@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\ArtistController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashierSessionController;
@@ -28,6 +29,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/settings/features', [SettingsController::class, 'features']);
         Route::get('/settings', [SettingsController::class, 'index']);
         Route::put('/settings', [SettingsController::class, 'update']);
+
+        Route::get('/activity-logs', [ActivityLogController::class, 'index']);
 
         Route::apiResource('artists', ArtistController::class);
         Route::apiResource('categories', CategoryController::class);

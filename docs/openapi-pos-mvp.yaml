@@ -133,6 +133,99 @@ paths:
                   artist_count: { type: integer, description: Jumlah artist aktif saat ini }
                   artist_limit_reached: { type: boolean, description: "true bila Pro dan sudah punya 1 artist" }
 
+  /settings:
+    get:
+      tags: [Settings]
+      summary: Daftar seluruh pengaturan
+      description: |
+        Hanya owner/admin (F14 — Setting & config management). Tabel
+        `payment_channels` (nomor rekening) TIDAK ikut di sini; itu
+        resource terpisah dengan penyamaran nomor rekeningnya sendiri.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Setting' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Settings]
+      summary: Ubah satu atau beberapa pengaturan sekaligus
+      description: |
+        Bentuk BULK, bukan satu key per request — layar pengaturan
+        biasanya menyimpan beberapa field sekaligus (nama toko, kontak,
+        format struk). Ini juga satu-satunya jalur admin untuk mengubah
+        `multi_artist_enabled` (upgrade lisensi Pro ke Master); lihat
+        catatan lisensi pada `POST /artists`. `type`/`group` boleh
+        dikosongkan pada key yang sudah ada — nilai lama dipakai lagi.
+        Setiap key yang berubah tercatat di log aktivitas (F13.4).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [settings]
+              properties:
+                settings:
+                  type: array
+                  minItems: 1
+                  items: { $ref: '#/components/schemas/SettingInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Setting' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ------------------------------------------------------------------
+  # LOG AKTIVITAS (F13.4)
+  # ------------------------------------------------------------------
+  /activity-logs:
+    get:
+      tags: [Settings]
+      summary: Riwayat tindakan sensitif
+      description: |
+        Hapus data, penyesuaian stok, dan perubahan harga/pengaturan
+        (F13.4, prioritas M). Hanya owner/admin. `old_values`/`new_values`
+        adalah snapshot kolom yang bisa diisi ulang (fillable) pada
+        entitas terkait saat kejadian, bukan diff per-field.
+      parameters:
+        - { name: entity_type, in: query, schema: { type: string, example: Artist } }
+        - { name: entity_id, in: query, schema: { type: integer } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: action, in: query, schema: { type: string, enum: [created, updated, deleted, stock_adjusted, price_changed] } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/ActivityLog' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /artists:
     get:
       tags: [Master Data]
@@ -292,7 +385,7 @@ paths:
       tags: [Master Data]
       summary: Daftar produk
       parameters:
-        - { name: search, in: query, description: Cocokkan nama produk atau SKU, schema: { type: string } }
+        - { name: search, in: query, description: "Cocokkan nama produk atau SKU", schema: { type: string } }
         - { name: artist_id, in: query, schema: { type: integer } }
         - { name: category_id, in: query, schema: { type: integer } }
         - { name: is_preorder, in: query, schema: { type: boolean } }
@@ -408,7 +501,7 @@ paths:
       summary: Cari varian untuk kasir
       description: Endpoint ringan khusus layar kasir. Hanya mengembalikan varian aktif dengan kolom seperlunya.
       parameters:
-        - { name: q, in: query, required: true, description: SKU atau potongan nama, schema: { type: string } }
+        - { name: q, in: query, required: true, description: "SKU atau potongan nama", schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 50 } }
       responses:
         '200':
@@ -475,7 +568,7 @@ paths:
                     required: [variant_id, qty_change]
                     properties:
                       variant_id: { type: integer }
-                      qty_change: { type: integer, description: Positif menambah, negatif mengurangi. Tidak boleh nol. }
+                      qty_change: { type: integer, description: "Positif menambah, negatif mengurangi. Tidak boleh nol." }
       responses:
         '201':
           description: Tersimpan
@@ -488,6 +581,33 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/StockMovement' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /stock/low:
+    get:
+      tags: [Stock]
+      summary: Varian dengan stok menipis
+      description: |
+        Varian aktif yang `current_stock`-nya sudah di titik atau di bawah
+        `low_stock_alert` masing-masing. Varian tanpa `low_stock_alert`
+        (null) tidak pernah muncul di sini — belum ada ambang untuk dicek.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        variant_id: { type: integer }
+                        sku: { type: string }
+                        product_name: { type: string }
+                        current_stock: { type: integer }
+                        low_stock_alert: { type: integer }
 
   # ------------------------------------------------------------------
   # EVENT & SESI
@@ -865,7 +985,7 @@ paths:
       tags: [Master Data]
       summary: Cari pelanggan
       parameters:
-        - { name: search, in: query, description: Nama, telepon, atau akun media sosial, schema: { type: string } }
+        - { name: search, in: query, description: "Nama, telepon, atau akun media sosial", schema: { type: string } }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -1750,7 +1870,7 @@ components:
           items:
             type: object
             properties:
-              label: { type: string, description: Nama produk, kategori, artist, atau tanggal sesuai group_by }
+              label: { type: string, description: "Nama produk, kategori, artist, atau tanggal sesuai group_by" }
               unit_count: { type: integer }
               amount: { $ref: '#/components/schemas/Money' }
 
@@ -1778,3 +1898,46 @@ components:
         outstanding: { $ref: '#/components/schemas/Money' }
         status: { type: string, enum: [unpaid, partial, paid] }
         calculated_at: { type: string, format: date-time, nullable: true }
+
+    Setting:
+      type: object
+      properties:
+        key: { type: string, example: store_name }
+        value:
+          type: string
+          nullable: true
+          description: Selalu disimpan sebagai string mentah, terlepas dari `type`. Interpretasinya (mis. boolean) terjadi di sisi pembaca.
+        type: { type: string, enum: [string, integer, decimal, boolean, json] }
+        group: { type: string, example: receipt }
+
+    SettingInput:
+      type: object
+      required: [key, value]
+      properties:
+        key: { type: string, maxLength: 100, example: store_name }
+        value:
+          nullable: true
+          description: "Boleh string, angka, boolean, atau objek (untuk type=json) — dinormalisasi ke string sebelum disimpan."
+          example: "Toko Merchandise Dummy"
+        type:
+          type: string
+          enum: [string, integer, decimal, boolean, json]
+          description: Dikosongkan berarti memakai `type` dari baris yang sudah ada, atau `string` bila key baru.
+        group:
+          type: string
+          maxLength: 50
+          description: Dikosongkan berarti memakai `group` dari baris yang sudah ada, atau `general` bila key baru.
+
+    ActivityLog:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer, nullable: true }
+        user_name: { type: string, nullable: true, readOnly: true }
+        action: { type: string, enum: [created, updated, deleted, stock_adjusted, price_changed] }
+        entity_type: { type: string, example: Artist }
+        entity_id: { type: integer, nullable: true }
+        description: { type: string, nullable: true }
+        old_values: { type: object, nullable: true, additionalProperties: true }
+        new_values: { type: object, nullable: true, additionalProperties: true }
+        created_at: { type: string, format: date-time }

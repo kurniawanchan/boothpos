@@ -133,6 +133,27 @@ class ActivityLogTest extends TestCase
         ]);
     }
 
+    public function test_owner_can_list_activity_logs_filtered_by_entity(): void
+    {
+        $owner = $this->actingAsRole('owner');
+        $artist = Artist::factory()->create();
+        $this->deleteJson("/api/v1/artists/{$artist->id}")->assertStatus(204);
+
+        $response = $this->getJson("/api/v1/activity-logs?entity_type=Artist&entity_id={$artist->id}");
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('deleted', $response->json('data.0.action'));
+        $this->assertSame($owner->name, $response->json('data.0.user_name'));
+    }
+
+    public function test_cashier_cannot_list_activity_logs(): void
+    {
+        $this->actingAsRole('cashier');
+
+        $this->getJson('/api/v1/activity-logs')->assertStatus(403);
+    }
+
     public function test_routine_sale_stock_movement_does_not_write_an_activity_log(): void
     {
         // F13.4 secara spesifik menyasar PENYESUAIAN manual, bukan setiap
