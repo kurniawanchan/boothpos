@@ -1,9 +1,148 @@
 @import 'tailwindcss';
 
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
-
+/*
+ * Design tokens — extracted from docs/UI-mockups/BoothPOS.dc.html (the
+ * sole design source of truth for this project, see AGENTS brief).
+ * Every color/radius/font used in components MUST reference one of these
+ * tokens (Tailwind utility classes generated from them below) — no raw
+ * hex literals in component files. This file is the single place hex
+ * values are allowed to live, exactly like a design-system token sheet.
+ */
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: ui-monospace, Menlo, monospace;
+
+  /* Brand (primary green) */
+  --color-brand: #2f9e6e;
+  --color-brand-hover: #268159;
+  --color-brand-active: #1e6b4b;
+
+  /* Near-black ink (text, dark panels/sidebar-footer, dark CTA) */
+  --color-ink: #14201b;
+  --color-ink-hover: #22332b;
+
+  /* Backdrops */
+  --color-canvas: #eef2f0;
+  --color-surface: #f7f9f8;
+  --color-surface-soft: #fbfdfc;
+  --color-surface-subtle: #fafcfb;
+
+  /* Mint (success / active / light-green accents) */
+  --color-mint-100: #e4f3ec;
+  --color-mint-50: #f2f8f5;
+  --color-mint-200: #d4ede1;
+  --color-mint-border: #dcede4;
+  --color-mint-accent: #8fc9ae;
+
+  /* Neutral borders — mockup uses several near-identical greys by role */
+  --color-line: #e0e8e4;
+  --color-line-2: #e6ece9;
+  --color-line-3: #eff4f2;
+  --color-line-4: #f1f5f3;
+  --color-line-5: #f2f6f4;
+  --color-line-6: #f3f7f5;
+  --color-line-7: #f0f5f3;
+  --color-track: #eef3f1;
+
+  /* Muted text, darkest to lightest */
+  --color-muted: #6e7f77;
+  --color-muted-2: #7e8e86;
+  --color-muted-3: #8a9a92;
+  --color-muted-4: #4a5a53;
+  --color-muted-5: #3c4c45;
+
+  /* Disabled */
+  --color-disabled: #c3d3cb;
+  --color-disabled-2: #c7d6cf;
+
+  /* Warning (amber tier-notice, cash-change banner) */
+  --color-warn-text: #8a6a1e;
+  --color-warn-bg: #fbf7ec;
+  --color-warn-border: #f0e4c8;
+  --color-warn-border-strong: #e0cfa4;
+
+  /* Danger */
+  --color-danger-text: #a2534b;
+  --color-danger-bg: #fbedec;
+  --color-danger-border: #f3d6d3;
+  --color-danger-border-hover: #c9756c;
+
+  /* Dark-panel accents (login hero, product-code generator panel) */
+  --color-dark-muted: #93a79d;
+  --color-dark-muted-2: #6e8579;
+
+  --color-scrollbar: #d8e2dd;
+
+  /* Product-code generator panel chip (dark-on-dark), from the mockup's
+     "Kode produk otomatis" block. */
+  --color-code-chip: #1f2e27;
+  --color-code-chip-border: #2c3e35;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 11px;
+  --radius-card: 13px;
+  --radius-modal: 18px;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-canvas);
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-brand-active);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--color-brand);
+}
+
+::selection {
+  background: var(--color-mint-200);
+}
+
+i.ph-duotone {
+  line-height: 1;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
