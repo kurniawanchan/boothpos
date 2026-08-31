@@ -1,0 +1,18 @@
+meta { name: 3 - Handed Over Sebelum Lunas (negative)
+  type: http
+  seq: 3
+}
+patch {
+  url: {{base_url}}/preorders/{{preorder_id}}/status
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+body:json {
+  { "status": "handed_over" }
+}
+tests {
+  test("ditolak 409 - status tidak boleh lompat dan belum lunas", function () {
+    expect(res.status).to.equal(409);
+  });
+}

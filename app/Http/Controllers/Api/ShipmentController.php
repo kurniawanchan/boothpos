@@ -1,0 +1,64 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Preorder;
+use App\Models\Shipment;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class ShipmentController extends Controller
+{
+    public function store(Request $request, Preorder $preorder): JsonResponse
+    {
+        if ($preorder->fulfillment !== 'courier') {
+            return response()->json(['message' => 'Preorder ini tidak memakai metode kurir.'], 409);
+        }
+
+        if ($preorder->shipment) {
+            return response()->json(['message' => 'Preorder ini sudah memiliki data pengiriman.'], 409);
+        }
+
+        $validated = $request->validate([
+            'courier_name' => ['required', 'string', 'max:50'],
+            'tracking_number' => ['nullable', 'string', 'max:50'],
+            'shipping_cost' => ['sometimes', 'numeric', 'min:0'],
+            'recipient_name' => ['required', 'string', 'max:100'],
+            'recipient_phone' => ['required', 'string', 'max:30'],
+            'address_line' => ['required', 'string', 'max:255'],
+            'city' => ['required', 'string', 'max:100'],
+            'province' => ['nullable', 'string', 'max:100'],
+            'postal_code' => ['nullable', 'string', 'max:10'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $shipment = $preorder->shipment()->create($validated);
+
+        return response()->json($shipment, 201);
+    }
+
+    public function update(Request $request, Shipment $shipment): JsonResponse
+    {
+        $validated = $request->validate([
+            'tracking_number' => ['nullable', 'string', 'max:50'],
+            'status' => ['sometimes', 'in:pending,packed,shipped,delivered'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        if (isset($validated['status'])) {
+            $timestampField = match ($validated['status']) {
+                'shipped' => 'shipped_at',
+                'delivered' => 'delivered_at',
+                default => null,
+            };
+            if ($timestampField) {
+                $validated[$timestampField] = now();
+            }
+        }
+
+        $shipment->update($validated);
+
+        return response()->json($shipment->fresh());
+    }
+}

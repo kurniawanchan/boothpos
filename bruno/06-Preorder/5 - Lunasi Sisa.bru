@@ -1,0 +1,19 @@
+meta { name: 5 - Lunasi Sisa
+  type: http
+  seq: 5
+}
+post {
+  url: {{base_url}}/preorders/{{preorder_id}}/payments
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+body:json {
+  { "method": "cash", "amount": 15000, "purpose": "settlement" }
+}
+tests {
+  test("status otomatis pindah ke settled setelah lunas", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.status).to.equal("settled");
+  });
+}

@@ -1,0 +1,42 @@
+meta {
+  name: 3 - Buat Produk + Varian
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/products
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "artist_id": {{artist_id}},
+    "category_id": {{category_id}},
+    "product_segment": "SAK",
+    "name": "Keychain Sakura",
+    "variants": [
+      { "variant_name": "Varian A", "sell_price": 25000, "cost_price": 10000 }
+    ]
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("product_id", res.body.id);
+    bru.setVar("variant_id", res.body.variants[0].id);
+    bru.setVar("variant_sku", res.body.variants[0].sku);
+  }
+}
+
+tests {
+  test("code_prefix sesuai pola artist+kategori+segmen", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.code_prefix).to.equal("RYUKYSAK");
+  });
+}

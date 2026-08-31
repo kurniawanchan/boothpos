@@ -1,0 +1,30 @@
+meta {
+  name: 2 - Login Cashier
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "kasir01",
+    "password": "password123"
+  }
+}
+
+script:post-response {
+  if (res.status === 200) {
+    bru.setVar("cashier_token", res.body.token);
+  }
+}
+
+tests {
+  test("login kasir berhasil", function () {
+    expect(res.status).to.equal(200);
+  });
+}

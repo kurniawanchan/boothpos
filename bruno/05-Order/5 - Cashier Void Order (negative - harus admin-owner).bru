@@ -1,0 +1,18 @@
+meta { name: 5 - Cashier Void Order (negative - harus admin-owner)
+  type: http
+  seq: 5
+}
+post {
+  url: {{base_url}}/orders/{{order_id}}/void
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+body:json {
+  { "reason": "Coba dibatalkan kasir" }
+}
+tests {
+  test("ditolak 403", function () {
+    expect(res.status).to.equal(403);
+  });
+}

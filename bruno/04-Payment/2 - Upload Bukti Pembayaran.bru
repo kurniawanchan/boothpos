@@ -1,0 +1,23 @@
+meta { name: 2 - Upload Bukti Pembayaran
+  type: http
+  seq: 2
+}
+post {
+  url: {{base_url}}/payment-proofs
+  body: multipartForm
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+body:multipart-form {
+  file: @file(./sample-proof.jpg)
+  captured_via: upload
+}
+script:post-response {
+  if (res.status === 201) { bru.setVar("proof_token", res.body.proof_token); }
+}
+tests {
+  test("bukti terunggah, proof_token diterima", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.proof_token).to.be.a("string");
+  });
+}

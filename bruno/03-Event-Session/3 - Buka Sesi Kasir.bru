@@ -1,0 +1,25 @@
+meta { name: 3 - Buka Sesi Kasir
+  type: http
+  seq: 3
+}
+post {
+  url: {{base_url}}/sessions
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+body:json {
+  {
+    "event_id": {{event_id}},
+    "opening_cash": 500000
+  }
+}
+script:post-response {
+  if (res.status === 201) { bru.setVar("session_id", res.body.id); }
+}
+tests {
+  test("sesi terbuka", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.status).to.equal("open");
+  });
+}

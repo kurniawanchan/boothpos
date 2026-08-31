@@ -1,0 +1,22 @@
+meta { name: 1 - List Payment Channels
+  type: http
+  seq: 1
+}
+get {
+  url: {{base_url}}/payment-channels
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+script:post-response {
+  if (res.status === 200 && res.body.data.length > 0) {
+    bru.setVar("channel_id", res.body.data[0].id);
+  }
+}
+tests {
+  test("nomor rekening tersamar untuk kasir", function () {
+    expect(res.status).to.equal(200);
+    if (res.body.data.length > 0) {
+      expect(res.body.data[0].account_number).to.include("*");
+    }
+  });
+}

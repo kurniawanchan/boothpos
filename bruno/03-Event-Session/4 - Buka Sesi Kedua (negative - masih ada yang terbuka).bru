@@ -1,0 +1,18 @@
+meta { name: 4 - Buka Sesi Kedua (negative - masih ada yang terbuka)
+  type: http
+  seq: 4
+}
+post {
+  url: {{base_url}}/sessions
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+body:json {
+  { "event_id": {{event_id}}, "opening_cash": 100000 }
+}
+tests {
+  test("ditolak 409 - sesi lain masih terbuka", function () {
+    expect(res.status).to.equal(409);
+  });
+}

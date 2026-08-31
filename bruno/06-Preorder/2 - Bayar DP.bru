@@ -1,0 +1,19 @@
+meta { name: 2 - Bayar DP
+  type: http
+  seq: 2
+}
+post {
+  url: {{base_url}}/preorders/{{preorder_id}}/payments
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+body:json {
+  { "method": "cash", "amount": 10000, "purpose": "down_payment" }
+}
+tests {
+  test("status otomatis pindah ke dp_paid", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.status).to.equal("dp_paid");
+  });
+}

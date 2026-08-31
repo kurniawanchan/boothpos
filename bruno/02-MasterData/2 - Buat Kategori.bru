@@ -1,0 +1,34 @@
+meta {
+  name: 2 - Buat Kategori
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/categories
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "code": "KY",
+    "name": "Keychain"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("category_id", res.body.id);
+  }
+}
+
+tests {
+  test("kategori dibuat", function () {
+    expect(res.status).to.equal(201);
+  });
+}

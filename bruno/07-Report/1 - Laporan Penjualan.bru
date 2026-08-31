@@ -1,0 +1,14 @@
+meta { name: 1 - Laporan Penjualan
+  type: http
+  seq: 1
+}
+get {
+  url: {{base_url}}/reports/sales?event_id={{event_id}}&group_by=artist
+  auth: none
+}
+headers { Authorization: Bearer {{owner_token}} }
+tests {
+  test("laporan penjualan tampil", function () {
+    expect(res.status).to.equal(200);
+  });
+}

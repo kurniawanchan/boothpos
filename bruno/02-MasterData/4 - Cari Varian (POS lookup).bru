@@ -1,0 +1,21 @@
+meta {
+  name: 4 - Cari Varian (POS lookup)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_url}}/variants/lookup?q=SAK
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+tests {
+  test("kasir bisa mencari varian", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data.length).to.be.above(0);
+  });
+}

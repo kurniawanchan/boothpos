@@ -1,0 +1,26 @@
+meta { name: 2 - Buat Order Sama Persis (idempotensi - negative-ish)
+  type: http
+  seq: 2
+}
+post {
+  url: {{base_url}}/orders
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+body:json {
+  {
+    "session_id": {{session_id}},
+    "local_ref": "PAKAI-LOCAL-REF-DARI-REQUEST-SEBELUMNYA-SECARA-MANUAL",
+    "items": [ { "variant_id": {{variant_id}}, "qty": 2 } ],
+    "payments": [ { "method": "cash", "amount": 50000 } ]
+  }
+}
+tests {
+  test("catatan manual", function () {
+    // Bruno tidak mudah membaca ulang local_ref dari request sebelumnya
+    // lintas request tanpa disimpan eksplisit. Untuk uji idempotensi
+    // manual: copy local_ref dari response request #1, tempel di sini,
+    // kirim ulang, dan pastikan 'id' yang kembali SAMA dengan request #1.
+  });
+}

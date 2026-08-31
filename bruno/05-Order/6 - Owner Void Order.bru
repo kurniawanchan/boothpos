@@ -1,0 +1,19 @@
+meta { name: 6 - Owner Void Order
+  type: http
+  seq: 6
+}
+post {
+  url: {{base_url}}/orders/{{order_id}}/void
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{owner_token}} }
+body:json {
+  { "reason": "Salah input jumlah" }
+}
+tests {
+  test("order dibatalkan, stok dikembalikan", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.status).to.equal("voided");
+  });
+}

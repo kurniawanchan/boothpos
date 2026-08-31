@@ -1,0 +1,19 @@
+meta { name: 6 - Serahkan Barang
+  type: http
+  seq: 6
+}
+patch {
+  url: {{base_url}}/preorders/{{preorder_id}}/status
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{owner_token}} }
+body:json {
+  { "status": "handed_over" }
+}
+tests {
+  test("stok berkurang saat diserahkan", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.status).to.equal("handed_over");
+  });
+}

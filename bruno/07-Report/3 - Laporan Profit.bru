@@ -1,0 +1,14 @@
+meta { name: 3 - Laporan Profit
+  type: http
+  seq: 3
+}
+get {
+  url: {{base_url}}/reports/profit?event_id={{event_id}}
+  auth: none
+}
+headers { Authorization: Bearer {{owner_token}} }
+tests {
+  test("laporan profit hanya untuk owner/admin", function () {
+    expect(res.status).to.equal(200);
+  });
+}

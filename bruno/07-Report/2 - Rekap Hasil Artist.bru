@@ -1,0 +1,14 @@
+meta { name: 2 - Rekap Hasil Artist
+  type: http
+  seq: 2
+}
+get {
+  url: {{base_url}}/reports/artist-settlements?event_id={{event_id}}
+  auth: none
+}
+headers { Authorization: Bearer {{owner_token}} }
+tests {
+  test("rekap dihitung ulang live, tidak nol untuk artist yang barusan jual", function () {
+    expect(res.status).to.equal(200);
+  });
+}

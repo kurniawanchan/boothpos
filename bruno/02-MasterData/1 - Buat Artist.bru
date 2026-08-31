@@ -1,0 +1,35 @@
+meta {
+  name: 1 - Buat Artist
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/artists
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "code": "RYU",
+    "name": "Ryu Studio"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("artist_id", res.body.id);
+  }
+}
+
+tests {
+  test("artist dibuat, code ternormalisasi uppercase", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.code).to.equal("RYU");
+  });
+}

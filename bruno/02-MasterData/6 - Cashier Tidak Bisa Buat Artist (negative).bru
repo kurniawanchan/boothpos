@@ -1,0 +1,28 @@
+meta {
+  name: 6 - Cashier Tidak Bisa Buat Artist (negative)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/artists
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+body:json {
+  {
+    "code": "ABC",
+    "name": "Test"
+  }
+}
+
+tests {
+  test("ditolak 403 - otorisasi peran", function () {
+    expect(res.status).to.equal(403);
+  });
+}

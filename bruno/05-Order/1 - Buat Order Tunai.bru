@@ -1,0 +1,42 @@
+meta { name: 1 - Buat Order Tunai
+  type: http
+  seq: 1
+}
+post {
+  url: {{base_url}}/orders
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+script:pre-request {
+  function uuidv4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+  bru.setVar("local_ref", uuidv4());
+}
+
+body:json {
+  {
+    "session_id": {{session_id}},
+    "customer_id": {{customer_id}},
+    "local_ref": "{{local_ref}}",
+    "items": [
+      { "variant_id": {{variant_id}}, "qty": 2 }
+    ],
+    "payments": [
+      { "method": "cash", "amount": 50000 }
+    ]
+  }
+}
+script:post-response {
+  if (res.status === 201) { bru.setVar("order_id", res.body.id); }
+}
+tests {
+  test("order tersimpan, total sesuai harga master", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.total_amount).to.equal("50000.00");
+  });
+}

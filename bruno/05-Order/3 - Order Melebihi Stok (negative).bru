@@ -1,0 +1,33 @@
+meta { name: 3 - Order Melebihi Stok (negative)
+  type: http
+  seq: 3
+}
+post {
+  url: {{base_url}}/orders
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{cashier_token}} }
+script:pre-request {
+  function uuidv4() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+  bru.setVar("local_ref", uuidv4());
+}
+
+body:json {
+  {
+    "session_id": {{session_id}},
+    "local_ref": "{{local_ref}}",
+    "items": [ { "variant_id": {{variant_id}}, "qty": 99999 } ],
+    "payments": [ { "method": "cash", "amount": 999999999 } ]
+  }
+}
+tests {
+  test("ditolak 409 - stok tidak cukup", function () {
+    expect(res.status).to.equal(409);
+  });
+}

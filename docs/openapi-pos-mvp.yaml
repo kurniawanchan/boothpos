@@ -1,0 +1,1780 @@
+openapi: 3.0.3
+
+# =====================================================================
+# KLASIFIKASI: INTERNAL
+# Kontrak API — Sistem POS Event-Based Multi-Artist
+# Cakupan: MVP Oktober 2026 (termasuk pre-order dan pengiriman kurir)
+# Acuan: PRD v1.4, schema-pos-mvp.sql v1.0, uml-pos-mvp.md v1.0
+#
+# ATURAN: berkas ini adalah sumber kebenaran kontrak API. Koleksi Bruno
+# dan Postman diturunkan dari sini, bukan ditulis terpisah. Perubahan
+# endpoint wajib memperbarui berkas ini dalam commit yang sama.
+# =====================================================================
+
+info:
+  title: BoothPOS API
+  version: 1.3.0
+  description: |
+    API internal untuk BoothPOS — sistem POS berbasis event untuk toko
+    merchandise yang berjualan online maupun di bazaar/event. Berjalan di
+    localhost pada perangkat operasional toko, tanpa akses publik,
+    sejalan dengan model lisensi sekali bayar dan instalasi lokal per toko.
+
+    **Autentikasi** — token bearer. Token diperoleh dari `/auth/login`
+    dan dikirim pada header `Authorization: Bearer <token>`.
+
+    **Format uang** — seluruh nilai uang berupa string desimal dua angka
+    di belakang koma, contoh `"150000.00"`. String dipakai agar tidak ada
+    galat pembulatan floating point di sisi klien.
+
+    **Zona waktu** — seluruh timestamp dalam format ISO 8601 dengan
+    offset waktu lokal perangkat.
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Instalasi lokal pada laptop operasional
+
+tags:
+  - name: Auth
+  - name: Master Data
+  - name: Settings
+  - name: Stock
+  - name: Event & Session
+  - name: Sales
+  - name: Preorder
+  - name: Payment
+  - name: Report
+
+security:
+  - bearerAuth: []
+
+# =====================================================================
+# PATHS
+# =====================================================================
+paths:
+
+  # ------------------------------------------------------------------
+  # AUTH
+  # ------------------------------------------------------------------
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login dan dapatkan token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: kasir01 }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  user: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Cabut token aktif
+      responses:
+        '204': { description: Berhasil }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Profil pengguna aktif
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ------------------------------------------------------------------
+  # MASTER DATA — ARTIST
+  # ------------------------------------------------------------------
+  # ------------------------------------------------------------------
+  # SETTINGS — FLAG FITUR / LISENSI
+  # ------------------------------------------------------------------
+  /settings/features:
+    get:
+      tags: [Settings]
+      summary: Status flag fitur berbayar
+      description: |
+        Dibaca frontend untuk menentukan tampilan UI sesuai tingkat
+        lisensi (Pro/Master) — bukan sumber kebenaran otorisasi. Penegakan
+        sebenarnya tetap terjadi di server pada setiap endpoint terkait
+        (contoh: `POST /artists`), bukan dari flag yang dibaca di sini.
+        Klien yang memaksa memanggil endpoint terlarang tetap akan
+        ditolak 403 meski tidak pernah memanggil endpoint ini.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  multi_artist_enabled: { type: boolean }
+                  artist_count: { type: integer, description: Jumlah artist aktif saat ini }
+                  artist_limit_reached: { type: boolean, description: "true bila Pro dan sudah punya 1 artist" }
+
+  /artists:
+    get:
+      tags: [Master Data]
+      summary: Daftar artist
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: is_active, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Artist' }
+    post:
+      tags: [Master Data]
+      summary: Buat artist
+      description: |
+        **Gate lisensi (v1.1)** — bila pengaturan `multi_artist_enabled`
+        bernilai false (instalasi Pro) dan sudah ada satu artist aktif,
+        permintaan ini ditolak dengan 403. Instalasi baru yang belum
+        punya artist sama sekali tetap boleh membuat SATU artist
+        (menjadi artist bawaan), baik pada Pro maupun Master. Cek dulu
+        `GET /settings/features` untuk menyembunyikan tombol "Tambah
+        Artist" di UI saat kuota sudah tercapai.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArtistInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+        '403':
+          description: Kuota artist Pro sudah tercapai, perlu upgrade ke Master
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /artists/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Master Data]
+      summary: Detail artist
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Master Data]
+      summary: Perbarui artist
+      description: Kolom `code` tidak dapat diubah karena sudah menjadi bagian SKU yang beredar.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArtistInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Artist' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Master Data]
+      summary: Nonaktifkan artist
+      description: Soft delete. Ditolak bila artist masih memiliki produk aktif.
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ------------------------------------------------------------------
+  # MASTER DATA — KATEGORI
+  # ------------------------------------------------------------------
+  /categories:
+    get:
+      tags: [Master Data]
+      summary: Daftar kategori
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Category' }
+    post:
+      tags: [Master Data]
+      summary: Buat kategori
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /categories/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Master Data]
+      summary: Perbarui kategori
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+    delete:
+      tags: [Master Data]
+      summary: Nonaktifkan kategori
+      description: Ditolak bila masih ada produk aktif pada kategori ini.
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  # ------------------------------------------------------------------
+  # MASTER DATA — PRODUK
+  # ------------------------------------------------------------------
+  /products:
+    get:
+      tags: [Master Data]
+      summary: Daftar produk
+      parameters:
+        - { name: search, in: query, description: Cocokkan nama produk atau SKU, schema: { type: string } }
+        - { name: artist_id, in: query, schema: { type: integer } }
+        - { name: category_id, in: query, schema: { type: integer } }
+        - { name: is_preorder, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Product' }
+    post:
+      tags: [Master Data]
+      summary: Buat produk beserta varian
+      description: |
+        `code_prefix` dan `sku` dihasilkan server, tidak dikirim klien.
+        Segmen produk diturunkan dari nama bila `product_segment` kosong.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /products/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Master Data]
+      summary: Detail produk beserta varian
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Master Data]
+      summary: Perbarui produk
+      description: Perubahan nama tidak mengubah `code_prefix` maupun SKU yang sudah ada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+    delete:
+      tags: [Master Data]
+      summary: Nonaktifkan produk
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /products/{id}/variants:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Master Data]
+      summary: Tambah varian pada produk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VariantInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Variant' }
+
+  /variants/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Master Data]
+      summary: Perbarui varian
+      description: |
+        Perubahan `sell_price` atau `cost_price` tidak memengaruhi transaksi
+        yang sudah tercatat, karena harga disimpan sebagai snapshot.
+        `current_stock` tidak dapat diubah lewat endpoint ini.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VariantInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Variant' }
+
+  /variants/lookup:
+    get:
+      tags: [Master Data]
+      summary: Cari varian untuk kasir
+      description: Endpoint ringan khusus layar kasir. Hanya mengembalikan varian aktif dengan kolom seperlunya.
+      parameters:
+        - { name: q, in: query, required: true, description: SKU atau potongan nama, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 50 } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/VariantLookup' }
+
+  # ------------------------------------------------------------------
+  # STOK
+  # ------------------------------------------------------------------
+  /stock/movements:
+    get:
+      tags: [Stock]
+      summary: Riwayat pergerakan stok
+      parameters:
+        - { name: variant_id, in: query, schema: { type: integer } }
+        - { name: type, in: query, schema: { type: string, enum: [purchase, sale, preorder_handover, adjustment, return, initial] } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/StockMovement' }
+
+  /stock/adjustments:
+    post:
+      tags: [Stock]
+      summary: Penyesuaian stok manual
+      description: |
+        Dipakai untuk stok awal dan hasil stock opname. Menulis baris
+        `stock_movements` dan memperbarui `current_stock` dalam satu
+        transaksi database. Alasan wajib diisi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items, reason]
+              properties:
+                reason: { type: string, maxLength: 255, example: Stok awal event Oktober }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [variant_id, qty_change]
+                    properties:
+                      variant_id: { type: integer }
+                      qty_change: { type: integer, description: Positif menambah, negatif mengurangi. Tidak boleh nol. }
+      responses:
+        '201':
+          description: Tersimpan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  movements:
+                    type: array
+                    items: { $ref: '#/components/schemas/StockMovement' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  # ------------------------------------------------------------------
+  # EVENT & SESI
+  # ------------------------------------------------------------------
+  /events:
+    get:
+      tags: [Event & Session]
+      summary: Daftar event
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [draft, active, closed, cancelled] } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Event' }
+    post:
+      tags: [Event & Session]
+      summary: Buat event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+
+  /events/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Event & Session]
+      summary: Detail event
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+    put:
+      tags: [Event & Session]
+      summary: Perbarui event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+
+  /events/{id}/status:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Event & Session]
+      summary: Ubah status event
+      description: |
+        Perpindahan status mengikuti state machine. Menutup event memicu
+        perhitungan `artist_settlements`. Event tidak dapat ditutup bila
+        masih ada sesi kasir berstatus `open`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, closed, cancelled] }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /sessions/current:
+    get:
+      tags: [Event & Session]
+      summary: Sesi kasir aktif milik pengguna
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CashierSession' }
+        '404':
+          description: Tidak ada sesi terbuka
+
+  /sessions:
+    post:
+      tags: [Event & Session]
+      summary: Buka sesi kasir
+      description: Ditolak bila pengguna masih memiliki sesi lain berstatus `open`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_id, opening_cash]
+              properties:
+                event_id: { type: integer }
+                opening_cash: { type: string, example: "500000.00" }
+                notes: { type: string, nullable: true }
+      responses:
+        '201':
+          description: Sesi dibuka
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CashierSession' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /sessions/{id}/close:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Event & Session]
+      summary: Tutup sesi kasir
+      description: |
+        Server menghitung `expected_cash` dari kas awal ditambah seluruh
+        pembayaran tunai pada sesi, lalu menghitung selisih terhadap
+        `closing_cash` yang dilaporkan kasir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [closing_cash]
+              properties:
+                closing_cash: { type: string, example: "2350000.00" }
+                notes: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Sesi ditutup
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CashierSession' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /sessions/{id}/summary:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Event & Session]
+      summary: Ringkasan sesi kasir
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionSummary' }
+
+  # ------------------------------------------------------------------
+  # PEMBAYARAN
+  # ------------------------------------------------------------------
+  /payment-channels:
+    get:
+      tags: [Payment]
+      summary: Daftar kanal pembayaran non-tunai
+      description: |
+        Mengembalikan rekening bank dan QR e-wallet yang aktif untuk
+        ditampilkan ke pelanggan.
+
+        CATATAN KEAMANAN — hanya peran owner dan admin yang menerima
+        `account_number` lengkap. Peran kasir menerima nomor tersamar
+        pada daftar, dan nomor penuh hanya saat kanal dipilih untuk satu
+        transaksi.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PaymentChannel' }
+
+  /payment-proofs:
+    post:
+      tags: [Payment]
+      summary: Unggah bukti pembayaran
+      description: |
+        Dipanggil sebelum transaksi disimpan. Mengembalikan `proof_token`
+        yang disertakan saat membuat order atau pembayaran pre-order.
+        Token tanpa transaksi akan dibersihkan otomatis setelah 24 jam.
+
+        CATATAN KEAMANAN (area risiko: input validation) — tipe berkas
+        diverifikasi dari isi berkas, bukan dari header klien. Berkas
+        disimpan dengan nama acak di luar direktori publik.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, captured_via]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: JPEG atau PNG, maksimal 5 MB setelah kompresi klien
+                captured_via:
+                  type: string
+                  enum: [webcam, upload]
+      responses:
+        '201':
+          description: Tersimpan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  proof_token: { type: string, format: uuid }
+                  file_size: { type: integer }
+        '413':
+          description: Berkas melebihi batas ukuran
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /payment-proofs/{id}/file:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Payment]
+      summary: Ambil berkas bukti pembayaran
+      description: Disajikan melalui pemeriksaan izin, bukan tautan langsung ke penyimpanan.
+      responses:
+        '200':
+          description: Berkas gambar
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ------------------------------------------------------------------
+  # PENJUALAN
+  # ------------------------------------------------------------------
+  /orders:
+    get:
+      tags: [Sales]
+      summary: Daftar transaksi
+      parameters:
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: session_id, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string, enum: [completed, voided] } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/OrderSummary' }
+    post:
+      tags: [Sales]
+      summary: Buat transaksi penjualan
+      description: |
+        Endpoint inti kasir. Seluruh operasi berjalan dalam satu transaksi
+        database: order, order_items, payments, payment_proofs, dan
+        stock_movements.
+
+        **Aturan yang ditegakkan server:**
+        - Sesi kasir harus berstatus `open`
+        - Harga diambil dari master, bukan dari kiriman klien
+        - Pembayaran non-tunai wajib menyertakan `proof_token`
+        - Total pembayaran harus menutup `total_amount`
+        - Stok tidak boleh menjadi negatif
+
+        **Idempotensi** — sertakan `local_ref` berupa UUID yang dibuat
+        klien. Bila permintaan dengan `local_ref` sama dikirim ulang,
+        server mengembalikan transaksi yang sudah ada, bukan membuat baru.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderInput' }
+      responses:
+        '201':
+          description: Transaksi tersimpan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '409':
+          description: Stok tidak mencukupi, sesi tertutup, atau local_ref sudah dipakai
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Sales]
+      summary: Detail transaksi
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /orders/{id}/void:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Sales]
+      summary: Batalkan transaksi
+      description: |
+        Transaksi tidak dihapus. Status berubah menjadi `voided` dan stok
+        dikembalikan melalui `stock_movements` bertipe `return`.
+        Hanya peran owner dan admin yang diizinkan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 255 }
+      responses:
+        '200':
+          description: Dibatalkan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /orders/{id}/receipt:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Sales]
+      summary: Data struk
+      description: Mengembalikan data siap tampil untuk struk di layar, termasuk identitas toko dari pengaturan.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Receipt' }
+
+  # ------------------------------------------------------------------
+  # PELANGGAN
+  # ------------------------------------------------------------------
+  /customers:
+    get:
+      tags: [Master Data]
+      summary: Cari pelanggan
+      parameters:
+        - { name: search, in: query, description: Nama, telepon, atau akun media sosial, schema: { type: string } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Customer' }
+    post:
+      tags: [Master Data]
+      summary: Buat pelanggan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+
+  /customers/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Master Data]
+      summary: Perbarui pelanggan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+
+  # ------------------------------------------------------------------
+  # PRE-ORDER
+  # ------------------------------------------------------------------
+  /preorders:
+    get:
+      tags: [Preorder]
+      summary: Daftar pre-order
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] } }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: customer_id, in: query, schema: { type: integer } }
+        - { name: fulfillment, in: query, schema: { type: string, enum: [pickup, courier] } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/PreorderSummary' }
+    post:
+      tags: [Preorder]
+      summary: Buat pre-order
+      description: |
+        Pelanggan wajib diisi. Stok TIDAK berkurang pada tahap ini karena
+        barang belum tersedia.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PreorderInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /preorders/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Preorder]
+      summary: Detail pre-order
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /preorders/{id}/status:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Preorder]
+      summary: Ubah status pre-order
+      description: |
+        Perpindahan status mengikuti state machine pada dokumen UML.
+        Lompatan status ditolak dengan 409.
+
+        **Efek stok:**
+        - `arrived` menulis `stock_movements` bertipe `purchase`
+        - `handed_over` menulis `stock_movements` bertipe `preorder_handover`
+        - `handed_over` hanya diizinkan bila `paid_amount` sudah menutup `total_amount`
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [dp_paid, arrived, settled, handed_over, cancelled] }
+                cancel_reason: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '409':
+          description: Perpindahan status tidak valid atau belum lunas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /preorders/{id}/payments:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Preorder]
+      summary: Catat pembayaran pre-order
+      description: |
+        Dipakai untuk DP maupun pelunasan. Pembayaran non-tunai wajib
+        menyertakan `proof_token`. Server memperbarui `paid_amount` dan
+        memindahkan status bila pembayaran melunasi tagihan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentInput' }
+      responses:
+        '201':
+          description: Tersimpan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /preorders/{id}/shipment:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Preorder]
+      summary: Buat data pengiriman
+      description: Hanya untuk pre-order dengan `fulfillment = courier`. Satu pre-order satu pengiriman.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShipmentInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shipment' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /shipments/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Preorder]
+      summary: Perbarui pengiriman
+      description: Dipakai untuk mengisi nomor resi dan memindahkan status pengiriman.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tracking_number: { type: string, nullable: true }
+                status: { type: string, enum: [pending, packed, shipped, delivered] }
+                notes: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shipment' }
+
+  # ------------------------------------------------------------------
+  # LAPORAN
+  # ------------------------------------------------------------------
+  /reports/sales:
+    get:
+      tags: [Report]
+      summary: Laporan penjualan
+      parameters:
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: group_by, in: query, schema: { type: string, enum: [product, category, artist, day], default: product } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SalesReport' }
+
+  /reports/profit:
+    get:
+      tags: [Report]
+      summary: Laporan modal dan keuntungan
+      description: |
+        Laba kotor dihitung dari nilai snapshot pada `order_items`, bukan
+        harga master saat laporan dibuka. Laba bersih mengurangkan
+        `event_cost`. Hanya peran owner dan admin.
+      parameters:
+        - { name: event_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfitReport' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /reports/artist-settlements:
+    get:
+      tags: [Report]
+      summary: Rekap hasil per artist
+      description: Angka dihitung ulang dari `order_items`, tanpa potongan komisi.
+      parameters:
+        - { name: event_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event: { $ref: '#/components/schemas/Event' }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ArtistSettlement' }
+
+  /reports/artist-settlements/{id}/payment:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Report]
+      summary: Catat pembayaran ke artist
+      description: Menandai berapa yang sudah diserahkan ke artist. Tidak mengubah `total_sales`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { type: string, example: "1250000.00" }
+                notes: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtistSettlement' }
+
+  /reports/{report}/export:
+    parameters:
+      - name: report
+        in: path
+        required: true
+        schema: { type: string, enum: [sales, profit, artist-settlements] }
+    get:
+      tags: [Report]
+      summary: Ekspor laporan ke Excel
+      description: Parameter filter sama dengan endpoint laporan terkait. Ekspor tidak menyertakan kolom kontak pelanggan.
+      parameters:
+        - { name: event_id, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berkas xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+
+# =====================================================================
+# COMPONENTS
+# =====================================================================
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, default: 1, minimum: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      schema: { type: integer, default: 25, maximum: 100 }
+
+  responses:
+    Unauthorized:
+      description: Token tidak ada atau tidak valid
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Peran tidak memiliki izin
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Data tidak ditemukan
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Bertentangan dengan aturan bisnis
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Validasi gagal
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+              errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items: { type: string }
+
+  schemas:
+
+    Error:
+      type: object
+      properties:
+        message: { type: string }
+        code: { type: string, nullable: true, example: INSUFFICIENT_STOCK }
+
+    Paginated:
+      type: object
+      properties:
+        meta:
+          type: object
+          properties:
+            current_page: { type: integer }
+            per_page: { type: integer }
+            total: { type: integer }
+            last_page: { type: integer }
+
+    Money:
+      type: string
+      pattern: '^-?\d+\.\d{2}$'
+      example: "150000.00"
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        username: { type: string }
+        role: { type: string, enum: [owner, admin, cashier, inventory] }
+        is_active: { type: boolean }
+
+    Artist:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, minLength: 3, maxLength: 3, example: RYU }
+        name: { type: string }
+        contact_phone: { type: string, nullable: true }
+        contact_email: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        is_active: { type: boolean }
+        product_count: { type: integer, readOnly: true }
+
+    ArtistInput:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, minLength: 3, maxLength: 3, description: Huruf kapital. Permanen setelah dibuat. }
+        name: { type: string, maxLength: 100 }
+        contact_phone: { type: string, nullable: true }
+        contact_email: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        is_active: { type: boolean, default: true }
+
+    Category:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, minLength: 2, maxLength: 2, example: KY }
+        name: { type: string }
+        parent_id: { type: integer, nullable: true }
+        display_order: { type: integer }
+        is_active: { type: boolean }
+
+    CategoryInput:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, minLength: 2, maxLength: 2 }
+        name: { type: string, maxLength: 100 }
+        parent_id: { type: integer, nullable: true }
+        display_order: { type: integer, default: 0 }
+        is_active: { type: boolean, default: true }
+
+    Variant:
+      type: object
+      properties:
+        id: { type: integer }
+        product_id: { type: integer }
+        sku: { type: string, minLength: 12, maxLength: 12, example: RYUKYSAK0007 }
+        variant_name: { type: string }
+        cost_price: { $ref: '#/components/schemas/Money' }
+        sell_price: { $ref: '#/components/schemas/Money' }
+        current_stock: { type: integer, readOnly: true }
+        low_stock_alert: { type: integer, nullable: true }
+        is_active: { type: boolean }
+
+    VariantInput:
+      type: object
+      required: [variant_name, sell_price]
+      properties:
+        variant_name: { type: string, maxLength: 100, default: Standard }
+        cost_price: { $ref: '#/components/schemas/Money' }
+        sell_price: { $ref: '#/components/schemas/Money' }
+        low_stock_alert: { type: integer, nullable: true }
+        is_active: { type: boolean, default: true }
+
+    VariantLookup:
+      type: object
+      description: Bentuk ringkas untuk layar kasir
+      properties:
+        variant_id: { type: integer }
+        sku: { type: string }
+        label: { type: string, example: Keychain Sakura — Varian A }
+        artist_name: { type: string }
+        sell_price: { $ref: '#/components/schemas/Money' }
+        current_stock: { type: integer }
+        is_preorder: { type: boolean }
+
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        artist_id: { type: integer }
+        artist_name: { type: string, readOnly: true }
+        category_id: { type: integer }
+        category_name: { type: string, readOnly: true }
+        code_prefix: { type: string, minLength: 8, maxLength: 8, readOnly: true, example: RYUKYSAK }
+        product_segment: { type: string, minLength: 3, maxLength: 3 }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        image_path: { type: string, nullable: true }
+        is_preorder: { type: boolean }
+        preorder_eta: { type: string, format: date, nullable: true }
+        is_active: { type: boolean }
+        variants:
+          type: array
+          items: { $ref: '#/components/schemas/Variant' }
+
+    ProductInput:
+      type: object
+      required: [artist_id, category_id, name]
+      properties:
+        artist_id: { type: integer }
+        category_id: { type: integer }
+        product_segment:
+          type: string
+          minLength: 3
+          maxLength: 3
+          nullable: true
+          description: Diturunkan dari nama produk bila dikosongkan.
+        name: { type: string, maxLength: 150 }
+        description: { type: string, nullable: true }
+        is_preorder: { type: boolean, default: false }
+        preorder_eta: { type: string, format: date, nullable: true }
+        is_active: { type: boolean, default: true }
+        variants:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/VariantInput' }
+
+    StockMovement:
+      type: object
+      properties:
+        id: { type: integer }
+        variant_id: { type: integer }
+        sku: { type: string, readOnly: true }
+        type: { type: string, enum: [purchase, sale, preorder_handover, adjustment, return, initial] }
+        qty_change: { type: integer }
+        stock_before: { type: integer }
+        stock_after: { type: integer }
+        reference_type: { type: string, nullable: true }
+        reference_id: { type: integer, nullable: true }
+        reason: { type: string, nullable: true }
+        user_name: { type: string, nullable: true, readOnly: true }
+        created_at: { type: string, format: date-time }
+
+    Event:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        location: { type: string, nullable: true }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        status: { type: string, enum: [draft, active, closed, cancelled] }
+        event_cost: { $ref: '#/components/schemas/Money' }
+        notes: { type: string, nullable: true }
+
+    EventInput:
+      type: object
+      required: [name, start_date, end_date]
+      properties:
+        name: { type: string, maxLength: 150 }
+        location: { type: string, nullable: true }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        event_cost: { $ref: '#/components/schemas/Money' }
+        notes: { type: string, nullable: true }
+
+    CashierSession:
+      type: object
+      properties:
+        id: { type: integer }
+        event_id: { type: integer }
+        event_name: { type: string, readOnly: true }
+        user_id: { type: integer }
+        user_name: { type: string, readOnly: true }
+        opened_at: { type: string, format: date-time }
+        closed_at: { type: string, format: date-time, nullable: true }
+        opening_cash: { $ref: '#/components/schemas/Money' }
+        closing_cash: { $ref: '#/components/schemas/Money' }
+        expected_cash: { $ref: '#/components/schemas/Money' }
+        cash_difference: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [open, closed] }
+
+    SessionSummary:
+      type: object
+      properties:
+        session: { $ref: '#/components/schemas/CashierSession' }
+        order_count: { type: integer }
+        total_sales: { $ref: '#/components/schemas/Money' }
+        by_method:
+          type: array
+          items:
+            type: object
+            properties:
+              method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+              count: { type: integer }
+              amount: { $ref: '#/components/schemas/Money' }
+
+    Customer:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        social_handle: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    CustomerInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 100 }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        social_handle: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    PaymentChannel:
+      type: object
+      properties:
+        id: { type: integer }
+        type: { type: string, enum: [bank_transfer, qr_ewallet] }
+        provider: { type: string, example: BCA }
+        account_name: { type: string }
+        account_number:
+          type: string
+          nullable: true
+          description: Tersamar untuk peran kasir pada daftar. Kosong untuk qr_ewallet.
+        qr_image_url: { type: string, nullable: true }
+        is_active: { type: boolean }
+
+    PaymentInput:
+      type: object
+      required: [method, amount]
+      properties:
+        method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+        channel_id:
+          type: integer
+          nullable: true
+          description: Wajib untuk metode non-tunai, dikosongkan untuk tunai.
+        purpose: { type: string, enum: [full, down_payment, settlement], default: full }
+        amount: { $ref: '#/components/schemas/Money' }
+        proof_token:
+          type: string
+          format: uuid
+          nullable: true
+          description: Wajib untuk metode non-tunai. Diperoleh dari POST /payment-proofs.
+        notes: { type: string, nullable: true }
+
+    Payment:
+      type: object
+      properties:
+        id: { type: integer }
+        method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+        purpose: { type: string, enum: [full, down_payment, settlement] }
+        channel_provider: { type: string, nullable: true, readOnly: true }
+        amount: { $ref: '#/components/schemas/Money' }
+        verification: { type: string, enum: [pending, verified, rejected] }
+        paid_at: { type: string, format: date-time }
+        proofs:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              captured_via: { type: string, enum: [webcam, upload] }
+
+    OrderItemInput:
+      type: object
+      required: [variant_id, qty]
+      properties:
+        variant_id: { type: integer }
+        qty: { type: integer, minimum: 1 }
+        discount_amount: { $ref: '#/components/schemas/Money' }
+
+    OrderInput:
+      type: object
+      required: [session_id, items, payments, local_ref]
+      properties:
+        session_id: { type: integer }
+        customer_id: { type: integer, nullable: true, description: Kosongkan untuk pembeli walk-in. }
+        local_ref: { type: string, format: uuid, description: Dibuat klien. Menjamin idempotensi bila permintaan dikirim ulang. }
+        discount_amount: { $ref: '#/components/schemas/Money' }
+        notes: { type: string, nullable: true }
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/OrderItemInput' }
+        payments:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/PaymentInput' }
+
+    OrderItem:
+      type: object
+      properties:
+        id: { type: integer }
+        variant_id: { type: integer }
+        artist_id: { type: integer }
+        artist_name: { type: string, readOnly: true }
+        sku_snapshot: { type: string }
+        name_snapshot: { type: string }
+        qty: { type: integer }
+        cost_price: { $ref: '#/components/schemas/Money' }
+        sell_price: { $ref: '#/components/schemas/Money' }
+        discount_amount: { $ref: '#/components/schemas/Money' }
+        line_total: { $ref: '#/components/schemas/Money' }
+
+    OrderSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        order_number: { type: string, example: TRX-20261025-0001 }
+        event_name: { type: string }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        item_count: { type: integer }
+        status: { type: string, enum: [completed, voided] }
+        created_at: { type: string, format: date-time }
+
+    Order:
+      type: object
+      properties:
+        id: { type: integer }
+        order_number: { type: string }
+        event_id: { type: integer }
+        session_id: { type: integer }
+        customer_id: { type: integer, nullable: true }
+        subtotal: { $ref: '#/components/schemas/Money' }
+        discount_amount: { $ref: '#/components/schemas/Money' }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        paid_amount: { $ref: '#/components/schemas/Money' }
+        change_amount: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [completed, voided] }
+        void_reason: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+        payments:
+          type: array
+          items: { $ref: '#/components/schemas/Payment' }
+
+    Receipt:
+      type: object
+      properties:
+        store_name: { type: string }
+        store_contact: { type: string, nullable: true }
+        order_number: { type: string }
+        event_name: { type: string }
+        cashier_name: { type: string }
+        created_at: { type: string, format: date-time }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              qty: { type: integer }
+              price: { $ref: '#/components/schemas/Money' }
+              line_total: { $ref: '#/components/schemas/Money' }
+        subtotal: { $ref: '#/components/schemas/Money' }
+        discount_amount: { $ref: '#/components/schemas/Money' }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        payment_summary:
+          type: array
+          items:
+            type: object
+            properties:
+              method: { type: string }
+              amount: { $ref: '#/components/schemas/Money' }
+        change_amount: { $ref: '#/components/schemas/Money' }
+
+    PreorderItemInput:
+      type: object
+      required: [variant_id, qty]
+      properties:
+        variant_id: { type: integer }
+        qty: { type: integer, minimum: 1 }
+
+    PreorderInput:
+      type: object
+      required: [customer_id, fulfillment, items]
+      properties:
+        event_id: { type: integer, nullable: true }
+        customer_id: { type: integer }
+        fulfillment: { type: string, enum: [pickup, courier] }
+        shipping_cost: { $ref: '#/components/schemas/Money' }
+        expected_date: { type: string, format: date, nullable: true }
+        notes: { type: string, nullable: true }
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/PreorderItemInput' }
+
+    PreorderSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        preorder_number: { type: string, example: PO-20261025-0001 }
+        customer_name: { type: string }
+        status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
+        fulfillment: { type: string, enum: [pickup, courier] }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        paid_amount: { $ref: '#/components/schemas/Money' }
+        outstanding: { $ref: '#/components/schemas/Money' }
+        created_at: { type: string, format: date-time }
+
+    Preorder:
+      type: object
+      properties:
+        id: { type: integer }
+        preorder_number: { type: string }
+        event_id: { type: integer, nullable: true }
+        customer: { $ref: '#/components/schemas/Customer' }
+        status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
+        fulfillment: { type: string, enum: [pickup, courier] }
+        subtotal: { $ref: '#/components/schemas/Money' }
+        shipping_cost: { $ref: '#/components/schemas/Money' }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        paid_amount: { $ref: '#/components/schemas/Money' }
+        outstanding: { $ref: '#/components/schemas/Money' }
+        expected_date: { type: string, format: date, nullable: true }
+        cancel_reason: { type: string, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              variant_id: { type: integer }
+              artist_name: { type: string }
+              sku_snapshot: { type: string }
+              name_snapshot: { type: string }
+              qty: { type: integer }
+              sell_price: { $ref: '#/components/schemas/Money' }
+              line_total: { $ref: '#/components/schemas/Money' }
+        payments:
+          type: array
+          items: { $ref: '#/components/schemas/Payment' }
+        shipment:
+          allOf:
+            - $ref: '#/components/schemas/Shipment'
+          nullable: true
+
+    ShipmentInput:
+      type: object
+      required: [courier_name, recipient_name, recipient_phone, address_line, city]
+      properties:
+        courier_name: { type: string, maxLength: 50 }
+        tracking_number: { type: string, nullable: true }
+        shipping_cost: { $ref: '#/components/schemas/Money' }
+        recipient_name: { type: string, maxLength: 100 }
+        recipient_phone: { type: string, maxLength: 30 }
+        address_line: { type: string, maxLength: 255 }
+        city: { type: string, maxLength: 100 }
+        province: { type: string, nullable: true }
+        postal_code: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    Shipment:
+      type: object
+      properties:
+        id: { type: integer }
+        preorder_id: { type: integer }
+        courier_name: { type: string }
+        tracking_number: { type: string, nullable: true }
+        shipping_cost: { $ref: '#/components/schemas/Money' }
+        recipient_name: { type: string }
+        recipient_phone: { type: string }
+        address_line: { type: string }
+        city: { type: string }
+        province: { type: string, nullable: true }
+        postal_code: { type: string, nullable: true }
+        status: { type: string, enum: [pending, packed, shipped, delivered] }
+        shipped_at: { type: string, format: date-time, nullable: true }
+        delivered_at: { type: string, format: date-time, nullable: true }
+
+    SalesReport:
+      type: object
+      properties:
+        event: { $ref: '#/components/schemas/Event' }
+        totals:
+          type: object
+          properties:
+            order_count: { type: integer }
+            unit_count: { type: integer }
+            gross_sales: { $ref: '#/components/schemas/Money' }
+            discount_total: { $ref: '#/components/schemas/Money' }
+            net_sales: { $ref: '#/components/schemas/Money' }
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string, description: Nama produk, kategori, artist, atau tanggal sesuai group_by }
+              unit_count: { type: integer }
+              amount: { $ref: '#/components/schemas/Money' }
+
+    ProfitReport:
+      type: object
+      properties:
+        event: { $ref: '#/components/schemas/Event' }
+        revenue: { $ref: '#/components/schemas/Money' }
+        cost_of_goods: { $ref: '#/components/schemas/Money' }
+        gross_profit: { $ref: '#/components/schemas/Money' }
+        event_cost: { $ref: '#/components/schemas/Money' }
+        net_profit: { $ref: '#/components/schemas/Money' }
+
+    ArtistSettlement:
+      type: object
+      properties:
+        id: { type: integer }
+        artist_id: { type: integer }
+        artist_name: { type: string }
+        total_sales: { $ref: '#/components/schemas/Money' }
+        total_units: { type: integer }
+        deduction: { $ref: '#/components/schemas/Money' }
+        payable_amount: { $ref: '#/components/schemas/Money' }
+        paid_amount: { $ref: '#/components/schemas/Money' }
+        outstanding: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [unpaid, partial, paid] }
+        calculated_at: { type: string, format: date-time, nullable: true }
