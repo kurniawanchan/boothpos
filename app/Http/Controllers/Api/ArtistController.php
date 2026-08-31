@@ -7,6 +7,7 @@ use App\Http\Requests\StoreArtistRequest;
 use App\Http\Requests\UpdateArtistRequest;
 use App\Http\Resources\ArtistResource;
 use App\Models\Artist;
+use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\Schema;
 
 class ArtistController extends Controller
 {
+    public function __construct(private ActivityLogger $activityLogger) {}
+
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Artist::class);
@@ -61,7 +64,7 @@ class ArtistController extends Controller
         return response()->json(new ArtistResource($artist->fresh()));
     }
 
-    public function destroy(Artist $artist): JsonResponse
+    public function destroy(Request $request, Artist $artist): JsonResponse
     {
         $this->authorize('delete', $artist);
 
@@ -84,7 +87,22 @@ class ArtistController extends Controller
             }
         }
 
-        $artist->delete();
+        // F13.4 — hapus data adalah tindakan sensitif; log ditulis DI DALAM
+        // transaksi yang sama dengan delete-nya (atomik, ikut rollback bersama).
+        DB::transaction(function () use ($artist, $request) {
+            $snapshot = $artist->only($artist->getFillable());
+
+            $artist->delete();
+
+            $this->activityLogger->log(
+                userId: $request->user()?->id,
+                action: 'deleted',
+                entityType: 'Artist',
+                entityId: $artist->id,
+                description: "Menghapus artist {$artist->code} ({$artist->name}).",
+                oldValues: $snapshot,
+            );
+        });
 
         return response()->json(null, 204);
     }

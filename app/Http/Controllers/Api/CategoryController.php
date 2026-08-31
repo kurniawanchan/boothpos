@@ -7,6 +7,7 @@ use App\Http\Requests\StoreCategoryRequest;
 use App\Http\Requests\UpdateCategoryRequest;
 use App\Http\Resources\CategoryResource;
 use App\Models\Category;
+use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\Schema;
 
 class CategoryController extends Controller
 {
+    public function __construct(private ActivityLogger $activityLogger) {}
+
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Category::class);
@@ -61,7 +64,7 @@ class CategoryController extends Controller
         return response()->json(new CategoryResource($category->fresh()));
     }
 
-    public function destroy(Category $category): JsonResponse
+    public function destroy(Request $request, Category $category): JsonResponse
     {
         $this->authorize('delete', $category);
 
@@ -88,7 +91,21 @@ class CategoryController extends Controller
             }
         }
 
-        $category->delete();
+        // F13.4 — hapus data adalah tindakan sensitif.
+        DB::transaction(function () use ($category, $request) {
+            $snapshot = $category->only($category->getFillable());
+
+            $category->delete();
+
+            $this->activityLogger->log(
+                userId: $request->user()?->id,
+                action: 'deleted',
+                entityType: 'Category',
+                entityId: $category->id,
+                description: "Menghapus kategori {$category->code} ({$category->name}).",
+                oldValues: $snapshot,
+            );
+        });
 
         return response()->json(null, 204);
     }

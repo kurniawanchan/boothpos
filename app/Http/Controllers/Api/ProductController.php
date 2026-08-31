@@ -13,6 +13,7 @@ use App\Models\Artist;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Services\ActivityLogger;
 use App\Services\ProductCodeGenerator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,10 @@ use Illuminate\Support\Facades\DB;
 
 class ProductController extends Controller
 {
-    public function __construct(private ProductCodeGenerator $codeGenerator) {}
+    public function __construct(
+        private ProductCodeGenerator $codeGenerator,
+        private ActivityLogger $activityLogger,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -103,12 +107,30 @@ class ProductController extends Controller
 
     public function update(UpdateProductRequest $request, Product $product): JsonResponse
     {
-        $product->update($request->validated());
+        // F13.4 — "ubah harga" mencakup update produk/varian secara umum;
+        // snapshot before/after ditulis apa adanya (bukan hanya kalau harga
+        // ikut berubah) supaya activity_logs tetap satu sumber audit yang
+        // konsisten untuk seluruh perubahan master data produk.
+        DB::transaction(function () use ($request, $product) {
+            $before = $product->only($product->getFillable());
+
+            $product->update($request->validated());
+
+            $this->activityLogger->log(
+                userId: $request->user()?->id,
+                action: 'updated',
+                entityType: 'Product',
+                entityId: $product->id,
+                description: "Mengubah produk {$product->name}.",
+                oldValues: $before,
+                newValues: $product->only($product->getFillable()),
+            );
+        });
 
         return response()->json(new ProductResource($product->fresh(['artist', 'category', 'variants'])));
     }
 
-    public function destroy(Product $product): JsonResponse
+    public function destroy(Request $request, Product $product): JsonResponse
     {
         $this->authorize('delete', $product);
 
@@ -120,7 +142,21 @@ class ProductController extends Controller
             ], 409);
         }
 
-        $product->delete();
+        // F13.4 — hapus data adalah tindakan sensitif.
+        DB::transaction(function () use ($product, $request) {
+            $snapshot = $product->only($product->getFillable());
+
+            $product->delete();
+
+            $this->activityLogger->log(
+                userId: $request->user()?->id,
+                action: 'deleted',
+                entityType: 'Product',
+                entityId: $product->id,
+                description: "Menghapus produk {$product->name} ({$product->code_prefix}).",
+                oldValues: $snapshot,
+            );
+        });
 
         return response()->json(null, 204);
     }
@@ -142,7 +178,25 @@ class ProductController extends Controller
 
     public function updateVariant(UpdateVariantRequest $request, ProductVariant $variant): JsonResponse
     {
-        $variant->update($request->validated());
+        // F13.4 — "ubah harga" (price_changed): satu-satunya endpoint yang
+        // menyentuh cost_price/sell_price. Snapshot ditulis apa adanya
+        // (bukan hanya diff kolom harga) supaya operator bisa melihat
+        // konteks lengkap perubahan, bukan cuma angka harga saja.
+        DB::transaction(function () use ($request, $variant) {
+            $before = $variant->only($variant->getFillable());
+
+            $variant->update($request->validated());
+
+            $this->activityLogger->log(
+                userId: $request->user()?->id,
+                action: 'price_changed',
+                entityType: 'ProductVariant',
+                entityId: $variant->id,
+                description: "Mengubah varian {$variant->sku}.",
+                oldValues: $before,
+                newValues: $variant->only($variant->getFillable()),
+            );
+        });
 
         return response()->json(new ProductVariantResource($variant->fresh()));
     }

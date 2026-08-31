@@ -18,6 +18,8 @@ use Illuminate\Validation\ValidationException;
  */
 class StockService
 {
+    public function __construct(private ActivityLogger $activityLogger) {}
+
     /**
      * @throws ValidationException bila hasil qty_change membuat stok negatif
      */
@@ -63,6 +65,25 @@ class StockService
             ]);
 
             $locked->update(['current_stock' => $stockAfter]);
+
+            // F13.4 — hanya penyesuaian MANUAL yang dianggap "tindakan
+            // sensitif" per PRD 7.13, bukan setiap pergerakan stok (jual/
+            // beli/preorder juga lewat method ini tapi bukan sasaran F13.4).
+            // Ditulis di sini, bukan di StockController, supaya berlaku
+            // untuk SEMUA pemanggil applyMovement() bertipe 'adjustment' di
+            // masa depan juga — dan tetap di dalam transaksi yang sama
+            // dengan mutasi stoknya sendiri (atomik, ikut rollback bersama).
+            if ($type === 'adjustment') {
+                $this->activityLogger->log(
+                    userId: $userId,
+                    action: 'stock_adjusted',
+                    entityType: 'ProductVariant',
+                    entityId: $locked->id,
+                    description: "Penyesuaian stok {$locked->sku} sebanyak {$qtyChange} ({$stockBefore} -> {$stockAfter}).".($reason ? " Alasan: {$reason}." : ''),
+                    oldValues: ['current_stock' => $stockBefore],
+                    newValues: ['current_stock' => $stockAfter],
+                );
+            }
 
             return $movement;
         });
