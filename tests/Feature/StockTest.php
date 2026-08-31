@@ -16,14 +16,24 @@ class StockTest extends TestCase
 {
     use RefreshDatabase;
 
+    // BUG TEST YANG DITEMUKAN & DIPERBAIKI — SKU dulunya hardcoded sama
+    // persis untuk setiap pemanggilan. Tidak masalah selama tiap test
+    // hanya memanggil sekali, tapi test_low_stock_endpoint... memanggilnya
+    // DUA kali dalam satu test (butuh satu varian "low" dan satu "ok"),
+    // menabrak unique index sku di database sungguhan — celah yang baru
+    // kelihatan begitu test benar-benar dijalankan terhadap MySQL nyata.
+    private static int $variantSequence = 0;
+
     private function makeVariant(int $stock = 10): ProductVariant
     {
         $artist = Artist::factory()->create();
         $category = Category::factory()->create();
         $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
 
+        $sequence = str_pad((string) ++self::$variantSequence, 4, '0', STR_PAD_LEFT);
+
         return $product->variants()->create([
-            'sku' => 'AAABBCCC0001', 'sell_price' => 10000, 'current_stock' => $stock, 'low_stock_alert' => 5,
+            'sku' => "AAABBCCC{$sequence}", 'sell_price' => 10000, 'current_stock' => $stock, 'low_stock_alert' => 5,
         ]);
     }
 

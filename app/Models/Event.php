@@ -11,7 +11,19 @@ class Event extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['name', 'location', 'start_date', 'end_date', 'event_cost', 'notes'];
+    /**
+     * BUG YANG DITEMUKAN & DIPERBAIKI — 'status' semula tidak ada di sini.
+     * EventController::updateStatus() menulis status baru lewat
+     * $event->update(['status' => $newStatus]) — tanpa 'status' di
+     * $fillable, panggilan itu diam-diam tidak melakukan apa-apa (tidak
+     * error, hanya tidak menyimpan), sehingga event TIDAK PERNAH benar-
+     * benar berpindah status meski API merespons 200. Proteksi terhadap
+     * klien mengubah status secara sembarangan sudah ada di lapisan lain:
+     * StoreEventRequest tidak mengizinkan 'status' sama sekali (selalu
+     * mulai 'draft'), dan transisi hanya lewat updateStatus() yang
+     * ditegakkan EventPolicy::transitionStatus + Event::canTransitionTo().
+     */
+    protected $fillable = ['name', 'location', 'start_date', 'end_date', 'status', 'event_cost', 'notes'];
 
     protected function casts(): array
     {

@@ -13,13 +13,24 @@ class Product extends Model
     use HasFactory, SoftDeletes;
 
     /**
-     * 'code_prefix' dan 'product_segment' SENGAJA tidak ada di sini.
-     * Keduanya hanya boleh diisi lewat ProductCodeGenerator saat create,
-     * dan tidak pernah lewat mass assignment biasa (F19.4 — permanen).
+     * BUG YANG DITEMUKAN & DIPERBAIKI — 'code_prefix' dan 'product_segment'
+     * awalnya sengaja dikeluarkan dari $fillable dengan niat mencegah
+     * mass-assignment dari input klien. Niatnya benar, tapi caranya salah:
+     * ProductController::store() sendiri butuh menulis KEDUA kolom ini
+     * lewat Product::create() (nilainya berasal dari ProductCodeGenerator,
+     * bukan dari klien) — akibatnya INSERT selalu gagal 500 "code_prefix
+     * doesn't have a default value" karena Eloquent diam-diam membuang
+     * kedua field itu. Proteksi sesungguhnya terhadap input klien sudah
+     * cukup di lapisan validasi (StoreProductRequest tidak punya rule
+     * 'code_prefix' sama sekali, dan UpdateProductRequest sengaja tidak
+     * menerima keduanya), jadi $fillable tidak perlu jadi lapis proteksi
+     * kedua yang malah memblokir jalur internal yang sah.
      */
     protected $fillable = [
         'artist_id',
         'category_id',
+        'code_prefix',
+        'product_segment',
         'name',
         'description',
         'image_path',

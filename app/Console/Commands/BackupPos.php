@@ -65,7 +65,17 @@ class BackupPos extends Command
         }
 
         $this->info('Mengarsipkan bukti pembayaran...');
-        $proofsPath = storage_path('app/payment-proofs');
+        // BUG YANG DITEMUKAN & DIPERBAIKI saat bootstrap Laravel 13: sejak
+        // Laravel 11, root disk 'local' default adalah storage/app/private,
+        // BUKAN storage/app langsung. PaymentProofController menyimpan
+        // lewat Storage::disk('local'), jadi path fisiknya sekarang
+        // storage/app/private/payment-proofs. Path lama (storage_path
+        // ('app/payment-proofs')) tidak akan pernah ada, sehingga
+        // is_dir() di bawah selalu false dan cadangan diam-diam
+        // melewati SELURUH bukti pembayaran tanpa galat apa pun.
+        // Diselesaikan dengan meminta path dari disk itu sendiri, bukan
+        // menghardcode asumsi struktur direktori Laravel versi tertentu.
+        $proofsPath = Storage::disk('local')->path('payment-proofs');
         if (is_dir($proofsPath)) {
             $tarFile = "{$backupDir}/payment-proofs.tar.gz";
             exec(sprintf('tar -czf %s -C %s .', escapeshellarg($tarFile), escapeshellarg($proofsPath)));

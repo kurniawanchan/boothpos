@@ -81,6 +81,53 @@ class CashierSessionTest extends TestCase
             ->assertOk()->assertJsonPath('status', 'closed');
     }
 
+    public function test_cashier_cannot_view_another_cashiers_session_summary(): void
+    {
+        // Regresi — celah IDOR ditemukan saat security review: summary()
+        // tidak punya pemeriksaan otorisasi sama sekali, padahal close()
+        // pada controller yang sama sudah menegakkannya untuk sesi yang
+        // sama persis.
+        $ownerOfSession = User::factory()->create(['role' => 'cashier']);
+        $attacker = User::factory()->create(['role' => 'cashier']);
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create([
+            'event_id' => $event->id, 'user_id' => $ownerOfSession->id, 'status' => 'open',
+        ]);
+
+        $this->actingAs($attacker, 'sanctum');
+
+        $this->getJson("/api/v1/sessions/{$session->id}/summary")->assertStatus(403);
+    }
+
+    public function test_owner_can_view_any_cashiers_session_summary(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $owner = User::factory()->create(['role' => 'owner']);
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create([
+            'event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open',
+        ]);
+
+        $this->actingAs($owner, 'sanctum');
+
+        $this->getJson("/api/v1/sessions/{$session->id}/summary")
+            ->assertOk()
+            ->assertJsonPath('order_count', 0);
+    }
+
+    public function test_cashier_can_view_own_session_summary(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create([
+            'event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open',
+        ]);
+
+        $this->actingAs($cashier, 'sanctum');
+
+        $this->getJson("/api/v1/sessions/{$session->id}/summary")->assertOk();
+    }
+
     public function test_closing_computes_cash_difference(): void
     {
         $user = User::factory()->create(['role' => 'cashier']);

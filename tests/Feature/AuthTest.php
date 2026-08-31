@@ -111,6 +111,19 @@ class AuthTest extends TestCase
 
         $response->assertStatus(204);
 
+        // Guard Sanctum (RequestGuard) mem-cache user yang sudah ter-resolve
+        // di DALAM instance guard itu sendiri, dan instance itu bertahan di
+        // container SELAMA satu method test (baru dibuat ulang di method
+        // test berikutnya). Tanpa forgetGuards() di sini, panggilan getJson()
+        // kedua akan memakai user hasil resolve dari panggilan postJson()
+        // logout tadi tanpa mengecek ulang token ke DB sama sekali — murni
+        // artefak berbagi state antar-request DI DALAM SATU test method,
+        // bukan bug produksi (tiap request HTTP sungguhan boot ulang
+        // aplikasi dari nol, jadi tidak ada guard yang bisa "diingat").
+        // Dibuktikan lewat tinker: create->delete->findToken() untuk token
+        // sungguhan bekerja benar di luar konteks test HTTP ini.
+        \Illuminate\Support\Facades\Auth::forgetGuards();
+
         // Token yang sama tidak lagi valid untuk permintaan berikutnya.
         $this->withHeader('Authorization', "Bearer {$token}")
             ->getJson('/api/v1/auth/me')

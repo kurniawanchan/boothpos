@@ -47,6 +47,17 @@ class Category extends Model
     }
 
     /**
+     * BUG YANG DITEMUKAN & DIPERBAIKI — sama seperti Artist::products():
+     * CategoryController::index()/show() memanggil withCount('products')/
+     * loadCount('products') tapi relasinya tidak pernah ditulis, membuat
+     * kedua endpoint itu fatal error 500.
+     */
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class);
+    }
+
+    /**
      * Menelusuri rantai leluhur dari $candidateParentId ke atas. Bila
      * $categoryId ditemukan di rantai tersebut, berarti menjadikan
      * $candidateParentId sebagai induk akan membentuk siklus.

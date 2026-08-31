@@ -74,6 +74,20 @@ class ArtistTest extends TestCase
 
     public function test_code_must_be_unique(): void
     {
+        // BUG TEST YANG DITEMUKAN & DIPERBAIKI — tanpa mengaktifkan Master
+        // di sini, artist pertama (dibuat langsung lewat factory) sudah
+        // memenuhi kuota Pro (1 artist), sehingga permintaan KEDUA ditolak
+        // LicenseGate lebih dulu (403) sebelum aturan unique 'code' sempat
+        // dievaluasi — test ini gagal bukan karena validasi unique-nya
+        // rusak, tapi karena setup-nya tidak mengisolasi dari fitur lisensi
+        // yang memang sengaja dicek duluan. Diaktifkan Master di sini agar
+        // test ini murni menguji validasi keunikan kode, terpisah dari
+        // LicenseGateTest yang sudah menguji perilaku kuota itu sendiri.
+        \App\Models\Setting::updateOrCreate(
+            ['key' => 'multi_artist_enabled'],
+            ['value' => '1', 'type' => 'boolean', 'group' => 'licensing']
+        );
+
         $this->actingAsRole('owner');
         Artist::factory()->create(['code' => 'RYU']);
 

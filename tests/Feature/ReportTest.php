@@ -94,4 +94,42 @@ class ReportTest extends TestCase
 
         $this->getJson("/api/v1/reports/profit?event_id={$event->id}")->assertStatus(403);
     }
+
+    // Regresi — celah access-control ditemukan saat security review:
+    // artistSettlements() tidak punya pemeriksaan owner/admin sama sekali,
+    // padahal mengembalikan payable_amount/deduction per artist (data
+    // komersial sesensitif laporan profit), dan sibling-nya di controller
+    // yang sama (profit, recordSettlementPayment) sudah menegakkannya.
+    public function test_artist_settlements_report_requires_owner_or_admin(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+        $event = Event::factory()->create();
+
+        $this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->assertStatus(403);
+    }
+
+    public function test_export_endpoint_forwards_the_403_instead_of_a_blank_file(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+        $event = Event::factory()->create();
+
+        $this->getJson("/api/v1/reports/profit/export?event_id={$event->id}")->assertStatus(403);
+    }
+
+    // Regresi — bug ditemukan saat security review: match() di export()
+    // tidak punya cabang 'profit' walau route mengizinkannya, sehingga
+    // selalu jatuh ke default dan diam-diam menghasilkan file kosong.
+    public function test_profit_export_produces_a_real_file_for_owner(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+        $event = Event::factory()->create();
+
+        $response = $this->get("/api/v1/reports/profit/export?event_id={$event->id}");
+
+        $response->assertOk();
+        $this->assertGreaterThan(0, strlen($response->streamedContent()));
+    }
 }

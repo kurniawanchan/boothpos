@@ -33,7 +33,14 @@ class EventController extends Controller
 
     public function store(StoreEventRequest $request): JsonResponse
     {
-        return response()->json(Event::create($request->validated()), 201);
+        // 'status' diisi eksplisit di sini, bukan dibiarkan jatuh ke
+        // default kolom database — Eloquent tidak membaca balik nilai
+        // default DB ke instance model setelah insert, jadi tanpa baris
+        // ini $event->status akan null di response walau baris DB-nya
+        // sudah benar 'draft' (bug yang ditemukan saat bootstrap).
+        $event = Event::create([...$request->validated(), 'status' => 'draft']);
+
+        return response()->json($event, 201);
     }
 
     public function show(Event $event): JsonResponse

@@ -93,6 +93,16 @@ class ReportController extends Controller
 
     public function artistSettlements(Request $request): JsonResponse
     {
+        // Sejalan dengan PRD 7.13 (kasir tidak boleh mengakses laporan
+        // modal/keuntungan) dan konsisten dengan profit()/
+        // recordSettlementPayment() di controller ini — rekap hasil
+        // artist memuat payable_amount dan deduction, data komersial yang
+        // sama sensitifnya dengan laporan profit, jadi harus digerbang
+        // sama, bukan cuma mutasinya (recordSettlementPayment) saja.
+        if (! $request->user()->isOwnerOrAdmin()) {
+            return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
+        }
+
         $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
         $event = Event::findOrFail($eventId);
 
@@ -141,19 +151,33 @@ class ReportController extends Controller
             return response()->json(['message' => 'Laporan tidak dikenali.'], 404);
         }
 
-        $eventId = $request->integer('event_id');
-
-        [$rows, $filename] = match ($report) {
-            'sales' => [
-                json_decode($this->sales($request)->getContent(), true)['rows'],
-                'laporan-penjualan.xlsx',
-            ],
-            'artist-settlements' => [
-                json_decode($this->artistSettlements($request)->getContent(), true)['data'],
-                'rekap-artist.xlsx',
-            ],
-            default => [[], 'laporan.xlsx'],
+        // BUG YANG DITEMUKAN & DIPERBAIKI — match() di bawah sebelumnya
+        // tidak punya cabang 'profit' walau route mengizinkan nilai itu
+        // (lihat where('report', 'sales|profit|artist-settlements') di
+        // routes/api.php). Akibatnya export profit selalu jatuh ke
+        // 'default' dan diam-diam menghasilkan file kosong tanpa galat
+        // apa pun — tidak ketahuan kecuali membuka isi file-nya.
+        [$response, $dataKey, $filename] = match ($report) {
+            'sales' => [$this->sales($request), 'rows', 'laporan-penjualan.xlsx'],
+            'profit' => [$this->profit($request), null, 'laporan-profit.xlsx'],
+            'artist-settlements' => [$this->artistSettlements($request), 'data', 'rekap-artist.xlsx'],
         };
+
+        // profit() dan artistSettlements() menegakkan otorisasinya sendiri
+        // (403 untuk kasir). Galat itu WAJIB diteruskan apa adanya, bukan
+        // ditelan lalu diam-diam mengekspor berkas kosong — kalau tidak,
+        // batasan akses laporan modal/keuntungan (PRD 7.13) bisa dilewati
+        // lewat endpoint export ini.
+        if ($response->getStatusCode() !== 200) {
+            return $response;
+        }
+
+        $payload = json_decode($response->getContent(), true);
+
+        // Laporan profit berbentuk satu objek ringkasan (bukan daftar
+        // baris) — dibungkus jadi satu baris supaya tetap kompatibel
+        // dengan GenericArrayExport yang mengasumsikan array of rows.
+        $rows = $dataKey === null ? [$payload] : $payload[$dataKey];
 
         return \Maatwebsite\Excel\Facades\Excel::download(
             new \App\Exports\GenericArrayExport($rows),

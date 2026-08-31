@@ -97,8 +97,15 @@ class CashierSessionController extends Controller
         return response()->json($session->fresh());
     }
 
-    public function summary(CashierSession $session): JsonResponse
+    public function summary(Request $request, CashierSession $session): JsonResponse
     {
+        // Otorisasi objek — celah IDOR yang sama seperti disebutkan pada
+        // close(): tanpa ini, kasir A bisa membaca total penjualan dan
+        // rincian metode bayar sesi kasir B hanya dengan menebak {id}.
+        if ($session->user_id !== $request->user()->id && ! $request->user()->isOwnerOrAdmin()) {
+            return response()->json(['message' => 'Anda tidak berhak melihat ringkasan sesi ini.'], 403);
+        }
+
         $orders = $session->orders()->where('status', 'completed')->get();
 
         $byMethod = Payment::whereIn('order_id', $orders->pluck('id'))
