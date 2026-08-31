@@ -1,10 +1,43 @@
+**Klasifikasi: INTERNAL**
+
 # BoothPOS — Backend Laravel
 
 BoothPOS — sistem POS event-based multi-artist untuk toko merchandise, dijual sebagai lisensi sekali bayar dengan instalasi lokal per toko.
 
 Akumulasi Increment 1–3+ (Auth, Artist, Category, Product/Variant, Customer,
 Stock, Event/Session, Payment, Order, Preorder/Shipment, Report/Settlement,
-Backup). Cakupan lengkap ada di laporan sesi terpisah yang menyertai zip ini.
+Backup) ditambah sesi bootstrap (lihat "Status eksekusi" di bawah): Laravel
+13 sungguhan dipasang di sekeliling kode ini, seluruh test dijalankan
+terhadap MySQL sungguhan, dan Activity Log (F13.4) beserta Settings admin
+CRUD (F14) diimplementasikan.
+
+## Status eksekusi
+
+**Kode ini SUDAH dieksekusi dan diuji sungguhan** — bagian ini dulu
+mengatakan sebaliknya; itu sudah tidak berlaku. Ringkasan:
+
+- Laravel 13.29 (PHP 8.4.5) dipasang di sekeliling bundel kode ini tanpa
+  mengubah logika bisnis yang sudah ada — lihat "Prasyarat instalasi" di
+  bawah untuk detail langkah dan apa yang disatukan dari mana.
+- `composer require maatwebsite/excel` (v4.0.2) dijalankan sungguhan.
+  `GenericArrayExport` diverifikasi menghasilkan berkas `.xlsx` yang benar
+  (signature ZIP valid, dibaca ulang lewat PhpSpreadsheet, isi kolom/baris
+  cocok) — bukan asumsi lagi.
+- Migration dijalankan terhadap database `boothpos` (MySQL 8.4 sungguhan,
+  bukan SQLite) dan `php artisan db:seed` berhasil membuat 5 user + 2 kanal
+  pembayaran + pengaturan toko.
+- **Seluruh test suite hijau: 120/120 lulus, 0 gagal, 0 galat**, dijalankan
+  terhadap database `boothpos_test` (MySQL sungguhan — WAJIB, karena dua
+  migration memakai `DB::statement('ALTER TABLE ... ADD CONSTRAINT ...
+  CHECK (...)')` yang sintaksnya MySQL-only dan akan gagal di SQLite).
+  Jalankan dengan `php artisan test` setelah menyalin `.env.testing` sendiri
+  (lihat "Menjalankan").
+- Sesuai prediksi di versi README sebelumnya: hampir seluruh kegagalan yang
+  ditemukan adalah masalah asumsi versi Laravel/Sanctum/PHP, BUKAN logika
+  bisnis inti. Daftar lengkap bug yang ditemukan dan diperbaiki ada di
+  bagian "Bug yang ditemukan saat eksekusi" di bawah — semuanya dibuktikan
+  lewat test yang benar-benar gagal lalu lulus setelah diperbaiki, bukan
+  ditebak dari membaca kode.
 
 ## Lisensi Pro vs Master (multi-artist toggle)
 
@@ -15,8 +48,10 @@ tingkat harga tanpa build kode terpisah:
   sendiri). `POST /artists` yang kedua ditolak 403.
 - **Master** — `true`. Tidak ada batas jumlah artist.
 
-Cek status: `GET /settings/features`. Ubah lewat `Setting::updateOrCreate`
-(belum ada endpoint admin untuk ini — lihat Remaining Issues).
+Cek status: `GET /settings/features`. Ubah lewat `PUT /settings` (endpoint
+admin owner/admin — lihat "Settings admin CRUD" di bawah; sebelumnya harus
+lewat `Setting::updateOrCreate` di tinker/seeder karena belum ada endpoint,
+gap ini sudah ditutup).
 
 Logika ada di satu tempat: `app/Support/LicenseGate.php`. Penegakan
 sesungguhnya di `ArtistPolicy::create`, bukan di controller atau frontend.
@@ -28,6 +63,36 @@ lewat review kode statis):
 2. `Setting::get()` memakai `Cache::rememberForever` tanpa invalidasi —
    upgrade Pro ke Master tidak akan langsung berlaku tanpa restart
    aplikasi. Ditambal lewat model event `saved`/`deleted` di `Setting`.
+
+## Activity Log (F13.4)
+
+Log aktivitas untuk tindakan sensitif — hapus data, penyesuaian stok, ubah
+harga — sesuai PRD 7.13, prioritas M. Sebelumnya belum diimplementasikan
+sama sekali; sekarang:
+
+- Migration `activity_logs` (mengikuti `docs/schema-pos-mvp.sql`), model
+  `ActivityLog`, dan service tunggal `App\Services\ActivityLogger` sebagai
+  satu-satunya jalur penulisan.
+- Ditulis DI DALAM transaksi database yang sama dengan tindakan sensitifnya
+  (hapus artist/kategori/produk, ubah produk/varian, penyesuaian stok
+  manual) — kalau tindakannya batal, baris log ikut batal, tidak pernah ada
+  log yang mengklaim sesuatu terjadi padahal tidak.
+- Penyesuaian stok manual (`type: adjustment`) yang dicatat, BUKAN setiap
+  pergerakan stok — penjualan/pembelian/preorder tidak membanjiri log ini,
+  sesuai kata "penyesuaian" di PRD, bukan "seluruh pergerakan".
+- Dibaca lewat `GET /activity-logs` (owner/admin saja), bisa difilter per
+  `entity_type`, `entity_id`, `user_id`, `action`, dan rentang tanggal.
+
+## Settings admin CRUD
+
+`GET /settings` dan `PUT /settings` (owner/admin, lewat `SettingPolicy`).
+Menutup gap yang disebutkan versi README sebelumnya — `Setting::
+updateOrCreate` sudah lama ada sebagai kapabilitas model, tapi tidak ada
+endpoint untuk mencapainya. `PUT /settings` menerima bentuk BULK
+(`{"settings": [{"key", "value", "type"?, "group"?}, ...]}`) karena layar
+pengaturan biasanya menyimpan beberapa field sekaligus, dan ini juga
+satu-satunya jalur admin untuk upgrade Pro ke Master (`multi_artist_
+enabled`). Setiap perubahan tercatat di Activity Log.
 
 ## Data dummy untuk testing manual
 
@@ -44,43 +109,229 @@ kode sumber, jangan dipakai di lingkungan yang bisa diakses orang lain.
 
 Ada di folder `bruno/` — bukan cuma daftar endpoint, tapi satu alur
 end-to-end dari login sampai laporan, termasuk skenario negatif (lihat
-`bruno/README.md`). Belum pernah dijalankan sungguhan, sama seperti kode
-PHP-nya.
+`bruno/README.md`). **Belum dijalankan sungguhan lewat Bruno pada sesi
+ini** — verifikasi sesi ini memakai `php artisan test` (120 test lulus)
+dan pemanggilan endpoint manual (tinker/artisan) sebagai gantinya, yang
+menutupi jalur yang sama tapi bukan alat yang sama. Menjalankan koleksi
+Bruno langsung tetap tugas terbuka sebelum uji lapangan penuh (WBS 9.5).
 
-## Prasyarat instalasi (belum pernah dijalankan di sandbox pembuat kode ini)
+## Prasyarat instalasi
+
+Sudah dijalankan dan terverifikasi pada sesi ini — bukan lagi asumsi.
+Ringkasan langkah yang benar-benar dipakai untuk membawa bundel kode ini
+(yang tidak menyertakan `artisan`/`bootstrap/`/`public/`/`vendor/`) menjadi
+aplikasi Laravel yang bisa dijalankan:
 
 ```bash
-composer create-project laravel/laravel boothpos
-cd boothpos
-php artisan install:api        # memasang Sanctum + routes/api.php
+# 1. Skeleton Laravel dibuat terpisah, lalu Sanctum dipasang di dalamnya
+composer create-project laravel/laravel <tmp-dir>
+cd <tmp-dir>
+php artisan install:api        # memasang Sanctum + routes/api.php + migration personal_access_tokens
+
+# 2. Infrastruktur skeleton (artisan, bootstrap/, public/, resources/,
+#    config/*.php dasar, composer.json/lock, phpunit.xml, tests/TestCase.php,
+#    storage/*/.gitignore) disalin ke proyek ini TANPA menimpa app/Models,
+#    app/Http, app/Services, app/Policies, database/migrations, database/
+#    factories, database/seeders/DatabaseSeeder.php, routes/api.php,
+#    tests/Feature, atau config/backup.php milik bundel ini.
+#    Migration users/cache/jobs bawaan skeleton DIBUANG (proyek ini
+#    punya migration users sendiri; cache/session/queue dikonfigurasi
+#    'file'/'sync', bukan 'database', supaya tidak perlu tabel tambahan
+#    di luar docs/schema-pos-mvp.sql — lihat .env.example).
+#    Migration personal_access_tokens Sanctum DIPERTAHANKAN, diberi ulang
+#    tanggal 2026_09_30 (sebelum 2026_10_01_...) supaya konsisten dengan
+#    konvensi "tabel infrastruktur duluan" — aman karena kolomnya
+#    polimorfik (morphs), tidak ada FK keras ke users.
+
+# 3. Dependencies
+cd <proyek-ini>
+composer install
 composer require maatwebsite/excel
 ```
 
 Set `APP_NAME=BoothPOS` di `.env` — ini nama produk, bukan nama toko.
 Nama toko (dicetak di struk) diatur terpisah lewat tabel `settings`
 (`store_name`), diisi masing-masing pembeli BoothPOS sesuai bisnisnya
-sendiri saat instalasi — lihat `DatabaseSeeder`.
-
-Salin seluruh folder `app/`, `database/`, `routes/`, `tests/`, `config/backup.php`
-dari paket ini ke proyek, timpa `routes/api.php` bawaan.
+sendiri saat instalasi — lihat `DatabaseSeeder`, atau `PUT /settings`
+setelah instalasi berjalan.
 
 Tambahkan ke `.env`:
 ```
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=boothpos
+DB_USERNAME=<user_aplikasi>
+DB_PASSWORD=<password_aplikasi>
+
 BACKUP_EXTERNAL_PATH=/path/ke/flashdisk-atau-hdd
 ```
+
+Untuk test (`php artisan test`), buat `.env.testing` terpisah menunjuk ke
+database test (BUKAN database aplikasi di atas — test suite menjalankan
+`migrate:fresh` berulang kali):
+```
+APP_ENV=testing
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=boothpos_test
+DB_USERNAME=<user_aplikasi>
+DB_PASSWORD=<password_aplikasi>
+```
+`phpunit.xml` sengaja TIDAK memaksa `DB_CONNECTION=sqlite` (beda dari
+default skeleton Laravel) supaya `.env.testing` di atas benar-benar
+dipakai — dua migration transaksi memakai `CHECK` constraint MySQL-only
+yang akan gagal total di SQLite.
+
+`.env` dan `.env.testing` tidak pernah dikomit ke git (lihat `.gitignore`)
+— jangan salin kredensial database ke dokumen atau commit message manapun.
 
 ## Menjalankan
 
 ```bash
 php artisan migrate
+php artisan db:seed
 php artisan test
 ```
 
-Saya tidak dapat menjalankan ini di sandbox (tidak ada akses packagist.org,
-tidak ada PHP terpasang). **Kode ini belum pernah tereksekusi.** Jalankan
-`php artisan test` sebagai langkah pertama begitu Anda menyalinnya, dan
-laporkan kegagalan — kemungkinan besar karena asumsi versi Laravel/Sanctum,
-bukan logika bisnis (yang sudah ditinjau manual baris per baris).
+Hasil sesi ini: migration jalan bersih (16 tabel awal + `personal_access_
+tokens` + `activity_logs` = 18), seeder jalan bersih, **120/120 test
+lulus** terhadap MySQL 8.4 sungguhan. Kegagalan yang ditemukan saat
+eksekusi pertama (lihat bagian berikut) semuanya masalah bootstrap/versi,
+bukan logika bisnis inti — logika bisnis inti (transaksi, stok, harga,
+lisensi) yang sudah ditinjau baris per baris di sesi-sesi sebelumnya lolos
+tanpa perlu diubah.
+
+## Bug yang ditemukan saat eksekusi (bukan lagi ASUMSI — dibuktikan lewat test)
+
+Seluruhnya ditemukan lewat test yang gagal, diperbaiki, lalu test yang
+sama dijalankan ulang sampai lulus — bukan dugaan dari membaca kode.
+
+**Bootstrap/infrastruktur (persis seperti diprediksi versi README
+sebelumnya — masalah versi Laravel, bukan bisnis):**
+1. `app/Http/Controllers/Controller.php` tidak ada sama sekali di bundel
+   ini. Skeleton Laravel 11+ menghasilkan base Controller kosong (tanpa
+   trait), padahal 5 controller di bundel ini memanggil `$this->
+   authorize(...)` yang butuh trait `AuthorizesRequests`. Ditambal dengan
+   menambahkan file ini kembali dengan trait tersebut.
+2. `Artist::products()` dan `Category::products()` (relasi HasMany) tidak
+   pernah ditulis, padahal controller masing-masing memanggil
+   `withCount('products')`/`loadCount('products')` — fatal 500 di setiap
+   endpoint list/show artist dan kategori.
+3. `Product`/`ProductVariant::$fillable` sengaja mengecualikan
+   `code_prefix`/`product_segment`/`sku` dengan niat mencegah mass-
+   assignment dari klien — tapi SATU-SATUNYA jalur pembuatan produk/varian
+   di seluruh kodebase (controller, factory, test) menulis kolom itu lewat
+   `create()`, sehingga setiap insert gagal "doesn't have a default
+   value". Perlindungan sesungguhnya sudah cukup di lapisan validasi
+   (FormRequest tidak menyediakan rule untuk kolom ini), jadi kolom
+   ditambahkan kembali ke `$fillable`.
+4. `Event::$fillable` tidak menyertakan `status` — `updateStatus()`
+   menulis status baru lewat `update(['status' => ...])` yang diam-diam
+   tidak berefek apa pun (bukan error, hanya tidak tersimpan). Event
+   secara efektif TIDAK PERNAH berpindah status meski API merespons 200.
+5. `BackupPos` men-hardcode `storage_path('app/payment-proofs')`; sejak
+   Laravel 11 root disk `local` pindah ke `storage/app/private`. Cadangan
+   diam-diam melewati SELURUH bukti pembayaran tanpa galat apa pun.
+   Diselesaikan dengan meminta path dari disk itu sendiri.
+6. `BackupPos` memanggil `proc_open($command, [2 => [...]], $pipes, null,
+   ['MYSQL_PWD' => $dbPass])` — argumen environment ke-5 pada `proc_open`
+   MENGGANTI seluruh environment child process, bukan menambahkannya
+   (beda dari `exec()`/`shell_exec()` yang otomatis mewarisi penuh).
+   Akibatnya proses `mysqldump` tidak punya `PATH` sama sekali dan gagal
+   "command not found" walau mysqldump terpasang benar. Baru ketahuan
+   setelah benar-benar dieksekusi — lihat "Cadangan & pemulihan" di bawah.
+   Diperbaiki dengan `getenv() + ['MYSQL_PWD' => $dbPass]` (menggabung,
+   bukan mengganti). `RestorePos` (baru) memakai pola yang sama sejak awal.
+7. Dua bug di test itu sendiri (bukan kode aplikasi): `AuthTest::
+   test_logout_revokes_current_token` butuh `Auth::forgetGuards()` di
+   antara dua panggilan HTTP simulasi dalam satu method test (guard
+   Sanctum meng-cache user yang sudah ter-resolve selama container
+   aplikasi masih hidup, dan container itu bertahan sepanjang satu method
+   test — bukan bug produksi, karena request sungguhan selalu boot ulang
+   aplikasi dari nol). `StockTest::makeVariant()` meng-hardcode SKU yang
+   sama untuk setiap pemanggilan, baru menabrak unique constraint saat ada
+   test yang memanggilnya dua kali.
+8. `ArtistTest::test_code_must_be_unique` gagal karena setup-nya tidak
+   mengaktifkan Master, sehingga kuota lisensi Pro (yang memang sengaja
+   dicek sebelum validasi lain) menghalangi permintaan kedua sebelum aturan
+   unique sempat diuji — bukan validasi unique-nya yang rusak.
+
+**Access control (ditemukan lewat security review, diverifikasi langsung
+ke kode sebelum diperbaiki — satu temuan diinvestigasi dan SENGAJA
+dibiarkan karena bertentangan dengan test yang sudah ada):**
+9. `CashierSessionController::summary()` tidak punya pemeriksaan otorisasi
+   sama sekali (celah IDOR) — padahal `close()` di controller yang sama,
+   untuk resource yang sama persis, sudah menegakkannya. Ditambal dengan
+   guard yang sama: pemilik sesi atau owner/admin.
+10. `ReportController::artistSettlements()` tidak punya gerbang owner/
+    admin — padahal mengembalikan `payable_amount`/`deduction` per artist
+    (data komersial sesensitif laporan profit), dan sibling-nya di
+    controller yang sama (`profit()`, `recordSettlementPayment()`) sudah
+    menegakkannya, sejalan dengan PRD 7.13 (kasir tidak boleh mengakses
+    laporan modal/keuntungan).
+11. `ReportController::export()` — `match()` tidak punya cabang `'profit'`
+    walau route mengizinkan nilai itu, sehingga selalu jatuh ke `default`
+    dan diam-diam menghasilkan file kosong. Diperbaiki, dan `export()`
+    sekarang meneruskan galat 403 dari `profit()`/`artistSettlements()`
+    apa adanya alih-alih diam-diam mengekspor data kosong (yang kalau
+    tidak diperbaiki bisa jadi jalan pintas melewati gerbang akses laporan).
+12. `ShipmentController::store()`/`update()` DIPERTIMBANGKAN untuk digerbang
+    owner/admin/inventory (PRD 7.11 punya ASSUMPTION soal ongkos kirim
+    diinput admin), tapi `PreorderTest::
+    test_shipment_can_only_be_created_for_courier_fulfillment` sudah
+    menjalankan endpoint ini sebagai kasir dan mengharapkan 409 (bukan
+    403) — bukti konkret bahwa akses kasir di sini disengaja, konsisten
+    dengan seluruh endpoint preorder lain. **Sengaja tidak diubah.**
+13. `StockController::adjust()` sempat dicurigai tidak punya pemeriksaan
+    peran — ternyata SUDAH digerbang lewat `StockAdjustmentRequest::
+    authorize()` (`canManageMasterData()`), dan sudah ada test yang
+    memverifikasinya. Tidak ada perubahan; dicatat di sini supaya jelas
+    ini sudah diperiksa, bukan terlewat.
+
+## Cadangan & pemulihan (WBS 9.2)
+
+**Dieksekusi sungguhan pada sesi ini — bukan lagi kewajiban yang ditunda.**
+
+```bash
+php artisan app:backup                     # buat cadangan baru
+php artisan app:restore <path/database.sql>   # pulihkan (MENIMPA data tujuan)
+php artisan app:restore <path> --force     # lewati konfirmasi (automasi)
+```
+
+Hasil verifikasi: `php artisan app:backup` dijalankan terhadap database
+`boothpos` dev, menghasilkan `storage/app/backups/<timestamp>/database.sql`
+(dump MySQL penuh, 22 tabel, lengkap dengan `DROP TABLE IF EXISTS` per
+tabel) dan `payment-proofs.tar.gz`, keduanya juga tersalin ke
+`BACKUP_EXTERNAL_PATH`. Dump tersebut dipulihkan ke database `boothpos_test`
+lewat `php artisan app:restore` (perintah baru, simetris dengan
+`app:backup`, memakai perbaikan bug #6 di atas sejak awal) — jumlah baris
+dan isi data (username, role, key/value pengaturan) dikonfirmasi cocok
+persis dengan sumbernya. Arsip `payment-proofs.tar.gz` dikonfirmasi bisa
+diekstrak dan isinya cocok dengan lokasi penyimpanan bukti pembayaran yang
+sesungguhnya (lihat bug #5). Test suite (120/120) tetap lulus setelah
+`boothpos_test` dipulihkan-lalu-di-reset ulang oleh `RefreshDatabase`.
+
+CATATAN LINGKUNGAN — mesin pengembangan sesi ini hanya punya MySQL di
+dalam kontainer Docker (`laradock-mysql-1`), tanpa `mysql`/`mysqldump` di
+host langsung. Untuk memverifikasi `BackupPos`/`RestorePos` TANPA memasang
+software MySQL apa pun secara permanen di host, verifikasi memakai dua
+skrip shim sementara (proxy ke `docker exec` container yang sudah ada)
+yang HANYA ditaruh di direktori kerja sesi, tidak pernah dikomit, dan
+dihapus setelah verifikasi selesai — bukan bagian dari produk. Kode
+`BackupPos`/`RestorePos` sendiri TETAP mengasumsikan `mysqldump`/`mysql`
+tersedia langsung di `PATH` server tempat BoothPOS berjalan, yang memang
+seharusnya benar untuk instalasi toko sungguhan (server lokal dengan MySQL
+terpasang normal, bukan di dalam kontainer terpisah). Jangan mengira
+pendekatan shim ini sebagai bagian dari mekanisme cadangan produk.
+
+Yang belum dilakukan (di luar cakupan sesi ini, catat sebagai tugas
+lanjutan sebelum event pertama): uji pemulihan dari media eksternal
+sungguhan (flashdisk/HDD nyata, bukan direktori lokal pengganti), dan
+penjadwalan otomatis harian (`routes/console.php` belum berisi
+`Schedule::command('app:backup')` — WBS 9.1 menyebut "cadangan berjalan
+terjadwal", tapi penjadwalan konkretnya belum ditambahkan di sesi ini).
 
 ## Urutan migration penting
 
@@ -90,16 +341,37 @@ sengaja membuat kolom `payments.preorder_id` TANPA constrained(), karena
 tabel `preorders` belum ada di titik itu — constraint-nya ditambahkan di
 migration `preorders_tables` lewat `Schema::table('payments', ...)`.
 
-## Gap yang diketahui — lihat laporan sesi untuk daftar lengkap
+Dua migration ditambahkan pada sesi bootstrap ini, mengikuti aturan yang
+sama:
+- `2026_09_30_000001_create_personal_access_tokens_table` (Sanctum) —
+  diberi tanggal SEBELUM `2026_10_01_000000_create_users_table` mengikuti
+  konvensi "tabel infrastruktur duluan"; aman di posisi manapun karena
+  kolomnya polimorfik (morphs), tidak ada FK keras ke `users`.
+- `2026_10_06_000001_create_activity_logs_table` (F13.4) — ditambahkan di
+  AKHIR urutan (setelah `preorders_tables`), bukan di dekat `settings` yang
+  disarankan `docs/schema-pos-mvp.sql`, karena satu-satunya dependensi
+  tabel ini adalah `users` yang sudah ada sejak awal, dan menambah file di
+  akhir tidak menyisipkan apa pun di tengah urutan yang sudah teruji.
 
-Ringkasan singkat, detail dan status ada di `LAPORAN-SESI-3.md`:
+## Gap yang diketahui
 
-1. Frontend Vue (POS screen, webcam, katalog cetak) — di luar cakupan sesi ini.
-2. `maatwebsite/excel` adalah ASUMSI pustaka, belum terverifikasi jalan.
-3. `BackupPos` command belum pernah dieksekusi — WBS 9.2 (uji pemulihan)
-   WAJIB dilakukan manual sebelum event pertama.
-4. Activity log (F13.4) belum diimplementasikan.
-5. Guard "hapus artist/kategori dengan produk aktif" sudah aktif sekarang
-   (tabel products sudah ada), tapi belum ada test baru yang memverifikasi
-   ulang skenario ini dengan produk sungguhan — test lama di Increment 1-2
-   ditulis sebelum tabel products ada.
+1. Frontend Vue (POS screen, webcam, katalog cetak) — di luar cakupan
+   backend, belum dibangun.
+2. Koleksi Bruno belum dijalankan sungguhan lewat aplikasi Bruno (lihat
+   "Koleksi Bruno" di atas) — API-nya sendiri sudah terverifikasi lewat
+   120 test otomatis dan pemanggilan manual.
+3. Penjadwalan otomatis `app:backup` (`Schedule::command` di
+   `routes/console.php`) belum ditambahkan — perintahnya sudah ada dan
+   terverifikasi jalan, tapi belum dipicu otomatis harian.
+4. Uji pemulihan dari media eksternal FISIK (flashdisk/HDD sungguhan)
+   belum dilakukan — verifikasi sesi ini memakai direktori lokal sebagai
+   pengganti `BACKUP_EXTERNAL_PATH`.
+5. `docs/schema-pos-mvp.sql` belum diperbarui untuk mencerminkan
+   penyimpangan yang sudah didokumentasikan di migration
+   `payment_proofs` sendiri (kolom `proof_token`, `payment_id` nullable)
+   — gap dokumentasi lama, bukan baru, dicatat ulang di sini karena masih
+   berlaku.
+6. Guard "hapus artist/kategori dengan produk aktif" — SUDAH diverifikasi
+   lulus lewat `ArtistDeleteGuardTest`/`CategoryDeleteGuardTest` pada sesi
+   ini (bagian dari 120 test yang lulus), menutup gap yang disebutkan
+   versi README sebelumnya.

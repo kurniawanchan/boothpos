@@ -15,11 +15,9 @@ use Illuminate\Support\Facades\Storage;
  * Dijadwalkan harian lewat routes/console.php (Schedule::command), dan
  * dapat dipicu manual sebelum berangkat ke event.
  *
- * BELUM DIVERIFIKASI JALAN — sandbox ini tidak punya mysqldump maupun
- * MySQL yang bisa dites. Jalankan manual di lingkungan lokal dan
- * konfirmasi hasil dump benar-benar bisa dipulihkan (php artisan app:backup
- * lalu restore ke database kosong) sebelum event pertama — ini kriteria
- * "uji pemulihan" yang WBS 9.2 syaratkan, bukan opsional.
+ * DIVERIFIKASI JALAN — dieksekusi sungguhan terhadap database dev lokal
+ * (lihat README bagian "Cadangan & pemulihan (WBS 9.2)" untuk hasil dan
+ * prosedur pemulihan lengkap).
  */
 class BackupPos extends Command
 {
@@ -55,12 +53,29 @@ class BackupPos extends Command
             escapeshellarg($sqlFile)
         );
 
+        // BUG YANG DITEMUKAN & DIPERBAIKI — proc_open() mengganti SELURUH
+        // environment proses child dengan array yang diberikan di argumen
+        // ke-5, bukan MENAMBAHKAN ke environment yang sudah ada (beda dari
+        // exec()/shell_exec() yang otomatis mewarisi environment penuh).
+        // Sebelumnya di sini hanya ['MYSQL_PWD' => $dbPass] yang dilewatkan,
+        // sehingga child process TIDAK PUNYA PATH sama sekali dan gagal
+        // dengan "mysqldump: command not found" (exit 127) — walau
+        // mysqldump terpasang benar di PATH proses PHP-nya sendiri.
+        // Baru ketahuan setelah benar-benar dijalankan, persis seperti yang
+        // diperingatkan komentar lama di sini soal "belum pernah dites".
+        $env = getenv() + ['MYSQL_PWD' => $dbPass];
+
         $this->info('Membuat dump database...');
-        $process = proc_open($command, [2 => ['pipe', 'w']], $pipes, null, ['MYSQL_PWD' => $dbPass]);
+        $process = proc_open($command, [2 => ['pipe', 'w']], $pipes, null, $env);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[2]);
         $exitCode = proc_close($process);
 
         if ($exitCode !== 0 || ! file_exists($sqlFile) || filesize($sqlFile) === 0) {
             $this->error('mysqldump gagal atau menghasilkan berkas kosong.');
+            if ($stderr !== '') {
+                $this->error($stderr);
+            }
             return self::FAILURE;
         }
 
