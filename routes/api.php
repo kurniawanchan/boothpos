@@ -26,6 +26,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
 
         Route::get('/settings/features', [SettingsController::class, 'features']);
+        Route::get('/settings', [SettingsController::class, 'index']);
+        Route::put('/settings', [SettingsController::class, 'update']);
 
         Route::apiResource('artists', ArtistController::class);
         Route::apiResource('categories', CategoryController::class);
