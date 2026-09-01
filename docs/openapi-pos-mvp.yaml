@@ -378,6 +378,34 @@ paths:
         '204': { description: Berhasil }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /categories/{id}/image:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Master Data]
+      summary: Unggah/ganti gambar kategori (Task 5)
+      description: |
+        Kategori sebelumnya tidak punya kolom gambar sama sekali
+        (`image_path` ditambahkan lewat migrasi
+        `2026_10_07_000001_add_image_path_to_categories_table`). Pola sama
+        dengan POST /products/{id}/image.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary, description: JPEG atau PNG, maksimal 5 MB. }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # ------------------------------------------------------------------
   # MASTER DATA — PRODUK
   # ------------------------------------------------------------------
@@ -469,6 +497,35 @@ paths:
       responses:
         '204': { description: Berhasil }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /products/{id}/image:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Master Data]
+      summary: Unggah/ganti gambar produk (Task 5)
+      description: |
+        Terpisah dari POST/PUT /products karena endpoint itu menerima
+        array bersarang `variants`, yang sulit dikirim lewat
+        multipart/form-data. Gambar lama (bila ada) dihapus setelah
+        gambar baru tersimpan. Disk publik — dilayani lewat
+        /storage/... setelah `php artisan storage:link`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary, description: JPEG atau PNG, maksimal 5 MB. }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /products/{id}/variants:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -816,6 +873,76 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/PaymentChannel' }
+    post:
+      tags: [Payment]
+      summary: Tambah kanal pembayaran (owner/admin)
+      description: |
+        Task 4 — `qr_image` kini bisa diikutsertakan saat membuat kanal
+        (sebelumnya tidak ada field gambar sama sekali di endpoint ini,
+        sehingga kanal QR baru tidak pernah punya cara diberi gambar QR).
+        Disimpan di disk publik supaya bisa dirender langsung oleh UI POS.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type, provider, account_name]
+              properties:
+                type: { type: string, enum: [bank_transfer, qr_ewallet] }
+                provider: { type: string, maxLength: 50 }
+                account_name: { type: string, maxLength: 100 }
+                account_number: { type: string, nullable: true, description: Wajib untuk bank_transfer. }
+                display_order: { type: integer }
+                qr_image:
+                  type: string
+                  format: binary
+                  description: JPEG atau PNG, maksimal 5 MB. Opsional — bisa ditambahkan belakangan lewat POST /payment-channels/{id}.
+      responses:
+        '201':
+          description: Tersimpan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentChannel' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /payment-channels/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Payment]
+      summary: Ubah kanal pembayaran, termasuk gambar QR (owner/admin)
+      description: |
+        Task 4 — endpoint yang SEBELUMNYA SAMA SEKALI TIDAK ADA (hanya
+        index()/store() yang terdaftar). Tanpa ini, kanal yang sudah
+        dibuat tanpa QR code tidak bisa diberi gambar belakangan.
+        Memakai POST, bukan PUT, karena unggahan multipart/form-data
+        dengan method override lebih konsisten diimplementasikan di
+        klien lewat POST langsung.
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                type: { type: string, enum: [bank_transfer, qr_ewallet] }
+                provider: { type: string, maxLength: 50 }
+                account_name: { type: string, maxLength: 100 }
+                account_number: { type: string, nullable: true }
+                display_order: { type: integer }
+                is_active: { type: boolean }
+                qr_image: { type: string, format: binary, description: JPEG atau PNG, maksimal 5 MB. }
+                remove_qr_image:
+                  type: boolean
+                  description: Menghapus gambar QR yang sudah ada tanpa menggantinya.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentChannel' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /payment-proofs:
     post:
@@ -1416,6 +1543,19 @@ paths:
 
         **Sel kosong berarti "jangan diubah"**, bukan "kosongkan nilainya".
 
+        **Task 6 — gambar via impor massal.** Sheet `products` dan
+        `categories` punya kolom `image_filename`. Bila diisi, nilainya
+        harus PERSIS SAMA dengan nama asli salah satu berkas yang
+        diunggah bersamaan lewat field `images[]` pada request yang sama.
+        Berkas yang cocok disalin ke penyimpanan publik (lokasi yang sama
+        dengan `POST /products/{id}/image` / `POST /categories/{id}/image`,
+        Task 5) dan `image_path` entitas diisi. Nama berkas yang
+        direferensikan TAPI TIDAK ADA padanannya di `images[]` adalah
+        GALAT PER BARIS (`column: image_filename`), bukan dilewati diam-diam
+        — konsisten dengan strategi semua-atau-tidak-sama-sekali impor ini.
+        Kolom kosong berarti "tidak ada gambar diikutsertakan" (gambar yang
+        sudah ada, bila ada, tidak diubah).
+
         Digerbang `canManageMasterData()` (owner/admin/inventory).
       requestBody:
         required: true
@@ -1435,6 +1575,14 @@ paths:
                   description: |
                     Bila `true`, berkas hanya divalidasi dan jumlah baris
                     dilaporkan — tidak ada data yang ditulis (F15.4).
+                images:
+                  type: array
+                  items: { type: string, format: binary }
+                  description: |
+                    Task 6 — batch gambar JPEG/PNG (maks 5 MB masing-masing,
+                    maks 200 berkas) yang direferensikan lewat kolom
+                    image_filename pada sheet products/categories,
+                    dicocokkan berdasarkan nama berkas ASLI.
       responses:
         '200':
           description: Impor berhasil, atau pratinjau tanpa galat
@@ -1574,6 +1722,8 @@ components:
         id: { type: integer }
         code: { type: string, minLength: 2, maxLength: 2, example: KY }
         name: { type: string }
+        image_path: { type: string, nullable: true, description: "Task 5. Diisi via POST /categories/{id}/image atau impor massal (Task 6)." }
+        image_url: { type: string, nullable: true, readOnly: true, description: "URL siap-pakai (disk publik)." }
         parent_id: { type: integer, nullable: true }
         display_order: { type: integer }
         is_active: { type: boolean }
@@ -1635,7 +1785,8 @@ components:
         product_segment: { type: string, minLength: 3, maxLength: 3 }
         name: { type: string }
         description: { type: string, nullable: true }
-        image_path: { type: string, nullable: true }
+        image_path: { type: string, nullable: true, description: "Diisi via POST /products/{id}/image atau impor massal (Task 6)." }
+        image_url: { type: string, nullable: true, readOnly: true, description: "URL siap-pakai (disk publik), ditambahkan Task 5." }
         is_preorder: { type: boolean }
         preorder_eta: { type: string, format: date, nullable: true }
         is_active: { type: boolean }
@@ -2017,8 +2168,23 @@ components:
 
     SalesReport:
       type: object
+      description: |
+        Task 1 — `group_label`, `rows[].entity_id`, dan `transactions`
+        ditambahkan supaya KPI `totals.order_count` dan tabel `rows`
+        (agregat per group_by) tidak lagi terlihat "berkontradiksi": dua
+        transaksi berbeda yang membeli produk yang sama menghasilkan dua
+        entri `transactions` tapi hanya satu baris `rows` — keduanya
+        sama-sama benar, cuma menjawab pertanyaan berbeda.
       properties:
         event: { $ref: '#/components/schemas/Event' }
+        group_by: { type: string, enum: [product, category, artist, day] }
+        group_label:
+          type: string
+          description: |
+            Label bahasa Indonesia siap-tampil untuk kolom pengelompokan
+            (mis. "Produk"/"Kategori"/"Artist"/"Tanggal") — supaya
+            frontend tidak perlu hardcode pemetaan group_by -> label.
+          example: Produk
         totals:
           type: object
           properties:
@@ -2032,9 +2198,33 @@ components:
           items:
             type: object
             properties:
+              entity_id:
+                type: integer
+                nullable: true
+                description: |
+                  product_id/category_id/artist_id sesuai group_by, untuk
+                  ditaut ke halaman detail entitas (Task 2). `null` untuk
+                  group_by=day, yang tidak menunjuk entitas apa pun.
               label: { type: string, description: "Nama produk, kategori, artist, atau tanggal sesuai group_by" }
               unit_count: { type: integer }
               amount: { $ref: '#/components/schemas/Money' }
+        transactions:
+          type: array
+          description: |
+            Satu baris = satu order berstatus completed pada rentang/event
+            yang difilter — daftar transaksi individual yang sebelumnya
+            tidak tersedia lewat endpoint ini. `id` disertakan supaya
+            frontend bisa memanggil GET /orders/{id}/receipt untuk struk
+            transaksi manapun di daftar ini (Task 3).
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              order_number: { type: string }
+              created_at: { type: string, format: date-time }
+              cashier_name: { type: string, nullable: true }
+              item_count: { type: integer }
+              total_amount: { $ref: '#/components/schemas/Money' }
 
     ProfitReport:
       type: object

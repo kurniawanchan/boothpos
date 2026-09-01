@@ -270,4 +270,83 @@ class ReportTest extends TestCase
         $response->assertOk();
         $this->assertGreaterThan(0, strlen($response->streamedContent()));
     }
+
+    // =====================================================================
+    // Task 1 — daftar transaksi, group_label dinamis, entity_id per baris.
+    // =====================================================================
+
+    private function seedSalesFixture(): array
+    {
+        $cashier = User::factory()->create(['role' => 'cashier', 'name' => 'Kasir Satu']);
+        $this->actingAs($cashier, 'sanctum');
+
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+
+        $artist = Artist::factory()->create(['code' => 'RYU']);
+        $category = Category::factory()->create(['code' => 'KY']);
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Minecraft']);
+        $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
+
+        $orderService = app(OrderService::class);
+
+        // Tiga order 'completed' terpisah, DUA di antaranya membeli produk
+        // yang SAMA — meniru temuan pengguna: KPI transaksi = 3, tapi
+        // baris agregat produk = 1 (semua beli produk yang sama).
+        $orders = [];
+        foreach ([1, 1, 2] as $qty) {
+            $orders[] = $orderService->create([
+                'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+                'items' => [['variant_id' => $variant->id, 'qty' => $qty]],
+                'payments' => [['method' => 'cash', 'amount' => $qty * 10000]],
+            ], $cashier);
+        }
+
+        return compact('event', 'artist', 'category', 'product', 'orders');
+    }
+
+    public function test_sales_report_lists_every_completed_transaction_separately_from_the_aggregate_rows(): void
+    {
+        ['event' => $event, 'orders' => $orders] = $this->seedSalesFixture();
+
+        $response = $this->getJson("/api/v1/reports/sales?event_id={$event->id}");
+
+        $response->assertOk();
+        $this->assertEquals(3, $response->json('totals.order_count'));
+        $this->assertCount(1, $response->json('rows')); // satu produk saja
+        $this->assertCount(3, $response->json('transactions')); // tapi tiga transaksi nyata
+
+        $transactionIds = collect($response->json('transactions'))->pluck('id')->all();
+        $this->assertEqualsCanonicalizing(collect($orders)->pluck('id')->all(), $transactionIds);
+
+        $first = $response->json('transactions.0');
+        $this->assertArrayHasKey('order_number', $first);
+        $this->assertArrayHasKey('created_at', $first);
+        $this->assertArrayHasKey('cashier_name', $first);
+        $this->assertArrayHasKey('item_count', $first);
+        $this->assertArrayHasKey('total_amount', $first);
+    }
+
+    public function test_sales_report_returns_dynamic_group_label_and_entity_id_per_group_by(): void
+    {
+        ['event' => $event, 'artist' => $artist, 'category' => $category, 'product' => $product] = $this->seedSalesFixture();
+
+        $byProduct = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=product")->assertOk();
+        $this->assertEquals('Produk', $byProduct->json('group_label'));
+        $this->assertEquals($product->id, $byProduct->json('rows.0.entity_id'));
+        $this->assertEquals($product->name, $byProduct->json('rows.0.label'));
+
+        $byCategory = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=category")->assertOk();
+        $this->assertEquals('Kategori', $byCategory->json('group_label'));
+        $this->assertEquals($category->id, $byCategory->json('rows.0.entity_id'));
+        $this->assertEquals($category->name, $byCategory->json('rows.0.label'));
+
+        $byArtist = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=artist")->assertOk();
+        $this->assertEquals('Artist', $byArtist->json('group_label'));
+        $this->assertEquals($artist->id, $byArtist->json('rows.0.entity_id'));
+
+        $byDay = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=day")->assertOk();
+        $this->assertEquals('Tanggal', $byDay->json('group_label'));
+        $this->assertNull($byDay->json('rows.0.entity_id'));
+    }
 }

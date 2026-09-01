@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Artist;
 use App\Models\ArtistSettlement;
 use App\Models\Event;
+use App\Models\Order;
 use App\Services\SettlementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,36 +16,81 @@ class ReportController extends Controller
 {
     public function __construct(private SettlementService $settlementService) {}
 
+    /**
+     * Label yang ditampilkan UI untuk setiap group_by (Task 1). Sengaja
+     * satu sumber di sini, bukan di-hardcode di frontend — kalau
+     * group_by baru ditambahkan di backend, frontend otomatis dapat
+     * label yang benar tanpa perlu tahu daftarnya sendiri.
+     */
+    private const GROUP_LABELS = [
+        'product' => 'Produk',
+        'category' => 'Kategori',
+        'artist' => 'Artist',
+        'day' => 'Tanggal',
+    ];
+
     public function sales(Request $request): JsonResponse
     {
         $groupBy = $request->string('group_by', 'product')->value();
+
+        if (! array_key_exists($groupBy, self::GROUP_LABELS)) {
+            $groupBy = 'product';
+        }
 
         $base = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->join('product_variants', 'product_variants.id', '=', 'order_items.variant_id')
             ->join('products', 'products.id', '=', 'product_variants.product_id')
+            // BUG YANG DITEMUKAN & DIPERBAIKI — 'categories' sebelumnya
+            // tidak pernah di-join, padahal group_by=category memakai
+            // products.category_id sebagai label (lihat komentar
+            // "disederhanakan" yang dibuang di sini). Hasilnya, baris
+            // laporan untuk pengelompokan kategori menampilkan ID mentah
+            // sebagai label, bukan nama kategori — dan sebelumnya bahkan
+            // selectRaw() TIDAK punya cabang 'category' sama sekali,
+            // sehingga otomatis jatuh ke default 'products.name' dan
+            // diam-diam mengelompokkan per PRODUK, bukan per KATEGORI,
+            // walau parameter group_by=category diterima tanpa galat.
+            ->join('categories', 'categories.id', '=', 'products.category_id')
             ->join('artists', 'artists.id', '=', 'order_items.artist_id')
             ->where('orders.status', 'completed')
             ->when($request->filled('event_id'), fn ($q) => $q->where('orders.event_id', $request->integer('event_id')))
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('orders.created_at', '>=', $request->date('date_from')))
             ->when($request->filled('date_to'), fn ($q) => $q->whereDate('orders.created_at', '<=', $request->date('date_to')));
 
-        $labelColumn = match ($groupBy) {
-            'category' => DB::raw('products.category_id'), // disederhanakan; join category bila perlu nama
-            'artist' => 'artists.name',
-            'day' => DB::raw('DATE(orders.created_at)'),
-            default => 'products.name',
+        // Task 1 — setiap baris agregat kini membawa entity_id (product_id/
+        // category_id/artist_id) di samping label, supaya frontend bisa
+        // menaut baris ke halaman detail entitas (mis. detail produk +
+        // total stok, Task 2) — sebelumnya hanya label yang dipilih tanpa
+        // ID apa pun untuk ditaut.
+        [$idExpr, $labelExpr, $idAlias] = match ($groupBy) {
+            'category' => ['categories.id', 'categories.name', 'category_id'],
+            'artist' => ['artists.id', 'artists.name', 'artist_id'],
+            'day' => ['DATE(orders.created_at)', 'DATE(orders.created_at)', null],
+            default => ['products.id', 'products.name', 'product_id'],
         };
 
         $rows = (clone $base)
-            ->selectRaw('
-                '.($groupBy === 'day' ? 'DATE(orders.created_at)' : ($groupBy === 'artist' ? 'artists.name' : 'products.name')).' as label,
+            ->selectRaw("
+                {$idExpr} as entity_id,
+                {$labelExpr} as label,
                 SUM(order_items.qty) as unit_count,
                 SUM(order_items.line_total) as amount
-            ')
-            ->groupBy('label')
+            ")
+            ->groupBy(DB::raw($idExpr))
             ->orderByDesc('amount')
-            ->get();
+            ->get()
+            ->map(function ($row) use ($idAlias) {
+                $data = (array) $row;
+                // Untuk group_by=day tidak ada entitas untuk ditaut — id
+                // dikembalikan null secara eksplisit alih-alih menghapus
+                // key-nya, supaya bentuk baris tetap konsisten antar
+                // group_by dan frontend tidak perlu isset() check.
+                $data['entity_id'] = $idAlias === null ? null : $data['entity_id'];
+                $data['amount'] = number_format((float) $data['amount'], 2, '.', '');
+
+                return $data;
+            });
 
         $totals = (clone $base)->selectRaw('
             COUNT(DISTINCT orders.id) as order_count,
@@ -56,7 +102,44 @@ class ReportController extends Controller
 
         $event = $request->filled('event_id') ? Event::find($request->integer('event_id')) : null;
 
-        return response()->json(['event' => $event, 'totals' => $totals, 'rows' => $rows]);
+        // Task 1 — daftar TRANSAKSI (satu baris = satu order 'completed'),
+        // terpisah dari tabel agregat per-produk/kategori/artist/hari di
+        // atas. Ini yang sebelumnya hilang: KPI "Transaksi: 3" dihitung
+        // dari COUNT(DISTINCT orders.id) di atas, tapi tidak ada satu pun
+        // endpoint yang mengembalikan baris per-order — jadi kalau dua
+        // dari tiga order kebetulan membeli produk yang sama, tabel
+        // agregat produk (2 baris) terlihat "berkontradiksi" dengan KPI
+        // (3 transaksi), padahal keduanya sama-sama benar, cuma menjawab
+        // pertanyaan berbeda. `id` disertakan di setiap baris supaya
+        // frontend bisa memanggil GET /orders/{id}/receipt untuk struk
+        // transaksi mana pun di daftar ini (Task 3), bukan cuma yang baru
+        // saja dibuat.
+        $transactions = Order::query()
+            ->with('cashier')
+            ->withCount('items')
+            ->where('status', 'completed')
+            ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
+            ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
+            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('created_at', '<=', $request->date('date_to')))
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (Order $order) => [
+                'id' => $order->id,
+                'order_number' => $order->order_number,
+                'created_at' => $order->created_at?->toIso8601String(),
+                'cashier_name' => $order->cashier?->name,
+                'item_count' => $order->items_count,
+                'total_amount' => number_format((float) $order->total_amount, 2, '.', ''),
+            ]);
+
+        return response()->json([
+            'event' => $event,
+            'group_by' => $groupBy,
+            'group_label' => self::GROUP_LABELS[$groupBy],
+            'totals' => $totals,
+            'rows' => $rows,
+            'transactions' => $transactions,
+        ]);
     }
 
     public function profit(Request $request): JsonResponse
