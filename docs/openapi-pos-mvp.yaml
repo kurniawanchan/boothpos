@@ -1232,7 +1232,14 @@ paths:
     get:
       tags: [Report]
       summary: Rekap hasil per artist
-      description: Angka dihitung ulang dari `order_items`, tanpa potongan komisi.
+      description: |
+        Angka dihitung ulang dari `order_items` setiap kali dibaca, tanpa
+        potongan komisi.
+
+        Daftar memuat **seluruh artist aktif**, termasuk yang belum punya
+        penjualan sama sekali di event ini (seluruh nilai uang `"0.00"`,
+        `total_units` 0, `status` `unpaid`, `id` `null`). Artist nonaktif
+        hanya ikut bila punya baris settlement di event ini.
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -1887,7 +1894,15 @@ components:
     ArtistSettlement:
       type: object
       properties:
-        id: { type: integer }
+        id:
+          type: integer
+          nullable: true
+          description: |
+            ID baris `artist_settlements` — dipakai sebagai `{id}` pada
+            `POST /reports/artist-settlements/{id}/payment`. Bernilai `null`
+            untuk artist aktif yang belum punya penjualan di event ini
+            (barisnya belum ada, dan memang tidak ada yang perlu dibayar).
+            Pakai `artist_id` sebagai kunci baris di tabel UI.
         artist_id: { type: integer }
         artist_name: { type: string }
         total_sales: { $ref: '#/components/schemas/Money' }

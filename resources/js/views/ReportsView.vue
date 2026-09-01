@@ -171,6 +171,7 @@ const salesColumns = computed(() => [{ key: 'label', label: groupBy.value === 'd
           ]"
           :rows="settlements ?? []"
           :loading="loading"
+          row-key="artist_id"
           empty-message="Belum ada penjualan untuk event ini."
         >
           <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>

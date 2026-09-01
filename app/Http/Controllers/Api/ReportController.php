@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Artist;
 use App\Models\ArtistSettlement;
 use App\Models\Event;
 use App\Services\SettlementService;
@@ -110,18 +111,59 @@ class ReportController extends Controller
         // cache — konsisten dengan keputusan desain SettlementService.
         $this->settlementService->recalculateForEvent($event);
 
-        $settlements = ArtistSettlement::with('artist')->where('event_id', $eventId)->get();
+        $settlements = ArtistSettlement::where('event_id', $eventId)->get()->keyBy('artist_id');
 
-        $data = $settlements->map(fn (ArtistSettlement $s) => [
-            'id' => $s->id, 'artist_id' => $s->artist_id, 'artist_name' => $s->artist->name,
-            'total_sales' => number_format((float) $s->total_sales, 2, '.', ''),
-            'total_units' => $s->total_units,
-            'deduction' => number_format((float) $s->deduction, 2, '.', ''),
-            'payable_amount' => number_format((float) $s->payable_amount, 2, '.', ''),
-            'paid_amount' => number_format((float) $s->paid_amount, 2, '.', ''),
-            'outstanding' => number_format((float) $s->payable_amount - (float) $s->paid_amount, 2, '.', ''),
-            'status' => $s->status,
-        ]);
+        // BUG YANG DITEMUKAN & DIPERBAIKI — laporan ini dulu membaca
+        // artist_settlements saja, sedangkan SettlementService::
+        // recalculateForEvent() membangun barisnya dari agregasi
+        // GROUP BY order_items.artist_id. Artist yang belum punya satu pun
+        // order_items di event ini karena itu TIDAK PERNAH punya baris
+        // settlement, dan hilang total dari laporan — operator tidak bisa
+        // membedakan "artist ini belum laku" dari "artist ini tidak ikut
+        // event". Perbaikannya dilakukan di sisi LAPORAN (left join semua
+        // artist aktif ke settlement-nya), bukan dengan menyemai baris
+        // artist_settlements kosong untuk setiap artist: tabel itu berperan
+        // sebagai catatan STATUS PEMBAYARAN ke artist, jadi baris yang
+        // tidak pernah punya nilai bayar hanya akan jadi sampah yang
+        // mengaburkan maknanya.
+        //
+        // Artist yang sudah dinonaktifkan/di-soft-delete TETAP muncul bila
+        // punya baris settlement di event ini — uangnya tetap wajib
+        // dibayar, dan versi lama malah fatal error di $s->artist->name
+        // untuk artist yang sudah terhapus.
+        $artistIdsWithSettlement = $settlements->keys()->all();
+
+        $artists = Artist::withTrashed()
+            ->where(function ($q) use ($artistIdsWithSettlement) {
+                $q->where(fn ($active) => $active->where('is_active', true)->whereNull('deleted_at'))
+                    ->orWhereIn('id', $artistIdsWithSettlement);
+            })
+            ->orderBy('name')
+            ->get();
+
+        $data = $artists->map(function (Artist $artist) use ($settlements) {
+            $s = $settlements->get($artist->id);
+
+            $payable = (float) ($s?->payable_amount ?? 0);
+            $paid = (float) ($s?->paid_amount ?? 0);
+
+            return [
+                // null HANYA untuk artist yang memang belum punya baris
+                // settlement (nol penjualan). Baris yang dulu bernilai
+                // angka tetap bernilai angka — 'artist_id' di bawah adalah
+                // kunci baris yang selalu terisi untuk kebutuhan tabel UI.
+                'id' => $s?->id,
+                'artist_id' => $artist->id,
+                'artist_name' => $artist->name,
+                'total_sales' => number_format((float) ($s?->total_sales ?? 0), 2, '.', ''),
+                'total_units' => (int) ($s?->total_units ?? 0),
+                'deduction' => number_format((float) ($s?->deduction ?? 0), 2, '.', ''),
+                'payable_amount' => number_format($payable, 2, '.', ''),
+                'paid_amount' => number_format($paid, 2, '.', ''),
+                'outstanding' => number_format($payable - $paid, 2, '.', ''),
+                'status' => $s?->status ?? 'unpaid',
+            ];
+        })->values();
 
         return response()->json(['event' => $event, 'data' => $data]);
     }
