@@ -63,6 +63,26 @@ const routes = [
         meta: { title: 'Pergerakan Stok', subtitle: 'Seluruh perubahan stok tercatat dan dapat diaudit' },
       },
       {
+        path: 'vendors',
+        name: 'vendors',
+        component: () => import('../views/VendorsView.vue'),
+        meta: {
+          title: 'Vendor',
+          subtitle: 'Pemasok bahan baku dan harganya',
+          roles: ['owner', 'admin', 'inventory'],
+        },
+      },
+      {
+        path: 'materials',
+        name: 'materials',
+        component: () => import('../views/MaterialsView.vue'),
+        meta: {
+          title: 'Bahan Baku',
+          subtitle: 'Bahan baku, harga per vendor, dan BOM varian produk',
+          roles: ['owner', 'admin', 'inventory'],
+        },
+      },
+      {
         path: 'customers',
         name: 'customers',
         component: () => import('../views/CustomersView.vue'),

@@ -2,9 +2,11 @@
 import { ref, computed, watch } from 'vue';
 import BaseModal from '../ui/BaseModal.vue';
 import StatusPill from '../ui/StatusPill.vue';
+import VariantBomModal from './VariantBomModal.vue';
 import { getProduct } from '../../api/products';
 import { formatIDR } from '../../utils/money';
 import { useToastStore } from '../../stores/toast';
+import { useAuthStore } from '../../stores/auth';
 
 /**
  * Read-only product detail — opened from the "Detail" row action on
@@ -20,8 +22,16 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const toast = useToastStore();
+const auth = useAuthStore();
 const product = ref(null);
 const loading = ref(false);
+
+const showBom = ref(false);
+const bomVariant = ref(null);
+function openBom(variant) {
+  bomVariant.value = variant;
+  showBom.value = true;
+}
 
 watch(
   () => [props.open, props.productId],
@@ -88,6 +98,7 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
                 <th class="px-3 py-2 text-right font-bold text-muted-2">Harga jual</th>
                 <th class="px-3 py-2 text-right font-bold text-muted-2">Stok</th>
                 <th class="px-3 py-2 font-bold text-muted-2">Status</th>
+                <th v-if="auth.canManageMasterData" class="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -99,6 +110,9 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
                 <td class="px-3 py-2">
                   <StatusPill :variant="v.is_active ? 'mint' : 'neutral'">{{ v.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
                 </td>
+                <td v-if="auth.canManageMasterData" class="px-3 py-2 text-right">
+                  <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openBom(v)">BOM</button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -106,4 +120,12 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
       </div>
     </div>
   </BaseModal>
+
+  <VariantBomModal
+    :open="showBom"
+    :variant-id="bomVariant?.id"
+    :variant-sku="bomVariant?.sku"
+    :variant-name="bomVariant?.variant_name"
+    @close="showBom = false"
+  />
 </template>

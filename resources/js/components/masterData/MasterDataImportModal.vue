@@ -26,7 +26,16 @@ const toast = useToastStore();
 // round trip just to be told the same thing.
 const MAX_BYTES = 10 * 1024 * 1024;
 
-const SHEET_LABEL = { artists: 'Artist', categories: 'Kategori', products: 'Produk', stock: 'Stok' };
+const SHEET_LABEL = {
+  artists: 'Artist',
+  categories: 'Kategori',
+  products: 'Produk',
+  stock: 'Stok',
+  vendors: 'Vendor',
+  materials: 'Bahan Baku',
+  vendor_prices: 'Harga Vendor',
+  bom: 'BOM',
+};
 
 const fileInputEl = ref(null);
 const imagesInputEl = ref(null);
@@ -138,8 +147,9 @@ const isDone = computed(() => !!result.value?.applied);
         <div class="flex flex-1 flex-col gap-1">
           <span class="text-[13px] font-bold text-brand-active">Belum punya berkasnya?</span>
           <span class="text-[12px] leading-relaxed text-muted-4">
-            Template berisi 4 sheet (artist, kategori, produk, stok) lengkap dengan judul kolom dan contoh baris —
-            sheet produk dan kategori kini juga memuat contoh kolom <span class="font-semibold">image_filename</span>.
+            Template berisi 8 sheet (artist, kategori, produk, stok, vendor, bahan baku, harga vendor, BOM) lengkap dengan
+            judul kolom dan contoh baris — sheet produk dan kategori kini juga memuat contoh kolom
+            <span class="font-semibold">image_filename</span>.
             Berkas hasil <span class="font-semibold">ekspor</span> dari layar mana pun juga memakai kolom yang sama —
             bisa langsung disunting dan diunggah balik ke sini.
           </span>

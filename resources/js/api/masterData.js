@@ -7,6 +7,10 @@ const EXPORT_FILENAMES = {
   categories: 'data-kategori.xlsx',
   products: 'data-produk.xlsx',
   stock: 'data-stok.xlsx',
+  vendors: 'data-vendor.xlsx',
+  materials: 'data-bahan-baku.xlsx',
+  vendor_prices: 'data-harga-vendor.xlsx',
+  bom: 'data-bom.xlsx',
 };
 
 function downloadBlob(blob, filename) {

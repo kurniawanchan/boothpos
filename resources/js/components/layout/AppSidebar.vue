@@ -24,6 +24,8 @@ const NAV_DEFS = [
   { name: 'artists', label: 'Artist', icon: 'ph-users-three' },
   { name: 'categories', label: 'Kategori', icon: 'ph-squares-four' },
   { name: 'stock', label: 'Stok', icon: 'ph-stack' },
+  { name: 'vendors', label: 'Vendor', icon: 'ph-truck', roles: ['owner', 'admin', 'inventory'] },
+  { name: 'materials', label: 'Bahan Baku', icon: 'ph-flask', roles: ['owner', 'admin', 'inventory'] },
   { name: 'customers', label: 'Pelanggan', icon: 'ph-address-book' },
   { name: 'preorders', label: 'Pre-order', icon: 'ph-clock-countdown' },
   { name: 'reports', label: 'Laporan', icon: 'ph-chart-bar' },
