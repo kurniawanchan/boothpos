@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -28,6 +29,24 @@ class ImportMasterDataRequest extends FormRequest
     public function authorize(): bool
     {
         return $this->user()?->canManageMasterData() ?? false;
+    }
+
+    /**
+     * Tanpa override ini, FormRequest membalas "This action is
+     * unauthorized." — satu-satunya pesan berbahasa Inggris di antara tiga
+     * endpoint impor/ekspor yang bersebelahan (GET /exports/{entity} dan
+     * GET /imports/master-data/template sudah membalas dalam bahasa
+     * Indonesia). Polanya meniru StoreArtistRequest::failedAuthorization().
+     *
+     * CATATAN: StockAdjustmentRequest punya kekurangan yang sama dan
+     * SENGAJA tidak ikut diubah di sini — itu di luar cakupan perubahan
+     * ini, dicatat supaya tidak dikira terlewat.
+     */
+    protected function failedAuthorization(): void
+    {
+        throw new AuthorizationException(
+            'Hanya owner/admin/inventory yang dapat mengimpor data master.'
+        );
     }
 
     public function rules(): array

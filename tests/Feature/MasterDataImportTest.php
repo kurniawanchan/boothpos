@@ -185,7 +185,11 @@ class MasterDataImportTest extends TestCase
     {
         $this->actingAsRole('cashier');
 
-        $this->postImport($this->fullCatalogWorkbook())->assertStatus(403);
+        $this->postImport($this->fullCatalogWorkbook())
+            ->assertStatus(403)
+            // Pesannya berbahasa Indonesia seperti dua endpoint
+            // impor/ekspor sebelahnya, bukan "This action is unauthorized."
+            ->assertJsonPath('message', 'Hanya owner/admin/inventory yang dapat mengimpor data master.');
 
         $this->assertSame(0, Artist::count());
     }
