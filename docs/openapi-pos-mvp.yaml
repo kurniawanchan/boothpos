@@ -384,11 +384,23 @@ paths:
     get:
       tags: [Master Data]
       summary: Daftar produk
+      description: |
+        `variants` TIDAK disertakan kecuali `with_variants=1` dikirim.
+        Opt-in, bukan default: layar Kelola Produk tidak memakai varian,
+        sedangkan layar kasir memakainya — memuatnya selalu hanya
+        memperbesar payload untuk konsumen yang tidak butuh.
       parameters:
         - { name: search, in: query, description: "Cocokkan nama produk atau SKU", schema: { type: string } }
         - { name: artist_id, in: query, schema: { type: integer } }
         - { name: category_id, in: query, schema: { type: integer } }
         - { name: is_preorder, in: query, schema: { type: boolean } }
+        - name: with_variants
+          in: query
+          description: |
+            `1`/`true` menyertakan `variants` pada setiap produk, dimuat
+            lewat eager-load (bukan satu query per produk). Isinya sama
+            persis dengan `GET /products/{id}`, termasuk varian nonaktif.
+          schema: { type: boolean, default: false }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:

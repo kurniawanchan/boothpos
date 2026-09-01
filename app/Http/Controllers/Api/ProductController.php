@@ -32,8 +32,22 @@ class ProductController extends Controller
 
         $perPage = min((int) $request->integer('per_page', 25), 100);
 
+        // ?with_variants=1 — OPT-IN, bukan selalu aktif. Dua alasan:
+        // (1) layar Kelola Produk hanya menampilkan nama/artist/kategori,
+        //     jadi memuat varian untuk semua konsumen memperbesar payload
+        //     tanpa dipakai;
+        // (2) default response tidak berubah sama sekali, jadi ini
+        //     penambahan aditif — tidak ada konsumen lama yang perlu
+        //     menyesuaikan diri.
+        // Dimuat lewat eager-load relasi (bukan lazy-load di dalam
+        // ProductResource) supaya tetap 2 query, bukan N+1.
+        // Varian TIDAK difilter is_active di sini, persis seperti
+        // GET /products/{id} — supaya kedua endpoint memberi isi yang sama
+        // untuk produk yang sama, bukan diam-diam berbeda.
+        $withVariants = $request->boolean('with_variants');
+
         $products = Product::query()
-            ->with(['artist', 'category'])
+            ->with(array_merge(['artist', 'category'], $withVariants ? ['variants'] : []))
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = $request->string('search');
                 $q->where(function ($q2) use ($term) {

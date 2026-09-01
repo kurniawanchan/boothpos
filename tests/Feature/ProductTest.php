@@ -147,6 +147,63 @@ class ProductTest extends TestCase
         $this->deleteJson("/api/v1/products/{$product->id}")->assertStatus(409);
     }
 
+    public function test_product_list_omits_variants_by_default(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 25000, 'current_stock' => 7]);
+
+        $response = $this->getJson('/api/v1/products');
+
+        $response->assertOk();
+        $this->assertArrayNotHasKey('variants', $response->json('data.0'));
+    }
+
+    // Menutup N+1 di layar kasir: PosView dulu mengambil detail tiap produk
+    // satu per satu hanya untuk mendapatkan varian.
+    public function test_product_list_includes_variants_when_asked(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 25000, 'current_stock' => 7]);
+        $product->variants()->create(['sku' => 'RYUKYAAA0002', 'sell_price' => 30000, 'current_stock' => 3]);
+
+        $response = $this->getJson('/api/v1/products?with_variants=1');
+
+        $response->assertOk()
+            ->assertJsonCount(2, 'data.0.variants')
+            ->assertJsonPath('data.0.variants.0.sku', 'RYUKYAAA0001')
+            ->assertJsonPath('data.0.variants.0.sell_price', '25000.00')
+            ->assertJsonPath('data.0.variants.0.current_stock', 7);
+    }
+
+    // Varian dimuat lewat eager-load, bukan lazy-load per baris di resource.
+    public function test_product_list_with_variants_does_not_run_a_query_per_product(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        foreach (range(1, 5) as $i) {
+            $product = Product::factory()->create([
+                'artist_id' => $artist->id,
+                'category_id' => $category->id,
+                'code_prefix' => 'RYUKYP'.str_pad((string) $i, 2, '0', STR_PAD_LEFT),
+            ]);
+            $product->variants()->create(['sku' => 'RYUKYP'.str_pad((string) $i, 2, '0', STR_PAD_LEFT).'0001', 'sell_price' => 1000]);
+        }
+
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+        $this->getJson('/api/v1/products?with_variants=1')->assertOk();
+        $queries = \Illuminate\Support\Facades\DB::getQueryLog();
+        \Illuminate\Support\Facades\DB::disableQueryLog();
+
+        $variantQueries = collect($queries)->filter(fn ($q) => str_contains($q['query'], 'product_variants'))->count();
+
+        $this->assertSame(1, $variantQueries, 'Varian harus dimuat dalam satu query eager-load, bukan satu query per produk.');
+    }
+
     public function test_variant_lookup_finds_by_sku_fragment(): void
     {
         $this->actingAsRole('cashier');
