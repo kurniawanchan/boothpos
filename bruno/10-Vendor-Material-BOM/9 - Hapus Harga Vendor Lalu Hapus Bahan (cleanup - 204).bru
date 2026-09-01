@@ -1,0 +1,20 @@
+meta {
+  name: 9 - Hapus Harga Vendor Lalu Hapus Bahan (cleanup - 204)
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{base_url}}/vendor-prices/{{vendor_price_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("harga vendor dihapus (detach) - guard 409 di request 6 kini bisa dilepas dengan urutan yang benar", function () {
+    expect(res.status).to.equal(204);
+  });
+}

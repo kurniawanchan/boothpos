@@ -1,0 +1,25 @@
+meta {
+  name: 8 - Unggah Gambar Kategori
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{base_url}}/categories/{{category_id}}/image
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:multipart-form {
+  image: @file(./sample-image.jpg)
+}
+
+tests {
+  test("gambar kategori terunggah", function () {
+    expect(res.status).to.equal(200);
+  });
+}

@@ -2781,7 +2781,7 @@ components:
         sheet:
           type: string
           nullable: true
-          enum: [artists, categories, products, stock, null]
+          enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, null]
           description: "`null` untuk galat tingkat berkas (mis. tidak ada sheet yang dikenali)."
         row:
           type: integer

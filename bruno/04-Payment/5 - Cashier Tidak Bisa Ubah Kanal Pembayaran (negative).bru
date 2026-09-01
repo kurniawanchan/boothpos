@@ -1,0 +1,25 @@
+meta {
+  name: 5 - Cashier Tidak Bisa Ubah Kanal Pembayaran (negative)
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{base_url}}/payment-channels/{{payment_channel_id}}
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+body:multipart-form {
+  provider: Percobaan Kasir
+}
+
+tests {
+  test("ditolak 403 - hanya owner/admin yang boleh mengubah kanal pembayaran", function () {
+    expect(res.status).to.equal(403);
+  });
+}

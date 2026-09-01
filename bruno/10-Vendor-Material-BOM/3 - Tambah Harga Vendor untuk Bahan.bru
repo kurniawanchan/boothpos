@@ -1,0 +1,36 @@
+meta {
+  name: 3 - Tambah Harga Vendor untuk Bahan
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/materials/{{material_id}}/vendor-prices
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "vendor_id": {{vendor_id}},
+    "price": 5000,
+    "is_preferred": true
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("vendor_price_id", res.body.id);
+  }
+}
+
+tests {
+  test("harga vendor tercatat, ditandai preferred", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.is_preferred).to.equal(true);
+  });
+}

@@ -1,0 +1,20 @@
+meta {
+  name: 7 - Hapus Vendor Masih Dipakai (negative - 409)
+  type: http
+  seq: 7
+}
+
+delete {
+  url: {{base_url}}/vendors/{{vendor_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("ditolak 409 - vendor masih punya harga bahan terdaftar", function () {
+    expect(res.status).to.equal(409);
+  });
+}

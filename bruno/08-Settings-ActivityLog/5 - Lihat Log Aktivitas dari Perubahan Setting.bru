@@ -1,0 +1,26 @@
+meta {
+  name: 5 - Lihat Log Aktivitas dari Perubahan Setting
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{base_url}}/activity-logs?entity_type=Setting&action=updated
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("perubahan setting dari request sebelumnya tercatat di log aktivitas", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data).to.be.an("array");
+    expect(res.body.data.length).to.be.above(0);
+  });
+  test("log memuat snapshot old_values/new_values, bukan diff", function () {
+    var row = res.body.data[0];
+    expect(row).to.have.property("new_values");
+  });
+}

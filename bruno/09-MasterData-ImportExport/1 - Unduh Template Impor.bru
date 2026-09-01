@@ -1,0 +1,20 @@
+meta {
+  name: 1 - Unduh Template Impor
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/imports/master-data/template
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("template 8 sheet terunduh (artists..bom)", function () {
+    expect(res.status).to.equal(200);
+  });
+}

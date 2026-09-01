@@ -1,0 +1,35 @@
+meta {
+  name: 3 - Tambah Kanal Pembayaran dengan QR
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/payment-channels
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:multipart-form {
+  type: qr_ewallet
+  provider: Gopay
+  account_name: Toko Merchandise Dummy
+  qr_image: @file(./sample-image.jpg)
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("payment_channel_id", res.body.id);
+  }
+}
+
+tests {
+  test("kanal QR dibuat dengan gambar (bug lama: field ini dulu tidak ada)", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.qr_image_url).to.not.equal(null);
+  });
+}

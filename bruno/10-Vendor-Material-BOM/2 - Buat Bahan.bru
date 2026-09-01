@@ -1,0 +1,36 @@
+meta {
+  name: 2 - Buat Bahan
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/materials
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "code": "ACRBRN",
+    "name": "Akrilik 3mm",
+    "unit": "lembar"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("material_id", res.body.id);
+  }
+}
+
+tests {
+  test("bahan dibuat", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.code).to.equal("ACRBRN");
+  });
+}

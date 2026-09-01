@@ -1,0 +1,20 @@
+meta {
+  name: 7 - Cashier Tidak Bisa Ekspor (negative)
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{base_url}}/exports/artists
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+tests {
+  test("ditolak 403 - ekspor massal digerbang lebih ketat dari GET /artists biasa", function () {
+    expect(res.status).to.equal(403);
+  });
+}

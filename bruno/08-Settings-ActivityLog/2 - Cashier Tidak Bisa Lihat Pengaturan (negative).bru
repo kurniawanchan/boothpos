@@ -1,0 +1,20 @@
+meta {
+  name: 2 - Cashier Tidak Bisa Lihat Pengaturan (negative)
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/settings
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+tests {
+  test("ditolak 403 - hanya owner/admin yang boleh melihat pengaturan", function () {
+    expect(res.status).to.equal(403);
+  });
+}

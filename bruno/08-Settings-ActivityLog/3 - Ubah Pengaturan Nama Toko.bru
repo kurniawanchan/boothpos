@@ -1,0 +1,30 @@
+meta {
+  name: 3 - Ubah Pengaturan Nama Toko
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{base_url}}/settings
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "settings": [
+      { "key": "store_name", "value": "Toko Merchandise Bruno Test", "type": "string", "group": "receipt" }
+    ]
+  }
+}
+
+tests {
+  test("pengaturan tersimpan, nilai baru langsung dikembalikan", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data[0].value).to.equal("Toko Merchandise Bruno Test");
+  });
+}

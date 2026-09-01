@@ -310,8 +310,13 @@ Catatan kepatuhan: data kontak pelanggan adalah data pribadi. Sistem harus memba
 | F9.2 | Laporan keuntungan per produk dan per kategori | S |
 | F9.3 | Laba bersih memperhitungkan biaya event | S |
 | F9.4 | Perbandingan performa antar event | C |
+| F9.5 | Laporan modal dan laba kotor per artist, dihitung terpisah dari biaya event | S |
 
 **Kriteria penerimaan F9.1** — Laba kotor dihitung sebagai `SUM(qty × sell_price) - SUM(qty × cost_price)` dari seluruh `ORDER_ITEMS` pada event tersebut, menggunakan nilai snapshot, bukan harga master saat laporan dibuka.
+
+**Kriteria penerimaan F9.5** — Untuk setiap artist, modal dihitung sebagai `SUM(qty × modal_per_unit)` dari seluruh `ORDER_ITEMS` produk milik artist tersebut pada event, dengan `modal_per_unit` memakai basis biaya yang tersedia untuk produk/varian bersangkutan (harga modal manual atau modal bahan dari BOM, sesuai yang tercatat pada produk itu — sistem tidak mewajibkan satu basis tertentu). Laba kotor per artist dihitung sebagai total penjualan artist tersebut dikurangi modal artist tersebut. Biaya event bersama (`event_cost`) TIDAK ikut dikurangkan pada angka ini; biaya tersebut sudah diperhitungkan secara terpisah pada laba bersih tingkat event (F9.3), agar tidak dua kali dikurangkan atau dialokasikan secara tidak adil antar artist.
+
+**Catatan penambahan — 2026-09-02.** F9.5 adalah kapabilitas baru: saat ini laporan modal & keuntungan (7.9) hanya berskala event/produk/kategori, dan rekap artist (7.11) hanya berskala pendapatan tanpa modal maupun laba. F9.5 mengisi celah tersebut dengan pandangan modal & laba per artist. Ditempatkan di 7.9, bukan 7.11, karena secara fundamental ini adalah laporan modal & keuntungan (memakai basis biaya yang sama dengan F9.1/F9.2), hanya diiris per artist alih-alih per event atau per produk/kategori; 7.11 tetap fokus pada rekap pendapatan dan status pembayaran ke artist. Belum dibangun per tanggal catatan ini.
 
 ### 7.10 Laporan penjualan
 
@@ -322,6 +327,11 @@ Catatan kepatuhan: data kontak pelanggan adalah data pribadi. Sistem harus memba
 | F10.3 | Laporan per sesi kasir | M |
 | F10.4 | Ekspor laporan ke CSV atau spreadsheet | M |
 | F10.5 | Produk terlaris dan tren penjualan | S |
+| F10.6 | Pencarian pada daftar transaksi berdasarkan nomor transaksi, nama pelanggan, atau nama kasir | S |
+
+**Kriteria penerimaan F10.6** — Pada daftar transaksi di laporan penjualan, pengguna dapat mengetikkan kata kunci; sistem menyaring baris yang nomor transaksinya, nama pelanggannya, atau nama kasirnya cocok (mengandung kata kunci, tidak peka huruf besar/kecil) tanpa perlu memuat ulang seluruh laporan.
+
+**Catatan penambahan — 2026-09-02.** F10.6 menambah kemampuan pencarian pada daftar transaksi yang sudah tersedia di laporan penjualan. Belum dibangun per tanggal catatan ini.
 
 ### 7.11 Laporan hasil per artist
 
@@ -332,8 +342,13 @@ Catatan kepatuhan: data kontak pelanggan adalah data pribadi. Sistem harus memba
 | F11.3 | Penandaan status pembayaran ke artist: belum dibayar, sebagian, lunas | M |
 | F11.4 | Pencatatan potongan biaya bersama sebelum pembayaran ke artist | C — tidak ada potongan biaya pada model bisnis saat ini |
 | F11.5 | Ekspor rekap per artist untuk dikirim ke masing-masing artist | M |
+| F11.6 | Detail transaksi (daftar order beserta rincian item) yang menyusun rekap seorang artist dapat dilihat langsung dari halaman Rekap Artist, dan turut disertakan pada berkas hasil ekspor rekap tersebut | M |
 
 **Kriteria penerimaan F11.1** — Setelah event ditutup, sistem menampilkan daftar seluruh artist yang produknya terjual di event tersebut, dengan total nilai penjualan masing-masing, tanpa perlu perhitungan manual.
+
+**Kriteria penerimaan F11.6** — Dari halaman Rekap Artist, memilih satu artist menampilkan daftar transaksi yang menyumbang ke total rekapnya (nomor transaksi, tanggal, item, qty, nilai); berkas ekspor rekap artist (F11.5) memuat detail transaksi yang sama, bukan hanya angka total.
+
+**Catatan penambahan — 2026-09-02.** Rekap Artist saat ini hanya menampilkan total per artist; F11.2 (rincian item terjual) mencakup agregat per produk, bukan transaksi individual. F11.6 menambah kemampuan menelusuri (drill-down) ke transaksi yang menyusun total tersebut, baik di layar maupun di ekspor. Belum dibangun per tanggal catatan ini.
 
 ### 7.12 Open / close point of sales
 

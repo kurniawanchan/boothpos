@@ -1,0 +1,25 @@
+meta {
+  name: 9 - Cashier Tidak Bisa Unggah Gambar Produk (negative)
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{base_url}}/products/{{product_id}}/image
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+body:multipart-form {
+  image: @file(./sample-image.jpg)
+}
+
+tests {
+  test("ditolak 403 - unggah gambar hanya untuk yang boleh kelola master data", function () {
+    expect(res.status).to.equal(403);
+  });
+}

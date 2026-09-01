@@ -1,0 +1,20 @@
+meta {
+  name: 6 - Cashier Tidak Bisa Lihat Log Aktivitas (negative)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{base_url}}/activity-logs
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+tests {
+  test("ditolak 403 - hanya owner/admin yang boleh meninjau log aktivitas", function () {
+    expect(res.status).to.equal(403);
+  });
+}

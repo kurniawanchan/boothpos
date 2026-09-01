@@ -1,0 +1,26 @@
+meta {
+  name: 6 - Cashier Tidak Bisa Impor (negative)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/imports/master-data
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+body:multipart-form {
+  file: @file(./contoh-impor-valid.xlsx)
+  dry_run: true
+}
+
+tests {
+  test("ditolak 403 - hanya owner/admin/inventory yang boleh impor massal", function () {
+    expect(res.status).to.equal(403);
+  });
+}

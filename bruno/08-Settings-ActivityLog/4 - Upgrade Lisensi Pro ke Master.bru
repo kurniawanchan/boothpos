@@ -1,0 +1,29 @@
+meta {
+  name: 4 - Upgrade Lisensi Pro ke Master
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{base_url}}/settings
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "settings": [
+      { "key": "multi_artist_enabled", "value": true, "type": "boolean", "group": "licensing" }
+    ]
+  }
+}
+
+tests {
+  test("jalur resmi upgrade Pro->Master, bukan lagi lewat tinker", function () {
+    expect(res.status).to.equal(200);
+  });
+}

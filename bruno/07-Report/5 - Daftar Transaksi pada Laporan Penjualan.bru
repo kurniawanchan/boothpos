@@ -1,0 +1,21 @@
+meta {
+  name: 5 - Daftar Transaksi pada Laporan Penjualan
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{base_url}}/reports/sales?event_id={{event_id}}&group_by=product
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("daftar transaksi (satu baris per order) ikut pada laporan penjualan", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.transactions).to.be.an("array");
+  });
+}

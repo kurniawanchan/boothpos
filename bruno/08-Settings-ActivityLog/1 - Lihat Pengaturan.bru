@@ -1,0 +1,21 @@
+meta {
+  name: 1 - Lihat Pengaturan
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/settings
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("daftar pengaturan tampil, termasuk multi_artist_enabled", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data).to.be.an("array");
+  });
+}

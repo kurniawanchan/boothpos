@@ -1,0 +1,28 @@
+meta {
+  name: 8 - Cashier Tidak Bisa Buat Vendor (negative)
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{base_url}}/vendors
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+body:json {
+  {
+    "code": "VNDGAK",
+    "name": "Percobaan Kasir"
+  }
+}
+
+tests {
+  test("ditolak 403 - vendor setara tingkat Products/Categories, bukan untuk kasir", function () {
+    expect(res.status).to.equal(403);
+  });
+}

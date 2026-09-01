@@ -6,15 +6,17 @@
 
 | Field | Isi |
 |---|---|
-| Versi | v1.3 |
-| Tanggal | 30 Agustus 2026 |
-| Cakupan | MVP Oktober 2026 |
+| Versi | v1.4 |
+| Tanggal | 2 September 2026 |
+| Cakupan | MVP Oktober 2026, ditambah status pelaksanaan pasca-MVP per tanggal dokumen ini |
 | Sumber daya | Tim developer dengan bantuan AI |
 | Acuan | PRD v1.6, `schema-pos-mvp.sql`, `uml-pos-mvp.md`, `openapi-pos-mvp.yaml` |
 
 ---
 
 **Addendum v1.2** — menambahkan task 2.8 (gate lisensi Pro/Master, 4 jam) sesuai keputusan produk multi-artist toggle. Ini penambahan aditif +4 jam terhadap total 215 jam pada bagian 3; tidak mengubah struktur jadwal mingguan di bagian 5 secara material karena berada di paket yang sama (2.0 Master data, minggu 2) dan masih di bawah cadangan yang ada. Tidak dilakukan kalkulasi ulang penuh kaskade seluruh dokumen untuk penambahan sekecil ini — proporsional dengan skala perubahan.
+
+**Addendum v1.4 (2 September 2026)** — dokumen ini berhenti diperbarui sejak commit pertama (`31c588c`) meski seluruh cakupan MVP di bagian 2 sudah dikerjakan, plus kapabilitas pasca-MVP yang tidak pernah punya baris WBS sama sekali: Log Aktivitas (F13.4), Settings admin CRUD, backup/restore (WBS 9.2 — sudah dieksekusi dan diverifikasi, lihat catatan pada 9.2 di bawah), seluruh frontend Vue, unggah gambar produk/kategori/kanal pembayaran, ekspor/impor Excel master data (8 sheet), dan modul Vendor/Bahan Baku/BOM. Bagian ini menandai baris yang sudah selesai (kolom **Status**, ditambahkan pada setiap tabel paket kerja) dan menambahkan baris baru untuk kapabilitas yang genuinely baru (paket 2.9, 6.6, 9.7–9.9, 10.0, 11.0, dan tiga baris F9.5/F10.6/F11.6 di paket 8.0). **Tidak dilakukan kalkulasi ulang jam/jadwal/kapasitas di bagian 3–6** — proyek sudah lewat dari fase estimasi ke fase eksekusi; baris baru diberi estimasi jam sendiri untuk keperluan pencatatan cakupan, bukan untuk disusun ulang ke jadwal mingguan yang sudah lewat. Item F9.5/F10.6/F11.6 (PRD, ditambahkan 2026-09-02) **belum dibangun** per tanggal dokumen ini — dicatat "Belum dikerjakan" apa adanya, bukan diberi tanda selesai.
 
 ---
 
@@ -52,6 +54,8 @@ Estimasi dalam jam, mencakup API dan antarmuka sekaligus kecuali disebut lain.
 | 1.5 | Seeder data awal: pengguna, pengaturan, kanal pembayaran | 3 | 1.4 | Sistem dapat login dengan data contoh |
 | 1.6 | Autentikasi token dan middleware peran | 6 | 1.5 | Endpoint terlindungi sesuai peran |
 
+**Status (2 September 2026): 1.1–1.6 seluruhnya selesai.** Autentikasi token (Sanctum) dan middleware peran berjalan; 214 test backend dan 90 test frontend lulus di atas fondasi ini.
+
 ### 2.0 Master data — 48 jam
 
 | ID | Tugas | Jam | Prasyarat | Keluaran |
@@ -64,6 +68,9 @@ Estimasi dalam jam, mencakup API dan antarmuka sekaligus kecuali disebut lain.
 | 2.6 | Unggah dan tampil foto produk | 4 | 2.5 | Foto tersimpan di penyimpanan lokal |
 | 2.7 | CRUD pelanggan dan pencarian cepat | 5 | 1.6 | Modul pelanggan berfungsi |
 | 2.8 | Gate lisensi Pro/Master: setting `multi_artist_enabled`, endpoint status fitur, penegakan kuota artist | 4 | 2.1 | Instalasi Pro membatasi 1 artist, Master tidak terbatas |
+| 2.9 | *(baru, pasca-MVP)* Unggah/ganti gambar kategori — `POST /categories/{id}/image`, pola sama dengan 2.6 | 2 | 2.2 | Kategori punya gambar seperti produk |
+
+**Status (2 September 2026): 2.1–2.9 seluruhnya selesai**, termasuk 2.9 yang tidak ada di versi WBS sebelumnya (kategori sebelumnya tidak punya kolom gambar sama sekali; `image_path` ditambahkan lewat migrasi `2026_10_07_000001_add_image_path_to_categories_table`). Lihat paket 10.0 dan 11.0 di bawah untuk kapabilitas Master Data pasca-MVP yang lebih besar (impor/ekspor Excel, Vendor/Bahan Baku/BOM) — sengaja dipisah sebagai paket sendiri, bukan ditambahkan ke sini, karena keduanya adalah modul baru dengan kontrak API sendiri, bukan perluasan kecil dari 2.1–2.8.
 
 ### 3.0 Stok — 20 jam
 
@@ -74,6 +81,8 @@ Estimasi dalam jam, mencakup API dan antarmuka sekaligus kecuali disebut lain.
 | 3.3 | Halaman riwayat pergerakan beserta filter | 4 | 3.1 | Riwayat dapat ditelusuri |
 | 3.4 | Peringatan stok menipis | 2 | 3.1 | Indikator pada daftar produk |
 
+**Status (2 September 2026): 3.1–3.4 seluruhnya selesai.** Jalur `StockService::applyMovement()` juga menjadi jalur tunggal yang dipakai fitur pasca-MVP (impor Excel sheet `stock`, paket 10.0) — konsisten dengan aturan "satu jalur tulis stok" yang sudah ditegakkan 3.1.
+
 ### 4.0 Event & sesi kasir — 22 jam
 
 | ID | Tugas | Jam | Prasyarat | Keluaran |
@@ -83,6 +92,8 @@ Estimasi dalam jam, mencakup API dan antarmuka sekaligus kecuali disebut lain.
 | 4.3 | Tutup sesi: hitung kas seharusnya dan selisih | 6 | 4.2, 5.3 | Selisih kas terhitung otomatis |
 | 4.4 | Ringkasan sesi per metode bayar | 4 | 4.3 | Rekap sesi dapat dilihat |
 | 4.5 | Penegakan aturan sesi terbuka pada transaksi | 2 | 4.2 | Transaksi ditolak bila sesi tertutup |
+
+**Status (2 September 2026): 4.1–4.5 seluruhnya selesai.**
 
 ### 5.0 Transaksi penjualan — 48 jam
 
@@ -96,6 +107,8 @@ Estimasi dalam jam, mencakup API dan antarmuka sekaligus kecuali disebut lain.
 | 5.6 | Struk di layar dan tampil ulang dari riwayat | 6 | 5.3 | Struk terbaca jelas saat difoto |
 | 5.7 | Pembatalan transaksi dan pengembalian stok | 4 | 5.3 | Void tercatat, stok kembali |
 
+**Status (2 September 2026): 5.1–5.7 seluruhnya selesai.** 5.7 kini juga menulis baris Log Aktivitas (paket 9.7) di transaksi database yang sama — lihat `uml-pos-mvp.md` bagian 10.
+
 ### 6.0 Pembayaran & bukti — 26 jam
 
 | ID | Tugas | Jam | Prasyarat | Keluaran |
@@ -105,6 +118,9 @@ Estimasi dalam jam, mencakup API dan antarmuka sekaligus kecuali disebut lain.
 | 6.3 | Integrasi webcam untuk memotret bukti | 8 | 6.2 | Foto dapat diambil dari peramban |
 | 6.4 | Antarmuka pemilihan metode dan tampilan rekening atau QR | 4 | 6.1 | Nomor terbaca dari jarak meja |
 | 6.5 | Penegakan bukti wajib di sisi server | 2 | 6.2, 5.3 | Transaksi non-tunai ditolak tanpa bukti |
+| 6.6 | *(baru, pasca-MVP)* Unggah/ganti gambar QR kanal pembayaran — `POST /payment-channels` (field `qr_image`) dan `POST /payment-channels/{id}` (endpoint update yang sebelumnya tidak ada sama sekali) | 5 | 6.1 | Kanal QR (Gopay dkk) bisa diberi/diganti gambar QR |
+
+**Status (2 September 2026): 6.1–6.6 seluruhnya selesai**, termasuk perbaikan dua bug yang sempat membuat checkout non-tunai buntu: (1) backend memanggil nama route yang tidak pernah didefinisikan saat merender `qr_image_url`, menyebabkan `GET /payment-channels` gagal 500 begitu ada satu kanal berQR; (2) frontend (`ChannelPicker.vue`) tidak auto-pilih kanal saat hanya ada satu channel aktif, sehingga layar checkout QRIS tampak kosong selamanya. Detail di `uml-pos-mvp.md` bagian 13.2.
 
 ### 7.0 Pre-order & pengiriman — 38 jam
 
@@ -116,6 +132,8 @@ Estimasi dalam jam, mencakup API dan antarmuka sekaligus kecuali disebut lain.
 | 7.4 | Pembayaran DP dan pelunasan | 6 | 7.1, 6.2 | Sisa tagihan terhitung |
 | 7.5 | Pengiriman: alamat, kurir, ongkir, resi, status | 6 | 7.1 | Pengiriman dapat dilacak |
 
+**Status (2 September 2026): 7.1–7.5 seluruhnya selesai**, termasuk perbaikan bug F13.4-terkait di mana `GET /preorders/{id}` (dan hasil `PATCH`/`POST` pre-order lainnya) sempat menghilangkan `customer`, `payments`, dan `shipment` dari response karena relasi tidak dimuat sebelum `present()` membacanya (pola `relationLoaded()` gagal senyap). Sudah diperbaiki — lihat `uml-pos-mvp.md` bagian 4.
+
 ### 8.0 Laporan & ekspor — 28 jam
 
 | ID | Tugas | Jam | Prasyarat | Keluaran |
@@ -124,6 +142,11 @@ Estimasi dalam jam, mencakup API dan antarmuka sekaligus kecuali disebut lain.
 | 8.2 | Rekap hasil artist dan pencatatan pembayaran | 8 | 5.3 | Rekap otomatis per event |
 | 8.3 | Laporan modal dan keuntungan | 5 | 5.3 | Laba kotor dan bersih terhitung |
 | 8.4 | Ekspor Excel untuk laporan | 7 | 8.1, 8.2 | Berkas xlsx dapat diunduh |
+| 8.5 | *(baru, PRD F9.5, 2026-09-02)* Laporan modal dan laba kotor per artist, terpisah dari biaya event | 6 | 8.2, 8.3 | Modal & laba per artist terlihat tanpa dua kali potong `event_cost` |
+| 8.6 | *(baru, PRD F10.6, 2026-09-02)* Pencarian pada daftar transaksi laporan penjualan (nomor transaksi/nama pelanggan/nama kasir) | 3 | 8.1 | Filter tanpa reload seluruh laporan |
+| 8.7 | *(baru, PRD F11.6, 2026-09-02)* Drill-down transaksi penyusun rekap artist, di layar dan di berkas ekspor | 5 | 8.2, 8.4 | Detail order per artist terlihat, bukan cuma angka total |
+
+**Status (2 September 2026): 8.1–8.4 selesai. 8.5–8.7 BELUM DIKERJAKAN** — F9.5/F10.6/F11.6 baru ditambahkan ke PRD pada tanggal dokumen ini (lihat PRD §7.9/§7.10/§7.11, "Catatan penambahan — 2026-09-02"); PRD sendiri mencatat ketiganya "belum dibangun per tanggal catatan ini". Baris 8.5–8.7 dicatat di sini supaya cakupannya tidak hilang dari WBS, bukan diberi tanda selesai.
 
 ### 9.0 Operasional & rilis — 34 jam
 
@@ -135,6 +158,40 @@ Estimasi dalam jam, mencakup API dan antarmuka sekaligus kecuali disebut lain.
 | 9.4 | Input data produk sungguhan | 4 | 2.5 | Katalog siap pakai |
 | 9.5 | Simulasi event penuh sebagai uji terima | 8 | Seluruhnya | Daftar bug prioritas |
 | 9.6 | Panduan operasional dan pelatihan operator | 5 | 9.5 | Operator dapat menjalankan sendiri |
+| 9.7 | *(baru, pasca-MVP, F13.4)* Log aktivitas: `ActivityLogger` service, penulisan di transaksi yang sama dengan hapus/penyesuaian stok/perubahan harga/pengaturan, endpoint baca `GET /activity-logs` | 8 | 1.6 | Tindakan sensitif tercatat dan bisa ditinjau owner/admin |
+| 9.8 | *(baru, pasca-MVP)* Settings admin CRUD: `GET/PUT /settings`, `GET /settings/features`, jalur resmi upgrade lisensi Pro→Master (menggantikan `tinker`) | 5 | 1.6, 2.8 | Pengaturan toko & upgrade lisensi lewat endpoint, tercatat di log aktivitas |
+| 9.9 | *(baru)* Frontend Vue SPA lengkap: Pinia stores, router, composables (`usePaginatedList`, error handler 422/409/403/401), seluruh layar (dashboard, kasir, master data, laporan, settings) | — | 5.2, dst. | 90 test frontend (Vitest) lulus, `npm run build` menghasilkan `public/build` |
+
+**Status (2 September 2026): 9.1–9.6 seluruhnya selesai, plus 9.7–9.9 baru (tidak ada di versi WBS sebelumnya).** Catatan khusus untuk **9.2 (uji pemulihan dari cadangan)** — sebelumnya tercatat sebagai kewajiban yang ditunda: **sudah dieksekusi dan diverifikasi sungguhan pada sesi ini.** `php artisan app:backup` dijalankan terhadap database dev, menghasilkan dump MySQL penuh (22 tabel) plus arsip `payment-proofs.tar.gz`, keduanya tersalin ke `BACKUP_EXTERNAL_PATH`; dump dipulihkan ke database terpisah lewat `php artisan app:restore` dan jumlah baris/isi data (username, role, key/value pengaturan) dikonfirmasi cocok persis dengan sumbernya; arsip bukti pembayaran dikonfirmasi bisa diekstrak dan isinya cocok dengan lokasi penyimpanan sesungguhnya. Test suite tetap lulus setelah database restorasi di-reset ulang oleh `RefreshDatabase`. Verifikasi memakai shim `docker exec` sementara (tidak dikomit, tidak bagian dari produk) karena mesin dev hanya punya MySQL di kontainer Docker — kode `BackupPos`/`RestorePos` sendiri tetap mengasumsikan `mysqldump`/`mysql` ada langsung di `PATH` server toko sungguhan. Yang MASIH belum dilakukan: uji pemulihan dari media eksternal fisik (flashdisk/HDD nyata) dan penjadwalan otomatis harian (`Schedule::command('app:backup')` belum ada di `routes/console.php`) — detail lengkap di `README.md` bagian "Cadangan & pemulihan (WBS 9.2)".
+
+### 10.0 Impor/ekspor Excel master data — pasca-MVP (PRD 7.15, diaktifkan kembali 2026-09-01) — 24 jam
+
+Dicoret dari cakupan MVP awal (PRD §10.2 lama), diaktifkan kembali atas permintaan eksplisit pemilik produk pada 2026-09-01. Tidak ada di versi WBS sebelumnya sama sekali.
+
+| ID | Tugas | Jam | Prasyarat | Keluaran |
+|---|---|---|---|---|
+| 10.1 | `MasterDataSheets`: kamus judul kolom bersama untuk ekspor/template/impor, 8 sheet (artists, categories, products, stock, vendors, materials, vendor_prices, bom) | 3 | 2.0, 11.0 | Satu sumber kebenaran nama sheet & kolom |
+| 10.2 | `GET /exports/{entity}`: ekspor satu entitas ke `.xlsx` | 3 | 10.1 | Berkas round-trip balik ke impor |
+| 10.3 | `GET /imports/master-data/template`: unduh workbook gabungan 8 sheet dengan contoh baris | 2 | 10.1 | Template siap pakai |
+| 10.4 | `MasterDataImportService`: validasi penuh + transaksi tunggal semua-atau-tidak-sama-sekali, urutan pemrosesan tetap, `dry_run` | 10 | 3.1, 10.1 | Impor 8 sheet konsisten, tanpa data setengah jadi |
+| 10.5 | Resolusi SKU tertunda: sheet `stock`/`bom` boleh menunjuk SKU yang baru dibuat sheet `products` pada berkas yang sama | 3 | 10.4 | Satu berkas bisa membuat varian baru sekaligus mengisi stok/BOM-nya |
+| 10.6 | Task 6 — gambar via `image_filename` + `images[]`: pencocokan nama berkas, galat per-baris bila referensi tidak ada padanan | 3 | 10.4, 2.9 | Produk/kategori bisa dapat gambar lewat impor massal |
+
+**Status (2 September 2026): 10.1–10.6 seluruhnya selesai.** Digerbang `canManageMasterData()` (owner/admin/inventory) — lebih ketat dari endpoint baca per-entitas, karena ekstraksi massal adalah permukaan risiko sendiri.
+
+### 11.0 Vendor, Bahan Baku, dan BOM — pasca-MVP (ditambahkan 2026-09-01) — 26 jam
+
+Bukan kebangkitan "vendor management"/"materials & production" yang dicoret PRD §10.2 — sengaja lebih sempit (tidak ada purchase order, tidak ada penjadwalan produksi), tidak berkorespondensi dengan nomor F- manapun. Tidak ada di versi WBS sebelumnya sama sekali.
+
+| ID | Tugas | Jam | Prasyarat | Keluaran |
+|---|---|---|---|---|
+| 11.1 | CRUD vendor (`code` permanen, soft delete dengan guard) | 4 | 1.6 | Modul vendor berfungsi, konsisten pola Artist/Category |
+| 11.2 | CRUD bahan baku (`code`, `unit` bebas, soft delete dengan guard ganda: harga vendor + BOM) | 4 | 1.6 | Modul bahan berfungsi |
+| 11.3 | Harga vendor per bahan: attach/update/detach, unique (vendor,bahan), `is_preferred` saling eksklusif per bahan | 6 | 11.1, 11.2 | Satu bahan bisa punya harga dari banyak vendor |
+| 11.4 | BOM per varian: attach/update/detach baris (bahan + qty per unit), diikat ke `ProductVariant` bukan `Product` | 6 | 11.2, 2.4 | Resep bahan per SKU tercatat |
+| 11.5 | `BomCostCalculator` + `GET /variants/{id}/cost-breakdown`: pemilihan harga (preferred, lalu termurah), `bom_cost` terpisah dari `cost_price` | 6 | 11.3, 11.4 | Modal bahan terhitung, TIDAK pernah menimpa `cost_price` |
+
+**Status (2 September 2026): 11.1–11.5 seluruhnya selesai.** Seluruh endpoint digerbang `canManageMasterData()`, setara tingkat Products/Categories/Stock. Delete guard pada Vendor (masih punya `vendor_material_prices`) dan Material (masih punya `vendor_material_prices` ATAU baris BOM) menghasilkan 409, ditulis ke log aktivitas (paket 9.7) untuk create/delete.
 
 ---
 

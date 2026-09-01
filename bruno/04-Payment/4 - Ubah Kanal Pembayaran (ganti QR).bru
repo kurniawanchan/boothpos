@@ -1,0 +1,27 @@
+meta {
+  name: 4 - Ubah Kanal Pembayaran (ganti QR)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/payment-channels/{{payment_channel_id}}
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:multipart-form {
+  provider: Gopay Toko
+  qr_image: @file(./sample-image.jpg)
+}
+
+tests {
+  test("kanal diperbarui, endpoint ini sebelumnya sama sekali tidak ada", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.provider).to.equal("Gopay Toko");
+  });
+}

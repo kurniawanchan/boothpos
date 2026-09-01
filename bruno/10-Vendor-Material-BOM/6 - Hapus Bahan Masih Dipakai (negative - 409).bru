@@ -1,0 +1,20 @@
+meta {
+  name: 6 - Hapus Bahan Masih Dipakai (negative - 409)
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{base_url}}/materials/{{material_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("ditolak 409 - bahan masih punya harga vendor dan baris BOM aktif", function () {
+    expect(res.status).to.equal(409);
+  });
+}

@@ -1,0 +1,27 @@
+meta {
+  name: 3 - Impor Sungguhan
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/imports/master-data
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:multipart-form {
+  file: @file(./contoh-impor-valid.xlsx)
+}
+
+tests {
+  test("impor diterapkan, sheets berisi angka riil per sheet", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.applied).to.equal(true);
+    expect(res.body.sheets).to.be.an("object");
+  });
+}

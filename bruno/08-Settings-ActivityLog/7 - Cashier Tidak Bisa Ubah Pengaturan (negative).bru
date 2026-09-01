@@ -1,0 +1,29 @@
+meta {
+  name: 7 - Cashier Tidak Bisa Ubah Pengaturan (negative)
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{base_url}}/settings
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{cashier_token}}
+}
+
+body:json {
+  {
+    "settings": [
+      { "key": "store_name", "value": "Percobaan Kasir" }
+    ]
+  }
+}
+
+tests {
+  test("ditolak 403 - kasir tidak boleh mengubah pengaturan atau lisensi", function () {
+    expect(res.status).to.equal(403);
+  });
+}

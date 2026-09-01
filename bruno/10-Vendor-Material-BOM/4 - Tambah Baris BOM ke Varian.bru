@@ -1,0 +1,35 @@
+meta {
+  name: 4 - Tambah Baris BOM ke Varian
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/variants/{{variant_id}}/bom
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "material_id": {{material_id}},
+    "qty_needed": 2
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("bom_line_id", res.body.id);
+  }
+}
+
+tests {
+  test("baris BOM ditambahkan ke varian (bukan ke produk induk)", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.qty_needed).to.equal("2.0000");
+  });
+}
