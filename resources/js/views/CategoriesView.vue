@@ -2,6 +2,7 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listCategories, createCategory, updateCategory, deleteCategory } from '../api/categories';
+import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
@@ -13,6 +14,7 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
 const auth = useAuthStore();
 const toast = useToastStore();
@@ -22,11 +24,34 @@ const allCategories = ref([]); // for the parent picker + hierarchy column, unpa
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
 
+async function loadAllCategories() {
+  allCategories.value = (await listCategories({ per_page: 100 })).data;
+}
+
 onMounted(async () => {
   await load();
-  const res = await listCategories({ per_page: 100 });
-  allCategories.value = res.data;
+  await loadAllCategories();
 });
+
+const exporting = ref(false);
+const showImportModal = ref(false);
+
+async function doExport() {
+  exporting.value = true;
+  try {
+    await exportMasterData('categories');
+  } catch {
+    toast.error('Gagal mengekspor data kategori.');
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function afterImport() {
+  // Refresh in the background but leave the modal open so the user still
+  // sees the applied summary — they close it themselves via "Tutup".
+  await Promise.all([load(), loadAllCategories()]);
+}
 
 const nameById = computed(() => Object.fromEntries(allCategories.value.map((c) => [c.id, c.name])));
 
@@ -97,7 +122,7 @@ async function saveCategory() {
     }
     showForm.value = false;
     await load();
-    allCategories.value = (await listCategories({ per_page: 100 })).data;
+    await loadAllCategories();
   } catch (err) {
     if (err.isValidation) Object.assign(formErrors, Object.fromEntries(Object.entries(err.errors).map(([k, v]) => [k, v[0]])));
   } finally {
@@ -139,10 +164,20 @@ async function performDelete() {
           @input="debouncedSearch"
         />
       </div>
-      <BaseButton v-if="auth.canManageMasterData" @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Kategori baru
-      </BaseButton>
+      <template v-if="auth.canManageMasterData">
+        <BaseButton variant="secondary" :loading="exporting" @click="doExport">
+          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+          Ekspor .xlsx
+        </BaseButton>
+        <BaseButton variant="secondary" @click="showImportModal = true">
+          <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
+          Impor massal
+        </BaseButton>
+        <BaseButton @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          Kategori baru
+        </BaseButton>
+      </template>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
@@ -199,5 +234,7 @@ async function performDelete() {
       @close="showDelete = false"
       @confirm="performDelete"
     />
+
+    <MasterDataImportModal :open="showImportModal" @close="showImportModal = false" @imported="afterImport" />
   </div>
 </template>

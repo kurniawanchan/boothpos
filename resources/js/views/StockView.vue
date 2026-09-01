@@ -3,6 +3,7 @@ import { ref, reactive, onMounted } from 'vue';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listMovements, createAdjustment } from '../api/stock';
 import { lookupVariants } from '../api/products';
+import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
@@ -16,12 +17,33 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
+import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
 const auth = useAuthStore();
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listMovements);
 onMounted(load);
+
+const exporting = ref(false);
+const showImportModal = ref(false);
+
+async function doExport() {
+  exporting.value = true;
+  try {
+    await exportMasterData('stock');
+  } catch {
+    toast.error('Gagal mengekspor data stok.');
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function afterImport() {
+  // Refresh in the background but leave the modal open so the user still
+  // sees the applied summary — they close it themselves via "Tutup".
+  await load();
+}
 
 const TYPE_LABEL = { purchase: 'Pembelian', sale: 'Penjualan', preorder_handover: 'Serah pre-order', adjustment: 'Penyesuaian', return: 'Retur', initial: 'Stok awal' };
 const TYPE_VARIANT = { purchase: 'mint', sale: 'neutral', preorder_handover: 'warn', adjustment: 'neutral', return: 'mint', initial: 'neutral' };
@@ -113,10 +135,20 @@ async function submitAdjustment() {
       <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
       <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_to: v || undefined })" />
       <span class="flex-1"></span>
-      <BaseButton v-if="auth.canManageMasterData" @click="openAdjust">
-        <i class="ph-duotone ph-sliders-horizontal text-[16px]" aria-hidden="true"></i>
-        Penyesuaian stok
-      </BaseButton>
+      <template v-if="auth.canManageMasterData">
+        <BaseButton variant="secondary" :loading="exporting" @click="doExport">
+          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+          Ekspor .xlsx
+        </BaseButton>
+        <BaseButton variant="secondary" @click="showImportModal = true">
+          <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
+          Impor massal
+        </BaseButton>
+        <BaseButton @click="openAdjust">
+          <i class="ph-duotone ph-sliders-horizontal text-[16px]" aria-hidden="true"></i>
+          Penyesuaian stok
+        </BaseButton>
+      </template>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
@@ -182,5 +214,7 @@ async function submitAdjustment() {
         </div>
       </template>
     </BaseModal>
+
+    <MasterDataImportModal :open="showImportModal" @close="showImportModal = false" @imported="afterImport" />
   </div>
 </template>

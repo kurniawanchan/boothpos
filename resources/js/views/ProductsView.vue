@@ -4,6 +4,7 @@ import { usePaginatedList } from '../composables/usePaginatedList';
 import { listProducts, getProduct, createProduct, updateProduct, deleteProduct, addVariant, updateVariant } from '../api/products';
 import { listArtists } from '../api/artists';
 import { listCategories } from '../api/categories';
+import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
@@ -17,6 +18,7 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
 const auth = useAuthStore();
 const toast = useToastStore();
@@ -38,6 +40,34 @@ onMounted(async () => {
 
 function applyFilters() {
   setFilter({ artist_id: artistFilter.value || undefined, category_id: categoryFilter.value || undefined });
+}
+
+const exporting = ref(false);
+const showImportModal = ref(false);
+
+async function doExport() {
+  exporting.value = true;
+  try {
+    await exportMasterData('products');
+  } catch {
+    toast.error('Gagal mengekspor data produk.');
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function afterImport() {
+  // Refresh in the background but leave the modal open — it still shows the
+  // applied summary (per-sheet counts, ignored sheets), and closing it out
+  // from under the user the instant the request resolves would hide the
+  // one confirmation that the bulk write actually did what was previewed.
+  // The user closes it themselves via "Tutup".
+  // A products import can also touch artists/categories it references.
+  await Promise.all([
+    load(),
+    listArtists({ per_page: 100 }).then((r) => (artists.value = r.data)),
+    listCategories({ per_page: 100 }).then((r) => (categories.value = r.data)),
+  ]);
 }
 
 const columns = [
@@ -236,10 +266,20 @@ async function performDelete() {
       </div>
       <BaseSelect class="w-48" v-model="artistFilter" placeholder="Semua artist" :options="artists.map((a) => ({ value: a.id, label: a.name }))" @update:model-value="applyFilters" />
       <BaseSelect class="w-48" v-model="categoryFilter" placeholder="Semua kategori" :options="categories.map((c) => ({ value: c.id, label: c.name }))" @update:model-value="applyFilters" />
-      <BaseButton v-if="auth.canManageMasterData" @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Produk baru
-      </BaseButton>
+      <template v-if="auth.canManageMasterData">
+        <BaseButton variant="secondary" :loading="exporting" @click="doExport">
+          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+          Ekspor .xlsx
+        </BaseButton>
+        <BaseButton variant="secondary" @click="showImportModal = true">
+          <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
+          Impor massal
+        </BaseButton>
+        <BaseButton @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          Produk baru
+        </BaseButton>
+      </template>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
@@ -351,5 +391,7 @@ async function performDelete() {
       @close="showDelete = false"
       @confirm="performDelete"
     />
+
+    <MasterDataImportModal :open="showImportModal" @close="showImportModal = false" @imported="afterImport" />
   </div>
 </template>

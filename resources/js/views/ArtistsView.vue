@@ -2,6 +2,8 @@
 import { reactive, ref, onMounted } from 'vue';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listArtists, createArtist, updateArtist, deleteArtist } from '../api/artists';
+import { exportMasterData } from '../api/masterData';
+import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
@@ -13,7 +15,9 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
+const auth = useAuthStore();
 const settings = useSettingsStore();
 const toast = useToastStore();
 
@@ -25,6 +29,28 @@ onMounted(async () => {
   await settings.load();
   await load();
 });
+
+const exporting = ref(false);
+const showImportModal = ref(false);
+
+async function doExport() {
+  exporting.value = true;
+  try {
+    await exportMasterData('artists');
+  } catch {
+    toast.error('Gagal mengekspor data artist.');
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function afterImport() {
+  // Refresh in the background but leave the modal open so the user still
+  // sees the applied summary — they close it themselves via "Tutup".
+  // Artist count/quota may have changed — the Pro/Master license gate reads
+  // from settings, so refresh it alongside the list itself.
+  await Promise.all([load(), settings.load()]);
+}
 
 const columns = [
   { key: 'code', label: 'Kode' },
@@ -132,6 +158,16 @@ async function performDelete() {
           @input="debouncedSearch"
         />
       </div>
+      <template v-if="auth.canManageMasterData">
+        <BaseButton variant="secondary" :loading="exporting" @click="doExport">
+          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+          Ekspor .xlsx
+        </BaseButton>
+        <BaseButton variant="secondary" @click="showImportModal = true">
+          <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
+          Impor massal
+        </BaseButton>
+      </template>
       <BaseButton :disabled="!canCreate()" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         Tambah artist
@@ -211,5 +247,7 @@ async function performDelete() {
       @close="showDelete = false"
       @confirm="performDelete"
     />
+
+    <MasterDataImportModal :open="showImportModal" @close="showImportModal = false" @imported="afterImport" />
   </div>
 </template>
