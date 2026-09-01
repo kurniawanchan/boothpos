@@ -745,4 +745,81 @@ class MasterDataImportTest extends TestCase
 
         $this->assertSame(15, ProductVariant::first()->current_stock);
     }
+
+    // =================================================================
+    // Task 6 — image_filename pada sheet products/categories, dicocokkan
+    // ke batch berkas 'images[]' yang diunggah bersamaan.
+    // =================================================================
+
+    public function test_products_and_categories_sheets_can_reference_uploaded_images_by_filename(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+
+        $workbook = $this->workbook([
+            'artists' => ['rows' => [
+                ['code' => 'RYU', 'name' => 'Ryu Illustration', 'is_active' => 1],
+            ]],
+            'categories' => ['rows' => [
+                ['code' => 'KY', 'name' => 'Keychain', 'is_active' => 1, 'image_filename' => 'kategori-keychain.png'],
+            ]],
+            'products' => ['rows' => [
+                [
+                    'artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
+                    'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard',
+                    'sell_price' => 25000, 'image_filename' => 'produk-sakura.jpg',
+                ],
+            ]],
+        ]);
+
+        $categoryImage = UploadedFile::fake()->image('kategori-keychain.png');
+        $productImage = UploadedFile::fake()->image('produk-sakura.jpg');
+
+        $response = $this->postImport($workbook, ['images' => [$categoryImage, $productImage]]);
+
+        $response->assertOk()->assertJsonPath('applied', true)->assertJsonPath('errors', []);
+
+        $category = Category::where('code', 'KY')->firstOrFail();
+        $product = Product::where('code_prefix', 'RYUKYSAK')->firstOrFail();
+
+        $this->assertNotNull($category->image_path);
+        $this->assertNotNull($product->image_path);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($category->image_path);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($product->image_path);
+    }
+
+    public function test_a_referenced_image_filename_with_no_matching_upload_is_a_row_level_error(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+
+        $workbook = $this->workbook([
+            'categories' => ['rows' => [
+                ['code' => 'KY', 'name' => 'Keychain', 'is_active' => 1, 'image_filename' => 'tidak-diunggah.png'],
+            ]],
+        ]);
+
+        // Sengaja TIDAK mengirim 'images' sama sekali — mensimulasikan
+        // pemilik toko yang lupa menyertakan berkas gambar yang
+        // direferensikan sheet-nya.
+        $response = $this->postImport($workbook);
+
+        $response->assertStatus(422)->assertJsonPath('applied', false);
+
+        $error = collect($response->json('errors'))->firstWhere('column', 'image_filename');
+        $this->assertNotNull($error);
+        $this->assertSame('categories', $error['sheet']);
+        $this->assertDatabaseMissing('categories', ['code' => 'KY']);
+    }
+
+    public function test_the_shipped_template_still_imports_cleanly_after_adding_the_image_filename_column(): void
+    {
+        // Regresi eksplisit untuk Task 6: menambah kolom image_filename ke
+        // MasterDataSheets tidak boleh membuat
+        // test_the_shipped_template_imports_as_is (di atas) mulai gagal.
+        // Kolom baru dibiarkan kosong pada baris contoh (lihat
+        // MasterDataSheets::exampleRow()), yang berarti "tidak ada gambar
+        // diikutsertakan" — bukan error.
+        $this->test_the_shipped_template_imports_as_is();
+    }
 }

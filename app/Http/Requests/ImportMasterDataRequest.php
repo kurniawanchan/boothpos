@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Services\ImageUploadService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -9,6 +10,11 @@ use Illuminate\Validation\Rule;
 class ImportMasterDataRequest extends FormRequest
 {
     public const MAX_KILOBYTES = 10240; // 10 MB
+
+    /** Batas jumlah berkas gambar per pengiriman (Task 6) — cukup longgar
+     * untuk satu batch impor wajar, tapi mencegah request tunggal membawa
+     * ribuan berkas sekaligus. */
+    public const MAX_IMAGES = 200;
 
     /**
      * Digerbang di FormRequest, bukan lewat Policy per entitas, dan bukan
@@ -61,6 +67,17 @@ class ImportMasterDataRequest extends FormRequest
             // jalur validasi yang sama persis dengan impor sungguhan,
             // supaya pratinjau tidak bisa berbeda hasil dari penerapannya.
             'dry_run' => ['sometimes', 'boolean'],
+            // Task 6 — batch gambar yang dikirim BERSAMAAN dengan .xlsx
+            // pada request yang sama (multipart/form-data 'images[]'),
+            // dicocokkan ke kolom image_filename sheet products/categories
+            // lewat nama berkas asli. Pola validasi sama dengan
+            // ImageUploadService (MIME dicek ulang di controller sebelum
+            // diteruskan ke service impor).
+            'images' => ['sometimes', 'array', 'max:'.self::MAX_IMAGES],
+            'images.*' => [
+                'file',
+                Rule::file()->max(ImageUploadService::MAX_KILOBYTES)->rules(['mimes:jpeg,png']),
+            ],
         ];
     }
 

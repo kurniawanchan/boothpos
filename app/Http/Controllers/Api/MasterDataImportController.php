@@ -98,6 +98,11 @@ class MasterDataImportController extends Controller
             user: $request->user(),
             dryRun: $request->boolean('dry_run'),
             originalName: $file->getClientOriginalName(),
+            // Task 6 — batch gambar dikirim di field 'images[]' pada request
+            // yang sama; MIME masing-masing sudah diperiksa oleh rule
+            // ImportMasterDataRequest, konsisten dengan pemeriksaan ganda
+            // .xlsx di atas (rule Laravel + pembuktian ulang di controller).
+            images: $request->file('images', []),
         );
 
         // Berkas sumber hanya disimpan bila impornya BENAR-BENAR diterapkan

@@ -11,6 +11,7 @@ use App\Models\ProductVariant;
 use App\Models\User;
 use App\Support\LicenseGate;
 use App\Support\MasterDataSheets;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
@@ -81,19 +82,35 @@ class MasterDataImportService
 
     private array $counts = [];
 
+    /** @var array<string, UploadedFile> nama berkas asli => berkas terunggah (Task 6). */
+    private array $imagesByFilename = [];
+
     public function __construct(
         private ProductCodeGenerator $codeGenerator,
         private StockService $stockService,
         private ActivityLogger $activityLogger,
+        private ImageUploadService $imageUploadService,
     ) {}
 
     /**
+     * @param  UploadedFile[]  $images  Berkas gambar yang diunggah BERSAMAAN
+     *                                  dengan .xlsx pada satu request yang
+     *                                  sama (Task 6) — dicocokkan ke baris
+     *                                  products/categories lewat kolom
+     *                                  image_filename berdasarkan nama asli
+     *                                  berkas (getClientOriginalName()),
+     *                                  bukan urutan atau index array.
      * @return array{applied: bool, dry_run: bool, sheets: array, ignored_sheets: array, errors: array}
      */
-    public function import(string $absolutePath, User $user, bool $dryRun, string $originalName): array
+    public function import(string $absolutePath, User $user, bool $dryRun, string $originalName, array $images = []): array
     {
         $this->errors = [];
         $this->counts = [];
+        $this->imagesByFilename = [];
+
+        foreach ($images as $image) {
+            $this->imagesByFilename[$image->getClientOriginalName()] = $image;
+        }
 
         [$sheets, $ignored] = $this->readSheets($absolutePath);
 
@@ -483,6 +500,13 @@ class MasterDataImportService
                 }
             }
 
+            // Task 6 — kolom kosong berarti "jangan diubah" (aturan #6 di
+            // docblock kelas ini), sama seperti kolom lain. image_filename
+            // TIDAK ikut ditaruh di $attributes karena bukan nama kolom
+            // tabel — path sebenarnya baru diketahui setelah berkasnya
+            // disalin ke storage saat apply().
+            $imageFilename = $this->resolveImageFilename($sheet, $row, $values);
+
             $parentCode = null;
             if ($this->filled($values, 'parent_code')) {
                 $parentCode = strtoupper($this->stringValue($values, 'parent_code'));
@@ -501,6 +525,7 @@ class MasterDataImportService
                 'attributes' => $attributes,
                 'parent_code' => $parentCode,
                 'exists' => $existing !== null,
+                'image_filename' => $imageFilename,
             ];
         }
 
@@ -597,6 +622,10 @@ class MasterDataImportService
                     'sku' => $sku,
                     'product_attributes' => $productAttributes,
                     'variant_attributes' => $variantAttributes,
+                    // Task 6 — gambar melekat pada PRODUK, bukan varian;
+                    // baris manapun dari varian produk yang sama boleh
+                    // membawanya.
+                    'image_filename' => $this->resolveImageFilename($sheet, $row, $values),
                 ];
 
                 continue;
@@ -733,6 +762,7 @@ class MasterDataImportService
                 'variant_attributes' => $variantAttributes,
                 'initial_stock' => $initialStock,
                 'product_exists' => $product !== null,
+                'image_filename' => $this->resolveImageFilename($sheet, $row, $values),
             ];
         }
 
@@ -963,6 +993,11 @@ class MasterDataImportService
             $category = Category::firstOrNew(['code' => $entry['code']]);
             $category->fill($entry['attributes']);
             $category->code = $entry['code'];
+
+            if ($entry['image_filename'] !== null) {
+                $this->applyImageFilename($category, 'categories', $entry['image_filename']);
+            }
+
             $category->save();
         }
 
@@ -1001,8 +1036,14 @@ class MasterDataImportService
             if ($entry['mode'] === 'variant_by_sku') {
                 $variant = ProductVariant::with('product')->where('sku', $entry['sku'])->firstOrFail();
 
-                if ($entry['product_attributes'] !== []) {
-                    $variant->product->fill($entry['product_attributes'])->save();
+                if ($entry['product_attributes'] !== [] || $entry['image_filename'] !== null) {
+                    $variant->product->fill($entry['product_attributes']);
+
+                    if ($entry['image_filename'] !== null) {
+                        $this->applyImageFilename($variant->product, 'products', $entry['image_filename']);
+                    }
+
+                    $variant->product->save();
                 }
 
                 if ($entry['variant_attributes'] !== []) {
@@ -1022,15 +1063,27 @@ class MasterDataImportService
                 // — bukan menyusun code_prefix sendiri di sini.
                 $codePrefix = $this->codeGenerator->buildCodePrefix($artist->code, $category->code, $entry['segment']);
 
-                $product = Product::create(array_merge([
+                $product = new Product(array_merge([
                     'artist_id' => $artist->id,
                     'category_id' => $category->id,
                     'code_prefix' => $codePrefix,
                     'product_segment' => $entry['segment'],
                     'name' => $entry['product_name'],
                 ], $entry['product_attributes']));
-            } elseif ($entry['product_attributes'] !== []) {
-                $product->fill($entry['product_attributes'])->save();
+
+                if ($entry['image_filename'] !== null) {
+                    $this->applyImageFilename($product, 'products', $entry['image_filename']);
+                }
+
+                $product->save();
+            } elseif ($entry['product_attributes'] !== [] || $entry['image_filename'] !== null) {
+                $product->fill($entry['product_attributes']);
+
+                if ($entry['image_filename'] !== null) {
+                    $this->applyImageFilename($product, 'products', $entry['image_filename']);
+                }
+
+                $product->save();
             }
 
             $variant = ProductVariant::where('product_id', $product->id)
@@ -1066,6 +1119,34 @@ class MasterDataImportService
                 $variant->fill($entry['variant_attributes'])->save();
             }
         }
+    }
+
+    /**
+     * Task 6 — menyalin berkas gambar yang diunggah bersamaan ke disk
+     * 'public' lewat ImageUploadService (pola validasi MIME + nama acak
+     * yang sama dengan upload gambar satuan di Task 5), lalu mengisi
+     * atribut image_path model. Gambar lama (kalau ada) dihapus supaya
+     * tidak menumpuk berkas yatim di storage setiap kali diimpor ulang.
+     *
+     * Efek samping penyimpanan berkas TIDAK ikut ter-rollback bila
+     * transaksi DB gagal setelahnya — sama seperti upload gambar satuan,
+     * ini bukan operasi transaksional. Risikonya kecil (berkas yatim di
+     * storage, bukan data yang salah) dan konsisten dengan bagaimana
+     * unggahan berkas ditangani di seluruh kodebase ini (lihat juga
+     * PaymentProofController).
+     */
+    private function applyImageFilename(Product|Category $model, string $directory, string $filename): void
+    {
+        $file = $this->imagesByFilename[$filename] ?? null;
+
+        if ($file === null) {
+            // Sudah divalidasi ada di tahap validasi; ini jaga-jaga saja.
+            return;
+        }
+
+        $oldPath = $model->image_path;
+        $model->image_path = $this->imageUploadService->store($file, $directory);
+        $this->imageUploadService->delete($oldPath);
     }
 
     private function applyStock(array $plan, User $user): void
@@ -1107,6 +1188,37 @@ class MasterDataImportService
     // =================================================================
     // UTILITAS NILAI SEL
     // =================================================================
+
+    /**
+     * Task 6 — memvalidasi kolom image_filename terhadap batch berkas yang
+     * diunggah bersamaan lewat field 'images[]'. Nama berkas yang
+     * direferensikan tapi tidak ada padanannya di batch adalah GALAT PER
+     * BARIS (bukan dilewati diam-diam), konsisten dengan strategi
+     * all-or-nothing impor ini — spreadsheet yang menjanjikan gambar untuk
+     * suatu produk tapi gambarnya lupa diikutsertakan lebih baik ditolak
+     * seluruhnya daripada diam-diam menyimpan produk tanpa gambar.
+     */
+    private function resolveImageFilename(string $sheet, int $row, array $values): ?string
+    {
+        if (! $this->filled($values, 'image_filename')) {
+            return null;
+        }
+
+        $filename = $this->stringValue($values, 'image_filename');
+
+        if (! array_key_exists($filename, $this->imagesByFilename)) {
+            $this->addError(
+                $sheet,
+                $row,
+                'image_filename',
+                "Berkas gambar '{$filename}' tidak ditemukan pada berkas yang diunggah bersamaan (field images[])."
+            );
+
+            return null;
+        }
+
+        return $filename;
+    }
 
     private function isBlank(mixed $value): bool
     {

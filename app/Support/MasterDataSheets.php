@@ -45,13 +45,13 @@ final class MasterDataSheets
                 'code', 'name', 'contact_phone', 'contact_email', 'notes', 'is_active',
             ],
             self::CATEGORIES => [
-                'code', 'name', 'parent_code', 'display_order', 'is_active',
+                'code', 'name', 'parent_code', 'display_order', 'is_active', 'image_filename',
             ],
             self::PRODUCTS => [
                 'sku', 'artist_code', 'category_code', 'product_segment', 'product_name',
                 'description', 'is_preorder', 'preorder_eta', 'product_is_active',
                 'variant_name', 'cost_price', 'sell_price', 'low_stock_alert',
-                'variant_is_active', 'initial_stock',
+                'variant_is_active', 'initial_stock', 'image_filename',
             ],
             self::STOCK => [
                 'sku', 'current_stock', 'reason',
@@ -90,6 +90,7 @@ final class MasterDataSheets
                 'parent_code' => '',
                 'display_order' => 1,
                 'is_active' => 1,
+                'image_filename' => '',
             ],
             self::PRODUCTS => [
                 'sku' => '',
@@ -107,6 +108,11 @@ final class MasterDataSheets
                 'low_stock_alert' => 5,
                 'variant_is_active' => 1,
                 'initial_stock' => 20,
+                // Kosong = tidak ada gambar diikutsertakan (Task 6). Diisi
+                // dengan nama berkas PERSIS SAMA seperti yang diunggah
+                // bersamaan lewat field 'images[]' pada POST
+                // /imports/master-data.
+                'image_filename' => '',
             ],
             self::STOCK => [
                 'sku' => 'RYUKYSAK0001',

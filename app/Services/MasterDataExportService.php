@@ -70,6 +70,12 @@ class MasterDataExportService
             'parent_code' => $c->parent?->code,
             'display_order' => $c->display_order,
             'is_active' => $c->is_active ? 1 : 0,
+            // Kosong dengan sengaja (Task 6) — kita tidak menyimpan nama
+            // berkas ASLI yang diunggah pengguna, hanya path acak di
+            // storage, jadi tidak ada nama untuk direkonstruksi di sini.
+            // Kolom kosong berarti "jangan diubah" saat diimpor ulang,
+            // konsisten dengan gambar yang sudah ada tetap dipertahankan.
+            'image_filename' => null,
         ])->all();
     }
 
@@ -111,6 +117,7 @@ class MasterDataExportService
                 // berlaku untuk varian BARU saat impor. Stok varian yang
                 // sudah ada diubah lewat sheet 'stock'.
                 'initial_stock' => null,
+                'image_filename' => null, // lihat catatan di categoryRows().
             ])->all();
     }
 
