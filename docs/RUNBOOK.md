@@ -165,7 +165,7 @@ DB_PASSWORD=<password_aplikasi_anda>
 BACKUP_EXTERNAL_PATH=<folder lokal apa saja untuk uji backup, lihat §7>
 ```
 
-Hasil yang sudah diverifikasi terakhir: **164/164 test lulus, 465
+Hasil yang sudah diverifikasi terakhir: **167/167 test lulus, 484
 assertion**, terhadap MySQL 8.4 sungguhan (sebelumnya 122; bertambah oleh
 ekspor/impor Excel master data dan perbaikan rekap artist).
 Kalau ada test yang gagal

@@ -115,7 +115,10 @@ class MasterDataImportService
             $plan[MasterDataSheets::ARTISTS],
             $plan[MasterDataSheets::CATEGORIES],
         );
-        $plan[MasterDataSheets::STOCK] = $this->validateStock($sheets[MasterDataSheets::STOCK] ?? []);
+        $plan[MasterDataSheets::STOCK] = $this->validateStock(
+            $sheets[MasterDataSheets::STOCK] ?? [],
+            $plan[MasterDataSheets::PRODUCTS],
+        );
 
         // Sheet yang tidak dikirim sama sekali tidak dilaporkan — nol baris
         // lebih membingungkan daripada tidak ada entrinya.
@@ -590,6 +593,7 @@ class MasterDataImportService
                 $plan[] = [
                     'row' => $row,
                     'mode' => 'variant_by_sku',
+                    'creates_variant' => false,
                     'sku' => $sku,
                     'product_attributes' => $productAttributes,
                     'variant_attributes' => $variantAttributes,
@@ -718,6 +722,7 @@ class MasterDataImportService
             $plan[] = [
                 'row' => $row,
                 'mode' => 'variant_by_code',
+                'creates_variant' => $isNewVariant,
                 'artist_code' => $artistCode,
                 'category_code' => $categoryCode,
                 'segment' => $segment,
@@ -820,13 +825,23 @@ class MasterDataImportService
     // VALIDASI — STOCK
     // =================================================================
 
-    private function validateStock(array $rows): array
+    private function validateStock(array $rows, array $productPlan): array
     {
         $sheet = MasterDataSheets::STOCK;
         $plan = [];
         $seen = [];
         $updated = 0;
         $unchanged = 0;
+
+        // Sheet 'products' bisa membuat varian baru yang SKU-nya dihasilkan
+        // server, jadi belum ada saat tahap validasi ini berjalan. Kalau
+        // berkas ini memang membuat varian baru, SKU stok yang belum
+        // dikenal TIDAK langsung dianggap salah — penyelesaiannya ditunda
+        // ke tahap penerapan (yang berjalan setelah sheet products), dan
+        // kalau di sana pun tidak ketemu, seluruh impor tetap rollback
+        // dengan galat per-baris yang sama bentuknya.
+        $fileCreatesVariants = collect($productPlan)
+            ->contains(fn (array $entry) => $entry['creates_variant'] ?? false);
 
         foreach ($rows as $entry) {
             $row = $entry['row'];
@@ -849,10 +864,10 @@ class MasterDataImportService
 
             $variant = ProductVariant::where('sku', $sku)->first();
 
-            if ($variant === null) {
-                // SKU varian baru dibuat SERVER, jadi tidak mungkin ditulis
-                // pengguna di berkas yang sama. Untuk varian baru, isi
-                // kolom initial_stock di sheet 'products'.
+            if ($variant === null && ! $fileCreatesVariants) {
+                // Tidak ada baris products yang membuat varian baru, jadi
+                // SKU ini tidak mungkin muncul kemudian — dilaporkan
+                // sekarang bersama galat lain, bukan ditunda.
                 $this->addError($sheet, $row, 'sku', "SKU '{$sku}' tidak ditemukan. Untuk varian baru, isi kolom initial_stock di sheet 'products' — SKU dibuat otomatis oleh sistem.");
 
                 continue;
@@ -870,7 +885,11 @@ class MasterDataImportService
                 continue;
             }
 
-            $delta = $target - $variant->current_stock;
+            // Untuk baris yang varian-nya baru akan dibuat sheet products,
+            // selisih sesungguhnya baru diketahui saat penerapan. Hitungan
+            // di sini dipakai HANYA untuk laporan jumlah pada pratinjau,
+            // dan sengaja optimistis (dianggap berubah).
+            $delta = $variant === null ? $target : $target - $variant->current_stock;
 
             $reason = $this->stringValue($values, 'reason');
 
@@ -1052,7 +1071,19 @@ class MasterDataImportService
     private function applyStock(array $plan, User $user): void
     {
         foreach ($plan as $entry) {
-            $variant = ProductVariant::where('sku', $entry['sku'])->firstOrFail();
+            $variant = ProductVariant::where('sku', $entry['sku'])->first();
+
+            // Baris yang SKU-nya ditunda dari tahap validasi (lihat
+            // validateStock): sheet products sudah diterapkan di atas, jadi
+            // kalau di sini pun belum ada, SKU-nya memang salah tulis.
+            if ($variant === null) {
+                throw new MasterDataImportRowException(
+                    MasterDataSheets::STOCK,
+                    $entry['row'],
+                    'sku',
+                    "SKU '{$entry['sku']}' tidak ditemukan, termasuk setelah sheet 'products' diterapkan. Untuk varian baru, isi kolom initial_stock di sheet 'products' — SKU dibuat otomatis oleh sistem."
+                );
+            }
 
             $delta = $entry['target'] - $variant->current_stock;
 

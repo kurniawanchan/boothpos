@@ -1403,9 +1403,16 @@ paths:
         adalah jumlah akhir yang diinginkan; server menghitung selisihnya
         terhadap stok saat ini dan menerapkannya sebagai satu
         `stock_movements` bertipe `adjustment` (F15.8). Baris yang angkanya
-        sudah sama tidak menghasilkan movement apa pun. Stok awal varian
-        BARU diisi lewat kolom `initial_stock` di sheet `products`, karena
-        SKU-nya belum ada saat berkas disusun.
+        sudah sama tidak menghasilkan movement apa pun.
+
+        Sheet `stock` menunjuk varian lewat `sku`. Cara paling aman mengisi
+        stok awal varian BARU adalah kolom `initial_stock` di sheet
+        `products`, karena SKU dibuat server. Sheet `stock` tetap boleh
+        menunjuk SKU yang baru akan dibuat oleh berkas yang sama — SKU-nya
+        deterministik (`code_prefix` + urutan 4 digit) — dan
+        penyelesaiannya ditunda sampai sheet `products` diterapkan. SKU
+        yang tetap tidak ditemukan setelah itu membatalkan seluruh impor
+        dengan galat per-baris biasa.
 
         **Sel kosong berarti "jangan diubah"**, bukan "kosongkan nilainya".
 

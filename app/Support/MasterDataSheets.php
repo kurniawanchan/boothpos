@@ -64,6 +64,14 @@ final class MasterDataSheets
      * Satu baris contoh per sheet untuk template. Diisi (bukan template
      * kosong) karena sasaran fitur ini pemilik toko non-teknis: contoh
      * konkret jauh lebih jelas daripada judul kolom saja.
+     *
+     * Baris-baris contoh ini SALING KONSISTEN dan template apa adanya
+     * memang bisa diimpor tanpa galat — sudah dibuktikan lewat
+     * MasterDataImportTest::test_the_shipped_template_imports_as_is.
+     * Itu bukan kebetulan: SKU pada contoh sheet 'stock' adalah SKU yang
+     * PASTI dihasilkan server untuk baris contoh sheet 'products'
+     * (RYU + KY + SAK -> RYUKYSAK, varian pertama -> 0001). Kalau contoh
+     * di sini diubah, jalankan lagi test itu.
      */
     public static function exampleRow(string $sheet): array
     {
@@ -103,7 +111,7 @@ final class MasterDataSheets
             self::STOCK => [
                 'sku' => 'RYUKYSAK0001',
                 'current_stock' => 20,
-                'reason' => 'Stok opname 1 Oktober',
+                'reason' => 'Isi jumlah AKHIR yang diinginkan, bukan selisih. Contoh alasan: stok opname 1 Oktober.',
             ],
             default => throw new \InvalidArgumentException("Sheet tidak dikenali: {$sheet}."),
         };

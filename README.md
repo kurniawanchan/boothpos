@@ -26,7 +26,7 @@ mengatakan sebaliknya; itu sudah tidak berlaku. Ringkasan:
 - Migration dijalankan terhadap database `boothpos` (MySQL 8.4 sungguhan,
   bukan SQLite) dan `php artisan db:seed` berhasil membuat 5 user + 2 kanal
   pembayaran + pengaturan toko.
-- **Seluruh test suite hijau: 164/164 lulus, 0 gagal, 0 galat** (angka saat
+- **Seluruh test suite hijau: 167/167 lulus, 0 gagal, 0 galat** (angka saat
   bagian ini terakhir diperbarui, 2026-09-01; sesi bootstrap dulu 120),
   dijalankan terhadap database `boothpos_test` (MySQL sungguhan — WAJIB, karena dua
   migration memakai `DB::statement('ALTER TABLE ... ADD CONSTRAINT ...
@@ -130,10 +130,17 @@ Keputusan desain yang paling mungkin mengejutkan pembaca berikutnya:
    `adjustment` lewat `StockService::applyMovement()` — tidak pernah
    menulis `current_stock` langsung (F15.8). Baris yang angkanya sudah
    sama tidak menghasilkan movement sama sekali.
-4. **Stok awal varian BARU diisi lewat kolom `initial_stock` di sheet
-   `products`, bukan di sheet `stock`.** Sebabnya SKU dihasilkan server:
-   saat menyusun berkas, pemilik toko belum bisa tahu SKU varian yang
-   belum dibuat, jadi sheet `stock` hanya bisa menunjuk SKU yang sudah ada.
+4. **Stok awal varian BARU sebaiknya diisi lewat kolom `initial_stock` di
+   sheet `products`, bukan di sheet `stock`** — SKU dihasilkan server, jadi
+   saat menyusun berkas pemilik toko belum tentu tahu SKU varian yang belum
+   dibuat. Sheet `stock` TETAP boleh menunjuk SKU yang baru akan dibuat
+   berkas yang sama (SKU-nya deterministik: `code_prefix` + urutan 4
+   digit); penyelesaiannya ditunda sampai sheet `products` diterapkan, dan
+   SKU yang tetap tidak ketemu membatalkan seluruh impor. Berkat itu
+   **template bawaan bisa langsung diimpor apa adanya** — ada test yang
+   menjaganya (`test_the_shipped_template_imports_as_is`), karena template
+   yang baris contohnya sendiri gagal validasi adalah paper cut termahal
+   yang bisa dipunyai fitur ini.
 5. **Kunci upsert**: `artists.code`, `categories.code`, `stock.sku`, dan
    untuk produk `sku` bila diisi — bila kosong, `code_prefix`
    (artist_code + category_code + product_segment) plus `variant_name`.

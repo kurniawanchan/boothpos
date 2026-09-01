@@ -147,6 +147,29 @@ class MasterDataImportTest extends TestCase
         }
     }
 
+    /**
+     * Alur pertama pemilik toko non-teknis: unduh template, isi, unggah.
+     * Template yang baris contohnya sendiri gagal validasi adalah paper cut
+     * paling mahal yang bisa dipunyai fitur ini — jadi diuji langsung.
+     */
+    public function test_the_shipped_template_imports_as_is(): void
+    {
+        $this->actingAsRole('owner');
+
+        $path = tempnam(sys_get_temp_dir(), 'tpl').'.xlsx';
+        $this->tempFiles[] = $path;
+        file_put_contents($path, $this->get('/api/v1/imports/master-data/template')->streamedContent());
+
+        $this->postImport(new UploadedFile($path, 'template-impor-master-data.xlsx', null, null, true))
+            ->assertOk()
+            ->assertJsonPath('applied', true)
+            ->assertJsonPath('errors', []);
+
+        $this->assertDatabaseHas('artists', ['code' => 'RYU']);
+        $this->assertDatabaseHas('categories', ['code' => 'KY']);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'RYUKYSAK0001', 'current_stock' => 20]);
+    }
+
     public function test_template_is_gated_to_master_data_roles(): void
     {
         $this->actingAsRole('cashier');
@@ -493,6 +516,56 @@ class MasterDataImportTest extends TestCase
             ->assertJsonPath('errors.0.sheet', 'stock')
             ->assertJsonPath('errors.0.row', 2)
             ->assertJsonPath('errors.0.column', 'sku');
+    }
+
+    // SKU varian baru dihasilkan server dan bisa ditebak dari kodenya
+    // (RYU + KY + SAK -> RYUKYSAK0001). Kalau sheet products memang membuat
+    // varian baru, sheet stock boleh menunjuk SKU itu — penyelesaiannya
+    // ditunda sampai sheet products diterapkan.
+    public function test_a_stock_row_may_reference_a_sku_created_by_the_products_sheet(): void
+    {
+        $this->actingAsRole('owner');
+        Artist::factory()->create(['code' => 'RYU']);
+        Category::factory()->create(['code' => 'KY']);
+
+        $this->postImport($this->workbook([
+            'products' => ['rows' => [
+                ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
+            ]],
+            'stock' => ['rows' => [
+                ['sku' => 'RYUKYSAK0001', 'current_stock' => 7],
+            ]],
+        ]))->assertOk()->assertJsonPath('applied', true);
+
+        $this->assertSame(7, ProductVariant::where('sku', 'RYUKYSAK0001')->value('current_stock'));
+        $this->assertEquals(7, StockMovement::sum('qty_change'));
+    }
+
+    // ...tapi kalau SKU-nya salah tulis, impor tetap batal seluruhnya dan
+    // galatnya tetap menunjuk sheet + nomor baris yang benar.
+    public function test_a_mistyped_deferred_sku_still_rolls_the_whole_import_back(): void
+    {
+        $this->actingAsRole('owner');
+        Artist::factory()->create(['code' => 'RYU']);
+        Category::factory()->create(['code' => 'KY']);
+
+        $this->postImport($this->workbook([
+            'products' => ['rows' => [
+                ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
+            ]],
+            'stock' => ['rows' => [
+                ['sku' => 'RYUKYSAK9999', 'current_stock' => 7],
+            ]],
+        ]))->assertStatus(422)
+            ->assertJsonPath('applied', false)
+            ->assertJsonPath('errors.0.sheet', 'stock')
+            ->assertJsonPath('errors.0.row', 2)
+            ->assertJsonPath('errors.0.column', 'sku');
+
+        $this->assertSame(0, Product::count());
+        $this->assertSame(0, ProductVariant::count());
+        $this->assertSame(0, StockMovement::count());
+        $this->assertSame(0, ActivityLog::count());
     }
 
     // =================================================================
