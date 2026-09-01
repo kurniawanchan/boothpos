@@ -107,9 +107,11 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/reports/sales', [ReportController::class, 'sales']);
         Route::get('/reports/profit', [ReportController::class, 'profit']);
+        Route::get('/reports/artist-profit', [ReportController::class, 'artistProfit']);
         Route::get('/reports/artist-settlements', [ReportController::class, 'artistSettlements']);
+        Route::get('/reports/artist-settlements/{artist}/transactions', [ReportController::class, 'artistSettlementTransactions']);
         Route::post('/reports/artist-settlements/{settlement}/payment', [ReportController::class, 'recordSettlementPayment']);
         Route::get('/reports/{report}/export', [ReportController::class, 'export'])
-            ->where('report', 'sales|profit|artist-settlements');
+            ->where('report', 'sales|profit|artist-settlements|artist-profit');
     });
 });

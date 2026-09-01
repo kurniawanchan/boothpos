@@ -1369,6 +1369,43 @@ paths:
               schema: { $ref: '#/components/schemas/ProfitReport' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /reports/artist-profit:
+    get:
+      tags: [Report]
+      summary: Laporan modal dan laba kotor per artist (F9.5)
+      description: |
+        Untuk setiap artist dengan minimal satu `order_items` 'completed'
+        pada event ini: `total_sales` (SUM `line_total`), `modal` (SUM
+        `cost_price * qty`, snapshot yang sama dipakai `GET /reports/profit`
+        — bukan modal BOM hidup, lihat docblock `ReportController::
+        artistProfit()`), dan `gross_profit = total_sales - modal`.
+
+        `event_cost` TIDAK dikurangkan di laporan ini sama sekali (sudah
+        diperhitungkan terpisah pada `GET /reports/profit`, F9.3) — sengaja
+        tidak ada field itu pada respons ini. Hanya peran owner dan admin.
+      parameters:
+        - { name: event_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event: { $ref: '#/components/schemas/Event' }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        artist_id: { type: integer }
+                        artist_name: { type: string }
+                        total_sales: { $ref: '#/components/schemas/Money' }
+                        modal: { $ref: '#/components/schemas/Money' }
+                        gross_profit: { $ref: '#/components/schemas/Money' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /reports/artist-settlements:
     get:
       tags: [Report]
@@ -1395,6 +1432,58 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/ArtistSettlement' }
+
+  /reports/artist-settlements/{artist}/transactions:
+    parameters:
+      - name: artist
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      tags: [Report]
+      summary: Drill-down transaksi yang menyusun rekap satu artist (F11.6)
+      description: |
+        Daftar order 'completed' pada event ini yang memuat minimal satu
+        item milik artist ini, dikelompokkan per order. Karena satu order
+        booth ini bisa berisi item dari BEBERAPA artist sekaligus, `items[]`
+        pada setiap baris HANYA memuat item milik artist yang diminta —
+        bukan seluruh isi order tersebut. Hanya peran owner dan admin.
+      parameters:
+        - { name: event_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event: { $ref: '#/components/schemas/Event' }
+                  artist:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                  transactions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        order_id: { type: integer }
+                        order_number: { type: string }
+                        created_at: { type: string, format: date-time, nullable: true }
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              sku: { type: string }
+                              name: { type: string }
+                              qty: { type: integer }
+                              line_total: { $ref: '#/components/schemas/Money' }
+                        order_total_for_artist:
+                          $ref: '#/components/schemas/Money'
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /reports/artist-settlements/{id}/payment:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -1424,11 +1513,19 @@ paths:
       - name: report
         in: path
         required: true
-        schema: { type: string, enum: [sales, profit, artist-settlements] }
+        schema: { type: string, enum: [sales, profit, artist-settlements, artist-profit] }
     get:
       tags: [Report]
       summary: Ekspor laporan ke Excel
-      description: Parameter filter sama dengan endpoint laporan terkait. Ekspor tidak menyertakan kolom kontak pelanggan.
+      description: |
+        Parameter filter sama dengan endpoint laporan terkait. Ekspor tidak
+        menyertakan kolom kontak pelanggan.
+
+        `report=artist-settlements` (F11.6) sengaja berbeda dari tiga
+        laporan lain: berkasnya berisi DUA sheet, "Rekap" (bentuk lama,
+        tidak berubah) dan "Detail Transaksi" (baru — satu baris flat per
+        item per order, lintas semua artist di event ini: artist_name,
+        order_number, date, item_name, qty, line_total).
       parameters:
         - { name: event_id, in: query, schema: { type: integer } }
       responses:
@@ -2669,6 +2766,16 @@ components:
               order_number: { type: string }
               created_at: { type: string, format: date-time }
               cashier_name: { type: string, nullable: true }
+              customer_name:
+                type: string
+                nullable: true
+                description: |
+                  F10.6 — nama pelanggan bila order dikaitkan ke satu
+                  (`orders.customer_id` nullable — walk-in tidak punya
+                  data pelanggan). Disediakan untuk pencarian di
+                  frontend atas array `transactions[]` yang sudah
+                  diambil (nomor transaksi/nama pelanggan/nama kasir);
+                  tidak ada parameter pencarian sisi server yang baru.
               item_count: { type: integer }
               total_amount: { $ref: '#/components/schemas/Money' }
 

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Artist;
 use App\Models\CashierSession;
 use App\Models\Category;
+use App\Models\Customer;
 use App\Models\Event;
 use App\Models\Product;
 use App\Models\User;
@@ -348,5 +349,267 @@ class ReportTest extends TestCase
         $byDay = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=day")->assertOk();
         $this->assertEquals('Tanggal', $byDay->json('group_label'));
         $this->assertNull($byDay->json('rows.0.entity_id'));
+    }
+
+    // =====================================================================
+    // F10.6 — customer_name pada transactions[]
+    // =====================================================================
+
+    public function test_transactions_include_customer_name_when_order_has_a_customer(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+        $artist = Artist::factory()->create();
+        $category = Category::factory()->create();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'AAAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
+
+        $customer = Customer::factory()->create(['name' => 'Budi Santoso']);
+
+        app(OrderService::class)->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'customer_id' => $customer->id,
+            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 10000]],
+        ], $cashier);
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+
+        $response = $this->getJson("/api/v1/reports/sales?event_id={$event->id}");
+
+        $response->assertOk();
+        $this->assertSame('Budi Santoso', $response->json('transactions.0.customer_name'));
+    }
+
+    // Walk-in — orders.customer_id nullable, field harus null tanpa galat,
+    // bukan melempar exception saat relasi customer() diakses.
+    public function test_transactions_customer_name_is_null_for_walk_in_orders(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+        $artist = Artist::factory()->create();
+        $category = Category::factory()->create();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'BBBKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
+
+        app(OrderService::class)->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 10000]],
+        ], $cashier);
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+
+        $response = $this->getJson("/api/v1/reports/sales?event_id={$event->id}");
+
+        $response->assertOk();
+        $this->assertArrayHasKey('customer_name', $response->json('transactions.0'));
+        $this->assertNull($response->json('transactions.0.customer_name'));
+    }
+
+    // =====================================================================
+    // F11.6 — drill-down transaksi per artist di Rekap Artist
+    // =====================================================================
+
+    public function test_artist_settlement_transactions_requires_owner_or_admin(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+
+        $event = Event::factory()->create();
+        $artist = Artist::factory()->create();
+
+        $this->getJson("/api/v1/reports/artist-settlements/{$artist->id}/transactions?event_id={$event->id}")
+            ->assertStatus(403);
+    }
+
+    // Kasus inti F11.6: satu order berisi item dari DUA artist berbeda.
+    // Drill-down artist A hanya boleh menampilkan item milik artist A,
+    // walau order itu juga memuat item artist B — dan sebaliknya.
+    public function test_artist_settlement_transactions_only_shows_that_artists_items_within_shared_orders(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+        $category = Category::factory()->create();
+
+        $artistA = Artist::factory()->create(['code' => 'ARA', 'name' => 'Artist A']);
+        $artistB = Artist::factory()->create(['code' => 'ARB', 'name' => 'Artist B']);
+
+        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id, 'name' => 'Produk A']);
+        $variantA = $productA->variants()->create(['sku' => 'ARAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
+
+        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id, 'name' => 'Produk B']);
+        $variantB = $productB->variants()->create(['sku' => 'ARBKYAAA0001', 'sell_price' => 20000, 'cost_price' => 8000, 'current_stock' => 100]);
+
+        $orderService = app(OrderService::class);
+
+        // Satu order berisi item DUA artist sekaligus.
+        $sharedOrder = $orderService->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'items' => [
+                ['variant_id' => $variantA->id, 'qty' => 2],
+                ['variant_id' => $variantB->id, 'qty' => 1],
+            ],
+            'payments' => [['method' => 'cash', 'amount' => 40000]],
+        ], $cashier);
+
+        // Order kedua, hanya artist A — untuk memastikan pengelompokan per
+        // order (bukan agregat total) berfungsi, dan artist A punya dua
+        // order yang menyusun totalnya.
+        $soloOrderA = $orderService->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'items' => [['variant_id' => $variantA->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 10000]],
+        ], $cashier);
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+
+        $forA = $this->getJson("/api/v1/reports/artist-settlements/{$artistA->id}/transactions?event_id={$event->id}")
+            ->assertOk();
+
+        $this->assertCount(2, $forA->json('transactions'));
+        $orderIdsForA = collect($forA->json('transactions'))->pluck('order_id')->all();
+        $this->assertEqualsCanonicalizing([$sharedOrder->id, $soloOrderA->id], $orderIdsForA);
+
+        $sharedRowForA = collect($forA->json('transactions'))->firstWhere('order_id', $sharedOrder->id);
+        // Item milik artist A saja dalam order gabungan — bukan item B.
+        $this->assertCount(1, $sharedRowForA['items']);
+        $this->assertSame('20000.00', $sharedRowForA['order_total_for_artist']); // 2 x 10000
+
+        $forB = $this->getJson("/api/v1/reports/artist-settlements/{$artistB->id}/transactions?event_id={$event->id}")
+            ->assertOk();
+
+        $this->assertCount(1, $forB->json('transactions'));
+        $sharedRowForB = $forB->json('transactions.0');
+        $this->assertSame($sharedOrder->id, $sharedRowForB['order_id']);
+        $this->assertCount(1, $sharedRowForB['items']);
+        $this->assertSame('20000.00', $sharedRowForB['order_total_for_artist']); // 1 x 20000
+    }
+
+    // =====================================================================
+    // F11.6 — ekspor rekap artist multi-sheet (ringkasan + detail transaksi)
+    // =====================================================================
+
+    // Sejarah bug di kodebase ini: export yang "200 OK" tapi isinya kosong/
+    // salah tidak ketahuan tanpa benar-benar membaca isi berkasnya — jadi
+    // tes ini membuka workbook dan memverifikasi kedua sheet beserta isinya,
+    // bukan hanya status code.
+    public function test_artist_settlements_export_produces_a_real_two_sheet_workbook(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+        $artist = Artist::factory()->create(['code' => 'EXP', 'name' => 'Artist Ekspor']);
+        $category = Category::factory()->create();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Gantungan Kunci']);
+        $variant = $product->variants()->create(['sku' => 'EXPKYAAA0001', 'sell_price' => 15000, 'cost_price' => 5000, 'current_stock' => 100]);
+
+        app(OrderService::class)->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'items' => [['variant_id' => $variant->id, 'qty' => 2]],
+            'payments' => [['method' => 'cash', 'amount' => 30000]],
+        ], $cashier);
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+
+        $response = $this->get("/api/v1/reports/artist-settlements/export?event_id={$event->id}");
+        $response->assertOk();
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'rekap-artist').'.xlsx';
+        file_put_contents($tmpPath, $response->streamedContent());
+
+        $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmpPath);
+        $sheetNames = $spreadsheet->getSheetNames();
+
+        $this->assertContains('Rekap', $sheetNames);
+        $this->assertContains('Detail Transaksi', $sheetNames);
+
+        $summarySheet = $spreadsheet->getSheetByName('Rekap');
+        $this->assertSame('artist_name', $summarySheet->getCell('C1')->getValue());
+        $this->assertSame('Artist Ekspor', $summarySheet->getCell('C2')->getValue());
+
+        $detailSheet = $spreadsheet->getSheetByName('Detail Transaksi');
+        $this->assertSame('item_name', $detailSheet->getCell('D1')->getValue());
+        $this->assertSame('Gantungan Kunci — Standard', $detailSheet->getCell('D2')->getValue());
+        $this->assertSame(2, $detailSheet->getCell('E2')->getValue());
+
+        unlink($tmpPath);
+    }
+
+    // =====================================================================
+    // F9.5 — modal & laba kotor per artist
+    // =====================================================================
+
+    public function test_artist_profit_report_requires_owner_or_admin(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+        $event = Event::factory()->create();
+
+        $this->getJson("/api/v1/reports/artist-profit?event_id={$event->id}")->assertStatus(403);
+    }
+
+    public function test_artist_profit_sums_modal_across_multiple_orders_and_never_subtracts_event_cost(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+
+        // event_cost besar dan bukan nol — kalau ini secara keliru ikut
+        // dikurangkan pada laporan per-artist, tes ini akan gagal.
+        $event = Event::factory()->create(['status' => 'active', 'event_cost' => 5000000]);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+
+        $artist = Artist::factory()->create(['code' => 'MDL', 'name' => 'Artist Modal']);
+        $category = Category::factory()->create();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'MDLKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
+
+        $orderService = app(OrderService::class);
+
+        // Dua order terpisah, keduanya menyumbang ke modal & penjualan
+        // artist yang sama — memastikan agregasinya SUM lintas order.
+        $orderService->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'items' => [['variant_id' => $variant->id, 'qty' => 3]],
+            'payments' => [['method' => 'cash', 'amount' => 30000]],
+        ], $cashier);
+
+        $orderService->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'items' => [['variant_id' => $variant->id, 'qty' => 2]],
+            'payments' => [['method' => 'cash', 'amount' => 20000]],
+        ], $cashier);
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+
+        $response = $this->getJson("/api/v1/reports/artist-profit?event_id={$event->id}");
+        $response->assertOk();
+
+        $row = collect($response->json('data'))->firstWhere('artist_id', $artist->id);
+
+        // total_sales = 5 x 10000, modal = 5 x 4000, gross_profit = selisihnya
+        $this->assertSame('50000.00', $row['total_sales']);
+        $this->assertSame('20000.00', $row['modal']);
+        $this->assertSame('30000.00', $row['gross_profit']);
+
+        // event_cost TIDAK BOLEH pernah muncul/dikurangkan di laporan ini.
+        $this->assertArrayNotHasKey('event_cost', $row);
+        $this->assertArrayNotHasKey('net_profit', $row);
     }
 }

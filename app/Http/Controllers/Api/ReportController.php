@@ -7,6 +7,7 @@ use App\Models\Artist;
 use App\Models\ArtistSettlement;
 use App\Models\Event;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Services\SettlementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -115,7 +116,14 @@ class ReportController extends Controller
         // transaksi mana pun di daftar ini (Task 3), bukan cuma yang baru
         // saja dibuat.
         $transactions = Order::query()
-            ->with('cashier')
+            // F10.6 — eager-load 'customer' di samping 'cashier' yang sudah
+            // ada, supaya frontend punya nama pelanggan untuk disaring saat
+            // mengetik kata kunci. Pencarian sendiri sengaja TIDAK dibangun
+            // di sini: kriteria penerimaan F10.6 eksplisit menyebut "tanpa
+            // perlu memuat ulang seluruh laporan", yang berarti penyaringan
+            // dilakukan di frontend atas array transactions[] yang sudah
+            // diambil, bukan lewat parameter query baru di endpoint ini.
+            ->with(['cashier', 'customer'])
             ->withCount('items')
             ->where('status', 'completed')
             ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
@@ -128,6 +136,9 @@ class ReportController extends Controller
                 'order_number' => $order->order_number,
                 'created_at' => $order->created_at?->toIso8601String(),
                 'cashier_name' => $order->cashier?->name,
+                // customer_id nullable (pembeli walk-in tidak wajib punya
+                // data pelanggan) — null di sini apa adanya, bukan galat.
+                'customer_name' => $order->customer?->name,
                 'item_count' => $order->items_count,
                 'total_amount' => number_format((float) $order->total_amount, 2, '.', ''),
             ]);
@@ -251,6 +262,146 @@ class ReportController extends Controller
         return response()->json(['event' => $event, 'data' => $data]);
     }
 
+    /**
+     * F11.6 — drill-down transaksi yang menyusun rekap satu artist di satu
+     * event. Sengaja dipisah dari artistSettlements() (bukan menumpuk
+     * ?with_transactions=1 di sana) karena bentuknya beda tujuan: yang satu
+     * tabel ringkasan seluruh artist, yang ini daftar order milik SATU
+     * artist — memuatnya sekaligus di setiap baris ringkasan akan menarik
+     * N+1 order untuk artist yang tidak sedang dilihat penggunanya.
+     *
+     * PENTING (kasus multi-artist per order) — satu order booth ini bisa
+     * berisi item dari BEBERAPA artist sekaligus (order_items.artist_id
+     * per baris, bukan per order). Baris yang dikembalikan di sini HARUS
+     * disaring where('order_items.artist_id', $artist->id) sebelum
+     * dikelompokkan per order, supaya order dengan item dari artist lain
+     * tidak ikut ditampilkan atau nilainya tidak tercampur ke artist ini.
+     */
+    public function artistSettlementTransactions(Request $request, Artist $artist): JsonResponse
+    {
+        if (! $request->user()->isOwnerOrAdmin()) {
+            return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
+        }
+
+        $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
+        $event = Event::findOrFail($eventId);
+
+        $items = OrderItem::query()
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.event_id', $eventId)
+            ->where('orders.status', 'completed')
+            ->where('order_items.artist_id', $artist->id)
+            ->orderByDesc('orders.created_at')
+            ->get([
+                'orders.id as order_id',
+                'orders.order_number',
+                'orders.created_at as order_created_at',
+                'order_items.name_snapshot',
+                'order_items.sku_snapshot',
+                'order_items.qty',
+                'order_items.line_total',
+            ]);
+
+        $transactions = $items
+            ->groupBy('order_id')
+            ->map(function ($rowsForOrder) {
+                $first = $rowsForOrder->first();
+
+                return [
+                    'order_id' => $first->order_id,
+                    'order_number' => $first->order_number,
+                    'created_at' => $first->order_created_at
+                        ? \Illuminate\Support\Carbon::parse($first->order_created_at)->toIso8601String()
+                        : null,
+                    // Hanya item MILIK ARTIST INI dalam order tersebut —
+                    // bukan seluruh isi order (lihat komentar kelas di atas).
+                    'items' => $rowsForOrder->map(fn ($r) => [
+                        'sku' => $r->sku_snapshot,
+                        'name' => $r->name_snapshot,
+                        'qty' => (int) $r->qty,
+                        'line_total' => number_format((float) $r->line_total, 2, '.', ''),
+                    ])->values(),
+                    'order_total_for_artist' => number_format(
+                        (float) $rowsForOrder->sum('line_total'), 2, '.', ''
+                    ),
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'event' => $event,
+            'artist' => ['id' => $artist->id, 'name' => $artist->name],
+            'transactions' => $transactions,
+        ]);
+    }
+
+    /**
+     * F9.5 — modal dan laba kotor PER ARTIST, terpisah dari biaya event.
+     *
+     * KEPUTUSAN DESAIN (dicatat di sini karena tidak jelas dari nama
+     * method saja): PRD F9.5 sengaja tidak mewajibkan satu basis modal
+     * tertentu (harga modal manual vs. modal BOM) — lihat kriteria
+     * penerimaannya. Kodebase ini sudah punya pola arsitektural yang
+     * konsisten: field uang/identitas di-SNAPSHOT ke order_items pada
+     * saat transaksi terjadi (sell_price, cost_price, sku_snapshot,
+     * name_snapshot), justru supaya laporan historis tidak diam-diam
+     * berubah kalau data master (termasuk komposisi BOM) berubah setelah
+     * transaksi lampau terjadi. profit() (F9.1/F9.2) sudah memakai
+     * order_items.cost_price sebagai basis modal tingkat event — laporan
+     * ini memakai sumber yang SAMA, hanya diiris per artist, supaya kedua
+     * laporan modal/keuntungan tetap konsisten satu sama lain dan tidak
+     * membangun dua jalur biaya paralel (harga modal manual vs. BOM
+     * hidup) yang bisa saling menyimpang dan membingungkan pengguna.
+     * Modal BOM (bom_cost, lihat BomCostCalculator) tetap tersedia lewat
+     * endpoint cost-breakdown-nya sendiri untuk kebutuhan lain, tapi
+     * BUKAN basis laporan historis ini.
+     *
+     * event_cost SENGAJA tidak dikurangkan di mana pun pada laporan ini —
+     * kriteria penerimaan F9.5 eksplisit melarangnya, karena biaya
+     * bersama itu sudah diperhitungkan terpisah di laba bersih tingkat
+     * event (F9.3) dan akan dobel-hitung atau teralokasi tidak adil antar
+     * artist bila ikut dikurangkan di sini juga.
+     */
+    public function artistProfit(Request $request): JsonResponse
+    {
+        if (! $request->user()->isOwnerOrAdmin()) {
+            return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
+        }
+
+        $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
+        $event = Event::findOrFail($eventId);
+
+        $rows = DB::table('order_items')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->join('artists', 'artists.id', '=', 'order_items.artist_id')
+            ->where('orders.event_id', $eventId)
+            ->where('orders.status', 'completed')
+            ->selectRaw('
+                artists.id as artist_id,
+                artists.name as artist_name,
+                SUM(order_items.line_total) as total_sales,
+                SUM(order_items.cost_price * order_items.qty) as modal
+            ')
+            ->groupBy('artists.id', 'artists.name')
+            ->orderBy('artists.name')
+            ->get()
+            ->map(function ($row) {
+                $totalSales = (float) $row->total_sales;
+                $modal = (float) $row->modal;
+                $grossProfit = $totalSales - $modal;
+
+                return [
+                    'artist_id' => $row->artist_id,
+                    'artist_name' => $row->artist_name,
+                    'total_sales' => number_format($totalSales, 2, '.', ''),
+                    'modal' => number_format($modal, 2, '.', ''),
+                    'gross_profit' => number_format($grossProfit, 2, '.', ''),
+                ];
+            });
+
+        return response()->json(['event' => $event, 'data' => $rows]);
+    }
+
     public function recordSettlementPayment(Request $request, ArtistSettlement $settlement): JsonResponse
     {
         if (! $request->user()->isOwnerOrAdmin()) {
@@ -272,8 +423,17 @@ class ReportController extends Controller
      */
     public function export(Request $request, string $report)
     {
-        if (! in_array($report, ['sales', 'profit', 'artist-settlements'], true)) {
+        if (! in_array($report, ['sales', 'profit', 'artist-settlements', 'artist-profit'], true)) {
             return response()->json(['message' => 'Laporan tidak dikenali.'], 404);
+        }
+
+        // F11.6 — 'artist-settlements' punya kebutuhan ekspor berbeda dari
+        // tiga laporan lain di sini (satu sheet ringkasan + satu sheet
+        // detail transaksi), jadi ditangani lewat jalurnya sendiri alih-alih
+        // dipaksa masuk ke pola GenericArrayExport satu-sheet di bawah —
+        // sejalan dengan catatan di docblock GenericArrayExport sendiri.
+        if ($report === 'artist-settlements') {
+            return $this->exportArtistSettlements($request);
         }
 
         // BUG YANG DITEMUKAN & DIPERBAIKI — match() di bawah sebelumnya
@@ -285,11 +445,11 @@ class ReportController extends Controller
         [$response, $dataKey, $filename] = match ($report) {
             'sales' => [$this->sales($request), 'rows', 'laporan-penjualan.xlsx'],
             'profit' => [$this->profit($request), null, 'laporan-profit.xlsx'],
-            'artist-settlements' => [$this->artistSettlements($request), 'data', 'rekap-artist.xlsx'],
+            'artist-profit' => [$this->artistProfit($request), 'data', 'laporan-modal-artist.xlsx'],
         };
 
-        // profit() dan artistSettlements() menegakkan otorisasinya sendiri
-        // (403 untuk kasir). Galat itu WAJIB diteruskan apa adanya, bukan
+        // profit(), artistProfit() menegakkan otorisasinya sendiri (403
+        // untuk kasir). Galat itu WAJIB diteruskan apa adanya, bukan
         // ditelan lalu diam-diam mengekspor berkas kosong — kalau tidak,
         // batasan akses laporan modal/keuntungan (PRD 7.13) bisa dilewati
         // lewat endpoint export ini.
@@ -307,6 +467,65 @@ class ReportController extends Controller
         return \Maatwebsite\Excel\Facades\Excel::download(
             new \App\Exports\GenericArrayExport($rows),
             $filename
+        );
+    }
+
+    /**
+     * F11.6 — ekspor rekap artist dua sheet: "Rekap" (bentuk lama, tidak
+     * berubah, supaya tidak memutus apa pun yang sudah membaca berkas
+     * lama) dan "Detail Transaksi" (baru — satu baris flat per item per
+     * order, lintas SEMUA artist di event ini). Sheet-per-artist sengaja
+     * TIDAK dipakai — jumlah artist per event tidak terbatas, dan
+     * MultiSheetArrayExport dirancang untuk daftar sheet yang diketahui
+     * sebelumnya, bukan satu sheet per baris data.
+     */
+    private function exportArtistSettlements(Request $request)
+    {
+        $summaryResponse = $this->artistSettlements($request);
+
+        if ($summaryResponse->getStatusCode() !== 200) {
+            return $summaryResponse;
+        }
+
+        $summaryPayload = json_decode($summaryResponse->getContent(), true);
+        $summaryRows = $summaryPayload['data'];
+
+        $eventId = $request->integer('event_id');
+
+        $detailRows = DB::table('order_items')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->join('artists', 'artists.id', '=', 'order_items.artist_id')
+            ->where('orders.event_id', $eventId)
+            ->where('orders.status', 'completed')
+            ->orderBy('artists.name')
+            ->orderBy('orders.created_at')
+            ->get([
+                'artists.name as artist_name',
+                'orders.order_number',
+                'orders.created_at',
+                'order_items.name_snapshot as item_name',
+                'order_items.qty',
+                'order_items.line_total',
+            ])
+            ->map(fn ($r) => [
+                'artist_name' => $r->artist_name,
+                'order_number' => $r->order_number,
+                'date' => \Illuminate\Support\Carbon::parse($r->created_at)->toDateTimeString(),
+                'item_name' => $r->item_name,
+                'qty' => (int) $r->qty,
+                'line_total' => number_format((float) $r->line_total, 2, '.', ''),
+            ])
+            ->all();
+
+        $summaryHeadings = ['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status'];
+        $detailHeadings = ['artist_name', 'order_number', 'date', 'item_name', 'qty', 'line_total'];
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\MultiSheetArrayExport([
+                new \App\Exports\SheetArrayExport('Rekap', $summaryHeadings, $summaryRows),
+                new \App\Exports\SheetArrayExport('Detail Transaksi', $detailHeadings, $detailRows),
+            ]),
+            'rekap-artist.xlsx'
         );
     }
 }
