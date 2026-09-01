@@ -182,4 +182,36 @@ class CategoryTest extends TestCase
 
         $this->deleteJson("/api/v1/categories/{$category->id}")->assertStatus(204);
     }
+
+    // =====================================================================
+    // Task 5 — unggah gambar kategori.
+    // =====================================================================
+
+    public function test_owner_can_upload_a_category_image(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+        $category = Category::factory()->create();
+
+        $response = $this->post("/api/v1/categories/{$category->id}/image", [
+            'image' => \Illuminate\Http\UploadedFile::fake()->image('kategori.png'),
+        ]);
+
+        $response->assertOk();
+        $this->assertNotNull($response->json('image_url'));
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($category->fresh()->image_path);
+    }
+
+    public function test_cashier_cannot_upload_a_category_image(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('cashier');
+        $category = Category::factory()->create();
+
+        $response = $this->post("/api/v1/categories/{$category->id}/image", [
+            'image' => \Illuminate\Http\UploadedFile::fake()->image('kategori.png'),
+        ]);
+
+        $response->assertStatus(403);
+    }
 }

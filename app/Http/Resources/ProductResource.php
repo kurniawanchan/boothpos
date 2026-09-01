@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class ProductResource extends JsonResource
 {
@@ -19,6 +20,8 @@ class ProductResource extends JsonResource
             'name' => $this->name,
             'description' => $this->description,
             'image_path' => $this->image_path,
+            // URL siap-pakai (Task 5), sama dengan CategoryResource.
+            'image_url' => $this->image_path ? Storage::disk('public')->url($this->image_path) : null,
             'is_preorder' => $this->is_preorder,
             'preorder_eta' => $this->preorder_eta?->toDateString(),
             'is_active' => $this->is_active,

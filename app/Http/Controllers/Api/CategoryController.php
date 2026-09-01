@@ -8,14 +8,19 @@ use App\Http\Requests\UpdateCategoryRequest;
 use App\Http\Resources\CategoryResource;
 use App\Models\Category;
 use App\Services\ActivityLogger;
+use App\Services\ImageUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\Rule;
 
 class CategoryController extends Controller
 {
-    public function __construct(private ActivityLogger $activityLogger) {}
+    public function __construct(
+        private ActivityLogger $activityLogger,
+        private ImageUploadService $imageUploadService,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -62,6 +67,33 @@ class CategoryController extends Controller
         $category->update($request->validated());
 
         return response()->json(new CategoryResource($category->fresh()));
+    }
+
+    /**
+     * Task 5 — mengikuti pola ProductController::uploadImage() (endpoint
+     * terpisah, konsisten di kedua entitas master data yang baru dapat
+     * gambar).
+     */
+    public function uploadImage(Request $request, Category $category): JsonResponse
+    {
+        $this->authorize('update', $category);
+
+        $validated = $request->validate([
+            'image' => [
+                'required',
+                'file',
+                Rule::file()->max(ImageUploadService::MAX_KILOBYTES)->rules(['mimes:jpeg,png']),
+            ],
+        ]);
+
+        $oldPath = $category->image_path;
+
+        $category->image_path = $this->imageUploadService->store($validated['image'], 'categories');
+        $category->save();
+
+        $this->imageUploadService->delete($oldPath);
+
+        return response()->json(new CategoryResource($category->fresh()->loadCount('products')));
     }
 
     public function destroy(Request $request, Category $category): JsonResponse

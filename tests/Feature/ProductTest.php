@@ -229,4 +229,52 @@ class ProductTest extends TestCase
 
         $this->assertCount(0, $response->json('data'));
     }
+
+    // =====================================================================
+    // Task 5 — unggah gambar produk.
+    // =====================================================================
+
+    public function test_owner_can_upload_a_product_image(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+
+        $response = $this->post("/api/v1/products/{$product->id}/image", [
+            'image' => \Illuminate\Http\UploadedFile::fake()->image('produk.jpg'),
+        ]);
+
+        $response->assertOk();
+        $this->assertNotNull($response->json('image_url'));
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($product->fresh()->image_path);
+    }
+
+    public function test_uploading_a_disguised_non_image_file_is_rejected(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+
+        $response = $this->post("/api/v1/products/{$product->id}/image", [
+            'image' => \Illuminate\Http\UploadedFile::fake()->create('produk.jpg', 10, 'application/pdf'),
+        ]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_cashier_cannot_upload_a_product_image(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+
+        $response = $this->post("/api/v1/products/{$product->id}/image", [
+            'image' => \Illuminate\Http\UploadedFile::fake()->image('produk.jpg'),
+        ]);
+
+        $response->assertStatus(403);
+    }
 }

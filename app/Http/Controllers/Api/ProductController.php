@@ -14,16 +14,19 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Services\ActivityLogger;
+use App\Services\ImageUploadService;
 use App\Services\ProductCodeGenerator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
 {
     public function __construct(
         private ProductCodeGenerator $codeGenerator,
         private ActivityLogger $activityLogger,
+        private ImageUploadService $imageUploadService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -213,6 +216,37 @@ class ProductController extends Controller
         });
 
         return response()->json(new ProductVariantResource($variant->fresh()));
+    }
+
+    /**
+     * Task 5 — dipisah dari store()/update() alih-alih memperluas
+     * keduanya menerima multipart, karena store() sudah menerima array
+     * bersarang 'variants' yang rumit dikirim via multipart/form-data.
+     * Endpoint gambar terpisah lebih sederhana untuk frontend (satu
+     * <input type=file> yang bisa dipicu kapan pun, termasuk saat
+     * mengedit produk yang sudah ada) dan konsisten dengan pola upload
+     * lain di kodebase ini (PaymentProofController::store()).
+     */
+    public function uploadImage(Request $request, Product $product): JsonResponse
+    {
+        $this->authorize('update', $product);
+
+        $validated = $request->validate([
+            'image' => [
+                'required',
+                'file',
+                Rule::file()->max(ImageUploadService::MAX_KILOBYTES)->rules(['mimes:jpeg,png']),
+            ],
+        ]);
+
+        $oldPath = $product->image_path;
+
+        $product->image_path = $this->imageUploadService->store($validated['image'], 'products');
+        $product->save();
+
+        $this->imageUploadService->delete($oldPath);
+
+        return response()->json(new ProductResource($product->fresh(['artist', 'category', 'variants'])));
     }
 
     public function lookupVariants(Request $request): JsonResponse
