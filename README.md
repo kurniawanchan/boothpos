@@ -26,7 +26,9 @@ mengatakan sebaliknya; itu sudah tidak berlaku. Ringkasan:
 - Migration dijalankan terhadap database `boothpos` (MySQL 8.4 sungguhan,
   bukan SQLite) dan `php artisan db:seed` berhasil membuat 5 user + 2 kanal
   pembayaran + pengaturan toko.
-- **Seluruh test suite hijau: 120/120 lulus, 0 gagal, 0 galat**, dijalankan
+- **Seluruh test suite hijau: 163/163 lulus, 0 gagal, 0 galat** (angka saat
+  bagian ini terakhir diperbarui, 2026-09-01; sesi bootstrap dulu 120),
+  dijalankan
   terhadap database `boothpos_test` (MySQL sungguhan — WAJIB, karena dua
   migration memakai `DB::statement('ALTER TABLE ... ADD CONSTRAINT ...
   CHECK (...)')` yang sintaksnya MySQL-only dan akan gagal di SQLite).
@@ -93,6 +95,70 @@ endpoint untuk mencapainya. `PUT /settings` menerima bentuk BULK
 pengaturan biasanya menyimpan beberapa field sekaligus, dan ini juga
 satu-satunya jalur admin untuk upgrade Pro ke Master (`multi_artist_
 enabled`). Setiap perubahan tercatat di Activity Log.
+
+## Ekspor & impor Excel master data (PRD 7.15)
+
+**Catatan cakupan — ditambahkan 2026-09-01.** Impor Excel semula dipotong
+dari MVP (PRD 10.2) dan README versi sebelumnya ikut menyebutnya begitu.
+Keputusan itu dibatalkan atas permintaan eksplisit pemilik produk; catatan
+lamanya tidak dihapus dari PRD, hanya diberi catatan bertanggal.
+
+```
+GET  /api/v1/exports/{artists|categories|products|stock}   -> .xlsx per entitas
+GET  /api/v1/imports/master-data/template                  -> workbook 4 sheet + contoh
+POST /api/v1/imports/master-data                           -> multipart: file, dry_run?
+```
+
+Ketiganya digerbang `canManageMasterData()` (owner/admin/inventory) —
+sengaja lebih ketat daripada endpoint daftar yang boleh dibaca kasir,
+karena menarik seluruh master data sebagai satu berkas adalah permukaan
+ekstraksi data massal, bukan kebutuhan operasional kasir.
+
+Keputusan desain yang paling mungkin mengejutkan pembaca berikutnya:
+
+1. **Satu berkas, empat sheet** (`artists`, `categories`, `products`,
+   `stock`), diproses dalam urutan dependensi itu berapa pun urutan fisik
+   sheet di berkas. Nama sheet dicocokkan tanpa memandang huruf besar/kecil;
+   sheet lain diabaikan dan dilaporkan di `ignored_sheets`.
+2. **Semua-atau-tidak sama sekali.** Validasi penuh dulu, lalu satu
+   transaksi. Ini menyimpang dari kriteria penerimaan F15.5 secara sadar —
+   alasannya ditulis lengkap di PRD 7.15 dan di docblock
+   `MasterDataImportService`. Pratinjau (F15.4) lewat `dry_run=1`,
+   memakai jalur validasi yang sama persis.
+3. **Kolom stok bersifat ABSOLUT, bukan selisih.** `current_stock` pada
+   sheet `stock` adalah jumlah akhir yang diinginkan; server menghitung
+   selisihnya dan menerapkannya sebagai satu `stock_movements` bertipe
+   `adjustment` lewat `StockService::applyMovement()` — tidak pernah
+   menulis `current_stock` langsung (F15.8). Baris yang angkanya sudah
+   sama tidak menghasilkan movement sama sekali.
+4. **Stok awal varian BARU diisi lewat kolom `initial_stock` di sheet
+   `products`, bukan di sheet `stock`.** Sebabnya SKU dihasilkan server:
+   saat menyusun berkas, pemilik toko belum bisa tahu SKU varian yang
+   belum dibuat, jadi sheet `stock` hanya bisa menunjuk SKU yang sudah ada.
+5. **Kunci upsert**: `artists.code`, `categories.code`, `stock.sku`, dan
+   untuk produk `sku` bila diisi — bila kosong, `code_prefix`
+   (artist_code + category_code + product_segment) plus `variant_name`.
+   Satu baris sheet `products` = satu VARIAN, karena harga melekat pada
+   varian.
+6. **Sel kosong berarti "jangan diubah"**, bukan "kosongkan nilainya".
+7. **Kode tetap dihasilkan server.** `code_prefix` lewat
+   `ProductCodeGenerator::buildCodePrefix()`, SKU lewat `nextVariantSku()`.
+   SKU yang tidak dikenal pada sheet `products` DITOLAK, tidak dipakai
+   membuat varian baru.
+8. **Gerbang lisensi Pro tidak bisa dilewati lewat impor.** `ArtistPolicy`
+   tidak ikut jalur ini, jadi kuota `LicenseGate` diperiksa eksplisit di
+   `MasterDataImportService` — tanpa itu satu berkas berisi 20 artist jadi
+   jalan pintas upgrade Pro ke Master secara gratis.
+
+Berkas hasil ekspor sengaja memakai nama sheet dan judul kolom yang sama
+persis dengan yang diterima impor (satu sumber: `App\Support\
+MasterDataSheets`), jadi alur "ekspor → sunting di Excel → unggah lagi"
+bekerja tanpa menyunting format. Ada test yang membuktikannya
+(`test_a_stock_export_can_be_edited_and_imported_back`).
+
+Berkas sumber impor yang BERHASIL diterapkan disimpan di
+`storage/app/private/imports/<uuid>.xlsx` sebagai jejak audit; pratinjau
+dan berkas yang ditolak tidak meninggalkan sampah.
 
 ## Data dummy untuk testing manual
 
@@ -289,6 +355,31 @@ dibiarkan karena bertentangan dengan test yang sudah ada):**
     authorize()` (`canManageMasterData()`), dan sudah ada test yang
     memverifikasinya. Tidak ada perubahan; dicatat di sini supaya jelas
     ini sudah diperiksa, bukan terlewat.
+
+**Sesi 2026-09-01:**
+14. `ReportController::artistSettlements()` menghilangkan artist yang belum
+    punya penjualan di event tersebut. Penyebabnya di hulu:
+    `SettlementService::recalculateForEvent()` membangun baris dari
+    `GROUP BY order_items.artist_id`, jadi artist tanpa `order_items` tidak
+    pernah punya baris `artist_settlements`, dan laporan hanya membaca
+    baris yang ada. Operator karena itu tidak bisa membedakan "artist ini
+    belum laku" dari "artist ini tidak ikut event". Diperbaiki di sisi
+    LAPORAN (left join seluruh artist aktif ke settlement-nya), bukan
+    dengan menyemai baris kosong — supaya `artist_settlements` tetap
+    bermakna "catatan status pembayaran ke artist". `id` bernilai `null`
+    hanya untuk baris nol itu; `artist_id` selalu terisi dan sekarang
+    dipakai sebagai `row-key` tabel rekap di `ReportsView.vue`.
+15. Bug laten di endpoint yang sama, ikut tertutup oleh perbaikan #14:
+    `$s->artist->name` fatal error bila artist-nya sudah di-soft-delete
+    padahal masih punya baris settlement. Sekarang artist terhapus/nonaktif
+    tetap dilaporkan selama punya baris settlement di event itu — uangnya
+    memang tetap wajib dibayar.
+16. `GET /products` tidak pernah bisa memuat varian: `ProductResource`
+    sudah mendukungnya lewat `whenLoaded('variants')` tapi `index()` hanya
+    eager-load `artist`/`category`. Layar kasir menyiasatinya dengan
+    memanggil detail tiap produk satu per satu (N+1). Ditutup lewat opsi
+    `?with_variants=1` — opt-in, bukan default, supaya payload layar
+    Kelola Produk tidak ikut membengkak.
 
 ## Cadangan & pemulihan (WBS 9.2)
 

@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\CashierSessionController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\EventController;
+use App\Http\Controllers\Api\MasterDataExportController;
+use App\Http\Controllers\Api\MasterDataImportController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentChannelController;
 use App\Http\Controllers\Api\PaymentProofController;
@@ -69,6 +71,15 @@ Route::prefix('v1')->group(function () {
         Route::post('/preorders/{preorder}/payments', [PreorderController::class, 'storePayment']);
         Route::post('/preorders/{preorder}/shipment', [ShipmentController::class, 'store']);
         Route::patch('/shipments/{shipment}', [ShipmentController::class, 'update']);
+
+        // Ekspor/impor master data (PRD 7.15). Dikelompokkan di bawah
+        // /exports dan /imports — bukan /artists/export dsb — supaya tidak
+        // bertabrakan dengan apiResource /artists/{artist} dan supaya
+        // seluruh permukaan berkas berpasangan simetris di satu tempat.
+        Route::get('/exports/{entity}', [MasterDataExportController::class, 'show'])
+            ->where('entity', 'artists|categories|products|stock');
+        Route::get('/imports/master-data/template', [MasterDataImportController::class, 'template']);
+        Route::post('/imports/master-data', [MasterDataImportController::class, 'store']);
 
         Route::get('/reports/sales', [ReportController::class, 'sales']);
         Route::get('/reports/profit', [ReportController::class, 'profit']);

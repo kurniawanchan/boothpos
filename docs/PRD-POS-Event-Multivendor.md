@@ -386,6 +386,8 @@ Berlaku untuk seluruh modul CRUD: produk, varian, kategori, artist, pelanggan, s
 
 **Kriteria penerimaan F15.5** — Saat mengimpor berkas berisi 100 baris dengan 3 baris bermasalah, sistem menyimpan 97 baris valid dan menampilkan laporan berisi nomor baris serta alasan untuk 3 baris yang gagal.
 
+**Catatan implementasi — 2026-09-01.** Modul ini dibangun (lihat catatan perubahan cakupan di 10.2), dengan satu penyimpangan yang disengaja dari kriteria penerimaan F15.5 di atas: impor bersifat **semua-atau-tidak sama sekali**. Seluruh berkas divalidasi lebih dulu; bila ada satu baris pun yang gagal, tidak ada data yang berubah dan seluruh galat dilaporkan sekaligus beserta nama sheet, nomor baris, nama kolom, dan alasannya. Alasan penyimpangan: keempat sheet saling bergantung (produk menunjuk artist/kategori, stok menunjuk varian), sehingga "97 baris tersimpan, 3 gagal" bisa berarti produk tersimpan tanpa artistnya, atau harga separuh terbarui — kondisi yang lebih merusak daripada meminta pemilik toko memperbaiki berkasnya lalu mengulang impor, dan sejalan dengan mitigasi risiko "impor Excel merusak data massal" pada 9.6. Pratinjau F15.4 tersedia lewat parameter `dry_run` yang memakai jalur validasi yang sama persis. F15.6 (mode tambah/perbarui) diwujudkan sebagai upsert otomatis berdasarkan kolom unik masing-masing entitas, bukan sebagai dua mode terpisah. F15.8 dipenuhi: impor stok selalu lewat `StockService::applyMovement()`, tidak pernah menulis `current_stock` langsung.
+
 Catatan keamanan (area risiko: input validation) — berkas impor adalah masukan tidak tepercaya. Sistem wajib memvalidasi tipe berkas, ukuran maksimum, dan setiap nilai sel di sisi server. Harga dan jumlah dari berkas impor tidak boleh dipercaya begitu saja.
 
 Catatan perlindungan data — ekspor yang memuat data pelanggan hanya boleh diakses peran yang berwenang, dan berkas ekspor untuk artist tidak menyertakan kolom kontak pelanggan.
@@ -716,7 +718,7 @@ Yang meringankan: skalanya kecil. Lima artist dan puluhan SKU berarti beberapa f
 
 | Modul | Alasan penundaan |
 |---|---|
-| Impor Excel | Puluhan SKU untuk 5 artist dapat diinput manual dalam hitungan jam. Membangun impor beserta validasi dan pratinjau memakan waktu berhari-hari untuk penghematan yang kecil |
+| ~~Impor Excel~~ | ~~Puluhan SKU untuk 5 artist dapat diinput manual dalam hitungan jam. Membangun impor beserta validasi dan pratinjau memakan waktu berhari-hari untuk penghematan yang kecil~~ **Dibatalkan dari daftar potong pada 2026-09-01** atas permintaan eksplisit pemilik produk — lihat catatan di bawah tabel |
 | QR code & pemindaian | Dengan puluhan SKU, pencarian pada grid produk berlayar sentuh sama cepatnya dan jauh lebih murah dibangun. Nilai QR baru muncul saat ratusan SKU |
 | Flash sale | Diskon dapat diterapkan manual sebagai penyesuaian harga di kasir untuk event pertama |
 | Bahan baku, produksi, markup | Perhitungan modal cukup diinput sebagai harga modal per produk. Modul produksi penuh baru bernilai saat volume produksi meningkat |
@@ -725,6 +727,36 @@ Yang meringankan: skalanya kecil. Lima artist dan puluhan SKU berarti beberapa f
 | Purchase management | Tumpang tindih dengan pencatatan harga modal sederhana |
 | User management granular | Satu operator berarti cukup satu akun; peran berlapis belum dibutuhkan |
 | Dashboard per artist | Rekap hasil artist pada modul 7.11 sudah menjawab kebutuhan inti; dashboard visual menyusul |
+
+**Catatan perubahan cakupan — 2026-09-01 (impor Excel masuk kembali)**
+
+Keputusan pemotongan di atas sengaja tidak dihapus; ia tetap benar untuk
+konteks saat ditulis. Yang berubah adalah keputusannya, bukan alasannya.
+
+Impor Excel diminta kembali secara eksplisit oleh pemilik produk dan sudah
+dibangun, bersama ekspor `.xlsx` untuk produk, artist, kategori, dan stok.
+Bentuk yang dibangun sedikit berbeda dari 7.15 dan perbedaannya disengaja:
+
+- **Satu berkas gabungan berisi empat sheet**, bukan satu berkas per modul.
+  Alasannya dependensi: produk menunjuk artist dan kategori, stok menunjuk
+  varian. Empat berkas terpisah memaksa pemilik toko mengurutkan sendiri
+  urutan unggahannya.
+- **Semua-atau-tidak sama sekali**, menyimpang dari kriteria penerimaan
+  F15.5 yang meminta baris valid tetap tersimpan. Karena sheet-sheet itu
+  saling bergantung, penyimpanan sebagian meninggalkan master data setengah
+  jadi — kondisi yang jauh lebih sulit dibereskan daripada memperbaiki
+  berkasnya lalu mengulang impor. Pratinjau F15.4 tetap tersedia lewat
+  `dry_run`, memakai jalur validasi yang sama persis.
+- **Riwayat impor (F15.7)** belum berupa tabel `IMPORT_JOBS` tersendiri;
+  untuk sekarang setiap impor menulis satu baris `activity_logs`
+  (`action: imported`) berisi jumlah baris per sheet, dan berkas sumbernya
+  disimpan di penyimpanan privat.
+- **Impor transaksi penjualan (F15.9) TIDAK dibangun** — masih di luar
+  cakupan.
+
+Cakupan yang tetap dipotong: QR code, flash sale, bahan baku/produksi,
+vendor management, purchase management, user management granular, dan
+dashboard per artist.
 
 ### 10.3 Cakupan MVP Oktober
 
@@ -778,7 +810,7 @@ Permintaan fitur baru yang muncul sebelum Oktober masuk ke daftar pasca-event, b
 Poin berikut masih berstatus ASSUMPTION dan perlu dikonfirmasi:
 
 1. Tanggal pasti event Oktober, karena selisih awal atau akhir bulan mengubah cakupan yang layak dikerjakan.
-2. Katalog PDF, laporan modal & keuntungan, dan ekspor Excel data master tidak dikerjakan sebelum Oktober, sebagai konsekuensi masuknya pre-order ke MVP.
+2. ~~Katalog PDF, laporan modal & keuntungan, dan ekspor Excel data master tidak dikerjakan sebelum Oktober, sebagai konsekuensi masuknya pre-order ke MVP.~~ **Diperbarui 2026-09-01:** laporan modal & keuntungan sudah dibangun, dan ekspor Excel data master (produk, artist, kategori, stok) beserta impornya juga sudah dibangun — lihat catatan perubahan cakupan di 10.2. Katalog PDF tetap di luar cakupan.
 3. Laptop operasional memiliki kamera yang dapat diakses peramban untuk memotret bukti pembayaran.
 4. QR e-wallet berupa QR statis milik toko yang dicetak atau ditampilkan, bukan QR dinamis per transaksi.
 5. Kapasitas penyimpanan laptop memadai untuk foto bukti pembayaran yang disimpan permanen.

@@ -13,7 +13,7 @@ openapi: 3.0.3
 
 info:
   title: BoothPOS API
-  version: 1.3.0
+  version: 1.4.0
   description: |
     API internal untuk BoothPOS — sistem POS berbasis event untuk toko
     merchandise yang berjualan online maupun di bazaar/event. Berjalan di
@@ -44,6 +44,7 @@ tags:
   - name: Preorder
   - name: Payment
   - name: Report
+  - name: Import & Export
 
 security:
   - bearerAuth: []
@@ -1309,6 +1310,141 @@ paths:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema: { type: string, format: binary }
 
+  # ------------------------------------------------------------------
+  # IMPOR & EKSPOR MASTER DATA (PRD 7.15)
+  #
+  # CATATAN CAKUPAN — impor Excel awalnya dipotong dari MVP (PRD 10.2).
+  # Ditambahkan kembali pada 2026-09-01 atas permintaan eksplisit
+  # pemilik produk; keputusan pemotongan lama sengaja tidak dihapus dari
+  # PRD, hanya diberi catatan bertanggal.
+  # ------------------------------------------------------------------
+
+  /exports/{entity}:
+    parameters:
+      - name: entity
+        in: path
+        required: true
+        schema: { type: string, enum: [artists, categories, products, stock] }
+    get:
+      tags: [Import & Export]
+      summary: Ekspor satu entitas master data ke Excel
+      description: |
+        Satu berkas `.xlsx` berisi SATU sheet bernama sama dengan `entity`,
+        dengan judul kolom yang sama persis dengan yang diterima
+        `POST /imports/master-data`. Berkas hasil ekspor karena itu bisa
+        disunting lalu diunggah kembali apa adanya.
+
+        Sheet `products` berisi **satu baris per varian** (bukan per
+        produk), karena harga melekat pada varian.
+
+        Digerbang `canManageMasterData()` (owner/admin/inventory) — lebih
+        ketat daripada endpoint daftar yang boleh dibaca kasir, karena
+        menarik seluruh master data sebagai berkas adalah permukaan
+        ekstraksi data massal.
+      responses:
+        '200':
+          description: Berkas xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /imports/master-data/template:
+    get:
+      tags: [Import & Export]
+      summary: Unduh template impor gabungan
+      description: |
+        Workbook `.xlsx` berisi empat sheet (`artists`, `categories`,
+        `products`, `stock`) lengkap dengan judul kolom yang benar dan satu
+        baris contoh per sheet (F15.3).
+      responses:
+        '200':
+          description: Berkas xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /imports/master-data:
+    post:
+      tags: [Import & Export]
+      summary: Impor massal master data dari satu berkas Excel
+      description: |
+        Satu berkas `.xlsx` memuat sampai empat sheet sekaligus. Sheet yang
+        tidak dikenali diabaikan dan dilaporkan pada `ignored_sheets`; nama
+        sheet dicocokkan tanpa memandang huruf besar/kecil.
+
+        **Urutan pemrosesan** selalu `artists` → `categories` → `products`
+        → `stock`, berapa pun urutan sheet di dalam berkas.
+
+        **Semua-atau-tidak sama sekali.** Seluruh berkas divalidasi lebih
+        dulu; bila ada satu baris pun yang tidak valid, tidak ada data yang
+        diubah dan seluruh galat dikembalikan sekaligus (422). Ini
+        menyimpang dari kriteria penerimaan F15.5 (yang meminta baris valid
+        tetap tersimpan) secara sengaja: sheet-sheet ini saling bergantung,
+        sehingga penyimpanan sebagian meninggalkan master data setengah
+        jadi yang jauh lebih sulit dibereskan.
+
+        **Kunci pencocokan (upsert, bukan selalu insert)**
+        | Sheet | Kunci |
+        |---|---|
+        | `artists` | `code` |
+        | `categories` | `code` |
+        | `products` | `sku` bila diisi; bila kosong, `code_prefix` (artist_code + category_code + product_segment) + `variant_name` |
+        | `stock` | `sku` |
+
+        **Kode dihasilkan server.** `code_prefix` dan `sku` selalu dibuat
+        `ProductCodeGenerator`. Kolom `sku` pada sheet `products` hanya
+        boleh menunjuk varian yang SUDAH ada — SKU yang tidak dikenal
+        ditolak, tidak dipakai untuk membuat varian baru.
+
+        **Stok bersifat absolut.** Kolom `current_stock` pada sheet `stock`
+        adalah jumlah akhir yang diinginkan; server menghitung selisihnya
+        terhadap stok saat ini dan menerapkannya sebagai satu
+        `stock_movements` bertipe `adjustment` (F15.8). Baris yang angkanya
+        sudah sama tidak menghasilkan movement apa pun. Stok awal varian
+        BARU diisi lewat kolom `initial_stock` di sheet `products`, karena
+        SKU-nya belum ada saat berkas disusun.
+
+        **Sel kosong berarti "jangan diubah"**, bukan "kosongkan nilainya".
+
+        Digerbang `canManageMasterData()` (owner/admin/inventory).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Berkas `.xlsx`, maksimal 10 MB.
+                dry_run:
+                  type: boolean
+                  default: false
+                  description: |
+                    Bila `true`, berkas hanya divalidasi dan jumlah baris
+                    dilaporkan — tidak ada data yang ditulis (F15.4).
+      responses:
+        '200':
+          description: Impor berhasil, atau pratinjau tanpa galat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MasterDataImportResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: |
+            Berkas ditolak (bukan `.xlsx` valid, terlalu besar, tidak
+            memuat sheet yang dikenali) ATAU ada baris yang tidak valid.
+            Pada kasus terakhir `errors` berisi daftar galat per baris dan
+            `applied` bernilai `false` — tidak ada data yang berubah.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MasterDataImportResult' }
+
 # =====================================================================
 # COMPONENTS
 # =====================================================================
@@ -1955,13 +2091,69 @@ components:
           maxLength: 50
           description: Dikosongkan berarti memakai `group` dari baris yang sudah ada, atau `general` bila key baru.
 
+    MasterDataImportResult:
+      type: object
+      properties:
+        message: { type: string }
+        applied:
+          type: boolean
+          description: Apakah perubahan benar-benar tersimpan. Selalu `false` untuk `dry_run` dan untuk berkas yang bergalat.
+        dry_run: { type: boolean }
+        sheets:
+          type: object
+          description: |
+            Hanya memuat sheet yang benar-benar ada di berkas, dalam urutan
+            pemrosesan (artists, categories, products, stock).
+          additionalProperties: { $ref: '#/components/schemas/MasterDataImportSheetCount' }
+          example:
+            artists: { rows: 2, created: 1, updated: 1, unchanged: 0 }
+            products: { rows: 5, created: 4, updated: 1, unchanged: 0 }
+            stock: { rows: 5, created: 0, updated: 3, unchanged: 2 }
+        ignored_sheets:
+          type: array
+          description: Nama sheet di berkas yang tidak dikenali dan dilewati.
+          items: { type: string }
+        errors:
+          type: array
+          items: { $ref: '#/components/schemas/MasterDataImportError' }
+
+    MasterDataImportSheetCount:
+      type: object
+      properties:
+        rows: { type: integer, description: Jumlah baris berisi (baris kosong tidak dihitung). }
+        created: { type: integer, description: "Baris yang membuat data baru. Sheet `products` dihitung pada level VARIAN; sheet `stock` selalu 0." }
+        updated:
+          type: integer
+          description: |
+            Baris yang cocok dengan data yang sudah ada. TIDAK berarti
+            nilainya pasti berubah. Untuk sheet `stock`, jumlah baris yang
+            menghasilkan `stock_movements`.
+        unchanged:
+          type: integer
+          description: Untuk sheet `stock`, baris yang angkanya sudah sama dengan stok saat ini sehingga tidak menghasilkan movement. Selalu 0 untuk sheet lain.
+
+    MasterDataImportError:
+      type: object
+      properties:
+        sheet:
+          type: string
+          nullable: true
+          enum: [artists, categories, products, stock, null]
+          description: "`null` untuk galat tingkat berkas (mis. tidak ada sheet yang dikenali)."
+        row:
+          type: integer
+          nullable: true
+          description: Nomor baris di dalam sheet, sesuai penomoran Excel (baris 1 = judul kolom, data mulai baris 2).
+        column: { type: string, nullable: true, example: category_code }
+        message: { type: string, example: "Kategori dengan kode 'ZZ' tidak ditemukan." }
+
     ActivityLog:
       type: object
       properties:
         id: { type: integer }
         user_id: { type: integer, nullable: true }
         user_name: { type: string, nullable: true, readOnly: true }
-        action: { type: string, enum: [created, updated, deleted, stock_adjusted, price_changed] }
+        action: { type: string, enum: [created, updated, deleted, stock_adjusted, price_changed, imported] }
         entity_type: { type: string, example: Artist }
         entity_id: { type: integer, nullable: true }
         description: { type: string, nullable: true }
