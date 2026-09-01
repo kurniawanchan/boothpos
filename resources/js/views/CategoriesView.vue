@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listCategories, createCategory, updateCategory, deleteCategory } from '../api/categories';
+import { listCategories, createCategory, updateCategory, deleteCategory, uploadCategoryImage } from '../api/categories';
 import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
@@ -74,14 +74,47 @@ const showDelete = ref(false);
 const deleteTarget = ref(null);
 const deleting = ref(false);
 
+// Client-side file guard, same pattern used by MasterDataImportModal's
+// .xlsx check — fail fast before a round trip. ASSUMPTION: 5 MB cap and
+// image/* mime, since the backend contract doesn't specify a limit here.
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const categoryImageFile = ref(null);
+const categoryImageError = ref('');
+const categoryImageInputEl = ref(null);
+
+function onCategoryImageChange(e) {
+  const file = e.target.files?.[0] ?? null;
+  categoryImageError.value = '';
+  categoryImageFile.value = null;
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    categoryImageError.value = 'Berkas harus berupa gambar.';
+    e.target.value = '';
+    return;
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    categoryImageError.value = 'Ukuran gambar maksimal 5 MB.';
+    e.target.value = '';
+    return;
+  }
+  categoryImageFile.value = file;
+}
+
 const parentOptions = computed(() =>
   allCategories.value.filter((c) => c.id !== editingCategory.value?.id).map((c) => ({ value: c.id, label: c.name }))
 );
+
+function resetCategoryImage() {
+  categoryImageFile.value = null;
+  categoryImageError.value = '';
+  if (categoryImageInputEl.value) categoryImageInputEl.value.value = '';
+}
 
 function openCreate() {
   editingCategory.value = null;
   Object.assign(form, { code: '', name: '', parent_id: '', display_order: 0, is_active: true });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
+  resetCategoryImage();
   showForm.value = true;
 }
 
@@ -95,12 +128,14 @@ function openEdit(category) {
     is_active: category.is_active,
   });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
+  resetCategoryImage();
   showForm.value = true;
 }
 
 async function saveCategory() {
   saving.value = true;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
+  let categoryId = editingCategory.value?.id ?? null;
   try {
     if (editingCategory.value) {
       await updateCategory(editingCategory.value.id, {
@@ -111,14 +146,22 @@ async function saveCategory() {
       });
       toast.success('Kategori diperbarui.');
     } else {
-      await createCategory({
+      const created = await createCategory({
         code: form.code.toUpperCase(),
         name: form.name,
         parent_id: form.parent_id || null,
         display_order: Number(form.display_order) || 0,
         is_active: form.is_active,
       });
+      categoryId = created.id;
       toast.success('Kategori dibuat.');
+    }
+    if (categoryImageFile.value && categoryId) {
+      try {
+        await uploadCategoryImage(categoryId, categoryImageFile.value);
+      } catch {
+        toast.error('Kategori tersimpan, tapi gagal mengunggah gambar.');
+      }
     }
     showForm.value = false;
     await load();
@@ -216,6 +259,26 @@ async function performDelete() {
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
           Aktif
         </label>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[12.5px] font-semibold text-muted-4" for="category-image">Gambar kategori</label>
+          <div class="flex items-center gap-3">
+            <img
+              v-if="editingCategory?.image_url && !categoryImageFile"
+              :src="editingCategory.image_url"
+              alt="Gambar kategori saat ini"
+              class="h-14 w-14 flex-none rounded-lg border border-line-2 object-cover"
+            />
+            <input
+              id="category-image"
+              ref="categoryImageInputEl"
+              type="file"
+              accept="image/*"
+              class="flex-1 rounded-lg border border-line bg-white px-3.5 py-2.5 text-[13px] file:mr-3 file:rounded-md file:border-0 file:bg-mint-100 file:px-3 file:py-1.5 file:text-[12.5px] file:font-bold file:text-brand-active"
+              @change="onCategoryImageChange"
+            />
+          </div>
+          <p v-if="categoryImageError" class="text-[12px] font-semibold text-danger-text">{{ categoryImageError }}</p>
+        </div>
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">

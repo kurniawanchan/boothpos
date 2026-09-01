@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 
 const props = defineProps({
   channels: { type: Array, required: true }, // already filtered by type
@@ -8,6 +8,27 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue']);
 
 const selected = computed(() => props.channels.find((c) => c.id === props.modelValue) ?? null);
+
+// BUG YANG DITEMUKAN & DIPERBAIKI: saat hanya ada satu kanal pembayaran
+// (mis. satu channel Gopay qr_ewallet), chip pemilihan hanya dirender
+// ketika channels.length > 1, dan tidak ada fallback auto-select — akibatnya
+// tidak ada yang pernah terpilih dan layar checkout QRIS tampak kosong
+// selamanya ("Pilih kanal pembayaran di atas."). Auto-pilih satu-satunya
+// kanal yang tersedia; perilaku pilih-manual untuk 2+ kanal tidak diubah.
+watch(
+  () => props.channels,
+  (list) => {
+    if (list.length === 1 && props.modelValue !== list[0].id) {
+      emit('update:modelValue', list[0].id);
+    } else if (list.length === 0 && props.modelValue !== null) {
+      emit('update:modelValue', null);
+    } else if (list.length > 1 && props.modelValue !== null && !list.some((c) => c.id === props.modelValue)) {
+      // kanal yang sebelumnya terpilih sudah tidak ada di daftar (mis. ganti metode)
+      emit('update:modelValue', null);
+    }
+  },
+  { immediate: true }
+);
 </script>
 
 <template>

@@ -11,6 +11,9 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import DataTable from '../components/ui/DataTable.vue';
+import ProductDetailModal from '../components/product/ProductDetailModal.vue';
+import ReceiptModal from '../components/receipt/ReceiptModal.vue';
+import { formatDateTime } from '../utils/date';
 
 const auth = useAuthStore();
 const toast = useToastStore();
@@ -94,7 +97,35 @@ async function submitSettlementPayment() {
   }
 }
 
-const salesColumns = computed(() => [{ key: 'label', label: groupBy.value === 'day' ? 'Tanggal' : 'Label' }, { key: 'unit_count', label: 'Unit' }, { key: 'amount', label: 'Jumlah' }]);
+// Server supplies the column label per group_by ("Produk"/"Kategori"/"Artist"/"Tanggal")
+// — never hardcode it here, that's the exact bug the user reported.
+const salesColumns = computed(() => [{ key: 'label', label: sales.value?.group_label ?? 'Label' }, { key: 'unit_count', label: 'Unit' }, { key: 'amount', label: 'Jumlah' }]);
+
+const showProductDetail = ref(false);
+const detailProductId = ref(null);
+
+function openRowDetail(row) {
+  if (groupBy.value !== 'product' || !row.entity_id) return;
+  detailProductId.value = row.entity_id;
+  showProductDetail.value = true;
+}
+
+const transactionColumns = [
+  { key: 'order_number', label: 'No. transaksi' },
+  { key: 'created_at', label: 'Waktu' },
+  { key: 'cashier_name', label: 'Kasir' },
+  { key: 'item_count', label: 'Item' },
+  { key: 'total_amount', label: 'Total' },
+  { key: 'actions', label: '' },
+];
+
+const showReceipt = ref(false);
+const receiptOrderId = ref(null);
+
+function openReceipt(transaction) {
+  receiptOrderId.value = transaction.id;
+  showReceipt.value = true;
+}
 </script>
 
 <template>
@@ -149,8 +180,37 @@ const salesColumns = computed(() => [{ key: 'label', label: groupBy.value === 'd
       </div>
       <div class="overflow-hidden rounded-card border border-line-2 bg-white">
         <DataTable :columns="salesColumns" :rows="sales?.rows ?? []" :loading="loading" empty-message="Belum ada data penjualan.">
+          <template #cell-label="{ row }">
+            <button
+              v-if="groupBy === 'product' && row.entity_id"
+              type="button"
+              class="text-left font-semibold text-brand-active underline decoration-dotted hover:text-brand"
+              @click="openRowDetail(row)"
+            >
+              {{ row.label }}
+            </button>
+            <span v-else>{{ row.label }}</span>
+          </template>
           <template #cell-amount="{ row }">{{ formatIDR(row.amount) }}</template>
         </DataTable>
+      </div>
+
+      <!-- Daftar transaksi asli — ringkasan per produk di atas mengelompokkan
+           per produk (2 baris bisa mewakili 3 transaksi bila dua di antaranya
+           membeli produk yang sama), jadi daftar ini ditampilkan berdampingan
+           supaya jumlah transaksi selalu bisa diverifikasi langsung. -->
+      <div class="flex flex-col gap-2">
+        <span class="text-[13px] font-bold tracking-tight">Daftar transaksi ({{ sales?.transactions?.length ?? 0 }})</span>
+        <div class="overflow-hidden rounded-card border border-line-2 bg-white">
+          <DataTable :columns="transactionColumns" :rows="sales?.transactions ?? []" :loading="loading" empty-message="Belum ada transaksi.">
+            <template #cell-order_number="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.order_number }}</span></template>
+            <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
+            <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
+            <template #cell-actions="{ row }">
+              <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openReceipt(row)">Lihat struk</button>
+            </template>
+          </DataTable>
+        </div>
       </div>
     </template>
 
@@ -218,5 +278,8 @@ const salesColumns = computed(() => [{ key: 'label', label: groupBy.value === 'd
         </div>
       </template>
     </BaseModal>
+
+    <ProductDetailModal :open="showProductDetail" :product-id="detailProductId" @close="showProductDetail = false" />
+    <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" close-label="Tutup" @close="showReceipt = false" />
   </div>
 </template>

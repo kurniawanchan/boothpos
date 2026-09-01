@@ -7,17 +7,77 @@ import { formatIDR } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { useToastStore } from '../../stores/toast';
 
+/**
+ * Also doubles as a historical-receipt viewer (Task 3, Sales report
+ * "Lihat struk" click-through) — GET /orders/{order}/receipt works
+ * identically for a just-completed order or an old one, so no separate
+ * component was needed.
+ *
+ * Download-as-image/PDF is client-side rasterization of this same DOM
+ * (html2canvas → PNG, then jsPDF wraps that raster into a single-page
+ * PDF) — no backend PDF/image generation exists or is planned. This keeps
+ * the receipt layout above as the single source of truth rather than
+ * duplicating it into a second PDF-specific template.
+ */
 const props = defineProps({
   open: { type: Boolean, default: false },
   orderId: { type: [Number, String, null], default: null },
+  closeLabel: { type: String, default: 'Transaksi berikutnya' },
 });
 const emit = defineEmits(['close']);
 
 const toast = useToastStore();
 const receipt = ref(null);
 const loading = ref(false);
+const receiptEl = ref(null);
+const downloadingImage = ref(false);
+const downloadingPdf = ref(false);
 
 const METHOD_LABELS = { cash: 'Tunai', bank_transfer: 'Transfer bank', qr_ewallet: 'QRIS / e-wallet' };
+
+async function captureCanvas() {
+  const { default: html2canvas } = await import('html2canvas');
+  return html2canvas(receiptEl.value, { backgroundColor: '#ffffff', scale: 2 });
+}
+
+async function downloadAsImage() {
+  if (!receiptEl.value) return;
+  downloadingImage.value = true;
+  try {
+    const canvas = await captureCanvas();
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = `struk-${receipt.value?.order_number ?? 'transaksi'}.png`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch {
+    toast.error('Gagal mengunduh struk sebagai gambar.');
+  } finally {
+    downloadingImage.value = false;
+  }
+}
+
+async function downloadAsPdf() {
+  if (!receiptEl.value) return;
+  downloadingPdf.value = true;
+  try {
+    const canvas = await captureCanvas();
+    const { jsPDF } = await import('jspdf');
+    const imgData = canvas.toDataURL('image/png');
+    // Single-page PDF sized to the raster — a receipt is a strip, not an
+    // A4 page, so we fit the page to the content instead of the reverse.
+    const widthPt = (canvas.width * 72) / 96;
+    const heightPt = (canvas.height * 72) / 96;
+    const pdf = new jsPDF({ orientation: heightPt >= widthPt ? 'portrait' : 'landscape', unit: 'pt', format: [widthPt, heightPt] });
+    pdf.addImage(imgData, 'PNG', 0, 0, widthPt, heightPt);
+    pdf.save(`struk-${receipt.value?.order_number ?? 'transaksi'}.pdf`);
+  } catch {
+    toast.error('Gagal mengunduh struk sebagai PDF.');
+  } finally {
+    downloadingPdf.value = false;
+  }
+}
 
 
 watch(
@@ -51,7 +111,7 @@ watch(
     </div>
 
     <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">Memuat struk…</div>
-    <div v-else-if="receipt" class="flex flex-col gap-[18px] px-6 py-6">
+    <div v-else-if="receipt" ref="receiptEl" class="flex flex-col gap-[18px] bg-white px-6 py-6">
       <div class="flex flex-col items-center gap-1 text-center">
         <span class="text-[17px] font-extrabold tracking-tight">{{ receipt.store_name }}</span>
         <span class="text-[12.5px] text-muted-2">{{ receipt.event_name }}</span>
@@ -85,7 +145,19 @@ watch(
     </div>
 
     <template #footer>
-      <BaseButton variant="primary" class="w-full" @click="emit('close')">Transaksi berikutnya</BaseButton>
+      <div class="flex flex-col gap-2">
+        <div class="flex gap-2">
+          <BaseButton variant="secondary" class="flex-1" :loading="downloadingImage" :disabled="!receipt" @click="downloadAsImage">
+            <i class="ph-duotone ph-image text-[16px]" aria-hidden="true"></i>
+            Unduh gambar
+          </BaseButton>
+          <BaseButton variant="secondary" class="flex-1" :loading="downloadingPdf" :disabled="!receipt" @click="downloadAsPdf">
+            <i class="ph-duotone ph-file-pdf text-[16px]" aria-hidden="true"></i>
+            Unduh PDF
+          </BaseButton>
+        </div>
+        <BaseButton variant="primary" class="w-full" @click="emit('close')">{{ closeLabel }}</BaseButton>
+      </div>
     </template>
   </BaseModal>
 </template>

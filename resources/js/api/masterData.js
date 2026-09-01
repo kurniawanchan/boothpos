@@ -42,10 +42,16 @@ export async function downloadImportTemplate() {
  * runs the identical validation path and reports counts without writing
  * anything (F15.4 preview), so callers should always preview before
  * applying for real.
+ *
+ * `images` is an optional batch of files uploaded alongside the sheet —
+ * the products/categories sheets can reference any of them by filename via
+ * their `image_filename` column; a referenced filename with no match here
+ * comes back as a normal row-level error, not a client-side failure.
  */
-export function importMasterData(file, { dryRun = false } = {}) {
+export function importMasterData(file, { dryRun = false, images = [] } = {}) {
   const form = new FormData();
   form.append('file', file);
   if (dryRun) form.append('dry_run', '1');
+  images.forEach((img) => form.append('images[]', img));
   return client.post('/imports/master-data', form).then((r) => r.data);
 }

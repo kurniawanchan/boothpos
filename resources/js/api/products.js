@@ -28,6 +28,13 @@ export function updateVariant(variantId, payload) {
   return client.put(`/variants/${variantId}`, payload).then((r) => r.data);
 }
 
+/** POST /products/{id}/image — multipart `image` field, gated same as product update. */
+export function uploadProductImage(id, file) {
+  const form = new FormData();
+  form.append('image', file);
+  return client.post(`/products/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+}
+
 /** Lightweight cashier-facing search — GET /variants/lookup?q=&limit= */
 export function lookupVariants(q, limit = 20) {
   if (!q) return Promise.resolve({ data: [] });

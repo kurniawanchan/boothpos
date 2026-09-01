@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listProducts, getProduct, createProduct, updateProduct, deleteProduct, addVariant, updateVariant } from '../api/products';
+import { listProducts, getProduct, createProduct, updateProduct, deleteProduct, addVariant, updateVariant, uploadProductImage } from '../api/products';
 import { listArtists } from '../api/artists';
 import { listCategories } from '../api/categories';
 import { exportMasterData } from '../api/masterData';
@@ -19,6 +19,7 @@ import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
+import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 
 const auth = useAuthStore();
 const toast = useToastStore();
@@ -44,6 +45,40 @@ function applyFilters() {
 
 const exporting = ref(false);
 const showImportModal = ref(false);
+const showDetail = ref(false);
+const detailProductId = ref(null);
+
+function openDetail(product) {
+  detailProductId.value = product.id;
+  showDetail.value = true;
+}
+
+// Client-side file guard, same pattern used by MasterDataImportModal's
+// .xlsx check — fail fast before a round trip. ASSUMPTION: 5 MB cap and
+// image/* mime, since the backend contract doesn't specify a limit here.
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const productImageFile = ref(null);
+const productImageError = ref('');
+const productImageInputEl = ref(null);
+const uploadingProductImage = ref(false);
+
+function onProductImageChange(e) {
+  const file = e.target.files?.[0] ?? null;
+  productImageError.value = '';
+  productImageFile.value = null;
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    productImageError.value = 'Berkas harus berupa gambar.';
+    e.target.value = '';
+    return;
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    productImageError.value = 'Ukuran gambar maksimal 5 MB.';
+    e.target.value = '';
+    return;
+  }
+  productImageFile.value = file;
+}
 
 async function doExport() {
   exporting.value = true;
@@ -122,12 +157,18 @@ function openCreate() {
   });
   variantRows.value = [emptyVariant()];
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
+  productImageFile.value = null;
+  productImageError.value = '';
+  if (productImageInputEl.value) productImageInputEl.value.value = '';
   showDrawer.value = true;
 }
 
 async function openEdit(product) {
   const full = await getProduct(product.id);
   editingProduct.value = full;
+  productImageFile.value = null;
+  productImageError.value = '';
+  if (productImageInputEl.value) productImageInputEl.value.value = '';
   Object.assign(productForm, {
     artist_id: full.artist_id,
     category_id: full.category_id,
@@ -175,6 +216,7 @@ function marginFor(row) {
 async function saveProduct() {
   saving.value = true;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
+  let productId = editingProduct.value?.id ?? null;
   try {
     if (editingProduct.value) {
       await updateProduct(editingProduct.value.id, {
@@ -199,7 +241,7 @@ async function saveProduct() {
       }
       toast.success('Produk diperbarui.');
     } else {
-      await createProduct({
+      const created = await createProduct({
         artist_id: Number(productForm.artist_id),
         category_id: Number(productForm.category_id),
         product_segment: productForm.product_segment || null,
@@ -215,7 +257,18 @@ async function saveProduct() {
           low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
         })),
       });
+      productId = created.id;
       toast.success('Produk dibuat.');
+    }
+    if (productImageFile.value && productId) {
+      uploadingProductImage.value = true;
+      try {
+        await uploadProductImage(productId, productImageFile.value);
+      } catch {
+        toast.error('Produk tersimpan, tapi gagal mengunggah gambar.');
+      } finally {
+        uploadingProductImage.value = false;
+      }
     }
     showDrawer.value = false;
     await load();
@@ -292,9 +345,12 @@ async function performDelete() {
           <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
-          <div v-if="auth.canManageMasterData" class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">Hapus</button>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openDetail(row)">Detail</button>
+            <template v-if="auth.canManageMasterData">
+              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
+              <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">Hapus</button>
+            </template>
           </div>
         </template>
       </DataTable>
@@ -325,6 +381,26 @@ async function performDelete() {
               Produk pre-order
             </label>
             <BaseInput v-if="productForm.is_preorder" v-model="productForm.preorder_eta" type="date" label="Estimasi tiba" class="flex-1" />
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <label class="text-[12.5px] font-semibold text-muted-4" for="product-image">Gambar produk</label>
+            <div class="flex items-center gap-3">
+              <img
+                v-if="editingProduct?.image_url && !productImageFile"
+                :src="editingProduct.image_url"
+                alt="Gambar produk saat ini"
+                class="h-16 w-16 flex-none rounded-lg border border-line-2 object-cover"
+              />
+              <input
+                id="product-image"
+                ref="productImageInputEl"
+                type="file"
+                accept="image/*"
+                class="flex-1 rounded-lg border border-line bg-white px-3.5 py-2.5 text-[13px] file:mr-3 file:rounded-md file:border-0 file:bg-mint-100 file:px-3 file:py-1.5 file:text-[12.5px] file:font-bold file:text-brand-active"
+                @change="onProductImageChange"
+              />
+            </div>
+            <p v-if="productImageError" class="text-[12px] font-semibold text-danger-text">{{ productImageError }}</p>
           </div>
         </div>
 
@@ -393,5 +469,6 @@ async function performDelete() {
     />
 
     <MasterDataImportModal :open="showImportModal" @close="showImportModal = false" @imported="afterImport" />
+    <ProductDetailModal :open="showDetail" :product-id="detailProductId" @close="showDetail = false" />
   </div>
 </template>

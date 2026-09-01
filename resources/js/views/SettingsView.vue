@@ -3,7 +3,7 @@ import { reactive, ref, onMounted } from 'vue';
 import { useSettingsStore } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
 import { listSettings, updateSettings } from '../api/settings';
-import { listPaymentChannels, createPaymentChannel } from '../api/payments';
+import { listPaymentChannels, createPaymentChannel, updatePaymentChannel } from '../api/payments';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
@@ -58,26 +58,84 @@ async function saveStoreIdentity() {
 // --- Payment channels ------------------------------------------------------
 const channels = ref([]);
 const showChannelForm = ref(false);
+const editingChannel = ref(null); // null = create, otherwise the channel being edited
 const channelForm = reactive({ type: 'bank_transfer', provider: '', account_name: '', account_number: '', display_order: 0 });
 const savingChannel = ref(false);
 const channelErrors = reactive({});
+
+// Client-side file guard, same pattern as MasterDataImportModal's .xlsx
+// check — fail fast before a round trip. ASSUMPTION: 5 MB cap and
+// image/* mime, since the backend contract doesn't specify a limit here.
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const qrImageFile = ref(null);
+const qrImageError = ref('');
+const removeQrImage = ref(false);
+const qrImageInputEl = ref(null);
 
 async function loadChannels() {
   channels.value = (await listPaymentChannels()).data;
 }
 
+function resetChannelForm() {
+  qrImageFile.value = null;
+  qrImageError.value = '';
+  removeQrImage.value = false;
+  if (qrImageInputEl.value) qrImageInputEl.value.value = '';
+}
+
 function openChannelForm() {
+  editingChannel.value = null;
   Object.assign(channelForm, { type: 'bank_transfer', provider: '', account_name: '', account_number: '', display_order: channels.value.length });
   Object.keys(channelErrors).forEach((k) => delete channelErrors[k]);
+  resetChannelForm();
   showChannelForm.value = true;
+}
+
+function openChannelEdit(channel) {
+  editingChannel.value = channel;
+  Object.assign(channelForm, {
+    type: channel.type,
+    provider: channel.provider,
+    account_name: channel.account_name,
+    account_number: channel.account_number ?? '',
+    display_order: channel.display_order ?? 0,
+  });
+  Object.keys(channelErrors).forEach((k) => delete channelErrors[k]);
+  resetChannelForm();
+  showChannelForm.value = true;
+}
+
+function onQrImageChange(e) {
+  const file = e.target.files?.[0] ?? null;
+  qrImageError.value = '';
+  qrImageFile.value = null;
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    qrImageError.value = 'Berkas harus berupa gambar.';
+    e.target.value = '';
+    return;
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    qrImageError.value = 'Ukuran gambar maksimal 5 MB.';
+    e.target.value = '';
+    return;
+  }
+  qrImageFile.value = file;
+  removeQrImage.value = false;
 }
 
 async function saveChannel() {
   savingChannel.value = true;
   Object.keys(channelErrors).forEach((k) => delete channelErrors[k]);
+  const payload = { ...channelForm, display_order: Number(channelForm.display_order) || 0 };
   try {
-    await createPaymentChannel({ ...channelForm, display_order: Number(channelForm.display_order) || 0 });
-    toast.success('Kanal pembayaran ditambahkan.');
+    if (editingChannel.value) {
+      await updatePaymentChannel(editingChannel.value.id, payload, { qrImage: qrImageFile.value, removeQrImage: removeQrImage.value });
+      toast.success('Kanal pembayaran diperbarui.');
+    } else {
+      await createPaymentChannel(payload, { qrImage: qrImageFile.value });
+      toast.success('Kanal pembayaran ditambahkan.');
+    }
     showChannelForm.value = false;
     await loadChannels();
   } catch (err) {
@@ -136,12 +194,14 @@ onMounted(async () => {
         <BaseButton variant="secondary" size="sm" @click="openChannelForm">Tambah</BaseButton>
       </div>
       <div v-for="c in channels" :key="c.id" class="flex items-center gap-3 rounded-lg border border-line-3 bg-surface-subtle px-3.5 py-3">
-        <i class="ph-duotone text-[21px] text-brand" :class="c.type === 'bank_transfer' ? 'ph-bank' : 'ph-qr-code'" aria-hidden="true"></i>
+        <img v-if="c.qr_image_url" :src="c.qr_image_url" :alt="`Kode QR ${c.provider}`" class="h-10 w-10 flex-none rounded-md border border-line-2 object-contain" />
+        <i v-else class="ph-duotone text-[21px] text-brand" :class="c.type === 'bank_transfer' ? 'ph-bank' : 'ph-qr-code'" aria-hidden="true"></i>
         <div class="flex flex-1 flex-col gap-0.5">
           <span class="text-[13.5px] font-bold">{{ c.provider }}</span>
           <span class="font-mono text-[12px] text-muted-2">{{ c.account_number || '—' }} · a.n. {{ c.account_name }}</span>
         </div>
         <StatusPill :variant="c.is_active ? 'mint' : 'neutral'">{{ c.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
+        <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openChannelEdit(c)">Edit</button>
       </div>
       <p class="border-t border-line-3 pt-3.5 text-[11.5px] leading-relaxed text-muted-3">
         Peran kasir menerima nomor tersamar pada daftar; nomor penuh hanya muncul saat kanal dipilih untuk satu transaksi.
@@ -169,12 +229,35 @@ onMounted(async () => {
       </p>
     </div>
 
-    <BaseModal :open="showChannelForm" title="Tambah kanal pembayaran" max-width-class="max-w-[440px]" @close="showChannelForm = false">
+    <BaseModal :open="showChannelForm" :title="editingChannel ? 'Ubah kanal pembayaran' : 'Tambah kanal pembayaran'" max-width-class="max-w-[440px]" @close="showChannelForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveChannel">
         <BaseSelect v-model="channelForm.type" label="Tipe" :options="[{ value: 'bank_transfer', label: 'Transfer bank' }, { value: 'qr_ewallet', label: 'QR e-wallet' }]" />
         <BaseInput v-model="channelForm.provider" label="Nama penyedia" required :error="channelErrors.provider" />
         <BaseInput v-model="channelForm.account_name" label="Nama pemilik rekening" required :error="channelErrors.account_name" />
         <BaseInput v-if="channelForm.type === 'bank_transfer'" v-model="channelForm.account_number" label="Nomor rekening" required :error="channelErrors.account_number" />
+
+        <div v-if="channelForm.type === 'qr_ewallet'" class="flex flex-col gap-1.5">
+          <label class="text-[12.5px] font-semibold text-muted-4" for="channel-qr-image">Gambar kode QR</label>
+          <img
+            v-if="editingChannel?.qr_image_url && !removeQrImage && !qrImageFile"
+            :src="editingChannel.qr_image_url"
+            alt="Kode QR saat ini"
+            class="h-28 w-28 self-start rounded-md border border-line-2 object-contain"
+          />
+          <input
+            id="channel-qr-image"
+            ref="qrImageInputEl"
+            type="file"
+            accept="image/*"
+            class="rounded-lg border border-line bg-white px-3.5 py-2.5 text-[13px] file:mr-3 file:rounded-md file:border-0 file:bg-mint-100 file:px-3 file:py-1.5 file:text-[12.5px] file:font-bold file:text-brand-active"
+            @change="onQrImageChange"
+          />
+          <p v-if="qrImageError" class="text-[12px] font-semibold text-danger-text">{{ qrImageError }}</p>
+          <label v-if="editingChannel?.qr_image_url" class="flex items-center gap-2 text-[12.5px] font-semibold text-muted-4">
+            <input v-model="removeQrImage" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
+            Hapus gambar QR yang ada
+          </label>
+        </div>
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">

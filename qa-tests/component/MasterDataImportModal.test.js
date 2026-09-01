@@ -155,7 +155,7 @@ describe('MasterDataImportModal', () => {
     await waitFor(() => expect(emitted().imported).toBeTruthy());
     expect(await screen.findByText(/impor diterapkan/i)).toBeInTheDocument();
     expect(importMasterData).toHaveBeenCalledTimes(2);
-    expect(importMasterData).toHaveBeenNthCalledWith(1, expect.any(File), { dryRun: true });
-    expect(importMasterData).toHaveBeenNthCalledWith(2, expect.any(File), { dryRun: false });
+    expect(importMasterData).toHaveBeenNthCalledWith(1, expect.any(File), { dryRun: true, images: [] });
+    expect(importMasterData).toHaveBeenNthCalledWith(2, expect.any(File), { dryRun: false, images: [] });
   });
 });

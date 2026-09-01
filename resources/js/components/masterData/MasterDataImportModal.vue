@@ -29,7 +29,9 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const SHEET_LABEL = { artists: 'Artist', categories: 'Kategori', products: 'Produk', stock: 'Stok' };
 
 const fileInputEl = ref(null);
+const imagesInputEl = ref(null);
 const selectedFile = ref(null);
+const selectedImages = ref([]); // batch of files matched by image_filename in the sheet
 const clientError = ref(''); // client-side file validation, before any request
 const simpleError = ref(''); // 422 shapes (a) missing/wrong-type file, (b) defensive rejection — message only
 const result = ref(null); // parsed body of a dry-run preview OR a successful apply
@@ -40,11 +42,13 @@ const applying = ref(false);
 
 function resetState() {
   selectedFile.value = null;
+  selectedImages.value = [];
   clientError.value = '';
   simpleError.value = '';
   result.value = null;
   rejected.value = null;
   if (fileInputEl.value) fileInputEl.value.value = '';
+  if (imagesInputEl.value) imagesInputEl.value.value = '';
 }
 
 function close() {
@@ -85,6 +89,10 @@ function onFileChange(e) {
   selectedFile.value = file;
 }
 
+function onImagesChange(e) {
+  selectedImages.value = Array.from(e.target.files ?? []);
+}
+
 async function runImport(dryRun) {
   if (!selectedFile.value) return;
   simpleError.value = '';
@@ -94,7 +102,7 @@ async function runImport(dryRun) {
   else applying.value = true;
 
   try {
-    const data = await importMasterData(selectedFile.value, { dryRun });
+    const data = await importMasterData(selectedFile.value, { dryRun, images: selectedImages.value });
     result.value = data;
     if (!dryRun) {
       toast.success('Impor berhasil.');
@@ -130,7 +138,8 @@ const isDone = computed(() => !!result.value?.applied);
         <div class="flex flex-1 flex-col gap-1">
           <span class="text-[13px] font-bold text-brand-active">Belum punya berkasnya?</span>
           <span class="text-[12px] leading-relaxed text-muted-4">
-            Template berisi 4 sheet (artist, kategori, produk, stok) lengkap dengan judul kolom dan contoh baris.
+            Template berisi 4 sheet (artist, kategori, produk, stok) lengkap dengan judul kolom dan contoh baris —
+            sheet produk dan kategori kini juga memuat contoh kolom <span class="font-semibold">image_filename</span>.
             Berkas hasil <span class="font-semibold">ekspor</span> dari layar mana pun juga memakai kolom yang sama —
             bisa langsung disunting dan diunggah balik ke sini.
           </span>
@@ -158,6 +167,25 @@ const isDone = computed(() => !!result.value?.applied);
         <p v-if="clientError" class="text-[12px] font-semibold text-danger-text">{{ clientError }}</p>
         <p v-else-if="simpleError" class="text-[12px] font-semibold text-danger-text">{{ simpleError }}</p>
         <p v-else class="text-[11.5px] text-muted-3">Sheet yang tidak dikenali di dalam berkas akan dilewati, bukan menggagalkan impor.</p>
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[12.5px] font-semibold text-muted-4" for="master-data-import-images">
+          Gambar produk/kategori (opsional)
+        </label>
+        <input
+          id="master-data-import-images"
+          ref="imagesInputEl"
+          type="file"
+          accept="image/*"
+          multiple
+          class="rounded-lg border border-line bg-white px-3.5 py-2.5 text-[13px] file:mr-3 file:rounded-md file:border-0 file:bg-mint-100 file:px-3 file:py-1.5 file:text-[12.5px] file:font-bold file:text-brand-active"
+          @change="onImagesChange"
+        />
+        <p class="text-[11.5px] text-muted-3">
+          Nama berkas harus cocok dengan kolom <span class="font-mono">image_filename</span> di sheet produk/kategori.
+          <template v-if="selectedImages.length">{{ selectedImages.length }} berkas dipilih.</template>
+        </p>
       </div>
 
       <div v-if="rejected" class="flex flex-col gap-3 rounded-lg border border-danger-border bg-danger-bg px-4 py-3.5">
