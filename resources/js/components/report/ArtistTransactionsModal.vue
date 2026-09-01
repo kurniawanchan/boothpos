@@ -1,0 +1,91 @@
+<script setup>
+import { ref, watch } from 'vue';
+import BaseModal from '../ui/BaseModal.vue';
+import { artistSettlementTransactions } from '../../api/reports';
+import { formatIDR } from '../../utils/money';
+import { formatDateTime } from '../../utils/date';
+import { useToastStore } from '../../stores/toast';
+
+/**
+ * F11.6 — drill-down transaksi yang menyusun rekap satu artist, dibuka dari
+ * baris "Rekap Artist" di ReportsView. Setiap order di sini HANYA memuat
+ * item MILIK ARTIST INI (backend sudah menyaring order_items.artist_id,
+ * bukan seluruh isi order) — sengaja TIDAK disaring ulang di sini supaya
+ * tidak ada dua sumber kebenaran soal isolasi antar-artist dalam satu order.
+ */
+const props = defineProps({
+  open: { type: Boolean, default: false },
+  artistId: { type: [Number, String, null], default: null },
+  artistName: { type: String, default: '' },
+  eventId: { type: [Number, String, null], default: null },
+});
+const emit = defineEmits(['close']);
+
+const toast = useToastStore();
+const loading = ref(false);
+const transactions = ref([]);
+
+watch(
+  () => [props.open, props.artistId, props.eventId],
+  async ([open, artistId, eventId]) => {
+    if (!open || !artistId || !eventId) {
+      transactions.value = [];
+      return;
+    }
+    loading.value = true;
+    try {
+      const res = await artistSettlementTransactions(artistId, eventId);
+      transactions.value = res.transactions ?? [];
+    } catch (err) {
+      toast.error(err.message || 'Gagal memuat detail transaksi artist.');
+    } finally {
+      loading.value = false;
+    }
+  },
+  { immediate: true }
+);
+</script>
+
+<template>
+  <BaseModal :open="open" :title="`Detail transaksi — ${artistName}`" max-width-class="max-w-[640px]" @close="emit('close')">
+    <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">Memuat detail transaksi…</div>
+    <div v-else-if="transactions.length === 0" class="px-6 py-14 text-center text-[13px] text-muted-3">
+      Belum ada transaksi yang menyumbang ke rekap artist ini.
+    </div>
+    <div v-else class="flex flex-col gap-3.5 px-6 py-5">
+      <div
+        v-for="tx in transactions"
+        :key="tx.order_id"
+        class="flex flex-col gap-2.5 rounded-lg border border-line-2 p-3.5"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex flex-col">
+            <span class="font-mono text-[12.5px] font-bold text-brand-active">{{ tx.order_number }}</span>
+            <span class="text-[11.5px] text-muted-3">{{ tx.created_at ? formatDateTime(tx.created_at) : '—' }}</span>
+          </div>
+          <span class="text-[14px] font-extrabold tracking-tight">{{ formatIDR(tx.order_total_for_artist) }}</span>
+        </div>
+        <div class="overflow-hidden rounded-md border border-line-5">
+          <table class="w-full border-collapse text-[12.5px]">
+            <thead>
+              <tr class="bg-surface-subtle text-left">
+                <th class="px-3 py-1.5 font-bold text-muted-2">SKU</th>
+                <th class="px-3 py-1.5 font-bold text-muted-2">Nama</th>
+                <th class="px-3 py-1.5 text-right font-bold text-muted-2">Qty</th>
+                <th class="px-3 py-1.5 text-right font-bold text-muted-2">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(item, idx) in tx.items" :key="idx" class="border-t border-line-5">
+                <td class="px-3 py-1.5 font-mono">{{ item.sku }}</td>
+                <td class="px-3 py-1.5">{{ item.name }}</td>
+                <td class="px-3 py-1.5 text-right">{{ item.qty }}</td>
+                <td class="px-3 py-1.5 text-right">{{ formatIDR(item.line_total) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </BaseModal>
+</template>

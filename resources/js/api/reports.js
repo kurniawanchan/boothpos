@@ -14,6 +14,21 @@ export function artistSettlements(eventId) {
     .then((r) => r.data);
 }
 
+// F11.6 — drill-down transaksi yang menyusun rekap satu artist. Owner/admin
+// saja (backend mengembalikan 403 untuk role lain); pemanggil bertanggung
+// jawab menyembunyikan kontrolnya untuk role yang tidak berhak.
+export function artistSettlementTransactions(artistId, eventId) {
+  return client
+    .get(`/reports/artist-settlements/${artistId}/transactions`, { params: { event_id: eventId } })
+    .then((r) => r.data);
+}
+
+// F9.5 — modal & laba kotor per artist (terpisah dari profitReport() di
+// atas, yang berskala event). Owner/admin saja.
+export function artistProfitReport(eventId) {
+  return client.get('/reports/artist-profit', { params: { event_id: eventId } }).then((r) => r.data);
+}
+
 export function recordSettlementPayment(settlementId, payload) {
   return client
     .post(`/reports/artist-settlements/${settlementId}/payment`, payload)

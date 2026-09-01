@@ -3,7 +3,14 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { listEvents } from '../api/events';
-import { salesReport, artistSettlements, profitReport, recordSettlementPayment, exportReport } from '../api/reports';
+import {
+  salesReport,
+  artistSettlements,
+  profitReport,
+  artistProfitReport,
+  recordSettlementPayment,
+  exportReport,
+} from '../api/reports';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
@@ -13,6 +20,7 @@ import EmptyState from '../components/ui/EmptyState.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
+import ArtistTransactionsModal from '../components/report/ArtistTransactionsModal.vue';
 import { formatDateTime } from '../utils/date';
 
 const auth = useAuthStore();
@@ -26,11 +34,22 @@ const groupBy = ref('product');
 const sales = ref(null);
 const settlements = ref(null);
 const profit = ref(null);
+const artistProfit = ref(null);
 const loading = ref(false);
 
 const tabs = computed(() => {
   const t = [{ key: 'sales', label: 'Penjualan' }];
-  if (auth.isOwnerOrAdmin) t.push({ key: 'settlement', label: 'Rekap Artist' }, { key: 'profit', label: 'Modal & Untung' });
+  if (auth.isOwnerOrAdmin) {
+    t.push(
+      { key: 'settlement', label: 'Rekap Artist' },
+      { key: 'profit', label: 'Modal & Untung' },
+      // F9.5 — laporan modal & laba kotor PER ARTIST, tab terpisah dari
+      // "Modal & Untung" (yang berskala event) karena angkanya sengaja
+      // TIDAK dikurangi biaya event dan akan salah dibaca kalau ditumpuk
+      // di tab yang sama tanpa pemisahan visual yang jelas.
+      { key: 'artist-profit', label: 'Modal Artist' }
+    );
+  }
   return t;
 });
 
@@ -53,6 +72,9 @@ async function loadActiveTab() {
       settlements.value = res.data;
     } else if (activeTab.value === 'profit' && eventId.value) {
       profit.value = await profitReport(eventId.value);
+    } else if (activeTab.value === 'artist-profit' && eventId.value) {
+      const res = await artistProfitReport(eventId.value);
+      artistProfit.value = res.data;
     }
   } finally {
     loading.value = false;
@@ -112,6 +134,7 @@ function openRowDetail(row) {
 
 const transactionColumns = [
   { key: 'order_number', label: 'No. transaksi' },
+  { key: 'customer_name', label: 'Pelanggan' },
   { key: 'created_at', label: 'Waktu' },
   { key: 'cashier_name', label: 'Kasir' },
   { key: 'item_count', label: 'Item' },
@@ -119,12 +142,40 @@ const transactionColumns = [
   { key: 'actions', label: '' },
 ];
 
+// F10.6 — pencarian client-side atas transactions[] yang sudah dimuat,
+// bukan lewat parameter query baru (lihat komentar di sales() backend:
+// kriteria penerimaannya eksplisit meminta "tanpa perlu memuat ulang
+// seluruh laporan"). Nama pelanggan nullable untuk order walk-in — baris
+// itu cukup tidak cocok pada kriteria nama, bukan error.
+const transactionSearch = ref('');
+
+const filteredTransactions = computed(() => {
+  const all = sales.value?.transactions ?? [];
+  const q = transactionSearch.value.trim().toLowerCase();
+  if (!q) return all;
+  return all.filter((t) => {
+    const orderNumber = (t.order_number ?? '').toLowerCase();
+    const customerName = (t.customer_name ?? '').toLowerCase();
+    const cashierName = (t.cashier_name ?? '').toLowerCase();
+    return orderNumber.includes(q) || customerName.includes(q) || cashierName.includes(q);
+  });
+});
+
 const showReceipt = ref(false);
 const receiptOrderId = ref(null);
 
 function openReceipt(transaction) {
   receiptOrderId.value = transaction.id;
   showReceipt.value = true;
+}
+
+// F11.6 — drill-down transaksi per artist dari tab Rekap Artist.
+const showArtistTransactions = ref(false);
+const artistTransactionsTarget = ref(null);
+
+function openArtistTransactions(row) {
+  artistTransactionsTarget.value = row;
+  showArtistTransactions.value = true;
 }
 </script>
 
@@ -168,6 +219,10 @@ function openReceipt(transaction) {
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         Ekspor .xlsx
       </BaseButton>
+      <BaseButton v-if="activeTab === 'artist-profit'" variant="secondary" @click="doExport('artist-profit')">
+        <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+        Ekspor .xlsx
+      </BaseButton>
     </div>
 
     <!-- Sales tab -->
@@ -200,10 +255,28 @@ function openReceipt(transaction) {
            membeli produk yang sama), jadi daftar ini ditampilkan berdampingan
            supaya jumlah transaksi selalu bisa diverifikasi langsung. -->
       <div class="flex flex-col gap-2">
-        <span class="text-[13px] font-bold tracking-tight">Daftar transaksi ({{ sales?.transactions?.length ?? 0 }})</span>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="text-[13px] font-bold tracking-tight">Daftar transaksi ({{ filteredTransactions.length }})</span>
+          <div class="relative w-64">
+            <i class="ph-duotone ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-muted-3" aria-hidden="true"></i>
+            <input
+              v-model="transactionSearch"
+              type="search"
+              placeholder="Cari no. transaksi, pelanggan, atau kasir…"
+              class="w-full rounded-lg border border-line-2 bg-white py-2 pl-8 pr-3 text-[12.5px] outline-none focus:border-brand-active"
+              aria-label="Cari transaksi"
+            />
+          </div>
+        </div>
         <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-          <DataTable :columns="transactionColumns" :rows="sales?.transactions ?? []" :loading="loading" empty-message="Belum ada transaksi.">
+          <DataTable
+            :columns="transactionColumns"
+            :rows="filteredTransactions"
+            :loading="loading"
+            :empty-message="transactionSearch ? 'Tidak ada transaksi yang cocok dengan pencarian.' : 'Belum ada transaksi.'"
+          >
             <template #cell-order_number="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.order_number }}</span></template>
+            <template #cell-customer_name="{ row }"><span :class="!row.customer_name ? 'text-muted-3' : ''">{{ row.customer_name ?? 'Walk-in' }}</span></template>
             <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
             <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
             <template #cell-actions="{ row }">
@@ -242,11 +315,20 @@ function openReceipt(transaction) {
             <span class="text-[12px] font-semibold capitalize" :class="row.status === 'paid' ? 'text-brand-active' : 'text-warn-text'">{{ row.status }}</span>
           </template>
           <template #cell-actions="{ row }">
-            <!-- id is null until a real settlement row exists (an artist
-                 with zero sales this event) — there is nothing to record a
-                 payment against yet, so the action must stay hidden rather
-                 than firing a request the backend can't resolve. -->
-            <button v-if="row.id !== null && parseMoney(row.outstanding) > 0" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openSettlementPay(row)">Catat bayar</button>
+            <div class="flex items-center justify-end gap-3">
+              <!-- F11.6 — drill-down tersedia untuk artist manapun di rekap
+                   ini (memakai artist_id, yang selalu ada — lihat komentar
+                   row-key di atas), bukan hanya yang sudah punya baris
+                   settlement, supaya "belum ada penjualan" juga bisa
+                   diverifikasi langsung sebagai daftar kosong, bukan
+                   kontrol yang hilang begitu saja. -->
+              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openArtistTransactions(row)">Detail transaksi</button>
+              <!-- id is null until a real settlement row exists (an artist
+                   with zero sales this event) — there is nothing to record a
+                   payment against yet, so the action must stay hidden rather
+                   than firing a request the backend can't resolve. -->
+              <button v-if="row.id !== null && parseMoney(row.outstanding) > 0" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openSettlementPay(row)">Catat bayar</button>
+            </div>
           </template>
         </DataTable>
       </div>
@@ -265,6 +347,41 @@ function openReceipt(transaction) {
       <p class="text-[11.5px] leading-relaxed text-muted-3">Laba kotor memakai nilai snapshot pada order_items, bukan harga master saat laporan dibuka.</p>
     </template>
 
+    <!-- Artist profit tab (F9.5, owner/admin only) -->
+    <template v-else-if="activeTab === 'artist-profit'">
+      <EmptyState v-if="!eventId" icon="ph-calendar-dots" message="Pilih event untuk melihat laporan modal & laba per artist." />
+      <template v-else>
+        <!-- Penjelasan ini WAJIB ada — angka di sini sengaja tidak dikurangi
+             event_cost (lihat kriteria penerimaan F9.5), dan tanpa catatan
+             ini pengguna gampang membacanya sebagai versi turunan/salah
+             dari "Modal & Untung" tingkat event, padahal itu laporan lain. -->
+        <div class="flex items-start gap-2.5 rounded-lg border border-line-2 bg-surface-subtle px-4 py-3">
+          <i class="ph-duotone ph-info text-[16px] text-muted-3" aria-hidden="true"></i>
+          <p class="text-[12px] leading-relaxed text-muted-3">
+            Laba kotor per artist di sini <span class="font-semibold text-muted-4">belum dikurangi biaya event</span> — biaya event sudah diperhitungkan terpisah pada laba bersih tingkat event di tab "Modal & Untung", supaya tidak dobel-hitung atau dialokasikan tidak adil antar artist.
+          </p>
+        </div>
+        <div class="overflow-hidden rounded-card border border-line-2 bg-white">
+          <DataTable
+            :columns="[
+              { key: 'artist_name', label: 'Artist' },
+              { key: 'total_sales', label: 'Penjualan' },
+              { key: 'modal', label: 'Modal' },
+              { key: 'gross_profit', label: 'Laba kotor' },
+            ]"
+            :rows="artistProfit ?? []"
+            :loading="loading"
+            row-key="artist_id"
+            empty-message="Belum ada penjualan artist pada event ini."
+          >
+            <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
+            <template #cell-modal="{ row }">{{ formatIDR(row.modal) }}</template>
+            <template #cell-gross_profit="{ row }"><span class="font-semibold text-brand-active">{{ formatIDR(row.gross_profit) }}</span></template>
+          </DataTable>
+        </div>
+      </template>
+    </template>
+
     <BaseModal :open="showSettlementPay" title="Catat pembayaran ke artist" max-width-class="max-w-[400px]" @close="showSettlementPay = false">
       <div class="flex flex-col gap-3.5 px-6 py-5">
         <p class="text-[13px] text-muted-4">{{ settlementTarget?.artist_name }} · sisa {{ formatIDR(settlementTarget?.outstanding) }}</p>
@@ -281,5 +398,12 @@ function openReceipt(transaction) {
 
     <ProductDetailModal :open="showProductDetail" :product-id="detailProductId" @close="showProductDetail = false" />
     <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" close-label="Tutup" @close="showReceipt = false" />
+    <ArtistTransactionsModal
+      :open="showArtistTransactions"
+      :artist-id="artistTransactionsTarget?.artist_id"
+      :artist-name="artistTransactionsTarget?.artist_name"
+      :event-id="eventId"
+      @close="showArtistTransactions = false"
+    />
   </div>
 </template>
