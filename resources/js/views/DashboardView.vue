@@ -101,10 +101,27 @@ const maxSettlement = computed(() => Math.max(1, ...settlements.value.map((s) =>
 
       <div v-if="auth.isOwnerOrAdmin" class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
         <span class="text-[14.5px] font-bold">Hasil per artist</span>
-        <EmptyState v-if="!loading && !settlements.length" icon="ph-users-three" message="Belum ada penjualan per artist." />
+        <!-- GET /reports/artist-settlements now lists every active artist,
+             not only those with sales — so this only stays empty when
+             there are no active artists at all for the event, never
+             because sales are still zero. -->
+        <EmptyState v-if="!loading && !settlements.length" icon="ph-users-three" message="Belum ada artist aktif terdaftar." />
         <div v-for="row in settlements" :key="row.artist_id" class="flex flex-col gap-1.5">
-          <div class="flex items-baseline justify-between"><span class="text-[12.5px] font-semibold">{{ row.artist_name }}</span><span class="text-[12.5px] font-bold text-brand-active">{{ formatIDR(row.total_sales) }}</span></div>
-          <div class="h-[7px] overflow-hidden rounded-xs bg-track"><div class="h-full rounded-xs bg-brand" :style="{ width: `${(parseMoney(row.total_sales) / maxSettlement) * 100}%` }"></div></div>
+          <div class="flex items-baseline justify-between">
+            <span class="text-[12.5px] font-semibold">{{ row.artist_name }}</span>
+            <span class="text-[12.5px] font-bold" :class="parseMoney(row.total_sales) > 0 ? 'text-brand-active' : 'text-muted-3'">{{ formatIDR(row.total_sales) }}</span>
+          </div>
+          <!-- A zero-earning artist still gets a visible (if minimal) bar
+               rather than a zero-width one, so a list that's entirely
+               zero still reads as "no sales yet" instead of a rendering
+               glitch. -->
+          <div class="h-[7px] overflow-hidden rounded-xs bg-track">
+            <div
+              class="h-full rounded-xs"
+              :class="parseMoney(row.total_sales) > 0 ? 'bg-brand' : 'bg-disabled-2'"
+              :style="{ width: `${Math.max((parseMoney(row.total_sales) / maxSettlement) * 100, 3)}%` }"
+            ></div>
+          </div>
         </div>
       </div>
     </div>

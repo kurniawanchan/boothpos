@@ -37,6 +37,20 @@ describe('normalizeAxiosError', () => {
     const original = new ApiError('sudah dinormalisasi', { status: 500 });
     expect(normalizeAxiosError(original)).toBe(original);
   });
+
+  it('carries the full raw response body on `.data` for callers needing more than message/errors', () => {
+    const body = {
+      message: 'Impor dibatalkan: ada baris yang tidak valid. Tidak ada data yang diubah.',
+      applied: false,
+      dry_run: false,
+      sheets: { artists: { rows: 2, created: 1, updated: 1, unchanged: 0 } },
+      ignored_sheets: [],
+      errors: [{ sheet: 'products', row: 12, column: 'category_code', message: "Kategori dengan kode 'ZZ' tidak ditemukan." }],
+    };
+    const err = normalizeAxiosError({ response: { status: 422, data: body } });
+    expect(err.data).toEqual(body);
+    expect(Array.isArray(err.errors)).toBe(true);
+  });
 });
 
 describe('firstFieldErrors', () => {

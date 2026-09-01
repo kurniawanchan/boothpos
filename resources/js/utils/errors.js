@@ -5,12 +5,18 @@
  * banner/toast, 403 → role denial, 401 → handled entirely in api/client.js.
  */
 export class ApiError extends Error {
-  constructor(message, { status = null, errors = null, code = null } = {}) {
+  constructor(message, { status = null, errors = null, code = null, data = null } = {}) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.errors = errors; // { field: [messages] } from 422 responses, or null
     this.code = code;
+    // Full raw JSON body of the response, when there was one. Most callers
+    // only ever need message/status/errors above, but a few endpoints
+    // (bulk master-data import) return a richer envelope — sheets,
+    // applied, dry_run, ignored_sheets — that doesn't fit the generic
+    // shape. Those callers reach for `err.data` instead of re-parsing.
+    this.data = data;
   }
 
   get isValidation() {
@@ -47,6 +53,7 @@ export function normalizeAxiosError(err) {
     status: response.status,
     errors: data.errors || null,
     code: data.code || null,
+    data,
   });
 }
 

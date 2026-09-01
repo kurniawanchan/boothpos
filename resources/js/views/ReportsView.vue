@@ -172,7 +172,7 @@ const salesColumns = computed(() => [{ key: 'label', label: groupBy.value === 'd
           :rows="settlements ?? []"
           :loading="loading"
           row-key="artist_id"
-          empty-message="Belum ada penjualan untuk event ini."
+          empty-message="Belum ada artist aktif — rekap ini mendaftar setiap artist aktif untuk event ini, sekalipun belum ada penjualan."
         >
           <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
           <template #cell-payable_amount="{ row }">{{ formatIDR(row.payable_amount) }}</template>
@@ -182,7 +182,11 @@ const salesColumns = computed(() => [{ key: 'label', label: groupBy.value === 'd
             <span class="text-[12px] font-semibold capitalize" :class="row.status === 'paid' ? 'text-brand-active' : 'text-warn-text'">{{ row.status }}</span>
           </template>
           <template #cell-actions="{ row }">
-            <button v-if="parseMoney(row.outstanding) > 0" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openSettlementPay(row)">Catat bayar</button>
+            <!-- id is null until a real settlement row exists (an artist
+                 with zero sales this event) — there is nothing to record a
+                 payment against yet, so the action must stay hidden rather
+                 than firing a request the backend can't resolve. -->
+            <button v-if="row.id !== null && parseMoney(row.outstanding) > 0" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openSettlementPay(row)">Catat bayar</button>
           </template>
         </DataTable>
       </div>
