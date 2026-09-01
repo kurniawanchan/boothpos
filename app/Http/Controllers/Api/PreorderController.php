@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePreorderRequest;
+use App\Http\Resources\CustomerResource;
 use App\Models\Preorder;
 use App\Services\PreorderService;
 use Illuminate\Http\JsonResponse;
@@ -110,7 +111,37 @@ class PreorderController extends Controller
                 'id' => $i->id, 'variant_id' => $i->variant_id, 'sku_snapshot' => $i->sku_snapshot,
                 'name_snapshot' => $i->name_snapshot, 'qty' => $i->qty,
                 'sell_price' => number_format((float) $i->sell_price, 2, '.', ''),
+                'line_total' => number_format((float) $i->line_total, 2, '.', ''),
             ]) : [],
+            // Sebelumnya hilang total dari present() meski show() sudah
+            // meng-eager-load ketiganya (dan openapi-pos-mvp.yaml sudah lama
+            // mendokumentasikan field ini) — layar detail preorder di
+            // frontend tidak pernah bisa menampilkan riwayat pembayaran atau
+            // data pengiriman. Ditemukan lewat verifikasi browser sungguhan
+            // saat integrasi frontend, bukan lewat test yang sudah ada.
+            'customer' => $preorder->relationLoaded('customer') && $preorder->customer
+                ? new CustomerResource($preorder->customer) : null,
+            'payments' => $preorder->relationLoaded('payments') ? $preorder->payments->map(fn ($p) => [
+                'id' => $p->id, 'method' => $p->method, 'purpose' => $p->purpose,
+                'amount' => number_format((float) $p->amount, 2, '.', ''),
+                'verification' => $p->verification, 'paid_at' => $p->paid_at,
+            ]) : [],
+            'shipment' => $preorder->relationLoaded('shipment') && $preorder->shipment ? [
+                'id' => $preorder->shipment->id,
+                'courier_name' => $preorder->shipment->courier_name,
+                'tracking_number' => $preorder->shipment->tracking_number,
+                'shipping_cost' => number_format((float) $preorder->shipment->shipping_cost, 2, '.', ''),
+                'recipient_name' => $preorder->shipment->recipient_name,
+                'recipient_phone' => $preorder->shipment->recipient_phone,
+                'address_line' => $preorder->shipment->address_line,
+                'city' => $preorder->shipment->city,
+                'province' => $preorder->shipment->province,
+                'postal_code' => $preorder->shipment->postal_code,
+                'status' => $preorder->shipment->status,
+                'shipped_at' => $preorder->shipment->shipped_at,
+                'delivered_at' => $preorder->shipment->delivered_at,
+                'notes' => $preorder->shipment->notes,
+            ] : null,
         ];
     }
 }

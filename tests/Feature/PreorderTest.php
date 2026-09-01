@@ -125,6 +125,55 @@ class PreorderTest extends TestCase
         $this->assertDatabaseHas('stock_movements', ['variant_id' => $this->variant->id, 'type' => 'preorder_handover', 'qty_change' => -1]);
     }
 
+    public function test_response_includes_customer_payments_and_shipment(): void
+    {
+        // BUG YANG DITEMUKAN & DIPERBAIKI — ditemukan lewat verifikasi
+        // browser sungguhan saat integrasi frontend, bukan lewat test yang
+        // sudah ada di sini sebelumnya. present() sudah lama mengembalikan
+        // 'items' tapi diam-diam tidak pernah menyertakan customer/payments/
+        // shipment sama sekali di respons manapun (store/show/updateStatus/
+        // storePayment), padahal ketiganya sudah didokumentasikan di
+        // openapi-pos-mvp.yaml dan show() sudah meng-eager-load semuanya.
+
+        $preorder = $this->createPreorder();
+        $this->assertSame($this->customer->id, $preorder['customer']['id']);
+        $this->assertSame([], $preorder['payments']);
+        $this->assertNull($preorder['shipment']);
+
+        $afterDp = $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
+            'method' => 'cash', 'amount' => 100000, 'purpose' => 'down_payment',
+        ])->json();
+        $this->assertSame($this->customer->id, $afterDp['customer']['id']);
+        $this->assertCount(1, $afterDp['payments']);
+        $this->assertSame('down_payment', $afterDp['payments'][0]['purpose']);
+        $this->assertSame('100000.00', $afterDp['payments'][0]['amount']);
+
+        $show = $this->getJson("/api/v1/preorders/{$preorder['id']}")->json();
+        $this->assertSame($this->customer->name, $show['customer']['name']);
+        $this->assertCount(1, $show['payments']);
+
+        $afterStatus = $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->json();
+        $this->assertSame($this->customer->id, $afterStatus['customer']['id']);
+    }
+
+    public function test_shipment_appears_in_response_once_created(): void
+    {
+        $product = $this->variant->product()->update(['is_preorder' => true]);
+        $courierPreorder = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id,
+            'fulfillment' => 'courier',
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
+        ])->json();
+
+        $this->postJson("/api/v1/preorders/{$courierPreorder['id']}/shipment", [
+            'courier_name' => 'JNE', 'recipient_name' => 'Budi', 'recipient_phone' => '08123',
+            'address_line' => 'Jl. Test', 'city' => 'Jakarta',
+        ])->assertCreated();
+
+        $show = $this->getJson("/api/v1/preorders/{$courierPreorder['id']}")->json();
+        $this->assertSame('JNE', $show['shipment']['courier_name']);
+    }
+
     public function test_shipment_can_only_be_created_for_courier_fulfillment(): void
     {
         $preorder = $this->createPreorder(); // fulfillment = pickup

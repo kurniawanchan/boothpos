@@ -63,7 +63,7 @@ class PreorderService
                 ]);
             }
 
-            return $preorder->load('items');
+            return $preorder->load(['items', 'customer']);
         });
     }
 
@@ -84,7 +84,7 @@ class PreorderService
                 $preorder->update(['status' => 'settled']);
             }
 
-            return $preorder->fresh(['items', 'payments']);
+            return $preorder->fresh(['items', 'payments', 'customer', 'shipment']);
         });
     }
 
@@ -128,7 +128,7 @@ class PreorderService
                 'cancel_reason' => $newStatus === 'cancelled' ? $cancelReason : $preorder->cancel_reason,
             ]);
 
-            return $preorder->fresh(['items', 'payments', 'shipment']);
+            return $preorder->fresh(['items', 'payments', 'shipment', 'customer']);
         });
     }
 
