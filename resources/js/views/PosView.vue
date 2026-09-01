@@ -2,15 +2,17 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { currentSession } from '../api/sessions';
 import { listCategories } from '../api/categories';
-import { listProducts, getProduct, lookupVariants } from '../api/products';
+import { listProducts, lookupVariants } from '../api/products';
 import { createOrder } from '../api/orders';
 import { usePosCartStore } from '../stores/posCart';
 import { useToastStore } from '../stores/toast';
 import { uuid } from '../utils/uuid';
 import { formatIDR, toMoneyString } from '../utils/money';
+import { buildProductCards, toCartItem } from '../utils/posProductCards';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import PosCartPanel from '../components/pos/PosCartPanel.vue';
 import PosPaymentModal from '../components/payment/PosPaymentModal.vue';
+import ProductVariantPickerModal from '../components/pos/ProductVariantPickerModal.vue';
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
 import CustomerPickerModal from '../components/forms/CustomerPickerModal.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
@@ -36,6 +38,8 @@ const submittingOrder = ref(false);
 const localRef = ref(null);
 const lastOrderId = ref(null);
 const paymentModalRef = ref(null);
+const showVariantPicker = ref(false);
+const variantPickerCard = ref(null);
 
 onMounted(async () => {
   session.value = await currentSession();
@@ -50,19 +54,15 @@ const categoryCodeById = computed(() => Object.fromEntries(categories.value.map(
 async function loadBrowse() {
   loadingGrid.value = true;
   try {
+    // ?with_variants=1 eager-loads every product's variants (including
+    // inactive ones) in one extra query total — no more per-product N+1.
     const res = await listProducts({
       ...(selectedCategoryId.value ? { category_id: selectedCategoryId.value } : {}),
       is_active: true,
+      with_variants: 1,
       per_page: 100,
     });
-    // GET /products (list) never returns `variants` — ProductResource only
-    // fills it via whenLoaded(), and the index query eager-loads just
-    // artist/category (verified against ProductController::index). The
-    // POS grid needs per-variant price/stock, so each product's full
-    // detail is fetched individually. Fine for a modest booth catalog; a
-    // dedicated lightweight "POS browse" endpoint that eager-loads
-    // variants would be the proper backend fix (see project report).
-    browsedProducts.value = await Promise.all(res.data.map((p) => getProduct(p.id)));
+    browsedProducts.value = res.data;
   } finally {
     loadingGrid.value = false;
   }
@@ -88,21 +88,10 @@ const runSearch = useDebouncedFn(async () => {
 }, 300);
 watch(search, runSearch);
 
-const browseCards = computed(() =>
-  browsedProducts.value.flatMap((p) =>
-    (p.variants || [])
-      .filter((v) => v.is_active)
-      .map((v) => ({
-        variant_id: v.id,
-        sku: v.sku,
-        name: p.variants.length > 1 ? `${p.name} — ${v.variant_name}` : p.name,
-        artist_name: p.artist_name,
-        sell_price: v.sell_price,
-        current_stock: v.current_stock,
-        category_code: categoryCodeById.value[p.category_id] ?? null,
-      }))
-  )
-);
+// One card per product (grouped) — picking a product with more than one
+// active variant opens the variant picker; a single-variant product is
+// added to the cart directly (see selectProductCard below).
+const browseCards = computed(() => buildProductCards(browsedProducts.value, categoryCodeById.value));
 
 const searchCards = computed(() =>
   (searchResults.value ?? []).map((v) => ({
@@ -116,11 +105,38 @@ const searchCards = computed(() =>
   }))
 );
 
+// Search hits stay variant-granular (the cashier searched for a specific
+// SKU/name), so they're never re-grouped by product — only the plain
+// browse grid groups. `cards` here is just used to drive the shared
+// empty-state check across both modes.
 const cards = computed(() => (searchResults.value !== null ? searchCards.value : browseCards.value));
 
-function addToCart(card) {
-  if (card.current_stock <= 0) return;
-  cart.add(card);
+function addToCart(item) {
+  if (item.current_stock <= 0) return;
+  cart.add(item);
+}
+
+function selectProductCard(card) {
+  if (card.out_of_stock) return;
+  if (card.variant_count === 1) {
+    // No pointless second click for a product that only has one variant.
+    addToCart(toCartItem(card, card.variants[0]));
+    return;
+  }
+  variantPickerCard.value = card;
+  showVariantPicker.value = true;
+}
+
+function handleVariantPick(variant) {
+  if (!variantPickerCard.value) return;
+  addToCart(toCartItem(variantPickerCard.value, variant));
+  showVariantPicker.value = false;
+  variantPickerCard.value = null;
+}
+
+function closeVariantPicker() {
+  showVariantPicker.value = false;
+  variantPickerCard.value = null;
 }
 
 const canCheckout = computed(() => !!session.value);
@@ -217,29 +233,66 @@ function closeReceipt() {
 
       <EmptyState v-if="!loadingGrid && cards.length === 0" icon="ph-package" message="Tidak ada produk yang cocok." />
       <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-3.5 pb-5">
-        <button
-          v-for="card in cards"
-          :key="card.variant_id"
-          type="button"
-          :disabled="card.current_stock <= 0"
-          class="flex flex-col overflow-hidden rounded-card border border-line-2 bg-white text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-60"
-          @click="addToCart(card)"
-        >
-          <div class="relative flex h-[104px] items-center justify-center bg-line-7 text-muted-4">
-            <span v-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
-            <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
-            <span class="absolute bottom-1.5 left-2 rounded bg-white/85 px-1.5 py-0.5 font-mono text-[9.5px] text-muted-5">{{ card.sku }}</span>
-            <span v-if="card.current_stock <= 0" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">Habis</span>
-          </div>
-          <div class="flex flex-col gap-1 px-3 py-2.5">
-            <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
-            <span class="text-[11px] text-muted-3">{{ card.artist_name }}</span>
-            <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
-              <span class="text-[14.5px] font-bold text-brand-active">{{ formatIDR(card.sell_price) }}</span>
-              <span class="text-[11px] text-muted-3">Stok {{ card.current_stock }}</span>
+        <!-- Search results stay variant-granular: the cashier searched
+             for a specific SKU/name, so each hit adds straight to cart. -->
+        <template v-if="searchResults !== null">
+          <button
+            v-for="card in searchCards"
+            :key="card.variant_id"
+            type="button"
+            :disabled="card.current_stock <= 0"
+            class="flex flex-col overflow-hidden rounded-card border border-line-2 bg-white text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-60"
+            @click="addToCart(card)"
+          >
+            <div class="relative flex h-[104px] items-center justify-center bg-line-7 text-muted-4">
+              <span v-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
+              <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
+              <span class="absolute bottom-1.5 left-2 rounded bg-white/85 px-1.5 py-0.5 font-mono text-[9.5px] text-muted-5">{{ card.sku }}</span>
+              <span v-if="card.current_stock <= 0" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">Habis</span>
             </div>
-          </div>
-        </button>
+            <div class="flex flex-col gap-1 px-3 py-2.5">
+              <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
+              <span class="text-[11px] text-muted-3">{{ card.artist_name }}</span>
+              <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
+                <span class="text-[14.5px] font-bold text-brand-active">{{ formatIDR(card.sell_price) }}</span>
+                <span class="text-[11px] text-muted-3">Stok {{ card.current_stock }}</span>
+              </div>
+            </div>
+          </button>
+        </template>
+
+        <!-- Browse grid: one card per product. A single-variant product
+             adds straight to cart; anything with more than one variant
+             opens the picker (see selectProductCard). -->
+        <template v-else>
+          <button
+            v-for="card in browseCards"
+            :key="card.product_id"
+            type="button"
+            :disabled="card.out_of_stock"
+            class="flex flex-col overflow-hidden rounded-card border border-line-2 bg-white text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-60"
+            @click="selectProductCard(card)"
+          >
+            <div class="relative flex h-[104px] items-center justify-center bg-line-7 text-muted-4">
+              <span v-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
+              <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
+              <span v-if="card.variant_count > 1" class="absolute left-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-bold text-muted-5">{{ card.variant_count }} varian</span>
+              <span v-if="card.out_of_stock" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">Habis</span>
+            </div>
+            <div class="flex flex-col gap-1 px-3 py-2.5">
+              <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
+              <span class="text-[11px] text-muted-3">{{ card.artist_name }}</span>
+              <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
+                <span class="text-[14.5px] font-bold text-brand-active">
+                  <template v-if="card.variant_count === 0">Tidak ada varian</template>
+                  <template v-else-if="card.min_price === card.max_price">{{ formatIDR(card.min_price) }}</template>
+                  <template v-else>{{ formatIDR(card.min_price) }}–{{ formatIDR(card.max_price) }}</template>
+                </span>
+                <span class="text-[11px] text-muted-3">Stok {{ card.total_stock }}</span>
+              </div>
+            </div>
+          </button>
+        </template>
       </div>
     </div>
 
@@ -268,5 +321,7 @@ function closeReceipt() {
     />
 
     <ReceiptModal :open="showReceipt" :order-id="lastOrderId" @close="closeReceipt" />
+
+    <ProductVariantPickerModal :open="showVariantPicker" :product="variantPickerCard" @close="closeVariantPicker" @select="handleVariantPick" />
   </div>
 </template>
