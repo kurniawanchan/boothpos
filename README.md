@@ -26,10 +26,9 @@ mengatakan sebaliknya; itu sudah tidak berlaku. Ringkasan:
 - Migration dijalankan terhadap database `boothpos` (MySQL 8.4 sungguhan,
   bukan SQLite) dan `php artisan db:seed` berhasil membuat 5 user + 2 kanal
   pembayaran + pengaturan toko.
-- **Seluruh test suite hijau: 163/163 lulus, 0 gagal, 0 galat** (angka saat
+- **Seluruh test suite hijau: 164/164 lulus, 0 gagal, 0 galat** (angka saat
   bagian ini terakhir diperbarui, 2026-09-01; sesi bootstrap dulu 120),
-  dijalankan
-  terhadap database `boothpos_test` (MySQL sungguhan — WAJIB, karena dua
+  dijalankan terhadap database `boothpos_test` (MySQL sungguhan — WAJIB, karena dua
   migration memakai `DB::statement('ALTER TABLE ... ADD CONSTRAINT ...
   CHECK (...)')` yang sintaksnya MySQL-only dan akan gagal di SQLite).
   Jalankan dengan `php artisan test` setelah menyalin `.env.testing` sendiri

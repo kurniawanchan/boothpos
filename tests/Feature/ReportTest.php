@@ -155,6 +155,51 @@ class ReportTest extends TestCase
         $this->assertSame('Artist Belum Laku', $rows[$idle->id]['artist_name']);
     }
 
+    // Baris settlement yang PUNYA id tetap bisa dibayar lewat endpoint
+    // pembayaran — id yang dikembalikan laporan harus benar-benar bisa
+    // dipakai sebagai {settlement} di rute itu.
+    public function test_settlement_payment_still_works_for_the_id_returned_by_the_report(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+
+        $selling = Artist::factory()->create(['code' => 'PAY']);
+        Artist::factory()->create(['code' => 'NIL']); // artist nol penjualan, id-nya null
+        $category = Category::factory()->create();
+
+        $product = Product::factory()->create(['artist_id' => $selling->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'PAYKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
+
+        app(OrderService::class)->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'items' => [['variant_id' => $variant->id, 'qty' => 5]],
+            'payments' => [['method' => 'cash', 'amount' => 50000]],
+        ], $cashier);
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+
+        $rows = collect($this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->json('data'))
+            ->keyBy('artist_id');
+
+        $settlementId = $rows[$selling->id]['id'];
+        $this->assertNotNull($settlementId);
+
+        $this->postJson("/api/v1/reports/artist-settlements/{$settlementId}/payment", ['amount' => 20000])
+            ->assertOk()
+            ->assertJsonPath('status', 'partial');
+
+        $after = collect($this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->json('data'))
+            ->keyBy('artist_id');
+
+        $this->assertSame('20000.00', $after[$selling->id]['paid_amount']);
+        $this->assertSame('30000.00', $after[$selling->id]['outstanding']);
+        $this->assertSame('partial', $after[$selling->id]['status']);
+    }
+
     // Artist nonaktif TIDAK ikut dilaporkan bila tidak punya penjualan —
     // laporan berisi "semua artist AKTIF", bukan seluruh isi tabel artists.
     public function test_inactive_artist_without_sales_is_not_listed(): void

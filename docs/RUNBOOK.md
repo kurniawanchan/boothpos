@@ -165,9 +165,10 @@ DB_PASSWORD=<password_aplikasi_anda>
 BACKUP_EXTERNAL_PATH=<folder lokal apa saja untuk uji backup, lihat §7>
 ```
 
-Hasil yang sudah diverifikasi terakhir: **163/163 test lulus, 459
+Hasil yang sudah diverifikasi terakhir: **164/164 test lulus, 465
 assertion**, terhadap MySQL 8.4 sungguhan (sebelumnya 122; bertambah oleh
-ekspor/impor Excel master data dan perbaikan rekap artist). Kalau ada test yang gagal
+ekspor/impor Excel master data dan perbaikan rekap artist).
+Kalau ada test yang gagal
 setelah Anda clone ulang, kemungkinan besar karena `.env.testing` belum
 dibuat/salah host-port, bukan bug logika bisnis (histori bug yang pernah
 ditemukan ada di `README.md`).
