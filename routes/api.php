@@ -36,9 +36,11 @@ Route::prefix('v1')->group(function () {
 
         Route::apiResource('artists', ArtistController::class);
         Route::apiResource('categories', CategoryController::class);
+        Route::post('/categories/{category}/image', [CategoryController::class, 'uploadImage']);
         Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'update']);
 
         Route::apiResource('products', ProductController::class);
+        Route::post('/products/{product}/image', [ProductController::class, 'uploadImage']);
         Route::post('/products/{product}/variants', [ProductController::class, 'storeVariant']);
         Route::put('/variants/{variant}', [ProductController::class, 'updateVariant']);
         Route::get('/variants/lookup', [ProductController::class, 'lookupVariants']);
@@ -57,6 +59,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/payment-channels', [PaymentChannelController::class, 'index']);
         Route::post('/payment-channels', [PaymentChannelController::class, 'store']);
+        Route::post('/payment-channels/{channel}', [PaymentChannelController::class, 'update']);
         Route::post('/payment-proofs', [PaymentProofController::class, 'store']);
         Route::get('/payment-proofs/{proof}/file', [PaymentProofController::class, 'show'])->name('payment-proofs.file');
 

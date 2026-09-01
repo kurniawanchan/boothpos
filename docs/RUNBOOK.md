@@ -33,6 +33,18 @@ Hanya perlu sekali per mesin/clone baru.
 composer install
 cp .env.example .env
 php artisan key:generate
+php artisan storage:link
+```
+
+**PENTING (ditambahkan 2026-09-01)** — `storage:link` WAJIB dijalankan
+sebelum mencoba fitur gambar produk/kategori, QR channel pembayaran, atau
+gambar hasil impor massal. Tanpa symlink `public/storage` -> `storage/app/public`,
+`qr_image_url`/`image_url` yang dikembalikan API akan menunjuk ke berkas
+yang tidak bisa diakses lewat HTTP (404), meski path-nya benar tersimpan
+di database. Terverifikasi belum pernah dijalankan di mesin dev ini
+sampai sesi ini.
+
+```bash
 ```
 
 **PENTING** — `.env.example` bawaan skeleton Laravel default ke
