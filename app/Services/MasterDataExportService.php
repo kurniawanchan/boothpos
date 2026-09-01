@@ -4,7 +4,10 @@ namespace App\Services;
 
 use App\Models\Artist;
 use App\Models\Category;
+use App\Models\Material;
 use App\Models\ProductVariant;
+use App\Models\Vendor;
+use App\Models\VendorMaterialPrice;
 use App\Support\MasterDataSheets;
 
 /**
@@ -32,6 +35,10 @@ class MasterDataExportService
             MasterDataSheets::CATEGORIES => $this->categoryRows(),
             MasterDataSheets::PRODUCTS => $this->productRows(),
             MasterDataSheets::STOCK => $this->stockRows(),
+            MasterDataSheets::VENDORS => $this->vendorRows(),
+            MasterDataSheets::MATERIALS => $this->materialRows(),
+            MasterDataSheets::VENDOR_PRICES => $this->vendorPriceRows(),
+            MasterDataSheets::BOM => $this->bomRows(),
             default => throw new \InvalidArgumentException("Entitas ekspor tidak dikenali: {$entity}."),
         };
     }
@@ -43,8 +50,76 @@ class MasterDataExportService
             MasterDataSheets::CATEGORIES => 'data-kategori.xlsx',
             MasterDataSheets::PRODUCTS => 'data-produk.xlsx',
             MasterDataSheets::STOCK => 'data-stok.xlsx',
+            MasterDataSheets::VENDORS => 'data-vendor.xlsx',
+            MasterDataSheets::MATERIALS => 'data-bahan.xlsx',
+            MasterDataSheets::VENDOR_PRICES => 'data-harga-vendor.xlsx',
+            MasterDataSheets::BOM => 'data-bom.xlsx',
             default => throw new \InvalidArgumentException("Entitas ekspor tidak dikenali: {$entity}."),
         };
+    }
+
+    private function vendorRows(): array
+    {
+        return Vendor::query()->orderBy('code')->get()->map(fn (Vendor $v) => [
+            'code' => $v->code,
+            'name' => $v->name,
+            'contact_phone' => $v->contact_phone,
+            'contact_email' => $v->contact_email,
+            'notes' => $v->notes,
+            'is_active' => $v->is_active ? 1 : 0,
+        ])->all();
+    }
+
+    private function materialRows(): array
+    {
+        return Material::query()->orderBy('code')->get()->map(fn (Material $m) => [
+            'code' => $m->code,
+            'name' => $m->name,
+            'unit' => $m->unit,
+            'notes' => $m->notes,
+            'is_active' => $m->is_active ? 1 : 0,
+        ])->all();
+    }
+
+    private function vendorPriceRows(): array
+    {
+        return VendorMaterialPrice::query()
+            ->with(['vendor', 'material'])
+            ->join('vendors', 'vendors.id', '=', 'vendor_material_prices.vendor_id')
+            ->join('materials', 'materials.id', '=', 'vendor_material_prices.material_id')
+            ->orderBy('materials.code')
+            ->orderBy('vendors.code')
+            ->select('vendor_material_prices.*')
+            ->get()
+            ->map(fn (VendorMaterialPrice $p) => [
+                'vendor_code' => $p->vendor->code,
+                'material_code' => $p->material->code,
+                'price' => number_format((float) $p->price, 2, '.', ''),
+                'is_preferred' => $p->is_preferred ? 1 : 0,
+                'notes' => $p->notes,
+            ])->all();
+    }
+
+    /**
+     * Satu baris per baris BOM (varian + bahan), lintas seluruh varian —
+     * bentuk yang sama dengan yang diterima import (sku + material_code).
+     */
+    private function bomRows(): array
+    {
+        return \App\Models\ProductVariantBomLine::query()
+            ->with(['variant', 'material'])
+            ->join('product_variants', 'product_variants.id', '=', 'product_variant_bom_lines.product_variant_id')
+            ->join('materials', 'materials.id', '=', 'product_variant_bom_lines.material_id')
+            ->orderBy('product_variants.sku')
+            ->orderBy('materials.code')
+            ->select('product_variant_bom_lines.*')
+            ->get()
+            ->map(fn ($line) => [
+                'sku' => $line->variant->sku,
+                'material_code' => $line->material->code,
+                'qty_needed' => number_format((float) $line->qty_needed, 4, '.', ''),
+                'notes' => $line->notes,
+            ])->all();
     }
 
     private function artistRows(): array

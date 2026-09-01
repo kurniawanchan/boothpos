@@ -721,8 +721,8 @@ Yang meringankan: skalanya kecil. Lima artist dan puluhan SKU berarti beberapa f
 | ~~Impor Excel~~ | ~~Puluhan SKU untuk 5 artist dapat diinput manual dalam hitungan jam. Membangun impor beserta validasi dan pratinjau memakan waktu berhari-hari untuk penghematan yang kecil~~ **Dibatalkan dari daftar potong pada 2026-09-01** atas permintaan eksplisit pemilik produk — lihat catatan di bawah tabel |
 | QR code & pemindaian | Dengan puluhan SKU, pencarian pada grid produk berlayar sentuh sama cepatnya dan jauh lebih murah dibangun. Nilai QR baru muncul saat ratusan SKU |
 | Flash sale | Diskon dapat diterapkan manual sebagai penyesuaian harga di kasir untuk event pertama |
-| Bahan baku, produksi, markup | Perhitungan modal cukup diinput sebagai harga modal per produk. Modul produksi penuh baru bernilai saat volume produksi meningkat |
-| Vendor management | Pengeluaran ke vendor eksternal untuk stiker dan keychain masih dapat dicatat di spreadsheet pada tahap ini |
+| ~~Bahan baku, produksi, markup~~ | ~~Perhitungan modal cukup diinput sebagai harga modal per produk. Modul produksi penuh baru bernilai saat volume produksi meningkat~~ **Sebagian dibatalkan dari daftar potong pada 2026-09-01** — lihat catatan "Vendor, bahan baku, dan BOM" di bawah tabel. Modul produksi PENUH (penjadwalan produksi, kapasitas, dsb) tetap di luar cakupan |
+| ~~Vendor management~~ | ~~Pengeluaran ke vendor eksternal untuk stiker dan keychain masih dapat dicatat di spreadsheet pada tahap ini~~ **Sebagian dibatalkan dari daftar potong pada 2026-09-01** — lihat catatan di bawah tabel. Manajemen PO/pembelian ke vendor tetap di luar cakupan, hanya master data vendor + harga bahan yang dibangun |
 | ~~Pre-order & pengiriman kurir~~ | **Dibatalkan dari daftar potong.** Pre-order dijual di event Oktober, sehingga modul ini masuk MVP |
 | Purchase management | Tumpang tindih dengan pencatatan harga modal sederhana |
 | User management granular | Satu operator berarti cukup satu akun; peran berlapis belum dibutuhkan |
@@ -754,9 +754,44 @@ Bentuk yang dibangun sedikit berbeda dari 7.15 dan perbedaannya disengaja:
 - **Impor transaksi penjualan (F15.9) TIDAK dibangun** — masih di luar
   cakupan.
 
-Cakupan yang tetap dipotong: QR code, flash sale, bahan baku/produksi,
-vendor management, purchase management, user management granular, dan
-dashboard per artist.
+Cakupan yang tetap dipotong: QR code, flash sale, purchase management
+(manajemen PO ke vendor), user management granular, dan dashboard per
+artist.
+
+**Catatan penambahan pasca-MVP — 2026-09-01 (vendor, bahan baku, dan BOM)**
+
+Atas permintaan eksplisit pemilik produk, dibangun modul baru: master data
+vendor (pemasok bahan baku), master data bahan baku, harga bahan per vendor
+(satu bahan boleh dijual banyak vendor pada harga berbeda), dan Bill of
+Materials (BOM) per varian produk beserta perhitungan modal bahan
+(`bom_cost`) yang diturunkan darinya.
+
+Ini **BUKAN** kebangkitan salah satu butir yang dicoret di 10.2 di atas —
+cakupannya dibangun sengaja lebih sempit dari keduanya dan tidak
+berkorespondensi dengan nomor F- manapun di dokumen ini (kapabilitas baru,
+bukan pemulihan kapabilitas lama):
+
+- **Bukan "vendor management" penuh**: tidak ada purchase order, tidak ada
+  pencatatan pembelian aktual, tidak ada riwayat transaksi dengan vendor.
+  Hanya master data vendor + tabel harga per bahan.
+- **Bukan "bahan baku, produksi, markup" penuh**: tidak ada penjadwalan
+  produksi, tidak ada pelacakan konsumsi bahan aktual saat produksi
+  berjalan, tidak ada laporan efisiensi produksi. Hanya BOM statis
+  (resep: bahan apa + berapa banyak per unit) dan modal yang dihitung
+  darinya.
+- **`bom_cost` TIDAK menimpa `cost_price`.** `cost_price` sudah dipakai
+  laporan laba dan settlement artist di seluruh kodebase; `bom_cost`
+  disajikan terpisah, read-only, untuk dibandingkan manual oleh pemilik
+  toko. Lihat dokblok `App\Services\BomCostCalculator`.
+- **BOM diikat ke VARIAN**, bukan produk induk — varian ukuran/warna
+  berbeda dari produk yang sama (mis. keychain kecil vs besar) bisa punya
+  kebutuhan bahan yang berbeda.
+- Diimpor/diekspor lewat workbook gabungan yang sama dengan impor master
+  data lain (10.2), sebagai empat sheet tambahan: `vendors`, `materials`,
+  `vendor_prices`, `bom`.
+
+Cakupan yang tetap dipotong dari 10.2 setelah penambahan ini: purchase
+management (PO ke vendor) dan modul produksi penuh.
 
 ### 10.3 Cakupan MVP Oktober
 

@@ -12,7 +12,7 @@ Docs in `docs/` are the spec source of truth: `PRD-POS-Event-Multivendor.md`, `o
 
 ```bash
 # Backend
-php artisan test                          # full suite (167 tests)
+php artisan test                          # full suite (214 tests)
 php artisan test --filter=PreorderTest    # one file
 php artisan test --filter=test_arrived_status_increases_stock   # one test
 php artisan migrate && php artisan db:seed
@@ -86,9 +86,11 @@ Vue 3 SPA (`resources/js/`: `api/`, `stores/` (Pinia), `router/`, `composables/`
 
 ## Scope discipline
 
-PRD §10.2/§10.3 explicitly **cut** these from MVP — do not build them even if scaffolding hints at them: vendor management, purchase management, materials/production, flash sale, QR/barcode scanning, granular custom roles, artist self-service portal, printed/PDF catalog, and Excel import *of sales transactions* (PRD F15.9).
+PRD §10.2/§10.3 explicitly **cut** these from MVP — do not build them even if scaffolding hints at them: purchase management (PO to vendors), full production/manufacturing scheduling, flash sale, QR/barcode scanning, granular custom roles, artist self-service portal, printed/PDF catalog, and Excel import *of sales transactions* (PRD F15.9).
 
 **Excel import of master data was un-cut on 2026-09-01** at the product owner's explicit request and is now built (see "Master-data Excel export/import" below). PRD §10.2, §7.15 and README carry dated notes rather than rewritten history — don't "restore" the old scope cut when you read those.
+
+**Vendor/material/BOM tracking was added post-MVP on 2026-09-01** at the product owner's explicit request — see "Vendor, material, and BOM tracking" below. This is a genuinely new capability, not a resurrection of the PRD §10.2 "vendor management" or "materials/production" cuts: it's deliberately narrower than either (no purchase orders, no production scheduling) and doesn't map to any existing F-number. PRD §10.2 carries a dated note rather than rewritten history.
 
 Some mockup elements in `docs/UI-mockups/BoothPOS.dc.html` have no backend and are intentionally left unwired: the receipt PDF button and the Settings "Cadangkan sekarang" button (`app:backup` is CLI-only). The generic "Ekspor .xlsx" buttons on master-data tables now DO have a backend (`GET /exports/{entity}`) but are not wired up in the SPA yet. The mockup's embedded JS also contains fabricated demo data and discount rules — none of it is real logic.
 
@@ -106,6 +108,45 @@ Non-obvious rules, all enforced in `app/Services/MasterDataImportService.php` (r
 - **A blank cell means "leave unchanged"**, not "clear the value".
 - **The Pro/Master license quota is re-checked inside the import** — `ArtistPolicy` is not on this path, so without that check a spreadsheet would be a free licence upgrade.
 - Sheet names and column headers come from one place, `app/Support/MasterDataSheets.php`, shared by export, template, and import — so export files round-trip back through import. Don't fork that list.
+
+## Vendor, material, and BOM tracking (added post-MVP, 2026-09-01)
+
+Tracks which vendor(s) sell a raw material and at what price, and what a
+product variant's BOM (Bill of Materials) actually costs in materials.
+`GET|POST|PUT|DELETE /vendors`, `/materials`, plus
+`POST/PUT/DELETE /materials/{material}/vendor-prices` (attach/update/detach
+a vendor's price for a material) and `POST/PUT/DELETE /variants/{variant}/bom`
+(attach/update/detach a BOM line) and `GET /variants/{variant}/cost-breakdown`.
+All gated on `canManageMasterData()`, same tier as Products/Categories/Stock.
+
+- **BOM is keyed to the product *variant*, not the parent product** —
+  different variants of the same product (e.g. keychain sizes) can need
+  different quantities/materials, and `ProductVariant` is already the
+  first-class entity for per-SKU data (price, stock) in this codebase.
+- **A material can have prices from multiple vendors** (`vendor_material_prices`,
+  unique on `(vendor_id, material_id)`). One vendor per material may be
+  flagged `is_preferred`; flagging one automatically unflags any other for
+  the same material (enforced in `MaterialController`, not a DB constraint).
+- **`bom_cost` is a separate, read-only figure — it never writes to
+  `cost_price`.** `cost_price` already feeds the profit report and artist
+  settlements throughout this codebase; silently overwriting it from BOM
+  data would be a correctness risk to code that's already tested elsewhere.
+  See `App\Services\BomCostCalculator`'s docblock for the full rationale.
+- **Price selection when a material has >1 vendor**: the vendor flagged
+  `is_preferred`, else the *cheapest* price (a defensive/optimistic default
+  for a cost estimate, not a purchasing recommendation) — documented in
+  `BomCostCalculator` and `Material::referencePrice()`, don't duplicate that
+  logic elsewhere.
+- **Delete guards** mirror Artist/Category: a vendor referenced by any
+  `vendor_material_prices` row, or a material referenced by any
+  `vendor_material_prices` row or BOM line, cannot be deleted (409).
+- **Excel import/export**: `vendors`, `materials`, `vendor_prices`, `bom`
+  are four more sheets in the *same* combined master-data workbook
+  (`MasterDataSheets::ORDER`), processed after `stock` in dependency order.
+  `vendor_prices`/`bom` reference vendors/materials/variants by `code`/`sku`,
+  the same pattern as `artist_code`/`category_code` on the `products` sheet.
+  `bom` rows may reference a SKU created by the `products` sheet in the same
+  file (resolved at apply time, same deferred-resolution pattern as `stock`).
 
 ## Conventions
 

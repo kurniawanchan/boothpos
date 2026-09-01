@@ -549,13 +549,88 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 
 -- =====================================================================
+-- VENDOR, BAHAN BAKU, DAN BOM (ditambahkan pasca-MVP, 2026-09-01)
+-- =====================================================================
+-- Dibangun atas permintaan eksplisit pemilik produk — BUKAN kebangkitan
+-- "materials/vendors" yang ditunda di bawah (cakupannya sengaja lebih
+-- sempit: tidak ada production_orders/purchases). Lihat CLAUDE.md/
+-- README.md/PRD §10.2 untuk catatan lengkap. `code` bertipe VARCHAR
+-- panjang bebas (bukan CHAR tetap seperti artists/categories) karena
+-- kode vendor/bahan tidak dipakai membentuk code_prefix produk mana pun.
+
+CREATE TABLE vendors (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(20) NOT NULL UNIQUE,
+  name VARCHAR(150) NOT NULL,
+  contact_phone VARCHAR(30) NULL,
+  contact_email VARCHAR(100) NULL,
+  notes TEXT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  deleted_at TIMESTAMP NULL,
+  KEY idx_vendors_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE materials (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(20) NOT NULL UNIQUE,
+  name VARCHAR(150) NOT NULL,
+  unit VARCHAR(20) NOT NULL,        -- bebas: pcs, gram, meter, lembar, ...
+  notes TEXT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  deleted_at TIMESTAMP NULL,
+  KEY idx_materials_is_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE vendor_material_prices (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  vendor_id BIGINT UNSIGNED NOT NULL,
+  material_id BIGINT UNSIGNED NOT NULL,
+  price DECIMAL(14,2) NOT NULL,
+  is_preferred TINYINT(1) NOT NULL DEFAULT 0,  -- satu preferred per bahan, ditegakkan di app layer
+  notes TEXT NULL,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  UNIQUE KEY uk_vendor_material (vendor_id, material_id),
+  KEY idx_vmp_material (material_id),
+  CONSTRAINT fk_vmp_vendor   FOREIGN KEY (vendor_id)   REFERENCES vendors(id)   ON DELETE RESTRICT,
+  CONSTRAINT fk_vmp_material FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE product_variant_bom_lines (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  -- Diikat ke VARIAN, bukan produk induk: ukuran/varian berbeda dari
+  -- produk yang sama bisa butuh jumlah bahan berbeda (lihat CLAUDE.md).
+  product_variant_id BIGINT UNSIGNED NOT NULL,
+  material_id BIGINT UNSIGNED NOT NULL,
+  qty_needed DECIMAL(12,4) NOT NULL,  -- per satu unit produk jadi; boleh pecahan
+  notes TEXT NULL,
+  created_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NULL,
+  UNIQUE KEY uk_bom_variant_material (product_variant_id, material_id),
+  CONSTRAINT fk_bom_variant  FOREIGN KEY (product_variant_id) REFERENCES product_variants(id) ON DELETE CASCADE,
+  CONSTRAINT fk_bom_material FOREIGN KEY (material_id)        REFERENCES materials(id)        ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- CATATAN — bom_cost (total qty_needed * harga vendor acuan) TIDAK
+-- disimpan sebagai kolom; selalu dihitung on-the-fly oleh
+-- App\Services\BomCostCalculator dan TIDAK PERNAH menimpa
+-- product_variants.cost_price (lihat dokblok kelas itu untuk alasannya).
+
+
+-- =====================================================================
 -- TABEL YANG SENGAJA DITUNDA
 -- =====================================================================
 -- Modul berikut tidak masuk MVP Oktober. Tabelnya belum dibuat karena
 -- seluruhnya dapat ditambahkan tanpa mengubah tabel yang sudah ada:
 --
---   materials, material_purchases   -> bahan baku
---   vendors                         -> pemasok dan jasa produksi
+--   material_purchases              -> pencatatan pembelian bahan aktual
+--                                      (vendors/materials/harga SUDAH ada
+--                                      di atas sejak 2026-09-01 — hanya
+--                                      riwayat transaksi pembeliannya yang
+--                                      masih ditunda)
 --   production_orders, production_materials
 --   flash_sales, flash_sale_items
 --   purchases, purchase_items

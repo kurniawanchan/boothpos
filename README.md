@@ -166,6 +166,61 @@ Berkas sumber impor yang BERHASIL diterapkan disimpan di
 `storage/app/private/imports/<uuid>.xlsx` sebagai jejak audit; pratinjau
 dan berkas yang ditolak tidak meninggalkan sampah.
 
+## Vendor, bahan baku, dan BOM (ditambahkan pasca-MVP, 2026-09-01)
+
+**Catatan cakupan.** PRD §10.2 sebelumnya mencoret "vendor management" dan
+"bahan baku, produksi, markup" dari MVP. Modul ini dibangun atas permintaan
+eksplisit pemilik produk, dan **BUKAN kebangkitan salah satu butir yang
+dicoret itu** — cakupannya sengaja jauh lebih sempit (tidak ada purchase
+order, tidak ada penjadwalan produksi) dan tidak berkorespondensi dengan
+nomor F- manapun di PRD; ini kapabilitas baru, bukan pemulihan kapabilitas
+lama. Catatan lama di PRD tidak dihapus, hanya diberi catatan bertanggal
+(lihat PRD §10.2).
+
+```
+GET|POST|PUT|DELETE /api/v1/vendors[/{vendor}]
+GET|POST|PUT|DELETE /api/v1/materials[/{material}]
+POST/PUT/DELETE      /api/v1/materials/{material}/vendor-prices[/{vendorPrice}]
+GET/POST/PUT/DELETE  /api/v1/variants/{variant}/bom[/{bomLine}]
+GET                  /api/v1/variants/{variant}/cost-breakdown
+```
+
+Digerbang `canManageMasterData()`, sama seperti Produk/Kategori/Stok.
+
+Keputusan desain yang paling mungkin mengejutkan pembaca berikutnya:
+
+1. **BOM diikat ke VARIAN, bukan produk induk.** Varian ukuran/warna
+   berbeda dari produk yang sama (mis. keychain kecil vs besar) bisa punya
+   kebutuhan bahan berbeda, dan `ProductVariant` sudah jadi entitas
+   kelas satu untuk data per-SKU (harga, stok) di kodebase ini — BOM
+   per-varian konsisten dengan pola yang sudah ada.
+2. **Satu bahan boleh dijual banyak vendor** (`vendor_material_prices`,
+   unique pada `(vendor_id, material_id)`), dengan satu flag `is_preferred`
+   per bahan. Menandai satu harga preferred otomatis melepas tanda dari
+   harga lain milik bahan yang sama (`MaterialController`, bukan
+   constraint DB — "preferred" adalah keputusan bisnis yang bisa berubah).
+3. **`bom_cost` TIDAK PERNAH menimpa `cost_price`.** `cost_price` sudah
+   dipakai laporan laba dan settlement artist di seluruh kodebase ini;
+   menimpanya otomatis dari BOM berisiko nyata merusak logika yang sudah
+   diuji di tempat lain. `bom_cost` selalu berupa field terpisah, read-only,
+   di `GET /variants/{variant}/cost-breakdown` — pemilik toko membandingkan
+   keduanya sendiri. Lihat dokblok `App\Services\BomCostCalculator`.
+4. **Pemilihan harga saat >1 vendor menjual bahan yang sama**: vendor
+   `is_preferred` bila ada, kalau tidak ada yang ditandai maka harga
+   TERMURAH dipakai — estimasi modal yang defensif, bukan rekomendasi
+   belanja. Aturan ini didokumentasikan satu kali di
+   `BomCostCalculator`/`Material::referencePrice()`, tidak diduplikasi.
+5. **Delete guard mengikuti pola Artist/Category**: vendor yang masih
+   punya baris harga terdaftar, atau bahan yang masih dipakai baris harga
+   ATAU baris BOM, tidak bisa dihapus (409).
+6. **Diimpor/diekspor lewat workbook gabungan yang sama** dengan impor
+   master data lain (lihat bagian di atas), sebagai empat sheet tambahan:
+   `vendors`, `materials`, `vendor_prices`, `bom`. `vendor_prices`/`bom`
+   mereferensikan vendor/bahan/varian lewat `code`/`sku` — pola yang sama
+   dengan `artist_code`/`category_code` pada sheet `products`. Baris `bom`
+   boleh menunjuk SKU yang baru dibuat sheet `products` pada berkas yang
+   sama (diselesaikan saat `apply()`, pola yang sama dengan sheet `stock`).
+
 ## Data dummy untuk testing manual
 
 ```bash
@@ -386,6 +441,16 @@ dibiarkan karena bertentangan dengan test yang sudah ada):**
     memanggil detail tiap produk satu per satu (N+1). Ditutup lewat opsi
     `?with_variants=1` — opt-in, bukan default, supaya payload layar
     Kelola Produk tidak ikut membengkak.
+17. `ProductVariant` menyatakan `use HasFactory` tapi tidak pernah punya
+    `ProductVariantFactory`-nya sendiri — setiap test sebelum modul
+    vendor/BOM (2026-09-01) membuat varian manual lewat
+    `$product->variants()->create([...])`. Test BOM/harga vendor yang
+    tidak selalu butuh detail produk induk butuh `ProductVariant::factory()`
+    berdiri sendiri, jadi celah itu ditutup di
+    `database/factories/ProductVariantFactory.php` alih-alih menduplikasi
+    pola manual di setiap test baru. Bukan bug yang berdampak ke produksi
+    (tidak ada kode aplikasi yang memanggil factory ini), tapi dicatat
+    supaya tidak dikira sengaja dihindari.
 
 ## Cadangan & pemulihan (WBS 9.2)
 

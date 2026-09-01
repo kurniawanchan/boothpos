@@ -44,6 +44,7 @@ tags:
   - name: Preorder
   - name: Payment
   - name: Report
+  - name: Vendor & Bahan Baku
   - name: Import & Export
 
 security:
@@ -1438,6 +1439,297 @@ paths:
               schema: { type: string, format: binary }
 
   # ------------------------------------------------------------------
+  # VENDOR, BAHAN BAKU, DAN BOM (ditambahkan pasca-MVP, 2026-09-01)
+  #
+  # CATATAN CAKUPAN — bukan kebangkitan "vendor management" / "materials/
+  # production" yang dicoret PRD §10.2: cakupan di sini sengaja lebih
+  # sempit (tidak ada purchase order, tidak ada penjadwalan produksi) dan
+  # tidak berkorespondensi dengan nomor F- manapun. Lihat catatan
+  # bertanggal di CLAUDE.md/README.md/PRD §10.2.
+  # ------------------------------------------------------------------
+
+  /vendors:
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Daftar vendor
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: is_active, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Vendor' }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Buat vendor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VendorInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vendor' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /vendors/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Detail vendor
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vendor' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Vendor & Bahan Baku]
+      summary: Perbarui vendor
+      description: Kolom `code` tidak dapat diubah, konsisten dengan Artist/Category.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VendorInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vendor' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Vendor & Bahan Baku]
+      summary: Hapus vendor
+      description: Soft delete. Ditolak (409) bila vendor masih punya baris harga bahan terdaftar.
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /materials:
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Daftar bahan baku
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: is_active, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Material' }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Buat bahan baku
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaterialInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Material' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /materials/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Detail bahan baku (menyertakan seluruh harga vendor)
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Material' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Vendor & Bahan Baku]
+      summary: Perbarui bahan baku
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaterialInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Material' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Vendor & Bahan Baku]
+      summary: Hapus bahan baku
+      description: |
+        Soft delete. Ditolak (409) bila bahan masih punya harga vendor
+        terdaftar ATAU masih dipakai baris BOM varian mana pun.
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /materials/{material}/vendor-prices:
+    parameters:
+      - { name: material, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Tambah harga vendor untuk satu bahan
+      description: |
+        Satu bahan boleh punya harga dari banyak vendor (unique pada
+        pasangan vendor+bahan). Mengirim `is_preferred: true` melepas
+        tanda preferred dari harga lain milik bahan yang sama — hanya
+        satu vendor preferred per bahan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VendorMaterialPriceInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VendorMaterialPrice' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /vendor-prices/{vendorPrice}:
+    parameters:
+      - { name: vendorPrice, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Vendor & Bahan Baku]
+      summary: Perbarui harga vendor untuk suatu bahan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VendorMaterialPriceInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VendorMaterialPrice' }
+    delete:
+      tags: [Vendor & Bahan Baku]
+      summary: Hapus (detach) harga vendor untuk suatu bahan
+      responses:
+        '204': { description: Berhasil }
+
+  /variants/{variant}/bom:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Daftar baris BOM suatu varian
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/BomLine' }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Tambah baris BOM (bahan + jumlah per unit) ke suatu varian
+      description: |
+        BOM diikat ke VARIAN, bukan produk induk — varian ukuran/warna
+        berbeda dari produk yang sama bisa butuh jumlah bahan berbeda.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BomLineInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BomLine' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /bom/{bomLine}:
+    parameters:
+      - { name: bomLine, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Vendor & Bahan Baku]
+      summary: Perbarui jumlah/notes satu baris BOM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BomLineInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BomLine' }
+    delete:
+      tags: [Vendor & Bahan Baku]
+      summary: Hapus baris BOM
+      responses:
+        '204': { description: Berhasil }
+
+  /variants/{variant}/cost-breakdown:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Rincian modal bahan (BOM) suatu varian
+      description: |
+        `bom_cost` = jumlah `qty_needed * unit_cost` seluruh baris BOM.
+        `unit_cost` per baris memakai harga vendor `is_preferred` bila
+        ada, kalau tidak ada yang ditandai maka harga TERMURAH dipakai
+        (lihat `App\Services\BomCostCalculator` untuk alasannya). Bahan
+        tanpa harga vendor sama sekali dihitung sebagai biaya nol dan
+        ditandai `has_price: false`.
+
+        **`bom_cost` TIDAK PERNAH menimpa `cost_price`** — keduanya
+        disajikan berdampingan di response ini supaya pemilik toko bisa
+        membandingkan dan merekonsiliasi manual.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BomCostBreakdown' }
+
+  # ------------------------------------------------------------------
   # IMPOR & EKSPOR MASTER DATA (PRD 7.15)
   #
   # CATATAN CAKUPAN — impor Excel awalnya dipotong dari MVP (PRD 10.2).
@@ -1451,7 +1743,7 @@ paths:
       - name: entity
         in: path
         required: true
-        schema: { type: string, enum: [artists, categories, products, stock] }
+        schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom] }
     get:
       tags: [Import & Export]
       summary: Ekspor satu entitas master data ke Excel
@@ -1463,6 +1755,12 @@ paths:
 
         Sheet `products` berisi **satu baris per varian** (bukan per
         produk), karena harga melekat pada varian.
+
+        `vendors`, `materials`, `vendor_prices`, `bom` ditambahkan
+        pasca-MVP (2026-09-01) — lihat catatan bertanggal di
+        `CLAUDE.md`/`README.md`/PRD §10.2. `bom` berisi satu baris per
+        pasangan varian+bahan, direferensikan lewat `sku` (bukan produk
+        induk) karena BOM diikat ke varian.
 
         Digerbang `canManageMasterData()` (owner/admin/inventory) — lebih
         ketat daripada endpoint daftar yang boleh dibaca kasir, karena
@@ -1482,9 +1780,13 @@ paths:
       tags: [Import & Export]
       summary: Unduh template impor gabungan
       description: |
-        Workbook `.xlsx` berisi empat sheet (`artists`, `categories`,
-        `products`, `stock`) lengkap dengan judul kolom yang benar dan satu
-        baris contoh per sheet (F15.3).
+        Workbook `.xlsx` berisi delapan sheet (`artists`, `categories`,
+        `products`, `stock`, `vendors`, `materials`, `vendor_prices`, `bom`)
+        lengkap dengan judul kolom yang benar dan satu baris contoh per
+        sheet (F15.3). Empat sheet terakhir ditambahkan pasca-MVP
+        (2026-09-01, lihat CLAUDE.md/README.md/PRD §10.2) — bukan bagian
+        dari F15.3 asli, tapi dibangun mengikuti pola workbook gabungan
+        yang sama persis.
       responses:
         '200':
           description: Berkas xlsx
@@ -1498,12 +1800,16 @@ paths:
       tags: [Import & Export]
       summary: Impor massal master data dari satu berkas Excel
       description: |
-        Satu berkas `.xlsx` memuat sampai empat sheet sekaligus. Sheet yang
-        tidak dikenali diabaikan dan dilaporkan pada `ignored_sheets`; nama
-        sheet dicocokkan tanpa memandang huruf besar/kecil.
+        Satu berkas `.xlsx` memuat sampai delapan sheet sekaligus. Sheet
+        yang tidak dikenali diabaikan dan dilaporkan pada `ignored_sheets`;
+        nama sheet dicocokkan tanpa memandang huruf besar/kecil.
 
         **Urutan pemrosesan** selalu `artists` → `categories` → `products`
-        → `stock`, berapa pun urutan sheet di dalam berkas.
+        → `stock` → `vendors` → `materials` → `vendor_prices` → `bom`,
+        berapa pun urutan sheet di dalam berkas. Empat sheet terakhir
+        (vendor/bahan baku/BOM) ditambahkan pasca-MVP 2026-09-01 — lihat
+        catatan bertanggal di CLAUDE.md/README.md/PRD §10.2; ini kapabilitas
+        baru, bukan pemulihan salah satu butir yang dicoret PRD §10.2.
 
         **Semua-atau-tidak sama sekali.** Seluruh berkas divalidasi lebih
         dulu; bila ada satu baris pun yang tidak valid, tidak ada data yang
@@ -1520,6 +1826,10 @@ paths:
         | `categories` | `code` |
         | `products` | `sku` bila diisi; bila kosong, `code_prefix` (artist_code + category_code + product_segment) + `variant_name` |
         | `stock` | `sku` |
+        | `vendors` | `code` |
+        | `materials` | `code` |
+        | `vendor_prices` | pasangan (`vendor_code`, `material_code`) |
+        | `bom` | pasangan (`sku`, `material_code`) |
 
         **Kode dihasilkan server.** `code_prefix` dan `sku` selalu dibuat
         `ProductCodeGenerator`. Kolom `sku` pada sheet `products` hanya
@@ -1555,6 +1865,16 @@ paths:
         — konsisten dengan strategi semua-atau-tidak-sama-sekali impor ini.
         Kolom kosong berarti "tidak ada gambar diikutsertakan" (gambar yang
         sudah ada, bila ada, tidak diubah).
+
+        **Vendor/bahan/BOM (pasca-MVP, 2026-09-01).** Sheet `vendor_prices`
+        dan `bom` mereferensikan vendor/bahan/varian lewat `vendor_code`/
+        `material_code`/`sku` — pola yang sama dengan `artist_code`/
+        `category_code` pada sheet `products`. Baris `bom` boleh menunjuk
+        SKU yang baru dibuat sheet `products` pada berkas yang sama
+        (diselesaikan setelah sheet `products` diterapkan, pola yang sama
+        dengan sheet `stock`). Menandai `is_preferred = 1` pada sheet
+        `vendor_prices` melepas tanda preferred dari harga vendor lain
+        untuk bahan yang sama.
 
         Digerbang `canManageMasterData()` (owner/admin/inventory).
       requestBody:
@@ -1715,6 +2035,132 @@ components:
         contact_email: { type: string, nullable: true }
         notes: { type: string, nullable: true }
         is_active: { type: boolean, default: true }
+
+    # -------------------------------------------------------------
+    # Vendor, bahan baku, dan BOM (ditambahkan pasca-MVP, 2026-09-01)
+    # -------------------------------------------------------------
+    Vendor:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, maxLength: 20, example: VNAKR }
+        name: { type: string }
+        contact_phone: { type: string, nullable: true }
+        contact_email: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        is_active: { type: boolean }
+        material_price_count: { type: integer, nullable: true, readOnly: true }
+
+    VendorInput:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, maxLength: 20, description: Permanen setelah dibuat, sama seperti Artist/Category. }
+        name: { type: string, maxLength: 150 }
+        contact_phone: { type: string, nullable: true }
+        contact_email: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        is_active: { type: boolean, default: true }
+
+    Material:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, maxLength: 20, example: AC3 }
+        name: { type: string }
+        unit: { type: string, example: lembar, description: "Bebas: pcs, gram, meter, lembar, dst." }
+        notes: { type: string, nullable: true }
+        is_active: { type: boolean }
+        vendor_price_count: { type: integer, nullable: true, readOnly: true }
+        vendor_prices:
+          type: array
+          readOnly: true
+          description: Hanya disertakan pada GET /materials/{id}.
+          items: { $ref: '#/components/schemas/VendorMaterialPrice' }
+
+    MaterialInput:
+      type: object
+      required: [code, name, unit]
+      properties:
+        code: { type: string, maxLength: 20 }
+        name: { type: string, maxLength: 150 }
+        unit: { type: string, maxLength: 20 }
+        notes: { type: string, nullable: true }
+        is_active: { type: boolean, default: true }
+
+    VendorMaterialPrice:
+      type: object
+      properties:
+        id: { type: integer }
+        vendor_id: { type: integer }
+        vendor_name: { type: string, readOnly: true }
+        material_id: { type: integer }
+        price: { type: string, example: "15000.00" }
+        is_preferred:
+          type: boolean
+          description: |
+            Vendor acuan untuk perhitungan bom_cost saat bahan ini punya
+            >1 vendor. Hanya satu true per bahan — menandai satu melepas
+            tanda dari yang lain.
+        notes: { type: string, nullable: true }
+
+    VendorMaterialPriceInput:
+      type: object
+      required: [vendor_id, price]
+      description: vendor_id wajib hanya saat membuat (POST); tidak berlaku saat update (PUT).
+      properties:
+        vendor_id: { type: integer }
+        price: { type: number, minimum: 0 }
+        is_preferred: { type: boolean, default: false }
+        notes: { type: string, nullable: true }
+
+    BomLine:
+      type: object
+      properties:
+        id: { type: integer }
+        product_variant_id: { type: integer }
+        material_id: { type: integer }
+        material_name: { type: string, readOnly: true }
+        material_unit: { type: string, readOnly: true }
+        qty_needed: { type: string, example: "2.5000", description: Per satu unit produk jadi; boleh pecahan. }
+        notes: { type: string, nullable: true }
+
+    BomLineInput:
+      type: object
+      required: [material_id, qty_needed]
+      description: material_id wajib hanya saat membuat (POST); tidak berlaku saat update (PUT).
+      properties:
+        material_id: { type: integer }
+        qty_needed: { type: number, exclusiveMinimum: 0 }
+        notes: { type: string, nullable: true }
+
+    BomCostBreakdown:
+      type: object
+      description: |
+        Read-only. bom_cost TIDAK PERNAH menimpa cost_price — keduanya
+        disajikan berdampingan untuk direkonsiliasi manual oleh pemilik
+        toko (lihat App\Services\BomCostCalculator).
+      properties:
+        product_variant_id: { type: integer }
+        sku: { type: string }
+        cost_price: { type: string, example: "12345.00", description: Modal manual yang sudah ada, tidak diubah oleh endpoint ini. }
+        bom_cost: { type: string, example: "16000.00", description: "Jumlah qty_needed * unit_cost seluruh baris BOM." }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              bom_line_id: { type: integer }
+              material_id: { type: integer }
+              material_name: { type: string }
+              unit: { type: string }
+              qty_needed: { type: string }
+              unit_cost: { type: string, description: Harga vendor acuan (preferred, atau termurah bila tidak ada yang preferred). }
+              line_cost: { type: string }
+              has_price: { type: boolean, description: false bila bahan ini belum punya harga vendor sama sekali (line_cost dihitung 0). }
+              reference_vendor_id: { type: integer, nullable: true }
+              reference_vendor_name: { type: string, nullable: true }
+              reference_is_preferred: { type: boolean }
 
     Category:
       type: object

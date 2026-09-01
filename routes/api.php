@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\MasterDataExportController;
 use App\Http\Controllers\Api\MasterDataImportController;
+use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentChannelController;
 use App\Http\Controllers\Api\PaymentProofController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\StockController;
+use App\Http\Controllers\Api\VendorController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -48,6 +50,25 @@ Route::prefix('v1')->group(function () {
         Route::get('/stock/movements', [StockController::class, 'movements']);
         Route::post('/stock/adjustments', [StockController::class, 'adjust']);
         Route::get('/stock/low', [StockController::class, 'lowStock']);
+
+        // Vendor/bahan baku/BOM — pasca-MVP, ditambahkan 2026-09-01 (lihat
+        // catatan bertanggal di CLAUDE.md/README.md/PRD). Harga vendor per
+        // bahan dan BOM per varian digantung di bawah /materials dan
+        // /variants karena aksinya sesungguhnya adalah attach/detach
+        // relasi, bukan CRUD entitas mandiri — sama seperti
+        // /products/{product}/variants tidak berdiri sendiri sebagai
+        // apiResource.
+        Route::apiResource('vendors', VendorController::class);
+        Route::apiResource('materials', MaterialController::class);
+        Route::post('/materials/{material}/vendor-prices', [MaterialController::class, 'storeVendorPrice']);
+        Route::put('/vendor-prices/{vendorPrice}', [MaterialController::class, 'updateVendorPrice']);
+        Route::delete('/vendor-prices/{vendorPrice}', [MaterialController::class, 'destroyVendorPrice']);
+
+        Route::get('/variants/{variant}/bom', [MaterialController::class, 'bomIndex']);
+        Route::post('/variants/{variant}/bom', [MaterialController::class, 'storeBomLine']);
+        Route::put('/bom/{bomLine}', [MaterialController::class, 'updateBomLine']);
+        Route::delete('/bom/{bomLine}', [MaterialController::class, 'destroyBomLine']);
+        Route::get('/variants/{variant}/cost-breakdown', [MaterialController::class, 'costBreakdown']);
 
         Route::apiResource('events', EventController::class);
         Route::patch('/events/{event}/status', [EventController::class, 'updateStatus']);
@@ -80,7 +101,7 @@ Route::prefix('v1')->group(function () {
         // bertabrakan dengan apiResource /artists/{artist} dan supaya
         // seluruh permukaan berkas berpasangan simetris di satu tempat.
         Route::get('/exports/{entity}', [MasterDataExportController::class, 'show'])
-            ->where('entity', 'artists|categories|products|stock');
+            ->where('entity', 'artists|categories|products|stock|vendors|materials|vendor_prices|bom');
         Route::get('/imports/master-data/template', [MasterDataImportController::class, 'template']);
         Route::post('/imports/master-data', [MasterDataImportController::class, 'store']);
 

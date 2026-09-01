@@ -6,9 +6,12 @@ use App\Exceptions\MasterDataImportRowException;
 use App\Imports\MasterDataSheetsImport;
 use App\Models\Artist;
 use App\Models\Category;
+use App\Models\Material;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
+use App\Models\Vendor;
+use App\Models\VendorMaterialPrice;
 use App\Support\LicenseGate;
 use App\Support\MasterDataSheets;
 use Illuminate\Http\UploadedFile;
@@ -135,6 +138,18 @@ class MasterDataImportService
         $plan[MasterDataSheets::STOCK] = $this->validateStock(
             $sheets[MasterDataSheets::STOCK] ?? [],
             $plan[MasterDataSheets::PRODUCTS],
+        );
+        $plan[MasterDataSheets::VENDORS] = $this->validateVendors($sheets[MasterDataSheets::VENDORS] ?? []);
+        $plan[MasterDataSheets::MATERIALS] = $this->validateMaterials($sheets[MasterDataSheets::MATERIALS] ?? []);
+        $plan[MasterDataSheets::VENDOR_PRICES] = $this->validateVendorPrices(
+            $sheets[MasterDataSheets::VENDOR_PRICES] ?? [],
+            $plan[MasterDataSheets::VENDORS],
+            $plan[MasterDataSheets::MATERIALS],
+        );
+        $plan[MasterDataSheets::BOM] = $this->validateBom(
+            $sheets[MasterDataSheets::BOM] ?? [],
+            $plan[MasterDataSheets::PRODUCTS],
+            $plan[MasterDataSheets::MATERIALS],
         );
 
         // Sheet yang tidak dikirim sama sekali tidak dilaporkan — nol baris
@@ -957,6 +972,10 @@ class MasterDataImportService
             $this->applyCategories($plan[MasterDataSheets::CATEGORIES]);
             $this->applyProducts($plan[MasterDataSheets::PRODUCTS], $user);
             $this->applyStock($plan[MasterDataSheets::STOCK], $user);
+            $this->applyVendors($plan[MasterDataSheets::VENDORS]);
+            $this->applyMaterials($plan[MasterDataSheets::MATERIALS]);
+            $this->applyVendorPrices($plan[MasterDataSheets::VENDOR_PRICES]);
+            $this->applyBom($plan[MasterDataSheets::BOM]);
 
             // F13.4 — impor massal adalah tindakan sensitif, dan ditulis DI
             // DALAM transaksi yang sama seperti seluruh mutasi lain di
@@ -1186,6 +1205,463 @@ class MasterDataImportService
     }
 
     // =================================================================
+    // VALIDASI — VENDORS (pasca-MVP, ditambahkan 2026-09-01)
+    // =================================================================
+
+    private function validateVendors(array $rows): array
+    {
+        $sheet = MasterDataSheets::VENDORS;
+        $plan = [];
+        $seen = [];
+        $created = 0;
+        $updated = 0;
+
+        foreach ($rows as $entry) {
+            $row = $entry['row'];
+            $values = $entry['values'];
+
+            $code = $this->stringValue($values, 'code');
+
+            if ($code === null) {
+                $this->addError($sheet, $row, 'code', 'Kode vendor wajib diisi.');
+
+                continue;
+            }
+
+            $code = strtoupper($code);
+
+            if (mb_strlen($code) > 20) {
+                $this->addError($sheet, $row, 'code', "Kode vendor '{$code}' maksimal 20 karakter.");
+
+                continue;
+            }
+
+            if (isset($seen[$code])) {
+                $this->addError($sheet, $row, 'code', "Kode vendor '{$code}' muncul dua kali di sheet ini (baris {$seen[$code]}).");
+
+                continue;
+            }
+            $seen[$code] = $row;
+
+            $existing = Vendor::where('code', $code)->first();
+
+            if ($existing === null && Vendor::withTrashed()->where('code', $code)->exists()) {
+                $this->addError($sheet, $row, 'code', "Kode vendor '{$code}' masih dipakai vendor yang sudah dihapus. Pakai kode lain.");
+
+                continue;
+            }
+
+            $attributes = [];
+
+            if ($this->filled($values, 'name')) {
+                $name = $this->stringValue($values, 'name');
+                if (mb_strlen($name) > 150) {
+                    $this->addError($sheet, $row, 'name', 'Nama vendor maksimal 150 karakter.');
+                } else {
+                    $attributes['name'] = $name;
+                }
+            } elseif ($existing === null) {
+                $this->addError($sheet, $row, 'name', 'Nama vendor wajib diisi untuk vendor baru.');
+            }
+
+            if ($this->filled($values, 'contact_phone')) {
+                $attributes['contact_phone'] = $this->stringValue($values, 'contact_phone');
+            }
+
+            if ($this->filled($values, 'contact_email')) {
+                $email = $this->stringValue($values, 'contact_email');
+                if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+                    $this->addError($sheet, $row, 'contact_email', "Alamat email '{$email}' tidak valid.");
+                } else {
+                    $attributes['contact_email'] = $email;
+                }
+            }
+
+            if ($this->filled($values, 'notes')) {
+                $attributes['notes'] = $this->stringValue($values, 'notes');
+            }
+
+            if ($this->filled($values, 'is_active')) {
+                $isActive = $this->parseBool($sheet, $row, 'is_active', $values['is_active']);
+                if ($isActive !== null) {
+                    $attributes['is_active'] = $isActive;
+                }
+            }
+
+            $existing === null ? $created++ : $updated++;
+
+            $plan[] = ['row' => $row, 'code' => $code, 'attributes' => $attributes, 'exists' => $existing !== null];
+        }
+
+        $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
+
+        return $plan;
+    }
+
+    // =================================================================
+    // VALIDASI — MATERIALS (pasca-MVP, ditambahkan 2026-09-01)
+    // =================================================================
+
+    private function validateMaterials(array $rows): array
+    {
+        $sheet = MasterDataSheets::MATERIALS;
+        $plan = [];
+        $seen = [];
+        $created = 0;
+        $updated = 0;
+
+        foreach ($rows as $entry) {
+            $row = $entry['row'];
+            $values = $entry['values'];
+
+            $code = $this->stringValue($values, 'code');
+
+            if ($code === null) {
+                $this->addError($sheet, $row, 'code', 'Kode bahan wajib diisi.');
+
+                continue;
+            }
+
+            $code = strtoupper($code);
+
+            if (mb_strlen($code) > 20) {
+                $this->addError($sheet, $row, 'code', "Kode bahan '{$code}' maksimal 20 karakter.");
+
+                continue;
+            }
+
+            if (isset($seen[$code])) {
+                $this->addError($sheet, $row, 'code', "Kode bahan '{$code}' muncul dua kali di sheet ini (baris {$seen[$code]}).");
+
+                continue;
+            }
+            $seen[$code] = $row;
+
+            $existing = Material::where('code', $code)->first();
+
+            if ($existing === null && Material::withTrashed()->where('code', $code)->exists()) {
+                $this->addError($sheet, $row, 'code', "Kode bahan '{$code}' masih dipakai bahan yang sudah dihapus. Pakai kode lain.");
+
+                continue;
+            }
+
+            $attributes = [];
+
+            if ($this->filled($values, 'name')) {
+                $name = $this->stringValue($values, 'name');
+                if (mb_strlen($name) > 150) {
+                    $this->addError($sheet, $row, 'name', 'Nama bahan maksimal 150 karakter.');
+                } else {
+                    $attributes['name'] = $name;
+                }
+            } elseif ($existing === null) {
+                $this->addError($sheet, $row, 'name', 'Nama bahan wajib diisi untuk bahan baru.');
+            }
+
+            if ($this->filled($values, 'unit')) {
+                $attributes['unit'] = $this->stringValue($values, 'unit');
+            } elseif ($existing === null) {
+                $this->addError($sheet, $row, 'unit', 'Satuan wajib diisi untuk bahan baru.');
+            }
+
+            if ($this->filled($values, 'notes')) {
+                $attributes['notes'] = $this->stringValue($values, 'notes');
+            }
+
+            if ($this->filled($values, 'is_active')) {
+                $isActive = $this->parseBool($sheet, $row, 'is_active', $values['is_active']);
+                if ($isActive !== null) {
+                    $attributes['is_active'] = $isActive;
+                }
+            }
+
+            $existing === null ? $created++ : $updated++;
+
+            $plan[] = ['row' => $row, 'code' => $code, 'attributes' => $attributes, 'exists' => $existing !== null];
+        }
+
+        $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
+
+        return $plan;
+    }
+
+    // =================================================================
+    // VALIDASI — VENDOR_PRICES (pasca-MVP, ditambahkan 2026-09-01)
+    // =================================================================
+
+    /**
+     * Upsert key: pasangan (vendor_code, material_code) — mencerminkan
+     * unique constraint (vendor_id, material_id) di database. Baris yang
+     * cocok dengan pasangan yang sudah ada MENGUBAH harganya; baris baru
+     * membuat baris harga baru.
+     */
+    private function validateVendorPrices(array $rows, array $vendorPlan, array $materialPlan): array
+    {
+        $sheet = MasterDataSheets::VENDOR_PRICES;
+        $plan = [];
+        $seen = [];
+        $created = 0;
+        $updated = 0;
+
+        $vendorCodesInFile = array_column($vendorPlan, 'code');
+        $materialCodesInFile = array_column($materialPlan, 'code');
+
+        foreach ($rows as $entry) {
+            $row = $entry['row'];
+            $values = $entry['values'];
+
+            $vendorCode = $this->filled($values, 'vendor_code') ? strtoupper($this->stringValue($values, 'vendor_code')) : null;
+            $materialCode = $this->filled($values, 'material_code') ? strtoupper($this->stringValue($values, 'material_code')) : null;
+
+            $rowIsBroken = false;
+
+            if ($vendorCode === null) {
+                $this->addError($sheet, $row, 'vendor_code', 'Kode vendor wajib diisi.');
+                $rowIsBroken = true;
+            } elseif (! in_array($vendorCode, $vendorCodesInFile, true) && ! Vendor::where('code', $vendorCode)->exists()) {
+                $this->addError($sheet, $row, 'vendor_code', "Vendor dengan kode '{$vendorCode}' tidak ditemukan.");
+                $rowIsBroken = true;
+            }
+
+            if ($materialCode === null) {
+                $this->addError($sheet, $row, 'material_code', 'Kode bahan wajib diisi.');
+                $rowIsBroken = true;
+            } elseif (! in_array($materialCode, $materialCodesInFile, true) && ! Material::where('code', $materialCode)->exists()) {
+                $this->addError($sheet, $row, 'material_code', "Bahan dengan kode '{$materialCode}' tidak ditemukan.");
+                $rowIsBroken = true;
+            }
+
+            if ($rowIsBroken) {
+                continue;
+            }
+
+            $key = $vendorCode.'|'.$materialCode;
+
+            if (isset($seen[$key])) {
+                $this->addError($sheet, $row, 'vendor_code', "Pasangan vendor '{$vendorCode}' + bahan '{$materialCode}' muncul dua kali di sheet ini (baris {$seen[$key]}).");
+
+                continue;
+            }
+            $seen[$key] = $row;
+
+            $existing = VendorMaterialPrice::query()
+                ->whereHas('vendor', fn ($q) => $q->where('code', $vendorCode))
+                ->whereHas('material', fn ($q) => $q->where('code', $materialCode))
+                ->first();
+
+            if (! $this->filled($values, 'price')) {
+                if ($existing === null) {
+                    $this->addError($sheet, $row, 'price', 'Harga wajib diisi untuk pasangan vendor/bahan baru.');
+
+                    continue;
+                }
+            }
+
+            $attributes = [];
+
+            if ($this->filled($values, 'price')) {
+                $price = $this->parseDecimal($sheet, $row, 'price', $values['price']);
+                if ($price !== null) {
+                    $attributes['price'] = $price;
+                }
+            }
+
+            if ($this->filled($values, 'is_preferred')) {
+                $isPreferred = $this->parseBool($sheet, $row, 'is_preferred', $values['is_preferred']);
+                if ($isPreferred !== null) {
+                    $attributes['is_preferred'] = $isPreferred;
+                }
+            }
+
+            if ($this->filled($values, 'notes')) {
+                $attributes['notes'] = $this->stringValue($values, 'notes');
+            }
+
+            $existing === null ? $created++ : $updated++;
+
+            $plan[] = [
+                'row' => $row,
+                'vendor_code' => $vendorCode,
+                'material_code' => $materialCode,
+                'attributes' => $attributes,
+                'exists' => $existing !== null,
+            ];
+        }
+
+        $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
+
+        return $plan;
+    }
+
+    // =================================================================
+    // VALIDASI — BOM (pasca-MVP, ditambahkan 2026-09-01)
+    // =================================================================
+
+    /**
+     * Upsert key: pasangan (sku, material_code) — mencerminkan unique
+     * constraint (product_variant_id, material_id). SKU boleh menunjuk
+     * varian yang BARU dibuat sheet 'products' pada berkas yang sama —
+     * sama seperti sheet 'stock', resolusinya ditunda ke tahap apply()
+     * yang berjalan setelah sheet products diterapkan.
+     */
+    private function validateBom(array $rows, array $productPlan, array $materialPlan): array
+    {
+        $sheet = MasterDataSheets::BOM;
+        $plan = [];
+        $seen = [];
+        $created = 0;
+        $updated = 0;
+
+        $materialCodesInFile = array_column($materialPlan, 'code');
+        $fileCreatesVariants = collect($productPlan)->contains(fn (array $entry) => $entry['creates_variant'] ?? false);
+
+        foreach ($rows as $entry) {
+            $row = $entry['row'];
+            $values = $entry['values'];
+
+            $sku = $this->filled($values, 'sku') ? strtoupper($this->stringValue($values, 'sku')) : null;
+            $materialCode = $this->filled($values, 'material_code') ? strtoupper($this->stringValue($values, 'material_code')) : null;
+
+            $rowIsBroken = false;
+
+            if ($sku === null) {
+                $this->addError($sheet, $row, 'sku', 'SKU varian wajib diisi.');
+                $rowIsBroken = true;
+            }
+
+            if ($materialCode === null) {
+                $this->addError($sheet, $row, 'material_code', 'Kode bahan wajib diisi.');
+                $rowIsBroken = true;
+            } elseif (! in_array($materialCode, $materialCodesInFile, true) && ! Material::where('code', $materialCode)->exists()) {
+                $this->addError($sheet, $row, 'material_code', "Bahan dengan kode '{$materialCode}' tidak ditemukan.");
+                $rowIsBroken = true;
+            }
+
+            if (! $this->filled($values, 'qty_needed')) {
+                $this->addError($sheet, $row, 'qty_needed', 'Jumlah bahan per unit (qty_needed) wajib diisi.');
+                $rowIsBroken = true;
+            }
+
+            if ($rowIsBroken) {
+                continue;
+            }
+
+            $variant = ProductVariant::where('sku', $sku)->first();
+
+            if ($variant === null && ! $fileCreatesVariants) {
+                $this->addError($sheet, $row, 'sku', "SKU '{$sku}' tidak ditemukan.");
+
+                continue;
+            }
+
+            $key = $sku.'|'.$materialCode;
+            if (isset($seen[$key])) {
+                $this->addError($sheet, $row, 'material_code', "Pasangan SKU '{$sku}' + bahan '{$materialCode}' muncul dua kali di sheet ini (baris {$seen[$key]}).");
+
+                continue;
+            }
+            $seen[$key] = $row;
+
+            $qty = $this->parseDecimalQty($sheet, $row, 'qty_needed', $values['qty_needed']);
+            if ($qty === null) {
+                continue;
+            }
+
+            $existing = $variant !== null
+                ? $variant->bomLines()->whereHas('material', fn ($q) => $q->where('code', $materialCode))->first()
+                : null;
+
+            $existing === null ? $created++ : $updated++;
+
+            $plan[] = [
+                'row' => $row,
+                'sku' => $sku,
+                'material_code' => $materialCode,
+                'qty_needed' => $qty,
+                'notes' => $this->filled($values, 'notes') ? $this->stringValue($values, 'notes') : null,
+            ];
+        }
+
+        $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
+
+        return $plan;
+    }
+
+    // =================================================================
+    // PENERAPAN — VENDORS/MATERIALS/VENDOR_PRICES/BOM
+    // =================================================================
+
+    private function applyVendors(array $plan): void
+    {
+        foreach ($plan as $entry) {
+            $vendor = Vendor::firstOrNew(['code' => $entry['code']]);
+            $vendor->fill($entry['attributes']);
+            $vendor->code = $entry['code'];
+            $vendor->save();
+        }
+    }
+
+    private function applyMaterials(array $plan): void
+    {
+        foreach ($plan as $entry) {
+            $material = Material::firstOrNew(['code' => $entry['code']]);
+            $material->fill($entry['attributes']);
+            $material->code = $entry['code'];
+            $material->save();
+        }
+    }
+
+    private function applyVendorPrices(array $plan): void
+    {
+        foreach ($plan as $entry) {
+            $vendor = Vendor::where('code', $entry['vendor_code'])->firstOrFail();
+            $material = Material::where('code', $entry['material_code'])->firstOrFail();
+
+            $price = VendorMaterialPrice::firstOrNew([
+                'vendor_id' => $vendor->id,
+                'material_id' => $material->id,
+            ]);
+
+            // Sama seperti MaterialController::storeVendorPrice() —
+            // menandai satu harga preferred harus melepas tanda dari harga
+            // lain milik bahan yang sama, supaya impor tidak bisa
+            // menghasilkan lebih dari satu vendor preferred per bahan.
+            if (($entry['attributes']['is_preferred'] ?? false) === true) {
+                VendorMaterialPrice::where('material_id', $material->id)->update(['is_preferred' => false]);
+            }
+
+            $price->fill($entry['attributes']);
+            $price->vendor_id = $vendor->id;
+            $price->material_id = $material->id;
+            $price->save();
+        }
+    }
+
+    private function applyBom(array $plan): void
+    {
+        foreach ($plan as $entry) {
+            $variant = ProductVariant::where('sku', $entry['sku'])->first();
+
+            if ($variant === null) {
+                throw new MasterDataImportRowException(
+                    MasterDataSheets::BOM,
+                    $entry['row'],
+                    'sku',
+                    "SKU '{$entry['sku']}' tidak ditemukan, termasuk setelah sheet 'products' diterapkan."
+                );
+            }
+
+            $material = Material::where('code', $entry['material_code'])->firstOrFail();
+
+            $line = $variant->bomLines()->firstOrNew(['material_id' => $material->id]);
+            $line->qty_needed = $entry['qty_needed'];
+            $line->notes = $entry['notes'];
+            $line->material_id = $material->id;
+            $line->save();
+        }
+    }
+
+    // =================================================================
     // UTILITAS NILAI SEL
     // =================================================================
 
@@ -1302,6 +1778,30 @@ class MasterDataImportService
         // MySQL dengan galat 500 yang tidak bisa dibaca pemilik toko.
         if ($parsed > 999999999999.99) {
             $this->addError($sheet, $row, $column, 'Nilai terlalu besar.');
+
+            return null;
+        }
+
+        return $parsed;
+    }
+
+    /**
+     * Sama seperti parseDecimal() tapi untuk kolom qty_needed BOM: tidak
+     * memakai batas plafon harga (bukan uang), dan harus > 0 — jumlah bahan
+     * nol per unit produk bukan baris BOM yang berarti apa pun.
+     */
+    private function parseDecimalQty(string $sheet, int $row, string $column, mixed $value): ?float
+    {
+        if (! is_numeric($value)) {
+            $this->addError($sheet, $row, $column, "Nilai '{$value}' harus berupa angka polos tanpa pemisah ribuan.");
+
+            return null;
+        }
+
+        $parsed = (float) $value;
+
+        if ($parsed <= 0) {
+            $this->addError($sheet, $row, $column, 'Jumlah bahan per unit harus lebih besar dari nol.');
 
             return null;
         }

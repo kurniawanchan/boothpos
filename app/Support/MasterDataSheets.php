@@ -27,12 +27,34 @@ final class MasterDataSheets
     public const STOCK = 'stock';
 
     /**
+     * Vendor/bahan baku/BOM — ditambahkan pasca-MVP 2026-09-01 (lihat
+     * catatan bertanggal di CLAUDE.md/README.md/PRD). "vendor_prices" dan
+     * "bom" mereferensikan vendor/bahan/varian lewat KODE, bukan id
+     * database, mengikuti pola persis artist_code/category_code pada sheet
+     * 'products' — supaya berkas hasil ekspor tetap portabel antar
+     * instalasi dan tidak bergantung pada urutan insert.
+     */
+    public const VENDORS = 'vendors';
+
+    public const MATERIALS = 'materials';
+
+    public const VENDOR_PRICES = 'vendor_prices';
+
+    public const BOM = 'bom';
+
+    /**
      * URUTAN DEPENDENSI, bukan urutan fisik sheet di dalam berkas.
      * artists/categories harus ada sebelum products bisa mereferensikannya,
-     * dan varian harus ada sebelum stok bisa menunjuk SKU-nya. Impor selalu
-     * memproses dalam urutan ini berapa pun urutan sheet di berkas.
+     * dan varian harus ada sebelum stok bisa menunjuk SKU-nya. vendors dan
+     * materials harus ada sebelum vendor_prices (menunjuk keduanya) dan bom
+     * (menunjuk material + SKU varian yang mungkin baru dibuat sheet
+     * products). Impor selalu memproses dalam urutan ini berapa pun urutan
+     * sheet di berkas.
      */
-    public const ORDER = [self::ARTISTS, self::CATEGORIES, self::PRODUCTS, self::STOCK];
+    public const ORDER = [
+        self::ARTISTS, self::CATEGORIES, self::PRODUCTS, self::STOCK,
+        self::VENDORS, self::MATERIALS, self::VENDOR_PRICES, self::BOM,
+    ];
 
     /**
      * Kolom per sheet, berurutan. Baris pertama setiap sheet WAJIB berisi
@@ -55,6 +77,18 @@ final class MasterDataSheets
             ],
             self::STOCK => [
                 'sku', 'current_stock', 'reason',
+            ],
+            self::VENDORS => [
+                'code', 'name', 'contact_phone', 'contact_email', 'notes', 'is_active',
+            ],
+            self::MATERIALS => [
+                'code', 'name', 'unit', 'notes', 'is_active',
+            ],
+            self::VENDOR_PRICES => [
+                'vendor_code', 'material_code', 'price', 'is_preferred', 'notes',
+            ],
+            self::BOM => [
+                'sku', 'material_code', 'qty_needed', 'notes',
             ],
             default => throw new \InvalidArgumentException("Sheet tidak dikenali: {$sheet}."),
         };
@@ -118,6 +152,36 @@ final class MasterDataSheets
                 'sku' => 'RYUKYSAK0001',
                 'current_stock' => 20,
                 'reason' => 'Isi jumlah AKHIR yang diinginkan, bukan selisih. Contoh alasan: stok opname 1 Oktober.',
+            ],
+            self::VENDORS => [
+                'code' => 'VNAKR',
+                'name' => 'Toko Akrilik Jaya',
+                'contact_phone' => '',
+                'contact_email' => '',
+                'notes' => '',
+                'is_active' => 1,
+            ],
+            self::MATERIALS => [
+                'code' => 'AC3',
+                'name' => 'Acrylic sheet 3mm',
+                'unit' => 'lembar',
+                'notes' => '',
+                'is_active' => 1,
+            ],
+            self::VENDOR_PRICES => [
+                'vendor_code' => 'VNAKR',
+                'material_code' => 'AC3',
+                'price' => '15000.00',
+                'is_preferred' => 1,
+                'notes' => '',
+            ],
+            self::BOM => [
+                // SKU sama seperti pada sheet 'stock' — varian ini memang
+                // dibuat oleh baris contoh sheet 'products' di atas.
+                'sku' => 'RYUKYSAK0001',
+                'material_code' => 'AC3',
+                'qty_needed' => '1.0000',
+                'notes' => '',
             ],
             default => throw new \InvalidArgumentException("Sheet tidak dikenali: {$sheet}."),
         };

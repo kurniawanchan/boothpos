@@ -52,6 +52,11 @@ class ProductVariant extends Model
         return $this->belongsTo(Product::class);
     }
 
+    public function bomLines(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductVariantBomLine::class);
+    }
+
     public function isLowStock(): bool
     {
         return $this->low_stock_alert !== null && $this->current_stock <= $this->low_stock_alert;
