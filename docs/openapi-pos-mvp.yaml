@@ -82,7 +82,7 @@ paths:
                 type: object
                 properties:
                   token: { type: string }
-                  user: { $ref: '#/components/schemas/User' }
+                  user: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
@@ -103,7 +103,7 @@ paths:
           description: Berhasil
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/User' }
+              schema: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ------------------------------------------------------------------
@@ -2356,16 +2356,28 @@ components:
       pattern: '^-?\d+\.\d{2}$'
       example: "150000.00"
 
-    User:
+    # BUG YANG DITEMUKAN & DIPERBAIKI — skema ini sebelumnya juga bernama
+    # `User` sama seperti skema entitas CRUD pengguna di bawah (lihat
+    # bagian "Pengguna & Peran"), yang ditambahkan belakangan oleh alur
+    # kerja terpisah. Dua definisi top-level dengan kunci sama di YAML
+    # membuat definisi kedua diam-diam menimpa yang pertama pada parser
+    # yang taat spesifikasi — endpoint /auth/login dan /auth/me akan
+    # terdokumentasi memakai skema yang salah (bentuk objek role, bukan
+    # nama+menu_keys) tanpa galat apa pun yang terlihat. Diberi nama
+    # sendiri karena memang bentuknya berbeda dari skema entitas User
+    # (role di sini nama tampilan saja + menu_keys hasil resolusi sesi,
+    # bukan objek Role penuh).
+    AuthenticatedUser:
       type: object
       description: |
-        Sejak 001-user-store-settings, `role` adalah NAMA Role yang bisa
-        dikonfigurasi bebas oleh owner (bukan lagi enum 4 nilai tetap) —
-        dipakai HANYA untuk tampilan. `menu_keys` adalah daftar kunci menu
-        yang boleh diakses akun ini, resolusi sekali per sesi login/`GET
-        /auth/me`; ini yang dipakai frontend untuk `canAccessMenu()`
-        (cosmetic saja — penegakan sesungguhnya tetap di server pada
-        setiap endpoint).
+        Bentuk `user` pada respons /auth/login dan /auth/me — BUKAN skema
+        entitas User CRUD (lihat `User` di bagian "Pengguna & Peran").
+        `role` adalah NAMA Role yang bisa dikonfigurasi bebas oleh owner
+        (bukan lagi enum 4 nilai tetap) — dipakai HANYA untuk tampilan.
+        `menu_keys` adalah daftar kunci menu yang boleh diakses akun ini,
+        resolusi sekali per sesi login/`GET /auth/me`; ini yang dipakai
+        frontend untuk `canAccessMenu()` (cosmetic saja — penegakan
+        sesungguhnya tetap di server pada setiap endpoint).
       properties:
         id: { type: integer }
         name: { type: string }
