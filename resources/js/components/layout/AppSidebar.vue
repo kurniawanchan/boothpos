@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '../../stores/auth';
@@ -19,6 +19,13 @@ defineEmits(['logout']);
 // place the sidebar decides visibility, delegating to
 // auth.canAccessMenu() (which mirrors User::canAccessMenu() server-side)
 // instead of a hardcoded role list. See specs/001-user-store-settings.
+//
+// Pengaturan/Pengguna/Peran are grouped under one collapsible "Pengaturan"
+// parent (routes/menu keys unchanged — 'settings'/'users'/'roles' are
+// still three separate pages, this only changes how they're presented in
+// the sidebar) — three same-purpose administrative screens as one flat
+// top-level item each was cluttering the nav for owner/admin, the only
+// roles that ever see more than one of them.
 const NAV_DEFS = [
   { name: 'dashboard', label: 'Beranda', icon: 'ph-house', menuKey: 'dashboard' },
   { name: 'pos', label: 'Kasir', icon: 'ph-shopping-cart-simple', menuKey: 'pos' },
@@ -34,16 +41,55 @@ const NAV_DEFS = [
   { name: 'preorders', label: 'Pre-order', icon: 'ph-clock-countdown', menuKey: 'preorders' },
   { name: 'sales', label: 'Penjualan', icon: 'ph-receipt', menuKey: 'sales' },
   { name: 'reports', label: 'Laporan', icon: 'ph-chart-bar', menuKey: 'reports' },
-  { name: 'users', label: 'Pengguna', icon: 'ph-users', menuKey: 'users' },
-  { name: 'roles', label: 'Peran', icon: 'ph-shield-check', menuKey: 'roles' },
-  { name: 'settings', label: 'Pengaturan', icon: 'ph-gear-six', menuKey: 'settings' },
+  {
+    key: 'settings-group',
+    label: 'Pengaturan',
+    icon: 'ph-gear-six',
+    children: [
+      { name: 'settings', label: 'General', menuKey: 'settings' },
+      { name: 'users', label: 'Pengguna', menuKey: 'users' },
+      { name: 'roles', label: 'Peran', menuKey: 'roles' },
+    ],
+  },
 ];
 
+// A group is visible only if at least one of its children is — same
+// hide-entirely convention as every other role gate in this app, applied
+// one level up.
 const navItems = computed(() =>
-  NAV_DEFS.filter((item) => auth.canAccessMenu(item.menuKey)).map((item) => ({
-    ...item,
-    badge: item.name === 'pos' ? cartCount.value : item.name === 'preorders' ? props.preorderAlertCount : 0,
-  }))
+  NAV_DEFS.map((item) => {
+    if (item.children) {
+      const children = item.children.filter((c) => auth.canAccessMenu(c.menuKey));
+      return children.length ? { ...item, children } : null;
+    }
+    return auth.canAccessMenu(item.menuKey)
+      ? { ...item, badge: item.name === 'pos' ? cartCount.value : item.name === 'preorders' ? props.preorderAlertCount : 0 }
+      : null;
+  }).filter(Boolean)
+);
+
+const expandedGroups = ref(new Set());
+function isGroupExpanded(item) {
+  return expandedGroups.value.has(item.key) || item.children.some((c) => c.name === route.name);
+}
+function toggleGroup(item) {
+  const next = new Set(expandedGroups.value);
+  if (next.has(item.key)) next.delete(item.key);
+  else next.add(item.key);
+  expandedGroups.value = next;
+}
+// Auto-expand a group the first time its own child becomes the active
+// route (e.g. arriving at /users via a direct link or after saving a
+// form) so the parent doesn't look collapsed while showing an active
+// child underneath it.
+watch(
+  () => route.name,
+  () => {
+    for (const item of navItems.value) {
+      if (item.children?.some((c) => c.name === route.name)) expandedGroups.value.add(item.key);
+    }
+  },
+  { immediate: true }
 );
 </script>
 
@@ -60,8 +106,9 @@ const navItems = computed(() =>
     </div>
 
     <ul class="flex flex-1 flex-col gap-0.5 overflow-auto px-3">
-      <li v-for="item in navItems" :key="item.name">
+      <li v-for="item in navItems" :key="item.key ?? item.name">
         <RouterLink
+          v-if="!item.children"
           :to="{ name: item.name }"
           class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-[13.5px] font-medium text-muted-4 transition-colors hover:bg-line-7"
           :class="route.name === item.name ? 'bg-mint-100 font-bold text-brand-active' : ''"
@@ -76,6 +123,35 @@ const navItems = computed(() =>
             {{ item.badge }}
           </span>
         </RouterLink>
+
+        <template v-else>
+          <button
+            type="button"
+            class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-[13.5px] font-medium text-muted-4 transition-colors hover:bg-line-7"
+            :class="item.children.some((c) => c.name === route.name) ? 'text-brand-active' : ''"
+            :aria-expanded="isGroupExpanded(item)"
+            @click="toggleGroup(item)"
+          >
+            <i class="ph-duotone text-[17px]" :class="item.icon" aria-hidden="true"></i>
+            <span class="flex-1 text-left font-bold">{{ item.label }}</span>
+            <i
+              class="ph-duotone ph-caret-down text-[13px] transition-transform"
+              :class="{ 'rotate-180': isGroupExpanded(item) }"
+              aria-hidden="true"
+            ></i>
+          </button>
+          <ul v-if="isGroupExpanded(item)" class="mt-0.5 flex flex-col gap-0.5 border-l border-line-3 pl-3.5">
+            <li v-for="child in item.children" :key="child.name">
+              <RouterLink
+                :to="{ name: child.name }"
+                class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium text-muted-4 transition-colors hover:bg-line-7"
+                :class="route.name === child.name ? 'bg-mint-100 font-bold text-brand-active' : ''"
+              >
+                <span class="flex-1 text-left">{{ child.label }}</span>
+              </RouterLink>
+            </li>
+          </ul>
+        </template>
       </li>
     </ul>
 
