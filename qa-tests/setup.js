@@ -1,6 +1,16 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/vue';
+import { config } from '@vue/test-utils';
+import { i18n } from '../resources/js/i18n';
+
+// 002-language-toggle — @testing-library/vue v8 delegates to @vue/test-utils'
+// mount() under the hood, so pushing plugins onto VTU's global config here
+// applies to every render() call project-wide, without editing each of the
+// ~20 test files that call render() with their own `global.plugins` array
+// (those per-file arrays — mostly just Pinia — still work identically
+// alongside this).
+config.global.plugins.push(i18n);
 
 // BUG YANG DITEMUKAN & DIPERBAIKI — tidak ada cleanup() di antar-test sama
 // sekali sebelum ini. @testing-library/vue TIDAK auto-unmount komponen

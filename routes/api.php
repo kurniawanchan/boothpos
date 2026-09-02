@@ -22,15 +22,20 @@ use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VendorController;
+use App\Http\Middleware\SetLocaleFromUser;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
 
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
-    Route::middleware('auth:sanctum')->group(function () {
+    // SetLocaleFromUser HANYA di sini, bukan pada POST /auth/login di
+    // atas — layar login selalu Bahasa Indonesia (FR-001), locale
+    // per-akun baru berlaku setelah $request->user() resolve.
+    Route::middleware(['auth:sanctum', SetLocaleFromUser::class])->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
+        Route::put('/auth/language', [AuthController::class, 'updateLanguage']);
 
         Route::get('/settings/features', [SettingsController::class, 'features']);
         Route::get('/settings', [SettingsController::class, 'index']);

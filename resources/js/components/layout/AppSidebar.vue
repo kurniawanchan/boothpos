@@ -1,11 +1,13 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { usePosCartStore } from '../../stores/posCart';
 
+const { t } = useI18n();
 const route = useRoute();
 const auth = useAuthStore();
 const settings = useSettingsStore();
@@ -26,29 +28,31 @@ defineEmits(['logout']);
 // the sidebar) — three same-purpose administrative screens as one flat
 // top-level item each was cluttering the nav for owner/admin, the only
 // roles that ever see more than one of them.
+// `label` menyimpan KUNCI terjemahan (di bawah namespace `nav.*`), bukan
+// lagi teks literal — dibaca lewat t(item.label) di template.
 const NAV_DEFS = [
-  { name: 'dashboard', label: 'Beranda', icon: 'ph-house', menuKey: 'dashboard' },
-  { name: 'pos', label: 'Kasir', icon: 'ph-shopping-cart-simple', menuKey: 'pos' },
-  { name: 'session', label: 'Sesi Kasir', icon: 'ph-cash-register', menuKey: 'session' },
-  { name: 'events', label: 'Event', icon: 'ph-calendar-dots', menuKey: 'events' },
-  { name: 'products', label: 'Produk', icon: 'ph-package', menuKey: 'products' },
-  { name: 'artists', label: 'Artist', icon: 'ph-users-three', menuKey: 'artists' },
-  { name: 'categories', label: 'Kategori', icon: 'ph-squares-four', menuKey: 'categories' },
-  { name: 'stock', label: 'Stok', icon: 'ph-stack', menuKey: 'stock' },
-  { name: 'vendors', label: 'Vendor', icon: 'ph-truck', menuKey: 'vendors' },
-  { name: 'materials', label: 'Bahan Baku', icon: 'ph-flask', menuKey: 'materials' },
-  { name: 'customers', label: 'Pelanggan', icon: 'ph-address-book', menuKey: 'customers' },
-  { name: 'preorders', label: 'Pre-order', icon: 'ph-clock-countdown', menuKey: 'preorders' },
-  { name: 'sales', label: 'Penjualan', icon: 'ph-receipt', menuKey: 'sales' },
-  { name: 'reports', label: 'Laporan', icon: 'ph-chart-bar', menuKey: 'reports' },
+  { name: 'dashboard', label: 'nav.dashboard', icon: 'ph-house', menuKey: 'dashboard' },
+  { name: 'pos', label: 'nav.pos', icon: 'ph-shopping-cart-simple', menuKey: 'pos' },
+  { name: 'session', label: 'nav.session', icon: 'ph-cash-register', menuKey: 'session' },
+  { name: 'events', label: 'nav.events', icon: 'ph-calendar-dots', menuKey: 'events' },
+  { name: 'products', label: 'nav.products', icon: 'ph-package', menuKey: 'products' },
+  { name: 'artists', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'artists' },
+  { name: 'categories', label: 'nav.categories', icon: 'ph-squares-four', menuKey: 'categories' },
+  { name: 'stock', label: 'nav.stock', icon: 'ph-stack', menuKey: 'stock' },
+  { name: 'vendors', label: 'nav.vendors', icon: 'ph-truck', menuKey: 'vendors' },
+  { name: 'materials', label: 'nav.materials', icon: 'ph-flask', menuKey: 'materials' },
+  { name: 'customers', label: 'nav.customers', icon: 'ph-address-book', menuKey: 'customers' },
+  { name: 'preorders', label: 'nav.preorders', icon: 'ph-clock-countdown', menuKey: 'preorders' },
+  { name: 'sales', label: 'nav.sales', icon: 'ph-receipt', menuKey: 'sales' },
+  { name: 'reports', label: 'nav.reports', icon: 'ph-chart-bar', menuKey: 'reports' },
   {
     key: 'settings-group',
-    label: 'Pengaturan',
+    label: 'nav.settings_group',
     icon: 'ph-gear-six',
     children: [
-      { name: 'settings', label: 'General', menuKey: 'settings' },
-      { name: 'users', label: 'Pengguna', menuKey: 'users' },
-      { name: 'roles', label: 'Peran', menuKey: 'roles' },
+      { name: 'settings', label: 'nav.settings', menuKey: 'settings' },
+      { name: 'users', label: 'nav.users', menuKey: 'users' },
+      { name: 'roles', label: 'nav.roles', menuKey: 'roles' },
     ],
   },
 ];
@@ -94,7 +98,7 @@ watch(
 </script>
 
 <template>
-  <nav aria-label="Navigasi utama" class="sticky top-0 flex h-screen w-[228px] flex-none flex-col border-r border-line-2 bg-white">
+  <nav :aria-label="t(`nav.aria_label`)" class="sticky top-0 flex h-screen w-[228px] flex-none flex-col border-r border-line-2 bg-white">
     <div class="flex items-center gap-2.5 px-[18px] pb-[18px] pt-5">
       <div class="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-brand text-[18px] text-white">
         <i class="ph-duotone ph-storefront" aria-hidden="true"></i>
@@ -114,7 +118,7 @@ watch(
           :class="route.name === item.name ? 'bg-mint-100 font-bold text-brand-active' : ''"
         >
           <i class="ph-duotone text-[17px]" :class="item.icon" aria-hidden="true"></i>
-          <span class="flex-1 text-left">{{ item.label }}</span>
+          <span class="flex-1 text-left">{{ t(item.label) }}</span>
           <span
             v-if="item.badge"
             class="rounded-full px-1.5 py-0.5 text-[10.5px] font-bold"
@@ -133,7 +137,7 @@ watch(
             @click="toggleGroup(item)"
           >
             <i class="ph-duotone text-[17px]" :class="item.icon" aria-hidden="true"></i>
-            <span class="flex-1 text-left font-bold">{{ item.label }}</span>
+            <span class="flex-1 text-left font-bold">{{ t(item.label) }}</span>
             <i
               class="ph-duotone ph-caret-down text-[13px] transition-transform"
               :class="{ 'rotate-180': isGroupExpanded(item) }"
@@ -147,7 +151,7 @@ watch(
                 class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium text-muted-4 transition-colors hover:bg-line-7"
                 :class="route.name === child.name ? 'bg-mint-100 font-bold text-brand-active' : ''"
               >
-                <span class="flex-1 text-left">{{ child.label }}</span>
+                <span class="flex-1 text-left">{{ t(child.label) }}</span>
               </RouterLink>
             </li>
           </ul>

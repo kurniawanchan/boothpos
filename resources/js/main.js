@@ -8,10 +8,12 @@ import '@phosphor-icons/web/duotone';
 import App from './App.vue';
 import router from './router';
 import { useAuthStore } from './stores/auth';
+import { i18n } from './i18n';
 
 const app = createApp(App);
 app.use(createPinia());
 app.use(router);
+app.use(i18n);
 
 // Restore the session (if any) from sessionStorage before the first route
 // resolves, so navigation guards see accurate auth state on a hard refresh.

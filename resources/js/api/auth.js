@@ -11,3 +11,7 @@ export function logout() {
 export function me() {
   return client.get('/auth/me').then((r) => r.data);
 }
+
+export function updateLanguage(language) {
+  return client.put('/auth/language', { language }).then((r) => r.data);
+}

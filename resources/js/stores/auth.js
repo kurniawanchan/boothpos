@@ -1,6 +1,17 @@
 import { defineStore } from 'pinia';
 import * as authApi from '../api/auth';
 import { getToken, setToken, clearToken } from '../utils/storage';
+import { i18n } from '../i18n';
+
+// Satu-satunya tempat locale FRONTEND diputuskan dari data user (cermin
+// dari SetLocaleFromUser di backend) — dipanggil setiap kali `user`
+// berubah lewat login/restore/me, supaya tidak ada jalur kedua yang
+// menyetel i18n.global.locale secara independen (Constitution Principle I).
+function syncLocale(user) {
+  if (user?.language) {
+    i18n.global.locale.value = user.language;
+  }
+}
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -25,6 +36,12 @@ export const useAuthStore = defineStore('auth', {
       const { token, user } = await authApi.login(username, password);
       setToken(token);
       this.user = user;
+      syncLocale(user);
+    },
+    async setLanguage(language) {
+      const updated = await authApi.updateLanguage(language);
+      this.user = updated;
+      syncLocale(updated);
     },
     async logout() {
       try {
@@ -56,6 +73,7 @@ export const useAuthStore = defineStore('auth', {
         }
         try {
           this.user = await authApi.me();
+          syncLocale(this.user);
         } catch {
           clearToken();
           this.user = null;

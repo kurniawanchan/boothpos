@@ -172,5 +172,11 @@ class MasterDataImportUserTest extends TestCase
         // password tersimpan tetap ter-hash dan BUKAN string kosong/null.
         $this->assertNotEmpty($user->password);
         $this->assertTrue(\Illuminate\Support\Facades\Hash::needsRehash($user->password) === false);
+
+        // 002-language-toggle US2 — users sheet tidak punya kolom bahasa
+        // sama sekali; default 'en' murni dari kolom database
+        // (users.language), tidak perlu perubahan apa pun di
+        // MasterDataSheets/MasterDataImportService untuk ini.
+        $this->assertSame('en', $user->language);
     }
 }

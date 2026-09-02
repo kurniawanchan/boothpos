@@ -1,5 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 /**
  * Dropdown kustom, bukan <select> native — popup <select> native memakai
@@ -12,7 +15,7 @@ const props = defineProps({
   modelValue: { type: [String, Number, null], default: '' },
   label: { type: String, default: '' },
   options: { type: Array, default: () => [] }, // [{ value, label }]
-  placeholder: { type: String, default: 'Pilih…' },
+  placeholder: { type: String, default: '' },
   error: { type: String, default: '' },
   hint: { type: String, default: '' },
   required: { type: Boolean, default: false },
@@ -32,7 +35,8 @@ const panelStyle = ref({});
 const selectedOption = computed(() =>
   props.options.find((o) => o.value == props.modelValue) ?? null,
 );
-const displayLabel = computed(() => selectedOption.value?.label ?? props.placeholder);
+const effectivePlaceholder = computed(() => props.placeholder || t('common.select_placeholder'));
+const displayLabel = computed(() => selectedOption.value?.label ?? effectivePlaceholder.value);
 
 // Panel is teleported to <body> (same pattern as BaseModal) and positioned
 // with fixed coordinates computed from the trigger's own rect. A select
@@ -166,12 +170,11 @@ onBeforeUnmount(() => {
         class="z-[95] max-h-64 overflow-y-auto rounded-lg border border-line bg-white p-1 shadow-lg"
       >
         <div
-          v-if="placeholder"
           role="option"
           :aria-selected="!modelValue"
           class="cursor-default rounded-md px-3 py-2 text-[14px] text-muted-3"
         >
-          {{ placeholder }}
+          {{ effectivePlaceholder }}
         </div>
         <button
           v-for="(opt, i) in options"
@@ -194,7 +197,7 @@ onBeforeUnmount(() => {
           <span class="truncate">{{ opt.label }}</span>
           <i v-if="opt.value == modelValue" class="ph-duotone ph-check shrink-0 text-[14px] text-brand" aria-hidden="true"></i>
         </button>
-        <div v-if="options.length === 0" class="px-3 py-2 text-[13px] text-muted-3">Tidak ada pilihan.</div>
+        <div v-if="options.length === 0" class="px-3 py-2 text-[13px] text-muted-3">{{ t('common.no_options') }}</div>
       </div>
     </Teleport>
 

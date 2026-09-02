@@ -19,6 +19,7 @@ class User extends Authenticatable
         'role_id',
         'photo_path',
         'is_active',
+        'language',
     ];
 
     protected $hidden = [
@@ -26,6 +27,9 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    // `language` sengaja tidak masuk sini — nilainya string enum polos
+    // ('id'/'en'), bukan JSON seperti `Role::menu_keys`, jadi round-trip
+    // apa adanya tanpa perlu cast.
     protected function casts(): array
     {
         return [

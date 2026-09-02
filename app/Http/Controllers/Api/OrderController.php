@@ -85,6 +85,11 @@ class OrderController extends Controller
         return response()->json(new OrderResource($order));
     }
 
+    // 002-language-toggle FR-009 — SENGAJA tidak memakai __() di sini
+    // meski SetLocaleFromUser tetap aktif untuk route ini. Struk dibaca
+    // PELANGGAN, bukan operator toko, jadi harus selalu Bahasa Indonesia
+    // terlepas dari preferensi bahasa kasir yang sedang login. Jangan
+    // "perbaiki" ini jadi ikut ter-i18n-kan.
     public function receipt(Order $order): JsonResponse
     {
         $order->load(['items', 'payments', 'cashier', 'event']);

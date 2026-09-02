@@ -78,9 +78,13 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    // 'id' — bukan default framework 'en'. Ini locale yang aktif untuk
+    // rute tamu (login, lihat FR-001) dan sebelum SetLocaleFromUser
+    // mengganti locale per-request untuk pengguna yang sudah login
+    // (002-language-toggle).
+    'locale' => env('APP_LOCALE', 'id'),
 
-    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
+    'fallback_locale' => env('APP_FALLBACK_LOCALE', 'id'),
 
     'faker_locale' => env('APP_FAKER_LOCALE', 'en_US'),
 
