@@ -9,6 +9,7 @@ use App\Models\Event;
 use App\Models\PaymentChannel;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -215,5 +216,43 @@ class OrderTest extends TestCase
 
         $this->postJson("/api/v1/orders/{$order['id']}/void", ['reason' => 'Pertama'])->assertOk();
         $this->postJson("/api/v1/orders/{$order['id']}/void", ['reason' => 'Kedua'])->assertStatus(409);
+    }
+
+    // 001-user-store-settings User Story 3 / SC-004 — celah yang
+    // ditemukan saat implementasi profil toko: struk sebelumnya hanya
+    // menampilkan store_name/store_contact, padahal spec mewajibkan
+    // identitas toko LENGKAP (alamat, logo, kontak person) tercantum.
+    public function test_receipt_includes_full_store_profile_when_configured(): void
+    {
+        Setting::updateOrCreate(['key' => 'store_name'], ['value' => 'Toko Merch', 'type' => 'string', 'group' => 'receipt']);
+        Setting::updateOrCreate(['key' => 'store_address'], ['value' => 'Jl. Merdeka No. 1, Jakarta', 'type' => 'string', 'group' => 'receipt']);
+        Setting::updateOrCreate(['key' => 'store_logo_path'], ['value' => 'store-logo/logo-test.png', 'type' => 'string', 'group' => 'receipt']);
+        Setting::updateOrCreate(['key' => 'store_contact_person'], ['value' => 'Budi Santoso', 'type' => 'string', 'group' => 'receipt']);
+        Setting::updateOrCreate(['key' => 'store_contact_phone'], ['value' => '0812-3456-7890', 'type' => 'string', 'group' => 'receipt']);
+        Setting::updateOrCreate(['key' => 'store_contact_email'], ['value' => 'toko@contoh.com', 'type' => 'string', 'group' => 'receipt']);
+
+        $order = $this->postJson('/api/v1/orders', $this->basePayload())->json();
+
+        $response = $this->getJson("/api/v1/orders/{$order['id']}/receipt");
+
+        $response->assertOk()
+            ->assertJsonPath('store_name', 'Toko Merch')
+            ->assertJsonPath('store_address', 'Jl. Merdeka No. 1, Jakarta')
+            ->assertJsonPath('store_contact_person', 'Budi Santoso')
+            ->assertJsonPath('store_contact_phone', '0812-3456-7890')
+            ->assertJsonPath('store_contact_email', 'toko@contoh.com');
+        $this->assertStringContainsString('store-logo/logo-test.png', $response->json('store_logo_url'));
+    }
+
+    public function test_receipt_omits_store_profile_fields_gracefully_when_unconfigured(): void
+    {
+        $order = $this->postJson('/api/v1/orders', $this->basePayload())->json();
+
+        $response = $this->getJson("/api/v1/orders/{$order['id']}/receipt");
+
+        $response->assertOk()
+            ->assertJsonPath('store_address', null)
+            ->assertJsonPath('store_logo_url', null)
+            ->assertJsonPath('store_contact_person', null);
     }
 }

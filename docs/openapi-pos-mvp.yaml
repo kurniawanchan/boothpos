@@ -2944,6 +2944,16 @@ components:
       properties:
         store_name: { type: string }
         store_contact: { type: string, nullable: true }
+        # 001-user-store-settings User Story 3 / SC-004 — field ini
+        # sebelumnya terlewat dari task breakdown fitur tsb, ditutup saat
+        # ditemukan sebagai celah nyata. Semua nullable — profil toko
+        # boleh tidak diisi lengkap, struk tetap tampil tanpa field yang
+        # kosong (bukan menampilkan string kosong/"null").
+        store_address: { type: string, nullable: true }
+        store_logo_url: { type: string, nullable: true, description: URL publik logo toko (dari ImageUploadService), null bila belum diunggah. }
+        store_contact_person: { type: string, nullable: true }
+        store_contact_phone: { type: string, nullable: true }
+        store_contact_email: { type: string, nullable: true }
         order_number: { type: string }
         event_name: { type: string }
         cashier_name: { type: string }

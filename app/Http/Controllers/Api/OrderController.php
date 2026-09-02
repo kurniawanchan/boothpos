@@ -7,6 +7,7 @@ use App\Http\Requests\StoreOrderRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use App\Models\Setting;
+use App\Services\ImageUploadService;
 use App\Services\OrderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,7 +15,10 @@ use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
-    public function __construct(private OrderService $orderService) {}
+    public function __construct(
+        private OrderService $orderService,
+        private ImageUploadService $imageUploadService,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -88,6 +92,17 @@ class OrderController extends Controller
         return response()->json([
             'store_name' => Setting::get('store_name', 'Toko'),
             'store_contact' => Setting::get('store_contact'),
+            // 001-user-store-settings User Story 3 / SC-004 — struk harus
+            // menampilkan identitas toko LENGKAP sesuai yang dikonfigurasi
+            // di Pengaturan, bukan cuma nama+satu kontak seperti
+            // sebelumnya. Field ini pernah terlewat dari task breakdown
+            // awal fitur tsb — ditemukan saat implementasi profil toko,
+            // ditutup di sini.
+            'store_address' => Setting::get('store_address'),
+            'store_logo_url' => $this->imageUploadService->url(Setting::get('store_logo_path')),
+            'store_contact_person' => Setting::get('store_contact_person'),
+            'store_contact_phone' => Setting::get('store_contact_phone'),
+            'store_contact_email' => Setting::get('store_contact_email'),
             'order_number' => $order->order_number,
             'event_name' => $order->event->name,
             'cashier_name' => $order->cashier->name,
