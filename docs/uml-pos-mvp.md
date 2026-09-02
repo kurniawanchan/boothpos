@@ -6,12 +6,14 @@
 
 | Field | Isi |
 |---|---|
-| Versi | v1.3 |
+| Versi | v1.4 |
 | Tanggal | 2 September 2026 |
-| Cakupan | MVP Oktober 2026, termasuk pre-order dan pengiriman kurir, ditambah kapabilitas pasca-MVP: log aktivitas (F13.4), Settings admin CRUD, ekspor/impor Excel master data, dan modul Vendor/Bahan Baku/BOM |
+| Cakupan | MVP Oktober 2026, termasuk pre-order dan pengiriman kurir, ditambah kapabilitas pasca-MVP: log aktivitas (F13.4), Settings admin CRUD, ekspor/impor Excel master data, modul Vendor/Bahan Baku/BOM, dan manajemen pengguna & peran kustom (`001-user-store-settings`) |
 | Acuan | PRD v1.6, `schema-pos-mvp.sql`, `openapi-pos-mvp.yaml` |
 
 **Addendum v1.3** — dokumen ini sebelumnya berhenti di commit pertama (`31c588c`) dan tidak mengikuti seluruh pekerjaan backend/frontend yang menyusul. Bagian 3 (sequence transaksi kasir) diperbaiki agar bukti pembayaran dan log aktivitas tergambar konsisten dengan kode; bagian 4 (pre-order) diperbaiki karena diagram lama tidak menunjukkan bug `customer`/`payments`/`shipment` yang hilang dari response (sudah diperbaiki di kode, lihat catatan pada bagian tersebut); bagian 9 diperluas dengan Settings admin CRUD; dan bagian 10–13 baru ditambahkan untuk log aktivitas, impor/ekspor Excel, Vendor/Bahan Baku/BOM, dan kanal pembayaran QR. Bagian 1–2 (use case dan class diagram) diperluas secukupnya untuk mencakup aktor/entitas baru tanpa menghapus struktur MVP asli.
+
+**Addendum v1.4** — bagian 14 baru ditambahkan untuk fitur `001-user-store-settings`: model otorisasi `Role`/`menu_keys` dinamis yang menggantikan enum `role` 4-nilai tetap, CRUD pengguna & peran kustom, dan profil toko lengkap di struk. Bagian 1–2, 9, dan 11 tidak digambar ulang untuk perubahan ini — perubahan skema `users`/`roles` dan sheet impor baru cukup dijelaskan naratif di bagian 14 sendiri, karena diagram bagian 2 sudah cukup padat dan `Role`/`User` bukan bagian dari struktur transaksi kasir inti yang digambarkannya.
 
 Diagram ditulis dalam sintaks Mermaid agar ikut terkontrol versi bersama kode. Dapat dirender di GitHub, ekstensi Mermaid pada VS Code, atau mermaid.live.
 
@@ -946,3 +948,86 @@ flowchart TD
   E --> G[Render qr_image_url atau account_number tersamar/penuh sesuai peran]
   F --> G
 ```
+
+## 14. Manajemen pengguna & peran kustom, profil toko — pasca-MVP, ditambahkan 2026-09-02
+
+Fitur `001-user-store-settings`. Mengganti seluruh model otorisasi berbasis
+enum `role` 4-nilai tetap (owner/admin/kasir/manajer inventori) dengan model
+`Role` dinamis ber-`menu_keys`, dan melengkapi identitas toko di struk.
+Bukan perluasan kecil dari bagian 9 (gate lisensi Pro/Master) — itu tetap
+memakai `LicenseGate`/`multi_artist_enabled` tanpa perubahan; ini adalah
+lapisan otorisasi terpisah yang menentukan menu mana yang boleh diakses tiap
+pengguna.
+
+### 14.1 Migrasi dua tahap skema (pola yang sama dengan `payments.preorder_id`)
+
+```mermaid
+flowchart LR
+  A["users.role (enum lama)"] -->|migrasi 1: tambah role_id nullable + seed 4 peran default + backfill| B["users.role DAN role_id (dua-duanya ada)"]
+  B -->|migrasi 2 (tanggal belakangan): role_id NOT NULL, drop kolom role| C["users.role_id (satu-satunya sumber peran)"]
+```
+
+Empat peran default yang di-seed pada migrasi pertama mereplikasi PERSIS hak
+akses lama sebelum kolom `role` dihapus: Owner dan Admin mendapat
+`MenuKeys::keys()` (semua menu), Kasir mendapat
+`dashboard, pos, session, events, customers, preorders, sales`, dan
+Inventory mendapat set Kasir ditambah
+`products, artists, categories, stock, vendors, materials`. Ini diverifikasi
+lewat login sungguhan sebagai 4 akun (bukan hanya lewat test) sebelum
+migrasi tahap dua dijalankan.
+
+### 14.2 Primitif otorisasi tunggal
+
+```mermaid
+classDiagram
+  class User {
+    +role_id
+    +photo_path
+    +last_access_at
+    +canAccessMenu(menuKey) bool
+  }
+  class Role {
+    +menu_keys: json
+    +canAccessAnyOf(keys) bool
+  }
+  User "1..*" --> "1" Role
+```
+
+`User::canAccessMenu('users')` menggantikan ~15 titik pemeriksaan lama
+(`isOwnerOrAdmin()` inline di 6 controller, `canManageMasterData()` di 17
+`FormRequest`, dan beberapa policy) — satu primitif, bukan tiga mekanisme
+paralel seperti sebelumnya. `App\Support\MenuKeys` adalah satu-satunya
+sumber daftar menu, dipakai backend (validasi) dan frontend
+(`GET /menu-keys` mengisi `RoleMenuPicker.vue`).
+
+**Guard kunci-diri (self-lockout), diberi status 409 bukan 403** — karena ini
+konflik aturan bisnis ("akun ini akan terkunci"), bukan penolakan izin:
+seorang pengguna tidak bisa menonaktifkan/menghapus/mengubah peran akunnya
+sendiri yang sedang login (`UserPolicy`), dan sebuah peran tidak bisa
+dihapus/diedit sehingga menyisakan nol peran yang masih bisa kelola menu
+`users`+`roles` (`RolePolicy::wouldLeaveNoRoleCapableOfManagingAccess()`),
+maupun dihapus selagi masih punya pengguna (`user_count > 0`).
+
+### 14.3 Profil toko di struk
+
+`Setting` (tabel key-value generik yang sama dipakai gate lisensi) diberi
+lima key baru: `store_address`, `store_logo_path`, `store_contact_person`,
+`store_contact_phone`, `store_contact_email` — bukan tabel baru, karena
+profil toko adalah satu baris data tunggal per instalasi, pola yang sama
+dengan pertimbangan di catatan `Setting` pada bagian 2. Celah yang ditemukan
+saat implementasi: `GET /orders/{id}/receipt` sebelumnya hanya menampilkan
+`store_name`/`store_contact` lama, padahal spec mewajibkan identitas toko
+lengkap tercantum di struk — diperbaiki dengan menambah lima field di atas
+ke response `receipt()`, memakai `ImageUploadService::url()` untuk logo
+(pola sama dengan bagian 13), dan field yang belum diisi tampil `null`
+(dihilangkan gracefully di `ReceiptModal.vue`), bukan string kosong.
+
+### 14.4 Ekspor/impor Excel diperluas 8 → 10 sheet
+
+`roles` dan `users` ditambahkan ke urutan pemrosesan
+(`artists → categories → products → stock → vendors → materials →
+vendor_prices → bom → roles → users`) mengikuti pola bagian 11, dengan satu
+penyimpangan yang disengaja: sheet baru merujuk relasinya lewat NAMA, bukan
+`code`, karena `Role` tidak punya kolom kode. Pengguna baru yang dibuat
+lewat impor mendapat `Hash::make(Str::random(32))` — tidak pernah password
+yang dikirim klien.

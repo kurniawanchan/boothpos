@@ -1,0 +1,27 @@
+meta {
+  name: 7 - Owner Nonaktifkan Diri Sendiri (negative - 409)
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{base_url}}/users/{{owner_user_id}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "is_active": false
+  }
+}
+
+tests {
+  test("ditolak 409 - FR-006 swa-kunci, bukan 403 karena ini konflik aturan bisnis bukan penolakan izin", function () {
+    expect(res.status).to.equal(409);
+  });
+}

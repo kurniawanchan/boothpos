@@ -170,7 +170,7 @@ no existing user's access may be assumed unchanged.
 - [X] T053 [US4] Update `docs/openapi-pos-mvp.yaml`'s export/import entity enums. Depends on: T051, T052.
 - [X] T054 [US4] Extend the downloadable template (`GET /imports/master-data/template`) with example `roles`/`users` rows; re-verify it still imports cleanly as-is (this repo's existing `test_the_shipped_template_imports_as_is` convention — extend that test to cover the two new sheets). Depends on: T051.
 - [X] T055 [P] [US4] Update `resources/js/components/masterData/MasterDataImportModal.vue` copy if it names specific sheets, to mention the two new ones.
-- [ ] T056 [US4] Run `php artisan test --filter=MasterDataImportUserTest` and verify quickstart.md step 7 live: export, edit, re-import (happy path), then re-import with a bad role reference and confirm nothing was partially applied. Depends on: T049, T054, T055.
+- [X] T056 [US4] Run `php artisan test --filter=MasterDataImportUserTest` and verify quickstart.md step 7 live: export, edit, re-import (happy path), then re-import with a bad role reference and confirm nothing was partially applied. Depends on: T049, T054, T055.
 
 **Checkpoint**: All four user stories independently functional.
 
@@ -180,11 +180,11 @@ no existing user's access may be assumed unchanged.
 
 **Purpose**: Documentation and regression discipline this repo's Constitution requires (Principle II, "Documentation & Change Discipline").
 
-- [ ] T057 [P] Add a dated post-MVP note to `docs/PRD-POS-Event-Multivendor.md`: F13.1 (user CRUD) built; F13.5 (configurable custom roles) moved from Priority C/stretch to built — following this repo's existing convention for scope-change notes (see the Vendor/Material/BOM and Excel-import dated notes already in that document).
-- [ ] T058 [P] Update `docs/uml-pos-mvp.md`/`docs/wbs-pos-mvp.md` to reflect the new Role/User-management flows and mark the relevant WBS items done, mirroring how the Vendor/Material/BOM feature updated these same documents.
-- [ ] T059 [P] Extend the `bruno/` collection with a new numbered folder covering: create role → create user with that role → confirm restricted access (403) → delete-in-use guard (409) → self-lockout guard (409) — following this collection's existing "one real flow plus negative cases" convention.
-- [ ] T060 Run the full regression suite: `php artisan test` (all suites, not just this feature's) and `npm test` — zero failures, confirming none of the 29 migrated authorization call sites regressed.
-- [ ] T061 Execute all 8 steps of `quickstart.md` end-to-end in a real browser as the final acceptance pass before considering this feature done.
+- [X] T057 [P] Add a dated post-MVP note to `docs/PRD-POS-Event-Multivendor.md`: F13.1 (user CRUD) built; F13.5 (configurable custom roles) moved from Priority C/stretch to built — following this repo's existing convention for scope-change notes (see the Vendor/Material/BOM and Excel-import dated notes already in that document).
+- [X] T058 [P] Update `docs/uml-pos-mvp.md`/`docs/wbs-pos-mvp.md` to reflect the new Role/User-management flows and mark the relevant WBS items done, mirroring how the Vendor/Material/BOM feature updated these same documents.
+- [X] T059 [P] Extend the `bruno/` collection with a new numbered folder covering: create role → create user with that role → confirm restricted access (403) → delete-in-use guard (409) → self-lockout guard (409) — following this collection's existing "one real flow plus negative cases" convention.
+- [X] T060 Run the full regression suite: `php artisan test` (all suites, not just this feature's) and `npm test` — zero failures, confirming none of the 29 migrated authorization call sites regressed.
+- [X] T061 Execute all 8 steps of `quickstart.md` end-to-end in a real browser as the final acceptance pass before considering this feature done.
 
 ---
 

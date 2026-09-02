@@ -1,0 +1,31 @@
+meta {
+  name: 3 - Login Pengguna Terbatas
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "bruno.terbatas",
+    "password": "password123"
+  }
+}
+
+script:post-response {
+  if (res.status === 200) {
+    bru.setVar("restricted_user_token", res.body.token);
+  }
+}
+
+tests {
+  test("login berhasil untuk pengguna dengan peran kustom", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.token).to.be.a("string");
+  });
+}

@@ -1,0 +1,20 @@
+meta {
+  name: 4 - Pengguna Terbatas Tidak Bisa Akses Roles (negative)
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_url}}/roles
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{restricted_user_token}}
+}
+
+tests {
+  test("ditolak 403 - menu_keys peran ini tidak menyertakan 'roles'", function () {
+    expect(res.status).to.equal(403);
+  });
+}

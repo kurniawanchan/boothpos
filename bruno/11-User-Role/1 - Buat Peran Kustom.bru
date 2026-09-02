@@ -1,0 +1,35 @@
+meta {
+  name: 1 - Buat Peran Kustom
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "name": "Kasir Terbatas Bruno",
+    "menu_keys": ["dashboard", "pos"]
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("custom_role_id", res.body.id);
+  }
+}
+
+tests {
+  test("peran kustom dibuat dengan menu_keys terbatas", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.menu_keys).to.eql(["dashboard", "pos"]);
+  });
+}

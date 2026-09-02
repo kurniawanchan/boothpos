@@ -1,0 +1,20 @@
+meta {
+  name: 9 - Hapus Peran Kustom (cleanup - 204)
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{base_url}}/roles/{{custom_role_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("peran kustom dihapus setelah tidak ada pengguna yang memakainya", function () {
+    expect(res.status).to.equal(204);
+  });
+}
