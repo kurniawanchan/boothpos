@@ -31,7 +31,7 @@ class UpdateArtistRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'code.prohibited' => 'Kode artist bersifat permanen dan tidak dapat diubah setelah dibuat.',
+            'code.prohibited' => __('master_data.artist_code_permanent'),
         ];
     }
 }

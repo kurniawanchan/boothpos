@@ -40,7 +40,7 @@ class OrderService
         $session = CashierSession::findOrFail($data['session_id']);
         if ($session->status !== 'open') {
             throw ValidationException::withMessages([
-                'session_id' => 'Sesi kasir tidak dalam status terbuka.',
+                'session_id' => __('orders_payments.session_not_open'),
             ]);
         }
 
@@ -56,7 +56,7 @@ class OrderService
 
                 if (! $variant->is_active) {
                     throw ValidationException::withMessages([
-                        'items' => "Varian {$variant->sku} tidak aktif.",
+                        'items' => __('orders_payments.variant_inactive', ['sku' => $variant->sku]),
                     ]);
                 }
 
@@ -81,7 +81,7 @@ class OrderService
             $paidAmount = collect($data['payments'])->sum('amount');
             if (round($paidAmount, 2) < round($totalAmount, 2)) {
                 throw ValidationException::withMessages([
-                    'payments' => 'Total pembayaran tidak menutup total transaksi.',
+                    'payments' => __('orders_payments.payment_insufficient'),
                 ]);
             }
 
@@ -93,7 +93,7 @@ class OrderService
             // input jumlah pembayaran.
             if ($changeAmount > $cashPaid + 0.01) {
                 throw ValidationException::withMessages([
-                    'payments' => 'Kembalian tidak dapat melebihi jumlah tunai yang diterima.',
+                    'payments' => __('orders_payments.change_exceeds_cash_received'),
                 ]);
             }
 
@@ -151,7 +151,7 @@ class OrderService
     public function void(Order $order, string $reason, User $user): Order
     {
         if ($order->status === 'voided') {
-            throw ValidationException::withMessages(['status' => 'Transaksi sudah dibatalkan sebelumnya.']);
+            throw ValidationException::withMessages(['status' => __('orders_payments.already_voided')]);
         }
 
         return DB::transaction(function () use ($order, $reason, $user) {

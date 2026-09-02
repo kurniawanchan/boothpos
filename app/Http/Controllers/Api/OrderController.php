@@ -71,7 +71,7 @@ class OrderController extends Controller
         // kunci menu yang, pada keempat peran default, persis berisi
         // owner+admin).
         if (! $request->user()->canAccessMenu('settings')) {
-            return response()->json(['message' => 'Hanya owner/admin yang dapat membatalkan transaksi.'], 403);
+            return response()->json(['message' => __('orders_payments.not_authorized_void')], 403);
         }
 
         $validated = $request->validate(['reason' => ['required', 'string', 'max:255']]);

@@ -72,7 +72,7 @@ class PaymentChannelController extends Controller
     public function store(Request $request): JsonResponse
     {
         if (! $request->user()->canAccessMenu('settings')) {
-            return response()->json(['message' => 'Tidak berhak.'], 403);
+            return response()->json(['message' => __('orders_payments.not_authorized')], 403);
         }
 
         $validated = $request->validate([
@@ -114,7 +114,7 @@ class PaymentChannelController extends Controller
     public function update(Request $request, PaymentChannel $channel): JsonResponse
     {
         if (! $request->user()->canAccessMenu('settings')) {
-            return response()->json(['message' => 'Tidak berhak.'], 403);
+            return response()->json(['message' => __('orders_payments.not_authorized')], 403);
         }
 
         $validated = $request->validate([

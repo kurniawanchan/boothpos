@@ -26,11 +26,11 @@ class ShipmentController extends Controller
         // membalik keputusan desain yang sudah dibuat, bukan memperbaiki
         // bug. Dicatat di sini, bukan diam-diam diubah.
         if ($preorder->fulfillment !== 'courier') {
-            return response()->json(['message' => 'Preorder ini tidak memakai metode kurir.'], 409);
+            return response()->json(['message' => __('preorders.not_courier_fulfillment')], 409);
         }
 
         if ($preorder->shipment) {
-            return response()->json(['message' => 'Preorder ini sudah memiliki data pengiriman.'], 409);
+            return response()->json(['message' => __('preorders.shipment_already_exists')], 409);
         }
 
         $validated = $request->validate([

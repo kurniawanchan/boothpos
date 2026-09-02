@@ -156,7 +156,7 @@ class ReportController extends Controller
     public function profit(Request $request): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {
-            return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
+            return response()->json(['message' => __('reports.not_authorized')], 403);
         }
 
         $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
@@ -195,7 +195,7 @@ class ReportController extends Controller
         // sama sensitifnya dengan laporan profit, jadi harus digerbang
         // sama, bukan cuma mutasinya (recordSettlementPayment) saja.
         if (! $request->user()->canAccessMenu('reports')) {
-            return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
+            return response()->json(['message' => __('reports.not_authorized')], 403);
         }
 
         $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
@@ -280,7 +280,7 @@ class ReportController extends Controller
     public function artistSettlementTransactions(Request $request, Artist $artist): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {
-            return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
+            return response()->json(['message' => __('reports.not_authorized')], 403);
         }
 
         $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
@@ -365,7 +365,7 @@ class ReportController extends Controller
     public function artistProfit(Request $request): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {
-            return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
+            return response()->json(['message' => __('reports.not_authorized')], 403);
         }
 
         $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
@@ -405,7 +405,7 @@ class ReportController extends Controller
     public function recordSettlementPayment(Request $request, ArtistSettlement $settlement): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {
-            return response()->json(['message' => 'Tidak berhak.'], 403);
+            return response()->json(['message' => __('reports.not_authorized_generic')], 403);
         }
 
         $validated = $request->validate(['amount' => ['required', 'numeric', 'min:0.01']]);
@@ -424,7 +424,7 @@ class ReportController extends Controller
     public function export(Request $request, string $report)
     {
         if (! in_array($report, ['sales', 'profit', 'artist-settlements', 'artist-profit'], true)) {
-            return response()->json(['message' => 'Laporan tidak dikenali.'], 404);
+            return response()->json(['message' => __('reports.unknown_report')], 404);
         }
 
         // F11.6 — 'artist-settlements' punya kebutuhan ekspor berbeda dari

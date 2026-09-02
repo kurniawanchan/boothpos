@@ -42,7 +42,7 @@ class PaymentProofController extends Controller
         $actualMime = $file->getMimeType();
         if (! in_array($actualMime, self::ALLOWED_MIME, true)) {
             return response()->json([
-                'message' => 'Tipe berkas tidak didukung. Hanya JPEG atau PNG.',
+                'message' => __('orders_payments.unsupported_file_type'),
             ], 422);
         }
 
@@ -78,11 +78,11 @@ class PaymentProofController extends Controller
         $isOwnerOfProof = $proof->uploaded_by === $user->id;
 
         if (! $user->isOwnerOrAdmin() && ! $isOwnerOfProof) {
-            return response()->json(['message' => 'Tidak berhak mengakses berkas ini.'], 403);
+            return response()->json(['message' => __('orders_payments.not_authorized_proof_access')], 403);
         }
 
         if (! Storage::disk('local')->exists($proof->file_path)) {
-            return response()->json(['message' => 'Berkas tidak ditemukan.'], 404);
+            return response()->json(['message' => __('orders_payments.proof_not_found')], 404);
         }
 
         return response(Storage::disk('local')->get($proof->file_path))

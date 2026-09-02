@@ -23,7 +23,7 @@ class ActivityLogController extends Controller
         // komersial (ReportController), belum punya layar/menu tersendiri
         // di frontend hari ini.
         if (! $request->user()->canAccessMenu('reports')) {
-            return response()->json(['message' => 'Tidak berhak mengakses log aktivitas.'], 403);
+            return response()->json(['message' => __('activity_log.not_authorized')], 403);
         }
 
         $perPage = min((int) $request->integer('per_page', 25), 100);

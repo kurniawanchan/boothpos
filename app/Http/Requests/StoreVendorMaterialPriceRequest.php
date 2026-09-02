@@ -43,7 +43,7 @@ class StoreVendorMaterialPriceRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'vendor_id.unique' => 'Vendor ini sudah punya harga untuk bahan ini. Ubah harganya lewat endpoint update.',
+            'vendor_id.unique' => __('vendors_materials.vendor_price_already_exists'),
         ];
     }
 }

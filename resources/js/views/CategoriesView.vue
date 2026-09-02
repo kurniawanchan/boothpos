@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listCategories, createCategory, updateCategory, deleteCategory, uploadCategoryImage } from '../api/categories';
 import { exportMasterData } from '../api/masterData';
@@ -17,6 +18,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
 const auth = useAuthStore();
+const { t } = useI18n();
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listCategories);
@@ -41,7 +43,7 @@ async function doExport() {
   try {
     await exportMasterData('categories');
   } catch {
-    toast.error('Gagal mengekspor data kategori.');
+    toast.error(t('master_data.export_category_failed'));
   } finally {
     exporting.value = false;
   }
@@ -55,14 +57,14 @@ async function afterImport() {
 
 const nameById = computed(() => Object.fromEntries(allCategories.value.map((c) => [c.id, c.name])));
 
-const columns = [
-  { key: 'code', label: 'Kode' },
-  { key: 'name', label: 'Nama' },
-  { key: 'parent_id', label: 'Induk' },
-  { key: 'product_count', label: 'Produk' },
-  { key: 'is_active', label: 'Status' },
+const columns = computed(() => [
+  { key: 'code', label: t('master_data.col_code') },
+  { key: 'name', label: t('master_data.col_name') },
+  { key: 'parent_id', label: t('master_data.col_parent') },
+  { key: 'product_count', label: t('master_data.col_product_count') },
+  { key: 'is_active', label: t('master_data.col_status') },
   { key: 'actions', label: '' },
-];
+]);
 
 const showForm = ref(false);
 const editingCategory = ref(null);
@@ -88,12 +90,12 @@ function onCategoryImageChange(e) {
   categoryImageFile.value = null;
   if (!file) return;
   if (!file.type.startsWith('image/')) {
-    categoryImageError.value = 'Berkas harus berupa gambar.';
+    categoryImageError.value = t('master_data.image_must_be_image');
     e.target.value = '';
     return;
   }
   if (file.size > MAX_IMAGE_BYTES) {
-    categoryImageError.value = 'Ukuran gambar maksimal 5 MB.';
+    categoryImageError.value = t('master_data.image_max_size');
     e.target.value = '';
     return;
   }
@@ -144,7 +146,7 @@ async function saveCategory() {
         display_order: Number(form.display_order) || 0,
         is_active: form.is_active,
       });
-      toast.success('Kategori diperbarui.');
+      toast.success(t('master_data.category_updated'));
     } else {
       const created = await createCategory({
         code: form.code.toUpperCase(),
@@ -154,13 +156,13 @@ async function saveCategory() {
         is_active: form.is_active,
       });
       categoryId = created.id;
-      toast.success('Kategori dibuat.');
+      toast.success(t('master_data.category_created'));
     }
     if (categoryImageFile.value && categoryId) {
       try {
         await uploadCategoryImage(categoryId, categoryImageFile.value);
       } catch {
-        toast.error('Kategori tersimpan, tapi gagal mengunggah gambar.');
+        toast.error(t('master_data.category_saved_image_failed'));
       }
     }
     showForm.value = false;
@@ -182,7 +184,7 @@ async function performDelete() {
   deleting.value = true;
   try {
     await deleteCategory(deleteTarget.value.id);
-    toast.success('Kategori dinonaktifkan.');
+    toast.success(t('master_data.category_deactivated'));
     showDelete.value = false;
     await load();
   } catch {
@@ -198,11 +200,11 @@ async function performDelete() {
     <div class="flex flex-wrap items-center gap-2.5">
       <div class="relative flex min-w-[230px] flex-1 items-center">
         <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="category-search">Cari kategori</label>
+        <label class="sr-only" for="category-search">{{ t('master_data.search_category') }}</label>
         <input
           id="category-search"
           v-model="search"
-          placeholder="Cari nama kategori…"
+          :placeholder="t('master_data.search_category_placeholder')"
           class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           @input="debouncedSearch"
         />
@@ -210,62 +212,62 @@ async function performDelete() {
       <template v-if="auth.canAccessMenu('categories')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          Ekspor .xlsx
+          {{ t('common.export_xlsx') }}
         </BaseButton>
         <BaseButton variant="secondary" @click="showImportModal = true">
           <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
-          Impor massal
+          {{ t('common.bulk_import') }}
         </BaseButton>
         <BaseButton @click="openCreate">
           <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-          Kategori baru
+          {{ t('master_data.new_category') }}
         </BaseButton>
       </template>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada kategori.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_categories')">
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
         <template #cell-parent_id="{ row }">{{ row.parent_id ? nameById[row.parent_id] ?? `#${row.parent_id}` : '—' }}</template>
         <template #cell-product_count="{ row }">{{ row.product_count ?? 0 }}</template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div v-if="auth.canAccessMenu('categories')" class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">Hapus</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingCategory ? 'Ubah kategori' : 'Kategori baru'" max-width-class="max-w-[460px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingCategory ? t('master_data.edit_category') : t('master_data.new_category')" max-width-class="max-w-[460px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveCategory">
         <BaseInput
           v-model="form.code"
-          label="Kode (2 huruf)"
+          :label="t('master_data.code_2_letters')"
           maxlength="2"
           required
           :disabled="!!editingCategory"
-          hint="Permanen setelah dibuat."
+          :hint="t('master_data.permanent_after_creation')"
           :error="formErrors.code"
         />
-        <BaseInput v-model="form.name" label="Nama kategori" required maxlength="100" :error="formErrors.name" />
-        <BaseSelect v-model="form.parent_id" label="Kategori induk" placeholder="Tidak ada (kategori utama)" :options="parentOptions" :error="formErrors.parent_id" />
-        <BaseInput v-model="form.display_order" type="number" label="Urutan tampil" :error="formErrors.display_order" />
+        <BaseInput v-model="form.name" :label="t('master_data.category_name')" required maxlength="100" :error="formErrors.name" />
+        <BaseSelect v-model="form.parent_id" :label="t('master_data.parent_category')" :placeholder="t('master_data.no_parent_main_category')" :options="parentOptions" :error="formErrors.parent_id" />
+        <BaseInput v-model="form.display_order" type="number" :label="t('master_data.display_order')" :error="formErrors.display_order" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
-          Aktif
+          {{ t('common.active') }}
         </label>
         <div class="flex flex-col gap-1.5">
-          <label class="text-[12.5px] font-semibold text-muted-4" for="category-image">Gambar kategori</label>
+          <label class="text-[12.5px] font-semibold text-muted-4" for="category-image">{{ t('master_data.category_image') }}</label>
           <div class="flex items-center gap-3">
             <img
               v-if="editingCategory?.image_url && !categoryImageFile"
               :src="editingCategory.image_url"
-              alt="Gambar kategori saat ini"
+              :alt="t('master_data.current_category_image')"
               class="h-14 w-14 flex-none rounded-lg border border-line-2 object-cover"
             />
             <input
@@ -282,17 +284,17 @@ async function performDelete() {
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton :loading="saving" @click="saveCategory">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="saving" @click="saveCategory">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"
-      title="Nonaktifkan kategori"
-      :message="`Nonaktifkan ${deleteTarget?.name}? Ditolak bila masih ada sub-kategori atau produk aktif.`"
-      confirm-label="Ya, nonaktifkan"
+      :title="t('master_data.deactivate_category')"
+      :message="t('master_data.deactivate_category_confirm', { name: deleteTarget?.name })"
+      :confirm-label="t('master_data.yes_deactivate')"
       :loading="deleting"
       @close="showDelete = false"
       @confirm="performDelete"

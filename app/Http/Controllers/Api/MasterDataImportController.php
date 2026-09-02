@@ -50,7 +50,7 @@ class MasterDataImportController extends Controller
     public function template(Request $request): BinaryFileResponse|JsonResponse
     {
         if (! $request->user()->canAccessAnyMenu(['artists', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users'])) {
-            return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat mengunduh template impor.'], 403);
+            return response()->json(['message' => __('master_data_import.not_authorized_template')], 403);
         }
 
         $sheets = array_map(
@@ -72,7 +72,7 @@ class MasterDataImportController extends Controller
         $actualMime = $file->getMimeType();
         if (! in_array($actualMime, self::ALLOWED_MIME, true)) {
             return response()->json([
-                'message' => 'Tipe berkas tidak didukung. Hanya .xlsx.',
+                'message' => __('master_data_import.unsupported_file_type'),
             ], 422);
         }
 
@@ -89,7 +89,7 @@ class MasterDataImportController extends Controller
             Storage::disk('local')->delete($storedPath);
 
             return response()->json([
-                'message' => 'Berkas bukan workbook .xlsx yang valid.',
+                'message' => __('master_data_import.invalid_workbook'),
             ], 422);
         }
 
@@ -115,7 +115,7 @@ class MasterDataImportController extends Controller
 
         if ($result['errors'] !== []) {
             return response()->json(array_merge([
-                'message' => 'Impor dibatalkan: ada baris yang tidak valid. Tidak ada data yang diubah.',
+                'message' => __('master_data_import.import_cancelled_invalid_rows'),
             ], $result), 422);
         }
 

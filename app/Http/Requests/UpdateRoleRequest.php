@@ -45,7 +45,7 @@ class UpdateRoleRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'menu_keys.*.in' => 'Kunci menu tidak dikenal.',
+            'menu_keys.*.in' => __('roles.unknown_menu_key'),
         ];
     }
 }

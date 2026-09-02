@@ -27,7 +27,7 @@ class PaymentRecorder
 
             if (! $token) {
                 throw ValidationException::withMessages([
-                    'payments' => 'Bukti pembayaran wajib untuk metode non-tunai.',
+                    'payments' => __('orders_payments.proof_required_for_non_cash'),
                 ]);
             }
 
@@ -35,7 +35,7 @@ class PaymentRecorder
 
             if (! $proof) {
                 throw ValidationException::withMessages([
-                    'payments' => 'Token bukti pembayaran tidak valid atau sudah dipakai.',
+                    'payments' => __('orders_payments.proof_token_invalid'),
                 ]);
             }
         }

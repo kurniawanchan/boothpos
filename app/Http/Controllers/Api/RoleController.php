@@ -85,7 +85,7 @@ class RoleController extends Controller
 
             if (! $stillCapable && app(\App\Policies\RolePolicy::class)->wouldLeaveNoRoleCapableOfManagingAccess($role->id)) {
                 return response()->json([
-                    'message' => 'Tidak bisa disimpan — ini peran terakhir yang bisa mengelola pengguna & peran. Toko akan kehilangan akses mengelola dirinya sendiri.',
+                    'message' => __('policies.role_would_leave_no_capable_role'),
                 ], 409);
             }
         }
@@ -108,13 +108,13 @@ class RoleController extends Controller
         $activeUserCount = $role->users()->where('is_active', true)->count();
         if ($activeUserCount > 0) {
             return response()->json([
-                'message' => "Tidak bisa dihapus — masih dipakai oleh {$activeUserCount} pengguna.",
+                'message' => __('policies.role_delete_in_use', ['count' => $activeUserCount]),
             ], 409);
         }
 
         if ($policy->wouldLeaveNoRoleCapableOfManagingAccess($role->id)) {
             return response()->json([
-                'message' => 'Tidak bisa dihapus — ini peran terakhir yang bisa mengelola pengguna & peran. Toko akan kehilangan akses mengelola dirinya sendiri.',
+                'message' => __('policies.role_delete_would_leave_no_capable_role'),
             ], 409);
         }
 

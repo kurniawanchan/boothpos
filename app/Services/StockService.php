@@ -47,7 +47,7 @@ class StockService
 
             if ($stockAfter < 0) {
                 throw ValidationException::withMessages([
-                    'qty_change' => "Stok tidak mencukupi untuk varian {$locked->sku}. Tersedia: {$stockBefore}.",
+                    'qty_change' => __('master_data.insufficient_stock', ['sku' => $locked->sku, 'available' => $stockBefore]),
                 ]);
             }
 

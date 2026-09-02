@@ -153,33 +153,33 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
 
 - [X] T019 [P] [US1] `app/Http/Controllers/Api/AuthController.php` login
       failure/inactive-account messages → `lang/{id,en}/auth.php`.
-- [ ] T020 [P] [US1] `app/Policies/UserPolicy.php` and
+- [X] T020 [P] [US1] `app/Policies/UserPolicy.php` and
       `app/Policies/RolePolicy.php` — self-lockout (409) and
       last-capable-role (409) messages → `lang/{id,en}/policies.php`.
-- [ ] T021 [P] [US1] `app/Http/Requests/StoreUserRequest.php`,
+- [X] T021 [P] [US1] `app/Http/Requests/StoreUserRequest.php`,
       `UpdateUserRequest.php`, `StoreRoleRequest.php`,
       `UpdateRoleRequest.php` — custom `messages()` strings →
       `lang/{id,en}/users.php` + `lang/{id,en}/roles.php`.
-- [ ] T022 [P] [US1] `app/Http/Controllers/Api/ArtistController.php`,
+- [X] T022 [P] [US1] `app/Http/Controllers/Api/ArtistController.php`,
       `CategoryController.php`, `ProductController.php`,
       `StockController.php` and their `FormRequest`/delete-guard
       messages → `lang/{id,en}/master_data.php`.
-- [ ] T023 [P] [US1] `app/Http/Controllers/Api/VendorController.php`,
+- [X] T023 [P] [US1] `app/Http/Controllers/Api/VendorController.php`,
       `MaterialController.php` and vendor-price/BOM guard messages →
       `lang/{id,en}/vendors_materials.php`.
-- [ ] T024 [P] [US1] `app/Http/Controllers/Api/CustomerController.php`,
+- [X] T024 [P] [US1] `app/Http/Controllers/Api/CustomerController.php`,
       `EventController.php`, `CashierSessionController.php` →
       `lang/{id,en}/events_sessions.php`.
-- [ ] T025 [P] [US1] `app/Http/Controllers/Api/OrderController.php`
+- [X] T025 [P] [US1] `app/Http/Controllers/Api/OrderController.php`
       (EXCLUDING `receipt()` — see T031), `PaymentChannelController.php`,
       `PaymentProofController.php` → `lang/{id,en}/orders_payments.php`.
-- [ ] T026 [P] [US1] `app/Http/Controllers/Api/PreorderController.php`,
+- [X] T026 [P] [US1] `app/Http/Controllers/Api/PreorderController.php`,
       `ShipmentController.php` → `lang/{id,en}/preorders.php`.
-- [ ] T027 [P] [US1] `app/Http/Controllers/Api/ReportController.php` →
+- [X] T027 [P] [US1] `app/Http/Controllers/Api/ReportController.php` →
       `lang/{id,en}/reports.php`.
-- [ ] T028 [P] [US1] `app/Http/Controllers/Api/SettingsController.php`,
+- [X] T028 [P] [US1] `app/Http/Controllers/Api/SettingsController.php`,
       `app/Policies/SettingPolicy.php` → `lang/{id,en}/settings.php`.
-- [ ] T029 [P] [US1] `app/Http/Controllers/Api/ActivityLogController.php`
+- [X] T029 [P] [US1] `app/Http/Controllers/Api/ActivityLogController.php`
       → `lang/{id,en}/activity_log.php`.
 - [ ] T030 [P] [US1] `app/Services/MasterDataImportService.php`,
       `MasterDataExportController.php`, `MasterDataImportController.php`
@@ -197,7 +197,7 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
 - [ ] T032 [P] [US1] `resources/js/components/layout/AppShell.vue`,
       `AppSidebar.vue`, `AppTopbar.vue` — nav labels/group titles →
       `t('nav.*')`, populate `locales/{id,en}.json` under `nav`.
-- [ ] T033 [P] [US1] `resources/js/views/DashboardView.vue` → `t('dashboard.*')`.
+- [X] T033 [P] [US1] `resources/js/views/DashboardView.vue` → `t('dashboard.*')`.
 - [ ] T034 [P] [US1] `resources/js/views/PosView.vue`,
       `components/pos/PosCartPanel.vue`,
       `components/pos/ProductVariantPickerModal.vue`,

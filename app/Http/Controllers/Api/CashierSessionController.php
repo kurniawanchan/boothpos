@@ -18,7 +18,7 @@ class CashierSessionController extends Controller
             ->first();
 
         if (! $session) {
-            return response()->json(['message' => 'Tidak ada sesi terbuka.'], 404);
+            return response()->json(['message' => __('events_sessions.no_open_session')], 404);
         }
 
         return response()->json($session);
@@ -38,13 +38,13 @@ class CashierSessionController extends Controller
 
         if ($hasOpenSession) {
             return response()->json([
-                'message' => 'Anda masih memiliki sesi kasir yang terbuka. Tutup sesi tersebut terlebih dahulu.',
+                'message' => __('events_sessions.already_has_open_session'),
             ], 409);
         }
 
         $event = Event::findOrFail($validated['event_id']);
         if ($event->status !== 'active') {
-            return response()->json(['message' => 'Sesi hanya dapat dibuka pada event yang berstatus aktif.'], 409);
+            return response()->json(['message' => __('events_sessions.session_only_on_active_event')], 409);
         }
 
         $session = CashierSession::create([
@@ -65,11 +65,11 @@ class CashierSessionController extends Controller
         // owner/admin. Ini mencegah IDOR — kasir A menutup paksa sesi
         // kasir B hanya dengan mengganti {id} di URL.
         if ($session->user_id !== $request->user()->id && ! $request->user()->isOwnerOrAdmin()) {
-            return response()->json(['message' => 'Anda tidak berhak menutup sesi ini.'], 403);
+            return response()->json(['message' => __('events_sessions.not_authorized_close_session')], 403);
         }
 
         if ($session->status !== 'open') {
-            return response()->json(['message' => 'Sesi sudah ditutup.'], 409);
+            return response()->json(['message' => __('events_sessions.session_already_closed')], 409);
         }
 
         $validated = $request->validate([
@@ -103,7 +103,7 @@ class CashierSessionController extends Controller
         // close(): tanpa ini, kasir A bisa membaca total penjualan dan
         // rincian metode bayar sesi kasir B hanya dengan menebak {id}.
         if ($session->user_id !== $request->user()->id && ! $request->user()->isOwnerOrAdmin()) {
-            return response()->json(['message' => 'Anda tidak berhak melihat ringkasan sesi ini.'], 403);
+            return response()->json(['message' => __('events_sessions.not_authorized_view_summary')], 403);
         }
 
         $orders = $session->orders()->where('status', 'completed')->get();
