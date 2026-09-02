@@ -158,7 +158,7 @@ class MaterialController extends Controller
 
     public function destroyVendorPrice(Request $request, VendorMaterialPrice $vendorPrice): JsonResponse
     {
-        if (! $request->user()->canManageMasterData()) {
+        if (! $request->user()->canAccessMenu('materials')) {
             return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat mengelola harga vendor.'], 403);
         }
 
@@ -202,7 +202,7 @@ class MaterialController extends Controller
 
     public function destroyBomLine(Request $request, ProductVariantBomLine $bomLine): JsonResponse
     {
-        if (! $request->user()->canManageMasterData()) {
+        if (! $request->user()->canAccessMenu('products')) {
             return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat mengelola BOM.'], 403);
         }
 
@@ -226,7 +226,7 @@ class MaterialController extends Controller
 
     public function bomIndex(Request $request, ProductVariant $variant): JsonResponse
     {
-        if (! $request->user()->canManageMasterData()) {
+        if (! $request->user()->canAccessMenu('products')) {
             return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat melihat BOM.'], 403);
         }
 
@@ -242,7 +242,7 @@ class MaterialController extends Controller
      */
     public function costBreakdown(Request $request, ProductVariant $variant, BomCostCalculator $calculator): JsonResponse
     {
-        if (! $request->user()->canManageMasterData()) {
+        if (! $request->user()->canAccessMenu('products')) {
             return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat melihat rincian modal.'], 403);
         }
 

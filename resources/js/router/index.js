@@ -18,49 +18,49 @@ const routes = [
         path: 'dashboard',
         name: 'dashboard',
         component: () => import('../views/DashboardView.vue'),
-        meta: { title: 'Beranda', subtitle: 'Ringkasan performa event yang sedang berjalan' },
+        meta: { title: 'Beranda', subtitle: 'Ringkasan performa event yang sedang berjalan', menuKey: 'dashboard' },
       },
       {
         path: 'pos',
         name: 'pos',
         component: () => import('../views/PosView.vue'),
-        meta: { title: 'Kasir', subtitle: 'Transaksi terikat otomatis ke event aktif' },
+        meta: { title: 'Kasir', subtitle: 'Transaksi terikat otomatis ke event aktif', menuKey: 'pos' },
       },
       {
         path: 'session',
         name: 'session',
         component: () => import('../views/SessionView.vue'),
-        meta: { title: 'Sesi Kasir', subtitle: 'Buka, pantau, dan tutup sesi beserta selisih kas' },
+        meta: { title: 'Sesi Kasir', subtitle: 'Buka, pantau, dan tutup sesi beserta selisih kas', menuKey: 'session' },
       },
       {
         path: 'events',
         name: 'events',
         component: () => import('../views/EventsView.vue'),
-        meta: { title: 'Event', subtitle: 'Wadah seluruh transaksi dan rekap hasil' },
+        meta: { title: 'Event', subtitle: 'Wadah seluruh transaksi dan rekap hasil', menuKey: 'events' },
       },
       {
         path: 'products',
         name: 'products',
         component: () => import('../views/ProductsView.vue'),
-        meta: { title: 'Produk & Varian', subtitle: 'Kode produk 12 karakter digenerate otomatis' },
+        meta: { title: 'Produk & Varian', subtitle: 'Kode produk 12 karakter digenerate otomatis', menuKey: 'products' },
       },
       {
         path: 'artists',
         name: 'artists',
         component: () => import('../views/ArtistsView.vue'),
-        meta: { title: 'Artist', subtitle: 'Pemilik merchandise yang dititipkan' },
+        meta: { title: 'Artist', subtitle: 'Pemilik merchandise yang dititipkan', menuKey: 'artists' },
       },
       {
         path: 'categories',
         name: 'categories',
         component: () => import('../views/CategoriesView.vue'),
-        meta: { title: 'Kategori', subtitle: 'Hierarki kategori untuk filter di kasir' },
+        meta: { title: 'Kategori', subtitle: 'Hierarki kategori untuk filter di kasir', menuKey: 'categories' },
       },
       {
         path: 'stock',
         name: 'stock',
         component: () => import('../views/StockView.vue'),
-        meta: { title: 'Pergerakan Stok', subtitle: 'Seluruh perubahan stok tercatat dan dapat diaudit' },
+        meta: { title: 'Pergerakan Stok', subtitle: 'Seluruh perubahan stok tercatat dan dapat diaudit', menuKey: 'stock' },
       },
       {
         path: 'vendors',
@@ -69,7 +69,7 @@ const routes = [
         meta: {
           title: 'Vendor',
           subtitle: 'Pemasok bahan baku dan harganya',
-          roles: ['owner', 'admin', 'inventory'],
+          menuKey: 'vendors',
         },
       },
       {
@@ -79,26 +79,26 @@ const routes = [
         meta: {
           title: 'Bahan Baku',
           subtitle: 'Bahan baku, harga per vendor, dan BOM varian produk',
-          roles: ['owner', 'admin', 'inventory'],
+          menuKey: 'materials',
         },
       },
       {
         path: 'customers',
         name: 'customers',
         component: () => import('../views/CustomersView.vue'),
-        meta: { title: 'Pelanggan', subtitle: 'Data kontak dibatasi per peran' },
+        meta: { title: 'Pelanggan', subtitle: 'Data kontak dibatasi per peran', menuKey: 'customers' },
       },
       {
         path: 'preorders',
         name: 'preorders',
         component: () => import('../views/PreordersView.vue'),
-        meta: { title: 'Pre-order', subtitle: 'Pesanan, DP, status, dan pengiriman kurir' },
+        meta: { title: 'Pre-order', subtitle: 'Pesanan, DP, status, dan pengiriman kurir', menuKey: 'preorders' },
       },
       {
         path: 'sales',
         name: 'sales',
         component: () => import('../views/SalesView.vue'),
-        meta: { title: 'Penjualan', subtitle: 'Ringkasan transaksi, daftar struk, dan pencarian' },
+        meta: { title: 'Penjualan', subtitle: 'Ringkasan transaksi, daftar struk, dan pencarian', menuKey: 'sales' },
       },
       {
         path: 'reports',
@@ -112,8 +112,20 @@ const routes = [
           // Untung, Modal Artist) semuanya owner/admin-only (PRD 7.13),
           // jadi rutenya sendiri digerbang di sini, bukan cuma tab-nya,
           // supaya kasir/inventory tidak pernah sampai ke halaman kosong.
-          roles: ['owner', 'admin'],
+          menuKey: 'reports',
         },
+      },
+      {
+        path: 'users',
+        name: 'users',
+        component: () => import('../views/UsersView.vue'),
+        meta: { title: 'Pengguna', subtitle: 'Akun, peran, dan akses menu tiap pengguna', menuKey: 'users' },
+      },
+      {
+        path: 'roles',
+        name: 'roles',
+        component: () => import('../views/RolesView.vue'),
+        meta: { title: 'Peran', subtitle: 'Akses menu per peran, bebas dikonfigurasi', menuKey: 'roles' },
       },
       {
         path: 'settings',
@@ -122,7 +134,7 @@ const routes = [
         meta: {
           title: 'Pengaturan',
           subtitle: 'Lisensi, kanal pembayaran, identitas toko, cadangan',
-          roles: ['owner', 'admin'],
+          menuKey: 'settings',
         },
       },
     ],
@@ -164,8 +176,9 @@ router.beforeEach(async (to) => {
 
   // Screens we can predict will 403 for the current role are hidden from
   // nav entirely AND guarded here, so a typed-in URL doesn't crash into a
-  // raw 403 — redirect somewhere useful instead.
-  if (to.meta.roles && !to.meta.roles.includes(auth.role)) {
+  // raw 403 — redirect somewhere useful instead. Cosmetic only, exactly
+  // like AppSidebar.vue's nav filter — the API is the real gate.
+  if (to.meta.menuKey && !auth.canAccessMenu(to.meta.menuKey)) {
     return { name: 'dashboard' };
   }
 

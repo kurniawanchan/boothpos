@@ -12,3 +12,11 @@ export function listSettings() {
 export function updateSettings(settings) {
   return client.put('/settings', { settings }).then((r) => r.data);
 }
+
+/** Multipart — logo toko ditulis lewat endpoint khusus, bukan PUT /settings
+ * (lihat research.md Decision 3: body JSON bulk tidak bisa membawa file). */
+export function uploadStoreLogo(file) {
+  const form = new FormData();
+  form.append('image', file);
+  return client.post('/settings/store-logo', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+}

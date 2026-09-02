@@ -155,7 +155,7 @@ class ReportController extends Controller
 
     public function profit(Request $request): JsonResponse
     {
-        if (! $request->user()->isOwnerOrAdmin()) {
+        if (! $request->user()->canAccessMenu('reports')) {
             return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
         }
 
@@ -194,7 +194,7 @@ class ReportController extends Controller
         // artist memuat payable_amount dan deduction, data komersial yang
         // sama sensitifnya dengan laporan profit, jadi harus digerbang
         // sama, bukan cuma mutasinya (recordSettlementPayment) saja.
-        if (! $request->user()->isOwnerOrAdmin()) {
+        if (! $request->user()->canAccessMenu('reports')) {
             return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
         }
 
@@ -279,7 +279,7 @@ class ReportController extends Controller
      */
     public function artistSettlementTransactions(Request $request, Artist $artist): JsonResponse
     {
-        if (! $request->user()->isOwnerOrAdmin()) {
+        if (! $request->user()->canAccessMenu('reports')) {
             return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
         }
 
@@ -364,7 +364,7 @@ class ReportController extends Controller
      */
     public function artistProfit(Request $request): JsonResponse
     {
-        if (! $request->user()->isOwnerOrAdmin()) {
+        if (! $request->user()->canAccessMenu('reports')) {
             return response()->json(['message' => 'Hanya owner/admin yang dapat mengakses laporan ini.'], 403);
         }
 
@@ -404,7 +404,7 @@ class ReportController extends Controller
 
     public function recordSettlementPayment(Request $request, ArtistSettlement $settlement): JsonResponse
     {
-        if (! $request->user()->isOwnerOrAdmin()) {
+        if (! $request->user()->canAccessMenu('reports')) {
             return response()->json(['message' => 'Tidak berhak.'], 403);
         }
 

@@ -34,7 +34,7 @@ onMounted(async () => {
       lowStock().then((r) => (lowStockItems.value = r.data)),
       listPreorders({ status: 'dp_paid', per_page: 5 }).then((r) => (preorderAlerts.value = r.data)),
     ];
-    if (eventId && auth.isOwnerOrAdmin) {
+    if (eventId && auth.canAccessMenu('reports')) {
       tasks.push(profitReport(eventId).then((r) => (profit.value = r)));
       tasks.push(artistSettlements(eventId).then((r) => (settlements.value = r.data)));
     }
@@ -66,7 +66,7 @@ const maxSettlement = computed(() => Math.max(1, ...settlements.value.map((s) =>
         <span class="text-[26px] font-extrabold tracking-tight">{{ sales?.totals?.order_count ?? 0 }}</span>
         <span class="text-[11.5px] text-muted-3">{{ sales?.totals?.unit_count ?? 0 }} unit terjual</span>
       </div>
-      <div v-if="auth.isOwnerOrAdmin" class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
+      <div v-if="auth.canAccessMenu('reports')" class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
         <div class="flex items-center gap-2"><i class="ph-duotone ph-vault text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">Keuntungan kotor</span></div>
         <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(profit?.gross_profit ?? 0) }}</span>
         <span class="text-[11.5px] text-muted-3">Setelah modal, sebelum biaya event</span>
@@ -83,7 +83,7 @@ const maxSettlement = computed(() => Math.max(1, ...settlements.value.map((s) =>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 items-start gap-4" :class="auth.isOwnerOrAdmin ? 'xl:grid-cols-[1.6fr_1fr]' : ''">
+    <div class="grid grid-cols-1 items-start gap-4" :class="auth.canAccessMenu('reports') ? 'xl:grid-cols-[1.6fr_1fr]' : ''">
       <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
         <div class="flex items-baseline justify-between">
           <span class="text-[14.5px] font-bold">Penjualan per hari</span>
@@ -99,7 +99,7 @@ const maxSettlement = computed(() => Math.max(1, ...settlements.value.map((s) =>
         </div>
       </div>
 
-      <div v-if="auth.isOwnerOrAdmin" class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
+      <div v-if="auth.canAccessMenu('reports')" class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
         <span class="text-[14.5px] font-bold">Hasil per artist</span>
         <!-- GET /reports/artist-settlements now lists every active artist,
              not only those with sales — so this only stays empty when

@@ -10,9 +10,15 @@ export const useAuthStore = defineStore('auth', {
   getters: {
     isAuthenticated: (state) => !!state.user,
     role: (state) => state.user?.role ?? null,
-    isOwnerOrAdmin: (state) => ['owner', 'admin'].includes(state.user?.role),
-    // Mirrors User::canManageMasterData() server-side (owner/admin/inventory).
-    canManageMasterData: (state) => ['owner', 'admin', 'inventory'].includes(state.user?.role),
+    /**
+     * Cosmetic-only mirror of User::canAccessMenu() server-side — every
+     * real enforcement decision still happens on the backend (router
+     * guard here just avoids flashing a screen the API would 403 on).
+     * Reads menu_keys resolved once at login/GET /auth/me, never
+     * re-derived from a hardcoded role list (that's the whole point of
+     * this feature — see specs/001-user-store-settings).
+     */
+    canAccessMenu: (state) => (menuKey) => (state.user?.menu_keys ?? []).includes(menuKey),
   },
   actions: {
     async login(username, password) {

@@ -98,7 +98,7 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
                 <th class="px-3 py-2 text-right font-bold text-muted-2">Harga jual</th>
                 <th class="px-3 py-2 text-right font-bold text-muted-2">Stok</th>
                 <th class="px-3 py-2 font-bold text-muted-2">Status</th>
-                <th v-if="auth.canManageMasterData" class="px-3 py-2"></th>
+                <th v-if="auth.canAccessMenu('products')" class="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -110,7 +110,7 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
                 <td class="px-3 py-2">
                   <StatusPill :variant="v.is_active ? 'mint' : 'neutral'">{{ v.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
                 </td>
-                <td v-if="auth.canManageMasterData" class="px-3 py-2 text-right">
+                <td v-if="auth.canAccessMenu('products')" class="px-3 py-2 text-right">
                   <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openBom(v)">BOM</button>
                 </td>
               </tr>

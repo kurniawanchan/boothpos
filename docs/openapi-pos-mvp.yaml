@@ -82,7 +82,7 @@ paths:
                 type: object
                 properties:
                   token: { type: string }
-                  user: { $ref: '#/components/schemas/User' }
+                  user: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
@@ -103,7 +103,7 @@ paths:
           description: Berhasil
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/User' }
+              schema: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   # ------------------------------------------------------------------
@@ -189,6 +189,37 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/Setting' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /settings/store-logo:
+    post:
+      tags: [Settings]
+      summary: Unggah/ganti logo toko (001-user-store-settings US3, T045)
+      description: |
+        Mengikuti pola persis `POST /categories/{id}/image` — endpoint
+        multipart terpisah karena `PUT /settings`'s bulk JSON body tidak
+        bisa membawa file (lihat research.md Decision 3). Menulis baris
+        `store_logo_path` di tabel `settings` yang sama, dicatat ke log
+        aktivitas seperti setiap perubahan `PUT /settings` lainnya.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary, description: JPEG atau PNG, maksimal 5 MB. }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Setting' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
@@ -1545,6 +1576,230 @@ paths:
   # bertanggal di CLAUDE.md/README.md/PRD §10.2.
   # ------------------------------------------------------------------
 
+  /users:
+    get:
+      tags: [Pengguna & Peran]
+      summary: Daftar pengguna
+      description: Digerbangi canAccessMenu('users') (001-user-store-settings US1).
+      parameters:
+        - { name: search, in: query, schema: { type: string }, description: "Mencocokkan name atau username (FR-004)." }
+        - { name: role_id, in: query, schema: { type: integer } }
+        - { name: is_active, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Pengguna & Peran]
+      summary: Buat pengguna
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /users/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Pengguna & Peran]
+      summary: Detail pengguna
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Pengguna & Peran]
+      summary: Perbarui pengguna
+      description: |
+        password bersifat opsional (kosong berarti tidak diubah). Ditolak
+        409 bila targetnya akun yang sedang login sendiri DAN perubahan
+        akan menonaktifkannya atau mengganti role_id-nya (FR-006) — ini
+        konflik aturan bisnis, bukan soal hak akses, jadi 409 bukan 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Pengguna & Peran]
+      summary: Hapus (nonaktifkan) pengguna
+      description: Soft delete. 409 bila targetnya akun yang sedang login sendiri (FR-006).
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /users/{id}/photo:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Pengguna & Peran]
+      summary: Unggah/ganti foto pengguna
+      description: Mirip persis POST /products/{id}/image, memakai ImageUploadService yang sama.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary, description: JPEG atau PNG, maksimal 5 MB. }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /roles:
+    get:
+      tags: [Pengguna & Peran]
+      summary: Daftar peran
+      description: |
+        Digerbangi canAccessMenu('roles') (001-user-store-settings US2).
+        `user_count` pada setiap baris adalah jumlah pengguna AKTIF yang
+        memakai peran itu — dipasok siap pakai supaya frontend tidak perlu
+        request kedua, dan supaya pesan penolakan 409 delete (FR-014)
+        mengutip angka yang sama persis.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Role' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Pengguna & Peran]
+      summary: Buat peran
+      description: |
+        Setiap nilai `menu_keys` divalidasi terhadap registry
+        App\Support\MenuKeys — kunci tak dikenal ditolak 422, tidak pernah
+        didiamkan tersimpan tanpa efek.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /roles/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Pengguna & Peran]
+      summary: Detail peran
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Pengguna & Peran]
+      summary: Perbarui peran
+      description: |
+        Ditolak 409 (FR-013) bila perubahan `menu_keys` akan membuat TIDAK
+        ADA satu pun peran tersisa (selain peran ini) yang mencakup KEDUA
+        kunci reserved `users` DAN `roles` — toko tidak boleh pernah
+        kehilangan kemampuan mengelola aksesnya sendiri.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Pengguna & Peran]
+      summary: Hapus peran
+      description: |
+        Soft delete. Ditolak 409 bila peran masih dipakai satu atau lebih
+        pengguna aktif (FR-014, pesan mengutip jumlah pengguna persis), ATAU
+        bila peran ini adalah peran terakhir yang mencakup users+roles
+        (FR-013, dicek sesudah FR-014).
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /menu-keys:
+    get:
+      tags: [Pengguna & Peran]
+      summary: Registry menu/fitur yang tersedia
+      description: |
+        Sumber kebenaran tunggal App\Support\MenuKeys, dikembalikan sebagai
+        {key,label}[] supaya layar pengaturan peran (RoleMenuPicker.vue)
+        merender checkbox tanpa daftar menu di-hardcode dua kali.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string, example: roles }
+                        label: { type: string, example: Peran }
+
   /vendors:
     get:
       tags: [Vendor & Bahan Baku]
@@ -1840,7 +2095,7 @@ paths:
       - name: entity
         in: path
         required: true
-        schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom] }
+        schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, roles, users] }
     get:
       tags: [Import & Export]
       summary: Ekspor satu entitas master data ke Excel
@@ -1858,6 +2113,12 @@ paths:
         `CLAUDE.md`/`README.md`/PRD §10.2. `bom` berisi satu baris per
         pasangan varian+bahan, direferensikan lewat `sku` (bukan produk
         induk) karena BOM diikat ke varian.
+
+        `roles`/`users` ditambahkan pada User Story 4 fitur
+        001-user-store-settings (2026-09-02). Sheet `users` TIDAK PERNAH
+        memuat kolom password (FR-007); kolom `photo_path`-nya adalah
+        REFERENSI string ke path penyimpanan, bukan data biner gambarnya,
+        dan diabaikan sepenuhnya bila muncul pada berkas impor.
 
         Digerbang `canManageMasterData()` (owner/admin/inventory) — lebih
         ketat daripada endpoint daftar yang boleh dibaca kasir, karena
@@ -1877,13 +2138,14 @@ paths:
       tags: [Import & Export]
       summary: Unduh template impor gabungan
       description: |
-        Workbook `.xlsx` berisi delapan sheet (`artists`, `categories`,
-        `products`, `stock`, `vendors`, `materials`, `vendor_prices`, `bom`)
-        lengkap dengan judul kolom yang benar dan satu baris contoh per
-        sheet (F15.3). Empat sheet terakhir ditambahkan pasca-MVP
-        (2026-09-01, lihat CLAUDE.md/README.md/PRD §10.2) — bukan bagian
-        dari F15.3 asli, tapi dibangun mengikuti pola workbook gabungan
-        yang sama persis.
+        Workbook `.xlsx` berisi sepuluh sheet (`artists`, `categories`,
+        `products`, `stock`, `vendors`, `materials`, `vendor_prices`, `bom`,
+        `roles`, `users`) lengkap dengan judul kolom yang benar dan satu
+        baris contoh per sheet (F15.3). Enam sheet terakhir ditambahkan
+        pasca-MVP (`vendors`..`bom` pada 2026-09-01, `roles`/`users` pada
+        2026-09-02 — User Story 4 fitur 001-user-store-settings) — bukan
+        bagian dari F15.3 asli, tapi dibangun mengikuti pola workbook
+        gabungan yang sama persis.
       responses:
         '200':
           description: Berkas xlsx
@@ -1902,11 +2164,14 @@ paths:
         nama sheet dicocokkan tanpa memandang huruf besar/kecil.
 
         **Urutan pemrosesan** selalu `artists` → `categories` → `products`
-        → `stock` → `vendors` → `materials` → `vendor_prices` → `bom`,
-        berapa pun urutan sheet di dalam berkas. Empat sheet terakhir
-        (vendor/bahan baku/BOM) ditambahkan pasca-MVP 2026-09-01 — lihat
-        catatan bertanggal di CLAUDE.md/README.md/PRD §10.2; ini kapabilitas
+        → `stock` → `vendors` → `materials` → `vendor_prices` → `bom` →
+        `roles` → `users`, berapa pun urutan sheet di dalam berkas. Sheet
+        vendor/bahan baku/BOM ditambahkan pasca-MVP 2026-09-01; `roles`/
+        `users` ditambahkan 2026-09-02 (User Story 4) — lihat catatan
+        bertanggal di CLAUDE.md/README.md/PRD §10.2; keduanya kapabilitas
         baru, bukan pemulihan salah satu butir yang dicoret PRD §10.2.
+        `users` menunjuk `roles` lewat NAMA (`role_name`), bukan kode —
+        `Role` tidak punya kolom `code` seperti entitas lain.
 
         **Semua-atau-tidak sama sekali.** Seluruh berkas divalidasi lebih
         dulu; bila ada satu baris pun yang tidak valid, tidak ada data yang
@@ -1927,6 +2192,8 @@ paths:
         | `materials` | `code` |
         | `vendor_prices` | pasangan (`vendor_code`, `material_code`) |
         | `bom` | pasangan (`sku`, `material_code`) |
+        | `roles` | `name` |
+        | `users` | `username` |
 
         **Kode dihasilkan server.** `code_prefix` dan `sku` selalu dibuat
         `ProductCodeGenerator`. Kolom `sku` pada sheet `products` hanya
@@ -1973,7 +2240,22 @@ paths:
         `vendor_prices` melepas tanda preferred dari harga vendor lain
         untuk bahan yang sama.
 
-        Digerbang `canManageMasterData()` (owner/admin/inventory).
+        **Roles/Users (User Story 4, 2026-09-02).** Sheet `roles` punya
+        kolom `menu_keys` berisi daftar kunci menu dipisah KOMA dalam satu
+        sel (mis. `pos,session`), divalidasi terhadap registry
+        `App\Support\MenuKeys`. Sheet `users` mereferensikan peran lewat
+        `role_name` (boleh menunjuk peran baru yang dibuat sheet `roles`
+        pada berkas yang sama) dan TIDAK PERNAH punya kolom password
+        (FR-007) — akun baru dari impor mendapat password ACAK yang dibuat
+        server, wajib diatur ulang pemiliknya lewat `PUT /users/{user}`.
+        Baris `users` yang `role_name`-nya tidak dikenal membatalkan
+        SELURUH impor (FR-009), termasuk baris `roles` valid pada berkas
+        yang sama.
+
+        Digerbang `canAccessAnyMenu()` — siapa pun yang bisa mengelola
+        salah satu entitas master data pada berkas (termasuk
+        pengguna/peran) boleh mengimpornya secara massal, konsisten dengan
+        `canManageMasterData()` (owner/admin/inventory) untuk sheet lain.
       requestBody:
         required: true
         content:
@@ -2101,13 +2383,37 @@ components:
       pattern: '^-?\d+\.\d{2}$'
       example: "150000.00"
 
-    User:
+    # BUG YANG DITEMUKAN & DIPERBAIKI — skema ini sebelumnya juga bernama
+    # `User` sama seperti skema entitas CRUD pengguna di bawah (lihat
+    # bagian "Pengguna & Peran"), yang ditambahkan belakangan oleh alur
+    # kerja terpisah. Dua definisi top-level dengan kunci sama di YAML
+    # membuat definisi kedua diam-diam menimpa yang pertama pada parser
+    # yang taat spesifikasi — endpoint /auth/login dan /auth/me akan
+    # terdokumentasi memakai skema yang salah (bentuk objek role, bukan
+    # nama+menu_keys) tanpa galat apa pun yang terlihat. Diberi nama
+    # sendiri karena memang bentuknya berbeda dari skema entitas User
+    # (role di sini nama tampilan saja + menu_keys hasil resolusi sesi,
+    # bukan objek Role penuh).
+    AuthenticatedUser:
       type: object
+      description: |
+        Bentuk `user` pada respons /auth/login dan /auth/me — BUKAN skema
+        entitas User CRUD (lihat `User` di bagian "Pengguna & Peran").
+        `role` adalah NAMA Role yang bisa dikonfigurasi bebas oleh owner
+        (bukan lagi enum 4 nilai tetap) — dipakai HANYA untuk tampilan.
+        `menu_keys` adalah daftar kunci menu yang boleh diakses akun ini,
+        resolusi sekali per sesi login/`GET /auth/me`; ini yang dipakai
+        frontend untuk `canAccessMenu()` (cosmetic saja — penegakan
+        sesungguhnya tetap di server pada setiap endpoint).
       properties:
         id: { type: integer }
         name: { type: string }
         username: { type: string }
-        role: { type: string, enum: [owner, admin, cashier, inventory] }
+        role: { type: string, example: Owner }
+        menu_keys:
+          type: array
+          items: { type: string }
+          example: [dashboard, pos, session, products, reports, settings]
         is_active: { type: boolean }
 
     Artist:
@@ -2131,6 +2437,65 @@ components:
         contact_phone: { type: string, nullable: true }
         contact_email: { type: string, nullable: true }
         notes: { type: string, nullable: true }
+        is_active: { type: boolean, default: true }
+
+    # -------------------------------------------------------------
+    # Pengguna & Peran (001-user-store-settings, ditambahkan 2026-10)
+    # -------------------------------------------------------------
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        username: { type: string }
+        role:
+          type: object
+          nullable: true
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        is_active: { type: boolean }
+        photo_url: { type: string, nullable: true, readOnly: true }
+        last_login_at: { type: string, format: date-time, nullable: true }
+      description: password TIDAK PERNAH disertakan (FR-007), termasuk pada ekspor massal.
+
+    Role:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, maxLength: 50 }
+        menu_keys:
+          type: array
+          items: { type: string }
+          description: Divalidasi terhadap registry App\Support\MenuKeys.
+        is_system_default:
+          type: boolean
+          description: |
+            `true` untuk 4 peran bawaan (Owner/Admin/Kasir/Inventory) yang
+            direproduksi seeder — informasional saja, tidak memblokir edit.
+        user_count:
+          type: integer
+          readOnly: true
+          description: Jumlah pengguna AKTIF yang memakai peran ini.
+
+    RoleInput:
+      type: object
+      required: [name, menu_keys]
+      properties:
+        name: { type: string, maxLength: 50, description: Unik di antara peran yang belum dihapus. }
+        menu_keys:
+          type: array
+          items: { type: string }
+          description: Setiap nilai harus salah satu kunci App\Support\MenuKeys — kunci tak dikenal ditolak 422.
+
+    UserInput:
+      type: object
+      required: [name, username, role_id]
+      properties:
+        name: { type: string, maxLength: 100 }
+        username: { type: string, maxLength: 50, description: Unik di antara pengguna yang belum dihapus. }
+        password: { type: string, minLength: 8, description: Wajib saat membuat; opsional saat memperbarui (kosong = tidak diubah). }
+        role_id: { type: integer, description: Harus merujuk Role yang belum dihapus. }
         is_active: { type: boolean, default: true }
 
     # -------------------------------------------------------------
@@ -2579,6 +2944,16 @@ components:
       properties:
         store_name: { type: string }
         store_contact: { type: string, nullable: true }
+        # 001-user-store-settings User Story 3 / SC-004 — field ini
+        # sebelumnya terlewat dari task breakdown fitur tsb, ditutup saat
+        # ditemukan sebagai celah nyata. Semua nullable — profil toko
+        # boleh tidak diisi lengkap, struk tetap tampil tanpa field yang
+        # kosong (bukan menampilkan string kosong/"null").
+        store_address: { type: string, nullable: true }
+        store_logo_url: { type: string, nullable: true, description: URL publik logo toko (dari ImageUploadService), null bila belum diunggah. }
+        store_contact_person: { type: string, nullable: true }
+        store_contact_phone: { type: string, nullable: true }
+        store_contact_email: { type: string, nullable: true }
         order_number: { type: string }
         event_name: { type: string }
         cashier_name: { type: string }
@@ -2888,7 +3263,7 @@ components:
         sheet:
           type: string
           nullable: true
-          enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, null]
+          enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, roles, users, null]
           description: "`null` untuk galat tingkat berkas (mis. tidak ada sheet yang dikenali)."
         row:
           type: integer

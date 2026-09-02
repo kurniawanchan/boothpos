@@ -373,6 +373,28 @@ Catatan kepatuhan: data kontak pelanggan adalah data pribadi. Sistem harus memba
 
 Catatan keamanan (area risiko: access control) — kasir tidak boleh memiliki akses ke laporan modal dan keuntungan. Pembatasan ini harus ditegakkan di sisi server, bukan hanya menyembunyikan menu di antarmuka.
 
+**Catatan pasca-MVP — 2026-09-02 (manajemen pengguna & peran kustom)**
+
+Fitur `001-user-store-settings` membangun F13.1 dan menaikkan F13.5 dari
+stretch (Prioritas C) menjadi terbangun penuh:
+
+- **F13.1 (CRUD pengguna dengan peran) — kini terbangun penuh**, termasuk
+  foto profil, catatan akses terakhir (`last_access_at`), pencarian/filter,
+  dan ekspor/impor massal lewat workbook master-data yang sama dengan
+  vendor/bahan/BOM (lihat 7.15).
+- **F13.5 (Peran kustom yang dapat dikonfigurasi) — dari stretch menjadi
+  terbangun penuh.** Empat peran tetap (owner/admin/kasir/manajer inventori)
+  digantikan oleh model `Role` dinamis dengan `menu_keys` yang dapat
+  dikonfigurasi bebas per peran — bukan hanya menambah kolom di atas enum
+  lama. Ini keputusan arsitektur yang disengaja (opsi C dari klarifikasi
+  spec), bukan perluasan minor: satu primitif otorisasi baru,
+  `User::canAccessMenu()`, menggantikan seluruh pemeriksaan berbasis role
+  string di controller/policy/request lama.
+- Catatan keamanan di atas (kasir dilarang akses laporan modal/keuntungan)
+  tetap berlaku — kini ditegakkan lewat `menu_keys` peran Kasir default yang
+  sengaja tidak menyertakan menu laporan tersebut, bukan lagi lewat
+  pengecekan `role === 'kasir'` yang di-hardcode.
+
 ### 7.14 Setting & config management
 
 | ID | Kebutuhan | Prioritas |

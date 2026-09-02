@@ -1,0 +1,38 @@
+meta {
+  name: 2 - Buat Pengguna dengan Peran Tersebut
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{base_url}}/users
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "name": "Pengguna Terbatas Bruno",
+    "username": "bruno.terbatas",
+    "password": "password123",
+    "role_id": "{{custom_role_id}}",
+    "is_active": true
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("restricted_user_id", res.body.id);
+  }
+}
+
+tests {
+  test("pengguna dibuat dengan peran kustom", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.username).to.equal("bruno.terbatas");
+  });
+}

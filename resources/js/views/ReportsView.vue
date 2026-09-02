@@ -44,7 +44,7 @@ const loading = ref(false);
 // navigasi ke sini untuk peran lain, tapi komponennya sendiri tetap
 // gagal aman kalau suatu saat ter-render lewat jalur lain.
 const tabs = computed(() =>
-  auth.isOwnerOrAdmin
+  auth.canAccessMenu('reports')
     ? [
         { key: 'settlement', label: 'Rekap Artist' },
         { key: 'profit', label: 'Modal & Untung' },

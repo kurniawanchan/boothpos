@@ -1,8 +1,8 @@
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
 import { useSettingsStore } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
-import { listSettings, updateSettings } from '../api/settings';
+import { listSettings, updateSettings, uploadStoreLogo } from '../api/settings';
 import { listPaymentChannels, createPaymentChannel, updatePaymentChannel } from '../api/payments';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
@@ -29,29 +29,104 @@ async function pickTier(enabled) {
   }
 }
 
-// --- Store identity ------------------------------------------------------
-const storeForm = reactive({ store_name: '', store_contact: '' });
+// --- Store identity (T047, US3 — profil toko lengkap) ---------------------
+const storeForm = reactive({
+  store_name: '',
+  store_contact: '',
+  store_address: '',
+  store_contact_person: '',
+  store_contact_phone: '',
+  store_contact_email: '',
+});
+const storeErrors = reactive({});
 const savingStore = ref(false);
+const storeLogoPath = ref(null);
+// value mentah dari `settings` (mis. 'store-logo/uuid.png') bukan URL —
+// SettingResource tidak menyertakan *_url turunan seperti CategoryResource,
+// jadi URL dibangun di sini mengikuti konvensi disk 'public' ImageUploadService
+// (storage:link -> /storage/...), sama seperti bagaimana ProductResource/
+// CategoryResource sendiri pada akhirnya membangunnya via Storage::url().
+const storeLogoUrl = computed(() => (storeLogoPath.value ? `/storage/${storeLogoPath.value}` : null));
+const logoFile = ref(null);
+const logoError = ref('');
+const uploadingLogo = ref(false);
+const logoInputEl = ref(null);
 
 async function loadStoreIdentity() {
   const res = await listSettings();
   const byKey = Object.fromEntries(res.data.map((s) => [s.key, s.value]));
   storeForm.store_name = byKey.store_name ?? '';
   storeForm.store_contact = byKey.store_contact ?? '';
+  storeForm.store_address = byKey.store_address ?? '';
+  storeForm.store_contact_person = byKey.store_contact_person ?? '';
+  storeForm.store_contact_phone = byKey.store_contact_phone ?? '';
+  storeForm.store_contact_email = byKey.store_contact_email ?? '';
+  storeLogoPath.value = byKey.store_logo_path ?? null;
 }
 
 async function saveStoreIdentity() {
   savingStore.value = true;
+  Object.keys(storeErrors).forEach((k) => delete storeErrors[k]);
   try {
     await updateSettings([
       { key: 'store_name', value: storeForm.store_name, type: 'string', group: 'receipt' },
       { key: 'store_contact', value: storeForm.store_contact, type: 'string', group: 'receipt' },
+      { key: 'store_address', value: storeForm.store_address, type: 'string', group: 'receipt' },
+      { key: 'store_contact_person', value: storeForm.store_contact_person, type: 'string', group: 'receipt' },
+      { key: 'store_contact_phone', value: storeForm.store_contact_phone, type: 'string', group: 'receipt' },
+      { key: 'store_contact_email', value: storeForm.store_contact_email, type: 'string', group: 'receipt' },
     ]);
     toast.success('Identitas toko disimpan.');
   } catch (err) {
-    toast.error(err.message);
+    if (err.isValidation) {
+      // Backend mengembalikan error terikat indeks array ('settings.5.value')
+      // — dipetakan balik ke nama field yang dikenali form ini lewat urutan
+      // key yang sama persis dengan array di atas.
+      const order = ['store_name', 'store_contact', 'store_address', 'store_contact_person', 'store_contact_phone', 'store_contact_email'];
+      Object.entries(err.errors).forEach(([field, messages]) => {
+        const match = field.match(/^settings\.(\d+)\.value$/);
+        if (match) storeErrors[order[Number(match[1])]] = messages[0];
+      });
+      if (Object.keys(storeErrors).length === 0) toast.error(err.message);
+    } else {
+      toast.error(err.message);
+    }
   } finally {
     savingStore.value = false;
+  }
+}
+
+function onLogoChange(e) {
+  const file = e.target.files?.[0] ?? null;
+  logoError.value = '';
+  logoFile.value = null;
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    logoError.value = 'Berkas harus berupa gambar.';
+    e.target.value = '';
+    return;
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    logoError.value = 'Ukuran gambar maksimal 5 MB.';
+    e.target.value = '';
+    return;
+  }
+  logoFile.value = file;
+}
+
+async function saveLogo() {
+  if (!logoFile.value) return;
+  uploadingLogo.value = true;
+  try {
+    const res = await uploadStoreLogo(logoFile.value);
+    storeLogoPath.value = res.data.value;
+    logoFile.value = null;
+    if (logoInputEl.value) logoInputEl.value.value = '';
+    toast.success('Logo toko diperbarui.');
+  } catch (err) {
+    logoError.value = err.isValidation ? Object.values(err.errors)[0]?.[0] ?? err.message : err.message;
+  } finally {
+    uploadingLogo.value = false;
   }
 }
 
@@ -210,8 +285,46 @@ onMounted(async () => {
 
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
       <span class="text-[15px] font-bold tracking-tight">Identitas toko</span>
+
+      <div class="flex flex-col gap-1.5">
+        <label class="text-[12.5px] font-semibold text-muted-4" for="store-logo">Logo toko</label>
+        <div class="flex items-center gap-3">
+          <img
+            v-if="storeLogoUrl"
+            :src="storeLogoUrl"
+            alt="Logo toko saat ini"
+            class="h-16 w-16 flex-none rounded-md border border-line-2 object-contain"
+          />
+          <div class="flex flex-1 flex-col gap-1.5">
+            <input
+              id="store-logo"
+              ref="logoInputEl"
+              type="file"
+              accept="image/*"
+              class="rounded-lg border border-line bg-white px-3.5 py-2.5 text-[13px] file:mr-3 file:rounded-md file:border-0 file:bg-mint-100 file:px-3 file:py-1.5 file:text-[12.5px] file:font-bold file:text-brand-active"
+              @change="onLogoChange"
+            />
+            <p v-if="logoError" class="text-[12px] font-semibold text-danger-text">{{ logoError }}</p>
+            <BaseButton v-if="logoFile" size="sm" class="self-start" :loading="uploadingLogo" @click="saveLogo">Unggah logo</BaseButton>
+          </div>
+        </div>
+      </div>
+
       <BaseInput v-model="storeForm.store_name" label="Nama toko (tercetak di struk)" />
+      <label class="flex flex-col gap-1.5">
+        <span class="text-[12.5px] font-semibold text-muted-4">Alamat lengkap</span>
+        <textarea
+          v-model="storeForm.store_address"
+          rows="3"
+          class="rounded-lg border bg-white px-3.5 py-2.5 text-[14.5px] text-ink outline-none transition-colors placeholder:text-muted-3 focus:border-brand focus:ring-[3px] focus:ring-mint-100"
+          :class="storeErrors.store_address ? 'border-danger-border' : 'border-line'"
+        ></textarea>
+        <span v-if="storeErrors.store_address" class="text-[12px] font-medium text-danger-text">{{ storeErrors.store_address }}</span>
+      </label>
       <BaseInput v-model="storeForm.store_contact" label="Kontak toko" />
+      <BaseInput v-model="storeForm.store_contact_person" label="Nama kontak person" :error="storeErrors.store_contact_person" />
+      <BaseInput v-model="storeForm.store_contact_phone" label="Telepon" :error="storeErrors.store_contact_phone" />
+      <BaseInput v-model="storeForm.store_contact_email" label="Email" type="email" :error="storeErrors.store_contact_email" />
       <BaseButton class="self-start" :loading="savingStore" @click="saveStoreIdentity">Simpan</BaseButton>
     </div>
 

@@ -113,7 +113,14 @@ watch(
     <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">Memuat struk…</div>
     <div v-else-if="receipt" ref="receiptEl" class="flex flex-col gap-[18px] bg-white px-6 py-6">
       <div class="flex flex-col items-center gap-1 text-center">
+        <img
+          v-if="receipt.store_logo_url"
+          :src="receipt.store_logo_url"
+          alt="Logo toko"
+          class="mb-1 h-12 w-12 rounded-md object-contain"
+        />
         <span class="text-[17px] font-extrabold tracking-tight">{{ receipt.store_name }}</span>
+        <span v-if="receipt.store_address" class="max-w-[300px] text-[11.5px] leading-snug text-muted-3">{{ receipt.store_address }}</span>
         <span class="text-[12.5px] text-muted-2">{{ receipt.event_name }}</span>
         <span class="mt-1.5 font-mono text-[13px] font-semibold">{{ receipt.order_number }}</span>
         <span class="text-[12px] text-muted-2">{{ formatDateTime(receipt.created_at) }} · Kasir {{ receipt.cashier_name }}</span>
@@ -141,6 +148,16 @@ watch(
           <span class="text-muted">{{ METHOD_LABELS[p.method] ?? p.method }}</span><span class="font-semibold">{{ formatIDR(p.amount) }}</span>
         </div>
         <div class="flex justify-between text-[13.5px]"><span class="text-muted">Kembalian</span><span class="font-semibold">{{ formatIDR(receipt.change_amount) }}</span></div>
+      </div>
+
+      <div
+        v-if="receipt.store_contact_person || receipt.store_contact_phone || receipt.store_contact_email"
+        class="flex flex-col items-center gap-0.5 border-t border-dashed border-line-2 pt-3 text-center text-[11px] text-muted-3"
+      >
+        <span v-if="receipt.store_contact_person">{{ receipt.store_contact_person }}</span>
+        <span v-if="receipt.store_contact_phone || receipt.store_contact_email">
+          {{ [receipt.store_contact_phone, receipt.store_contact_email].filter(Boolean).join(' · ') }}
+        </span>
       </div>
     </div>
 

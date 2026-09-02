@@ -18,7 +18,7 @@ function renderVendors() {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
-  auth.user = { id: 1, role: 'owner', name: 'Owner' };
+  auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'vendors'] };
   return render(VendorsView, { global: { plugins: [pinia] } });
 }
 

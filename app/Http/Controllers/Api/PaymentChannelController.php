@@ -30,7 +30,7 @@ class PaymentChannelController extends Controller
             ->orderBy('display_order')
             ->get();
 
-        $isPrivileged = $request->user()->isOwnerOrAdmin();
+        $isPrivileged = $request->user()->canAccessMenu('settings');
 
         $data = $channels->map(fn (PaymentChannel $c) => [
             'id' => $c->id,
@@ -71,7 +71,7 @@ class PaymentChannelController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if (! $request->user()->isOwnerOrAdmin()) {
+        if (! $request->user()->canAccessMenu('settings')) {
             return response()->json(['message' => 'Tidak berhak.'], 403);
         }
 
@@ -113,7 +113,7 @@ class PaymentChannelController extends Controller
      */
     public function update(Request $request, PaymentChannel $channel): JsonResponse
     {
-        if (! $request->user()->isOwnerOrAdmin()) {
+        if (! $request->user()->canAccessMenu('settings')) {
             return response()->json(['message' => 'Tidak berhak.'], 403);
         }
 
@@ -158,7 +158,7 @@ class PaymentChannelController extends Controller
 
     private function present(PaymentChannel $c, Request $request): array
     {
-        $isPrivileged = $request->user()->isOwnerOrAdmin();
+        $isPrivileged = $request->user()->canAccessMenu('settings');
 
         return [
             'id' => $c->id,

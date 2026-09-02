@@ -19,16 +19,16 @@ class CategoryPolicy
 
     public function create(User $user): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('categories');
     }
 
     public function update(User $user, Category $category): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('categories');
     }
 
     public function delete(User $user, Category $category): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('categories');
     }
 }

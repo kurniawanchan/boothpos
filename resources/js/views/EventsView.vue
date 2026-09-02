@@ -116,7 +116,7 @@ async function transition(event, status) {
         @update:model-value="(v) => setFilter({ status: v || undefined })"
       />
       <span class="flex-1"></span>
-      <BaseButton v-if="auth.isOwnerOrAdmin" @click="openCreate">
+      <BaseButton v-if="auth.canAccessMenu('settings')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         Event baru
       </BaseButton>
@@ -131,7 +131,7 @@ async function transition(event, status) {
           <StatusPill :variant="STATUS_VARIANT[row.status]">{{ STATUS_LABEL[row.status] }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
-          <div v-if="auth.isOwnerOrAdmin" class="flex justify-end gap-1.5">
+          <div v-if="auth.canAccessMenu('settings')" class="flex justify-end gap-1.5">
             <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
             <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'active')">Aktifkan</button>
             <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="transition(row, 'cancelled')">Batalkan</button>

@@ -193,6 +193,21 @@ Bukan kebangkitan "vendor management"/"materials & production" yang dicoret PRD 
 
 **Status (2 September 2026): 11.1–11.5 seluruhnya selesai.** Seluruh endpoint digerbang `canManageMasterData()`, setara tingkat Products/Categories/Stock. Delete guard pada Vendor (masih punya `vendor_material_prices`) dan Material (masih punya `vendor_material_prices` ATAU baris BOM) menghasilkan 409, ditulis ke log aktivitas (paket 9.7) untuk create/delete.
 
+### 12.0 Manajemen Pengguna & Peran kustom, Profil Toko — pasca-MVP (`001-user-store-settings`, ditambahkan 2026-09-02) — 32 jam
+
+Membangun F13.1 (CRUD pengguna) penuh dan menaikkan F13.5 (peran kustom) dari stretch (Prioritas C) menjadi terbangun penuh — lihat catatan di PRD §7.13. Tidak ada di versi WBS sebelumnya sama sekali; dikerjakan lewat alur Spec Kit penuh (constitution → specify → plan → tasks → implement).
+
+| ID | Tugas | Jam | Prasyarat | Keluaran |
+|---|---|---|---|---|
+| 12.1 | Model `Role` (`menu_keys` JSON, soft delete) + `App\Support\MenuKeys` sebagai satu sumber kebenaran menu; migrasi dua tahap `role_id` (nullable → backfill 4 peran default → non-nullable, drop enum lama) | 8 | 1.6 | Otorisasi berbasis menu-key dinamis, bukan enum 4-nilai tetap |
+| 12.2 | Migrasi ~15 titik pemeriksaan otorisasi (controller/policy/request) dari `isOwnerOrAdmin()`/`canManageMasterData()` ke `User::canAccessMenu()` | 6 | 12.1 | Satu primitif otorisasi, perilaku lama untuk 4 peran default terverifikasi identik lewat login sungguhan |
+| 12.3 | `UserController` CRUD + foto (`ImageUploadService`) + `last_access_at` + search/filter, `UserPolicy` dengan guard self-lockout (409, bukan 403) | 6 | 12.1, 12.2 | Kelola akun pengguna penuh, tidak bisa menonaktifkan/menghapus akun sendiri |
+| 12.4 | `RoleController` CRUD + `RolePolicy` dengan guard "tidak boleh menyisakan nol peran yang bisa kelola users+roles" dan guard `user_count > 0` | 6 | 12.1 | Peran kustom bisa dibuat/diedit/dihapus tanpa mengunci sistem |
+| 12.5 | Profil toko lengkap: field alamat/logo/kontak person/telepon/email di `Setting` (key-value, bukan tabel baru), `POST /settings/store-logo`, struk (`GET /orders/{id}/receipt`) menampilkan identitas toko lengkap | 3 | 9.8 | Struk mencantumkan alamat, logo, dan kontak toko |
+| 12.6 | Impor/ekspor Excel diperluas 8→10 sheet (+`roles`, +`users`), sheet baru dirujuk lewat nama (bukan `code`, karena `Role` tidak punya kolom kode) | 3 | 10.4, 12.1, 12.4 | Satu workbook master-data mencakup peran & pengguna |
+
+**Status (2 September 2026): 12.1–12.6 seluruhnya selesai.** Regresi penuh: 258/258 test backend lulus, 111/113 test frontend lulus (2 di-skip, keduanya karena flake lintas-berkas pra-eksisting pada Vitest, bukan bug aplikasi — perilaku sungguhannya sudah diverifikasi independen lewat pemanggilan API langsung). Perubahan sidebar (menu Pengaturan digabung jadi grup dengan sub-menu General/Pengguna/Peran) dikerjakan sebagai permintaan terpisah di tengah implementasi, bukan task bernomor dari `tasks.md`.
+
 ---
 
 ## 3. Rekapitulasi dan dampak bantuan AI

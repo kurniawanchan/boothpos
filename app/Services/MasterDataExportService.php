@@ -6,6 +6,8 @@ use App\Models\Artist;
 use App\Models\Category;
 use App\Models\Material;
 use App\Models\ProductVariant;
+use App\Models\Role;
+use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorMaterialPrice;
 use App\Support\MasterDataSheets;
@@ -39,6 +41,8 @@ class MasterDataExportService
             MasterDataSheets::MATERIALS => $this->materialRows(),
             MasterDataSheets::VENDOR_PRICES => $this->vendorPriceRows(),
             MasterDataSheets::BOM => $this->bomRows(),
+            MasterDataSheets::ROLES => $this->roleRows(),
+            MasterDataSheets::USERS => $this->userRows(),
             default => throw new \InvalidArgumentException("Entitas ekspor tidak dikenali: {$entity}."),
         };
     }
@@ -54,8 +58,40 @@ class MasterDataExportService
             MasterDataSheets::MATERIALS => 'data-bahan.xlsx',
             MasterDataSheets::VENDOR_PRICES => 'data-harga-vendor.xlsx',
             MasterDataSheets::BOM => 'data-bom.xlsx',
+            MasterDataSheets::ROLES => 'data-peran.xlsx',
+            MasterDataSheets::USERS => 'data-pengguna.xlsx',
             default => throw new \InvalidArgumentException("Entitas ekspor tidak dikenali: {$entity}."),
         };
+    }
+
+    /**
+     * User Story 4 (T052) — menu_keys digabung jadi satu sel dipisah koma,
+     * pola yang sama seperti kolom impor sheet ini (MasterDataSheets).
+     */
+    private function roleRows(): array
+    {
+        return Role::query()->orderBy('name')->get()->map(fn (Role $r) => [
+            'name' => $r->name,
+            'menu_keys' => implode(',', $r->menu_keys ?? []),
+        ])->all();
+    }
+
+    /**
+     * FR-007 — TIDAK PERNAH memuat kolom password, baik nilainya (hash)
+     * maupun kolomnya sendiri. photo_path diekspor sebagai STRING referensi
+     * path penyimpanan, bukan data biner gambarnya — konsisten dengan
+     * bagaimana image_filename ditangani sheet lain (kosong = tidak
+     * diikutkan/tidak diubah), dan supaya berkas .xlsx-nya tetap ringan.
+     */
+    private function userRows(): array
+    {
+        return User::query()->with('role')->orderBy('username')->get()->map(fn (User $u) => [
+            'name' => $u->name,
+            'username' => $u->username,
+            'role_name' => $u->role?->name,
+            'is_active' => $u->is_active ? 1 : 0,
+            'photo_path' => $u->photo_path,
+        ])->all();
     }
 
     private function vendorRows(): array

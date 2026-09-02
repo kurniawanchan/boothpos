@@ -155,6 +155,12 @@ All gated on `canManageMasterData()`, same tier as Products/Categories/Stock.
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
+Active feature plan: `specs/001-user-store-settings/plan.md` (branch
+`001-user-store-settings`) — Pengaturan Pengguna dan Toko: user CRUD with
+photo/last-access/search/filter, a fully configurable role/menu-permission
+system replacing the current fixed 4-role model, expanded store profile
+(address/logo/contact), and bulk user export/import via the existing
+combined master-data workbook. See that plan's Technical Context and
+Project Structure sections for concrete file paths and design decisions
+before touching authorization code while this feature is in flight.
 <!-- SPECKIT END -->

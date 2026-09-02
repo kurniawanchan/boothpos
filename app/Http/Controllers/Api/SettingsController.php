@@ -7,13 +7,19 @@ use App\Http\Requests\UpdateSettingsRequest;
 use App\Http\Resources\SettingResource;
 use App\Models\Setting;
 use App\Services\ActivityLogger;
+use App\Services\ImageUploadService;
 use App\Support\LicenseGate;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class SettingsController extends Controller
 {
-    public function __construct(private ActivityLogger $activityLogger) {}
+    public function __construct(
+        private ActivityLogger $activityLogger,
+        private ImageUploadService $imageUploadService,
+    ) {}
 
     /**
      * Dibaca UI untuk sembunyikan/tampilkan tombol "Tambah Artist", BUKAN
@@ -96,6 +102,63 @@ class SettingsController extends Controller
         });
 
         return response()->json(['data' => SettingResource::collection(collect($updated))]);
+    }
+
+    /**
+     * T045 (US3, FR-018) — mengikuti pola CategoryController::uploadImage()
+     * persis: endpoint terpisah untuk logo toko, BUKAN lewat body JSON
+     * `PUT /settings` (lihat research.md Decision 3 — multipart butuh
+     * endpoint sendiri, generic bulk-update tidak menerima file upload).
+     * `store_logo_path` tetap baris `settings` biasa; hanya jalur
+     * penulisannya yang berbeda dari key-key lain.
+     */
+    public function uploadStoreLogo(Request $request): JsonResponse
+    {
+        $this->authorize('update', Setting::class);
+
+        $validated = $request->validate([
+            'image' => [
+                'required',
+                'file',
+                Rule::file()->max(ImageUploadService::MAX_KILOBYTES)->rules(['mimes:jpeg,png']),
+            ],
+        ]);
+
+        $existing = Setting::where('key', 'store_logo_path')->first();
+        $oldPath = $existing?->value;
+
+        $newPath = $this->imageUploadService->store($validated['image'], 'store-logo');
+
+        $setting = DB::transaction(function () use ($newPath, $existing, $request) {
+            $oldValues = $existing
+                ? ['value' => $existing->value, 'type' => $existing->type, 'group' => $existing->group]
+                : null;
+
+            $setting = Setting::updateOrCreate(
+                ['key' => 'store_logo_path'],
+                ['value' => $newPath, 'type' => 'string', 'group' => 'receipt'],
+            );
+
+            // F13.4 — sama seperti update() di atas, dicatat di dalam
+            // transaksi yang sama dengan penyimpanannya.
+            $this->activityLogger->log(
+                userId: $request->user()?->id,
+                action: 'updated',
+                entityType: 'Setting',
+                entityId: $setting->id,
+                description: "Mengubah pengaturan 'store_logo_path'.",
+                oldValues: $oldValues,
+                newValues: ['value' => $setting->value, 'type' => $setting->type, 'group' => $setting->group],
+            );
+
+            return $setting;
+        });
+
+        // File lama dihapus SETELAH transaksi commit — kalau rollback terjadi
+        // (mis. gagal menulis log), berkas lama masih ada untuk dirujuk.
+        $this->imageUploadService->delete($oldPath);
+
+        return response()->json(['data' => new SettingResource($setting)]);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\PaymentChannel;
+use App\Models\Role;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -27,23 +28,38 @@ class DatabaseSeeder extends Seeder
         $this->seedPaymentChannels();
     }
 
+    /**
+     * Nama peran di sini HARUS sama persis dengan nama yang di-seed oleh
+     * migrasi 2026_10_09_000002_add_role_id_and_photo_to_users_table
+     * (Owner/Admin/Kasir/Inventory) — seeder ini tidak lagi membuat baris
+     * Role sendiri, hanya menaut user dummy ke baris yang sudah ada,
+     * supaya satu-satunya tempat menu_keys keempat peran default
+     * didefinisikan tetap migrasi tersebut.
+     */
     private function seedUsers(): void
     {
         $accounts = [
-            ['name' => 'Owner Dummy', 'username' => 'owner', 'role' => 'owner'],
-            ['name' => 'Admin Dummy', 'username' => 'admin', 'role' => 'admin'],
-            ['name' => 'Kasir Dummy', 'username' => 'kasir01', 'role' => 'cashier'],
-            ['name' => 'Kasir Dummy Dua', 'username' => 'kasir02', 'role' => 'cashier'],
-            ['name' => 'Inventory Dummy', 'username' => 'inventory', 'role' => 'inventory'],
+            ['name' => 'Owner Dummy', 'username' => 'owner', 'role' => 'Owner'],
+            ['name' => 'Admin Dummy', 'username' => 'admin', 'role' => 'Admin'],
+            ['name' => 'Kasir Dummy', 'username' => 'kasir01', 'role' => 'Kasir'],
+            ['name' => 'Kasir Dummy Dua', 'username' => 'kasir02', 'role' => 'Kasir'],
+            ['name' => 'Inventory Dummy', 'username' => 'inventory', 'role' => 'Inventory'],
         ];
 
         foreach ($accounts as $account) {
+            $role = Role::where('name', $account['role'])->first();
+
+            if (! $role) {
+                $this->command->error("Peran default '{$account['role']}' tidak ditemukan — jalankan migrate terlebih dahulu.");
+                continue;
+            }
+
             User::updateOrCreate(
                 ['username' => $account['username']],
                 [
                     'name' => $account['name'],
                     'password' => Hash::make('password123'),
-                    'role' => $account['role'],
+                    'role_id' => $role->id,
                     'is_active' => true,
                 ]
             );

@@ -18,7 +18,11 @@ class ActivityLogController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()->isOwnerOrAdmin()) {
+        // Dipetakan ke canAccessMenu('reports') — log aktivitas adalah alat
+        // audit tingkat owner/admin yang sama sensitifnya dengan laporan
+        // komersial (ReportController), belum punya layar/menu tersendiri
+        // di frontend hari ini.
+        if (! $request->user()->canAccessMenu('reports')) {
             return response()->json(['message' => 'Tidak berhak mengakses log aktivitas.'], 403);
         }
 

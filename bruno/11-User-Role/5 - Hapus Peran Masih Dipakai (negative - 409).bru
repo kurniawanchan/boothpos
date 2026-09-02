@@ -1,0 +1,20 @@
+meta {
+  name: 5 - Hapus Peran Masih Dipakai (negative - 409)
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{base_url}}/roles/{{custom_role_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("ditolak 409 - peran masih dipakai pengguna aktif (user_count > 0)", function () {
+    expect(res.status).to.equal(409);
+  });
+}

@@ -207,7 +207,7 @@ async function performDelete() {
           @input="debouncedSearch"
         />
       </div>
-      <template v-if="auth.canManageMasterData">
+      <template v-if="auth.canAccessMenu('categories')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           Ekspor .xlsx
@@ -232,7 +232,7 @@ async function performDelete() {
           <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
-          <div v-if="auth.canManageMasterData" class="flex justify-end gap-2">
+          <div v-if="auth.canAccessMenu('categories')" class="flex justify-end gap-2">
             <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
             <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">Hapus</button>
           </div>

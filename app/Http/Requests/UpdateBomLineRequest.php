@@ -9,7 +9,7 @@ class UpdateBomLineRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->canManageMasterData() ?? false;
+        return $this->user()?->canAccessMenu('products') ?? false;
     }
 
     protected function failedAuthorization(): void

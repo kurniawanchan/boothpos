@@ -19,16 +19,16 @@ class MaterialPolicy
 
     public function create(User $user): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('materials');
     }
 
     public function update(User $user, Material $material): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('materials');
     }
 
     public function delete(User $user, Material $material): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('materials');
     }
 }

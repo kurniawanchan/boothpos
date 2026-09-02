@@ -135,7 +135,7 @@ async function submitAdjustment() {
       <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
       <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_to: v || undefined })" />
       <span class="flex-1"></span>
-      <template v-if="auth.canManageMasterData">
+      <template v-if="auth.canAccessMenu('stock')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           Ekspor .xlsx

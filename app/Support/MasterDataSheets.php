@@ -43,17 +43,31 @@ final class MasterDataSheets
     public const BOM = 'bom';
 
     /**
+     * Role/User — ditambahkan pasca-MVP 2026-09-02 (User Story 4, fitur
+     * 001-user-store-settings). Diproses PALING TERAKHIR: 'users'
+     * mereferensikan 'roles' lewat NAMA (Role.name adalah kolom unik
+     * peran — Role TIDAK punya kolom `code` seperti artist/kategori/vendor/
+     * bahan, jadi mengikuti kunci alami yang sudah ada, bukan menambah
+     * kolom baru hanya demi seragam dengan sheet lain).
+     */
+    public const ROLES = 'roles';
+
+    public const USERS = 'users';
+
+    /**
      * URUTAN DEPENDENSI, bukan urutan fisik sheet di dalam berkas.
      * artists/categories harus ada sebelum products bisa mereferensikannya,
      * dan varian harus ada sebelum stok bisa menunjuk SKU-nya. vendors dan
      * materials harus ada sebelum vendor_prices (menunjuk keduanya) dan bom
      * (menunjuk material + SKU varian yang mungkin baru dibuat sheet
-     * products). Impor selalu memproses dalam urutan ini berapa pun urutan
-     * sheet di berkas.
+     * products). roles harus ada sebelum users (menunjuknya lewat nama).
+     * Impor selalu memproses dalam urutan ini berapa pun urutan sheet di
+     * berkas.
      */
     public const ORDER = [
         self::ARTISTS, self::CATEGORIES, self::PRODUCTS, self::STOCK,
         self::VENDORS, self::MATERIALS, self::VENDOR_PRICES, self::BOM,
+        self::ROLES, self::USERS,
     ];
 
     /**
@@ -89,6 +103,28 @@ final class MasterDataSheets
             ],
             self::BOM => [
                 'sku', 'material_code', 'qty_needed', 'notes',
+            ],
+            // menu_keys: daftar kunci menu dipisah koma dalam SATU sel,
+            // pola yang sama seperti "comma in a cell" pada kolom lain di
+            // kodebase ini (belum ada sebelumnya di sheet manapun, tapi
+            // ini satu-satunya cara mewakili daftar di dalam satu sel
+            // tanpa membuat satu baris per kombinasi role+menu). Divalidasi
+            // terhadap App\Support\MenuKeys::keys() saat apply.
+            self::ROLES => [
+                'name', 'menu_keys',
+            ],
+            // role_name menunjuk Role.name (kolom unik peran) — BUKAN kode,
+            // karena Role tidak punya kolom code. Sengaja tidak ada kolom
+            // password: FR-007 melarang password muncul di manapun pada
+            // data massal, baik ekspor maupun impor (lihat docblock kelas
+            // MasterDataImportService bagian ROLES/USERS).
+            // photo_path ikut diekspor sebagai REFERENSI STRING (path
+            // penyimpanan, bukan data biner gambarnya) supaya berkas
+            // ekspor lengkap menampilkan foto siapa yang sudah diunggah —
+            // tapi diabaikan saat diimpor (foto hanya bisa diubah lewat
+            // POST /users/{user}/photo, bukan lewat sel spreadsheet).
+            self::USERS => [
+                'name', 'username', 'role_name', 'is_active', 'photo_path',
             ],
             default => throw new \InvalidArgumentException("Sheet tidak dikenali: {$sheet}."),
         };
@@ -182,6 +218,20 @@ final class MasterDataSheets
                 'material_code' => 'AC3',
                 'qty_needed' => '1.0000',
                 'notes' => '',
+            ],
+            self::ROLES => [
+                'name' => 'Kasir Cabang Contoh',
+                'menu_keys' => 'pos,session',
+            ],
+            self::USERS => [
+                // role_name PERSIS SAMA dengan baris contoh sheet 'roles'
+                // di atas — buktinya test_the_shipped_template_imports_as_is
+                // (diperluas untuk sheet ini).
+                'name' => 'Contoh Kasir',
+                'username' => 'contoh.kasir',
+                'role_name' => 'Kasir Cabang Contoh',
+                'is_active' => 1,
+                'photo_path' => '',
             ],
             default => throw new \InvalidArgumentException("Sheet tidak dikenali: {$sheet}."),
         };

@@ -1,0 +1,20 @@
+meta {
+  name: 8 - Hapus Pengguna Lalu Hapus Peran (cleanup - 204)
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{base_url}}/users/{{restricted_user_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("pengguna dihapus - guard 409 di request 5 kini bisa dilepas dengan urutan yang benar", function () {
+    expect(res.status).to.equal(204);
+  });
+}

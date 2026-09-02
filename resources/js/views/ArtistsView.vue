@@ -158,7 +158,7 @@ async function performDelete() {
           @input="debouncedSearch"
         />
       </div>
-      <template v-if="auth.canManageMasterData">
+      <template v-if="auth.canAccessMenu('artists')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           Ekspor .xlsx

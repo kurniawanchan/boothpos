@@ -8,7 +8,7 @@ class StockAdjustmentRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->canManageMasterData() ?? false;
+        return $this->user()?->canAccessMenu('stock') ?? false;
     }
 
     public function rules(): array

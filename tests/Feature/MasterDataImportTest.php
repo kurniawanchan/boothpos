@@ -168,6 +168,12 @@ class MasterDataImportTest extends TestCase
         $this->assertDatabaseHas('artists', ['code' => 'RYU']);
         $this->assertDatabaseHas('categories', ['code' => 'KY']);
         $this->assertDatabaseHas('product_variants', ['sku' => 'RYUKYSAK0001', 'current_stock' => 20]);
+
+        // T054 (User Story 4) — sheet 'roles'/'users' ikut diperluas ke
+        // template ini; baris contohnya harus saling konsisten seperti
+        // pasangan artists/stock di atas.
+        $this->assertDatabaseHas('roles', ['name' => 'Kasir Cabang Contoh']);
+        $this->assertDatabaseHas('users', ['username' => 'contoh.kasir']);
     }
 
     public function test_template_is_gated_to_master_data_roles(): void
