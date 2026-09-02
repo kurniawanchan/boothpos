@@ -4,7 +4,6 @@ import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { listEvents } from '../api/events';
 import {
-  salesReport,
   artistSettlements,
   profitReport,
   artistProfitReport,
@@ -18,40 +17,45 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import DataTable from '../components/ui/DataTable.vue';
-import ProductDetailModal from '../components/product/ProductDetailModal.vue';
-import ReceiptModal from '../components/receipt/ReceiptModal.vue';
 import ArtistTransactionsModal from '../components/report/ArtistTransactionsModal.vue';
-import { formatDateTime } from '../utils/date';
 
+// Tab "Penjualan" dikeluarkan menjadi halaman/menu tersendiri (SalesView.vue)
+// — laporan penjualan terbuka untuk semua peran, sedangkan ketiga tab yang
+// tersisa di sini (Rekap Artist, Modal & Untung, Modal Artist) sengaja
+// dibatasi owner/admin saja (PRD 7.13: kasir tidak boleh mengakses laporan
+// modal/keuntungan). Karena SEMUA tab di sini kini owner/admin-only, rute
+// halaman ini sendiri digerbang lewat meta.roles di router — bukan cuma
+// tab-nya — supaya kasir/inventory tidak pernah sampai ke halaman kosong.
 const auth = useAuthStore();
 const toast = useToastStore();
 
 const events = ref([]);
 const eventId = ref('');
-const activeTab = ref('sales');
-const groupBy = ref('product');
+const activeTab = ref('settlement');
 
-const sales = ref(null);
 const settlements = ref(null);
 const profit = ref(null);
 const artistProfit = ref(null);
 const loading = ref(false);
 
-const tabs = computed(() => {
-  const t = [{ key: 'sales', label: 'Penjualan' }];
-  if (auth.isOwnerOrAdmin) {
-    t.push(
-      { key: 'settlement', label: 'Rekap Artist' },
-      { key: 'profit', label: 'Modal & Untung' },
-      // F9.5 — laporan modal & laba kotor PER ARTIST, tab terpisah dari
-      // "Modal & Untung" (yang berskala event) karena angkanya sengaja
-      // TIDAK dikurangi biaya event dan akan salah dibaca kalau ditumpuk
-      // di tab yang sama tanpa pemisahan visual yang jelas.
-      { key: 'artist-profit', label: 'Modal Artist' }
-    );
-  }
-  return t;
-});
+// Digerbang di sini JUGA (bukan cuma meta.roles di router) — pola
+// pertahanan berlapis yang sudah dipakai di seluruh aplikasi ini (mis.
+// license gate, nav item lain yang punya `roles`). Router mencegah
+// navigasi ke sini untuk peran lain, tapi komponennya sendiri tetap
+// gagal aman kalau suatu saat ter-render lewat jalur lain.
+const tabs = computed(() =>
+  auth.isOwnerOrAdmin
+    ? [
+        { key: 'settlement', label: 'Rekap Artist' },
+        { key: 'profit', label: 'Modal & Untung' },
+        // F9.5 — laporan modal & laba kotor PER ARTIST, tab terpisah dari
+        // "Modal & Untung" (yang berskala event) karena angkanya sengaja
+        // TIDAK dikurangi biaya event dan akan salah dibaca kalau ditumpuk
+        // di tab yang sama tanpa pemisahan visual yang jelas.
+        { key: 'artist-profit', label: 'Modal Artist' },
+      ]
+    : []
+);
 
 onMounted(async () => {
   events.value = (await listEvents({ per_page: 100 })).data;
@@ -60,19 +64,18 @@ onMounted(async () => {
   await loadActiveTab();
 });
 
-watch([eventId, activeTab, groupBy], loadActiveTab);
+watch([eventId, activeTab], loadActiveTab);
 
 async function loadActiveTab() {
+  if (!eventId.value) return;
   loading.value = true;
   try {
-    if (activeTab.value === 'sales') {
-      sales.value = await salesReport({ event_id: eventId.value || undefined, group_by: groupBy.value });
-    } else if (activeTab.value === 'settlement' && eventId.value) {
+    if (activeTab.value === 'settlement') {
       const res = await artistSettlements(eventId.value);
       settlements.value = res.data;
-    } else if (activeTab.value === 'profit' && eventId.value) {
+    } else if (activeTab.value === 'profit') {
       profit.value = await profitReport(eventId.value);
-    } else if (activeTab.value === 'artist-profit' && eventId.value) {
+    } else if (activeTab.value === 'artist-profit') {
       const res = await artistProfitReport(eventId.value);
       artistProfit.value = res.data;
     }
@@ -119,56 +122,6 @@ async function submitSettlementPayment() {
   }
 }
 
-// Server supplies the column label per group_by ("Produk"/"Kategori"/"Artist"/"Tanggal")
-// — never hardcode it here, that's the exact bug the user reported.
-const salesColumns = computed(() => [{ key: 'label', label: sales.value?.group_label ?? 'Label' }, { key: 'unit_count', label: 'Unit' }, { key: 'amount', label: 'Jumlah' }]);
-
-const showProductDetail = ref(false);
-const detailProductId = ref(null);
-
-function openRowDetail(row) {
-  if (groupBy.value !== 'product' || !row.entity_id) return;
-  detailProductId.value = row.entity_id;
-  showProductDetail.value = true;
-}
-
-const transactionColumns = [
-  { key: 'order_number', label: 'No. transaksi' },
-  { key: 'customer_name', label: 'Pelanggan' },
-  { key: 'created_at', label: 'Waktu' },
-  { key: 'cashier_name', label: 'Kasir' },
-  { key: 'item_count', label: 'Item' },
-  { key: 'total_amount', label: 'Total' },
-  { key: 'actions', label: '' },
-];
-
-// F10.6 — pencarian client-side atas transactions[] yang sudah dimuat,
-// bukan lewat parameter query baru (lihat komentar di sales() backend:
-// kriteria penerimaannya eksplisit meminta "tanpa perlu memuat ulang
-// seluruh laporan"). Nama pelanggan nullable untuk order walk-in — baris
-// itu cukup tidak cocok pada kriteria nama, bukan error.
-const transactionSearch = ref('');
-
-const filteredTransactions = computed(() => {
-  const all = sales.value?.transactions ?? [];
-  const q = transactionSearch.value.trim().toLowerCase();
-  if (!q) return all;
-  return all.filter((t) => {
-    const orderNumber = (t.order_number ?? '').toLowerCase();
-    const customerName = (t.customer_name ?? '').toLowerCase();
-    const cashierName = (t.cashier_name ?? '').toLowerCase();
-    return orderNumber.includes(q) || customerName.includes(q) || cashierName.includes(q);
-  });
-});
-
-const showReceipt = ref(false);
-const receiptOrderId = ref(null);
-
-function openReceipt(transaction) {
-  receiptOrderId.value = transaction.id;
-  showReceipt.value = true;
-}
-
 // F11.6 — drill-down transaksi per artist dari tab Rekap Artist.
 const showArtistTransactions = ref(false);
 const artistTransactionsTarget = ref(null);
@@ -195,22 +148,7 @@ function openArtistTransactions(row) {
         </button>
       </div>
       <BaseSelect class="w-56" v-model="eventId" placeholder="Semua event" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
-      <BaseSelect
-        v-if="activeTab === 'sales'"
-        class="w-40"
-        v-model="groupBy"
-        :options="[
-          { value: 'product', label: 'Per produk' },
-          { value: 'category', label: 'Per kategori' },
-          { value: 'artist', label: 'Per artist' },
-          { value: 'day', label: 'Per hari' },
-        ]"
-      />
       <span class="flex-1"></span>
-      <BaseButton v-if="activeTab === 'sales'" variant="secondary" @click="doExport('sales')">
-        <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-        Ekspor .xlsx
-      </BaseButton>
       <BaseButton v-if="activeTab === 'settlement'" variant="secondary" @click="doExport('artist-settlements')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         Ekspor .xlsx
@@ -225,70 +163,8 @@ function openArtistTransactions(row) {
       </BaseButton>
     </div>
 
-    <!-- Sales tab -->
-    <template v-if="activeTab === 'sales'">
-      <div class="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">Transaksi</span><span class="text-[23px] font-extrabold tracking-tight">{{ sales?.totals?.order_count ?? 0 }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">Unit terjual</span><span class="text-[23px] font-extrabold tracking-tight">{{ sales?.totals?.unit_count ?? 0 }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">Penjualan kotor</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.gross_sales ?? 0) }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">Penjualan bersih</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.net_sales ?? 0) }}</span></div>
-      </div>
-      <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-        <DataTable :columns="salesColumns" :rows="sales?.rows ?? []" :loading="loading" empty-message="Belum ada data penjualan.">
-          <template #cell-label="{ row }">
-            <button
-              v-if="groupBy === 'product' && row.entity_id"
-              type="button"
-              class="text-left font-semibold text-brand-active underline decoration-dotted hover:text-brand"
-              @click="openRowDetail(row)"
-            >
-              {{ row.label }}
-            </button>
-            <span v-else>{{ row.label }}</span>
-          </template>
-          <template #cell-amount="{ row }">{{ formatIDR(row.amount) }}</template>
-        </DataTable>
-      </div>
-
-      <!-- Daftar transaksi asli — ringkasan per produk di atas mengelompokkan
-           per produk (2 baris bisa mewakili 3 transaksi bila dua di antaranya
-           membeli produk yang sama), jadi daftar ini ditampilkan berdampingan
-           supaya jumlah transaksi selalu bisa diverifikasi langsung. -->
-      <div class="flex flex-col gap-2">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <span class="text-[13px] font-bold tracking-tight">Daftar transaksi ({{ filteredTransactions.length }})</span>
-          <div class="relative w-64">
-            <i class="ph-duotone ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-muted-3" aria-hidden="true"></i>
-            <input
-              v-model="transactionSearch"
-              type="search"
-              placeholder="Cari no. transaksi, pelanggan, atau kasir…"
-              class="w-full rounded-lg border border-line-2 bg-white py-2 pl-8 pr-3 text-[12.5px] outline-none focus:border-brand-active"
-              aria-label="Cari transaksi"
-            />
-          </div>
-        </div>
-        <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-          <DataTable
-            :columns="transactionColumns"
-            :rows="filteredTransactions"
-            :loading="loading"
-            :empty-message="transactionSearch ? 'Tidak ada transaksi yang cocok dengan pencarian.' : 'Belum ada transaksi.'"
-          >
-            <template #cell-order_number="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.order_number }}</span></template>
-            <template #cell-customer_name="{ row }"><span :class="!row.customer_name ? 'text-muted-3' : ''">{{ row.customer_name ?? 'Walk-in' }}</span></template>
-            <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
-            <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
-            <template #cell-actions="{ row }">
-              <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openReceipt(row)">Lihat struk</button>
-            </template>
-          </DataTable>
-        </div>
-      </div>
-    </template>
-
-    <!-- Settlement tab (owner/admin only) -->
-    <template v-else-if="activeTab === 'settlement'">
+    <!-- Settlement tab -->
+    <template v-if="activeTab === 'settlement'">
       <EmptyState v-if="!eventId" icon="ph-calendar-dots" message="Pilih event untuk melihat rekap artist." />
       <div v-else class="overflow-hidden rounded-card border border-line-2 bg-white">
         <DataTable
@@ -396,8 +272,6 @@ function openArtistTransactions(row) {
       </template>
     </BaseModal>
 
-    <ProductDetailModal :open="showProductDetail" :product-id="detailProductId" @close="showProductDetail = false" />
-    <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" close-label="Tutup" @close="showReceipt = false" />
     <ArtistTransactionsModal
       :open="showArtistTransactions"
       :artist-id="artistTransactionsTarget?.artist_id"

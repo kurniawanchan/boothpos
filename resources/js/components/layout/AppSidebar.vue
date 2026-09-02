@@ -28,7 +28,8 @@ const NAV_DEFS = [
   { name: 'materials', label: 'Bahan Baku', icon: 'ph-flask', roles: ['owner', 'admin', 'inventory'] },
   { name: 'customers', label: 'Pelanggan', icon: 'ph-address-book' },
   { name: 'preorders', label: 'Pre-order', icon: 'ph-clock-countdown' },
-  { name: 'reports', label: 'Laporan', icon: 'ph-chart-bar' },
+  { name: 'sales', label: 'Penjualan', icon: 'ph-receipt' },
+  { name: 'reports', label: 'Laporan', icon: 'ph-chart-bar', roles: ['owner', 'admin'] },
   { name: 'settings', label: 'Pengaturan', icon: 'ph-gear-six', roles: ['owner', 'admin'] },
 ];
 

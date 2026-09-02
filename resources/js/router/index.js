@@ -95,10 +95,25 @@ const routes = [
         meta: { title: 'Pre-order', subtitle: 'Pesanan, DP, status, dan pengiriman kurir' },
       },
       {
+        path: 'sales',
+        name: 'sales',
+        component: () => import('../views/SalesView.vue'),
+        meta: { title: 'Penjualan', subtitle: 'Ringkasan transaksi, daftar struk, dan pencarian' },
+      },
+      {
         path: 'reports',
         name: 'reports',
         component: () => import('../views/ReportsView.vue'),
-        meta: { title: 'Laporan', subtitle: 'Penjualan, hasil artist, modal & keuntungan' },
+        meta: {
+          title: 'Laporan',
+          subtitle: 'Rekap artist, modal & keuntungan',
+          // Tab "Penjualan" dipindah ke halaman/menu 'sales' tersendiri —
+          // ketiga tab yang tersisa di halaman ini (Rekap Artist, Modal &
+          // Untung, Modal Artist) semuanya owner/admin-only (PRD 7.13),
+          // jadi rutenya sendiri digerbang di sini, bukan cuma tab-nya,
+          // supaya kasir/inventory tidak pernah sampai ke halaman kosong.
+          roles: ['owner', 'admin'],
+        },
       },
       {
         path: 'settings',
