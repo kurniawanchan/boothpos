@@ -2095,7 +2095,7 @@ paths:
       - name: entity
         in: path
         required: true
-        schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom] }
+        schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, roles, users] }
     get:
       tags: [Import & Export]
       summary: Ekspor satu entitas master data ke Excel
@@ -2113,6 +2113,12 @@ paths:
         `CLAUDE.md`/`README.md`/PRD §10.2. `bom` berisi satu baris per
         pasangan varian+bahan, direferensikan lewat `sku` (bukan produk
         induk) karena BOM diikat ke varian.
+
+        `roles`/`users` ditambahkan pada User Story 4 fitur
+        001-user-store-settings (2026-09-02). Sheet `users` TIDAK PERNAH
+        memuat kolom password (FR-007); kolom `photo_path`-nya adalah
+        REFERENSI string ke path penyimpanan, bukan data biner gambarnya,
+        dan diabaikan sepenuhnya bila muncul pada berkas impor.
 
         Digerbang `canManageMasterData()` (owner/admin/inventory) — lebih
         ketat daripada endpoint daftar yang boleh dibaca kasir, karena
@@ -2132,13 +2138,14 @@ paths:
       tags: [Import & Export]
       summary: Unduh template impor gabungan
       description: |
-        Workbook `.xlsx` berisi delapan sheet (`artists`, `categories`,
-        `products`, `stock`, `vendors`, `materials`, `vendor_prices`, `bom`)
-        lengkap dengan judul kolom yang benar dan satu baris contoh per
-        sheet (F15.3). Empat sheet terakhir ditambahkan pasca-MVP
-        (2026-09-01, lihat CLAUDE.md/README.md/PRD §10.2) — bukan bagian
-        dari F15.3 asli, tapi dibangun mengikuti pola workbook gabungan
-        yang sama persis.
+        Workbook `.xlsx` berisi sepuluh sheet (`artists`, `categories`,
+        `products`, `stock`, `vendors`, `materials`, `vendor_prices`, `bom`,
+        `roles`, `users`) lengkap dengan judul kolom yang benar dan satu
+        baris contoh per sheet (F15.3). Enam sheet terakhir ditambahkan
+        pasca-MVP (`vendors`..`bom` pada 2026-09-01, `roles`/`users` pada
+        2026-09-02 — User Story 4 fitur 001-user-store-settings) — bukan
+        bagian dari F15.3 asli, tapi dibangun mengikuti pola workbook
+        gabungan yang sama persis.
       responses:
         '200':
           description: Berkas xlsx
@@ -2157,11 +2164,14 @@ paths:
         nama sheet dicocokkan tanpa memandang huruf besar/kecil.
 
         **Urutan pemrosesan** selalu `artists` → `categories` → `products`
-        → `stock` → `vendors` → `materials` → `vendor_prices` → `bom`,
-        berapa pun urutan sheet di dalam berkas. Empat sheet terakhir
-        (vendor/bahan baku/BOM) ditambahkan pasca-MVP 2026-09-01 — lihat
-        catatan bertanggal di CLAUDE.md/README.md/PRD §10.2; ini kapabilitas
+        → `stock` → `vendors` → `materials` → `vendor_prices` → `bom` →
+        `roles` → `users`, berapa pun urutan sheet di dalam berkas. Sheet
+        vendor/bahan baku/BOM ditambahkan pasca-MVP 2026-09-01; `roles`/
+        `users` ditambahkan 2026-09-02 (User Story 4) — lihat catatan
+        bertanggal di CLAUDE.md/README.md/PRD §10.2; keduanya kapabilitas
         baru, bukan pemulihan salah satu butir yang dicoret PRD §10.2.
+        `users` menunjuk `roles` lewat NAMA (`role_name`), bukan kode —
+        `Role` tidak punya kolom `code` seperti entitas lain.
 
         **Semua-atau-tidak sama sekali.** Seluruh berkas divalidasi lebih
         dulu; bila ada satu baris pun yang tidak valid, tidak ada data yang
@@ -2182,6 +2192,8 @@ paths:
         | `materials` | `code` |
         | `vendor_prices` | pasangan (`vendor_code`, `material_code`) |
         | `bom` | pasangan (`sku`, `material_code`) |
+        | `roles` | `name` |
+        | `users` | `username` |
 
         **Kode dihasilkan server.** `code_prefix` dan `sku` selalu dibuat
         `ProductCodeGenerator`. Kolom `sku` pada sheet `products` hanya
@@ -2228,7 +2240,22 @@ paths:
         `vendor_prices` melepas tanda preferred dari harga vendor lain
         untuk bahan yang sama.
 
-        Digerbang `canManageMasterData()` (owner/admin/inventory).
+        **Roles/Users (User Story 4, 2026-09-02).** Sheet `roles` punya
+        kolom `menu_keys` berisi daftar kunci menu dipisah KOMA dalam satu
+        sel (mis. `pos,session`), divalidasi terhadap registry
+        `App\Support\MenuKeys`. Sheet `users` mereferensikan peran lewat
+        `role_name` (boleh menunjuk peran baru yang dibuat sheet `roles`
+        pada berkas yang sama) dan TIDAK PERNAH punya kolom password
+        (FR-007) — akun baru dari impor mendapat password ACAK yang dibuat
+        server, wajib diatur ulang pemiliknya lewat `PUT /users/{user}`.
+        Baris `users` yang `role_name`-nya tidak dikenal membatalkan
+        SELURUH impor (FR-009), termasuk baris `roles` valid pada berkas
+        yang sama.
+
+        Digerbang `canAccessAnyMenu()` — siapa pun yang bisa mengelola
+        salah satu entitas master data pada berkas (termasuk
+        pengguna/peran) boleh mengimpornya secara massal, konsisten dengan
+        `canManageMasterData()` (owner/admin/inventory) untuk sheet lain.
       requestBody:
         required: true
         content:
@@ -3226,7 +3253,7 @@ components:
         sheet:
           type: string
           nullable: true
-          enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, null]
+          enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, roles, users, null]
           description: "`null` untuk galat tingkat berkas (mis. tidak ada sheet yang dikenali)."
         row:
           type: integer

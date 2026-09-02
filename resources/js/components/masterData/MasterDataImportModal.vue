@@ -35,6 +35,8 @@ const SHEET_LABEL = {
   materials: 'Bahan Baku',
   vendor_prices: 'Harga Vendor',
   bom: 'BOM',
+  roles: 'Peran',
+  users: 'Pengguna',
 };
 
 const fileInputEl = ref(null);
@@ -147,7 +149,7 @@ const isDone = computed(() => !!result.value?.applied);
         <div class="flex flex-1 flex-col gap-1">
           <span class="text-[13px] font-bold text-brand-active">Belum punya berkasnya?</span>
           <span class="text-[12px] leading-relaxed text-muted-4">
-            Template berisi 8 sheet (artist, kategori, produk, stok, vendor, bahan baku, harga vendor, BOM) lengkap dengan
+            Template berisi 10 sheet (artist, kategori, produk, stok, vendor, bahan baku, harga vendor, BOM, peran, pengguna) lengkap dengan
             judul kolom dan contoh baris — sheet produk dan kategori kini juga memuat contoh kolom
             <span class="font-semibold">image_filename</span>.
             Berkas hasil <span class="font-semibold">ekspor</span> dari layar mana pun juga memakai kolom yang sama —

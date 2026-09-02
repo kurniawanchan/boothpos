@@ -198,13 +198,19 @@ class UserTest extends TestCase
         $this->actingAsRole('owner');
         User::factory()->create(['role' => 'cashier', 'username' => 'ekspor_test']);
 
+        // BUG YANG DITEMUKAN & DIPERBAIKI (staleness, bukan regresi) —
+        // assertion di sini sebelumnya mengharapkan 404, karena ditulis
+        // pada fase User Story 1 SEBELUM /exports/{entity} menerima
+        // 'users' (baru dibangun di User Story 4 — lihat
+        // tests/Feature/MasterDataImportUserTest.php yang punya assertion
+        // sesungguhnya "password tidak pernah ada di kolom ekspor").
+        // Sekarang endpoint itu memang ada dan sengaja mengembalikan 200
+        // — diperbarui di sini supaya test ini tidak berbohong tentang
+        // kontrak yang sudah berubah secara sah, sambil tetap menegaskan
+        // hal yang namanya sendiri janjikan: password tidak pernah bocor.
         $response = $this->get('/api/v1/exports/users');
 
-        // Endpoint /exports/{entity} belum menerima 'users' sampai
-        // MasterDataSheets diperluas (T050, User Story 4) — route
-        // constraint-nya menolak nilai yang tidak dikenal dengan 404. Di
-        // fase ini (US1) cukup pastikan endpoint TIDAK diam-diam menerima
-        // 'users' dengan bocor password sebelum US4 dibangun.
-        $response->assertStatus(404);
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 }

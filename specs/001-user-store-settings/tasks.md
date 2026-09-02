@@ -159,16 +159,16 @@ no existing user's access may be assumed unchanged.
 
 ### Tests for User Story 4
 
-- [ ] T049 [P] [US4] Write `tests/Feature/MasterDataImportUserTest.php` — `roles` sheet processed before `users` sheet (dependency order), a `users` row referencing a nonexistent role name produces a row-level `422` naming the bad reference and rolls back the entire import (FR-009), export never includes a password column (FR-007), new users created via import receive a system-generated temporary password (per contracts/api.md).
+- [X] T049 [P] [US4] Write `tests/Feature/MasterDataImportUserTest.php` — `roles` sheet processed before `users` sheet (dependency order), a `users` row referencing a nonexistent role name produces a row-level `422` naming the bad reference and rolls back the entire import (FR-009), export never includes a password column (FR-007), new users created via import receive a system-generated temporary password (per contracts/api.md).
 
 ### Implementation for User Story 4
 
-- [ ] T050 [US4] Add `roles` and `users` sheet definitions (headers, dependency order after `bom`) to `app/Support/MasterDataSheets.php`.
-- [ ] T051 [US4] Extend `app/Services/MasterDataImportService.php` to validate and apply the `roles` then `users` sheets (role resolved by name; new user rows get a system-generated temporary password, never a client-supplied one). Depends on: T050.
-- [ ] T052 [US4] Extend `MasterDataExportController`'s `entity` route constraint and export logic to accept `roles`/`users` (excluding the password column). Depends on: T050.
-- [ ] T053 [US4] Update `docs/openapi-pos-mvp.yaml`'s export/import entity enums. Depends on: T051, T052.
-- [ ] T054 [US4] Extend the downloadable template (`GET /imports/master-data/template`) with example `roles`/`users` rows; re-verify it still imports cleanly as-is (this repo's existing `test_the_shipped_template_imports_as_is` convention — extend that test to cover the two new sheets). Depends on: T051.
-- [ ] T055 [P] [US4] Update `resources/js/components/masterData/MasterDataImportModal.vue` copy if it names specific sheets, to mention the two new ones.
+- [X] T050 [US4] Add `roles` and `users` sheet definitions (headers, dependency order after `bom`) to `app/Support/MasterDataSheets.php`.
+- [X] T051 [US4] Extend `app/Services/MasterDataImportService.php` to validate and apply the `roles` then `users` sheets (role resolved by name; new user rows get a system-generated temporary password, never a client-supplied one). Depends on: T050.
+- [X] T052 [US4] Extend `MasterDataExportController`'s `entity` route constraint and export logic to accept `roles`/`users` (excluding the password column). Depends on: T050.
+- [X] T053 [US4] Update `docs/openapi-pos-mvp.yaml`'s export/import entity enums. Depends on: T051, T052.
+- [X] T054 [US4] Extend the downloadable template (`GET /imports/master-data/template`) with example `roles`/`users` rows; re-verify it still imports cleanly as-is (this repo's existing `test_the_shipped_template_imports_as_is` convention — extend that test to cover the two new sheets). Depends on: T051.
+- [X] T055 [P] [US4] Update `resources/js/components/masterData/MasterDataImportModal.vue` copy if it names specific sheets, to mention the two new ones.
 - [ ] T056 [US4] Run `php artisan test --filter=MasterDataImportUserTest` and verify quickstart.md step 7 live: export, edit, re-import (happy path), then re-import with a bad role reference and confirm nothing was partially applied. Depends on: T049, T054, T055.
 
 **Checkpoint**: All four user stories independently functional.

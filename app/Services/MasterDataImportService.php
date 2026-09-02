@@ -9,14 +9,18 @@ use App\Models\Category;
 use App\Models\Material;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorMaterialPrice;
 use App\Support\LicenseGate;
 use App\Support\MasterDataSheets;
+use App\Support\MenuKeys;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\Reader\Xlsx as XlsxReader;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
@@ -71,6 +75,15 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
  *    dipakai untuk mengoreksi sebagian kolom (paling sering harga), jadi
  *    default yang aman adalah tidak menghapus data yang tidak disebut.
  *    Menghapus nilai dilakukan lewat layar CRUD biasa.
+ *
+ * 7. ROLES/USERS (User Story 4, 2026-09-02) — dua sheet TAMBAHAN diproses
+ *    PALING TERAKHIR (setelah bom), karena users menunjuk roles lewat NAMA
+ *    (Role tidak punya kolom code). Sheet 'users' TIDAK PERNAH punya kolom
+ *    password (FR-007) — akun baru hasil impor mendapat password ACAK
+ *    yang dibuat server (Str::random(), lihat applyUsers()), bukan dari
+ *    berkas. Kolom 'photo_path' pada sheet 'users' hanya untuk EKSPOR
+ *    (referensi, bukan data biner); saat diimpor kolom itu diabaikan sama
+ *    sekali — foto profil hanya bisa diubah lewat POST /users/{user}/photo.
  */
 class MasterDataImportService
 {
@@ -150,6 +163,11 @@ class MasterDataImportService
             $sheets[MasterDataSheets::BOM] ?? [],
             $plan[MasterDataSheets::PRODUCTS],
             $plan[MasterDataSheets::MATERIALS],
+        );
+        $plan[MasterDataSheets::ROLES] = $this->validateRoles($sheets[MasterDataSheets::ROLES] ?? []);
+        $plan[MasterDataSheets::USERS] = $this->validateUsers(
+            $sheets[MasterDataSheets::USERS] ?? [],
+            $plan[MasterDataSheets::ROLES],
         );
 
         // Sheet yang tidak dikirim sama sekali tidak dilaporkan — nol baris
@@ -976,6 +994,8 @@ class MasterDataImportService
             $this->applyMaterials($plan[MasterDataSheets::MATERIALS]);
             $this->applyVendorPrices($plan[MasterDataSheets::VENDOR_PRICES]);
             $this->applyBom($plan[MasterDataSheets::BOM]);
+            $this->applyRoles($plan[MasterDataSheets::ROLES]);
+            $this->applyUsers($plan[MasterDataSheets::USERS]);
 
             // F13.4 — impor massal adalah tindakan sensitif, dan ditulis DI
             // DALAM transaksi yang sama seperti seluruh mutasi lain di
@@ -1658,6 +1678,293 @@ class MasterDataImportService
             $line->notes = $entry['notes'];
             $line->material_id = $material->id;
             $line->save();
+        }
+    }
+
+    // =================================================================
+    // VALIDASI — ROLES (User Story 4, ditambahkan 2026-09-02)
+    // =================================================================
+
+    /**
+     * Upsert key: kolom unik `roles.name` (Role tidak punya kolom `code`).
+     * menu_keys pada sel adalah string dipisah koma, divalidasi terhadap
+     * App\Support\MenuKeys::keys() — kunci yang tidak dikenal adalah galat
+     * per-baris/kolom seperti kolom lain, bukan diabaikan diam-diam
+     * (kesalahan ketik pada menu_keys berarti peran itu diam-diam tidak
+     * bisa mengakses layar yang dimaksud pemiliknya).
+     */
+    private function validateRoles(array $rows): array
+    {
+        $sheet = MasterDataSheets::ROLES;
+        $plan = [];
+        $seen = [];
+        $created = 0;
+        $updated = 0;
+
+        foreach ($rows as $entry) {
+            $row = $entry['row'];
+            $values = $entry['values'];
+
+            $name = $this->stringValue($values, 'name');
+
+            if ($name === null) {
+                $this->addError($sheet, $row, 'name', 'Nama peran wajib diisi.');
+
+                continue;
+            }
+
+            if (mb_strlen($name) > 50) {
+                $this->addError($sheet, $row, 'name', 'Nama peran maksimal 50 karakter.');
+
+                continue;
+            }
+
+            $key = mb_strtolower($name);
+            if (isset($seen[$key])) {
+                $this->addError($sheet, $row, 'name', "Peran '{$name}' muncul dua kali di sheet ini (baris {$seen[$key]}).");
+
+                continue;
+            }
+            $seen[$key] = $row;
+
+            $existing = Role::where('name', $name)->first();
+
+            if ($existing === null && Role::withTrashed()->where('name', $name)->exists()) {
+                $this->addError($sheet, $row, 'name', "Nama peran '{$name}' masih dipakai peran yang sudah dihapus. Pakai nama lain.");
+
+                continue;
+            }
+
+            $menuKeys = null;
+            if ($this->filled($values, 'menu_keys')) {
+                $menuKeys = $this->parseMenuKeys($sheet, $row, $values['menu_keys']);
+            } elseif ($existing === null) {
+                $this->addError($sheet, $row, 'menu_keys', 'Daftar menu_keys wajib diisi untuk peran baru.');
+            }
+
+            if ($menuKeys === null && $this->filled($values, 'menu_keys')) {
+                // parseMenuKeys sudah melaporkan galatnya sendiri.
+                continue;
+            }
+
+            $existing === null ? $created++ : $updated++;
+
+            $plan[] = [
+                'row' => $row,
+                'name' => $name,
+                'menu_keys' => $menuKeys,
+                'exists' => $existing !== null,
+            ];
+        }
+
+        $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
+
+        return $plan;
+    }
+
+    /**
+     * "pos,session" -> ['pos', 'session']. Kunci tidak dikenal atau sel
+     * kosong setelah dipisah koma dilaporkan sebagai galat per-baris pada
+     * kolom menu_keys, bukan dibuang diam-diam.
+     */
+    private function parseMenuKeys(string $sheet, int $row, mixed $value): ?array
+    {
+        $parts = array_filter(array_map('trim', explode(',', (string) $value)), fn ($p) => $p !== '');
+
+        if ($parts === []) {
+            $this->addError($sheet, $row, 'menu_keys', 'Daftar menu_keys tidak boleh kosong.');
+
+            return null;
+        }
+
+        $unknown = array_values(array_filter($parts, fn ($key) => ! MenuKeys::isValid($key)));
+
+        if ($unknown !== []) {
+            $this->addError($sheet, $row, 'menu_keys', 'Kunci menu tidak dikenal: '.implode(', ', $unknown).'. Kunci yang valid: '.implode(', ', MenuKeys::keys()).'.');
+
+            return null;
+        }
+
+        return array_values(array_unique($parts));
+    }
+
+    // =================================================================
+    // VALIDASI — USERS (User Story 4, ditambahkan 2026-09-02)
+    // =================================================================
+
+    /**
+     * Upsert key: kolom unik `users.username`. role_name menunjuk
+     * roles.name — boleh menunjuk peran yang BARU dibuat sheet 'roles'
+     * pada berkas yang sama (peran sudah tersedia di $rolePlan karena
+     * sheet roles divalidasi lebih dulu, sesuai MasterDataSheets::ORDER).
+     *
+     * TIDAK ADA KOLOM PASSWORD (FR-007) — pengguna baru dari impor
+     * mendapat password ACAK yang dibuat server (Str::random()), tidak
+     * pernah dari nilai yang dikirim berkas. Ini sengaja lebih ketat
+     * daripada rute POST /users biasa (yang menerima password dari form)
+     * karena spreadsheet mudah dibagikan/disalin dan tidak boleh menjadi
+     * jalur bocornya kredensial dalam bentuk apa pun, termasuk password
+     * yang "akan diganti nanti". Pemilik akun ini harus mengatur ulang
+     * passwordnya lewat PUT /users/{user} (CRUD biasa) setelah impor.
+     */
+    private function validateUsers(array $rows, array $rolePlan): array
+    {
+        $sheet = MasterDataSheets::USERS;
+        $plan = [];
+        $seen = [];
+        $created = 0;
+        $updated = 0;
+
+        $roleNamesInFile = array_map(fn (array $r) => mb_strtolower($r['name']), $rolePlan);
+
+        foreach ($rows as $entry) {
+            $row = $entry['row'];
+            $values = $entry['values'];
+
+            $username = $this->stringValue($values, 'username');
+
+            if ($username === null) {
+                $this->addError($sheet, $row, 'username', 'Username wajib diisi.');
+
+                continue;
+            }
+
+            if (mb_strlen($username) > 50) {
+                $this->addError($sheet, $row, 'username', 'Username maksimal 50 karakter.');
+
+                continue;
+            }
+
+            $key = mb_strtolower($username);
+            if (isset($seen[$key])) {
+                $this->addError($sheet, $row, 'username', "Username '{$username}' muncul dua kali di sheet ini (baris {$seen[$key]}).");
+
+                continue;
+            }
+            $seen[$key] = $row;
+
+            $existing = User::where('username', $username)->first();
+
+            if ($existing === null && User::withTrashed()->where('username', $username)->exists()) {
+                $this->addError($sheet, $row, 'username', "Username '{$username}' masih dipakai akun yang sudah dihapus. Pakai username lain.");
+
+                continue;
+            }
+
+            $attributes = [];
+
+            if ($this->filled($values, 'name')) {
+                $name = $this->stringValue($values, 'name');
+                if (mb_strlen($name) > 100) {
+                    $this->addError($sheet, $row, 'name', 'Nama pengguna maksimal 100 karakter.');
+                } else {
+                    $attributes['name'] = $name;
+                }
+            } elseif ($existing === null) {
+                $this->addError($sheet, $row, 'name', 'Nama pengguna wajib diisi untuk akun baru.');
+            }
+
+            $roleName = null;
+            if ($this->filled($values, 'role_name')) {
+                $roleName = $this->stringValue($values, 'role_name');
+                $known = in_array(mb_strtolower($roleName), $roleNamesInFile, true)
+                    || Role::where('name', $roleName)->exists();
+
+                if (! $known) {
+                    $this->addError($sheet, $row, 'role_name', "Peran '{$roleName}' tidak ditemukan. Tambahkan pada sheet 'roles' pada berkas yang sama, atau perbaiki penulisan namanya.");
+                    $roleName = null;
+                } else {
+                    $attributes['role_name'] = $roleName;
+                }
+            } elseif ($existing === null) {
+                $this->addError($sheet, $row, 'role_name', 'Peran (role_name) wajib diisi untuk akun baru.');
+            }
+
+            if ($this->filled($values, 'is_active')) {
+                $isActive = $this->parseBool($sheet, $row, 'is_active', $values['is_active']);
+                if ($isActive !== null) {
+                    $attributes['is_active'] = $isActive;
+                }
+            }
+
+            $existing === null ? $created++ : $updated++;
+
+            $plan[] = [
+                'row' => $row,
+                'username' => $username,
+                'attributes' => $attributes,
+                'exists' => $existing !== null,
+            ];
+        }
+
+        $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
+
+        return $plan;
+    }
+
+    // =================================================================
+    // PENERAPAN — ROLES/USERS
+    // =================================================================
+
+    private function applyRoles(array $plan): void
+    {
+        foreach ($plan as $entry) {
+            $role = Role::firstOrNew(['name' => $entry['name']]);
+
+            if ($entry['menu_keys'] !== null) {
+                $role->menu_keys = $entry['menu_keys'];
+            } elseif (! $role->exists) {
+                // Sudah dicegah di validateRoles (galat 'wajib diisi'),
+                // jaga-jaga saja supaya tidak pernah menyimpan peran baru
+                // tanpa akses menu sama sekali.
+                $role->menu_keys = [];
+            }
+
+            $role->name = $entry['name'];
+            $role->save();
+        }
+    }
+
+    private function applyUsers(array $plan): void
+    {
+        foreach ($plan as $entry) {
+            $user = User::firstOrNew(['username' => $entry['username']]);
+            $isNew = ! $user->exists;
+
+            $attributes = $entry['attributes'];
+
+            if (array_key_exists('role_name', $attributes)) {
+                $role = Role::where('name', $attributes['role_name'])->first();
+
+                if ($role === null) {
+                    // Peran ini seharusnya baru saja dibuat applyRoles() di
+                    // atas — kalau masih tidak ketemu, sesuatu yang tak
+                    // terduga terjadi di antara validasi dan penerapan.
+                    throw new MasterDataImportRowException(
+                        MasterDataSheets::USERS,
+                        $entry['row'],
+                        'role_name',
+                        "Peran '{$attributes['role_name']}' tidak ditemukan saat diterapkan."
+                    );
+                }
+
+                $user->role_id = $role->id;
+                unset($attributes['role_name']);
+            }
+
+            $user->fill($attributes);
+            $user->username = $entry['username'];
+
+            if ($isNew) {
+                // FR-007 — TIDAK PERNAH dari kolom berkas (sheet ini tidak
+                // punya kolom password sama sekali). Panjang acak yang
+                // jauh melebihi minimum 8 karakter form CRUD biasa, karena
+                // tidak ada manusia yang akan mengetiknya — pemiliknya
+                // WAJIB mengatur ulang lewat PUT /users/{user}.
+                $user->password = Hash::make(Str::random(32));
+            }
+
+            $user->save();
         }
     }
 

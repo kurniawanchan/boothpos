@@ -118,7 +118,7 @@ Route::prefix('v1')->group(function () {
         // bertabrakan dengan apiResource /artists/{artist} dan supaya
         // seluruh permukaan berkas berpasangan simetris di satu tempat.
         Route::get('/exports/{entity}', [MasterDataExportController::class, 'show'])
-            ->where('entity', 'artists|categories|products|stock|vendors|materials|vendor_prices|bom');
+            ->where('entity', 'artists|categories|products|stock|vendors|materials|vendor_prices|bom|roles|users');
         Route::get('/imports/master-data/template', [MasterDataImportController::class, 'template']);
         Route::post('/imports/master-data', [MasterDataImportController::class, 'store']);
 

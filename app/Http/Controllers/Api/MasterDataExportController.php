@@ -40,7 +40,7 @@ class MasterDataExportController extends Controller
         // disamakan dengan siapa yang boleh MENGELOLA data ini
         // (owner/admin/inventory), konsisten dengan
         // StockAdjustmentRequest dan ImportMasterDataRequest.
-        if (! $request->user()->canAccessAnyMenu(['artists', 'categories', 'products', 'stock', 'vendors', 'materials'])) {
+        if (! $request->user()->canAccessAnyMenu(['artists', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users'])) {
             return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat mengekspor data master.'], 403);
         }
 
