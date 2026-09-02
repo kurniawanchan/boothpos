@@ -19,16 +19,16 @@ class VendorPolicy
 
     public function create(User $user): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('vendors');
     }
 
     public function update(User $user, Vendor $vendor): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('vendors');
     }
 
     public function delete(User $user, Vendor $vendor): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('vendors');
     }
 }

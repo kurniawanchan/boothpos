@@ -42,7 +42,12 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'username' => $user->username,
-                'role' => $user->role,
+                // 'role' sekarang nama Role (string) yang bisa diedit
+                // pemilik toko — dipakai HANYA untuk tampilan (mis. label
+                // di footer AppSidebar.vue), bukan lagi untuk keputusan
+                // otorisasi apa pun di frontend (lihat menu_keys di bawah).
+                'role' => $user->role?->name,
+                'menu_keys' => $user->role?->menu_keys ?? [],
                 'is_active' => $user->is_active,
             ],
         ]);
@@ -63,7 +68,10 @@ class AuthController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'username' => $user->username,
-            'role' => $user->role,
+            'role' => $user->role?->name,
+            // T009 — permukaan resolusi menu_keys sekali per sesi frontend
+            // (bukan per-menu, lihat plan.md Performance Goals).
+            'menu_keys' => $user->role?->menu_keys ?? [],
             'is_active' => $user->is_active,
         ]);
     }

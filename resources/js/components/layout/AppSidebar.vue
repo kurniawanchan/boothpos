@@ -15,26 +15,30 @@ const { count: cartCount } = storeToRefs(cart);
 const props = defineProps({ preorderAlertCount: { type: Number, default: 0 } });
 defineEmits(['logout']);
 
+// 'menuKey' matches app/Support/MenuKeys.php exactly — this is the one
+// place the sidebar decides visibility, delegating to
+// auth.canAccessMenu() (which mirrors User::canAccessMenu() server-side)
+// instead of a hardcoded role list. See specs/001-user-store-settings.
 const NAV_DEFS = [
-  { name: 'dashboard', label: 'Beranda', icon: 'ph-house' },
-  { name: 'pos', label: 'Kasir', icon: 'ph-shopping-cart-simple' },
-  { name: 'session', label: 'Sesi Kasir', icon: 'ph-cash-register' },
-  { name: 'events', label: 'Event', icon: 'ph-calendar-dots' },
-  { name: 'products', label: 'Produk', icon: 'ph-package' },
-  { name: 'artists', label: 'Artist', icon: 'ph-users-three' },
-  { name: 'categories', label: 'Kategori', icon: 'ph-squares-four' },
-  { name: 'stock', label: 'Stok', icon: 'ph-stack' },
-  { name: 'vendors', label: 'Vendor', icon: 'ph-truck', roles: ['owner', 'admin', 'inventory'] },
-  { name: 'materials', label: 'Bahan Baku', icon: 'ph-flask', roles: ['owner', 'admin', 'inventory'] },
-  { name: 'customers', label: 'Pelanggan', icon: 'ph-address-book' },
-  { name: 'preorders', label: 'Pre-order', icon: 'ph-clock-countdown' },
-  { name: 'sales', label: 'Penjualan', icon: 'ph-receipt' },
-  { name: 'reports', label: 'Laporan', icon: 'ph-chart-bar', roles: ['owner', 'admin'] },
-  { name: 'settings', label: 'Pengaturan', icon: 'ph-gear-six', roles: ['owner', 'admin'] },
+  { name: 'dashboard', label: 'Beranda', icon: 'ph-house', menuKey: 'dashboard' },
+  { name: 'pos', label: 'Kasir', icon: 'ph-shopping-cart-simple', menuKey: 'pos' },
+  { name: 'session', label: 'Sesi Kasir', icon: 'ph-cash-register', menuKey: 'session' },
+  { name: 'events', label: 'Event', icon: 'ph-calendar-dots', menuKey: 'events' },
+  { name: 'products', label: 'Produk', icon: 'ph-package', menuKey: 'products' },
+  { name: 'artists', label: 'Artist', icon: 'ph-users-three', menuKey: 'artists' },
+  { name: 'categories', label: 'Kategori', icon: 'ph-squares-four', menuKey: 'categories' },
+  { name: 'stock', label: 'Stok', icon: 'ph-stack', menuKey: 'stock' },
+  { name: 'vendors', label: 'Vendor', icon: 'ph-truck', menuKey: 'vendors' },
+  { name: 'materials', label: 'Bahan Baku', icon: 'ph-flask', menuKey: 'materials' },
+  { name: 'customers', label: 'Pelanggan', icon: 'ph-address-book', menuKey: 'customers' },
+  { name: 'preorders', label: 'Pre-order', icon: 'ph-clock-countdown', menuKey: 'preorders' },
+  { name: 'sales', label: 'Penjualan', icon: 'ph-receipt', menuKey: 'sales' },
+  { name: 'reports', label: 'Laporan', icon: 'ph-chart-bar', menuKey: 'reports' },
+  { name: 'settings', label: 'Pengaturan', icon: 'ph-gear-six', menuKey: 'settings' },
 ];
 
 const navItems = computed(() =>
-  NAV_DEFS.filter((item) => !item.roles || item.roles.includes(auth.role)).map((item) => ({
+  NAV_DEFS.filter((item) => auth.canAccessMenu(item.menuKey)).map((item) => ({
     ...item,
     badge: item.name === 'pos' ? cartCount.value : item.name === 'preorders' ? props.preorderAlertCount : 0,
   }))

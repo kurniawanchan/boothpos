@@ -34,7 +34,15 @@ class ImportMasterDataRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return $this->user()?->canManageMasterData() ?? false;
+        // Impor menyentuh EMPAT entitas sekaligus (artists/categories/
+        // products/stock, plus vendors/materials/vendor_prices/bom) —
+        // digerbang canAccessAnyMenu() (Role::canAccessAnyOf()), bukan satu
+        // canAccessMenu() tunggal, supaya siapa pun yang bisa mengelola
+        // SALAH SATU entitas master data tetap bisa mengimpornya secara
+        // massal, konsisten dengan owner/admin/inventory hari ini.
+        return $this->user()?->canAccessAnyMenu([
+            'artists', 'categories', 'products', 'stock', 'vendors', 'materials',
+        ]) ?? false;
     }
 
     /**

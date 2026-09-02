@@ -60,7 +60,13 @@ class OrderController extends Controller
 
     public function void(Request $request, Order $order): JsonResponse
     {
-        if (! $request->user()->isOwnerOrAdmin()) {
+        // Sama seperti catatan di EventPolicy::create() — "batalkan
+        // transaksi" adalah gerbang per-aksi di dalam menu 'sales'/'pos'
+        // yang dibagi semua peran, bukan aksesnya sendiri. Dipetakan ke
+        // canAccessMenu('settings') untuk alasan yang sama (satu-satunya
+        // kunci menu yang, pada keempat peran default, persis berisi
+        // owner+admin).
+        if (! $request->user()->canAccessMenu('settings')) {
             return response()->json(['message' => 'Hanya owner/admin yang dapat membatalkan transaksi.'], 403);
         }
 

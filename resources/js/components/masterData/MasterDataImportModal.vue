@@ -127,7 +127,7 @@ async function runImport(dryRun) {
       simpleError.value = err.errors?.file?.[0] ?? err.message;
     }
     // 403 is already toasted by the shared axios interceptor — this
-    // control is hidden for anyone without canManageMasterData anyway.
+    // control is hidden for anyone without master-data menu access anyway.
   } finally {
     previewing.value = false;
     applying.value = false;

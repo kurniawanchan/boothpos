@@ -31,7 +31,7 @@ class ArtistPolicy
      */
     public function create(User $user): Response
     {
-        if (! $user->canManageMasterData()) {
+        if (! $user->canAccessMenu('artists')) {
             return Response::deny('Anda tidak berhak mengelola artist.');
         }
 
@@ -46,11 +46,11 @@ class ArtistPolicy
 
     public function update(User $user, Artist $artist): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('artists');
     }
 
     public function delete(User $user, Artist $artist): bool
     {
-        return $user->canManageMasterData();
+        return $user->canAccessMenu('artists');
     }
 }

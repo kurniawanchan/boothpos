@@ -49,7 +49,7 @@ class MasterDataImportController extends Controller
      */
     public function template(Request $request): BinaryFileResponse|JsonResponse
     {
-        if (! $request->user()->canManageMasterData()) {
+        if (! $request->user()->canAccessAnyMenu(['artists', 'categories', 'products', 'stock', 'vendors', 'materials'])) {
             return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat mengunduh template impor.'], 403);
         }
 

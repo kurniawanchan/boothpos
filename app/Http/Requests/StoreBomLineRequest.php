@@ -10,7 +10,9 @@ class StoreBomLineRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->canManageMasterData() ?? false;
+        // BOM digantung pada varian produk (lihat CLAUDE.md "Vendor,
+        // material, dan BOM tracking") — dipetakan ke menu 'products'.
+        return $this->user()?->canAccessMenu('products') ?? false;
     }
 
     protected function failedAuthorization(): void

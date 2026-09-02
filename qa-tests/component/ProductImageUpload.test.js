@@ -29,7 +29,7 @@ function renderProducts() {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
-  auth.user = { id: 1, role: 'owner', name: 'Owner' };
+  auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'products'] };
   return render(ProductsView, { global: { plugins: [pinia] } });
 }
 

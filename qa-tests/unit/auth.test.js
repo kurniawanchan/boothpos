@@ -26,12 +26,15 @@ describe('useAuthStore', () => {
     expect(sessionStorage.getItem('boothpos_token')).toBe('abc123');
   });
 
-  it('computes isOwnerOrAdmin and canManageMasterData from the role', async () => {
-    authApi.login.mockResolvedValue({ token: 't', user: { id: 1, username: 'inventory', role: 'inventory' } });
+  it('computes canAccessMenu from the resolved menu_keys', async () => {
+    authApi.login.mockResolvedValue({
+      token: 't',
+      user: { id: 1, username: 'inventory', role: 'Inventory', menu_keys: ['dashboard', 'products', 'stock'] },
+    });
     const auth = useAuthStore();
     await auth.login('inventory', 'x');
-    expect(auth.isOwnerOrAdmin).toBe(false);
-    expect(auth.canManageMasterData).toBe(true);
+    expect(auth.canAccessMenu('reports')).toBe(false);
+    expect(auth.canAccessMenu('products')).toBe(true);
   });
 
   it('clears state on logout even if the server call fails', async () => {

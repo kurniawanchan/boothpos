@@ -319,7 +319,7 @@ async function performDelete() {
       </div>
       <BaseSelect class="w-48" v-model="artistFilter" placeholder="Semua artist" :options="artists.map((a) => ({ value: a.id, label: a.name }))" @update:model-value="applyFilters" />
       <BaseSelect class="w-48" v-model="categoryFilter" placeholder="Semua kategori" :options="categories.map((c) => ({ value: c.id, label: c.name }))" @update:model-value="applyFilters" />
-      <template v-if="auth.canManageMasterData">
+      <template v-if="auth.canAccessMenu('products')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           Ekspor .xlsx
@@ -347,7 +347,7 @@ async function performDelete() {
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
             <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openDetail(row)">Detail</button>
-            <template v-if="auth.canManageMasterData">
+            <template v-if="auth.canAccessMenu('products')">
               <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
               <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">Hapus</button>
             </template>

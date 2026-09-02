@@ -9,7 +9,7 @@ class UpdateVendorMaterialPriceRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->canManageMasterData() ?? false;
+        return $this->user()?->canAccessMenu('materials') ?? false;
     }
 
     protected function failedAuthorization(): void

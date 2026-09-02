@@ -20,7 +20,7 @@ function renderReports() {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
-  auth.user = { id: 1, role: 'owner', name: 'Owner' };
+  auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'reports'] };
   return render(ReportsView, { global: { plugins: [pinia] } });
 }
 
@@ -71,7 +71,7 @@ describe('ReportsView — artist transaction drill-down (F11.6)', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const auth = useAuthStore();
-    auth.user = { id: 2, role: 'cashier', name: 'Kasir' };
+    auth.user = { id: 2, role: 'Kasir', name: 'Kasir', menu_keys: ['dashboard', 'pos'] };
     render(ReportsView, { global: { plugins: [pinia] } });
     await screen.findByRole('combobox'); // event selector — always rendered regardless of role
     expect(screen.queryByText('Rekap Artist')).not.toBeInTheDocument();
@@ -117,7 +117,7 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const auth = useAuthStore();
-    auth.user = { id: 3, role: 'inventory', name: 'Gudang' };
+    auth.user = { id: 3, role: 'Inventory', name: 'Gudang', menu_keys: ['dashboard', 'products', 'stock'] };
     render(ReportsView, { global: { plugins: [pinia] } });
     await screen.findByRole('combobox'); // event selector — always rendered regardless of role
     expect(screen.queryByText('Modal Artist')).not.toBeInTheDocument();

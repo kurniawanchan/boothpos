@@ -2103,11 +2103,23 @@ components:
 
     User:
       type: object
+      description: |
+        Sejak 001-user-store-settings, `role` adalah NAMA Role yang bisa
+        dikonfigurasi bebas oleh owner (bukan lagi enum 4 nilai tetap) —
+        dipakai HANYA untuk tampilan. `menu_keys` adalah daftar kunci menu
+        yang boleh diakses akun ini, resolusi sekali per sesi login/`GET
+        /auth/me`; ini yang dipakai frontend untuk `canAccessMenu()`
+        (cosmetic saja — penegakan sesungguhnya tetap di server pada
+        setiap endpoint).
       properties:
         id: { type: integer }
         name: { type: string }
         username: { type: string }
-        role: { type: string, enum: [owner, admin, cashier, inventory] }
+        role: { type: string, example: Owner }
+        menu_keys:
+          type: array
+          items: { type: string }
+          example: [dashboard, pos, session, products, reports, settings]
         is_active: { type: boolean }
 
     Artist:
