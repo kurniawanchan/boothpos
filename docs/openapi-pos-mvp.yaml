@@ -192,6 +192,37 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /settings/store-logo:
+    post:
+      tags: [Settings]
+      summary: Unggah/ganti logo toko (001-user-store-settings US3, T045)
+      description: |
+        Mengikuti pola persis `POST /categories/{id}/image` — endpoint
+        multipart terpisah karena `PUT /settings`'s bulk JSON body tidak
+        bisa membawa file (lihat research.md Decision 3). Menulis baris
+        `store_logo_path` di tabel `settings` yang sama, dicatat ke log
+        aktivitas seperti setiap perubahan `PUT /settings` lainnya.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary, description: JPEG atau PNG, maksimal 5 MB. }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Setting' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # ------------------------------------------------------------------
   # LOG AKTIVITAS (F13.4)
   # ------------------------------------------------------------------
@@ -1545,6 +1576,230 @@ paths:
   # bertanggal di CLAUDE.md/README.md/PRD §10.2.
   # ------------------------------------------------------------------
 
+  /users:
+    get:
+      tags: [Pengguna & Peran]
+      summary: Daftar pengguna
+      description: Digerbangi canAccessMenu('users') (001-user-store-settings US1).
+      parameters:
+        - { name: search, in: query, schema: { type: string }, description: "Mencocokkan name atau username (FR-004)." }
+        - { name: role_id, in: query, schema: { type: integer } }
+        - { name: is_active, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Pengguna & Peran]
+      summary: Buat pengguna
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /users/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Pengguna & Peran]
+      summary: Detail pengguna
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Pengguna & Peran]
+      summary: Perbarui pengguna
+      description: |
+        password bersifat opsional (kosong berarti tidak diubah). Ditolak
+        409 bila targetnya akun yang sedang login sendiri DAN perubahan
+        akan menonaktifkannya atau mengganti role_id-nya (FR-006) — ini
+        konflik aturan bisnis, bukan soal hak akses, jadi 409 bukan 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Pengguna & Peran]
+      summary: Hapus (nonaktifkan) pengguna
+      description: Soft delete. 409 bila targetnya akun yang sedang login sendiri (FR-006).
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /users/{id}/photo:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Pengguna & Peran]
+      summary: Unggah/ganti foto pengguna
+      description: Mirip persis POST /products/{id}/image, memakai ImageUploadService yang sama.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary, description: JPEG atau PNG, maksimal 5 MB. }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /roles:
+    get:
+      tags: [Pengguna & Peran]
+      summary: Daftar peran
+      description: |
+        Digerbangi canAccessMenu('roles') (001-user-store-settings US2).
+        `user_count` pada setiap baris adalah jumlah pengguna AKTIF yang
+        memakai peran itu — dipasok siap pakai supaya frontend tidak perlu
+        request kedua, dan supaya pesan penolakan 409 delete (FR-014)
+        mengutip angka yang sama persis.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Role' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Pengguna & Peran]
+      summary: Buat peran
+      description: |
+        Setiap nilai `menu_keys` divalidasi terhadap registry
+        App\Support\MenuKeys — kunci tak dikenal ditolak 422, tidak pernah
+        didiamkan tersimpan tanpa efek.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /roles/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Pengguna & Peran]
+      summary: Detail peran
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Pengguna & Peran]
+      summary: Perbarui peran
+      description: |
+        Ditolak 409 (FR-013) bila perubahan `menu_keys` akan membuat TIDAK
+        ADA satu pun peran tersisa (selain peran ini) yang mencakup KEDUA
+        kunci reserved `users` DAN `roles` — toko tidak boleh pernah
+        kehilangan kemampuan mengelola aksesnya sendiri.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoleInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Role' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Pengguna & Peran]
+      summary: Hapus peran
+      description: |
+        Soft delete. Ditolak 409 bila peran masih dipakai satu atau lebih
+        pengguna aktif (FR-014, pesan mengutip jumlah pengguna persis), ATAU
+        bila peran ini adalah peran terakhir yang mencakup users+roles
+        (FR-013, dicek sesudah FR-014).
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /menu-keys:
+    get:
+      tags: [Pengguna & Peran]
+      summary: Registry menu/fitur yang tersedia
+      description: |
+        Sumber kebenaran tunggal App\Support\MenuKeys, dikembalikan sebagai
+        {key,label}[] supaya layar pengaturan peran (RoleMenuPicker.vue)
+        merender checkbox tanpa daftar menu di-hardcode dua kali.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string, example: roles }
+                        label: { type: string, example: Peran }
+
   /vendors:
     get:
       tags: [Vendor & Bahan Baku]
@@ -2143,6 +2398,65 @@ components:
         contact_phone: { type: string, nullable: true }
         contact_email: { type: string, nullable: true }
         notes: { type: string, nullable: true }
+        is_active: { type: boolean, default: true }
+
+    # -------------------------------------------------------------
+    # Pengguna & Peran (001-user-store-settings, ditambahkan 2026-10)
+    # -------------------------------------------------------------
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        username: { type: string }
+        role:
+          type: object
+          nullable: true
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        is_active: { type: boolean }
+        photo_url: { type: string, nullable: true, readOnly: true }
+        last_login_at: { type: string, format: date-time, nullable: true }
+      description: password TIDAK PERNAH disertakan (FR-007), termasuk pada ekspor massal.
+
+    Role:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, maxLength: 50 }
+        menu_keys:
+          type: array
+          items: { type: string }
+          description: Divalidasi terhadap registry App\Support\MenuKeys.
+        is_system_default:
+          type: boolean
+          description: |
+            `true` untuk 4 peran bawaan (Owner/Admin/Kasir/Inventory) yang
+            direproduksi seeder — informasional saja, tidak memblokir edit.
+        user_count:
+          type: integer
+          readOnly: true
+          description: Jumlah pengguna AKTIF yang memakai peran ini.
+
+    RoleInput:
+      type: object
+      required: [name, menu_keys]
+      properties:
+        name: { type: string, maxLength: 50, description: Unik di antara peran yang belum dihapus. }
+        menu_keys:
+          type: array
+          items: { type: string }
+          description: Setiap nilai harus salah satu kunci App\Support\MenuKeys — kunci tak dikenal ditolak 422.
+
+    UserInput:
+      type: object
+      required: [name, username, role_id]
+      properties:
+        name: { type: string, maxLength: 100 }
+        username: { type: string, maxLength: 50, description: Unik di antara pengguna yang belum dihapus. }
+        password: { type: string, minLength: 8, description: Wajib saat membuat; opsional saat memperbarui (kosong = tidak diubah). }
+        role_id: { type: integer, description: Harus merujuk Role yang belum dihapus. }
         is_active: { type: boolean, default: true }
 
     # -------------------------------------------------------------

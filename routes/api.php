@@ -16,9 +16,11 @@ use App\Http\Controllers\Api\PaymentProofController;
 use App\Http\Controllers\Api\PreorderController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\StockController;
+use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VendorController;
 use Illuminate\Support\Facades\Route;
 
@@ -33,8 +35,23 @@ Route::prefix('v1')->group(function () {
         Route::get('/settings/features', [SettingsController::class, 'features']);
         Route::get('/settings', [SettingsController::class, 'index']);
         Route::put('/settings', [SettingsController::class, 'update']);
+        Route::post('/settings/store-logo', [SettingsController::class, 'uploadStoreLogo']);
 
         Route::get('/activity-logs', [ActivityLogController::class, 'index']);
+
+        // Manajemen pengguna (001-user-store-settings US1). Foto memakai
+        // pola yang sama seperti /products/{product}/image — attach
+        // terpisah, bukan bagian dari apiResource, karena multipart.
+        Route::apiResource('users', UserController::class);
+        Route::post('/users/{user}/photo', [UserController::class, 'uploadPhoto']);
+
+        // Peran (Role) dan registry menu — 001-user-store-settings User
+        // Story 2. /menu-keys adalah App\Support\MenuKeys registry, bukan
+        // bagian dari resource /roles — dipisah supaya frontend bisa
+        // memuat daftar menu (untuk checkbox RoleMenuPicker) tanpa harus
+        // punya akses baca ke satu peran pun.
+        Route::get('/menu-keys', [RoleController::class, 'menuKeys']);
+        Route::apiResource('roles', RoleController::class);
 
         Route::apiResource('artists', ArtistController::class);
         Route::apiResource('categories', CategoryController::class);

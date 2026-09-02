@@ -107,22 +107,22 @@ no existing user's access may be assumed unchanged.
 
 ### Tests for User Story 2
 
-- [ ] T029 [P] [US2] Write `tests/Feature/RoleTest.php` — CRUD, `menu_keys` validated against `MenuKeys` registry (unknown key → `422`), delete rejected with `409` when `user_count > 0` (FR-014), delete/update rejected with `409` when it would leave zero roles capable of managing `users`+`roles` (FR-013) — cover both "deleting the last such role" and "editing its `menu_keys` to remove that access" as distinct cases. Must fail before implementation.
-- [ ] T030 [P] [US2] Write `qa-tests/component/RolesView.test.js` — list, create/edit with the menu checkbox grid, both 409 guards surfaced as clear UI messages (not generic errors).
+- [X] T029 [P] [US2] Write `tests/Feature/RoleTest.php` — CRUD, `menu_keys` validated against `MenuKeys` registry (unknown key → `422`), delete rejected with `409` when `user_count > 0` (FR-014), delete/update rejected with `409` when it would leave zero roles capable of managing `users`+`roles` (FR-013) — cover both "deleting the last such role" and "editing its `menu_keys` to remove that access" as distinct cases. Must fail before implementation.
+- [X] T030 [P] [US2] Write `qa-tests/component/RolesView.test.js` — list, create/edit with the menu checkbox grid, both 409 guards surfaced as clear UI messages (not generic errors).
 
 ### Implementation for User Story 2
 
-- [ ] T031 [P] [US2] Create `app/Http/Requests/StoreRoleRequest.php` and `app/Http/Requests/UpdateRoleRequest.php` — validate `menu_keys` entries against `App\Support\MenuKeys`.
-- [ ] T032 [P] [US2] Create `app/Http/Resources/RoleResource.php` — `{id, name, menu_keys, is_system_default, user_count}`.
-- [ ] T033 [US2] Create `app/Policies/RolePolicy.php` — `canAccessMenu('roles')` gate, plus FR-013 (check across all *other* roles before allowing a change that would remove `users`+`roles` from the last capable role) and FR-014 (block delete while `user_count > 0`) guards. Depends on: T031, T032.
-- [ ] T034 [US2] Create `app/Http/Controllers/Api/RoleController.php` — `index`, `store`, `show`, `update`, `destroy`, plus `menuKeys()` returning the `App\Support\MenuKeys` registry as `{key, label}[]`. Depends on: T033.
-- [ ] T035 [US2] Register routes in `routes/api.php`: `GET|POST /roles`, `GET|PUT|DELETE /roles/{role}`, `GET /menu-keys`. Depends on: T034.
-- [ ] T036 [US2] Update `docs/openapi-pos-mvp.yaml` with the new `/roles` and `/menu-keys` routes/schemas. Depends on: T035.
-- [ ] T037 [P] [US2] Create `resources/js/api/roles.js`.
-- [ ] T038 [P] [US2] Create `resources/js/components/settings/RoleMenuPicker.vue` — checkbox grid fed by `GET /menu-keys`, reusable by the role create/edit form.
-- [ ] T039 [US2] Create `resources/js/views/RolesView.vue` — list (with `user_count` shown per row), create/edit form using `RoleMenuPicker`, delete action surfacing the `409` guards clearly (e.g. "Tidak bisa dihapus — masih dipakai oleh 3 pengguna"). Depends on: T037, T038.
-- [ ] T040 [US2] Add the `roles` route (`menuKey: 'roles'`) to the router and the `Peran` nav item to `AppSidebar.vue`. Depends on: T039, T013, T014.
-- [ ] T041 [US2] Run `php artisan test --filter=RoleTest` and `npm test`, then verify quickstart.md steps 2–5 live in a browser: create a restricted custom role, confirm real `403` on a disallowed endpoint call (not just hidden UI), and trigger both lockout guards plus the delete-in-use guard. Depends on: T029, T030, T034, T039, T040.
+- [X] T031 [P] [US2] Create `app/Http/Requests/StoreRoleRequest.php` and `app/Http/Requests/UpdateRoleRequest.php` — validate `menu_keys` entries against `App\Support\MenuKeys`.
+- [X] T032 [P] [US2] Create `app/Http/Resources/RoleResource.php` — `{id, name, menu_keys, is_system_default, user_count}`.
+- [X] T033 [US2] Create `app/Policies/RolePolicy.php` — `canAccessMenu('roles')` gate, plus FR-013 (check across all *other* roles before allowing a change that would remove `users`+`roles` from the last capable role) and FR-014 (block delete while `user_count > 0`) guards. Depends on: T031, T032.
+- [X] T034 [US2] Create `app/Http/Controllers/Api/RoleController.php` — `index`, `store`, `show`, `update`, `destroy`, plus `menuKeys()` returning the `App\Support\MenuKeys` registry as `{key, label}[]`. Depends on: T033.
+- [X] T035 [US2] Register routes in `routes/api.php`: `GET|POST /roles`, `GET|PUT|DELETE /roles/{role}`, `GET /menu-keys`. Depends on: T034.
+- [X] T036 [US2] Update `docs/openapi-pos-mvp.yaml` with the new `/roles` and `/menu-keys` routes/schemas. Depends on: T035.
+- [X] T037 [P] [US2] Create `resources/js/api/roles.js`.
+- [X] T038 [P] [US2] Create `resources/js/components/settings/RoleMenuPicker.vue` — checkbox grid fed by `GET /menu-keys`, reusable by the role create/edit form.
+- [X] T039 [US2] Create `resources/js/views/RolesView.vue` — list (with `user_count` shown per row), create/edit form using `RoleMenuPicker`, delete action surfacing the `409` guards clearly (e.g. "Tidak bisa dihapus — masih dipakai oleh 3 pengguna"). Depends on: T037, T038.
+- [X] T040 [US2] Add the `roles` route (`menuKey: 'roles'`) to the router and the `Peran` nav item to `AppSidebar.vue`. Depends on: T039, T013, T014.
+- [X] T041 [US2] Run `php artisan test --filter=RoleTest` and `npm test`, then verify quickstart.md steps 2–5 live in a browser: create a restricted custom role, confirm real `403` on a disallowed endpoint call (not just hidden UI), and trigger both lockout guards plus the delete-in-use guard. Depends on: T029, T030, T034, T039, T040.
 
 **Checkpoint**: User Stories 1 and 2 together deliver this feature's core value — a genuinely configurable, server-enforced permission system (spec SC-006).
 
@@ -136,16 +136,16 @@ no existing user's access may be assumed unchanged.
 
 ### Tests for User Story 3
 
-- [ ] T042 [P] [US3] Extend `tests/Feature/SettingsTest.php` — new `store_address`/`store_contact_person`/`store_contact_phone`/`store_contact_email` keys save correctly via `PUT /settings`, invalid email format rejected (`422`, FR-018), `POST /settings/store-logo` accepts a valid image and rejects a non-image/oversized one.
-- [ ] T043 [P] [US3] Extend `qa-tests/component/SettingsView.test.js` for the new store-profile fields and logo upload.
+- [X] T042 [P] [US3] Extend `tests/Feature/SettingsTest.php` — new `store_address`/`store_contact_person`/`store_contact_phone`/`store_contact_email` keys save correctly via `PUT /settings`, invalid email format rejected (`422`, FR-018), `POST /settings/store-logo` accepts a valid image and rejects a non-image/oversized one.
+- [X] T043 [P] [US3] Extend `qa-tests/component/SettingsView.test.js` for the new store-profile fields and logo upload.
 
 ### Implementation for User Story 3
 
-- [ ] T044 [US3] Extend `app/Http/Requests/UpdateSettingsRequest.php` — add email-format validation for `store_contact_email` (FR-018).
-- [ ] T045 [US3] Add `uploadStoreLogo()` to `app/Http/Controllers/Api/SettingsController.php` (reuses `ImageUploadService`, mirrors `CategoryController::uploadImage`) and register `POST /settings/store-logo` in `routes/api.php`.
-- [ ] T046 [US3] Update `docs/openapi-pos-mvp.yaml` with `POST /settings/store-logo`. Depends on: T045.
-- [ ] T047 [US3] Extend the "Data Toko" card in `resources/js/views/SettingsView.vue` with address, logo upload, contact-person, phone, and email fields, wired to the extended `PUT /settings` and new `POST /settings/store-logo`. Depends on: T044, T045.
-- [ ] T048 [US3] Run `php artisan test --filter=SettingsTest` and `npm test`, then verify quickstart.md step 6 live: save the full profile, reload, complete a sale, confirm the receipt shows the new identity. Depends on: T042, T043, T047.
+- [X] T044 [US3] Extend `app/Http/Requests/UpdateSettingsRequest.php` — add email-format validation for `store_contact_email` (FR-018).
+- [X] T045 [US3] Add `uploadStoreLogo()` to `app/Http/Controllers/Api/SettingsController.php` (reuses `ImageUploadService`, mirrors `CategoryController::uploadImage`) and register `POST /settings/store-logo` in `routes/api.php`.
+- [X] T046 [US3] Update `docs/openapi-pos-mvp.yaml` with `POST /settings/store-logo`. Depends on: T045.
+- [X] T047 [US3] Extend the "Data Toko" card in `resources/js/views/SettingsView.vue` with address, logo upload, contact-person, phone, and email fields, wired to the extended `PUT /settings` and new `POST /settings/store-logo`. Depends on: T044, T045.
+- [X] T048 [US3] Run `php artisan test --filter=SettingsTest` and `npm test`, then verify quickstart.md step 6 live: save the full profile, reload, complete a sale, confirm the receipt shows the new identity. Depends on: T042, T043, T047.
 
 **Checkpoint**: All P1/P1/P2 stories complete — this is the recommended real-world shipping increment for this feature.
 

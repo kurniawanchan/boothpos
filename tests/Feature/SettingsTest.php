@@ -95,6 +95,94 @@ class SettingsTest extends TestCase
         ])->assertStatus(422)->assertJsonValidationErrors('settings.0.value');
     }
 
+    // --- User Story 3: profil toko (T042) --------------------------------
+
+    public function test_owner_can_save_store_profile_fields_via_bulk_update(): void
+    {
+        $this->actingAsRole('owner');
+
+        $response = $this->putJson('/api/v1/settings', [
+            'settings' => [
+                ['key' => 'store_address', 'value' => 'Jl. Merdeka No. 1, Jakarta', 'type' => 'string', 'group' => 'receipt'],
+                ['key' => 'store_contact_person', 'value' => 'Budi Santoso', 'type' => 'string', 'group' => 'receipt'],
+                ['key' => 'store_contact_phone', 'value' => '0812-3456-7890', 'type' => 'string', 'group' => 'receipt'],
+                ['key' => 'store_contact_email', 'value' => 'toko@contoh.com', 'type' => 'string', 'group' => 'receipt'],
+            ],
+        ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('settings', ['key' => 'store_address', 'value' => 'Jl. Merdeka No. 1, Jakarta']);
+        $this->assertDatabaseHas('settings', ['key' => 'store_contact_person', 'value' => 'Budi Santoso']);
+        $this->assertDatabaseHas('settings', ['key' => 'store_contact_phone', 'value' => '0812-3456-7890']);
+        $this->assertDatabaseHas('settings', ['key' => 'store_contact_email', 'value' => 'toko@contoh.com']);
+    }
+
+    public function test_invalid_store_contact_email_format_is_rejected(): void
+    {
+        $this->actingAsRole('owner');
+
+        $response = $this->putJson('/api/v1/settings', [
+            'settings' => [
+                ['key' => 'store_contact_email', 'value' => 'bukan-email', 'type' => 'string', 'group' => 'receipt'],
+            ],
+        ]);
+
+        $response->assertStatus(422)->assertJsonValidationErrors('settings.0.value');
+        $this->assertDatabaseMissing('settings', ['key' => 'store_contact_email']);
+    }
+
+    public function test_owner_can_upload_store_logo(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+
+        $file = \Illuminate\Http\UploadedFile::fake()->image('logo.png', 200, 200)->size(100);
+
+        $response = $this->postJson('/api/v1/settings/store-logo', ['image' => $file]);
+
+        $response->assertOk();
+        $setting = Setting::where('key', 'store_logo_path')->first();
+        $this->assertNotNull($setting);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($setting->value);
+    }
+
+    public function test_uploading_non_image_as_store_logo_is_rejected(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+
+        $file = \Illuminate\Http\UploadedFile::fake()->create('logo.pdf', 100, 'application/pdf');
+
+        $this->postJson('/api/v1/settings/store-logo', ['image' => $file])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('image');
+        $this->assertDatabaseMissing('settings', ['key' => 'store_logo_path']);
+    }
+
+    public function test_uploading_oversized_store_logo_is_rejected(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+
+        // MAX_KILOBYTES = 5120 (5 MB) — kirim berkas yang melebihinya.
+        $file = \Illuminate\Http\UploadedFile::fake()->image('logo.png')->size(6000);
+
+        $this->postJson('/api/v1/settings/store-logo', ['image' => $file])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('image');
+        $this->assertDatabaseMissing('settings', ['key' => 'store_logo_path']);
+    }
+
+    public function test_cashier_cannot_upload_store_logo(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('cashier');
+
+        $file = \Illuminate\Http\UploadedFile::fake()->image('logo.png');
+
+        $this->postJson('/api/v1/settings/store-logo', ['image' => $file])->assertStatus(403);
+    }
+
     public function test_updating_settings_writes_an_activity_log_with_old_and_new_values(): void
     {
         $owner = $this->actingAsRole('owner');
