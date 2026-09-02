@@ -1,6 +1,8 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, useId } from 'vue';
 import { listMenuKeys } from '../../api/roles';
+
+const idPrefix = useId();
 
 /**
  * Grid checkbox atas registry menu App\Support\MenuKeys — v-model-able
@@ -44,12 +46,15 @@ function toggle(key) {
       <label
         v-for="opt in options"
         :key="opt.key"
+        :for="`${idPrefix}-${opt.key}`"
         class="flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-[13px] transition-colors has-[:checked]:border-brand has-[:checked]:bg-mint-100"
       >
         <input
+          :id="`${idPrefix}-${opt.key}`"
           type="checkbox"
           class="h-4 w-4 rounded border-line text-brand focus:ring-mint-100"
           :value="opt.key"
+          :aria-label="opt.label"
           :checked="modelValue.includes(opt.key)"
           @change="toggle(opt.key)"
         />
