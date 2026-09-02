@@ -79,21 +79,21 @@ no existing user's access may be assumed unchanged.
 
 ### Tests for User Story 1
 
-- [ ] T017 [P] [US1] Write `tests/Feature/UserTest.php` — CRUD happy paths, search by name/username (FR-004), filter by role/status (FR-005), self-lockout on deactivate/delete/role-change (FR-006), photo upload validation, `403` for a role lacking `users` in `menu_keys`, export excludes password (FR-007). Must fail before implementation.
-- [ ] T018 [P] [US1] Write `qa-tests/component/UsersView.test.js` — list rendering, search/filter, create/edit form, self-lockout UI guard, photo upload client-side validation.
+- [X] T017 [P] [US1] Write `tests/Feature/UserTest.php` — CRUD happy paths, search by name/username (FR-004), filter by role/status (FR-005), self-lockout on deactivate/delete/role-change (FR-006), photo upload validation, `403` for a role lacking `users` in `menu_keys`, export excludes password (FR-007). Must fail before implementation.
+- [X] T018 [P] [US1] Write `qa-tests/component/UsersView.test.js` — list rendering, search/filter, create/edit form, self-lockout UI guard, photo upload client-side validation.
 
 ### Implementation for User Story 1
 
-- [ ] T019 [P] [US1] Create `app/Http/Requests/StoreUserRequest.php` and `app/Http/Requests/UpdateUserRequest.php` per data-model.md's User validation rules.
-- [ ] T020 [P] [US1] Create `app/Http/Resources/UserResource.php` — `{id, name, username, role: {id, name}, is_active, photo_url, last_login_at}`, password never included.
-- [ ] T021 [US1] Create `app/Policies/UserPolicy.php` — `canAccessMenu('users')` gate plus the FR-006 self-lockout guard (compare target user id to `auth()->id()`). Depends on: T019, T020.
-- [ ] T022 [US1] Create `app/Http/Controllers/Api/UserController.php` — `index` (search/filter/paginate), `store`, `show`, `update`, `destroy` (soft-delete), `uploadPhoto` (reuses `ImageUploadService`, mirrors `ProductController::uploadImage`). Depends on: T021.
-- [ ] T023 [US1] Register routes in `routes/api.php`: `GET|POST /users`, `GET|PUT|DELETE /users/{user}`, `POST /users/{user}/photo`. Depends on: T022.
-- [ ] T024 [US1] Update `docs/openapi-pos-mvp.yaml` with the new `/users` routes and schemas, in the same commit as T023. Depends on: T023.
-- [ ] T025 [P] [US1] Create `resources/js/api/users.js`.
-- [ ] T026 [US1] Create `resources/js/views/UsersView.vue` — list (search box, role/status filter, `DataTable`), create/edit form (`BaseModal`, role `BaseSelect` populated from `GET /roles`, photo upload), last-access column, self-lockout guard on the current user's own row (hide deactivate/delete/role-change actions client-side, matching this codebase's existing "hide, don't disable-then-403" convention). Depends on: T025.
-- [ ] T027 [US1] Add the `users` route (`menuKey: 'users'`) to `resources/js/router/index.js` and the `Pengguna` nav item to `AppSidebar.vue`. Depends on: T026, T013, T014.
-- [ ] T028 [US1] Run `php artisan test --filter=UserTest` and `npm test`, then verify quickstart.md's user-creation flow live in a browser as `owner`, and confirm the role dropdown shows the 4 seeded default roles from Foundational. Depends on: T017, T018, T022, T026, T027.
+- [X] T019 [P] [US1] Create `app/Http/Requests/StoreUserRequest.php` and `app/Http/Requests/UpdateUserRequest.php` per data-model.md's User validation rules.
+- [X] T020 [P] [US1] Create `app/Http/Resources/UserResource.php` — `{id, name, username, role: {id, name}, is_active, photo_url, last_login_at}`, password never included.
+- [X] T021 [US1] Create `app/Policies/UserPolicy.php` — `canAccessMenu('users')` gate plus the FR-006 self-lockout guard (compare target user id to `auth()->id()`). Depends on: T019, T020.
+- [X] T022 [US1] Create `app/Http/Controllers/Api/UserController.php` — `index` (search/filter/paginate), `store`, `show`, `update`, `destroy` (soft-delete), `uploadPhoto` (reuses `ImageUploadService`, mirrors `ProductController::uploadImage`). Depends on: T021.
+- [X] T023 [US1] Register routes in `routes/api.php`: `GET|POST /users`, `GET|PUT|DELETE /users/{user}`, `POST /users/{user}/photo`. Depends on: T022.
+- [X] T024 [US1] Update `docs/openapi-pos-mvp.yaml` with the new `/users` routes and schemas, in the same commit as T023. Depends on: T023.
+- [X] T025 [P] [US1] Create `resources/js/api/users.js`.
+- [X] T026 [US1] Create `resources/js/views/UsersView.vue` — list (search box, role/status filter, `DataTable`), create/edit form (`BaseModal`, role `BaseSelect` populated from `GET /roles`, photo upload), last-access column, self-lockout guard on the current user's own row (hide deactivate/delete/role-change actions client-side, matching this codebase's existing "hide, don't disable-then-403" convention). Depends on: T025.
+- [X] T027 [US1] Add the `users` route (`menuKey: 'users'`) to `resources/js/router/index.js` and the `Pengguna` nav item to `AppSidebar.vue`. Depends on: T026, T013, T014.
+- [X] T028 [US1] Run `php artisan test --filter=UserTest` and `npm test`, then verify quickstart.md's user-creation flow live in a browser as `owner`, and confirm the role dropdown shows the 4 seeded default roles from Foundational. Depends on: T017, T018, T022, T026, T027.
 
 **Checkpoint**: User Story 1 is fully functional and independently testable — using the 4 seeded default roles from Foundational (Role CRUD itself is User Story 2, not required for this checkpoint).
 

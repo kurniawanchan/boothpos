@@ -34,6 +34,8 @@ const NAV_DEFS = [
   { name: 'preorders', label: 'Pre-order', icon: 'ph-clock-countdown', menuKey: 'preorders' },
   { name: 'sales', label: 'Penjualan', icon: 'ph-receipt', menuKey: 'sales' },
   { name: 'reports', label: 'Laporan', icon: 'ph-chart-bar', menuKey: 'reports' },
+  { name: 'users', label: 'Pengguna', icon: 'ph-users', menuKey: 'users' },
+  { name: 'roles', label: 'Peran', icon: 'ph-shield-check', menuKey: 'roles' },
   { name: 'settings', label: 'Pengaturan', icon: 'ph-gear-six', menuKey: 'settings' },
 ];
 

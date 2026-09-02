@@ -116,6 +116,18 @@ const routes = [
         },
       },
       {
+        path: 'users',
+        name: 'users',
+        component: () => import('../views/UsersView.vue'),
+        meta: { title: 'Pengguna', subtitle: 'Akun, peran, dan akses menu tiap pengguna', menuKey: 'users' },
+      },
+      {
+        path: 'roles',
+        name: 'roles',
+        component: () => import('../views/RolesView.vue'),
+        meta: { title: 'Peran', subtitle: 'Akses menu per peran, bebas dikonfigurasi', menuKey: 'roles' },
+      },
+      {
         path: 'settings',
         name: 'settings',
         component: () => import('../views/SettingsView.vue'),
