@@ -12,6 +12,19 @@ import { i18n } from '../resources/js/i18n';
 // alongside this).
 config.global.plugins.push(i18n);
 
+// The ~20 pre-existing component test files assert Indonesian literal
+// text (e.g. `getByRole('button', { name: /produk baru/i })`), written
+// before this feature existed. Rather than rewrite every one of them,
+// default the test-time locale to 'id' (matching the app's own default
+// for guest/pre-login routes) so their assertions keep matching reality.
+// A test that specifically exercises the language toggle (e.g.
+// LanguageSwitcher.test.js) sets `i18n.global.locale.value` explicitly
+// per test, overriding this default.
+afterEach(() => {
+  i18n.global.locale.value = 'id';
+});
+i18n.global.locale.value = 'id';
+
 // BUG YANG DITEMUKAN & DIPERBAIKI — tidak ada cleanup() di antar-test sama
 // sekali sebelum ini. @testing-library/vue TIDAK auto-unmount komponen
 // setelah tiap test seperti sebagian framework lain; tanpa afterEach ini,

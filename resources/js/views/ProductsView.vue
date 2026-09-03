@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listProducts, getProduct, createProduct, updateProduct, deleteProduct, addVariant, updateVariant, uploadProductImage } from '../api/products';
 import { listArtists } from '../api/artists';
@@ -22,6 +23,7 @@ import MasterDataImportModal from '../components/masterData/MasterDataImportModa
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 
 const auth = useAuthStore();
+const { t } = useI18n();
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listProducts);
@@ -68,12 +70,12 @@ function onProductImageChange(e) {
   productImageFile.value = null;
   if (!file) return;
   if (!file.type.startsWith('image/')) {
-    productImageError.value = 'Berkas harus berupa gambar.';
+    productImageError.value = t('master_data.image_must_be_image_generic');
     e.target.value = '';
     return;
   }
   if (file.size > MAX_IMAGE_BYTES) {
-    productImageError.value = 'Ukuran gambar maksimal 5 MB.';
+    productImageError.value = t('master_data.image_max_size_generic');
     e.target.value = '';
     return;
   }
@@ -85,7 +87,7 @@ async function doExport() {
   try {
     await exportMasterData('products');
   } catch {
-    toast.error('Gagal mengekspor data produk.');
+    toast.error(t('master_data.export_product_failed'));
   } finally {
     exporting.value = false;
   }
@@ -105,15 +107,15 @@ async function afterImport() {
   ]);
 }
 
-const columns = [
-  { key: 'code_prefix', label: 'Kode' },
-  { key: 'name', label: 'Nama produk' },
-  { key: 'artist_name', label: 'Artist' },
-  { key: 'category_name', label: 'Kategori' },
-  { key: 'is_preorder', label: 'Tipe' },
-  { key: 'is_active', label: 'Status' },
+const columns = computed(() => [
+  { key: 'code_prefix', label: t('master_data.col_code') },
+  { key: 'name', label: t('master_data.col_product_name') },
+  { key: 'artist_name', label: t('master_data.col_artist') },
+  { key: 'category_name', label: t('master_data.col_category') },
+  { key: 'is_preorder', label: t('master_data.col_type') },
+  { key: 'is_active', label: t('master_data.col_status') },
   { key: 'actions', label: '' },
-];
+]);
 
 const emptyVariant = () => ({ id: null, variant_name: 'Standard', cost_price: '0', sell_price: '0', low_stock_alert: '', is_active: true });
 
@@ -239,7 +241,7 @@ async function saveProduct() {
         if (row.id) await updateVariant(row.id, payload);
         else await addVariant(editingProduct.value.id, payload);
       }
-      toast.success('Produk diperbarui.');
+      toast.success(t('master_data.product_updated'));
     } else {
       const created = await createProduct({
         artist_id: Number(productForm.artist_id),
@@ -258,14 +260,14 @@ async function saveProduct() {
         })),
       });
       productId = created.id;
-      toast.success('Produk dibuat.');
+      toast.success(t('master_data.product_created'));
     }
     if (productImageFile.value && productId) {
       uploadingProductImage.value = true;
       try {
         await uploadProductImage(productId, productImageFile.value);
       } catch {
-        toast.error('Produk tersimpan, tapi gagal mengunggah gambar.');
+        toast.error(t('master_data.product_saved_image_failed'));
       } finally {
         uploadingProductImage.value = false;
       }
@@ -292,7 +294,7 @@ async function performDelete() {
   deleting.value = true;
   try {
     await deleteProduct(deleteTarget.value.id);
-    toast.success('Produk dinonaktifkan.');
+    toast.success(t('master_data.product_deactivated'));
     showDelete.value = false;
     await load();
   } catch {
@@ -308,48 +310,48 @@ async function performDelete() {
     <div class="flex flex-wrap items-center gap-2.5">
       <div class="relative flex min-w-[230px] flex-1 items-center">
         <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="product-search">Cari produk</label>
+        <label class="sr-only" for="product-search">{{ t('master_data.search_product') }}</label>
         <input
           id="product-search"
           v-model="search"
-          placeholder="Cari nama produk atau SKU…"
+          :placeholder="t('master_data.search_product_placeholder')"
           class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           @input="debouncedSearch"
         />
       </div>
-      <BaseSelect class="w-48" v-model="artistFilter" placeholder="Semua artist" :options="artists.map((a) => ({ value: a.id, label: a.name }))" @update:model-value="applyFilters" />
-      <BaseSelect class="w-48" v-model="categoryFilter" placeholder="Semua kategori" :options="categories.map((c) => ({ value: c.id, label: c.name }))" @update:model-value="applyFilters" />
+      <BaseSelect class="w-48" v-model="artistFilter" :placeholder="t('master_data.all_artists')" :options="artists.map((a) => ({ value: a.id, label: a.name }))" @update:model-value="applyFilters" />
+      <BaseSelect class="w-48" v-model="categoryFilter" :placeholder="t('master_data.all_categories')" :options="categories.map((c) => ({ value: c.id, label: c.name }))" @update:model-value="applyFilters" />
       <template v-if="auth.canAccessMenu('products')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          Ekspor .xlsx
+          {{ t('common.export_xlsx') }}
         </BaseButton>
         <BaseButton variant="secondary" @click="showImportModal = true">
           <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
-          Impor massal
+          {{ t('common.bulk_import') }}
         </BaseButton>
         <BaseButton @click="openCreate">
           <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-          Produk baru
+          {{ t('master_data.new_product') }}
         </BaseButton>
       </template>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada produk.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_products')">
         <template #cell-code_prefix="{ row }"><span class="font-mono text-[12px] font-bold text-brand-active">{{ row.code_prefix }}</span></template>
         <template #cell-is_preorder="{ row }">
-          <StatusPill :variant="row.is_preorder ? 'warn' : 'neutral'">{{ row.is_preorder ? 'Pre-order' : 'Ready stock' }}</StatusPill>
+          <StatusPill :variant="row.is_preorder ? 'warn' : 'neutral'">{{ row.is_preorder ? t('master_data.preorder') : t('master_data.ready_stock') }}</StatusPill>
         </template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openDetail(row)">Detail</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openDetail(row)">{{ t('master_data.detail') }}</button>
             <template v-if="auth.canAccessMenu('products')">
-              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
-              <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">Hapus</button>
+              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+              <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
             </template>
           </div>
         </template>
@@ -359,36 +361,36 @@ async function performDelete() {
 
     <BaseDrawer
       :open="showDrawer"
-      :title="editingProduct ? editingProduct.name : 'Produk baru'"
-      subtitle="Kode produk digenerate server · POST /products"
+      :title="editingProduct ? editingProduct.name : t('master_data.new_product')"
+      :subtitle="t('master_data.code_generated_by_server')"
       @close="showDrawer = false"
     >
       <div class="flex flex-col gap-[18px]">
         <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
-          <span class="text-[14.5px] font-bold">Identitas produk</span>
+          <span class="text-[14.5px] font-bold">{{ t('master_data.product_identity') }}</span>
           <div class="grid grid-cols-2 gap-3.5">
-            <BaseSelect v-model="productForm.artist_id" label="Artist pemilik" required :options="artists.map((a) => ({ value: a.id, label: a.name }))" :error="formErrors.artist_id" />
-            <BaseSelect v-model="productForm.category_id" label="Kategori" required :options="categories.map((c) => ({ value: c.id, label: c.name }))" :error="formErrors.category_id" />
+            <BaseSelect v-model="productForm.artist_id" :label="t('master_data.owner_artist')" required :options="artists.map((a) => ({ value: a.id, label: a.name }))" :error="formErrors.artist_id" />
+            <BaseSelect v-model="productForm.category_id" :label="t('master_data.category')" required :options="categories.map((c) => ({ value: c.id, label: c.name }))" :error="formErrors.category_id" />
           </div>
           <div class="grid grid-cols-[2fr_1fr] gap-3.5">
-            <BaseInput v-model="productForm.name" label="Nama produk" required maxlength="150" :error="formErrors.name" />
-            <BaseInput v-model="productForm.product_segment" label="Segmen (3)" maxlength="3" placeholder="Auto" :error="formErrors.product_segment" />
+            <BaseInput v-model="productForm.name" :label="t('master_data.product_name')" required maxlength="150" :error="formErrors.name" />
+            <BaseInput v-model="productForm.product_segment" :label="t('master_data.segment_3')" maxlength="3" :placeholder="t('master_data.auto')" :error="formErrors.product_segment" />
           </div>
-          <BaseTextarea v-model="productForm.description" label="Deskripsi" :rows="2" />
+          <BaseTextarea v-model="productForm.description" :label="t('master_data.description')" :rows="2" />
           <div class="flex items-center gap-5">
             <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
               <input v-model="productForm.is_preorder" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
-              Produk pre-order
+              {{ t('master_data.preorder_product') }}
             </label>
-            <BaseInput v-if="productForm.is_preorder" v-model="productForm.preorder_eta" type="date" label="Estimasi tiba" class="flex-1" />
+            <BaseInput v-if="productForm.is_preorder" v-model="productForm.preorder_eta" type="date" :label="t('master_data.eta')" class="flex-1" />
           </div>
           <div class="flex flex-col gap-1.5">
-            <label class="text-[12.5px] font-semibold text-muted-4" for="product-image">Gambar produk</label>
+            <label class="text-[12.5px] font-semibold text-muted-4" for="product-image">{{ t('master_data.product_image') }}</label>
             <div class="flex items-center gap-3">
               <img
                 v-if="editingProduct?.image_url && !productImageFile"
                 :src="editingProduct.image_url"
-                alt="Gambar produk saat ini"
+                :alt="t('master_data.current_product_image')"
                 class="h-16 w-16 flex-none rounded-lg border border-line-2 object-cover"
               />
               <input
@@ -405,23 +407,23 @@ async function performDelete() {
         </div>
 
         <div class="flex flex-col gap-3.5 rounded-card bg-ink p-5">
-          <span class="text-[10.5px] font-bold uppercase tracking-[0.14em] text-dark-muted-2">Kode produk otomatis · pratinjau</span>
+          <span class="text-[10.5px] font-bold uppercase tracking-[0.14em] text-dark-muted-2">{{ t('master_data.auto_code_preview') }}</span>
           <div class="flex flex-wrap items-end gap-2.5">
-            <div class="flex flex-col items-center gap-1.5"><span class="font-mono text-[26px] font-bold tracking-wide text-white">{{ artistCode }}</span><span class="text-[10px] text-dark-muted-2">artist · 3</span></div>
-            <div class="flex flex-col items-center gap-1.5"><span class="font-mono text-[26px] font-bold tracking-wide text-mint-accent">{{ categoryCode }}</span><span class="text-[10px] text-dark-muted-2">kategori · 2</span></div>
-            <div class="flex flex-col items-center gap-1.5"><span class="font-mono text-[26px] font-bold tracking-wide text-white">{{ effectiveSegment }}</span><span class="text-[10px] text-dark-muted-2">produk · 3</span></div>
+            <div class="flex flex-col items-center gap-1.5"><span class="font-mono text-[26px] font-bold tracking-wide text-white">{{ artistCode }}</span><span class="text-[10px] text-dark-muted-2">{{ t('master_data.artist_label') }}</span></div>
+            <div class="flex flex-col items-center gap-1.5"><span class="font-mono text-[26px] font-bold tracking-wide text-mint-accent">{{ categoryCode }}</span><span class="text-[10px] text-dark-muted-2">{{ t('master_data.category_label') }}</span></div>
+            <div class="flex flex-col items-center gap-1.5"><span class="font-mono text-[26px] font-bold tracking-wide text-white">{{ effectiveSegment }}</span><span class="text-[10px] text-dark-muted-2">{{ t('master_data.product_label') }}</span></div>
             <div class="flex flex-1 flex-col items-end gap-1.5">
               <span class="rounded-lg border border-code-chip-border bg-code-chip px-3 py-1.5 font-mono text-[15px] font-bold text-white">{{ codePreview }}</span>
-              <span class="text-[10.5px] text-dark-muted-2">pratinjau — urutan asli dari server</span>
+              <span class="text-[10.5px] text-dark-muted-2">{{ t('master_data.preview_note') }}</span>
             </div>
           </div>
         </div>
 
         <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <span class="text-[14.5px] font-bold">Varian &amp; harga</span>
+            <span class="text-[14.5px] font-bold">{{ t('master_data.variants_and_prices') }}</span>
             <label class="flex items-center gap-2 text-[12.5px] text-muted">
-              Markup
+              {{ t('master_data.markup') }}
               <input v-model.number="markupPercent" type="number" class="w-[70px] rounded-md border border-line px-2.5 py-1.5 text-right text-[13px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100" />
               %
             </label>
@@ -431,38 +433,38 @@ async function performDelete() {
             <div class="flex items-center gap-2.5">
               <span v-if="row.sku" class="rounded-md bg-mint-100 px-2.5 py-1 font-mono text-[12px] font-semibold text-brand-active">{{ row.sku }}</span>
               <span v-if="marginFor(row) !== null" class="rounded-md px-2 py-1 text-[11px] font-bold" :class="marginFor(row) >= 0 ? 'bg-mint-100 text-brand-active' : 'bg-danger-bg text-danger-text'">
-                margin {{ marginFor(row) }}%
+                {{ t('master_data.margin', { value: marginFor(row) }) }}
               </span>
               <span class="flex-1"></span>
-              <button type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="`Hapus varian ${row.variant_name}`" @click="removeVariantRow(idx)">
+              <button type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('master_data.delete_variant', { name: row.variant_name })" @click="removeVariantRow(idx)">
                 <i class="ph-duotone ph-trash text-[14px]" aria-hidden="true"></i>
               </button>
             </div>
             <div class="grid grid-cols-[1.4fr_1fr_1fr_auto] items-end gap-2.5">
-              <BaseInput v-model="row.variant_name" label="Nama varian" />
-              <BaseInput v-model="row.cost_price" type="number" min="0" label="Harga modal" />
-              <BaseInput v-model="row.sell_price" type="number" min="0" label="Harga jual" />
-              <BaseButton variant="secondary" size="sm" @click="applyMarkup(row)">Terapkan markup</BaseButton>
+              <BaseInput v-model="row.variant_name" :label="t('master_data.variant_name')" />
+              <BaseInput v-model="row.cost_price" type="number" min="0" :label="t('master_data.cost_price')" />
+              <BaseInput v-model="row.sell_price" type="number" min="0" :label="t('master_data.sell_price')" />
+              <BaseButton variant="secondary" size="sm" @click="applyMarkup(row)">{{ t('master_data.apply_markup') }}</BaseButton>
             </div>
           </div>
           <button type="button" class="flex h-11 items-center justify-center gap-2 rounded-lg border border-dashed border-disabled-2 text-[13.5px] font-bold text-muted-5 hover:border-brand hover:text-brand-active" @click="addVariantRow">
             <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-            Tambah varian
+            {{ t('master_data.add_variant') }}
           </button>
         </div>
       </div>
 
       <template #footer>
-        <BaseButton variant="secondary" @click="showDrawer = false">Batal</BaseButton>
-        <BaseButton :loading="saving" @click="saveProduct">Simpan produk</BaseButton>
+        <BaseButton variant="secondary" @click="showDrawer = false">{{ t('common.cancel') }}</BaseButton>
+        <BaseButton :loading="saving" @click="saveProduct">{{ t('master_data.save_product') }}</BaseButton>
       </template>
     </BaseDrawer>
 
     <ConfirmDialog
       :open="showDelete"
-      title="Nonaktifkan produk"
-      :message="`Nonaktifkan ${deleteTarget?.name}? Ditolak bila masih ada varian aktif.`"
-      confirm-label="Ya, nonaktifkan"
+      :title="t('master_data.deactivate_product')"
+      :message="t('master_data.deactivate_product_confirm', { name: deleteTarget?.name })"
+      :confirm-label="t('master_data.yes_deactivate')"
       :loading="deleting"
       @close="showDelete = false"
       @confirm="performDelete"
