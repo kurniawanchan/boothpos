@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class VendorMaterialPrice extends Model
 {
-    use HasFactory;
+    use HasDataMode, HasFactory;
 
     protected $fillable = [
         'vendor_id',

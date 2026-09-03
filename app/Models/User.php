@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ModeGate;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -21,6 +22,20 @@ class User extends Authenticatable
         'is_active',
         'language',
     ];
+
+    /**
+     * 003-seed-demo-live follow-up — stamp SAJA, TIDAK ada global scope
+     * (beda dari HasDataMode dipakai model lain). Login/autentikasi HARUS
+     * berfungsi sama di kedua mode; hanya UserController::index() yang
+     * menyaring berdasarkan kolom ini. Lihat catatan migrasi
+     * add_data_mode_to_users_table dan CLAUDE.md.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (User $user) {
+            $user->data_mode = $user->data_mode ?? ModeGate::current();
+        });
+    }
 
     protected $hidden = [
         'password',

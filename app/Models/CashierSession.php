@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CashierSession extends Model
 {
-    use HasFactory;
+    use HasDataMode, HasFactory;
 
     protected $fillable = [
         'event_id', 'user_id', 'opened_at', 'closed_at', 'opening_cash',

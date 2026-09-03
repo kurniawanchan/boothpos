@@ -855,6 +855,32 @@ bukan pemulihan kapabilitas lama):
 Cakupan yang tetap dipotong dari 10.2 setelah penambahan ini: purchase
 management (PO ke vendor) dan modul produksi penuh.
 
+**Catatan penambahan pasca-MVP — 2026-09-03 (seed data dummy dan mode
+DEMO/LIVE)**
+
+Atas permintaan pemilik toko, dibangun: (1) seeder data contoh lengkap
+untuk toko dummy "Demo Sakana Fridge" (event, 3 artist, 9 produk × 3
+varian + stok, 3 kategori, penjualan, 3 customer, 6 vendor, bahan baku
+bertema merchandise anime & game, pre-order), dan (2) mode sistem
+**DEMO/LIVE** yang menandai setiap baris data bisnis/transaksional dengan
+mode saat dibuat dan menyaring seluruh pembacaan (daftar, POS, laporan)
+sesuai mode yang sedang aktif — lihat `specs/003-seed-demo-live/` untuk
+rancangan lengkap.
+
+Ini juga **BUKAN** kebangkitan butir manapun yang dicoret di 10.2 — tidak
+ada nomor F- yang berkorespondensi dengannya di dokumen ini, karena
+kapasitas mengeksplorasi sistem dengan data contoh bukan bagian dari
+cakupan MVP awal yang pernah dirancang maupun dipotong.
+
+- Mode aktif disimpan sebagai satu baris `settings` (`system_mode`),
+  persis pola `multi_artist_enabled`/`LicenseGate` — hanya owner/admin
+  yang bisa mengubahnya, tapi status mode terlihat oleh semua peran.
+- Data administratif (akun pengguna, role, pengaturan toko, log
+  aktivitas) SENGAJA tidak ikut dipisah mode — hanya data bisnis/
+  operasional yang terpengaruh.
+- Berpindah mode bersifat non-destruktif: tidak ada data yang dihapus,
+  hanya disembunyikan/ditampilkan sesuai mode aktif.
+
 ### 10.3 Cakupan MVP Oktober
 
 | Prioritas | Modul |

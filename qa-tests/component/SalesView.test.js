@@ -26,9 +26,9 @@ const SALES_RESPONSE = {
     { entity_id: 11, label: 'Pin Akrilik', unit_count: 2, amount: '60000.00' },
   ],
   transactions: [
-    { id: 101, order_number: 'ORD-001', customer_name: 'Budi Santoso', created_at: '2026-09-01T10:00:00Z', cashier_name: 'Kasir A', item_count: 2, total_amount: '60000.00' },
-    { id: 102, order_number: 'ORD-002', customer_name: null, created_at: '2026-09-01T11:00:00Z', cashier_name: 'Kasir A', item_count: 1, total_amount: '30000.00' },
-    { id: 103, order_number: 'ORD-003', customer_name: 'Siti Aminah', created_at: '2026-09-01T12:00:00Z', cashier_name: 'Kasir B', item_count: 2, total_amount: '60000.00' },
+    { id: 101, order_number: 'ORD-001', customer_name: 'Budi Santoso', created_at: '2026-09-01T10:00:00Z', cashier_name: 'Kasir A', item_count: 2, total_amount: '60000.00', artist_names: ['Nekoyama Studio'] },
+    { id: 102, order_number: 'ORD-002', customer_name: null, created_at: '2026-09-01T11:00:00Z', cashier_name: 'Kasir A', item_count: 1, total_amount: '30000.00', artist_names: ['Yukishiro Works'] },
+    { id: 103, order_number: 'ORD-003', customer_name: 'Siti Aminah', created_at: '2026-09-01T12:00:00Z', cashier_name: 'Kasir B', item_count: 2, total_amount: '60000.00', artist_names: ['Nekoyama Studio', 'Hoshizora Craft'] },
   ],
 };
 
@@ -92,7 +92,7 @@ describe('SalesView', () => {
       event_name: 'Event A',
       created_at: '2026-09-01T10:00:00Z',
       cashier_name: 'Kasir A',
-      items: [],
+      items: [{ name: 'Stiker Holografik', qty: 2, price: '30000.00', line_total: '60000.00', artist_name: 'Nekoyama Studio' }],
       subtotal: '60000.00',
       discount_amount: '0.00',
       total_amount: '60000.00',
@@ -107,6 +107,7 @@ describe('SalesView', () => {
     await waitFor(() => expect(getReceipt).toHaveBeenCalledWith(101));
     expect((await screen.findAllByText('ORD-001')).length).toBeGreaterThan(0);
     expect(screen.getByText('Toko A')).toBeInTheDocument();
+    expect(screen.getAllByText(/Nekoyama Studio/).length).toBeGreaterThan(0);
   });
 });
 
@@ -151,6 +152,46 @@ describe('SalesView — transaction search (F10.6)', () => {
     await user.type(input, 'kasir b');
     expect(screen.queryByText('ORD-001')).not.toBeInTheDocument();
     expect(screen.getByText('ORD-003')).toBeInTheDocument();
+  });
+
+  it('filters by artist name, matching a transaction that has multiple artists', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSales();
+    await screen.findByText('ORD-001');
+    const input = screen.getByLabelText('Cari transaksi');
+    await user.type(input, 'hoshizora');
+    expect(screen.queryByText('ORD-001')).not.toBeInTheDocument();
+    expect(screen.queryByText('ORD-002')).not.toBeInTheDocument();
+    expect(screen.getByText('ORD-003')).toBeInTheDocument();
+  });
+
+  it('opens the receipt when clicking the transaction number itself', async () => {
+    getReceipt.mockResolvedValue({ order_number: 'ORD-001', store_name: 'Toko A', event_name: 'Event A', created_at: '2026-09-01T10:00:00Z', cashier_name: 'Kasir A', items: [], subtotal: '0', discount_amount: '0', total_amount: '0', payment_summary: [], change_amount: '0' });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSales();
+    await screen.findByText('ORD-001');
+    await user.click(screen.getByRole('button', { name: 'ORD-001' }));
+    await waitFor(() => expect(getReceipt).toHaveBeenCalledWith(101));
+  });
+
+  it('shows a customer detail popover when clicking the customer name', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSales();
+    await screen.findByText('ORD-001');
+    await user.click(screen.getByRole('button', { name: 'Budi Santoso' }));
+    expect(await screen.findByText('Detail pelanggan')).toBeInTheDocument();
+  });
+
+  it('fills the search box when clicking an artist name', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSales();
+    await screen.findByText('ORD-001');
+    await user.click(screen.getAllByRole('button', { name: 'Nekoyama Studio' })[0]);
+    expect(screen.getByLabelText('Cari transaksi')).toHaveValue('Nekoyama Studio');
   });
 
   it('shows a "no match" empty message and does not throw for a null-customer row when searching', async () => {

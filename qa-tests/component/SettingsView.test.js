@@ -103,3 +103,52 @@ describe('SettingsView — profil toko (US3)', () => {
     await waitFor(() => expect(uploadStoreLogo).toHaveBeenCalledWith(file));
   });
 });
+
+describe('SettingsView — mode DEMO/LIVE (003-seed-demo-live US2)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listPaymentChannels.mockResolvedValue({ data: [] });
+    listSettings.mockResolvedValue({ data: [] });
+  });
+
+  it('shows LIVE selected by default and asks for confirmation before switching to DEMO', async () => {
+    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, system_mode: 'live' });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSettings();
+
+    await screen.findByText('Mode sistem');
+    await user.click(screen.getByRole('button', { name: 'DEMO' }));
+
+    expect(screen.getByText(/Pindah ke mode DEMO\?/)).toBeInTheDocument();
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('calls PUT /settings with the system_mode key once confirmed', async () => {
+    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, system_mode: 'live' });
+    updateSettings.mockResolvedValue({ data: [] });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSettings();
+
+    await screen.findByText('Mode sistem');
+    await user.click(screen.getByRole('button', { name: 'DEMO' }));
+    await user.click(screen.getByRole('button', { name: 'Ya, lanjutkan' }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith([
+      { key: 'system_mode', value: 'demo', type: 'string', group: 'system' },
+    ]));
+  });
+
+  it('does not prompt when clicking the already-active mode', async () => {
+    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, system_mode: 'live' });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSettings();
+
+    await screen.findByText('Mode sistem');
+    await user.click(screen.getByRole('button', { name: 'LIVE' }));
+
+    expect(screen.queryByText(/Pindah ke mode/)).not.toBeInTheDocument();
+  });
+});

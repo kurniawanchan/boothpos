@@ -9,6 +9,7 @@ import BaseButton from '../components/ui/BaseButton.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
+import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 
 const settings = useSettingsStore();
@@ -16,6 +17,33 @@ const { t } = useI18n();
 const toast = useToastStore();
 
 const changingTier = ref(false);
+
+// --- System mode DEMO/LIVE (003-seed-demo-live, FR-004/FR-013) -----------
+// Halaman ini sendiri sudah digerbang canAccessMenu('settings') lewat
+// router meta (lihat router/index.js), jadi cashier/inventory tidak pernah
+// sampai ke sini sama sekali — tidak perlu pengecekan tampilan tambahan
+// di komponen ini (Constitution III: hilang total, bukan disabled).
+const pendingMode = ref(null); // mode yang MAU dipilih, menunggu konfirmasi
+const switchingMode = ref(false);
+
+function requestModeSwitch(mode) {
+  if (mode === settings.systemMode) return;
+  pendingMode.value = mode;
+}
+
+async function confirmModeSwitch() {
+  const mode = pendingMode.value;
+  switchingMode.value = true;
+  try {
+    await settings.setSystemMode(mode);
+    toast.success(t('settings.system_mode_switched', { mode: t(`settings.system_mode_${mode}`) }));
+    pendingMode.value = null;
+  } catch (err) {
+    toast.error(err.message);
+  } finally {
+    switchingMode.value = false;
+  }
+}
 
 async function pickTier(enabled) {
   if (enabled === settings.multiArtistEnabled) return;
@@ -54,10 +82,18 @@ const logoError = ref('');
 const uploadingLogo = ref(false);
 const logoInputEl = ref(null);
 
+// 003-seed-demo-live follow-up — nama toko disimpan sebagai KEY TERPISAH
+// per mode ('store_name' untuk LIVE, 'store_name_demo' untuk DEMO) supaya
+// mengedit satu tidak pernah menimpa yang lain (lihat SakanaFridgeDemoSeeder
+// dan OrderController::receipt() untuk sisi baca lainnya). Field lain
+// (kontak, alamat) sengaja tetap satu key bersama — hanya "nama toko" yang
+// diminta dibedakan per mode.
+const storeNameKey = computed(() => (settings.isDemoMode ? 'store_name_demo' : 'store_name'));
+
 async function loadStoreIdentity() {
   const res = await listSettings();
   const byKey = Object.fromEntries(res.data.map((s) => [s.key, s.value]));
-  storeForm.store_name = byKey.store_name ?? '';
+  storeForm.store_name = byKey[storeNameKey.value] ?? '';
   storeForm.store_contact = byKey.store_contact ?? '';
   storeForm.store_address = byKey.store_address ?? '';
   storeForm.store_contact_person = byKey.store_contact_person ?? '';
@@ -71,7 +107,7 @@ async function saveStoreIdentity() {
   Object.keys(storeErrors).forEach((k) => delete storeErrors[k]);
   try {
     await updateSettings([
-      { key: 'store_name', value: storeForm.store_name, type: 'string', group: 'receipt' },
+      { key: storeNameKey.value, value: storeForm.store_name, type: 'string', group: 'receipt' },
       { key: 'store_contact', value: storeForm.store_contact, type: 'string', group: 'receipt' },
       { key: 'store_address', value: storeForm.store_address, type: 'string', group: 'receipt' },
       { key: 'store_contact_person', value: storeForm.store_contact_person, type: 'string', group: 'receipt' },
@@ -231,6 +267,35 @@ onMounted(async () => {
 <template>
   <div class="grid grid-cols-1 items-start gap-[18px] px-[26px] pb-10 pt-[22px] xl:grid-cols-2">
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
+      <span class="text-[15px] font-bold tracking-tight">{{ t('settings.system_mode_section_title') }}</span>
+      <div class="flex flex-col gap-2.5">
+        <button
+          type="button"
+          class="flex items-start gap-3 rounded-lg border px-4 py-3.5 text-left transition-colors"
+          :class="settings.systemMode === 'live' ? 'border-brand bg-mint-50' : 'border-line hover:border-brand'"
+          :disabled="switchingMode"
+          @click="requestModeSwitch('live')"
+        >
+          <span class="mt-1 h-2.5 w-2.5 flex-none rounded-full" :class="settings.systemMode === 'live' ? 'bg-brand' : 'bg-line-2'"></span>
+          <span class="text-[13.5px] font-bold">{{ t('settings.system_mode_live') }}</span>
+        </button>
+        <button
+          type="button"
+          class="flex items-start gap-3 rounded-lg border px-4 py-3.5 text-left transition-colors"
+          :class="settings.systemMode === 'demo' ? 'border-warn-border-strong bg-warn-bg' : 'border-line hover:border-brand'"
+          :disabled="switchingMode"
+          @click="requestModeSwitch('demo')"
+        >
+          <span class="mt-1 h-2.5 w-2.5 flex-none rounded-full" :class="settings.systemMode === 'demo' ? 'bg-warn-text' : 'bg-line-2'"></span>
+          <span class="text-[13.5px] font-bold">{{ t('settings.system_mode_demo') }}</span>
+        </button>
+      </div>
+      <p class="border-t border-line-3 pt-3.5 text-[11.5px] leading-relaxed text-muted-3">
+        {{ t('settings.system_mode_section_desc') }}
+      </p>
+    </div>
+
+    <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
       <span class="text-[15px] font-bold tracking-tight">{{ t('settings.license_tier') }}</span>
       <div class="flex flex-col gap-2.5">
         <button
@@ -343,6 +408,16 @@ onMounted(async () => {
         {{ t('settings.backup_files_note') }}
       </p>
     </div>
+
+    <ConfirmDialog
+      :open="pendingMode !== null"
+      :title="t('settings.system_mode_section_title')"
+      :message="pendingMode ? t('settings.system_mode_switch_confirm', { mode: t(`settings.system_mode_${pendingMode}`) }) : ''"
+      :confirm-label="t('common.continue')"
+      :loading="switchingMode"
+      @confirm="confirmModeSwitch"
+      @close="pendingMode = null"
+    />
 
     <BaseModal :open="showChannelForm" :title="editingChannel ? t('settings.edit_channel') : t('settings.add_channel')" max-width-class="max-w-[440px]" @close="showChannelForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveChannel">

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Customer extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasDataMode, HasFactory, SoftDeletes;
 
     protected $fillable = ['name', 'phone', 'email', 'social_handle', 'notes'];
 }

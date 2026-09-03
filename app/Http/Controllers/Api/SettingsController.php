@@ -9,6 +9,7 @@ use App\Models\Setting;
 use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
 use App\Support\LicenseGate;
+use App\Support\ModeGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +26,12 @@ class SettingsController extends Controller
      * Dibaca UI untuk sembunyikan/tampilkan tombol "Tambah Artist", BUKAN
      * sumber otorisasi. Penegakan sesungguhnya tetap di ArtistPolicy —
      * lihat komentar di endpoint ini pada openapi-pos-mvp.yaml.
+     *
+     * `system_mode` (003-seed-demo-live, FR-005) sengaja TIDAK digerbang
+     * policy tambahan — endpoint ini sudah terbuka untuk semua role yang
+     * login, dan status mode harus terlihat semua orang, bukan cuma
+     * owner/admin (yang berwenang MENGUBAHNYA tetap hanya lewat
+     * PUT /settings, digerbang SettingPolicy seperti biasa).
      */
     public function features(): JsonResponse
     {
@@ -32,6 +39,7 @@ class SettingsController extends Controller
             'multi_artist_enabled' => LicenseGate::multiArtistEnabled(),
             'artist_count' => LicenseGate::activeArtistCount(),
             'artist_limit_reached' => LicenseGate::artistLimitReached(),
+            'system_mode' => ModeGate::current(),
         ]);
     }
 

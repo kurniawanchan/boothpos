@@ -31,6 +31,9 @@ export function buildProductCards(products, categoryCodeById = {}) {
       // all-disabled variant picker.
       out_of_stock: variants.length === 0 || totalStock <= 0,
       variants,
+      // 004-sidebar-menu-reorg (FR-006) — passed through unchanged from
+      // ProductResource.image_url; null when the product has no image.
+      image_url: p.image_url ?? null,
     };
   });
 }

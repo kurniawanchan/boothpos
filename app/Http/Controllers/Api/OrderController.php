@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\Setting;
 use App\Services\ImageUploadService;
 use App\Services\OrderService;
+use App\Support\ModeGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -92,10 +93,18 @@ class OrderController extends Controller
     // "perbaiki" ini jadi ikut ter-i18n-kan.
     public function receipt(Order $order): JsonResponse
     {
-        $order->load(['items', 'payments', 'cashier', 'event']);
+        $order->load(['items.artist', 'payments', 'cashier', 'event', 'customer']);
 
         return response()->json([
-            'store_name' => Setting::get('store_name', 'Toko'),
+            // 003-seed-demo-live follow-up — nama toko DEMO dan LIVE
+            // disimpan sebagai baris settings terpisah (lihat catatan di
+            // SakanaFridgeDemoSeeder), supaya menjalankan seeder tidak
+            // pernah menimpa nama toko sungguhan. Struk selalu memakai
+            // nama milik MODE ORDER INI (bukan mode aktif saat ini) —
+            // tapi karena Order sendiri sudah disaring DataModeScope,
+            // ModeGate::current() saat request ini pasti sama dengan
+            // data_mode order yang berhasil dimuat.
+            'store_name' => Setting::get(ModeGate::isDemo() ? 'store_name_demo' : 'store_name', 'Toko'),
             'store_contact' => Setting::get('store_contact'),
             // 001-user-store-settings User Story 3 / SC-004 — struk harus
             // menampilkan identitas toko LENGKAP sesuai yang dikonfigurasi
@@ -108,6 +117,17 @@ class OrderController extends Controller
             'store_contact_person' => Setting::get('store_contact_person'),
             'store_contact_phone' => Setting::get('store_contact_phone'),
             'store_contact_email' => Setting::get('store_contact_email'),
+            // 003-seed-demo-live follow-up 2 (FR-024) — BUG YANG DITEMUKAN
+            // & DIPERBAIKI: footer struk sebelumnya HANYA menampilkan
+            // store_contact_person/phone/email (kontak TOKO, bukan
+            // pembeli), yang di database dev kebetulan berisi data contoh
+            // ("Budi Santoso" dkk. dari test fixture) sehingga terlihat
+            // seperti data palsu di struk pembeli. Struk pembeli lebih
+            // masuk akal menampilkan PEMBELI transaksi itu sendiri; null
+            // semua untuk order walk-in (customer_id kosong), apa adanya.
+            'customer_name' => $order->customer?->name,
+            'customer_phone' => $order->customer?->phone,
+            'customer_email' => $order->customer?->email,
             'order_number' => $order->order_number,
             'event_name' => $order->event->name,
             'cashier_name' => $order->cashier->name,
@@ -116,6 +136,14 @@ class OrderController extends Controller
                 'name' => $i->name_snapshot, 'qty' => $i->qty,
                 'price' => number_format((float) $i->sell_price, 2, '.', ''),
                 'line_total' => number_format((float) $i->line_total, 2, '.', ''),
+                // 003-seed-demo-live follow-up (FR-019) — satu transaksi
+                // booth multi-artist bisa berisi barang dari beberapa
+                // artist sekaligus; nama artist per baris, bukan satu
+                // nama tunggal di kop struk. artist_snapshot tidak ada
+                // (hanya artist_id disimpan di order_items), jadi diambil
+                // dari relasi — artist tidak pernah dihapus keras
+                // (RESTRICT di FK), jadi selalu ada.
+                'artist_name' => $i->artist?->name,
             ]),
             'subtotal' => number_format((float) $order->subtotal, 2, '.', ''),
             'discount_amount' => number_format((float) $order->discount_amount, 2, '.', ''),

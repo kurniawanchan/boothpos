@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ArtistSettlement;
 use App\Models\Event;
+use App\Support\ModeGate;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -37,6 +38,7 @@ class SettlementService
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->where('orders.event_id', $event->id)
             ->where('orders.status', 'completed')
+            ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat ReportController::sales()
             ->selectRaw('order_items.artist_id, SUM(order_items.line_total) as total_sales, SUM(order_items.qty) as total_units')
             ->groupBy('order_items.artist_id')
             ->get();

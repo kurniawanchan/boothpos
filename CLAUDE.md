@@ -148,6 +148,60 @@ All gated on `canManageMasterData()`, same tier as Products/Categories/Stock.
   `bom` rows may reference a SKU created by the `products` sheet in the same
   file (resolved at apply time, same deferred-resolution pattern as `stock`).
 
+## Seed data and DEMO/LIVE mode (added post-MVP, 2026-09-03)
+
+Every business/transactional model (Event, Artist, Category, Product,
+ProductVariant, Customer, Vendor, Material, VendorMaterialPrice,
+ProductVariantBomLine, CashierSession, Order, OrderItem, Preorder,
+PreorderItem, Shipment, Payment, PaymentProof, StockMovement,
+ArtistSettlement — 20 in total) uses the `App\Models\Concerns\HasDataMode`
+trait: a `data_mode` column (`demo`/`live`) auto-stamped at creation from
+`App\Support\ModeGate::current()`, filtered on every read via a global
+`DataModeScope`. **When adding a new model that represents business or
+transactional data, add this trait** — omitting it means the model
+silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
+`activity_logs`, and `payment_channels` deliberately do NOT use it
+(administrative data, visible identically in both modes).
+
+- **Active mode** is one more `settings` row (`system_mode`, `demo`/`live`,
+  default `live`), read via `ModeGate::current()` — same pattern as
+  `multi_artist_enabled`/`LicenseGate`. Changed through the existing
+  `PUT /settings` bulk endpoint (no dedicated route); surfaced to the
+  frontend via `GET /settings/features`'s `system_mode` field, visible to
+  every role, changeable only by owner/admin (`canAccessMenu('settings')`).
+- **`ModeGate::runAs($mode, $callback)`** temporarily overrides the active
+  mode for the duration of a callback — used by `SakanaFridgeDemoSeeder`
+  (`php artisan db:seed --class=SakanaFridgeDemoSeeder`, not run by the
+  base `DatabaseSeeder`) so seeded rows are always `data_mode = 'demo'`
+  regardless of whatever `system_mode` is currently persisted. Business
+  services (`OrderService`, `PreorderService`, `StockService`) are
+  completely unaware of DEMO/LIVE — they just call `Model::create()`, and
+  the trait does the stamping.
+- **Hand-rolled `DB::table(...)` queries bypass the Eloquent global
+  scope.** `ReportController` (`sales()`, `profit()`, `artistProfit()`,
+  `exportArtistSettlements()`) and `SettlementService::recalculateForEvent()`
+  all filter `order_items.data_mode` explicitly for this reason — if you
+  add another raw query touching one of the 20 tables above, it needs the
+  same explicit filter, or the report will (in the un-filtered case) sum
+  across both modes.
+- **A value with a database-wide UNIQUE constraint must count/check
+  across BOTH modes, not just the active one** — `OrderService::
+  generateOrderNumber()`, `PreorderService::generateNumber()`, and
+  `ProductCodeGenerator::buildCodePrefix()` all use
+  `withoutGlobalScope(DataModeScope::class)` for exactly this reason
+  (`order_number`/`preorder_number`/`code_prefix` are unique across the
+  whole table, not per mode — a naive per-mode count lets a DEMO and a
+  LIVE row collide on the same generated value).
+- **A foreign key that isn't re-validated through a scoped Eloquent
+  lookup can smuggle a cross-mode reference.** `variant_id`/`session_id`
+  are safe because their services call `findOrFail()` against a
+  `HasDataMode` model (404s automatically if it belongs to the other
+  mode). `customer_id` was NOT re-validated this way (it went straight
+  into `Order`/`Preorder::create()`, and the FormRequest's `exists:` rule
+  bypasses Eloquent scopes same as the uniqueness checks above) —
+  `OrderService`/`PreorderService::create()` now re-fetch the customer via
+  `Customer::findOrFail()` before writing, specifically to close this gap.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -155,7 +209,34 @@ All gated on `canManageMasterData()`, same tier as Products/Categories/Stock.
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/002-language-toggle/plan.md` (branch
+Active feature plan: `specs/004-sidebar-menu-reorg/plan.md` (branch
+`004-sidebar-menu-reorg`) — Sidebar Menu Reorg + Product Images &
+Clickable Filters: frontend-only reorder of the sidebar (Sesi Kasir →
+Sales → Purchase → Inventaris → Pre-orders) grouping Kategori/Produk/Stok
+under a new "Inventaris" collapsible parent and Vendor/Bahan Baku under a
+new "Purchase" parent (same group mechanism as the existing "Pengaturan"
+group — no menu_key/route/authorization changes), plus product image
+thumbnails (Products table + POS cards) and clickable artist/category
+filter chips (replacing Products page's dropdowns, adding an artist chip
+row to POS) with an explicit "All" option per axis. No backend changes —
+`ProductResource.image_url` and `GET /products`'s `artist_id`/
+`category_id` filters already existed before this feature.
+
+Previous feature: `specs/003-seed-demo-live/plan.md` (branch
+`003-seed-demo-live`) — Seed Data Dummy & Mode DEMO/LIVE: a one-time
+idempotent seeder (`SakanaFridgeDemoSeeder`) populating a full realistic
+dataset (event, 3 artists, 9 products × 3 variants + stock, 3 categories,
+sales, 3 customers, 6 vendors, anime/game-merch materials, pre-orders) for
+a store called "Demo Sakana Fridge", plus a store-wide DEMO/LIVE mode toggle
+(`system_mode` setting + `App\Support\ModeGate`) that tags every
+business/transactional row (`data_mode` column, `HasDataMode` trait +
+global scope) with the mode active when it was created, so DEMO and LIVE
+data never mix in any list, POS screen, or financial report. See that
+plan's data-model.md for the exact list of ~19 affected tables and
+research.md for the `ModeGate::runAs()` mode-forcing mechanism the seeder
+relies on before touching any model that gains the `HasDataMode` trait.
+
+Previous feature: `specs/002-language-toggle/plan.md` (branch
 `002-language-toggle`) — Ganti Bahasa Antarmuka (Indonesia/English):
 post-login language toggle stored per user account (`users.language`,
 default English), full-app translation scope via `vue-i18n` on the
@@ -167,7 +248,7 @@ III (Indonesian-only UI copy) — see that plan's Constitution Check and
 Complexity Tracking before touching UI copy or error-message strings
 while this feature is in flight.
 
-Previous feature: `specs/001-user-store-settings/plan.md` — Pengaturan
+Earlier feature: `specs/001-user-store-settings/plan.md` — Pengaturan
 Pengguna dan Toko: user CRUD with photo/last-access/search/filter, a
 fully configurable role/menu-permission system replacing the fixed
 4-role model, expanded store profile, and bulk user export/import.

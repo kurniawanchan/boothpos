@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { currentSession } from '../api/sessions';
 import { listCategories } from '../api/categories';
+import { listArtists } from '../api/artists';
 import { listProducts, lookupVariants } from '../api/products';
 import { createOrder } from '../api/orders';
 import { usePosCartStore } from '../stores/posCart';
@@ -25,7 +26,9 @@ const { t } = useI18n();
 const session = ref(null);
 const sessionChecked = ref(false);
 const categories = ref([]);
+const artists = ref([]);
 const selectedCategoryId = ref(null);
+const selectedArtistId = ref(null);
 const search = ref('');
 const browsedProducts = ref([]);
 const searchResults = ref(null);
@@ -48,6 +51,7 @@ onMounted(async () => {
   sessionChecked.value = true;
   const catRes = await listCategories({ per_page: 100 });
   categories.value = catRes.data;
+  artists.value = (await listArtists({ per_page: 100 })).data;
   await loadBrowse();
 });
 
@@ -60,6 +64,7 @@ async function loadBrowse() {
     // inactive ones) in one extra query total — no more per-product N+1.
     const res = await listProducts({
       ...(selectedCategoryId.value ? { category_id: selectedCategoryId.value } : {}),
+      ...(selectedArtistId.value ? { artist_id: selectedArtistId.value } : {}),
       is_active: true,
       with_variants: 1,
       per_page: 100,
@@ -70,6 +75,7 @@ async function loadBrowse() {
   }
 }
 watch(selectedCategoryId, loadBrowse);
+watch(selectedArtistId, loadBrowse);
 
 const runSearch = useDebouncedFn(async () => {
   const term = search.value.trim();
@@ -212,6 +218,28 @@ function closeReceipt() {
         </div>
       </div>
 
+      <!-- 004-sidebar-menu-reorg (US5, FR-007) — new artist chip row,
+           identical pattern to the pre-existing category row below. -->
+      <div class="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
+          :class="!selectedArtistId ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
+          @click="selectedArtistId = null"
+        >
+          {{ t('pos.all') }}
+        </button>
+        <button
+          v-for="a in artists"
+          :key="a.id"
+          type="button"
+          class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
+          :class="selectedArtistId === a.id ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
+          @click="selectedArtistId = a.id"
+        >
+          {{ a.name }}
+        </button>
+      </div>
       <div class="flex flex-wrap gap-1.5">
         <button
           type="button"
@@ -246,8 +274,9 @@ function closeReceipt() {
             class="flex flex-col overflow-hidden rounded-card border border-line-2 bg-white text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-60"
             @click="addToCart(card)"
           >
-            <div class="relative flex h-[104px] items-center justify-center bg-line-7 text-muted-4">
-              <span v-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
+            <div class="relative flex h-[104px] items-center justify-center overflow-hidden bg-line-7 text-muted-4">
+              <img v-if="card.image_url" :src="card.image_url" :alt="card.name" class="h-full w-full object-cover" />
+              <span v-else-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
               <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
               <span class="absolute bottom-1.5 left-2 rounded bg-white/85 px-1.5 py-0.5 font-mono text-[9.5px] text-muted-5">{{ card.sku }}</span>
               <span v-if="card.current_stock <= 0" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>
@@ -275,8 +304,9 @@ function closeReceipt() {
             class="flex flex-col overflow-hidden rounded-card border border-line-2 bg-white text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-60"
             @click="selectProductCard(card)"
           >
-            <div class="relative flex h-[104px] items-center justify-center bg-line-7 text-muted-4">
-              <span v-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
+            <div class="relative flex h-[104px] items-center justify-center overflow-hidden bg-line-7 text-muted-4">
+              <img v-if="card.image_url" :src="card.image_url" :alt="card.name" class="h-full w-full object-cover" />
+              <span v-else-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
               <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
               <span v-if="card.variant_count > 1" class="absolute left-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-bold text-muted-5">{{ t('pos.variant_count', { count: card.variant_count }) }}</span>
               <span v-if="card.out_of_stock" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>

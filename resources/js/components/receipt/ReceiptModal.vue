@@ -138,7 +138,10 @@ watch(
           <span class="min-w-[26px] text-[15px] font-bold text-brand-active">{{ item.qty }}×</span>
           <div class="flex flex-1 flex-col gap-0.5">
             <span class="text-[14.5px] font-semibold leading-snug">{{ item.name }}</span>
-            <span class="text-[12px] text-muted-3">{{ formatIDR(item.price) }}</span>
+            <span class="text-[12px] text-muted-3">
+              {{ formatIDR(item.price) }}
+              <template v-if="item.artist_name"> · {{ item.artist_name }}</template>
+            </span>
           </div>
           <span class="text-[14.5px] font-bold">{{ formatIDR(item.line_total) }}</span>
         </div>
@@ -157,13 +160,16 @@ watch(
         <div class="flex justify-between text-[13.5px]"><span class="text-muted">Kembalian</span><span class="font-semibold">{{ formatIDR(receipt.change_amount) }}</span></div>
       </div>
 
+      <!-- Follow-up 2 (FR-024) — pembeli transaksi INI, bukan kontak toko
+           (yang sebelumnya di sini terlihat seperti data contoh palsu).
+           Kosong sama sekali untuk order walk-in, apa adanya. -->
       <div
-        v-if="receipt.store_contact_person || receipt.store_contact_phone || receipt.store_contact_email"
+        v-if="receipt.customer_name || receipt.customer_phone || receipt.customer_email"
         class="flex flex-col items-center gap-0.5 border-t border-dashed border-line-2 pt-3 text-center text-[11px] text-muted-3"
       >
-        <span v-if="receipt.store_contact_person">{{ receipt.store_contact_person }}</span>
-        <span v-if="receipt.store_contact_phone || receipt.store_contact_email">
-          {{ [receipt.store_contact_phone, receipt.store_contact_email].filter(Boolean).join(' · ') }}
+        <span v-if="receipt.customer_name">{{ receipt.customer_name }}</span>
+        <span v-if="receipt.customer_phone || receipt.customer_email">
+          {{ [receipt.customer_phone, receipt.customer_email].filter(Boolean).join(' · ') }}
         </span>
       </div>
     </div>

@@ -151,6 +151,11 @@ paths:
         (contoh: `POST /artists`), bukan dari flag yang dibaca di sini.
         Klien yang memaksa memanggil endpoint terlarang tetap akan
         ditolak 403 meski tidak pernah memanggil endpoint ini.
+
+        `system_mode` (003-seed-demo-live, FR-005) terbuka untuk SEMUA
+        role yang login (bukan hanya owner/admin) — status DEMO/LIVE harus
+        selalu terlihat oleh siapa pun yang memakai sistem. Hanya
+        MENGUBAHNYA yang dibatasi owner/admin, lewat `PUT /settings`.
       responses:
         '200':
           description: Berhasil
@@ -162,6 +167,16 @@ paths:
                   multi_artist_enabled: { type: boolean }
                   artist_count: { type: integer, description: Jumlah artist aktif saat ini }
                   artist_limit_reached: { type: boolean, description: "true bila Pro dan sudah punya 1 artist" }
+                  system_mode:
+                    type: string
+                    enum: [demo, live]
+                    description: |
+                      Mode aktif saat ini. 'demo' menampilkan data contoh
+                      (lihat SakanaFridgeDemoSeeder); 'live' hanya
+                      menampilkan data yang dibuat sungguhan. Default
+                      'live' bila baris settings `system_mode` belum
+                      pernah dibuat (instalasi baru TIDAK PERNAH diam-diam
+                      mulai dalam mode DEMO).
 
   /settings:
     get:
@@ -194,6 +209,15 @@ paths:
         catatan lisensi pada `POST /artists`. `type`/`group` boleh
         dikosongkan pada key yang sudah ada — nilai lama dipakai lagi.
         Setiap key yang berubah tercatat di log aktivitas (F13.4).
+
+        Juga satu-satunya jalur mengubah `system_mode`
+        (003-seed-demo-live) — key baru bernilai `demo`/`live`, group
+        `system`. Tidak ada endpoint terpisah untuk ini (lihat
+        specs/003-seed-demo-live/contracts/settings-system-mode.md):
+
+        ```json
+        { "settings": [{ "key": "system_mode", "value": "demo", "type": "string", "group": "system" }] }
+        ```
       requestBody:
         required: true
         content:

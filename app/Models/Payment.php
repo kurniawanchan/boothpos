@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Payment extends Model
 {
+    use HasDataMode;
+
     protected $fillable = [
         'order_id', 'preorder_id', 'channel_id', 'method', 'purpose', 'amount',
         'verification', 'verified_by', 'verified_at', 'reject_reason', 'paid_at', 'notes',

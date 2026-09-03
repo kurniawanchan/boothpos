@@ -30,20 +30,39 @@ defineEmits(['logout']);
 // roles that ever see more than one of them.
 // `label` menyimpan KUNCI terjemahan (di bawah namespace `nav.*`), bukan
 // lagi teks literal — dibaca lewat t(item.label) di template.
+// 004-sidebar-menu-reorg — urutan & pengelompokan diminta eksplisit:
+// Sesi Kasir -> Sales -> Purchase (grup) -> Inventaris (grup) -> Pre-orders.
+// 'purchase-group'/'inventaris-group' memakai mekanisme grup yang SAMA
+// persis dengan 'settings-group' di atas (lihat komentar di sana) —
+// menuKey setiap anak TIDAK berubah, ini murni penataan ulang tampilan.
 const NAV_DEFS = [
   { name: 'dashboard', label: 'nav.dashboard', icon: 'ph-house', menuKey: 'dashboard' },
   { name: 'pos', label: 'nav.pos', icon: 'ph-shopping-cart-simple', menuKey: 'pos' },
   { name: 'session', label: 'nav.session', icon: 'ph-cash-register', menuKey: 'session' },
-  { name: 'events', label: 'nav.events', icon: 'ph-calendar-dots', menuKey: 'events' },
-  { name: 'products', label: 'nav.products', icon: 'ph-package', menuKey: 'products' },
-  { name: 'artists', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'artists' },
-  { name: 'categories', label: 'nav.categories', icon: 'ph-squares-four', menuKey: 'categories' },
-  { name: 'stock', label: 'nav.stock', icon: 'ph-stack', menuKey: 'stock' },
-  { name: 'vendors', label: 'nav.vendors', icon: 'ph-truck', menuKey: 'vendors' },
-  { name: 'materials', label: 'nav.materials', icon: 'ph-flask', menuKey: 'materials' },
-  { name: 'customers', label: 'nav.customers', icon: 'ph-address-book', menuKey: 'customers' },
-  { name: 'preorders', label: 'nav.preorders', icon: 'ph-clock-countdown', menuKey: 'preorders' },
   { name: 'sales', label: 'nav.sales', icon: 'ph-receipt', menuKey: 'sales' },
+  {
+    key: 'purchase-group',
+    label: 'nav.purchase_group',
+    icon: 'ph-shopping-bag-open',
+    children: [
+      { name: 'vendors', label: 'nav.vendors', menuKey: 'vendors' },
+      { name: 'materials', label: 'nav.materials', menuKey: 'materials' },
+    ],
+  },
+  {
+    key: 'inventaris-group',
+    label: 'nav.inventaris_group',
+    icon: 'ph-cube',
+    children: [
+      { name: 'categories', label: 'nav.categories', menuKey: 'categories' },
+      { name: 'products', label: 'nav.products', menuKey: 'products' },
+      { name: 'stock', label: 'nav.stock', menuKey: 'stock' },
+    ],
+  },
+  { name: 'preorders', label: 'nav.preorders', icon: 'ph-clock-countdown', menuKey: 'preorders' },
+  { name: 'events', label: 'nav.events', icon: 'ph-calendar-dots', menuKey: 'events' },
+  { name: 'artists', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'artists' },
+  { name: 'customers', label: 'nav.customers', icon: 'ph-address-book', menuKey: 'customers' },
   { name: 'reports', label: 'nav.reports', icon: 'ph-chart-bar', menuKey: 'reports' },
   {
     key: 'settings-group',

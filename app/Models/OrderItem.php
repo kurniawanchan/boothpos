@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OrderItem extends Model
 {
+    use HasDataMode;
+
     protected $fillable = [
         'order_id', 'variant_id', 'artist_id', 'sku_snapshot', 'name_snapshot',
         'qty', 'cost_price', 'sell_price', 'discount_amount', 'line_total',

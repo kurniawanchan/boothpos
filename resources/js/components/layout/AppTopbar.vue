@@ -1,5 +1,6 @@
 <script setup>
 import LanguageSwitcher from './LanguageSwitcher.vue';
+import SystemModeBadge from './SystemModeBadge.vue';
 
 defineProps({
   title: { type: String, required: true },
@@ -16,6 +17,7 @@ defineProps({
     <!-- Rendered langsung di sini (bukan lewat slot actions) supaya
          tersedia di SETIAP layar yang memakai AppTopbar tanpa perlu
          tiap view mendaftarkannya sendiri (FR-003/FR-004). -->
+    <SystemModeBadge />
     <LanguageSwitcher />
     <slot name="actions" />
   </header>

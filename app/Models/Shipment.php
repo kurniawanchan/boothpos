@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Shipment extends Model
 {
+    use HasDataMode;
+
     protected $fillable = [
         'preorder_id', 'courier_name', 'tracking_number', 'shipping_cost',
         'recipient_name', 'recipient_phone', 'address_line', 'city',
