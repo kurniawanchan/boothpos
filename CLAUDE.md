@@ -209,21 +209,50 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/005-ux-enhancements-dashboard/plan.md` (branch
-`005-ux-enhancements-dashboard`) — UX Enhancements: replaces the
-Products/POS artist/category chip filters (added in 004) with a searchable
-multi-select dropdown (new `BaseMultiSelect.vue`, `GET /products`'s
-`artist_id[]`/`category_id[]` now array-capable); adds dashboard shortcut
-tiles, a day-filterable sales panel, category/artist/event charts
-(`chart.js`, dynamically imported), drill-through links, and extra stats
-via new `DashboardController`/`DashboardService` (mode-scoped, gated by the
-caller's existing `menu_keys`, not a new permission concept); adds a
-self-service Profile screen (`PUT /auth/password`, `POST /auth/photo`, both
-self-scoped — deliberately NOT routed through `UserController`'s
-admin-gated `{user}` routes, so every role can manage their own account);
-and fixes the sidebar's "Purchase"→"Pembelian" label and submenu-item color
-inconsistency. See plan.md's Constitution Check for why dashboard
-mode-scoping is this feature's highest-risk item.
+Active feature plan: `specs/006-purchase-order-and-ops/plan.md` (branch
+`006-purchase-order-and-ops`) — Purchase Orders, Store Customization,
+Activity Log Screen, New Reports, POS Drafts, Per-Artist Opening Cash,
+Split Payment: 10 independent slices. Deliberately reverses PRD §10.2's
+"no purchase orders" cut (dated note, same pattern as the 2026-09-01
+Vendor/Material addition) — new `purchase_orders`/`purchase_order_items`
+tables + `PurchaseOrderService` (status: draft→ordered→received→paid,
++cancelled, mirroring `PreorderService`'s transition-guard pattern).
+Materials have NO stock concept today (`StockService` is
+`ProductVariant`-only) — adds a genuinely new, parallel
+`materials.current_stock` + `material_stock_movements` +
+`MaterialStockService`, not a fork of the existing variant stock path.
+Split payment and payment notes are ~80% already built server-side
+(`POST /orders` already accepts a `payments[]` array with cash-overpay
+guards; `Payment.notes` is already a real column) — the gap is almost
+entirely `PaymentPanel.vue`, which today hardcodes exactly one payment
+entry. POS drafts are a loosely-validated JSON cart snapshot (not
+normalized FK rows) so a since-deleted variant/customer degrades to a
+flagged line, not a crash. Per-artist opening cash is additive —
+`cashier_sessions.opening_cash` stays as the sum of a new
+`session_opening_cash_entries` table, old sessions keep working unchanged.
+Theme color is applied by setting the same `@theme` CSS custom properties
+(`--color-brand` etc.) at runtime via `document.documentElement.style`,
+not a second theming system. See research.md for the full grounding —
+most of this feature's scope was discovered by reading the existing
+code, not assumed from the request alone.
+
+Previous feature: `specs/005-ux-enhancements-dashboard/plan.md` (branch
+`005-ux-enhancements-dashboard`, shipped, PR #4 merged 2026-09-03) — UX
+Enhancements: replaces the Products/POS artist/category chip filters
+(added in 004) with a searchable multi-select dropdown
+(`BaseMultiSelect.vue`, `GET /products`'s `artist_id[]`/`category_id[]`
+now array-capable); dashboard shortcut tiles, a day-filterable sales
+panel, and category/artist/event breakdown charts (`chart.js`) — reusing
+the existing, already-tested `GET /reports/sales` (extended with an
+`event` grouping) rather than a new `DashboardController`/
+`DashboardService`, once research showed that endpoint already provided
+everything needed; self-service Profile screen (`PUT /auth/password`,
+`POST /auth/photo`, both self-scoped, deliberately not routed through
+`UserController`'s admin-gated `{user}` routes); sidebar
+"Purchase"→"Pembelian" fix, submenu-item color-consistency fix, and a
+show/hide sidebar toggle (animated width transition, reveal button lives
+in `AppTopbar.vue`'s flex row — not a fixed-position overlay, which used
+to sit on top of the page title once the sidebar was hidden).
 
 Previous feature: `specs/004-sidebar-menu-reorg/plan.md` (branch
 `004-sidebar-menu-reorg`) — Sidebar Menu Reorg + Product Images &

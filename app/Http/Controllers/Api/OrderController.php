@@ -113,10 +113,16 @@ class OrderController extends Controller
             // awal fitur tsb — ditemukan saat implementasi profil toko,
             // ditutup di sini.
             'store_address' => Setting::get('store_address'),
-            'store_logo_url' => $this->imageUploadService->url(Setting::get('store_logo_path')),
+            // 006-purchase-order-and-ops (US7) — receipt_show_logo TIDAK
+            // mengubah apakah logo ditampilkan di layar LAIN (mis. header
+            // app) — hanya di STRUK, sesuai FR-017/User Story 7.
+            'store_logo_url' => filter_var(Setting::get('receipt_show_logo', true), FILTER_VALIDATE_BOOLEAN)
+                ? $this->imageUploadService->url(Setting::get('store_logo_path'))
+                : null,
             'store_contact_person' => Setting::get('store_contact_person'),
             'store_contact_phone' => Setting::get('store_contact_phone'),
             'store_contact_email' => Setting::get('store_contact_email'),
+            'receipt_footer_text' => Setting::get('receipt_footer_text'),
             // 003-seed-demo-live follow-up 2 (FR-024) — BUG YANG DITEMUKAN
             // & DIPERBAIKI: footer struk sebelumnya HANYA menampilkan
             // store_contact_person/phone/email (kontak TOKO, bukan

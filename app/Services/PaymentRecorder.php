@@ -18,7 +18,7 @@ class PaymentRecorder
      * @param array{method:string,channel_id:?int,purpose:string,amount:float|string,proof_token:?string,notes:?string} $input
      * @throws ValidationException
      */
-    public function record(array $input, ?int $orderId, ?int $preorderId): Payment
+    public function record(array $input, ?int $orderId, ?int $preorderId, ?int $purchaseOrderId = null): Payment
     {
         $method = $input['method'];
 
@@ -43,6 +43,7 @@ class PaymentRecorder
         $payment = Payment::create([
             'order_id' => $orderId,
             'preorder_id' => $preorderId,
+            'purchase_order_id' => $purchaseOrderId,
             'channel_id' => $input['channel_id'] ?? null,
             'method' => $method,
             'purpose' => $input['purpose'] ?? 'full',

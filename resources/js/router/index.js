@@ -75,6 +75,12 @@ const routes = [
         meta: { menuKey: 'materials' },
       },
       {
+        path: 'purchase-orders',
+        name: 'purchase-orders',
+        component: () => import('../views/PurchaseOrdersView.vue'),
+        meta: { titleKey: 'nav.purchase_orders', subtitleKey: 'nav.purchase_orders_subtitle', menuKey: 'purchase_orders' },
+      },
+      {
         path: 'customers',
         name: 'customers',
         component: () => import('../views/CustomersView.vue'),
@@ -104,6 +110,12 @@ const routes = [
           // supaya kasir/inventory tidak pernah sampai ke halaman kosong.
           menuKey: 'reports',
         },
+      },
+      {
+        path: 'activity-log',
+        name: 'activity-log',
+        component: () => import('../views/ActivityLogView.vue'),
+        meta: { titleKey: 'nav.activity_log', subtitleKey: 'nav.activity_log_subtitle', menuKey: 'reports' },
       },
       {
         path: 'users',

@@ -5,13 +5,17 @@ import ReportsView from '../../resources/js/views/ReportsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listEvents } from '../../resources/js/api/events';
 import { artistSettlements, artistSettlementTransactions, artistProfitReport } from '../../resources/js/api/reports';
+import { listArtists } from '../../resources/js/api/artists';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
+vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({
   artistSettlements: vi.fn(),
   artistSettlementTransactions: vi.fn(),
   profitReport: vi.fn(),
   artistProfitReport: vi.fn(),
+  purchasesReport: vi.fn(),
+  stockByArtistReport: vi.fn(),
   recordSettlementPayment: vi.fn(),
   exportReport: vi.fn(),
 }));
@@ -47,6 +51,7 @@ describe('ReportsView — artist transaction drill-down (F11.6)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
+    listArtists.mockResolvedValue({ data: [] });
     artistSettlements.mockResolvedValue({ data: SETTLEMENT_ROWS });
     artistSettlementTransactions.mockResolvedValue(DRILLDOWN_RESPONSE);
   });
@@ -90,6 +95,7 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
+    listArtists.mockResolvedValue({ data: [] });
     artistSettlements.mockResolvedValue({ data: [] });
     artistProfitReport.mockResolvedValue(ARTIST_PROFIT_RESPONSE);
   });

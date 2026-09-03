@@ -16,6 +16,9 @@ class MaterialResource extends JsonResource
             'unit' => $this->unit,
             'notes' => $this->notes,
             'is_active' => $this->is_active,
+            // 006-purchase-order-and-ops (US1) — sebelumnya materials tidak
+            // punya konsep stok sama sekali; lihat research.md R4.
+            'current_stock' => number_format((float) $this->current_stock, 3, '.', ''),
             'vendor_price_count' => $this->vendor_prices_count ?? null,
             // vendor_prices hanya disertakan bila controller memuat relasinya
             // (show), konsisten dengan gaya relationLoaded() di kodebase ini.

@@ -10,4 +10,5 @@ return [
     'not_authorized_cost_breakdown' => 'Only owner/admin/inventory can view the cost breakdown.',
     'vendor_price_already_exists' => 'This vendor already has a price for this material. Update it via the update endpoint instead.',
     'bom_line_already_exists' => 'This material is already in this variant\'s BOM. Update the quantity via the update endpoint instead.',
+    'insufficient_material_stock' => 'Insufficient stock for material :material (available: :available).',
 ];

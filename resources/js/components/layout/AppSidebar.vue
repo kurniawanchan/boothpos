@@ -47,6 +47,7 @@ const NAV_DEFS = [
     children: [
       { name: 'vendors', label: 'nav.vendors', menuKey: 'vendors' },
       { name: 'materials', label: 'nav.materials', menuKey: 'materials' },
+      { name: 'purchase-orders', label: 'nav.purchase_orders', menuKey: 'purchase_orders' },
     ],
   },
   {
@@ -64,6 +65,7 @@ const NAV_DEFS = [
   { name: 'artists', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'artists' },
   { name: 'customers', label: 'nav.customers', icon: 'ph-address-book', menuKey: 'customers' },
   { name: 'reports', label: 'nav.reports', icon: 'ph-chart-bar', menuKey: 'reports' },
+  { name: 'activity-log', label: 'nav.activity_log', icon: 'ph-clock-clockwise', menuKey: 'reports' },
   {
     key: 'settings-group',
     label: 'nav.settings_group',

@@ -18,12 +18,14 @@ class Material extends Model
         'unit',
         'notes',
         'is_active',
+        'current_stock',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'current_stock' => 'decimal:3',
         ];
     }
 
@@ -42,6 +44,11 @@ class Material extends Model
     public function bomLines(): HasMany
     {
         return $this->hasMany(ProductVariantBomLine::class);
+    }
+
+    public function stockMovements(): HasMany
+    {
+        return $this->hasMany(MaterialStockMovement::class);
     }
 
     /**

@@ -32,6 +32,7 @@ class MenuKeys
         'stock' => 'Stok',
         'vendors' => 'Vendor',
         'materials' => 'Bahan Baku',
+        'purchase_orders' => 'Purchase Order',
         'customers' => 'Pelanggan',
         'preorders' => 'Pre-order',
         'sales' => 'Penjualan',

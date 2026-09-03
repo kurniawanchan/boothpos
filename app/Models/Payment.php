@@ -12,7 +12,7 @@ class Payment extends Model
     use HasDataMode;
 
     protected $fillable = [
-        'order_id', 'preorder_id', 'channel_id', 'method', 'purpose', 'amount',
+        'order_id', 'preorder_id', 'purchase_order_id', 'channel_id', 'method', 'purpose', 'amount',
         'verification', 'verified_by', 'verified_at', 'reject_reason', 'paid_at', 'notes',
     ];
 
@@ -23,6 +23,7 @@ class Payment extends Model
 
     public function order(): BelongsTo { return $this->belongsTo(Order::class); }
     public function preorder(): BelongsTo { return $this->belongsTo(Preorder::class); }
+    public function purchaseOrder(): BelongsTo { return $this->belongsTo(PurchaseOrder::class); }
     public function channel(): BelongsTo { return $this->belongsTo(PaymentChannel::class, 'channel_id'); }
     public function proofs(): HasMany { return $this->hasMany(PaymentProof::class); }
 }
