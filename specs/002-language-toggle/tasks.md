@@ -203,7 +203,7 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
       `components/pos/ProductVariantPickerModal.vue`,
       `components/payment/{ChannelPicker,MethodTiles,PaymentPanel,PosPaymentModal,ProofCapture}.vue`
       → `t('pos.*')`.
-- [ ] T035 [P] [US1] `resources/js/views/{ArtistsView,CategoriesView,ProductsView,StockView}.vue`,
+- [X] T035 [P] [US1] `resources/js/views/{ArtistsView,CategoriesView,ProductsView,StockView}.vue`,
       `components/product/{ProductDetailModal,VariantBomModal}.vue`,
       `components/masterData/{MasterDataImportModal,MaterialVendorPricesModal}.vue`
       → `t('master_data.*')`.
