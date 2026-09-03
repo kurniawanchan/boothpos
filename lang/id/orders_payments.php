@@ -13,4 +13,5 @@ return [
     'proof_token_invalid' => 'Token bukti pembayaran tidak valid atau sudah dipakai.',
     'change_exceeds_cash_received' => 'Kembalian tidak dapat melebihi jumlah tunai yang diterima.',
     'already_voided' => 'Transaksi sudah dibatalkan sebelumnya.',
+    'customer_not_found' => 'Customer tidak ditemukan.',
 ];

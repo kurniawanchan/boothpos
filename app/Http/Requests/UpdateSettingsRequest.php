@@ -62,6 +62,14 @@ class UpdateSettingsRequest extends FormRequest
                             $fail('Format email kontak toko tidak valid.');
                         }
                     }
+
+                    // 003-seed-demo-live (FR-004) — 'system_mode' adalah satu
+                    // baris settings lagi, sama seperti 'multi_artist_enabled',
+                    // jadi divalidasi lewat closure yang sama alih-alih endpoint
+                    // baru (lihat contracts/settings-system-mode.md).
+                    if ($key === 'system_mode' && ! in_array($value, ['demo', 'live'], true)) {
+                        $fail('Mode sistem harus salah satu dari: demo, live.');
+                    }
                 },
             ],
             'settings.*.type' => ['sometimes', 'in:string,integer,decimal,boolean,json'],

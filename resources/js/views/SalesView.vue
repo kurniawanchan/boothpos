@@ -8,6 +8,7 @@ import { formatIDR } from '../utils/money';
 import { formatDateTime } from '../utils/date';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
+import BaseModal from '../components/ui/BaseModal.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
@@ -68,6 +69,7 @@ function openRowDetail(row) {
 const transactionColumns = computed(() => [
   { key: 'order_number', label: t('reports.col_transaction_no') },
   { key: 'customer_name', label: t('reports.col_customer') },
+  { key: 'artist_names', label: t('reports.col_artist') },
   { key: 'created_at', label: t('reports.col_time') },
   { key: 'cashier_name', label: t('reports.col_cashier') },
   { key: 'item_count', label: t('reports.col_item') },
@@ -90,7 +92,11 @@ const filteredTransactions = computed(() => {
     const orderNumber = (t.order_number ?? '').toLowerCase();
     const customerName = (t.customer_name ?? '').toLowerCase();
     const cashierName = (t.cashier_name ?? '').toLowerCase();
-    return orderNumber.includes(q) || customerName.includes(q) || cashierName.includes(q);
+    // 003-seed-demo-live follow-up (FR-018) — cocok bila SALAH SATU nama
+    // artist di transaksi ini mengandung kata kunci (satu order booth
+    // multi-artist bisa berisi barang dari beberapa artist sekaligus).
+    const artistNames = (t.artist_names ?? []).join(' ').toLowerCase();
+    return orderNumber.includes(q) || customerName.includes(q) || cashierName.includes(q) || artistNames.includes(q);
   });
 });
 
@@ -100,6 +106,22 @@ const receiptOrderId = ref(null);
 function openReceipt(transaction) {
   receiptOrderId.value = transaction.id;
   showReceipt.value = true;
+}
+
+// Follow-up 2 (FR-023) — klik nama artist adalah pintasan mengisi kotak
+// pencarian yang sudah ada (Follow-up 1), bukan layar/filter baru.
+function searchByArtist(name) {
+  transactionSearch.value = name;
+}
+
+// Follow-up 2 (FR-022) — popover ringan pakai data yang SUDAH ada di baris
+// transaksi (customer_phone/customer_email dari ReportController::sales()),
+// bukan endpoint GET /customers/{id} baru (tidak ada di CustomerController).
+const detailCustomer = ref(null);
+
+function showCustomerDetail(row) {
+  if (!row.customer_name) return;
+  detailCustomer.value = { name: row.customer_name, phone: row.customer_phone, email: row.customer_email };
 }
 </script>
 
@@ -172,8 +194,28 @@ function openReceipt(transaction) {
           :loading="loading"
           :empty-message="transactionSearch ? t('reports.no_matching_transactions') : t('reports.no_transactions')"
         >
-          <template #cell-order_number="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.order_number }}</span></template>
-          <template #cell-customer_name="{ row }"><span :class="!row.customer_name ? 'text-muted-3' : ''">{{ row.customer_name ?? t('reports.walkin') }}</span></template>
+          <template #cell-order_number="{ row }">
+            <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" @click="openReceipt(row)">{{ row.order_number }}</button>
+          </template>
+          <template #cell-customer_name="{ row }">
+            <button
+              v-if="row.customer_name"
+              type="button"
+              class="text-left underline decoration-dotted hover:text-brand-active"
+              @click="showCustomerDetail(row)"
+            >{{ row.customer_name }}</button>
+            <span v-else class="text-muted-3">{{ t('reports.walkin') }}</span>
+          </template>
+          <template #cell-artist_names="{ row }">
+            <span class="flex flex-wrap gap-x-1 text-[12.5px] text-muted-4">
+              <template v-if="(row.artist_names ?? []).length">
+                <span v-for="(name, i) in row.artist_names" :key="name">
+                  <button type="button" class="underline decoration-dotted hover:text-brand-active" @click="searchByArtist(name)">{{ name }}</button><template v-if="i < row.artist_names.length - 1">,</template>
+                </span>
+              </template>
+              <span v-else>—</span>
+            </span>
+          </template>
           <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
           <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
           <template #cell-actions="{ row }">
@@ -185,5 +227,22 @@ function openReceipt(transaction) {
 
     <ProductDetailModal :open="showProductDetail" :product-id="detailProductId" @close="showProductDetail = false" />
     <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" :close-label="t('reports.close')" @close="showReceipt = false" />
+
+    <BaseModal :open="detailCustomer !== null" :title="t('reports.customer_detail')" max-width-class="max-w-[360px]" @close="detailCustomer = null">
+      <div v-if="detailCustomer" class="flex flex-col gap-2.5 px-6 py-5 text-[13.5px]">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[11.5px] font-semibold text-muted-3">{{ t('reports.col_customer') }}</span>
+          <span class="font-semibold">{{ detailCustomer.name }}</span>
+        </div>
+        <div v-if="detailCustomer.phone" class="flex flex-col gap-0.5">
+          <span class="text-[11.5px] font-semibold text-muted-3">{{ t('settings.phone') }}</span>
+          <span>{{ detailCustomer.phone }}</span>
+        </div>
+        <div v-if="detailCustomer.email" class="flex flex-col gap-0.5">
+          <span class="text-[11.5px] font-semibold text-muted-3">{{ t('settings.email') }}</span>
+          <span>{{ detailCustomer.email }}</span>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>

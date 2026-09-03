@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ArtistSettlement extends Model
 {
+    use HasDataMode;
+
     protected $fillable = [
         'event_id', 'artist_id', 'total_sales', 'total_units', 'deduction',
         'payable_amount', 'paid_amount', 'status', 'calculated_at', 'paid_at', 'notes',

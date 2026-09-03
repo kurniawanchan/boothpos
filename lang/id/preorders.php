@@ -5,4 +5,5 @@ return [
     'shipment_already_exists' => 'Preorder ini sudah memiliki data pengiriman.',
     'invalid_status_transition' => "Preorder berstatus ':from' tidak dapat berpindah ke ':to'.",
     'not_fully_paid' => 'Preorder belum lunas, tidak dapat diserahkan. Sisa tagihan: :outstanding',
+    'customer_not_found' => 'Customer tidak ditemukan.',
 ];

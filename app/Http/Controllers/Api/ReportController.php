@@ -9,6 +9,7 @@ use App\Models\Event;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Services\SettlementService;
+use App\Support\ModeGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -55,6 +56,12 @@ class ReportController extends Controller
             ->join('categories', 'categories.id', '=', 'products.category_id')
             ->join('artists', 'artists.id', '=', 'order_items.artist_id')
             ->where('orders.status', 'completed')
+            // 003-seed-demo-live (US3/FR-010) — query hand-rolled DB::table
+            // TIDAK ikut Eloquent global scope (DataModeScope); tanpa filter
+            // eksplisit ini, laporan tanpa event_id (mis. lihat SEMUA event)
+            // akan menjumlahkan order DEMO dan LIVE sekaligus. Lihat
+            // ReportDataModeIsolationTest.
+            ->where('order_items.data_mode', ModeGate::current())
             ->when($request->filled('event_id'), fn ($q) => $q->where('orders.event_id', $request->integer('event_id')))
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('orders.created_at', '>=', $request->date('date_from')))
             ->when($request->filled('date_to'), fn ($q) => $q->whereDate('orders.created_at', '<=', $request->date('date_to')));
@@ -123,7 +130,10 @@ class ReportController extends Controller
             // perlu memuat ulang seluruh laporan", yang berarti penyaringan
             // dilakukan di frontend atas array transactions[] yang sudah
             // diambil, bukan lewat parameter query baru di endpoint ini.
-            ->with(['cashier', 'customer'])
+            // 003-seed-demo-live follow-up (FR-018) — 'items.artist' juga
+            // di-eager-load supaya frontend punya nama artist per transaksi
+            // untuk disaring, sejalan dengan 'customer' di atas (F10.6).
+            ->with(['cashier', 'customer', 'items.artist'])
             ->withCount('items')
             ->where('status', 'completed')
             ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
@@ -138,9 +148,19 @@ class ReportController extends Controller
                 'cashier_name' => $order->cashier?->name,
                 // customer_id nullable (pembeli walk-in tidak wajib punya
                 // data pelanggan) — null di sini apa adanya, bukan galat.
+                'customer_id' => $order->customer_id,
                 'customer_name' => $order->customer?->name,
+                // Follow-up 2 (FR-022) — dipakai popover detail customer di
+                // Sales tanpa perlu endpoint GET /customers/{id} baru
+                // (CustomerController hanya expose index/store/update).
+                'customer_phone' => $order->customer?->phone,
+                'customer_email' => $order->customer?->email,
                 'item_count' => $order->items_count,
                 'total_amount' => number_format((float) $order->total_amount, 2, '.', ''),
+                // FR-018/FR-019 — nama-nama artist unik yang punya barang di
+                // transaksi ini, dipakai frontend untuk pencarian per
+                // artist DAN untuk ditampilkan di baris tabel.
+                'artist_names' => $order->items->pluck('artist.name')->filter()->unique()->values(),
             ]);
 
         return response()->json([
@@ -166,6 +186,12 @@ class ReportController extends Controller
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->where('orders.event_id', $eventId)
             ->where('orders.status', 'completed')
+            // 003-seed-demo-live — defense-in-depth, sama seperti sales()
+            // di atas (Event::findOrFail() sudah menyaring $eventId lintas
+            // mode, tapi query hand-rolled ini tetap dibuat eksplisit
+            // supaya tidak diam-diam benar hanya karena kebetulan digerbang
+            // lookup lain).
+            ->where('order_items.data_mode', ModeGate::current())
             ->selectRaw('
                 SUM(order_items.line_total) as revenue,
                 SUM(order_items.cost_price * order_items.qty) as cost_of_goods
@@ -376,6 +402,7 @@ class ReportController extends Controller
             ->join('artists', 'artists.id', '=', 'order_items.artist_id')
             ->where('orders.event_id', $eventId)
             ->where('orders.status', 'completed')
+            ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat catatan sales()
             ->selectRaw('
                 artists.id as artist_id,
                 artists.name as artist_name,
@@ -497,6 +524,7 @@ class ReportController extends Controller
             ->join('artists', 'artists.id', '=', 'order_items.artist_id')
             ->where('orders.event_id', $eventId)
             ->where('orders.status', 'completed')
+            ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat catatan sales()
             ->orderBy('artists.name')
             ->orderBy('orders.created_at')
             ->get([

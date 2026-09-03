@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
 {
+    use HasDataMode;
+
     protected $fillable = [
         'order_number', 'event_id', 'session_id', 'customer_id', 'user_id', 'channel',
         'subtotal', 'discount_amount', 'total_amount', 'total_cost', 'paid_amount',

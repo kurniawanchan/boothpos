@@ -3,8 +3,9 @@
 -- Skema Database MySQL — BoothPOS
 -- Sistem POS Event-Based Multi-Artist untuk Toko Merchandise
 -- Cakupan: MVP Oktober 2026 (termasuk pre-order dan pengiriman kurir)
--- Versi: v1.2
--- Tanggal: 30 Agustus 2026
+-- Versi: v1.3
+-- Tanggal: 30 Agustus 2026 (v1.2), diperbarui 3 September 2026 (v1.3 —
+-- kolom data_mode, lihat catatan di bagian bawah dokumen)
 --
 -- ASSUMPTION: MySQL 8.0 atau lebih baru (dibutuhkan untuk CHECK constraint
 -- dan collation utf8mb4_0900_ai_ci). Bila memakai MySQL 5.7 atau MariaDB,
@@ -46,6 +47,14 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- 7. Pembayaran memakai dua foreign key nullable (order_id, preorder_id)
 --    dengan CHECK tepat satu terisi, bukan relasi polimorfik. Ini menjaga
 --    integritas referensial tetap ditegakkan database.
+--
+-- 8. (v1.3, 2026-09-03) Setiap tabel data bisnis/transaksional memegang
+--    kolom `data_mode ENUM('demo','live') NOT NULL DEFAULT 'live'`,
+--    menandai apakah baris tersebut adalah data contoh (DEMO) atau data
+--    toko sungguhan (LIVE) — lihat catatan lengkap di bagian bawah
+--    dokumen ini ("MODE DEMO/LIVE"). Tabel administratif (users, roles,
+--    settings, activity_logs, payment_channels) SENGAJA tidak memegang
+--    kolom ini.
 -- =====================================================================
 
 
@@ -69,13 +78,15 @@ CREATE TABLE users (
   UNIQUE KEY uk_users_username (username),
   KEY idx_users_role (role)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- CATATAN (v1.3) — TIDAK memegang data_mode. Akun pengguna adalah data
+-- administratif, terlihat sama di kedua mode (lihat "MODE DEMO/LIVE").
 
 CREATE TABLE settings (
   id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `key`             VARCHAR(100)    NOT NULL,
   value             TEXT            NULL,
   type              ENUM('string','integer','decimal','boolean','json') NOT NULL DEFAULT 'string',
-  `group`           VARCHAR(50)     NOT NULL DEFAULT 'general' COMMENT 'general, receipt, product_code, storage',
+  `group`           VARCHAR(50)     NOT NULL DEFAULT 'general' COMMENT 'general, receipt, product_code, storage, system',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
@@ -86,6 +97,11 @@ CREATE TABLE settings (
 -- TIDAK ada tabel/kolom terpisah untuk ini secara sengaja — satu baris
 -- key-value ini yang membedakan dua tingkat harga BoothPOS, ditegakkan
 -- di application layer (ArtistPolicy), bukan di skema. Lihat PRD 7.3 F3.6-F3.9.
+--
+-- KEY MODE SISTEM (v1.3, 2026-09-03) — 'system_mode' (value='demo'|'live',
+-- type=string, group=system). Menentukan mode aktif yang dibaca
+-- App\Support\ModeGate; TIDAK ADA di baris ini berarti default 'live'.
+-- Lihat catatan "MODE DEMO/LIVE" di bagian bawah dokumen.
 
 -- Kanal pembayaran non-tunai: rekening bank dan QR e-wallet.
 -- CATATAN KEAMANAN (area risiko: perlindungan data) — nomor rekening
@@ -110,6 +126,8 @@ CREATE TABLE payment_channels (
     (type = 'qr_ewallet'    AND qr_image_path  IS NOT NULL)
   )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- CATATAN (v1.3) — TIDAK memegang data_mode. Konfigurasi rekening/QR toko
+-- adalah data administratif, sama seperti users/settings.
 
 CREATE TABLE activity_logs (
   id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -126,6 +144,9 @@ CREATE TABLE activity_logs (
   KEY idx_logs_user_time (user_id, created_at),
   CONSTRAINT fk_logs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- CATATAN (v1.3) — TIDAK memegang data_mode SENGAJA. Jejak "siapa mengubah
+-- apa dan kapan" (termasuk perubahan system_mode itu sendiri) harus tetap
+-- terlihat lintas mode, bukan ikut tersembunyi saat mode berpindah.
 
 
 -- =====================================================================
@@ -141,12 +162,14 @@ CREATE TABLE artists (
   contact_email     VARCHAR(100)    NULL,
   notes             TEXT            NULL,
   is_active         TINYINT(1)      NOT NULL DEFAULT 1,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live' COMMENT 'v1.3 — lihat catatan MODE DEMO/LIVE',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   deleted_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_artists_code (code),
-  KEY idx_artists_active (is_active)
+  KEY idx_artists_active (is_active),
+  KEY idx_artists_data_mode (data_mode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE categories (
@@ -156,12 +179,14 @@ CREATE TABLE categories (
   parent_id         BIGINT UNSIGNED NULL,
   display_order     SMALLINT        NOT NULL DEFAULT 0,
   is_active         TINYINT(1)      NOT NULL DEFAULT 1,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   deleted_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_categories_code (code),
   KEY idx_categories_parent (parent_id),
+  KEY idx_categories_data_mode (data_mode),
   CONSTRAINT fk_categories_parent FOREIGN KEY (parent_id) REFERENCES categories(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -177,6 +202,7 @@ CREATE TABLE products (
   is_preorder       TINYINT(1)      NOT NULL DEFAULT 0 COMMENT 'Produk dijual sebagai pre-order, bukan stok ready',
   preorder_eta      DATE            NULL,
   is_active         TINYINT(1)      NOT NULL DEFAULT 1,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   deleted_at        TIMESTAMP       NULL,
@@ -185,6 +211,7 @@ CREATE TABLE products (
   KEY idx_products_artist (artist_id),
   KEY idx_products_category (category_id),
   KEY idx_products_active (is_active, is_preorder),
+  KEY idx_products_data_mode (data_mode),
   CONSTRAINT fk_products_artist   FOREIGN KEY (artist_id)   REFERENCES artists(id)    ON DELETE RESTRICT,
   CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -199,6 +226,7 @@ CREATE TABLE product_variants (
   current_stock     INT             NOT NULL DEFAULT 0 COMMENT 'Nilai cepat baca. Sumber kebenaran ada di stock_movements.',
   low_stock_alert   INT             NULL COMMENT 'Ambang peringatan stok menipis',
   is_active         TINYINT(1)      NOT NULL DEFAULT 1,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   deleted_at        TIMESTAMP       NULL,
@@ -206,6 +234,7 @@ CREATE TABLE product_variants (
   UNIQUE KEY uk_variants_sku (sku),
   KEY idx_variants_product (product_id),
   KEY idx_variants_active (is_active),
+  KEY idx_variants_data_mode (data_mode),
   CONSTRAINT fk_variants_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,
   CONSTRAINT chk_variants_price CHECK (sell_price >= 0 AND cost_price >= 0)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -217,12 +246,14 @@ CREATE TABLE customers (
   email             VARCHAR(100)    NULL,
   social_handle     VARCHAR(100)    NULL COMMENT 'Akun media sosial, kanal kontak utama komunitas',
   notes             TEXT            NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   deleted_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   KEY idx_customers_phone (phone),
-  KEY idx_customers_name (name)
+  KEY idx_customers_name (name),
+  KEY idx_customers_data_mode (data_mode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 -- CATATAN PERLINDUNGAN DATA — tabel ini memuat data pribadi. Kolom phone,
 -- email, dan social_handle tidak boleh muncul pada laporan atau ekspor
@@ -242,12 +273,14 @@ CREATE TABLE events (
   status            ENUM('draft','active','closed','cancelled') NOT NULL DEFAULT 'draft',
   event_cost        DECIMAL(14,2)   NOT NULL DEFAULT 0.00 COMMENT 'Biaya booth, transport, dan lainnya',
   notes             TEXT            NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   deleted_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   KEY idx_events_status (status),
   KEY idx_events_dates (start_date, end_date),
+  KEY idx_events_data_mode (data_mode),
   CONSTRAINT chk_events_dates CHECK (end_date >= start_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -263,11 +296,13 @@ CREATE TABLE cashier_sessions (
   cash_difference   DECIMAL(14,2)   NULL COMMENT 'closing_cash - expected_cash. Negatif berarti kurang.',
   status            ENUM('open','closed') NOT NULL DEFAULT 'open',
   notes             TEXT            NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   KEY idx_sessions_event (event_id),
   KEY idx_sessions_user_status (user_id, status),
+  KEY idx_sessions_data_mode (data_mode),
   CONSTRAINT fk_sessions_event FOREIGN KEY (event_id) REFERENCES events(id) ON DELETE RESTRICT,
   CONSTRAINT fk_sessions_user  FOREIGN KEY (user_id)  REFERENCES users(id)  ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -298,6 +333,7 @@ CREATE TABLE orders (
   void_reason       VARCHAR(255)    NULL,
   local_ref         CHAR(36)        NULL COMMENT 'Identitas unik dari perangkat, cadangan bila kelak multi-perangkat',
   notes             TEXT            NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
@@ -307,6 +343,7 @@ CREATE TABLE orders (
   KEY idx_orders_session (session_id),
   KEY idx_orders_customer (customer_id),
   KEY idx_orders_created (created_at),
+  KEY idx_orders_data_mode (data_mode),
   CONSTRAINT fk_orders_event    FOREIGN KEY (event_id)    REFERENCES events(id)           ON DELETE RESTRICT,
   CONSTRAINT fk_orders_session  FOREIGN KEY (session_id)  REFERENCES cashier_sessions(id) ON DELETE RESTRICT,
   CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customers(id)        ON DELETE SET NULL,
@@ -325,12 +362,14 @@ CREATE TABLE order_items (
   sell_price        DECIMAL(14,2)   NOT NULL COMMENT 'Snapshot harga jual final saat transaksi',
   discount_amount   DECIMAL(14,2)   NOT NULL DEFAULT 0.00,
   line_total        DECIMAL(14,2)   NOT NULL COMMENT '(sell_price * qty) - discount_amount',
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live' COMMENT 'Selalu sama dengan data_mode order induknya',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   KEY idx_items_order (order_id),
   KEY idx_items_variant (variant_id),
   KEY idx_items_artist (artist_id),
+  KEY idx_items_data_mode (data_mode),
   CONSTRAINT fk_items_order   FOREIGN KEY (order_id)   REFERENCES orders(id)           ON DELETE RESTRICT,
   CONSTRAINT fk_items_variant FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE RESTRICT,
   CONSTRAINT fk_items_artist  FOREIGN KEY (artist_id)  REFERENCES artists(id)          ON DELETE RESTRICT,
@@ -358,6 +397,7 @@ CREATE TABLE preorders (
   expected_date     DATE            NULL,
   cancel_reason     VARCHAR(255)    NULL,
   notes             TEXT            NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
@@ -365,6 +405,7 @@ CREATE TABLE preorders (
   KEY idx_preorders_status (status),
   KEY idx_preorders_customer (customer_id),
   KEY idx_preorders_event (event_id),
+  KEY idx_preorders_data_mode (data_mode),
   CONSTRAINT fk_preorders_event    FOREIGN KEY (event_id)    REFERENCES events(id)    ON DELETE SET NULL,
   CONSTRAINT fk_preorders_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
   CONSTRAINT fk_preorders_user     FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE RESTRICT
@@ -384,12 +425,14 @@ CREATE TABLE preorder_items (
   cost_price        DECIMAL(14,2)   NOT NULL,
   sell_price        DECIMAL(14,2)   NOT NULL,
   line_total        DECIMAL(14,2)   NOT NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live' COMMENT 'Selalu sama dengan data_mode preorder induknya',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   KEY idx_po_items_preorder (preorder_id),
   KEY idx_po_items_variant (variant_id),
   KEY idx_po_items_artist (artist_id),
+  KEY idx_po_items_data_mode (data_mode),
   CONSTRAINT fk_po_items_preorder FOREIGN KEY (preorder_id) REFERENCES preorders(id)        ON DELETE RESTRICT,
   CONSTRAINT fk_po_items_variant  FOREIGN KEY (variant_id)  REFERENCES product_variants(id) ON DELETE RESTRICT,
   CONSTRAINT fk_po_items_artist   FOREIGN KEY (artist_id)   REFERENCES artists(id)          ON DELETE RESTRICT,
@@ -412,11 +455,13 @@ CREATE TABLE shipments (
   shipped_at        TIMESTAMP       NULL,
   delivered_at      TIMESTAMP       NULL,
   notes             TEXT            NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_shipments_preorder (preorder_id) COMMENT 'Satu pre-order satu pengiriman pada v1',
   KEY idx_shipments_status (status),
+  KEY idx_shipments_data_mode (data_mode),
   CONSTRAINT fk_shipments_preorder FOREIGN KEY (preorder_id) REFERENCES preorders(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 -- CATATAN PERLINDUNGAN DATA — alamat pengiriman adalah data pribadi.
@@ -441,12 +486,14 @@ CREATE TABLE payments (
   reject_reason     VARCHAR(255)    NULL,
   paid_at           TIMESTAMP       NOT NULL,
   notes             TEXT            NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live' COMMENT 'Selalu sama dengan data_mode order/preorder induknya',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   KEY idx_payments_order (order_id),
   KEY idx_payments_preorder (preorder_id),
   KEY idx_payments_method (method, verification),
+  KEY idx_payments_data_mode (data_mode),
   CONSTRAINT fk_payments_order    FOREIGN KEY (order_id)    REFERENCES orders(id)            ON DELETE RESTRICT,
   CONSTRAINT fk_payments_preorder FOREIGN KEY (preorder_id) REFERENCES preorders(id)         ON DELETE RESTRICT,
   CONSTRAINT fk_payments_channel  FOREIGN KEY (channel_id)  REFERENCES payment_channels(id)  ON DELETE RESTRICT,
@@ -471,9 +518,11 @@ CREATE TABLE payment_proofs (
   file_size         INT UNSIGNED    NOT NULL COMMENT 'Byte, setelah kompresi',
   captured_via      ENUM('webcam','upload') NOT NULL,
   uploaded_by       BIGINT UNSIGNED NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live' COMMENT 'Selalu sama dengan data_mode payment induknya. Berkas fisik di disk tidak ikut disaring — hanya baris DB ini.',
   created_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   KEY idx_proofs_payment (payment_id),
+  KEY idx_proofs_data_mode (data_mode),
   CONSTRAINT fk_proofs_payment  FOREIGN KEY (payment_id)  REFERENCES payments(id) ON DELETE RESTRICT,
   CONSTRAINT fk_proofs_uploader FOREIGN KEY (uploaded_by) REFERENCES users(id)    ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -502,11 +551,13 @@ CREATE TABLE stock_movements (
   reference_id      BIGINT UNSIGNED NULL,
   reason            VARCHAR(255)    NULL COMMENT 'Wajib diisi untuk type = adjustment',
   user_id           BIGINT UNSIGNED NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live' COMMENT 'Diisi sekali saat insert; tabel ini append-only, kolom ini tidak pernah di-UPDATE',
   created_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   KEY idx_movements_variant_time (variant_id, created_at),
   KEY idx_movements_type (type),
   KEY idx_movements_reference (reference_type, reference_id),
+  KEY idx_movements_data_mode (data_mode),
   CONSTRAINT fk_movements_variant FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE RESTRICT,
   CONSTRAINT fk_movements_user    FOREIGN KEY (user_id)    REFERENCES users(id)            ON DELETE SET NULL,
   CONSTRAINT chk_movements_change CHECK (qty_change <> 0)
@@ -532,11 +583,13 @@ CREATE TABLE artist_settlements (
   calculated_at     TIMESTAMP       NULL COMMENT 'Kapan angka terakhir dihitung ulang',
   paid_at           TIMESTAMP       NULL,
   notes             TEXT            NULL,
+  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live' COMMENT 'Selalu sama dengan data_mode event induknya',
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_settlements_event_artist (event_id, artist_id),
   KEY idx_settlements_status (status),
+  KEY idx_settlements_data_mode (data_mode),
   CONSTRAINT fk_settlements_event  FOREIGN KEY (event_id)  REFERENCES events(id)  ON DELETE RESTRICT,
   CONSTRAINT fk_settlements_artist FOREIGN KEY (artist_id) REFERENCES artists(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -566,10 +619,12 @@ CREATE TABLE vendors (
   contact_email VARCHAR(100) NULL,
   notes TEXT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
+  data_mode ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   deleted_at TIMESTAMP NULL,
-  KEY idx_vendors_is_active (is_active)
+  KEY idx_vendors_is_active (is_active),
+  KEY idx_vendors_data_mode (data_mode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE materials (
@@ -579,10 +634,12 @@ CREATE TABLE materials (
   unit VARCHAR(20) NOT NULL,        -- bebas: pcs, gram, meter, lembar, ...
   notes TEXT NULL,
   is_active TINYINT(1) NOT NULL DEFAULT 1,
+  data_mode ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   deleted_at TIMESTAMP NULL,
-  KEY idx_materials_is_active (is_active)
+  KEY idx_materials_is_active (is_active),
+  KEY idx_materials_data_mode (data_mode)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE vendor_material_prices (
@@ -592,10 +649,12 @@ CREATE TABLE vendor_material_prices (
   price DECIMAL(14,2) NOT NULL,
   is_preferred TINYINT(1) NOT NULL DEFAULT 0,  -- satu preferred per bahan, ditegakkan di app layer
   notes TEXT NULL,
+  data_mode ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   UNIQUE KEY uk_vendor_material (vendor_id, material_id),
   KEY idx_vmp_material (material_id),
+  KEY idx_vmp_data_mode (data_mode),
   CONSTRAINT fk_vmp_vendor   FOREIGN KEY (vendor_id)   REFERENCES vendors(id)   ON DELETE RESTRICT,
   CONSTRAINT fk_vmp_material FOREIGN KEY (material_id) REFERENCES materials(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -608,9 +667,11 @@ CREATE TABLE product_variant_bom_lines (
   material_id BIGINT UNSIGNED NOT NULL,
   qty_needed DECIMAL(12,4) NOT NULL,  -- per satu unit produk jadi; boleh pecahan
   notes TEXT NULL,
+  data_mode ENUM('demo','live') NOT NULL DEFAULT 'live',
   created_at TIMESTAMP NULL,
   updated_at TIMESTAMP NULL,
   UNIQUE KEY uk_bom_variant_material (product_variant_id, material_id),
+  KEY idx_bom_data_mode (data_mode),
   CONSTRAINT fk_bom_variant  FOREIGN KEY (product_variant_id) REFERENCES product_variants(id) ON DELETE CASCADE,
   CONSTRAINT fk_bom_material FOREIGN KEY (material_id)        REFERENCES materials(id)        ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -618,6 +679,42 @@ CREATE TABLE product_variant_bom_lines (
 -- disimpan sebagai kolom; selalu dihitung on-the-fly oleh
 -- App\Services\BomCostCalculator dan TIDAK PERNAH menimpa
 -- product_variants.cost_price (lihat dokblok kelas itu untuk alasannya).
+
+
+-- =====================================================================
+-- MODE DEMO/LIVE & SEED DATA "SAKANA FRIDGE" (ditambahkan pasca-MVP,
+-- 2026-09-03 — lihat specs/003-seed-demo-live/)
+-- =====================================================================
+-- Setiap tabel data bisnis/transaksional di atas (20 tabel: events,
+-- artists, categories, products, product_variants, customers, vendors,
+-- materials, vendor_material_prices, product_variant_bom_lines,
+-- cashier_sessions, orders, order_items, preorders, preorder_items,
+-- shipments, payments, payment_proofs, stock_movements,
+-- artist_settlements) memegang kolom `data_mode ENUM('demo','live')
+-- NOT NULL DEFAULT 'live'`.
+--
+-- Baris `data_mode = 'demo'` adalah data contoh (lihat seeder
+-- `database/seeders/SakanaFridgeDemoSeeder.php` — toko dummy bernama
+-- "Demo Sakana Fridge"); baris `data_mode = 'live'` adalah data toko
+-- sungguhan. Mode aktif disimpan sebagai satu baris lagi pada tabel
+-- `settings` yang sudah ada (`key = 'system_mode'`, value 'demo'/'live',
+-- default 'live' bila baris ini belum pernah dibuat), dibaca lewat
+-- `App\Support\ModeGate` — pola yang identik dengan
+-- `multi_artist_enabled`/`LicenseGate`.
+--
+-- Baris baru pada 20 tabel ini SELALU dicap otomatis dengan mode yang
+-- sedang aktif saat dibuat (lewat trait `App\Models\Concerns\HasDataMode`
+-- yang dipasang pada setiap model bersangkutan), dan pembacaan data
+-- SELALU disaring lewat scope global yang sama — bukan kolom kosmetik,
+-- ini satu-satunya mekanisme yang mencegah data contoh dan data
+-- sungguhan tercampur di daftar, layar POS, maupun laporan keuangan.
+-- Lihat specs/003-seed-demo-live/data-model.md dan research.md untuk
+-- rancangan lengkap (termasuk `ModeGate::runAs()` yang dipakai seeder
+-- agar tidak bergantung pada mode aktif saat itu).
+--
+-- TIDAK memegang data_mode secara SENGAJA: users, roles, settings,
+-- activity_logs, payment_channels — data administratif ini sama di
+-- kedua mode.
 
 
 -- =====================================================================
@@ -647,26 +744,27 @@ CREATE TABLE product_variant_bom_lines (
 -- =====================================================================
 -- CONTOH KUERI KUNCI
 -- =====================================================================
--- 1) Rekap hasil per artist untuk satu event
+-- 1) Rekap hasil per artist untuk satu event (mode aktif saja)
 -- SELECT a.name, SUM(oi.qty) AS units, SUM(oi.line_total) AS total_sales
 -- FROM order_items oi
 -- JOIN orders o  ON o.id = oi.order_id AND o.status = 'completed'
 -- JOIN artists a ON a.id = oi.artist_id
--- WHERE o.event_id = ?
+-- WHERE o.event_id = ? AND o.data_mode = ? AND a.data_mode = o.data_mode
 -- GROUP BY a.id, a.name
 -- ORDER BY total_sales DESC;
 --
--- 2) Laba kotor per event, memakai harga snapshot
+-- 2) Laba kotor per event, memakai harga snapshot (mode aktif saja)
 -- SELECT SUM(oi.line_total) AS revenue,
 --        SUM(oi.cost_price * oi.qty) AS cost,
 --        SUM(oi.line_total) - SUM(oi.cost_price * oi.qty) AS gross_profit
 -- FROM order_items oi
 -- JOIN orders o ON o.id = oi.order_id AND o.status = 'completed'
--- WHERE o.event_id = ?;
+-- WHERE o.event_id = ? AND o.data_mode = ?;
 --
--- 3) Verifikasi konsistensi stok terhadap buku besar
+-- 3) Verifikasi konsistensi stok terhadap buku besar (mode aktif saja)
 -- SELECT v.sku, v.current_stock, COALESCE(SUM(sm.qty_change), 0) AS ledger_stock
 -- FROM product_variants v
--- LEFT JOIN stock_movements sm ON sm.variant_id = v.id
+-- LEFT JOIN stock_movements sm ON sm.variant_id = v.id AND sm.data_mode = v.data_mode
+-- WHERE v.data_mode = ?
 -- GROUP BY v.id, v.sku, v.current_stock
 -- HAVING v.current_stock <> ledger_stock;

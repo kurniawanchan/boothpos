@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Concerns\DataModeScope;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Validation\ValidationException;
@@ -44,7 +45,11 @@ class ProductCodeGenerator
             throw new \InvalidArgumentException('Kombinasi kode artist, kategori, dan segmen produk harus menghasilkan 8 karakter.');
         }
 
-        if (Product::withTrashed()->where('code_prefix', $prefix)->exists()) {
+        // 003-seed-demo-live — withoutGlobalScope: code_prefix UNIQUE lintas
+        // SELURUH tabel (bukan per data_mode), jadi pengecekan tabrakan di
+        // sini juga harus lintas mode, sama seperti alasan di
+        // OrderService::generateOrderNumber().
+        if (Product::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code_prefix', $prefix)->exists()) {
             throw ValidationException::withMessages([
                 'product_segment' => "Kombinasi kode ini ({$prefix}) sudah dipakai produk lain. Ubah segmen nama produk secara manual.",
             ]);

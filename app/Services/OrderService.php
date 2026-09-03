@@ -3,9 +3,12 @@
 namespace App\Services;
 
 use App\Models\CashierSession;
+use App\Models\Concerns\DataModeScope;
+use App\Models\Customer;
 use App\Models\Order;
 use App\Models\ProductVariant;
 use App\Models\User;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -42,6 +45,24 @@ class OrderService
             throw ValidationException::withMessages([
                 'session_id' => __('orders_payments.session_not_open'),
             ]);
+        }
+
+        // 003-seed-demo-live (US3, research.md Decision 3) — 'customer_id'
+        // ditulis langsung ke Order::create() tanpa lookup Eloquent apa pun
+        // (beda dengan session_id/variant_id di atas/bawah yang sudah aman
+        // lewat findOrFail() terhadap model ber-HasDataMode). Validasi
+        // `exists:customers,id` di StoreOrderRequest juga tidak menolong —
+        // rule bawaan Laravel itu memakai query mentah yang tidak ikut
+        // Eloquent global scope, jadi id customer DEMO tetap lolos selagi
+        // LIVE aktif (atau sebaliknya) tanpa pengecekan eksplisit ini.
+        if (! empty($data['customer_id'])) {
+            try {
+                Customer::findOrFail($data['customer_id']);
+            } catch (ModelNotFoundException) {
+                throw ValidationException::withMessages([
+                    'customer_id' => __('orders_payments.customer_not_found'),
+                ]);
+            }
         }
 
         return DB::transaction(function () use ($data, $cashier, $session) {
@@ -181,10 +202,25 @@ class OrderService
      * hanya dipakai untuk tampilan struk/pencarian manusia, bukan kunci
      * bisnis. Perlu dikonfirmasi bila tim menginginkan reset per-event.
      */
+    /**
+     * 003-seed-demo-live — BUG YANG DITEMUKAN & DIPERBAIKI: `orders.
+     * order_number` bersifat UNIQUE lintas SELURUH tabel (tidak ada
+     * data_mode pada constraint-nya), tapi hitungan di sini sebelumnya
+     * lewat `Order::whereDate(...)->count()` yang otomatis disaring
+     * DataModeScope ke mode aktif saja. Akibatnya order DEMO dan LIVE
+     * pada hari yang sama sama-sama mulai menghitung dari 0 dan
+     * bertabrakan di nomor urut yang sama (mis. dua-duanya jadi
+     * TRX-20260903-0001), gagal INSERT dengan galat integritas.
+     * `withoutGlobalScope` di sini bukan kebocoran data lintas mode —
+     * nomor struk memang harus unik lintas seluruh instalasi, terlepas
+     * dari mode, sesuai constraint database itu sendiri.
+     */
     private function generateOrderNumber(): string
     {
         $today = now()->format('Ymd');
-        $countToday = Order::whereDate('created_at', now()->toDateString())->count();
+        $countToday = Order::withoutGlobalScope(DataModeScope::class)
+            ->whereDate('created_at', now()->toDateString())
+            ->count();
 
         return sprintf('TRX-%s-%04d', $today, $countToday + 1);
     }

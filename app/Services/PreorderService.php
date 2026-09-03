@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\Concerns\DataModeScope;
+use App\Models\Customer;
 use App\Models\Preorder;
 use App\Models\ProductVariant;
 use App\Models\User;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -21,6 +24,17 @@ class PreorderService
      */
     public function create(array $data, User $user): Preorder
     {
+        // 003-seed-demo-live — sama seperti OrderService::create(): tanpa
+        // lookup Eloquent ini, 'customer_id' lintas mode lolos begitu saja
+        // (lihat komentar lengkap di OrderService).
+        try {
+            Customer::findOrFail($data['customer_id']);
+        } catch (ModelNotFoundException) {
+            throw ValidationException::withMessages([
+                'customer_id' => __('preorders.customer_not_found'),
+            ]);
+        }
+
         return DB::transaction(function () use ($data, $user) {
             $subtotal = 0;
             $lineData = [];
@@ -132,10 +146,14 @@ class PreorderService
         });
     }
 
+    /** 003-seed-demo-live — sama seperti OrderService::generateOrderNumber(): `preorder_number` unik lintas seluruh tabel, jadi hitungannya HARUS lintas mode juga. */
     private function generateNumber(): string
     {
         $today = now()->format('Ymd');
-        $countToday = Preorder::whereDate('created_at', now()->toDateString())->count();
+        $countToday = Preorder::withoutGlobalScope(DataModeScope::class)
+            ->whereDate('created_at', now()->toDateString())
+            ->count();
+
         return sprintf('PO-%s-%04d', $today, $countToday + 1);
     }
 }

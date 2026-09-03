@@ -108,6 +108,7 @@ async function afterImport() {
 }
 
 const columns = computed(() => [
+  { key: 'image_url', label: '' },
   { key: 'code_prefix', label: t('master_data.col_code') },
   { key: 'name', label: t('master_data.col_product_name') },
   { key: 'artist_name', label: t('master_data.col_artist') },
@@ -319,8 +320,6 @@ async function performDelete() {
           @input="debouncedSearch"
         />
       </div>
-      <BaseSelect class="w-48" v-model="artistFilter" :placeholder="t('master_data.all_artists')" :options="artists.map((a) => ({ value: a.id, label: a.name }))" @update:model-value="applyFilters" />
-      <BaseSelect class="w-48" v-model="categoryFilter" :placeholder="t('master_data.all_categories')" :options="categories.map((c) => ({ value: c.id, label: c.name }))" @update:model-value="applyFilters" />
       <template v-if="auth.canAccessMenu('products')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
@@ -337,8 +336,58 @@ async function performDelete() {
       </template>
     </div>
 
+    <!-- 004-sidebar-menu-reorg (US5, FR-007) — chip filters replacing the
+         previous BaseSelect dropdowns, mirroring PosView.vue's existing
+         category-chip pattern exactly (see contracts/ui-contract.md). -->
+    <div class="flex flex-wrap gap-1.5">
+      <button
+        type="button"
+        class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
+        :class="!artistFilter ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
+        @click="artistFilter = ''; applyFilters()"
+      >
+        {{ t('master_data.all_artists') }}
+      </button>
+      <button
+        v-for="a in artists"
+        :key="a.id"
+        type="button"
+        class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
+        :class="artistFilter === a.id ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
+        @click="artistFilter = a.id; applyFilters()"
+      >
+        {{ a.name }}
+      </button>
+    </div>
+    <div class="flex flex-wrap gap-1.5">
+      <button
+        type="button"
+        class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
+        :class="!categoryFilter ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
+        @click="categoryFilter = ''; applyFilters()"
+      >
+        {{ t('master_data.all_categories') }}
+      </button>
+      <button
+        v-for="c in categories"
+        :key="c.id"
+        type="button"
+        class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
+        :class="categoryFilter === c.id ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
+        @click="categoryFilter = c.id; applyFilters()"
+      >
+        {{ c.name }}
+      </button>
+    </div>
+
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
       <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_products')">
+        <template #cell-image_url="{ row }">
+          <img v-if="row.image_url" :src="row.image_url" :alt="row.name" class="h-9 w-9 rounded-md border border-line-2 object-cover" />
+          <div v-else class="flex h-9 w-9 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
+            <i class="ph-duotone ph-image text-[16px]" aria-hidden="true"></i>
+          </div>
+        </template>
         <template #cell-code_prefix="{ row }"><span class="font-mono text-[12px] font-bold text-brand-active">{{ row.code_prefix }}</span></template>
         <template #cell-is_preorder="{ row }">
           <StatusPill :variant="row.is_preorder ? 'warn' : 'neutral'">{{ row.is_preorder ? t('master_data.preorder') : t('master_data.ready_stock') }}</StatusPill>

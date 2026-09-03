@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Policies\UserPolicy;
 use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
+use App\Support\ModeGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,9 @@ class UserController extends Controller
 
         $users = User::query()
             ->with('role')
+            // 003-seed-demo-live follow-up (FR-017) — daftar tampilan
+            // saja; TIDAK memengaruhi login (lihat catatan di User model).
+            ->where('data_mode', ModeGate::current())
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = '%'.$request->string('search').'%';
                 $q->where(fn ($qq) => $qq->where('name', 'like', $term)->orWhere('username', 'like', $term));

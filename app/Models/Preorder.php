@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Preorder extends Model
 {
+    use HasDataMode;
+
     protected $fillable = [
         'preorder_number', 'event_id', 'customer_id', 'user_id', 'status', 'fulfillment',
         'subtotal', 'shipping_cost', 'total_amount', 'paid_amount', 'expected_date',
