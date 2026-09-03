@@ -2,10 +2,22 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listPreorders, getPreorder, createPreorder, updatePreorderStatus, createPreorderPayment } from '../api/preorders';
+import {
+  listPreorders,
+  getPreorder,
+  createPreorder,
+  updatePreorderStatus,
+  createPreorderPayment,
+  exportPreorders,
+  downloadPreorderImportTemplate,
+  importPreorders,
+  resendPreorderNotification,
+} from '../api/preorders';
 import { createShipment, updateShipment } from '../api/shipments';
 import { lookupVariants } from '../api/products';
 import { useToastStore } from '../stores/toast';
+import { useAuthStore } from '../stores/auth';
+import PreorderInvoiceModal from '../components/preorder/PreorderInvoiceModal.vue';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDate, formatDateTime } from '../utils/date';
@@ -24,7 +36,13 @@ import RecordPaymentModal from '../components/payment/RecordPaymentModal.vue';
 import PreorderStatusStepper from '../components/preorder/PreorderStatusStepper.vue';
 
 const toast = useToastStore();
+const auth = useAuthStore();
 const { t } = useI18n();
+// 007-preorder-import-export-notify (FR-015) — export/import/resend
+// dibatasi owner/admin saja, meski menu_key 'preorders' sendiri masih
+// dipakai bersama kasir/inventory untuk CRUD dasar (server menegakkan
+// isOwnerOrAdmin() secara terpisah; ini hanya cermin kosmetik).
+const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));
 
 const STATUS_LABEL = computed(() => ({
   ordered: t('preorders.step_ordered'),
@@ -40,8 +58,13 @@ const FULFILLMENT_LABEL = computed(() => ({
   courier: t('preorders.fulfillment_courier'),
 }));
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listPreorders);
+const { items, meta, loading, load, setPage, setFilter, params } = usePaginatedList(listPreorders);
 onMounted(load);
+
+// 007-preorder-import-export-notify (US1) — pencarian nama pelanggan,
+// debounced sama seperti pola pencarian ProductsView.vue.
+const customerSearch = ref('');
+const debouncedCustomerSearch = useDebouncedFn(() => setFilter({ search: customerSearch.value || undefined }), 300);
 
 const columns = computed(() => [
   { key: 'preorder_number', label: t('preorders.col_number') },
@@ -155,6 +178,100 @@ const shipmentForm = reactive({
   notes: '',
 });
 const savingShipment = ref(false);
+
+// --- Print invoice/receipt (US2) -----------------------------------------
+const showInvoiceModal = ref(false);
+const invoicePreorderId = ref(null);
+
+function openInvoice(row) {
+  invoicePreorderId.value = row.id;
+  showInvoiceModal.value = true;
+}
+
+// --- Export/import (US3) --------------------------------------------------
+const exporting = ref(false);
+const importFileInput = ref(null);
+const importing = ref(false);
+
+async function doExportPreorders() {
+  exporting.value = true;
+  try {
+    // 007-preorder-import-export-notify (US3, Acceptance Scenario 1) —
+    // ekspor menghormati filter yang sedang aktif, dibaca langsung dari
+    // params reaktif usePaginatedList (satu-satunya sumber "apa yang
+    // sedang aktif" saat ini, bukan disalin ke ref terpisah).
+    const blob = await exportPreorders({ ...params });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'preorders.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    toast.error(err.message || t('preorders.export_failed'));
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function doDownloadImportTemplate() {
+  const blob = await downloadPreorderImportTemplate();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'template-preorders.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function triggerImportFile() {
+  importFileInput.value?.click();
+}
+
+async function onImportFileSelected(e) {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  importing.value = true;
+  try {
+    const result = await importPreorders(file);
+    toast.success(t('preorders.import_success', { count: result.created_count }));
+    await load();
+  } catch (err) {
+    if (err.status === 409 && err.data?.row_errors) {
+      const rowErrors = err.data.row_errors;
+      const first = rowErrors[0];
+      const suffix = rowErrors.length > 1 ? t('preorders.import_more_rows_failed', { count: rowErrors.length - 1 }) : '';
+      toast.error(t('preorders.import_row_error', { row: first.row, error: first.errors[0] }) + suffix, { timeout: 12000 });
+    } else {
+      toast.error(err.message || t('preorders.import_failed'));
+    }
+  } finally {
+    importing.value = false;
+  }
+}
+
+// --- Notification resend (US4) --------------------------------------------
+const resendingNotification = ref(false);
+
+async function doResendNotification() {
+  if (!detail.value) return;
+  resendingNotification.value = true;
+  try {
+    const result = await resendPreorderNotification(detail.value.id);
+    detail.value.latest_notification = { trigger: 'manual_resend', status: result.status, sent_at: result.sent_at, error_message: null };
+    if (result.status === 'sent') toast.success(t('preorders.notification_resent'));
+    else toast.warning(t(`preorders.notification_status_${result.status}`));
+  } catch (err) {
+    toast.error(err.message || t('preorders.notification_resend_failed'));
+  } finally {
+    resendingNotification.value = false;
+  }
+}
 
 async function openDetail(row) {
   showDetail.value = true;
@@ -293,6 +410,17 @@ async function markDelivered() {
 <template>
   <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
     <div class="flex flex-wrap items-center gap-2.5">
+      <div class="relative flex min-w-[230px] items-center">
+        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
+        <label class="sr-only" for="preorder-customer-search">{{ t('preorders.search_customer_name') }}</label>
+        <input
+          id="preorder-customer-search"
+          v-model="customerSearch"
+          :placeholder="t('preorders.search_customer_name_placeholder')"
+          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
+          @input="debouncedCustomerSearch"
+        />
+      </div>
       <BaseSelect
         class="w-48"
         :placeholder="t('preorders.all_status')"
@@ -306,6 +434,20 @@ async function markDelivered() {
         @update:model-value="(v) => setFilter({ fulfillment: v || undefined })"
       />
       <span class="flex-1"></span>
+      <template v-if="isOwnerOrAdmin">
+        <BaseButton variant="secondary" :loading="exporting" @click="doExportPreorders">
+          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+          {{ t('preorders.export_action') }}
+        </BaseButton>
+        <BaseButton variant="secondary" @click="triggerImportFile">
+          <i class="ph-duotone ph-upload-simple text-[16px]" aria-hidden="true"></i>
+          {{ t('preorders.import_action') }}
+        </BaseButton>
+        <button type="button" class="text-[12px] font-semibold text-muted-4 underline hover:text-brand-active" @click="doDownloadImportTemplate">
+          {{ t('preorders.download_template_action') }}
+        </button>
+        <input ref="importFileInput" type="file" accept=".xlsx" class="hidden" @change="onImportFileSelected" />
+      </template>
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('preorders.new_preorder') }}
@@ -320,7 +462,10 @@ async function markDelivered() {
         <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
         <template #cell-outstanding="{ row }">{{ formatIDR(row.outstanding) }}</template>
         <template #cell-actions="{ row }">
-          <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openDetail(row)">{{ t('preorders.detail') }}</button>
+          <div class="flex items-center justify-end gap-3">
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openInvoice(row)">{{ t('preorders.print_action') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openDetail(row)">{{ t('preorders.detail') }}</button>
+          </div>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
@@ -442,6 +587,26 @@ async function markDelivered() {
               {{ t('preorders.record_settlement') }}
             </BaseButton>
           </div>
+
+          <!-- 007-preorder-import-export-notify (US4) — hanya owner/admin,
+               menyamai gerbang server-side isOwnerOrAdmin() (bukan pura-pura
+               tersedia lalu ditolak 403, per Constitution III). -->
+          <div v-if="isOwnerOrAdmin" class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-5">
+            <span class="text-[14.5px] font-bold">{{ t('preorders.notification_section_title') }}</span>
+            <div v-if="detail.latest_notification" class="flex items-center gap-2 text-[12.5px]">
+              <i
+                class="ph-duotone text-[16px]"
+                :class="detail.latest_notification.status === 'sent' ? 'ph-check-circle text-brand-active' : detail.latest_notification.status === 'failed' ? 'ph-x-circle text-danger-text' : 'ph-warning-circle text-warn-text'"
+                aria-hidden="true"
+              ></i>
+              <span>{{ t(`preorders.notification_status_${detail.latest_notification.status}`) }}</span>
+            </div>
+            <p v-else class="text-[12px] text-muted-3">{{ t('preorders.notification_none_yet') }}</p>
+            <BaseButton variant="secondary" size="sm" :loading="resendingNotification" @click="doResendNotification">
+              <i class="ph-duotone ph-paper-plane-tilt text-[15px]" aria-hidden="true"></i>
+              {{ t('preorders.resend_notification_action') }}
+            </BaseButton>
+          </div>
         </div>
 
         <div v-if="detail.fulfillment === 'courier'" class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
@@ -507,6 +672,12 @@ async function markDelivered() {
       :title="t('preorders.record_preorder_settlement')"
       @close="showRecordPayment = false"
       @submit="submitPayment"
+    />
+
+    <PreorderInvoiceModal
+      :open="showInvoiceModal"
+      :preorder-id="invoicePreorderId"
+      @close="showInvoiceModal = false"
     />
   </div>
 </template>

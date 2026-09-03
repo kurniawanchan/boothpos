@@ -209,8 +209,30 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/006-purchase-order-and-ops/plan.md` (branch
-`006-purchase-order-and-ops`) — Purchase Orders, Store Customization,
+Active feature plan: `specs/007-preorder-import-export-notify/plan.md`
+(branch `007-preorder-import-export-notify`) — Pre-order search by
+customer name, status-appropriate printable invoice/receipt (client-side,
+mirroring `ReceiptModal.vue`/the PO invoice), export/import via a
+**separate, single-sheet workbook** (not a fifth sheet in
+`MasterDataSheets::ORDER` — pre-orders are transactional, not master,
+data), and email notification on status change + on-demand resend,
+backed by a new `preorder_notifications` audit table so a failed/skipped
+send is always visible, never silent. Imported pre-orders always start at
+`status = 'ordered'` with recorded (not re-priced) historical amounts —
+a deliberate, documented exception to this codebase's usual "server
+always recomputes money" rule, since import is backfilling orders that
+already happened elsewhere, possibly at a different price than today's.
+Email is sent synchronously (no queue worker exists on this
+single-machine deployment) via Laravel's stock `Mail` facade configured
+through `.env` `MAIL_*` vars — no new Settings-UI SMTP config in this
+feature's scope. Export/import/resend are gated `isOwnerOrAdmin()`
+inline, not a new menu key, since the existing `preorders` menu key is
+already shared with cashier/inventory for base CRUD. See research.md for
+the full grounding (R1–R7).
+
+Previous feature: `specs/006-purchase-order-and-ops/plan.md` (branch
+`006-purchase-order-and-ops`, shipped, PR #5 merged 2026-09-03) —
+Purchase Orders, Store Customization,
 Activity Log Screen, New Reports, POS Drafts, Per-Artist Opening Cash,
 Split Payment: 10 independent slices. Deliberately reverses PRD §10.2's
 "no purchase orders" cut (dated note, same pattern as the 2026-09-01

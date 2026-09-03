@@ -132,10 +132,21 @@ Route::prefix('v1')->group(function () {
         Route::post('/orders/{order}/void', [OrderController::class, 'void']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
 
+        // 007-preorder-import-export-notify — rute statis ('export',
+        // 'import/template', 'import') WAJIB didaftarkan SEBELUM
+        // apiResource('preorders', ...)'s 'show' (GET /preorders/{preorder}),
+        // supaya 'export'/'import' tidak tertangkap sebagai {preorder} id
+        // dan gagal route-model-binding (404).
+        Route::get('/preorders/export', [PreorderController::class, 'export']);
+        Route::get('/preorders/import/template', [PreorderController::class, 'importTemplate']);
+        Route::post('/preorders/import', [PreorderController::class, 'import']);
+
         Route::apiResource('preorders', PreorderController::class)->only(['index', 'store', 'show']);
         Route::patch('/preorders/{preorder}/status', [PreorderController::class, 'updateStatus']);
         Route::post('/preorders/{preorder}/payments', [PreorderController::class, 'storePayment']);
         Route::post('/preorders/{preorder}/shipment', [ShipmentController::class, 'store']);
+        Route::get('/preorders/{preorder}/invoice', [PreorderController::class, 'invoice']);
+        Route::post('/preorders/{preorder}/notifications/resend', [PreorderController::class, 'resendNotification']);
         Route::patch('/shipments/{shipment}', [ShipmentController::class, 'update']);
 
         // Ekspor/impor master data (PRD 7.15). Dikelompokkan di bawah

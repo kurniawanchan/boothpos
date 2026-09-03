@@ -1613,6 +1613,7 @@ paths:
         - { name: event_id, in: query, schema: { type: integer } }
         - { name: customer_id, in: query, schema: { type: integer } }
         - { name: fulfillment, in: query, schema: { type: string, enum: [pickup, courier] } }
+        - { name: search, in: query, description: "007-preorder-import-export-notify (US1) — cocok parsial, tidak peka huruf besar/kecil, terhadap nama pelanggan.", schema: { type: string } }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -1652,13 +1653,167 @@ paths:
     get:
       tags: [Preorder]
       summary: Detail pre-order
+      description: |
+        007-preorder-import-export-notify (US4) — respons kini menyertakan
+        `latest_notification` (percobaan kirim email terakhir untuk
+        pre-order ini, atau `null` bila belum pernah dicoba).
       responses:
         '200':
           description: Berhasil
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Preorder'
+                  - type: object
+                    properties:
+                      latest_notification:
+                        type: object
+                        nullable: true
+                        properties:
+                          trigger: { type: string, enum: [status_change, manual_resend] }
+                          status: { type: string, enum: [sent, skipped_no_email, skipped_not_configured, failed] }
+                          error_message: { type: string, nullable: true }
+                          sent_at: { type: string, format: date-time, nullable: true }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /preorders/{id}/invoice:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Preorder]
+      summary: Data invoice/struk sesuai status (007-preorder-import-export-notify, US2)
+      description: |
+        Data mentah — PDF-nya dirender di klien (html2canvas + jsPDF), sama
+        seperti struk penjualan dan invoice purchase order. `document_type`
+        dihitung server dari status pre-order saat ini: `invoice` untuk
+        `ordered`/`dp_paid`/`arrived`, `receipt` untuk `settled`/
+        `handed_over`, `cancelled` untuk `cancelled`.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Preorder'
+                  - type: object
+                    properties:
+                      document_type: { type: string, enum: [invoice, receipt, cancelled] }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /preorders/export:
+    get:
+      tags: [Preorder]
+      summary: Ekspor daftar pre-order ke .xlsx (007-preorder-import-export-notify, US3)
+      description: Hanya owner/admin. Menghormati filter yang sama dengan `GET /preorders` (`status`/`event_id`/`customer_id`/`fulfillment`/`search`/`date_from`/`date_to`).
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: customer_id, in: query, schema: { type: integer } }
+        - { name: fulfillment, in: query, schema: { type: string } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Berkas .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /preorders/import/template:
+    get:
+      tags: [Preorder]
+      summary: Unduh template impor pre-order (007-preorder-import-export-notify, US3)
+      description: Hanya owner/admin. Kolom header sama persis dengan yang divalidasi `POST /preorders/import`.
+      responses:
+        '200':
+          description: Berkas .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /preorders/import:
+    post:
+      tags: [Preorder]
+      summary: Impor batch pre-order dari .xlsx (007-preorder-import-export-notify, US3)
+      description: |
+        Hanya owner/admin. Validasi PENUH dulu, baru diterapkan sekaligus
+        dalam satu transaksi (all-or-nothing, meniru
+        `MasterDataImportService` — research.md R3) — bila ada satu baris
+        gagal, TIDAK ADA yang disimpan. Setiap pre-order yang diimpor
+        SELALU dibuat berstatus `ordered` dengan `paid_amount = 0`, apa pun
+        data di berkas (FR-010) — operator memajukan status/pembayarannya
+        secara manual setelah impor lewat endpoint yang sudah ada.
+        `customer_name` yang belum dikenal otomatis membuat `Customer`
+        baru (FR-009). Harga/qty pada baris DIPAKAI APA ADANYA (bukan
+        dihitung ulang dari master data saat ini) — pengecualian yang
+        disengaja terhadap aturan "server selalu menghitung ulang", karena
+        impor mencatat transaksi historis yang sudah terjadi di luar
+        sistem (research.md R4).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: Berkas .xlsx dengan tata kolom sama dengan template. }
+                dry_run: { type: string, enum: ['1'], description: Validasi tanpa menyimpan (pratinjau). }
+      responses:
+        '201':
+          description: Tersimpan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created_count: { type: integer }
+                  created_customer_count: { type: integer }
+                  preorder_ids: { type: array, items: { type: integer } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Validasi gagal — tidak ada baris yang disimpan.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  row_errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        errors: { type: array, items: { type: string } }
+
+  /preorders/{id}/notifications/resend:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Preorder]
+      summary: Kirim ulang notifikasi email pre-order (007-preorder-import-export-notify, US4)
+      description: |
+        Hanya owner/admin. Jalur yang sama persis dengan notifikasi
+        otomatis saat status berubah (`PreorderNotifier`), dipicu manual,
+        independen dari perubahan status apa pun. SELALU 200 dengan hasil
+        percobaan, tidak pernah 500 karena kegagalan kirim (FR-012/FR-013)
+        — kegagalan/dilewati adalah hasil yang sah, bukan galat request.
+      responses:
+        '200':
+          description: Percobaan tercatat (berhasil atau tidak)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [sent, skipped_no_email, skipped_not_configured, failed] }
+                  recipient_email: { type: string, nullable: true }
+                  sent_at: { type: string, format: date-time, nullable: true }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /preorders/{id}/status:
     parameters: [{ $ref: '#/components/parameters/Id' }]
