@@ -1,5 +1,6 @@
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listVendors, createVendor, updateVendor, deleteVendor } from '../api/vendors';
 import { exportMasterData } from '../api/masterData';
@@ -17,6 +18,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
 const auth = useAuthStore();
+const { t } = useI18n();
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listVendors);
@@ -33,7 +35,7 @@ async function doExport() {
   try {
     await exportMasterData('vendors');
   } catch {
-    toast.error('Gagal mengekspor data vendor.');
+    toast.error(t('vendors_materials.export_vendor_failed'));
   } finally {
     exporting.value = false;
   }
@@ -43,14 +45,14 @@ async function afterImport() {
   await load();
 }
 
-const columns = [
-  { key: 'code', label: 'Kode' },
-  { key: 'name', label: 'Nama' },
-  { key: 'contact', label: 'Kontak' },
-  { key: 'material_price_count', label: 'Bahan' },
-  { key: 'is_active', label: 'Status' },
+const columns = computed(() => [
+  { key: 'code', label: t('master_data.col_code') },
+  { key: 'name', label: t('master_data.col_name') },
+  { key: 'contact', label: t('master_data.col_contact') },
+  { key: 'material_price_count', label: t('vendors_materials.col_material_count') },
+  { key: 'is_active', label: t('master_data.col_status') },
   { key: 'actions', label: '' },
-];
+]);
 
 const showForm = ref(false);
 const editingVendor = ref(null);
@@ -97,10 +99,10 @@ async function saveVendor() {
   try {
     if (editingVendor.value) {
       await updateVendor(editingVendor.value.id, payload);
-      toast.success('Vendor diperbarui.');
+      toast.success(t('vendors_materials.vendor_updated'));
     } else {
       await createVendor(payload);
-      toast.success('Vendor dibuat.');
+      toast.success(t('vendors_materials.vendor_created'));
     }
     showForm.value = false;
     await load();
@@ -120,7 +122,7 @@ async function performDelete() {
   deleting.value = true;
   try {
     await deleteVendor(deleteTarget.value.id);
-    toast.success('Vendor dihapus.');
+    toast.success(t('vendors_materials.vendor_deleted'));
     showDelete.value = false;
     await load();
   } catch {
@@ -136,11 +138,11 @@ async function performDelete() {
     <div class="flex flex-wrap items-center gap-2.5">
       <div class="relative flex min-w-[230px] flex-1 items-center">
         <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="vendor-search">Cari vendor</label>
+        <label class="sr-only" for="vendor-search">{{ t('vendors_materials.search_vendor') }}</label>
         <input
           id="vendor-search"
           v-model="search"
-          placeholder="Cari nama vendor…"
+          :placeholder="t('vendors_materials.search_vendor_placeholder')"
           class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           @input="debouncedSearch"
         />
@@ -148,21 +150,21 @@ async function performDelete() {
       <template v-if="auth.canAccessMenu('vendors')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          Ekspor .xlsx
+          {{ t('common.export_xlsx') }}
         </BaseButton>
         <BaseButton variant="secondary" @click="showImportModal = true">
           <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
-          Impor massal
+          {{ t('common.bulk_import') }}
         </BaseButton>
       </template>
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Tambah vendor
+        {{ t('vendors_materials.new_vendor_btn') }}
       </BaseButton>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada vendor.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('vendors_materials.no_vendors')">
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
         <template #cell-contact="{ row }">
           <div class="flex flex-col gap-0.5 text-[12.5px] text-muted-4">
@@ -172,51 +174,51 @@ async function performDelete() {
         </template>
         <template #cell-material_price_count="{ row }">{{ row.material_price_count ?? 0 }}</template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">Hapus</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingVendor ? 'Ubah vendor' : 'Vendor baru'" max-width-class="max-w-[480px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingVendor ? t('vendors_materials.edit_vendor') : t('vendors_materials.new_vendor')" max-width-class="max-w-[480px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveVendor">
         <BaseInput
           v-model="form.code"
-          label="Kode vendor"
+          :label="t('vendors_materials.vendor_code')"
           maxlength="20"
           required
           :disabled="!!editingVendor"
-          hint="Permanen setelah dibuat."
+          :hint="t('master_data.permanent_after_creation')"
           :error="formErrors.code"
         />
-        <BaseInput v-model="form.name" label="Nama vendor" required maxlength="150" :error="formErrors.name" />
-        <BaseInput v-model="form.contact_phone" label="Telepon" :error="formErrors.contact_phone" />
-        <BaseInput v-model="form.contact_email" label="Email" type="email" :error="formErrors.contact_email" />
-        <BaseTextarea v-model="form.notes" label="Catatan" :rows="2" :error="formErrors.notes" />
+        <BaseInput v-model="form.name" :label="t('vendors_materials.vendor_name')" required maxlength="150" :error="formErrors.name" />
+        <BaseInput v-model="form.contact_phone" :label="t('master_data.phone')" :error="formErrors.contact_phone" />
+        <BaseInput v-model="form.contact_email" :label="t('master_data.email')" type="email" :error="formErrors.contact_email" />
+        <BaseTextarea v-model="form.notes" :label="t('master_data.notes')" :rows="2" :error="formErrors.notes" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
-          Aktif
+          {{ t('common.active') }}
         </label>
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton :loading="saving" @click="saveVendor">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="saving" @click="saveVendor">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"
-      title="Hapus vendor"
-      :message="`Hapus ${deleteTarget?.name}? Ditolak bila masih memiliki harga bahan yang terdaftar.`"
-      confirm-label="Ya, hapus"
+      :title="t('vendors_materials.delete_vendor')"
+      :message="t('vendors_materials.delete_vendor_confirm', { name: deleteTarget?.name })"
+      :confirm-label="t('vendors_materials.yes_delete')"
       :loading="deleting"
       @close="showDelete = false"
       @confirm="performDelete"

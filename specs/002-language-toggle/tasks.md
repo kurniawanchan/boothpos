@@ -207,7 +207,7 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
       `components/product/{ProductDetailModal,VariantBomModal}.vue`,
       `components/masterData/{MasterDataImportModal,MaterialVendorPricesModal}.vue`
       → `t('master_data.*')`.
-- [ ] T036 [P] [US1] `resources/js/views/{VendorsView,MaterialsView}.vue`
+- [X] T036 [P] [US1] `resources/js/views/{VendorsView,MaterialsView}.vue`
       → `t('vendors_materials.*')`.
 - [ ] T037 [P] [US1] `resources/js/views/{CustomersView,EventsView,SessionView}.vue`,
       `components/forms/CustomerPickerModal.vue`,

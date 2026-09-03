@@ -1,5 +1,6 @@
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listMaterials, createMaterial, updateMaterial, deleteMaterial } from '../api/materials';
 import { exportMasterData } from '../api/masterData';
@@ -18,6 +19,7 @@ import MasterDataImportModal from '../components/masterData/MasterDataImportModa
 import MaterialVendorPricesModal from '../components/masterData/MaterialVendorPricesModal.vue';
 
 const auth = useAuthStore();
+const { t } = useI18n();
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listMaterials);
@@ -34,7 +36,7 @@ async function doExport() {
   try {
     await exportMasterData('materials');
   } catch {
-    toast.error('Gagal mengekspor data bahan baku.');
+    toast.error(t('vendors_materials.export_material_failed'));
   } finally {
     exporting.value = false;
   }
@@ -44,14 +46,14 @@ async function afterImport() {
   await load();
 }
 
-const columns = [
-  { key: 'code', label: 'Kode' },
-  { key: 'name', label: 'Nama' },
-  { key: 'unit', label: 'Satuan' },
-  { key: 'vendor_price_count', label: 'Vendor' },
-  { key: 'is_active', label: 'Status' },
+const columns = computed(() => [
+  { key: 'code', label: t('master_data.col_code') },
+  { key: 'name', label: t('master_data.col_name') },
+  { key: 'unit', label: t('vendors_materials.col_unit') },
+  { key: 'vendor_price_count', label: t('vendors_materials.col_vendor_count') },
+  { key: 'is_active', label: t('master_data.col_status') },
   { key: 'actions', label: '' },
-];
+]);
 
 const showForm = ref(false);
 const editingMaterial = ref(null);
@@ -104,10 +106,10 @@ async function saveMaterial() {
   try {
     if (editingMaterial.value) {
       await updateMaterial(editingMaterial.value.id, payload);
-      toast.success('Bahan diperbarui.');
+      toast.success(t('vendors_materials.material_updated'));
     } else {
       await createMaterial(payload);
-      toast.success('Bahan dibuat.');
+      toast.success(t('vendors_materials.material_created'));
     }
     showForm.value = false;
     await load();
@@ -127,7 +129,7 @@ async function performDelete() {
   deleting.value = true;
   try {
     await deleteMaterial(deleteTarget.value.id);
-    toast.success('Bahan dihapus.');
+    toast.success(t('vendors_materials.material_deleted'));
     showDelete.value = false;
     await load();
   } catch {
@@ -143,11 +145,11 @@ async function performDelete() {
     <div class="flex flex-wrap items-center gap-2.5">
       <div class="relative flex min-w-[230px] flex-1 items-center">
         <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="material-search">Cari bahan</label>
+        <label class="sr-only" for="material-search">{{ t('vendors_materials.search_material') }}</label>
         <input
           id="material-search"
           v-model="search"
-          placeholder="Cari nama bahan baku…"
+          :placeholder="t('vendors_materials.search_material_placeholder')"
           class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           @input="debouncedSearch"
         />
@@ -155,69 +157,69 @@ async function performDelete() {
       <template v-if="auth.canAccessMenu('materials')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          Ekspor .xlsx
+          {{ t('common.export_xlsx') }}
         </BaseButton>
         <BaseButton variant="secondary" @click="showImportModal = true">
           <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
-          Impor massal
+          {{ t('common.bulk_import') }}
         </BaseButton>
       </template>
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Tambah bahan
+        {{ t('vendors_materials.new_material_btn') }}
       </BaseButton>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada bahan baku.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('vendors_materials.no_materials')">
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
         <template #cell-vendor_price_count="{ row }">{{ row.vendor_price_count ?? 0 }}</template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openPrices(row)">Harga vendor</button>
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">Hapus</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openPrices(row)">{{ t('vendors_materials.vendor_prices_action') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingMaterial ? 'Ubah bahan' : 'Bahan baru'" max-width-class="max-w-[480px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingMaterial ? t('vendors_materials.edit_material') : t('vendors_materials.new_material')" max-width-class="max-w-[480px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveMaterial">
         <BaseInput
           v-model="form.code"
-          label="Kode bahan"
+          :label="t('vendors_materials.material_code')"
           maxlength="20"
           required
           :disabled="!!editingMaterial"
-          hint="Permanen setelah dibuat."
+          :hint="t('master_data.permanent_after_creation')"
           :error="formErrors.code"
         />
-        <BaseInput v-model="form.name" label="Nama bahan" required maxlength="150" :error="formErrors.name" />
-        <BaseInput v-model="form.unit" label="Satuan (mis. pcs, meter, gram)" required maxlength="20" :error="formErrors.unit" />
-        <BaseTextarea v-model="form.notes" label="Catatan" :rows="2" :error="formErrors.notes" />
+        <BaseInput v-model="form.name" :label="t('vendors_materials.material_name')" required maxlength="150" :error="formErrors.name" />
+        <BaseInput v-model="form.unit" :label="t('vendors_materials.unit_with_examples')" required maxlength="20" :error="formErrors.unit" />
+        <BaseTextarea v-model="form.notes" :label="t('master_data.notes')" :rows="2" :error="formErrors.notes" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
-          Aktif
+          {{ t('common.active') }}
         </label>
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton :loading="saving" @click="saveMaterial">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="saving" @click="saveMaterial">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"
-      title="Hapus bahan"
-      :message="`Hapus ${deleteTarget?.name}? Ditolak bila masih dipakai harga vendor atau BOM varian produk.`"
-      confirm-label="Ya, hapus"
+      :title="t('vendors_materials.delete_material')"
+      :message="t('vendors_materials.delete_material_confirm', { name: deleteTarget?.name })"
+      :confirm-label="t('vendors_materials.yes_delete')"
       :loading="deleting"
       @close="showDelete = false"
       @confirm="performDelete"
