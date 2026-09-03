@@ -106,6 +106,34 @@ paths:
               schema: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /auth/language:
+    put:
+      tags: [Auth]
+      summary: Ganti preferensi bahasa akun sendiri (002-language-toggle)
+      description: >
+        Self-service — SENGAJA tidak digerbang canAccessMenu('users').
+        Setiap akun yang sudah login boleh mengubah bahasanya sendiri,
+        termasuk peran tanpa akses menu Pengguna (mis. Kasir default).
+        Berlaku untuk seluruh antarmuka setelah login; layar login dan
+        struk transaksi TIDAK ikut berubah (selalu Bahasa Indonesia).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [language]
+              properties:
+                language: { type: string, enum: [id, en] }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthenticatedUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # ------------------------------------------------------------------
   # MASTER DATA — ARTIST
   # ------------------------------------------------------------------
@@ -2415,6 +2443,13 @@ components:
           items: { type: string }
           example: [dashboard, pos, session, products, reports, settings]
         is_active: { type: boolean }
+        language:
+          type: string
+          enum: [id, en]
+          description: >
+            Preferensi bahasa antarmuka akun ini (002-language-toggle),
+            default 'en'. Berlaku setelah login saja — tidak mempengaruhi
+            layar login maupun struk transaksi (selalu Bahasa Indonesia).
 
     Artist:
       type: object

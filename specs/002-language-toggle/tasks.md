@@ -295,16 +295,16 @@ toggle mechanism (US1) and its default behavior (US2) are both proven.
 **Purpose**: Documentation, governance follow-up, and final regression —
 mirrors the Phase 7 convention established in `001-user-store-settings`.
 
-- [ ] T050 [P] Update `docs/openapi-pos-mvp.yaml` — add
+- [X] T050 [P] Update `docs/openapi-pos-mvp.yaml` — add
       `PUT /auth/language`, add `language` to the `User`/`AuthenticatedUser`
       schema and the `/auth/login` + `/auth/me` response bodies.
-- [ ] T051 [P] Add a dated post-MVP note to
+- [X] T051 [P] Add a dated post-MVP note to
       `docs/PRD-POS-Event-Multivendor.md` recording this new capability —
       it does not correspond to any existing F-number (the PRD never
       mentions multi-language support), so follow the same
       "genuinely new capability, not a resurrection of a cut scope item"
       framing used by the Vendor/Material/BOM note (§10.2/§7.13 area).
-- [ ] T052 [P] Extend the `bruno/` collection with a request (or new
+- [X] T052 [P] Extend the `bruno/` collection with a request (or new
       numbered folder, e.g. `bruno/12-Language/`) exercising
       `PUT /auth/language`: success, `422` on an invalid value, and a
       Kasir-role account succeeding despite lacking `users` menu access —
@@ -316,7 +316,7 @@ mirrors the Phase 7 convention established in `001-user-store-settings`.
       (MINOR bump) before this feature merges to `main`. This task does
       NOT perform the amendment itself — that is a deliberate, separate
       governance action.
-- [ ] T054 Full regression: `php artisan test` (zero failures — pay
+- [X] T054 Full regression: `php artisan test` (zero failures — pay
       particular attention to any EXISTING test asserting a literal
       Indonesian error-message string via `assertJsonPath('message', '...')`,
       since T019–T030 change those strings to come from `lang/id/*.php`
