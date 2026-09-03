@@ -36,3 +36,20 @@ yarn-error.log
 /.idea
 /.vscode
 /.zed
+
+# 008-android-installer — native Gradle/Kotlin wrapper project.
+# Build outputs, local Gradle caches, and Android Studio project files are
+# excluded; the bundled runtime *binaries* (PHP/MariaDB/mysqldump/tar for
+# arm64-v8a, research.md R1/R2/R5) are large native artifacts sourced or
+# built outside this repo, not committed source — see android/README.md.
+/android/.gradle
+/android/.idea
+/android/local.properties
+/android/*.iml
+/android/app/*.iml
+/android/build
+/android/app/build
+/android/captures
+/android/.cxx
+/android/app/src/main/assets/runtime/
+/android/app/src/main/assets/laravel/

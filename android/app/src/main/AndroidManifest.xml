@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- No INTERNET permission requested beyond loopback — this app never
+         talks to anything outside 127.0.0.1 (spec FR-004, research.md R1).
+         FOREGROUND_SERVICE is required for RuntimeForegroundService
+         (research.md R3) to keep the bundled PHP/MariaDB processes alive
+         reliably while the app is in active use. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application
+        android:name=".BoothPosApplication"
+        android:allowBackup="false"
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.BoothPosInstaller"
+        android:usesCleartextTraffic="true">
+        <!-- usesCleartextTraffic: the WebView talks to 127.0.0.1 over
+             plain HTTP — this never leaves the device (research.md R1),
+             so it is not the same risk class as cleartext to a remote
+             host; consistent with spec.md's Assumption that this mirrors
+             how BoothPOS is already reached over plain HTTP today. -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.BoothPosInstaller.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".RuntimeForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs the on-device BoothPOS application server (PHP + MariaDB) this app depends on." />
+        </service>
+
+    </application>
+
+</manifest>

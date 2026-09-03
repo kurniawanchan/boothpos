@@ -209,8 +209,34 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/007-preorder-import-export-notify/plan.md`
-(branch `007-preorder-import-export-notify`) — Pre-order search by
+Active feature plan: `specs/008-android-installer/plan.md` (branch
+`008-android-installer`) — a **fully standalone** Android tablet build of
+BoothPOS: the entire existing PHP/Laravel + Vue app runs unmodified,
+on-device, with zero network dependency for core operation — NOT a thin
+client to a Mac/PC (that's a materially different, rejected
+interpretation; see spec.md's Input line and Assumptions). Achieved by
+bundling a statically-built PHP runtime + a statically-built **MariaDB**
+(not MySQL, not SQLite — MySQL publishes no Android/ARM builds; MariaDB
+is wire/DDL-compatible including the `CHECK`-constraint migrations
+CLAUDE.md already documents as SQLite-hard-fails) inside a thin native
+Android shell (`android/`, new top-level dir) that launches both as a
+foreground `Service` and displays the existing Vue SPA in a `WebView`
+pointed at `127.0.0.1` — zero rewrite of `app/`/`resources/js/`, zero new
+business-logic implementation, avoiding a second, inevitably-diverging
+copy of every domain rule. Backup/restore reuses `BackupPos`/`RestorePos`
+unmodified (same `mysqldump`+`tar` archive shape on both platforms — see
+`contracts/backup-format.md`), only swapping "where the file ends up" for
+Android's Storage Access Framework instead of `BACKUP_EXTERNAL_PATH`.
+Flagged, not hidden: MariaDB's GPLv2 redistribution obligations, and that
+`mysqldump`/`tar`/`cp` (shelled out to by the existing backup commands)
+aren't present on Android by default and must be bundled too. See
+research.md R1–R7 for the full feasibility grounding, including two
+rejected alternatives (a native Kotlin/Flutter rewrite; a SQLite port)
+and why each was rejected.
+
+Previous feature: `specs/007-preorder-import-export-notify/plan.md`
+(branch `007-preorder-import-export-notify`, shipped, PR #6 merged
+2026-09-03) — Pre-order search by
 customer name, status-appropriate printable invoice/receipt (client-side,
 mirroring `ReceiptModal.vue`/the PO invoice), export/import via a
 **separate, single-sheet workbook** (not a fifth sheet in

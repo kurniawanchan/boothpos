@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand color matches resources/css/app.css's --color-brand token
+         (mint-green, 006/007's ThemeColorPicker default) so the native
+         splash/notification chrome doesn't clash with the web app it
+         wraps — see MainActivity's splash layout. -->
+    <color name="boothpos_brand">#2F9E6E</color>
+    <color name="boothpos_brand_dark">#1F6E4A</color>
+
+    <style name="Theme.BoothPosInstaller" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/boothpos_brand</item>
+        <item name="colorPrimaryDark">@color/boothpos_brand_dark</item>
+        <item name="colorAccent">@color/boothpos_brand</item>
+    </style>
+
+    <style name="Theme.BoothPosInstaller.Splash">
+        <item name="android:windowBackground">@color/boothpos_brand</item>
+    </style>
+</resources>
