@@ -198,7 +198,7 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
       `AppSidebar.vue`, `AppTopbar.vue` — nav labels/group titles →
       `t('nav.*')`, populate `locales/{id,en}.json` under `nav`.
 - [X] T033 [P] [US1] `resources/js/views/DashboardView.vue` → `t('dashboard.*')`.
-- [ ] T034 [P] [US1] `resources/js/views/PosView.vue`,
+- [X] T034 [P] [US1] `resources/js/views/PosView.vue`,
       `components/pos/PosCartPanel.vue`,
       `components/pos/ProductVariantPickerModal.vue`,
       `components/payment/{ChannelPicker,MethodTiles,PaymentPanel,PosPaymentModal,ProofCapture}.vue`

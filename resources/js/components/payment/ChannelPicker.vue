@@ -1,5 +1,8 @@
 <script setup>
 import { computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps({
   channels: { type: Array, required: true }, // already filtered by type
@@ -50,14 +53,14 @@ watch(
       <img
         v-if="selected.type === 'qr_ewallet' && selected.qr_image_url"
         :src="selected.qr_image_url"
-        :alt="`Kode QR ${selected.provider}`"
+        :alt="t('pos.qr_code_for', { provider: selected.provider })"
         class="h-40 w-40 self-center rounded-md border border-line-2 object-contain"
       />
       <span v-else class="font-mono text-[27px] font-extrabold tracking-wide text-ink" style="font-variant-numeric: tabular-nums">
         {{ selected.account_number || '—' }}
       </span>
-      <span class="text-[13px] text-muted-4">a.n. {{ selected.account_name }}</span>
+      <span class="text-[13px] text-muted-4">{{ t('pos.account_holder', { name: selected.account_name }) }}</span>
     </div>
-    <p v-else class="text-[12.5px] text-muted-3">Pilih kanal pembayaran di atas.</p>
+    <p v-else class="text-[12.5px] text-muted-3">{{ t('pos.pick_channel_above') }}</p>
   </div>
 </template>

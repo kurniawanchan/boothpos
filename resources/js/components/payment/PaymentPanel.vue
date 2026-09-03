@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import MethodTiles from './MethodTiles.vue';
 import ChannelPicker from './ChannelPicker.vue';
 import ProofCapture from './ProofCapture.vue';
@@ -27,6 +28,7 @@ const props = defineProps({
 const emit = defineEmits(['submit']);
 
 const toast = useToastStore();
+const { t } = useI18n();
 const method = ref('cash');
 const channels = ref([]);
 const channelId = ref(null);
@@ -77,7 +79,7 @@ async function handleCaptured(file, capturedVia) {
     const res = await uploadPaymentProof(file, capturedVia);
     proofToken.value = res.proof_token;
   } catch (err) {
-    toast.error(err.message || 'Gagal mengunggah bukti pembayaran.');
+    toast.error(err.message || t('pos.upload_proof_failed'));
   } finally {
     uploading.value = false;
   }
@@ -126,18 +128,18 @@ defineExpose({ reset });
 <template>
   <div class="flex flex-col gap-5">
     <div class="flex items-baseline justify-between rounded-lg border border-mint-border bg-mint-50 px-4 py-3.5">
-      <span class="text-[12.5px] font-semibold text-brand-active">{{ mode === 'checkout' ? 'Total tagihan' : 'Jumlah tagihan' }}</span>
+      <span class="text-[12.5px] font-semibold text-brand-active">{{ mode === 'checkout' ? t('pos.total_due') : t('pos.amount_due') }}</span>
       <span class="text-[24px] font-extrabold tracking-tight text-ink">{{ formatIDR(dueAmount) }}</span>
     </div>
 
     <div class="flex flex-col gap-2">
-      <span class="text-[11.5px] font-bold uppercase tracking-wider text-muted-3">Metode</span>
+      <span class="text-[11.5px] font-bold uppercase tracking-wider text-muted-3">{{ t('pos.method') }}</span>
       <MethodTiles :model-value="method" :allow-cash="allowCash" @update:model-value="pickMethod" />
     </div>
 
     <div v-if="method === 'cash'" class="flex flex-col gap-2.5">
       <BaseInput
-        :label="mode === 'checkout' ? 'Uang diterima' : 'Jumlah dibayar'"
+        :label="mode === 'checkout' ? t('pos.cash_received') : t('pos.amount_paid')"
         type="number"
         min="0"
         :model-value="amount"
@@ -155,26 +157,26 @@ defineExpose({ reset });
         </button>
       </div>
       <div v-if="mode === 'checkout'" class="flex items-center justify-between rounded-lg border border-warn-border bg-warn-bg px-3.5 py-3">
-        <span class="text-[12.5px] font-bold text-warn-text">Kembalian</span>
+        <span class="text-[12.5px] font-bold text-warn-text">{{ t('pos.change') }}</span>
         <span class="text-[18px] font-extrabold text-warn-text">{{ formatIDR(change) }}</span>
       </div>
     </div>
 
     <div v-else class="flex flex-col gap-3.5">
-      <BaseInput v-if="mode === 'record'" label="Jumlah dibayar" type="number" min="0" :model-value="amount" @update:model-value="setAmount" />
+      <BaseInput v-if="mode === 'record'" :label="t('pos.amount_paid')" type="number" min="0" :model-value="amount" @update:model-value="setAmount" />
       <ChannelPicker :channels="filteredChannels" :model-value="channelId" @update:model-value="(v) => (channelId = v)" />
       <ProofCapture @captured="handleCaptured" @cleared="handleCleared" />
     </div>
 
-    <BaseTextarea v-if="mode === 'record'" :model-value="notes" label="Catatan (opsional)" :rows="2" @update:model-value="(v) => (notes = v)" />
+    <BaseTextarea v-if="mode === 'record'" :model-value="notes" :label="t('pos.notes_optional')" :rows="2" @update:model-value="(v) => (notes = v)" />
 
     <div class="flex flex-col gap-2">
       <BaseButton variant="primary" size="lg" class="w-full" :disabled="!canSubmit" :loading="submitting || uploading" @click="submit">
         {{ submitLabel }}
       </BaseButton>
       <p class="text-center text-[11px] leading-relaxed text-muted-3">
-        <template v-if="method === 'cash'">Pembayaran tunai tidak memerlukan bukti.</template>
-        <template v-else>Bukti pembayaran wajib dilampirkan sebelum konfirmasi.</template>
+        <template v-if="method === 'cash'">{{ t('pos.cash_no_proof_needed') }}</template>
+        <template v-else>{{ t('pos.proof_required_before_confirm') }}</template>
       </p>
     </div>
   </div>

@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const emit = defineEmits(['captured', 'cleared']);
 
 const mode = ref('idle'); // idle | webcam | captured
@@ -25,7 +27,7 @@ async function startWebcam() {
       await videoRef.value.play();
     }
   } catch {
-    error.value = 'Kamera tidak dapat diakses. Gunakan opsi unggah berkas.';
+    error.value = t('pos.camera_unavailable');
   }
 }
 
@@ -71,12 +73,12 @@ async function onFileChange(e) {
   if (!file) return;
   error.value = '';
   if (!['image/jpeg', 'image/png'].includes(file.type)) {
-    error.value = 'Berkas harus berupa JPEG atau PNG.';
+    error.value = t('pos.file_must_be_jpeg_png');
     return;
   }
   const bitmap = await createImageBitmap(file).catch(() => null);
   if (!bitmap) {
-    error.value = 'Berkas gambar tidak dapat dibaca.';
+    error.value = t('pos.image_unreadable');
     return;
   }
   const blob = await drawToCompressedBlob(bitmap, bitmap.width, bitmap.height);
@@ -124,7 +126,7 @@ onBeforeUnmount(() => {
           @click="startWebcam"
         >
           <i class="ph-duotone ph-camera text-[18px]" aria-hidden="true"></i>
-          Ambil foto
+          {{ t('pos.take_photo') }}
         </button>
         <button
           type="button"
@@ -132,7 +134,7 @@ onBeforeUnmount(() => {
           @click="triggerUpload"
         >
           <i class="ph-duotone ph-upload-simple text-[18px]" aria-hidden="true"></i>
-          Unggah berkas
+          {{ t('pos.upload_file') }}
         </button>
       </div>
       <p v-if="error" role="alert" class="text-[12px] font-medium text-danger-text">{{ error }}</p>
@@ -146,30 +148,30 @@ onBeforeUnmount(() => {
           class="h-11 flex-1 rounded-lg bg-brand text-[13px] font-bold text-white transition-colors hover:bg-brand-hover"
           @click="snap"
         >
-          Jepret
+          {{ t('pos.capture') }}
         </button>
         <button
           type="button"
           class="h-11 flex-1 rounded-lg border border-line bg-white text-[13px] font-bold text-muted-5 hover:border-danger-border-hover hover:text-danger-text"
           @click="cancelWebcam"
         >
-          Batal
+          {{ t('common.cancel') }}
         </button>
       </div>
     </div>
 
     <div v-else class="flex items-center gap-3 rounded-lg border border-mint-border bg-mint-50 px-3.5 py-3">
-      <img :src="previewUrl" alt="Pratinjau bukti pembayaran" class="h-14 w-14 flex-none rounded-md object-cover" />
+      <img :src="previewUrl" :alt="t('pos.proof_preview_alt')" class="h-14 w-14 flex-none rounded-md object-cover" />
       <div class="flex flex-1 flex-col gap-0.5">
-        <span class="text-[13px] font-bold text-brand-active">Bukti terlampir</span>
-        <span class="text-[11.5px] text-muted-4">Siap dikirim bersama transaksi</span>
+        <span class="text-[13px] font-bold text-brand-active">{{ t('pos.proof_attached') }}</span>
+        <span class="text-[11.5px] text-muted-4">{{ t('pos.ready_to_send') }}</span>
       </div>
       <button
         type="button"
         class="text-[12.5px] font-bold text-muted-4 underline decoration-dotted hover:text-danger-text"
         @click="retake"
       >
-        Ambil ulang
+        {{ t('pos.retake') }}
       </button>
     </div>
   </div>

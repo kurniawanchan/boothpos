@@ -1,19 +1,23 @@
 <script setup>
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 const props = defineProps({
   modelValue: { type: String, required: true }, // cash | bank_transfer | qr_ewallet
   allowCash: { type: Boolean, default: true },
 });
 const emit = defineEmits(['update:modelValue']);
 
-const methods = [
-  { value: 'cash', icon: 'ph-money', label: 'Tunai', hint: 'Bayar langsung' },
-  { value: 'bank_transfer', icon: 'ph-bank', label: 'Transfer', hint: 'Bank' },
-  { value: 'qr_ewallet', icon: 'ph-qr-code', label: 'QRIS', hint: 'E-wallet' },
-];
+const methods = computed(() => [
+  { value: 'cash', icon: 'ph-money', label: t('pos.method_cash'), hint: t('pos.method_cash_hint') },
+  { value: 'bank_transfer', icon: 'ph-bank', label: t('pos.method_transfer'), hint: t('pos.method_transfer_hint') },
+  { value: 'qr_ewallet', icon: 'ph-qr-code', label: t('pos.method_qris'), hint: t('pos.method_qris_hint') },
+]);
 </script>
 
 <template>
-  <div role="radiogroup" aria-label="Metode pembayaran" class="grid grid-cols-3 gap-2.5">
+  <div role="radiogroup" :aria-label="t('pos.payment_method')" class="grid grid-cols-3 gap-2.5">
     <button
       v-for="m in methods"
       :key="m.value"
