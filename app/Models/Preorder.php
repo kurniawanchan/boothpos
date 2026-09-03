@@ -31,6 +31,18 @@ class Preorder extends Model
     public function payments(): HasMany { return $this->hasMany(Payment::class); }
     public function customer(): BelongsTo { return $this->belongsTo(Customer::class); }
     public function shipment(): HasOne { return $this->hasOne(Shipment::class); }
+    public function notifications(): HasMany { return $this->hasMany(PreorderNotification::class); }
+
+    /**
+     * 007-preorder-import-export-notify (US4) — dipakai PreorderController
+     * ::show() untuk field `latest_notification` tanpa request terpisah.
+     */
+    public function latestNotification(): ?PreorderNotification
+    {
+        return $this->relationLoaded('notifications')
+            ? $this->notifications->sortByDesc('sent_at')->first()
+            : $this->notifications()->orderByDesc('sent_at')->first();
+    }
 
     /**
      * State machine sesuai uml-pos-mvp.md bagian 6.1. Urutan linear ketat

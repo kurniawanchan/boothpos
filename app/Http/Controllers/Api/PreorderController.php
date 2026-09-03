@@ -2,18 +2,26 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exports\GenericArrayExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePreorderRequest;
 use App\Http\Resources\CustomerResource;
 use App\Models\Preorder;
+use App\Services\PreorderExportImportService;
+use App\Services\PreorderNotifier;
 use App\Services\PreorderService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Maatwebsite\Excel\Facades\Excel;
 
 class PreorderController extends Controller
 {
-    public function __construct(private PreorderService $preorderService) {}
+    public function __construct(
+        private PreorderService $preorderService,
+        private PreorderExportImportService $exportImportService,
+        private PreorderNotifier $notifier,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -25,6 +33,12 @@ class PreorderController extends Controller
             ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
             ->when($request->filled('customer_id'), fn ($q) => $q->where('customer_id', $request->integer('customer_id')))
             ->when($request->filled('fulfillment'), fn ($q) => $q->where('fulfillment', $request->string('fulfillment')))
+            // 007-preorder-import-export-notify (US1) — parsial, tidak peka
+            // huruf besar/kecil, terhadap nama pelanggan (research.md R1).
+            ->when($request->filled('search'), fn ($q) => $q->whereHas(
+                'customer',
+                fn ($cq) => $cq->where('name', 'like', '%' . $request->string('search')->value() . '%')
+            ))
             ->orderByDesc('created_at')
             ->paginate($perPage);
 
@@ -53,7 +67,112 @@ class PreorderController extends Controller
 
     public function show(Preorder $preorder): JsonResponse
     {
-        return response()->json($this->present($preorder->load(['items', 'payments', 'shipment', 'customer'])));
+        $preorder->load(['items', 'payments', 'shipment', 'customer', 'notifications']);
+
+        return response()->json([
+            ...$this->present($preorder),
+            // 007-preorder-import-export-notify (US4) — biar layar detail
+            // yang sudah ada bisa menampilkan status notifikasi terakhir
+            // tanpa request tambahan (data-model.md).
+            'latest_notification' => $this->presentNotification($preorder->latestNotification()),
+        ]);
+    }
+
+    /**
+     * 007-preorder-import-export-notify (US2) — data mentah untuk
+     * invoice/struk; PDF-nya sendiri dirender di klien (html2canvas +
+     * jsPDF), sama seperti pola ReceiptModal.vue/PO invoice (research.md
+     * R2). `document_type` dihitung SEKALI di sini via
+     * PreorderDocumentType, dipakai ulang oleh email (US4) — tidak pernah
+     * didefinisikan dua kali.
+     */
+    public function invoice(Preorder $preorder): JsonResponse
+    {
+        $preorder->load(['items', 'payments', 'customer']);
+
+        return response()->json([
+            ...$this->present($preorder),
+            'document_type' => \App\Support\PreorderDocumentType::forStatus($preorder->status),
+        ]);
+    }
+
+    /**
+     * 007-preorder-import-export-notify (US3, FR-015) — export/import
+     * dibatasi owner/admin, inline seperti ReportController/
+     * CashierSessionController — bukan menu key baru, karena 'preorders'
+     * masih dipakai bersama kasir/inventory untuk CRUD dasar.
+     */
+    public function export(Request $request)
+    {
+        abort_unless($request->user()->isOwnerOrAdmin(), 403, __('preorders.not_authorized'));
+
+        $rows = $this->exportImportService->export($request->only([
+            'status', 'event_id', 'customer_id', 'fulfillment', 'search', 'date_from', 'date_to',
+        ]));
+
+        return Excel::download(new GenericArrayExport($rows), 'preorders.xlsx');
+    }
+
+    public function importTemplate(Request $request)
+    {
+        abort_unless($request->user()->isOwnerOrAdmin(), 403, __('preorders.not_authorized'));
+
+        return Excel::download(new GenericArrayExport($this->exportImportService->template()), 'template-preorders.xlsx');
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->isOwnerOrAdmin(), 403, __('preorders.not_authorized'));
+
+        $request->validate(['file' => ['required', 'file', 'mimes:xlsx']]);
+
+        $result = $this->exportImportService->import($request->file('file'), $request->boolean('dry_run'), $request->user());
+
+        if (! $result['applied'] && ! $result['dry_run']) {
+            return response()->json([
+                'message' => __('preorders.import_nothing_saved'),
+                'row_errors' => $result['row_errors'],
+            ], 409);
+        }
+
+        return response()->json([
+            'created_count' => $result['created_count'],
+            'created_customer_count' => $result['created_customer_count'],
+            'preorder_ids' => $result['preorder_ids'],
+        ], $result['dry_run'] ? 200 : 201);
+    }
+
+    /**
+     * 007-preorder-import-export-notify (US4, FR-014) — jalur yang sama
+     * persis dengan notifikasi otomatis saat status berubah, dipicu
+     * manual. SELALU 200 dengan hasil percobaan (bukan 500) — kegagalan
+     * kirim adalah hasil yang sah, bukan galat request (FR-012/FR-013).
+     */
+    public function resendNotification(Request $request, Preorder $preorder): JsonResponse
+    {
+        abort_unless($request->user()->isOwnerOrAdmin(), 403, __('preorders.not_authorized'));
+
+        $notification = $this->notifier->notifyStatusChange($preorder, 'manual_resend');
+
+        return response()->json([
+            'status' => $notification->status,
+            'recipient_email' => $notification->recipient_email,
+            'sent_at' => $notification->sent_at?->toIso8601String(),
+        ]);
+    }
+
+    private function presentNotification(?\App\Models\PreorderNotification $notification): ?array
+    {
+        if (! $notification) {
+            return null;
+        }
+
+        return [
+            'trigger' => $notification->trigger,
+            'status' => $notification->status,
+            'error_message' => $notification->error_message,
+            'sent_at' => $notification->sent_at?->toIso8601String(),
+        ];
     }
 
     public function updateStatus(Request $request, Preorder $preorder): JsonResponse
@@ -70,6 +189,10 @@ class PreorderController extends Controller
         } catch (ValidationException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 409);
         }
+
+        // 007-preorder-import-export-notify (US4) — SETELAH commit di
+        // atas, tidak pernah bisa membuat respons ini gagal (research.md R7).
+        $this->preorderService->notifyStatusChangeSafely($preorder);
 
         return response()->json($this->present($preorder));
     }

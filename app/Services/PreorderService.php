@@ -146,8 +146,36 @@ class PreorderService
         });
     }
 
+    /**
+     * 007-preorder-import-export-notify (US4) — dipanggil SETELAH
+     * transaksi status commit (di atas), bukan di dalamnya: pengiriman
+     * email adalah operasi jaringan lambat/rawan gagal yang TIDAK BOLEH
+     * membuat perubahan status bisnis ini sendiri gagal atau rollback
+     * (research.md R7). Dibungkus try/catch tambahan di sini supaya
+     * bahkan galat TAK TERDUGA dari PreorderNotifier (bukan cuma galat
+     * kirim email yang sudah ditangani di dalamnya) tidak pernah bisa
+     * membuat respons transitionStatus() gagal.
+     */
+    public function notifyStatusChangeSafely(Preorder $preorder): void
+    {
+        try {
+            app(PreorderNotifier::class)->notifyStatusChange($preorder, 'status_change');
+        } catch (\Throwable) {
+            // Sengaja ditelan — lihat docblock di atas. Percobaan yang
+            // gagal DI DALAM PreorderNotifier sudah tercatat sebagai baris
+            // 'failed'; ini hanya jaring pengaman untuk galat yang bahkan
+            // lolos dari situ (mis. galat menulis baris audit itu sendiri).
+        }
+    }
+
     /** 003-seed-demo-live — sama seperti OrderService::generateOrderNumber(): `preorder_number` unik lintas seluruh tabel, jadi hitungannya HARUS lintas mode juga. */
-    private function generateNumber(): string
+    /**
+     * 007-preorder-import-export-notify (US3) — publik (bukan privat lagi)
+     * supaya PreorderExportImportService::import() bisa memakai jalur
+     * penomoran yang sama persis untuk pre-order hasil impor, alih-alih
+     * menduplikasi logika ini di kelas lain (Constitution I).
+     */
+    public function generateNumber(): string
     {
         $today = now()->format('Ymd');
         $countToday = Preorder::withoutGlobalScope(DataModeScope::class)
