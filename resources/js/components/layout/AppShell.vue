@@ -68,27 +68,33 @@ async function handleLogout() {
 
 <template>
   <div class="flex min-h-screen">
-    <AppSidebar
-      v-if="sidebarVisible"
-      :preorder-alert-count="preorderAlertCount"
-      @logout="handleLogout"
-      @hide-sidebar="setSidebarVisible(false)"
-    />
-    <!-- Tombol tampilkan kembali — hanya ada saat sidebar disembunyikan,
-         sengaja bukan bagian dari AppSidebar.vue sendiri karena saat itu
-         komponennya tidak ter-render sama sekali. -->
-    <button
-      v-else
-      type="button"
-      class="fixed left-3 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-md border border-line-2 bg-white text-muted-4 shadow-sm transition-colors hover:border-brand hover:text-brand-active"
-      :aria-label="t('nav.show_sidebar')"
-      :title="t('nav.show_sidebar')"
-      @click="setSidebarVisible(true)"
+    <!-- AppSidebar tetap ter-mount (bukan v-if) SELAMA transisi berjalan
+         supaya lebar wrapper bisa dianimasikan mulus (228px <-> 0);
+         v-if lama menghapus/memasang ulang secara instan tanpa animasi
+         sama sekali. overflow-hidden meng-clip isi <nav> yang tetap
+         w-[228px] internal saat wrapper menyempit — pola "slide collapse"
+         standar. Judul halaman tidak lagi bisa tertutup: tombol
+         "Tampilkan sidebar" sekarang di dalam AppTopbar (ikut alur flex
+         yang sama dengan judul), bukan elemen fixed melayang. -->
+    <div
+      class="flex-none overflow-hidden transition-[width] duration-500 ease-in-out"
+      :style="{ width: sidebarVisible ? '228px' : '0px' }"
+      :aria-hidden="!sidebarVisible"
+      :inert="!sidebarVisible"
     >
-      <i class="ph-duotone ph-sidebar-simple text-[17px]" aria-hidden="true"></i>
-    </button>
+      <AppSidebar
+        :preorder-alert-count="preorderAlertCount"
+        @logout="handleLogout"
+        @hide-sidebar="setSidebarVisible(false)"
+      />
+    </div>
     <div class="flex min-w-0 flex-1 flex-col">
-      <AppTopbar :title="pageTitle" :subtitle="pageSubtitle" />
+      <AppTopbar
+        :title="pageTitle"
+        :subtitle="pageSubtitle"
+        :sidebar-hidden="!sidebarVisible"
+        @show-sidebar="setSidebarVisible(true)"
+      />
       <main class="min-h-0 flex-1 overflow-auto">
         <RouterView />
       </main>

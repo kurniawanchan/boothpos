@@ -35,30 +35,45 @@ async function renderShell() {
   return render(AppShell, { global: { plugins: [pinia, router] } });
 }
 
-// Sidebar show/hide toggle
+// Sidebar tetap ter-mount SELAMA transisi (lihat komentar AppShell.vue) —
+// jadi status tampil/sembunyi diverifikasi lewat lebar wrapper +
+// aria-hidden/inert, bukan ada/tidaknya elemen <nav> di DOM. `hidden: true`
+// wajib di sini karena begitu aria-hidden="true" terpasang, query role
+// default testing-library MEMANG mengecualikannya dari accessibility tree
+// (perilaku yang benar) — kita tetap perlu menjangkau elemennya untuk
+// memeriksa lebar/atributnya sendiri.
+function sidebarWrapper() {
+  return screen.getByRole('navigation', { name: /navigasi utama/i, hidden: true }).parentElement;
+}
+
 describe('AppShell — sidebar show/hide toggle', () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it('shows the sidebar by default', async () => {
+  it('shows the sidebar by default (expanded width, not aria-hidden)', async () => {
     await renderShell();
-    expect(screen.getByRole('navigation', { name: /navigasi utama/i })).toBeInTheDocument();
+    const wrapper = sidebarWrapper();
+    expect(wrapper.style.width).toBe('228px');
+    expect(wrapper.getAttribute('aria-hidden')).toBe('false');
+    expect(screen.queryByRole('button', { name: /tampilkan sidebar/i })).not.toBeInTheDocument();
   });
 
-  it('hides the sidebar and shows a reveal button when the hide toggle is clicked, persisting the choice', async () => {
+  it('collapses the sidebar and shows a reveal button in the topbar when the hide toggle is clicked, persisting the choice', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     await renderShell();
 
     await user.click(screen.getByRole('button', { name: /sembunyikan sidebar/i }));
 
-    expect(screen.queryByRole('navigation', { name: /navigasi utama/i })).not.toBeInTheDocument();
+    const wrapper = sidebarWrapper();
+    expect(wrapper.style.width).toBe('0px');
+    expect(wrapper.getAttribute('aria-hidden')).toBe('true');
     expect(screen.getByRole('button', { name: /tampilkan sidebar/i })).toBeInTheDocument();
     expect(localStorage.getItem('boothpos:sidebar-visible')).toBe('hidden');
   });
 
-  it('shows the sidebar again when the reveal button is clicked', async () => {
+  it('expands the sidebar again when the reveal button is clicked', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     await renderShell();
@@ -66,7 +81,8 @@ describe('AppShell — sidebar show/hide toggle', () => {
     await user.click(screen.getByRole('button', { name: /sembunyikan sidebar/i }));
     await user.click(screen.getByRole('button', { name: /tampilkan sidebar/i }));
 
-    expect(screen.getByRole('navigation', { name: /navigasi utama/i })).toBeInTheDocument();
+    const wrapper = sidebarWrapper();
+    expect(wrapper.style.width).toBe('228px');
     expect(localStorage.getItem('boothpos:sidebar-visible')).toBe('visible');
   });
 
@@ -74,6 +90,7 @@ describe('AppShell — sidebar show/hide toggle', () => {
     localStorage.setItem('boothpos:sidebar-visible', 'hidden');
     await renderShell();
 
-    expect(screen.queryByRole('navigation', { name: /navigasi utama/i })).not.toBeInTheDocument();
+    expect(sidebarWrapper().style.width).toBe('0px');
+    expect(screen.getByRole('button', { name: /tampilkan sidebar/i })).toBeInTheDocument();
   });
 });
