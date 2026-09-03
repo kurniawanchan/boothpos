@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import ProductsView from '../../resources/js/views/ProductsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
+import { i18n } from '../../resources/js/i18n';
 import { listProducts, createProduct, uploadProductImage } from '../../resources/js/api/products';
 import { listArtists } from '../../resources/js/api/artists';
 import { listCategories } from '../../resources/js/api/categories';
@@ -70,5 +71,28 @@ describe('ProductsView — product image upload', () => {
 
     await waitFor(() => expect(createProduct).toHaveBeenCalled());
     await waitFor(() => expect(uploadProductImage).toHaveBeenCalledWith(99, file));
+  });
+
+  // 002-language-toggle FR-011 — switching locale mid-edit must not wipe
+  // out values the user already typed into an open form.
+  it('preserves in-progress form input when the language is switched mid-edit', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderProducts();
+    i18n.global.locale.value = 'id';
+
+    await user.click(await screen.findByRole('button', { name: /produk baru/i }));
+    const nameInput = screen.getByLabelText(/nama produk/i);
+    await user.type(nameInput, 'Kaos Polos Hitam');
+    expect(nameInput).toHaveValue('Kaos Polos Hitam');
+
+    // Simulate the user switching the app language while the form is open.
+    i18n.global.locale.value = 'en';
+    await Promise.resolve();
+
+    // The label re-renders in the new language...
+    expect(screen.getByLabelText(/product name/i)).toBeInTheDocument();
+    // ...but the value the user already typed survives untouched.
+    expect(screen.getByLabelText(/product name/i)).toHaveValue('Kaos Polos Hitam');
   });
 });

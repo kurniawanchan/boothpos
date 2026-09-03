@@ -241,7 +241,7 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
       switching the control re-renders visible text in the mounted
       component tree immediately, calls `authStore.setLanguage()`
       (mocked API), and reflects the persisted value on next mount.
-- [ ] T045 [US1] Extend an existing form test (e.g.
+- [X] T045 [US1] Extend an existing form test (e.g.
       `qa-tests/component/ProductImageUpload.test.js` or `UsersView.test.js`)
       with a case: fill part of a create form, flip the locale mid-edit,
       assert the field's value is unchanged (FR-011).
