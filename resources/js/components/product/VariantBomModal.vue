@@ -1,5 +1,6 @@
 <script setup>
-import { reactive, ref, watch } from 'vue';
+import { reactive, ref, watch, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseInput from '../ui/BaseInput.vue';
@@ -31,6 +32,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const toast = useToastStore();
+const { t } = useI18n();
 const loading = ref(false);
 const bomLines = ref([]);
 const breakdown = ref(null);
@@ -60,7 +62,7 @@ async function reload() {
     breakdown.value = breakdownRes;
     materials.value = materialsRes.data;
   } catch (err) {
-    toast.error(err.message || 'Gagal memuat BOM varian.');
+    toast.error(err.message || t('vendors_materials.load_bom_failed'));
   } finally {
     loading.value = false;
   }
@@ -79,10 +81,7 @@ watch(
   { immediate: true }
 );
 
-const materialOptions = ref([]);
-watch(materials, (m) => {
-  materialOptions.value = m.map((x) => ({ value: x.id, label: `${x.name} (${x.unit})` }));
-});
+const materialOptions = computed(() => materials.value.map((x) => ({ value: x.id, label: `${x.name} (${x.unit})` })));
 
 function openCreate() {
   editingLine.value = null;
@@ -103,14 +102,14 @@ async function saveLine() {
   try {
     if (editingLine.value) {
       await updateBomLine(editingLine.value.id, { qty_needed: form.qty_needed, notes: form.notes || null });
-      toast.success('Baris BOM diperbarui.');
+      toast.success(t('vendors_materials.bom_line_updated'));
     } else {
       await addBomLine(props.variantId, {
         material_id: Number(form.material_id),
         qty_needed: form.qty_needed,
         notes: form.notes || null,
       });
-      toast.success('Baris BOM ditambahkan.');
+      toast.success(t('vendors_materials.bom_line_added'));
     }
     showForm.value = false;
     await reload();
@@ -134,7 +133,7 @@ async function performDelete() {
   deleting.value = true;
   try {
     await deleteBomLine(deleteTarget.value.id);
-    toast.success('Baris BOM dihapus.');
+    toast.success(t('vendors_materials.bom_line_deleted'));
     showDelete.value = false;
     await reload();
   } catch {
@@ -146,37 +145,36 @@ async function performDelete() {
 </script>
 
 <template>
-  <BaseModal :open="open" :title="`BOM &amp; modal bahan — ${variantSku || variantName}`" max-width-class="max-w-[640px]" @close="emit('close')">
-    <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">Memuat BOM…</div>
+  <BaseModal :open="open" :title="t('vendors_materials.bom_and_cost_title', { variant: variantSku || variantName })" max-width-class="max-w-[640px]" @close="emit('close')">
+    <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">{{ t('vendors_materials.loading_bom') }}</div>
     <div v-else class="flex flex-col gap-4 px-6 py-5">
       <div v-if="breakdown" class="flex items-center gap-3 rounded-lg border border-line-2 bg-surface-subtle px-4 py-3.5">
         <div class="flex flex-1 flex-col gap-0.5">
-          <span class="text-[11px] font-bold uppercase tracking-wide text-muted-3">Harga modal manual (cost_price)</span>
+          <span class="text-[11px] font-bold uppercase tracking-wide text-muted-3">{{ t('vendors_materials.manual_cost_price') }}</span>
           <span class="text-[17px] font-extrabold tracking-tight">{{ formatIDR(breakdown.cost_price) }}</span>
         </div>
         <i class="ph-duotone ph-arrows-left-right text-[18px] text-muted-3" aria-hidden="true"></i>
         <div class="flex flex-1 flex-col items-end gap-0.5">
-          <span class="text-[11px] font-bold uppercase tracking-wide text-muted-3">Modal bahan dari BOM (bom_cost)</span>
+          <span class="text-[11px] font-bold uppercase tracking-wide text-muted-3">{{ t('vendors_materials.bom_cost_from_materials') }}</span>
           <span class="text-[17px] font-extrabold tracking-tight text-brand-active">{{ formatIDR(breakdown.bom_cost) }}</span>
         </div>
       </div>
       <p class="text-[12px] leading-relaxed text-muted-3">
-        <span class="font-mono">bom_cost</span> tidak pernah menimpa <span class="font-mono">cost_price</span> secara otomatis —
-        bandingkan sendiri lalu ubah harga modal manual lewat form Edit produk bila perlu.
+        {{ t('vendors_materials.bom_cost_note') }}
       </p>
 
       <div v-if="!bomLines.length" class="rounded-lg border border-dashed border-disabled-2 px-4 py-8 text-center text-[13px] text-muted-3">
-        Belum ada bahan pada BOM varian ini.
+        {{ t('vendors_materials.no_bom_materials') }}
       </div>
       <div v-else class="overflow-hidden rounded-lg border border-line-2">
         <table class="w-full border-collapse text-[13px]">
           <thead>
             <tr class="bg-surface-subtle text-left">
-              <th class="px-3 py-2 font-bold text-muted-2">Bahan</th>
-              <th class="px-3 py-2 text-right font-bold text-muted-2">Qty</th>
-              <th class="px-3 py-2 text-right font-bold text-muted-2">Harga satuan</th>
-              <th class="px-3 py-2 text-right font-bold text-muted-2">Biaya</th>
-              <th class="px-3 py-2 font-bold text-muted-2">Vendor acuan</th>
+              <th class="px-3 py-2 font-bold text-muted-2">{{ t('vendors_materials.col_material') }}</th>
+              <th class="px-3 py-2 text-right font-bold text-muted-2">{{ t('vendors_materials.col_qty') }}</th>
+              <th class="px-3 py-2 text-right font-bold text-muted-2">{{ t('vendors_materials.col_unit_price') }}</th>
+              <th class="px-3 py-2 text-right font-bold text-muted-2">{{ t('vendors_materials.col_cost') }}</th>
+              <th class="px-3 py-2 font-bold text-muted-2">{{ t('vendors_materials.col_reference_vendor') }}</th>
               <th class="px-3 py-2"></th>
             </tr>
           </thead>
@@ -189,11 +187,11 @@ async function performDelete() {
               <td class="px-3 py-2">
                 <span v-if="!line.has_price" class="inline-flex items-center gap-1 text-[11.5px] font-bold text-warn-text">
                   <i class="ph-duotone ph-warning text-[14px]" aria-hidden="true"></i>
-                  Belum ada harga vendor
+                  {{ t('vendors_materials.no_vendor_price_yet') }}
                 </span>
                 <span v-else class="inline-flex items-center gap-1.5">
                   {{ line.reference_vendor_name }}
-                  <StatusPill v-if="line.reference_is_preferred" variant="mint">Preferred</StatusPill>
+                  <StatusPill v-if="line.reference_is_preferred" variant="mint">{{ t('vendors_materials.preferred') }}</StatusPill>
                 </span>
               </td>
               <td class="px-3 py-2">
@@ -203,14 +201,14 @@ async function performDelete() {
                     class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active"
                     @click="openEdit(bomLines.find((l) => l.id === line.bom_line_id))"
                   >
-                    Edit
+                    {{ t('common.edit') }}
                   </button>
                   <button
                     type="button"
                     class="text-[12.5px] font-semibold text-danger-text"
                     @click="confirmDelete(bomLines.find((l) => l.id === line.bom_line_id))"
                   >
-                    Hapus
+                    {{ t('common.delete') }}
                   </button>
                 </div>
               </td>
@@ -221,40 +219,40 @@ async function performDelete() {
 
       <BaseButton variant="secondary" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Tambah bahan ke BOM
+        {{ t('vendors_materials.add_material_to_bom') }}
       </BaseButton>
     </div>
 
-    <BaseModal :open="showForm" :title="editingLine ? 'Ubah baris BOM' : 'Bahan baru di BOM'" max-width-class="max-w-[420px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingLine ? t('vendors_materials.edit_bom_line') : t('vendors_materials.new_bom_material')" max-width-class="max-w-[420px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveLine">
         <BaseSelect
           v-if="!editingLine"
           v-model="form.material_id"
-          label="Bahan"
+          :label="t('vendors_materials.material')"
           required
           :options="materialOptions"
           :error="formErrors.material_id"
         />
         <div v-else class="flex flex-col gap-1.5">
-          <span class="text-[12.5px] font-semibold text-muted-4">Bahan</span>
+          <span class="text-[12.5px] font-semibold text-muted-4">{{ t('vendors_materials.material') }}</span>
           <span class="text-[13.5px] font-bold">{{ editingLine.material_name }}</span>
         </div>
-        <BaseInput v-model="form.qty_needed" type="number" min="0" step="0.0001" label="Jumlah dibutuhkan per unit" required :error="formErrors.qty_needed" />
-        <BaseInput v-model="form.notes" label="Catatan" :error="formErrors.notes" />
+        <BaseInput v-model="form.qty_needed" type="number" min="0" step="0.0001" :label="t('vendors_materials.qty_needed_per_unit')" required :error="formErrors.qty_needed" />
+        <BaseInput v-model="form.notes" :label="t('master_data.notes')" :error="formErrors.notes" />
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton :loading="saving" @click="saveLine">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="saving" @click="saveLine">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"
-      title="Hapus baris BOM"
-      :message="`Hapus ${deleteTarget?.material_name} dari BOM varian ini?`"
-      confirm-label="Ya, hapus"
+      :title="t('vendors_materials.delete_bom_line')"
+      :message="t('vendors_materials.delete_bom_line_confirm', { material: deleteTarget?.material_name })"
+      :confirm-label="t('vendors_materials.yes_delete')"
       :loading="deleting"
       @close="showDelete = false"
       @confirm="performDelete"

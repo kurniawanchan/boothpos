@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import StatusPill from '../ui/StatusPill.vue';
 import VariantBomModal from './VariantBomModal.vue';
@@ -22,6 +23,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const toast = useToastStore();
+const { t } = useI18n();
 const auth = useAuthStore();
 const product = ref(null);
 const loading = ref(false);
@@ -44,7 +46,7 @@ watch(
     try {
       product.value = await getProduct(productId);
     } catch (err) {
-      toast.error(err.message || 'Gagal memuat detail produk.');
+      toast.error(err.message || t('master_data.load_product_detail_failed'));
     } finally {
       loading.value = false;
     }
@@ -56,8 +58,8 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
 </script>
 
 <template>
-  <BaseModal :open="open" :title="product?.name ?? 'Detail produk'" max-width-class="max-w-[560px]" @close="emit('close')">
-    <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">Memuat detail produk…</div>
+  <BaseModal :open="open" :title="product?.name ?? t('master_data.product_detail')" max-width-class="max-w-[560px]" @close="emit('close')">
+    <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">{{ t('master_data.loading_product_detail') }}</div>
     <div v-else-if="product" class="flex flex-col gap-4 px-6 py-5">
       <div class="flex items-start gap-3.5">
         <img
@@ -74,8 +76,8 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
           <span class="text-[15px] font-bold tracking-tight">{{ product.name }}</span>
           <span class="text-[12.5px] text-muted-2">{{ product.artist_name }} · {{ product.category_name }}</span>
           <div class="flex gap-1.5">
-            <StatusPill :variant="product.is_preorder ? 'warn' : 'neutral'">{{ product.is_preorder ? 'Pre-order' : 'Ready stock' }}</StatusPill>
-            <StatusPill :variant="product.is_active ? 'mint' : 'neutral'">{{ product.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
+            <StatusPill :variant="product.is_preorder ? 'warn' : 'neutral'">{{ product.is_preorder ? t('master_data.preorder') : t('master_data.ready_stock') }}</StatusPill>
+            <StatusPill :variant="product.is_active ? 'mint' : 'neutral'">{{ product.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
           </div>
         </div>
       </div>
@@ -83,21 +85,21 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
       <p v-if="product.description" class="text-[13px] leading-relaxed text-muted-4">{{ product.description }}</p>
 
       <div class="flex items-center justify-between rounded-lg border border-mint-border bg-mint-50 px-4 py-3">
-        <span class="text-[12.5px] font-semibold text-brand-active">Total stok tersedia (semua varian)</span>
+        <span class="text-[12.5px] font-semibold text-brand-active">{{ t('master_data.total_stock_available') }}</span>
         <span class="text-[21px] font-extrabold tracking-tight text-brand-active">{{ totalStock }}</span>
       </div>
 
       <div class="flex flex-col gap-2">
-        <span class="text-[11.5px] font-bold uppercase tracking-wider text-muted-3">Varian</span>
+        <span class="text-[11.5px] font-bold uppercase tracking-wider text-muted-3">{{ t('master_data.variants') }}</span>
         <div class="overflow-hidden rounded-lg border border-line-2">
           <table class="w-full border-collapse text-[13px]">
             <thead>
               <tr class="bg-surface-subtle text-left">
-                <th class="px-3 py-2 font-bold text-muted-2">SKU</th>
-                <th class="px-3 py-2 font-bold text-muted-2">Nama</th>
-                <th class="px-3 py-2 text-right font-bold text-muted-2">Harga jual</th>
-                <th class="px-3 py-2 text-right font-bold text-muted-2">Stok</th>
-                <th class="px-3 py-2 font-bold text-muted-2">Status</th>
+                <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_sku') }}</th>
+                <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_name') }}</th>
+                <th class="px-3 py-2 text-right font-bold text-muted-2">{{ t('master_data.col_sell_price') }}</th>
+                <th class="px-3 py-2 text-right font-bold text-muted-2">{{ t('master_data.col_stock') }}</th>
+                <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_status') }}</th>
                 <th v-if="auth.canAccessMenu('products')" class="px-3 py-2"></th>
               </tr>
             </thead>
@@ -108,10 +110,10 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
                 <td class="px-3 py-2 text-right">{{ formatIDR(v.sell_price) }}</td>
                 <td class="px-3 py-2 text-right font-semibold">{{ v.current_stock }}</td>
                 <td class="px-3 py-2">
-                  <StatusPill :variant="v.is_active ? 'mint' : 'neutral'">{{ v.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
+                  <StatusPill :variant="v.is_active ? 'mint' : 'neutral'">{{ v.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
                 </td>
                 <td v-if="auth.canAccessMenu('products')" class="px-3 py-2 text-right">
-                  <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openBom(v)">BOM</button>
+                  <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openBom(v)">{{ t('master_data.bom') }}</button>
                 </td>
               </tr>
             </tbody>

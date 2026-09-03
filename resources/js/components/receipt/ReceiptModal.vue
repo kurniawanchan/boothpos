@@ -8,6 +8,13 @@ import { formatDateTime } from '../../utils/date';
 import { useToastStore } from '../../stores/toast';
 
 /**
+ * 002-language-toggle FR-009 — labels in this component's template
+ * ("Subtotal", "Diskon", "Kembalian", "Kasir", dst.) are SENGAJA hardcoded
+ * Indonesian, not wrapped in t(). The receipt is read by the CUSTOMER, not
+ * the cashier operating the app — it must always be Indonesian regardless
+ * of the logged-in cashier's language preference. Do not "fix" these into
+ * t() calls.
+ *
  * Also doubles as a historical-receipt viewer (Task 3, Sales report
  * "Lihat struk" click-through) — GET /orders/{order}/receipt works
  * identically for a just-completed order or an old one, so no separate

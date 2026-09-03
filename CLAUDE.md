@@ -155,12 +155,22 @@ All gated on `canManageMasterData()`, same tier as Products/Categories/Stock.
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/001-user-store-settings/plan.md` (branch
-`001-user-store-settings`) — Pengaturan Pengguna dan Toko: user CRUD with
-photo/last-access/search/filter, a fully configurable role/menu-permission
-system replacing the current fixed 4-role model, expanded store profile
-(address/logo/contact), and bulk user export/import via the existing
-combined master-data workbook. See that plan's Technical Context and
-Project Structure sections for concrete file paths and design decisions
-before touching authorization code while this feature is in flight.
+Active feature plan: `specs/002-language-toggle/plan.md` (branch
+`002-language-toggle`) — Ganti Bahasa Antarmuka (Indonesia/English):
+post-login language toggle stored per user account (`users.language`,
+default English), full-app translation scope via `vue-i18n` on the
+frontend and Laravel's `lang/`/`App::setLocale()` on the backend (neither
+existed in this codebase before this feature). Login screen and
+transaction receipts are explicitly excluded — always Indonesian. This
+feature has a documented, justified conflict with Constitution Principle
+III (Indonesian-only UI copy) — see that plan's Constitution Check and
+Complexity Tracking before touching UI copy or error-message strings
+while this feature is in flight.
+
+Previous feature: `specs/001-user-store-settings/plan.md` — Pengaturan
+Pengguna dan Toko: user CRUD with photo/last-access/search/filter, a
+fully configurable role/menu-permission system replacing the fixed
+4-role model, expanded store profile, and bulk user export/import.
+Shipped (PR #1); see that plan for the Role/menu_keys authorization
+model design before touching authorization code.
 <!-- SPECKIT END -->

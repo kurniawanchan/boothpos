@@ -28,7 +28,7 @@ class UpdateCategoryRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'code.prohibited' => 'Kode kategori bersifat permanen dan tidak dapat diubah setelah dibuat.',
+            'code.prohibited' => __('master_data.category_code_permanent'),
         ];
     }
 

@@ -155,7 +155,7 @@ class ProductController extends Controller
 
         if ($hasActiveVariants) {
             return response()->json([
-                'message' => 'Produk masih memiliki varian aktif. Nonaktifkan seluruh varian terlebih dahulu.',
+                'message' => __('master_data.product_delete_has_active_variants'),
             ], 409);
         }
 

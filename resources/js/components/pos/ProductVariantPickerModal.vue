@@ -1,6 +1,9 @@
 <script setup>
+import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import { formatIDR } from '../../utils/money';
+
+const { t } = useI18n();
 
 // `product` is a browse card from posProductCards.js — { name, artist_name,
 // variants: [...active only] }. Only opened for products with more than
@@ -19,9 +22,9 @@ function pick(variant) {
 </script>
 
 <template>
-  <BaseModal :open="open" :title="product?.name ?? 'Pilih varian'" max-width-class="max-w-[420px]" @close="emit('close')">
+  <BaseModal :open="open" :title="product?.name ?? t('pos.pick_variant')" max-width-class="max-w-[420px]" @close="emit('close')">
     <div class="flex flex-col gap-2.5 px-5 py-4">
-      <p v-if="product?.artist_name" class="text-[12px] text-muted-3">{{ product.artist_name }} · pilih varian untuk ditambahkan ke keranjang</p>
+      <p v-if="product?.artist_name" class="text-[12px] text-muted-3">{{ product.artist_name }} · {{ t('pos.pick_variant_hint') }}</p>
       <button
         v-for="v in product?.variants ?? []"
         :key="v.id"
@@ -37,7 +40,7 @@ function pick(variant) {
         <div class="flex flex-col items-end gap-0.5">
           <span class="text-[13.5px] font-bold text-brand-active">{{ formatIDR(v.sell_price) }}</span>
           <span class="text-[11px]" :class="v.current_stock <= 0 ? 'font-semibold text-danger-text' : 'text-muted-3'">
-            {{ v.current_stock <= 0 ? 'Stok habis' : `Stok ${v.current_stock}` }}
+            {{ v.current_stock <= 0 ? t('pos.stock_out') : t('pos.stock_n', { count: v.current_stock }) }}
           </span>
         </div>
       </button>

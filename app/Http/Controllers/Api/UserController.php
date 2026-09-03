@@ -92,7 +92,7 @@ class UserController extends Controller
         // dst.), bukan dilempar lewat $this->authorize().
         if (app(UserPolicy::class)->isSelfLockout($request->user(), $user, $deactivating, $roleChanging)) {
             return response()->json([
-                'message' => 'Tidak dapat menonaktifkan atau mengganti peran akun yang sedang Anda gunakan sendiri.',
+                'message' => __('policies.user_self_lockout'),
             ], 409);
         }
 
@@ -115,7 +115,7 @@ class UserController extends Controller
 
         if (app(UserPolicy::class)->isSelfLockout($request->user(), $user, deactivating: true, roleChanging: false)) {
             return response()->json([
-                'message' => 'Tidak dapat menghapus akun yang sedang Anda gunakan sendiri.',
+                'message' => __('policies.user_self_delete'),
             ], 409);
         }
 

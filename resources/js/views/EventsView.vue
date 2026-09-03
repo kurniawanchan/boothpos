@@ -1,5 +1,6 @@
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listEvents, createEvent, updateEvent, updateEventStatus } from '../api/events';
 import { useAuthStore } from '../stores/auth';
@@ -16,22 +17,28 @@ import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 
 const auth = useAuthStore();
+const { t } = useI18n();
 const toast = useToastStore();
 
 const { items, meta, params, loading, load, setPage, setFilter } = usePaginatedList(listEvents);
 onMounted(load);
 
 const STATUS_VARIANT = { draft: 'neutral', active: 'mint', closed: 'dark', cancelled: 'danger' };
-const STATUS_LABEL = { draft: 'Draf', active: 'Aktif', closed: 'Selesai', cancelled: 'Dibatalkan' };
+const STATUS_LABEL = computed(() => ({
+  draft: t('events_sessions.status_draft'),
+  active: t('events_sessions.status_active'),
+  closed: t('events_sessions.status_closed'),
+  cancelled: t('events_sessions.status_cancelled'),
+}));
 
-const columns = [
-  { key: 'name', label: 'Nama event' },
-  { key: 'location', label: 'Lokasi' },
-  { key: 'dates', label: 'Tanggal' },
-  { key: 'event_cost', label: 'Biaya event' },
-  { key: 'status', label: 'Status' },
+const columns = computed(() => [
+  { key: 'name', label: t('events_sessions.col_event_name') },
+  { key: 'location', label: t('events_sessions.col_location') },
+  { key: 'dates', label: t('events_sessions.col_dates') },
+  { key: 'event_cost', label: t('events_sessions.col_event_cost') },
+  { key: 'status', label: t('events_sessions.col_status') },
   { key: 'actions', label: '' },
-];
+]);
 
 const showForm = ref(false);
 const editingEvent = ref(null);
@@ -74,10 +81,10 @@ async function saveEvent() {
   try {
     if (editingEvent.value) {
       await updateEvent(editingEvent.value.id, payload);
-      toast.success('Event diperbarui.');
+      toast.success(t('events_sessions.event_updated'));
     } else {
       await createEvent(payload);
-      toast.success('Event dibuat.');
+      toast.success(t('events_sessions.event_created'));
     }
     showForm.value = false;
     await load();
@@ -91,7 +98,7 @@ async function saveEvent() {
 async function transition(event, status) {
   try {
     await updateEventStatus(event.id, status);
-    toast.success('Status event diperbarui.');
+    toast.success(t('events_sessions.event_status_updated'));
     await load();
   } catch {
     // 409 (masih ada sesi terbuka / transisi tidak valid) sudah ditoast
@@ -106,24 +113,24 @@ async function transition(event, status) {
       <BaseSelect
         class="w-52"
         :model-value="params.status ?? ''"
-        placeholder="Semua status"
+        :placeholder="t('events_sessions.all_status')"
         :options="[
-          { value: 'draft', label: 'Draf' },
-          { value: 'active', label: 'Aktif' },
-          { value: 'closed', label: 'Selesai' },
-          { value: 'cancelled', label: 'Dibatalkan' },
+          { value: 'draft', label: t('events_sessions.status_draft') },
+          { value: 'active', label: t('events_sessions.status_active') },
+          { value: 'closed', label: t('events_sessions.status_closed') },
+          { value: 'cancelled', label: t('events_sessions.status_cancelled') },
         ]"
         @update:model-value="(v) => setFilter({ status: v || undefined })"
       />
       <span class="flex-1"></span>
       <BaseButton v-if="auth.canAccessMenu('settings')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Event baru
+        {{ t('events_sessions.new_event') }}
       </BaseButton>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada event.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('events_sessions.no_events')">
         <template #cell-location="{ row }">{{ row.location || '—' }}</template>
         <template #cell-dates="{ row }">{{ formatDate(row.start_date) }} – {{ formatDate(row.end_date) }}</template>
         <template #cell-event_cost="{ row }">{{ formatIDR(row.event_cost) }}</template>
@@ -132,31 +139,31 @@ async function transition(event, status) {
         </template>
         <template #cell-actions="{ row }">
           <div v-if="auth.canAccessMenu('settings')" class="flex justify-end gap-1.5">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
-            <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'active')">Aktifkan</button>
-            <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="transition(row, 'cancelled')">Batalkan</button>
-            <button v-if="row.status === 'active'" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'closed')">Tutup</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'active')">{{ t('events_sessions.activate') }}</button>
+            <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="transition(row, 'cancelled')">{{ t('events_sessions.cancel_event') }}</button>
+            <button v-if="row.status === 'active'" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'closed')">{{ t('events_sessions.close_event') }}</button>
           </div>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingEvent ? 'Ubah event' : 'Event baru'" max-width-class="max-w-[520px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingEvent ? t('events_sessions.edit_event') : t('events_sessions.new_event')" max-width-class="max-w-[520px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveEvent">
-        <BaseInput v-model="form.name" label="Nama event" required maxlength="150" :error="formErrors.name" />
-        <BaseInput v-model="form.location" label="Lokasi" :error="formErrors.location" />
+        <BaseInput v-model="form.name" :label="t('events_sessions.event_name')" required maxlength="150" :error="formErrors.name" />
+        <BaseInput v-model="form.location" :label="t('events_sessions.location')" :error="formErrors.location" />
         <div class="grid grid-cols-2 gap-3">
-          <BaseInput v-model="form.start_date" type="date" label="Tanggal mulai" required :error="formErrors.start_date" />
-          <BaseInput v-model="form.end_date" type="date" label="Tanggal selesai" required :error="formErrors.end_date" />
+          <BaseInput v-model="form.start_date" type="date" :label="t('events_sessions.start_date')" required :error="formErrors.start_date" />
+          <BaseInput v-model="form.end_date" type="date" :label="t('events_sessions.end_date')" required :error="formErrors.end_date" />
         </div>
-        <BaseInput v-model="form.event_cost" type="number" min="0" label="Biaya event (Rp)" :error="formErrors.event_cost" />
-        <BaseTextarea v-model="form.notes" label="Catatan" :rows="3" :error="formErrors.notes" />
+        <BaseInput v-model="form.event_cost" type="number" min="0" :label="t('events_sessions.event_cost_rp')" :error="formErrors.event_cost" />
+        <BaseTextarea v-model="form.notes" :label="t('events_sessions.notes')" :rows="3" :error="formErrors.notes" />
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton :loading="saving" @click="saveEvent">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="saving" @click="saveEvent">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>

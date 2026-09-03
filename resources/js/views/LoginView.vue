@@ -1,4 +1,8 @@
 <script setup>
+// 002-language-toggle FR-001 — this screen is VERIFIED to have no
+// useI18n()/t() usage and no <LanguageSwitcher>. It always renders in
+// Bahasa Indonesia for everyone, before any account identity is known.
+// Do not add a language toggle here.
 import { reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';

@@ -1,5 +1,6 @@
 <script setup>
-import { reactive, ref, watch } from 'vue';
+import { reactive, ref, watch, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseInput from '../ui/BaseInput.vue';
@@ -24,6 +25,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'changed']);
 
 const toast = useToastStore();
+const { t } = useI18n();
 const material = ref(null);
 const vendors = ref([]);
 const loading = ref(false);
@@ -48,7 +50,7 @@ async function reload() {
       listVendors({ per_page: 100, is_active: 1 }).then((r) => r.data),
     ]);
   } catch (err) {
-    toast.error(err.message || 'Gagal memuat harga vendor.');
+    toast.error(err.message || t('vendors_materials.load_vendor_prices_failed'));
   } finally {
     loading.value = false;
   }
@@ -66,10 +68,7 @@ watch(
   { immediate: true }
 );
 
-const vendorOptions = ref([]);
-watch(vendors, (v) => {
-  vendorOptions.value = v.map((x) => ({ value: x.id, label: x.name }));
-});
+const vendorOptions = computed(() => vendors.value.map((x) => ({ value: x.id, label: x.name })));
 
 function openCreate() {
   editingPrice.value = null;
@@ -100,10 +99,10 @@ async function savePrice() {
   try {
     if (editingPrice.value) {
       await updateVendorPrice(editingPrice.value.id, payload);
-      toast.success('Harga vendor diperbarui.');
+      toast.success(t('vendors_materials.vendor_price_updated'));
     } else {
       await addVendorPrice(props.materialId, { vendor_id: Number(form.vendor_id), ...payload });
-      toast.success('Harga vendor ditambahkan.');
+      toast.success(t('vendors_materials.vendor_price_added'));
     }
     showForm.value = false;
     await reload();
@@ -128,7 +127,7 @@ async function performDelete() {
   deleting.value = true;
   try {
     await deleteVendorPrice(deleteTarget.value.id);
-    toast.success('Harga vendor dihapus.');
+    toast.success(t('vendors_materials.vendor_price_deleted'));
     showDelete.value = false;
     await reload();
     emit('changed');
@@ -141,16 +140,15 @@ async function performDelete() {
 </script>
 
 <template>
-  <BaseModal :open="open" :title="material ? `Harga vendor — ${material.name}` : 'Harga vendor'" max-width-class="max-w-[560px]" @close="emit('close')">
-    <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">Memuat…</div>
+  <BaseModal :open="open" :title="material ? t('vendors_materials.vendor_price_title', { material: material.name }) : t('vendors_materials.vendor_price')" max-width-class="max-w-[560px]" @close="emit('close')">
+    <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">{{ t('vendors_materials.loading') }}</div>
     <div v-else class="flex flex-col gap-3.5 px-6 py-5">
       <p class="text-[12.5px] leading-relaxed text-muted-4">
-        Vendor yang ditandai <span class="font-bold text-brand-active">Preferred</span> menjadi acuan modal (bom_cost) bahan
-        ini. Jika tidak ada yang preferred, harga <span class="font-bold">termurah</span> dipakai sebagai estimasi.
+        {{ t('vendors_materials.preferred_explanation') }}
       </p>
 
       <div v-if="!material?.vendor_prices?.length" class="rounded-lg border border-dashed border-disabled-2 px-4 py-8 text-center text-[13px] text-muted-3">
-        Belum ada harga vendor untuk bahan ini.
+        {{ t('vendors_materials.no_vendor_prices_yet') }}
       </div>
       <div v-else class="flex flex-col gap-2">
         <div
@@ -161,58 +159,58 @@ async function performDelete() {
           <div class="flex flex-1 flex-col gap-0.5">
             <div class="flex items-center gap-2">
               <span class="text-[13px] font-bold">{{ p.vendor_name }}</span>
-              <StatusPill v-if="p.is_preferred" variant="mint">Preferred</StatusPill>
+              <StatusPill v-if="p.is_preferred" variant="mint">{{ t('vendors_materials.preferred') }}</StatusPill>
             </div>
             <span class="text-[12px] text-muted-3">{{ p.notes || '' }}</span>
           </div>
           <span class="text-[14px] font-bold tracking-tight">{{ formatIDR(p.price) }}</span>
           <div class="flex gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(p)">Edit</button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(p)">Hapus</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(p)">{{ t('common.edit') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(p)">{{ t('common.delete') }}</button>
           </div>
         </div>
       </div>
 
       <BaseButton variant="secondary" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Tambah harga vendor
+        {{ t('vendors_materials.add_vendor_price') }}
       </BaseButton>
     </div>
 
-    <BaseModal :open="showForm" :title="editingPrice ? 'Ubah harga vendor' : 'Harga vendor baru'" max-width-class="max-w-[420px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingPrice ? t('vendors_materials.edit_vendor_price') : t('vendors_materials.new_vendor_price')" max-width-class="max-w-[420px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="savePrice">
         <BaseSelect
           v-if="!editingPrice"
           v-model="form.vendor_id"
-          label="Vendor"
+          :label="t('vendors_materials.vendor')"
           required
           :options="vendorOptions"
           :error="formErrors.vendor_id"
         />
         <div v-else class="flex flex-col gap-1.5">
-          <span class="text-[12.5px] font-semibold text-muted-4">Vendor</span>
+          <span class="text-[12.5px] font-semibold text-muted-4">{{ t('vendors_materials.vendor') }}</span>
           <span class="text-[13.5px] font-bold">{{ editingPrice.vendor_name }}</span>
         </div>
-        <BaseInput v-model="form.price" type="number" min="0" label="Harga per unit" required :error="formErrors.price" />
+        <BaseInput v-model="form.price" type="number" min="0" :label="t('vendors_materials.price_per_unit')" required :error="formErrors.price" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_preferred" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
-          Jadikan vendor preferred untuk bahan ini
+          {{ t('vendors_materials.make_preferred_for_material') }}
         </label>
-        <BaseInput v-model="form.notes" label="Catatan" :error="formErrors.notes" />
+        <BaseInput v-model="form.notes" :label="t('master_data.notes')" :error="formErrors.notes" />
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton :loading="saving" @click="savePrice">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="saving" @click="savePrice">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"
-      title="Hapus harga vendor"
-      :message="`Hapus harga dari ${deleteTarget?.vendor_name}?`"
-      confirm-label="Ya, hapus"
+      :title="t('vendors_materials.delete_vendor_price')"
+      :message="t('vendors_materials.delete_vendor_price_confirm', { vendor: deleteTarget?.vendor_name })"
+      :confirm-label="t('vendors_materials.yes_delete')"
       :loading="deleting"
       @close="showDelete = false"
       @confirm="performDelete"

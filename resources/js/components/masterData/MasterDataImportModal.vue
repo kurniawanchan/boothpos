@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import { importMasterData, downloadImportTemplate } from '../../api/masterData';
@@ -20,24 +21,25 @@ defineProps({ open: { type: Boolean, default: false } });
 const emit = defineEmits(['close', 'imported']);
 
 const toast = useToastStore();
+const { t } = useI18n();
 
 // Mirrors ImportMasterDataRequest::MAX_KILOBYTES server-side — checked
 // client-side too so an oversized file fails fast instead of waiting on a
 // round trip just to be told the same thing.
 const MAX_BYTES = 10 * 1024 * 1024;
 
-const SHEET_LABEL = {
-  artists: 'Artist',
-  categories: 'Kategori',
-  products: 'Produk',
-  stock: 'Stok',
-  vendors: 'Vendor',
-  materials: 'Bahan Baku',
-  vendor_prices: 'Harga Vendor',
-  bom: 'BOM',
-  roles: 'Peran',
-  users: 'Pengguna',
-};
+const SHEET_LABEL = computed(() => ({
+  artists: t('master_data.sheet_artists'),
+  categories: t('master_data.sheet_categories'),
+  products: t('master_data.sheet_products'),
+  stock: t('master_data.sheet_stock'),
+  vendors: t('master_data.sheet_vendors'),
+  materials: t('master_data.sheet_materials'),
+  vendor_prices: t('master_data.sheet_vendor_prices'),
+  bom: t('master_data.sheet_bom'),
+  roles: t('master_data.sheet_roles'),
+  users: t('master_data.sheet_users'),
+}));
 
 const fileInputEl = ref(null);
 const imagesInputEl = ref(null);
@@ -72,7 +74,7 @@ async function downloadTemplate() {
   try {
     await downloadImportTemplate();
   } catch {
-    toast.error('Gagal mengunduh template impor.');
+    toast.error(t('master_data.download_template_failed'));
   } finally {
     downloadingTemplate.value = false;
   }
@@ -88,12 +90,12 @@ function onFileChange(e) {
   if (!file) return;
 
   if (!file.name.toLowerCase().endsWith('.xlsx')) {
-    clientError.value = 'Berkas impor harus berformat .xlsx.';
+    clientError.value = t('master_data.import_file_must_be_xlsx');
     e.target.value = '';
     return;
   }
   if (file.size > MAX_BYTES) {
-    clientError.value = 'Ukuran berkas impor maksimal 10 MB.';
+    clientError.value = t('master_data.import_file_max_size');
     e.target.value = '';
     return;
   }
@@ -116,7 +118,7 @@ async function runImport(dryRun) {
     const data = await importMasterData(selectedFile.value, { dryRun, images: selectedImages.value });
     result.value = data;
     if (!dryRun) {
-      toast.success('Impor berhasil.');
+      toast.success(t('master_data.import_success'));
       emit('imported');
     }
   } catch (err) {
@@ -142,18 +144,16 @@ const isDone = computed(() => !!result.value?.applied);
 </script>
 
 <template>
-  <BaseModal :open="open" title="Impor data master" max-width-class="max-w-[640px]" @close="close">
+  <BaseModal :open="open" :title="t('master_data.import_data')" max-width-class="max-w-[640px]" @close="close">
     <div class="flex flex-col gap-4 px-6 py-5">
       <div class="flex items-start gap-3 rounded-lg border border-mint-border bg-mint-50 px-3.5 py-3.5">
         <i class="ph-duotone ph-file-arrow-down text-[19px] text-brand-active" aria-hidden="true"></i>
         <div class="flex flex-1 flex-col gap-1">
-          <span class="text-[13px] font-bold text-brand-active">Belum punya berkasnya?</span>
+          <span class="text-[13px] font-bold text-brand-active">{{ t('master_data.no_file_yet_title') }}</span>
           <span class="text-[12px] leading-relaxed text-muted-4">
-            Template berisi 10 sheet (artist, kategori, produk, stok, vendor, bahan baku, harga vendor, BOM, peran, pengguna) lengkap dengan
-            judul kolom dan contoh baris — sheet produk dan kategori kini juga memuat contoh kolom
+            {{ t('master_data.template_description') }}
             <span class="font-semibold">image_filename</span>.
-            Berkas hasil <span class="font-semibold">ekspor</span> dari layar mana pun juga memakai kolom yang sama —
-            bisa langsung disunting dan diunggah balik ke sini.
+            {{ t('master_data.template_description_end') }}
           </span>
           <button
             type="button"
@@ -161,13 +161,13 @@ const isDone = computed(() => !!result.value?.applied);
             :disabled="downloadingTemplate"
             @click="downloadTemplate"
           >
-            {{ downloadingTemplate ? 'Mengunduh…' : 'Unduh template impor' }}
+            {{ downloadingTemplate ? t('master_data.downloading') : t('master_data.download_import_template') }}
           </button>
         </div>
       </div>
 
       <div class="flex flex-col gap-1.5">
-        <label class="text-[12.5px] font-semibold text-muted-4" for="master-data-import-file">Berkas .xlsx (maks 10 MB)</label>
+        <label class="text-[12.5px] font-semibold text-muted-4" for="master-data-import-file">{{ t('master_data.xlsx_file_max_10mb') }}</label>
         <input
           id="master-data-import-file"
           ref="fileInputEl"
@@ -178,12 +178,12 @@ const isDone = computed(() => !!result.value?.applied);
         />
         <p v-if="clientError" class="text-[12px] font-semibold text-danger-text">{{ clientError }}</p>
         <p v-else-if="simpleError" class="text-[12px] font-semibold text-danger-text">{{ simpleError }}</p>
-        <p v-else class="text-[11.5px] text-muted-3">Sheet yang tidak dikenali di dalam berkas akan dilewati, bukan menggagalkan impor.</p>
+        <p v-else class="text-[11.5px] text-muted-3">{{ t('master_data.unrecognized_sheets_skipped') }}</p>
       </div>
 
       <div class="flex flex-col gap-1.5">
         <label class="text-[12.5px] font-semibold text-muted-4" for="master-data-import-images">
-          Gambar produk/kategori (opsional)
+          {{ t('master_data.product_category_images_optional') }}
         </label>
         <input
           id="master-data-import-images"
@@ -195,8 +195,8 @@ const isDone = computed(() => !!result.value?.applied);
           @change="onImagesChange"
         />
         <p class="text-[11.5px] text-muted-3">
-          Nama berkas harus cocok dengan kolom <span class="font-mono">image_filename</span> di sheet produk/kategori.
-          <template v-if="selectedImages.length">{{ selectedImages.length }} berkas dipilih.</template>
+          {{ t('master_data.image_filename_must_match') }}
+          <template v-if="selectedImages.length">{{ t('master_data.files_selected', { count: selectedImages.length }) }}</template>
         </p>
       </div>
 
@@ -205,15 +205,15 @@ const isDone = computed(() => !!result.value?.applied);
           <i class="ph-duotone ph-x-circle text-[18px] text-danger-text" aria-hidden="true"></i>
           <span class="text-[13px] font-bold text-danger-text">{{ rejected.message }}</span>
         </div>
-        <p class="text-[12px] font-semibold text-danger-text">Tidak ada data yang diubah — perbaiki baris di bawah lalu unggah ulang.</p>
+        <p class="text-[12px] font-semibold text-danger-text">{{ t('master_data.no_data_changed_fix_rows') }}</p>
         <div class="max-h-[220px] overflow-auto rounded-md border border-danger-border-hover bg-white">
           <table class="w-full border-collapse text-[12px]">
             <thead>
               <tr class="bg-surface-subtle text-left">
-                <th class="px-3 py-2 font-bold text-muted-2">Sheet</th>
-                <th class="px-3 py-2 font-bold text-muted-2">Baris</th>
-                <th class="px-3 py-2 font-bold text-muted-2">Kolom</th>
-                <th class="px-3 py-2 font-bold text-muted-2">Masalah</th>
+                <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_sheet') }}</th>
+                <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_row') }}</th>
+                <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_column') }}</th>
+                <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_problem') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -232,31 +232,31 @@ const isDone = computed(() => !!result.value?.applied);
         <div class="flex items-center gap-2">
           <i class="ph-duotone text-[18px]" :class="result.applied ? 'ph-check-circle text-brand-active' : 'ph-eye text-muted-4'" aria-hidden="true"></i>
           <span class="text-[13px] font-bold" :class="result.applied ? 'text-brand-active' : 'text-muted-5'">
-            {{ result.applied ? 'Impor diterapkan — data sudah diperbarui.' : 'Pratinjau — belum ada data yang diubah.' }}
+            {{ result.applied ? t('master_data.import_applied') : t('master_data.preview_not_applied') }}
           </span>
         </div>
         <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <div v-for="(s, sheet) in result.sheets" :key="sheet" class="flex flex-col gap-1 rounded-md border border-line-3 bg-white px-3 py-2.5">
             <span class="text-[11px] font-bold uppercase tracking-wide text-muted-3">{{ SHEET_LABEL[sheet] ?? sheet }}</span>
-            <span class="text-[12px] text-muted-4">{{ s.rows }} baris</span>
-            <span class="text-[11.5px] text-brand-active">+{{ s.created }} baru</span>
-            <span class="text-[11.5px] text-muted-4">{{ s.updated }} diperbarui · {{ s.unchanged }} sama</span>
+            <span class="text-[12px] text-muted-4">{{ t('master_data.rows', { count: s.rows }) }}</span>
+            <span class="text-[11.5px] text-brand-active">{{ t('master_data.new_count', { count: s.created }) }}</span>
+            <span class="text-[11.5px] text-muted-4">{{ t('master_data.updated_unchanged', { updated: s.updated, unchanged: s.unchanged }) }}</span>
           </div>
         </div>
         <p v-if="result.ignored_sheets?.length" class="text-[11.5px] text-warn-text">
-          Sheet diabaikan (nama tidak dikenali): {{ result.ignored_sheets.join(', ') }}
+          {{ t('master_data.ignored_sheets', { sheets: result.ignored_sheets.join(', ') }) }}
         </p>
       </div>
     </div>
 
     <template #footer>
       <div class="flex items-center justify-between gap-2.5">
-        <span class="text-[11.5px] text-muted-3">Digerbang owner/admin/inventory.</span>
+        <span class="text-[11.5px] text-muted-3">{{ t('master_data.gated_owner_admin_inventory') }}</span>
         <div class="flex gap-2.5">
-          <BaseButton variant="secondary" @click="close">Tutup</BaseButton>
-          <BaseButton v-if="isDone" variant="secondary" @click="resetState">Impor berkas lain</BaseButton>
-          <BaseButton v-else-if="canApply" :loading="applying" @click="runImport(false)">Terapkan impor</BaseButton>
-          <BaseButton v-else :disabled="!canPreview" :loading="previewing" @click="runImport(true)">Pratinjau</BaseButton>
+          <BaseButton variant="secondary" @click="close">{{ t('master_data.close') }}</BaseButton>
+          <BaseButton v-if="isDone" variant="secondary" @click="resetState">{{ t('master_data.import_another_file') }}</BaseButton>
+          <BaseButton v-else-if="canApply" :loading="applying" @click="runImport(false)">{{ t('master_data.apply_import') }}</BaseButton>
+          <BaseButton v-else :disabled="!canPreview" :loading="previewing" @click="runImport(true)">{{ t('master_data.preview') }}</BaseButton>
         </div>
       </div>
     </template>

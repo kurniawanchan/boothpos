@@ -67,7 +67,7 @@ class EventController extends Controller
 
         if (! $event->canTransitionTo($newStatus)) {
             return response()->json([
-                'message' => "Event berstatus '{$event->status}' tidak dapat berpindah ke '{$newStatus}'.",
+                'message' => __('events_sessions.invalid_status_transition', ['from' => $event->status, 'to' => $newStatus]),
             ], 409);
         }
 
@@ -75,7 +75,7 @@ class EventController extends Controller
             $openSessions = $event->cashierSessions()->where('status', 'open')->count();
             if ($openSessions > 0) {
                 return response()->json([
-                    'message' => "Event tidak dapat ditutup: masih ada {$openSessions} sesi kasir yang belum ditutup.",
+                    'message' => __('events_sessions.cannot_close_open_sessions', ['count' => $openSessions]),
                 ], 409);
             }
         }

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import { artistSettlementTransactions } from '../../api/reports';
 import { formatIDR } from '../../utils/money';
@@ -22,6 +23,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const toast = useToastStore();
+const { t } = useI18n();
 const loading = ref(false);
 const transactions = ref([]);
 
@@ -37,7 +39,7 @@ watch(
       const res = await artistSettlementTransactions(artistId, eventId);
       transactions.value = res.transactions ?? [];
     } catch (err) {
-      toast.error(err.message || 'Gagal memuat detail transaksi artist.');
+      toast.error(err.message || t('reports.load_artist_transactions_failed'));
     } finally {
       loading.value = false;
     }
@@ -47,10 +49,10 @@ watch(
 </script>
 
 <template>
-  <BaseModal :open="open" :title="`Detail transaksi — ${artistName}`" max-width-class="max-w-[640px]" @close="emit('close')">
-    <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">Memuat detail transaksi…</div>
+  <BaseModal :open="open" :title="t('reports.transaction_detail_for', { artist: artistName })" max-width-class="max-w-[640px]" @close="emit('close')">
+    <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">{{ t('reports.loading_transaction_detail') }}</div>
     <div v-else-if="transactions.length === 0" class="px-6 py-14 text-center text-[13px] text-muted-3">
-      Belum ada transaksi yang menyumbang ke rekap artist ini.
+      {{ t('reports.no_transactions_contributing') }}
     </div>
     <div v-else class="flex flex-col gap-3.5 px-6 py-5">
       <div
@@ -69,10 +71,10 @@ watch(
           <table class="w-full border-collapse text-[12.5px]">
             <thead>
               <tr class="bg-surface-subtle text-left">
-                <th class="px-3 py-1.5 font-bold text-muted-2">SKU</th>
-                <th class="px-3 py-1.5 font-bold text-muted-2">Nama</th>
-                <th class="px-3 py-1.5 text-right font-bold text-muted-2">Qty</th>
-                <th class="px-3 py-1.5 text-right font-bold text-muted-2">Subtotal</th>
+                <th class="px-3 py-1.5 font-bold text-muted-2">{{ t('master_data.col_sku') }}</th>
+                <th class="px-3 py-1.5 font-bold text-muted-2">{{ t('master_data.col_name') }}</th>
+                <th class="px-3 py-1.5 text-right font-bold text-muted-2">{{ t('reports.col_qty') }}</th>
+                <th class="px-3 py-1.5 text-right font-bold text-muted-2">{{ t('reports.col_subtotal') }}</th>
               </tr>
             </thead>
             <tbody>

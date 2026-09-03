@@ -71,7 +71,7 @@ class OrderController extends Controller
         // kunci menu yang, pada keempat peran default, persis berisi
         // owner+admin).
         if (! $request->user()->canAccessMenu('settings')) {
-            return response()->json(['message' => 'Hanya owner/admin yang dapat membatalkan transaksi.'], 403);
+            return response()->json(['message' => __('orders_payments.not_authorized_void')], 403);
         }
 
         $validated = $request->validate(['reason' => ['required', 'string', 'max:255']]);
@@ -85,6 +85,11 @@ class OrderController extends Controller
         return response()->json(new OrderResource($order));
     }
 
+    // 002-language-toggle FR-009 — SENGAJA tidak memakai __() di sini
+    // meski SetLocaleFromUser tetap aktif untuk route ini. Struk dibaca
+    // PELANGGAN, bukan operator toko, jadi harus selalu Bahasa Indonesia
+    // terlepas dari preferensi bahasa kasir yang sedang login. Jangan
+    // "perbaiki" ini jadi ikut ter-i18n-kan.
     public function receipt(Order $order): JsonResponse
     {
         $order->load(['items', 'payments', 'cashier', 'event']);

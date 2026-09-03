@@ -82,7 +82,7 @@ class ArtistController extends Controller
 
             if ($hasActiveProducts) {
                 return response()->json([
-                    'message' => 'Artist masih memiliki produk aktif dan tidak dapat dihapus.',
+                    'message' => __('master_data.artist_delete_has_active_products'),
                 ], 409);
             }
         }

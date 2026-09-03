@@ -1,5 +1,6 @@
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listCustomers, createCustomer, updateCustomer } from '../api/customers';
 import { useToastStore } from '../stores/toast';
@@ -12,6 +13,7 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 
 const toast = useToastStore();
+const { t } = useI18n();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listCustomers);
 const search = ref('');
@@ -22,13 +24,13 @@ onMounted(load);
 // against CustomerResource, which only ever returns identity/contact
 // fields (id, name, phone, email, social_handle, notes). The mockup shows
 // those aggregate columns but the API never computes them.
-const columns = [
-  { key: 'name', label: 'Nama' },
-  { key: 'phone', label: 'Telepon' },
-  { key: 'email', label: 'Email' },
-  { key: 'social_handle', label: 'Media sosial' },
+const columns = computed(() => [
+  { key: 'name', label: t('events_sessions.col_name') },
+  { key: 'phone', label: t('events_sessions.col_phone') },
+  { key: 'email', label: t('events_sessions.col_email') },
+  { key: 'social_handle', label: t('events_sessions.col_social') },
   { key: 'actions', label: '' },
-];
+]);
 
 const showForm = ref(false);
 const editingCustomer = ref(null);
@@ -69,10 +71,10 @@ async function saveCustomer() {
   try {
     if (editingCustomer.value) {
       await updateCustomer(editingCustomer.value.id, payload);
-      toast.success('Pelanggan diperbarui.');
+      toast.success(t('events_sessions.customer_updated'));
     } else {
       await createCustomer(payload);
-      toast.success('Pelanggan dibuat.');
+      toast.success(t('events_sessions.customer_created'));
     }
     showForm.value = false;
     await load();
@@ -89,45 +91,45 @@ async function saveCustomer() {
     <div class="flex flex-wrap items-center gap-2.5">
       <div class="relative flex min-w-[230px] flex-1 items-center">
         <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="customer-search">Cari pelanggan</label>
+        <label class="sr-only" for="customer-search">{{ t('events_sessions.search_customer') }}</label>
         <input
           id="customer-search"
           v-model="search"
-          placeholder="Cari nama, telepon, atau akun media sosial…"
+          :placeholder="t('events_sessions.search_customer_placeholder')"
           class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           @input="debouncedSearch"
         />
       </div>
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Pelanggan baru
+        {{ t('events_sessions.new_customer') }}
       </BaseButton>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada pelanggan.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('events_sessions.no_customers')">
         <template #cell-phone="{ row }">{{ row.phone || '—' }}</template>
         <template #cell-email="{ row }">{{ row.email || '—' }}</template>
         <template #cell-social_handle="{ row }">{{ row.social_handle || '—' }}</template>
         <template #cell-actions="{ row }">
-          <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
+          <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingCustomer ? 'Ubah pelanggan' : 'Pelanggan baru'" max-width-class="max-w-[460px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingCustomer ? t('events_sessions.edit_customer') : t('events_sessions.new_customer')" max-width-class="max-w-[460px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveCustomer">
-        <BaseInput v-model="form.name" label="Nama" required maxlength="100" :error="formErrors.name" />
-        <BaseInput v-model="form.phone" label="Telepon" :error="formErrors.phone" />
-        <BaseInput v-model="form.email" type="email" label="Email" :error="formErrors.email" />
-        <BaseInput v-model="form.social_handle" label="Media sosial" :error="formErrors.social_handle" />
-        <BaseTextarea v-model="form.notes" label="Catatan" :rows="2" :error="formErrors.notes" />
+        <BaseInput v-model="form.name" :label="t('events_sessions.name')" required maxlength="100" :error="formErrors.name" />
+        <BaseInput v-model="form.phone" :label="t('events_sessions.phone')" :error="formErrors.phone" />
+        <BaseInput v-model="form.email" type="email" :label="t('events_sessions.email')" :error="formErrors.email" />
+        <BaseInput v-model="form.social_handle" :label="t('events_sessions.social_handle')" :error="formErrors.social_handle" />
+        <BaseTextarea v-model="form.notes" :label="t('events_sessions.notes')" :rows="2" :error="formErrors.notes" />
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton :loading="saving" @click="saveCustomer">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="saving" @click="saveCustomer">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>

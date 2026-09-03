@@ -1,5 +1,6 @@
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { computed, reactive, ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listArtists, createArtist, updateArtist, deleteArtist } from '../api/artists';
 import { exportMasterData } from '../api/masterData';
@@ -18,6 +19,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
 const auth = useAuthStore();
+const { t } = useI18n();
 const settings = useSettingsStore();
 const toast = useToastStore();
 
@@ -38,7 +40,7 @@ async function doExport() {
   try {
     await exportMasterData('artists');
   } catch {
-    toast.error('Gagal mengekspor data artist.');
+    toast.error(t('master_data.export_artist_failed'));
   } finally {
     exporting.value = false;
   }
@@ -52,14 +54,14 @@ async function afterImport() {
   await Promise.all([load(), settings.load()]);
 }
 
-const columns = [
-  { key: 'code', label: 'Kode' },
-  { key: 'name', label: 'Nama' },
-  { key: 'contact', label: 'Kontak' },
-  { key: 'product_count', label: 'Produk' },
-  { key: 'is_active', label: 'Status' },
+const columns = computed(() => [
+  { key: 'code', label: t('master_data.col_code') },
+  { key: 'name', label: t('master_data.col_name') },
+  { key: 'contact', label: t('master_data.col_contact') },
+  { key: 'product_count', label: t('master_data.col_product_count') },
+  { key: 'is_active', label: t('master_data.col_status') },
   { key: 'actions', label: '' },
-];
+]);
 
 const showForm = ref(false);
 const editingArtist = ref(null);
@@ -108,10 +110,10 @@ async function saveArtist() {
   try {
     if (editingArtist.value) {
       await updateArtist(editingArtist.value.id, payload);
-      toast.success('Artist diperbarui.');
+      toast.success(t('master_data.artist_updated'));
     } else {
       await createArtist(payload);
-      toast.success('Artist dibuat.');
+      toast.success(t('master_data.artist_created'));
       await settings.load();
     }
     showForm.value = false;
@@ -133,7 +135,7 @@ async function performDelete() {
   deleting.value = true;
   try {
     await deleteArtist(deleteTarget.value.id);
-    toast.success('Artist dinonaktifkan.');
+    toast.success(t('master_data.artist_deactivated'));
     showDelete.value = false;
     await Promise.all([load(), settings.load()]);
   } catch {
@@ -149,11 +151,11 @@ async function performDelete() {
     <div class="flex flex-wrap items-center gap-2.5">
       <div class="relative flex min-w-[230px] flex-1 items-center">
         <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="artist-search">Cari artist</label>
+        <label class="sr-only" for="artist-search">{{ t('master_data.search_artist') }}</label>
         <input
           id="artist-search"
           v-model="search"
-          placeholder="Cari nama artist…"
+          :placeholder="t('master_data.search_artist_placeholder')"
           class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           @input="debouncedSearch"
         />
@@ -161,35 +163,35 @@ async function performDelete() {
       <template v-if="auth.canAccessMenu('artists')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          Ekspor .xlsx
+          {{ t('common.export_xlsx') }}
         </BaseButton>
         <BaseButton variant="secondary" @click="showImportModal = true">
           <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
-          Impor massal
+          {{ t('common.bulk_import') }}
         </BaseButton>
       </template>
       <BaseButton :disabled="!canCreate()" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Tambah artist
+        {{ t('master_data.add_artist') }}
       </BaseButton>
     </div>
 
     <div v-if="!settings.multiArtistEnabled && settings.artistLimitReached" class="flex items-start gap-3 rounded-card border border-warn-border bg-warn-bg px-4 py-3.5">
       <i class="ph-duotone ph-lock-key text-[19px] text-warn-text" aria-hidden="true"></i>
       <div class="flex flex-1 flex-col gap-0.5">
-        <span class="text-[13px] font-bold text-warn-text">Lisensi Pro — satu artist</span>
+        <span class="text-[13px] font-bold text-warn-text">{{ t('master_data.pro_license_one_artist') }}</span>
         <span class="text-[12.5px] leading-relaxed text-warn-text opacity-90">
-          Tombol tambah artist dinonaktifkan karena kuota tercapai. Server tetap menolak
-          <span class="font-mono text-[11.5px]">POST /artists</span> dengan 403 walau UI dipaksa.
+          {{ t('master_data.add_artist_disabled_quota') }}
+          <span class="font-mono text-[11.5px]">POST /artists</span> 403.
         </span>
       </div>
       <RouterLink :to="{ name: 'settings' }" class="flex-none rounded-md border border-warn-border-strong bg-white px-3 py-1.5 text-[12.5px] font-bold text-warn-text hover:bg-surface-subtle">
-        Upgrade ke Master
+        {{ t('master_data.upgrade_to_master') }}
       </RouterLink>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada artist.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_artists')">
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
         <template #cell-contact="{ row }">
           <div class="flex flex-col gap-0.5 text-[12.5px] text-muted-4">
@@ -198,51 +200,51 @@ async function performDelete() {
           </div>
         </template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">Hapus</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingArtist ? 'Ubah artist' : 'Artist baru'" max-width-class="max-w-[480px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingArtist ? t('master_data.edit_artist') : t('master_data.new_artist')" max-width-class="max-w-[480px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveArtist">
         <BaseInput
           v-model="form.code"
-          label="Kode (3 huruf)"
+          :label="t('master_data.code_3_letters')"
           maxlength="3"
           required
           :disabled="!!editingArtist"
-          hint="Permanen setelah dibuat — jadi bagian dari SKU."
+          :hint="t('master_data.code_permanent_hint')"
           :error="formErrors.code"
         />
-        <BaseInput v-model="form.name" label="Nama artist" required maxlength="100" :error="formErrors.name" />
-        <BaseInput v-model="form.contact_phone" label="Telepon" :error="formErrors.contact_phone" />
-        <BaseInput v-model="form.contact_email" label="Email" type="email" :error="formErrors.contact_email" />
-        <BaseTextarea v-model="form.notes" label="Catatan" :rows="2" :error="formErrors.notes" />
+        <BaseInput v-model="form.name" :label="t('master_data.artist_name')" required maxlength="100" :error="formErrors.name" />
+        <BaseInput v-model="form.contact_phone" :label="t('master_data.phone')" :error="formErrors.contact_phone" />
+        <BaseInput v-model="form.contact_email" :label="t('master_data.email')" type="email" :error="formErrors.contact_email" />
+        <BaseTextarea v-model="form.notes" :label="t('master_data.notes')" :rows="2" :error="formErrors.notes" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
-          Aktif
+          {{ t('common.active') }}
         </label>
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton :loading="saving" @click="saveArtist">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="saving" @click="saveArtist">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"
-      title="Nonaktifkan artist"
-      :message="`Nonaktifkan ${deleteTarget?.name}? Ditolak bila masih ada produk aktif miliknya.`"
-      confirm-label="Ya, nonaktifkan"
+      :title="t('master_data.deactivate_artist')"
+      :message="t('master_data.deactivate_artist_confirm', { name: deleteTarget?.name })"
+      :confirm-label="t('master_data.yes_deactivate')"
       :loading="deleting"
       @close="showDelete = false"
       @confirm="performDelete"

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { currentSession } from '../api/sessions';
 import { listCategories } from '../api/categories';
 import { listProducts, lookupVariants } from '../api/products';
@@ -19,6 +20,7 @@ import EmptyState from '../components/ui/EmptyState.vue';
 
 const cart = usePosCartStore();
 const toast = useToastStore();
+const { t } = useI18n();
 
 const session = ref(null);
 const sessionChecked = ref(false);
@@ -140,11 +142,11 @@ function closeVariantPicker() {
 }
 
 const canCheckout = computed(() => !!session.value);
-const checkoutBlockedReason = computed(() => (session.value ? '' : 'Buka sesi kasir terlebih dahulu.'));
+const checkoutBlockedReason = computed(() => (session.value ? '' : t('pos.open_session_first')));
 
 function openPayment() {
   if (!session.value) {
-    toast.warning('Buka sesi kasir terlebih dahulu di layar Sesi Kasir.');
+    toast.warning(t('pos.open_session_first_toast'));
     return;
   }
   // Regenerated per checkout attempt (not per session) — this is what
@@ -193,18 +195,18 @@ function closeReceipt() {
     <div class="flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-[22px] py-5">
       <div v-if="sessionChecked && !session" class="flex items-center gap-3 rounded-card border border-warn-border bg-warn-bg px-4 py-3.5 text-[13px] text-warn-text">
         <i class="ph-duotone ph-lock-key text-[19px]" aria-hidden="true"></i>
-        Belum ada sesi kasir terbuka. Anda tetap bisa menelusuri produk, tapi pembayaran memerlukan sesi aktif —
-        <RouterLink :to="{ name: 'session' }" class="font-bold underline">buka di sini</RouterLink>.
+        {{ t('pos.no_session_open') }}
+        <RouterLink :to="{ name: 'session' }" class="font-bold underline">{{ t('pos.open_here') }}</RouterLink>.
       </div>
 
       <div class="flex flex-wrap items-center gap-2.5">
         <div class="relative flex min-w-[240px] flex-1 items-center">
           <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[17px] text-muted-3" aria-hidden="true"></i>
-          <label class="sr-only" for="pos-search">Cari nama produk atau SKU</label>
+          <label class="sr-only" for="pos-search">{{ t('pos.search_product_or_sku') }}</label>
           <input
             id="pos-search"
             v-model="search"
-            placeholder="Cari nama produk atau SKU…"
+            :placeholder="t('pos.search_product_or_sku_placeholder')"
             class="h-[46px] w-full rounded-lg border border-line bg-white pl-10 pr-3.5 text-[14.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           />
         </div>
@@ -217,7 +219,7 @@ function closeReceipt() {
           :class="!selectedCategoryId ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
           @click="selectedCategoryId = null"
         >
-          Semua
+          {{ t('pos.all') }}
         </button>
         <button
           v-for="c in categories"
@@ -231,7 +233,7 @@ function closeReceipt() {
         </button>
       </div>
 
-      <EmptyState v-if="!loadingGrid && cards.length === 0" icon="ph-package" message="Tidak ada produk yang cocok." />
+      <EmptyState v-if="!loadingGrid && cards.length === 0" icon="ph-package" :message="t('pos.no_matching_products')" />
       <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-3.5 pb-5">
         <!-- Search results stay variant-granular: the cashier searched
              for a specific SKU/name, so each hit adds straight to cart. -->
@@ -248,14 +250,14 @@ function closeReceipt() {
               <span v-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
               <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
               <span class="absolute bottom-1.5 left-2 rounded bg-white/85 px-1.5 py-0.5 font-mono text-[9.5px] text-muted-5">{{ card.sku }}</span>
-              <span v-if="card.current_stock <= 0" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">Habis</span>
+              <span v-if="card.current_stock <= 0" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>
             </div>
             <div class="flex flex-col gap-1 px-3 py-2.5">
               <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
               <span class="text-[11px] text-muted-3">{{ card.artist_name }}</span>
               <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
                 <span class="text-[14.5px] font-bold text-brand-active">{{ formatIDR(card.sell_price) }}</span>
-                <span class="text-[11px] text-muted-3">Stok {{ card.current_stock }}</span>
+                <span class="text-[11px] text-muted-3">{{ t('pos.stock_count', { count: card.current_stock }) }}</span>
               </div>
             </div>
           </button>
@@ -276,19 +278,19 @@ function closeReceipt() {
             <div class="relative flex h-[104px] items-center justify-center bg-line-7 text-muted-4">
               <span v-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
               <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
-              <span v-if="card.variant_count > 1" class="absolute left-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-bold text-muted-5">{{ card.variant_count }} varian</span>
-              <span v-if="card.out_of_stock" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">Habis</span>
+              <span v-if="card.variant_count > 1" class="absolute left-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-bold text-muted-5">{{ t('pos.variant_count', { count: card.variant_count }) }}</span>
+              <span v-if="card.out_of_stock" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>
             </div>
             <div class="flex flex-col gap-1 px-3 py-2.5">
               <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
               <span class="text-[11px] text-muted-3">{{ card.artist_name }}</span>
               <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
                 <span class="text-[14.5px] font-bold text-brand-active">
-                  <template v-if="card.variant_count === 0">Tidak ada varian</template>
+                  <template v-if="card.variant_count === 0">{{ t('pos.no_variants') }}</template>
                   <template v-else-if="card.min_price === card.max_price">{{ formatIDR(card.min_price) }}</template>
                   <template v-else>{{ formatIDR(card.min_price) }}–{{ formatIDR(card.max_price) }}</template>
                 </span>
-                <span class="text-[11px] text-muted-3">Stok {{ card.total_stock }}</span>
+                <span class="text-[11px] text-muted-3">{{ t('pos.stock_count', { count: card.total_stock }) }}</span>
               </div>
             </div>
           </button>

@@ -395,6 +395,31 @@ stretch (Prioritas C) menjadi terbangun penuh:
   sengaja tidak menyertakan menu laporan tersebut, bukan lagi lewat
   pengecekan `role === 'kasir'` yang di-hardcode.
 
+**Catatan pasca-MVP — 2026-09-03 (ganti bahasa antarmuka Indonesia/English)**
+
+Fitur `002-language-toggle`, atas permintaan eksplisit pemilik produk.
+**Bukan** kebangkitan butir manapun yang dicoret di §10.2 dan tidak
+berkorespondensi dengan nomor F- manapun di dokumen ini — kapabilitas baru:
+
+- Setelah login, setiap pengguna bisa mengganti bahasa antarmuka antara
+  Bahasa Indonesia dan English lewat kontrol yang tersedia di seluruh
+  layar (bukan hanya satu halaman pengaturan). Pilihan tersimpan per akun
+  (`users.language`), bukan per perangkat/browser — kasir yang bergantian
+  memakai perangkat yang sama masing-masing tetap melihat bahasa
+  preferensinya sendiri.
+- **Layar login dan struk transaksi SENGAJA dikecualikan total** — selalu
+  Bahasa Indonesia, tidak ikut preferensi bahasa akun manapun. Layar login
+  belum punya identitas akun untuk dijadikan acuan; struk dibaca pelanggan,
+  bukan operator toko.
+- Akun baru (dibuat manual maupun lewat impor massal) dan akun lama yang
+  belum pernah mengatur preferensi sama-sama default ke English.
+- **Konflik yang disengaja dengan konvensi kodebase ini**: proyek ini
+  sebelumnya selalu berasumsi seluruh teks antarmuka berbahasa Indonesia
+  (lihat `CLAUDE.md` — konvensi itu sekarang berlaku untuk kode
+  sumber/komentar/commit message saja, bukan lagi untuk teks yang dilihat
+  pengguna akhir). Ini dicatat eksplisit sebagai keputusan disengaja hasil
+  proses klarifikasi spec, bukan penyimpangan yang tidak disadari.
+
 ### 7.14 Setting & config management
 
 | ID | Kebutuhan | Prioritas |

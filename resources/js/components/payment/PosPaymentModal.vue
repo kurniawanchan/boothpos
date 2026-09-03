@@ -1,5 +1,6 @@
 <script setup>
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import PaymentPanel from './PaymentPanel.vue';
 import { formatIDR } from '../../utils/money';
@@ -14,12 +15,13 @@ const props = defineProps({
 });
 const emit = defineEmits(['close', 'submit']);
 
+const { t } = useI18n();
 const panelRef = ref(null);
 defineExpose({ reset: () => panelRef.value?.reset() });
 </script>
 
 <template>
-  <BaseModal :open="open" title="Pembayaran" max-width-class="max-w-[940px]" @close="emit('close')">
+  <BaseModal :open="open" :title="t('pos.payment_title')" max-width-class="max-w-[940px]" @close="emit('close')">
     <div class="grid grid-cols-1 md:grid-cols-[1.25fr_1fr]">
       <div class="flex flex-col gap-5 px-[26px] py-6">
         <PaymentPanel
@@ -27,12 +29,12 @@ defineExpose({ reset: () => panelRef.value?.reset() });
           mode="checkout"
           :due-amount="total"
           :submitting="submitting"
-          submit-label="Konfirmasi & simpan transaksi"
+          :submit-label="t('pos.confirm_and_save_transaction')"
           @submit="(payload) => emit('submit', payload)"
         />
       </div>
       <div class="flex flex-col gap-4 border-t border-line-3 bg-surface-subtle px-[26px] py-6 md:border-l md:border-t-0">
-        <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">Ringkasan</span>
+        <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">{{ t('pos.summary') }}</span>
         <div class="flex flex-1 flex-col gap-2.5 overflow-auto">
           <div v-for="line in lines" :key="line.key" class="flex items-baseline gap-2.5">
             <span class="min-w-[24px] text-[12.5px] font-bold text-brand-active">{{ line.qty }}×</span>
@@ -41,10 +43,10 @@ defineExpose({ reset: () => panelRef.value?.reset() });
           </div>
         </div>
         <div class="flex flex-col gap-2 border-t border-dashed border-line-2 pt-3.5">
-          <div class="flex justify-between text-[12.5px]"><span class="text-muted">Subtotal</span><span class="font-semibold">{{ formatIDR(subtotal) }}</span></div>
-          <div class="flex justify-between text-[12.5px]"><span class="text-muted">Diskon</span><span class="font-semibold text-danger-text">{{ formatIDR(discountAmount) }}</span></div>
+          <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('pos.subtotal') }}</span><span class="font-semibold">{{ formatIDR(subtotal) }}</span></div>
+          <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('pos.discount') }}</span><span class="font-semibold text-danger-text">{{ formatIDR(discountAmount) }}</span></div>
           <div class="flex items-baseline justify-between border-t border-line-3 pt-2.5">
-            <span class="text-[13.5px] font-bold">Total</span>
+            <span class="text-[13.5px] font-bold">{{ t('pos.total') }}</span>
             <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(total) }}</span>
           </div>
         </div>

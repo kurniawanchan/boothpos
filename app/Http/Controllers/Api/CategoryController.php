@@ -105,7 +105,7 @@ class CategoryController extends Controller
         // ini bukan opsional.
         if ($category->children()->where('is_active', true)->exists()) {
             return response()->json([
-                'message' => 'Kategori masih memiliki sub-kategori aktif dan tidak dapat dihapus.',
+                'message' => __('master_data.category_delete_has_active_subcategories'),
             ], 409);
         }
 
@@ -118,7 +118,7 @@ class CategoryController extends Controller
 
             if ($hasActiveProducts) {
                 return response()->json([
-                    'message' => 'Kategori masih memiliki produk aktif dan tidak dapat dihapus.',
+                    'message' => __('master_data.category_delete_has_active_products'),
                 ], 409);
             }
         }

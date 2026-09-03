@@ -29,7 +29,7 @@ class MasterDataExportController extends Controller
     public function show(Request $request, string $entity): BinaryFileResponse|JsonResponse
     {
         if (! in_array($entity, MasterDataExportService::ENTITIES, true)) {
-            return response()->json(['message' => 'Entitas ekspor tidak dikenali.'], 404);
+            return response()->json(['message' => __('master_data_import.unknown_export_entity')], 404);
         }
 
         // Digerbang canManageMasterData(), bukan sekadar Policy viewAny
@@ -41,7 +41,7 @@ class MasterDataExportController extends Controller
         // (owner/admin/inventory), konsisten dengan
         // StockAdjustmentRequest dan ImportMasterDataRequest.
         if (! $request->user()->canAccessAnyMenu(['artists', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users'])) {
-            return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat mengekspor data master.'], 403);
+            return response()->json(['message' => __('master_data_import.not_authorized_export')], 403);
         }
 
         $sheet = new SheetArrayExport(

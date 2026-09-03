@@ -86,7 +86,7 @@ class VendorController extends Controller
         // restrictOnDelete tidak berlaku untuk soft delete.
         if ($vendor->materialPrices()->exists()) {
             return response()->json([
-                'message' => 'Vendor masih memiliki harga bahan yang terdaftar dan tidak dapat dihapus.',
+                'message' => __('vendors_materials.vendor_delete_has_prices'),
             ], 409);
         }
 

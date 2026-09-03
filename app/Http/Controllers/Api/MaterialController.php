@@ -93,13 +93,13 @@ class MaterialController extends Controller
         // mengubah bom_cost varian yang memakainya.
         if ($material->vendorPrices()->exists()) {
             return response()->json([
-                'message' => 'Bahan masih memiliki harga vendor yang terdaftar dan tidak dapat dihapus.',
+                'message' => __('vendors_materials.material_delete_has_vendor_prices'),
             ], 409);
         }
 
         if ($material->bomLines()->exists()) {
             return response()->json([
-                'message' => 'Bahan masih dipakai pada BOM salah satu varian produk dan tidak dapat dihapus.',
+                'message' => __('vendors_materials.material_delete_used_in_bom'),
             ], 409);
         }
 
@@ -159,7 +159,7 @@ class MaterialController extends Controller
     public function destroyVendorPrice(Request $request, VendorMaterialPrice $vendorPrice): JsonResponse
     {
         if (! $request->user()->canAccessMenu('materials')) {
-            return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat mengelola harga vendor.'], 403);
+            return response()->json(['message' => __('vendors_materials.not_authorized_vendor_prices')], 403);
         }
 
         $vendorPrice->delete();
@@ -203,7 +203,7 @@ class MaterialController extends Controller
     public function destroyBomLine(Request $request, ProductVariantBomLine $bomLine): JsonResponse
     {
         if (! $request->user()->canAccessMenu('products')) {
-            return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat mengelola BOM.'], 403);
+            return response()->json(['message' => __('vendors_materials.not_authorized_bom_manage')], 403);
         }
 
         DB::transaction(function () use ($bomLine, $request) {
@@ -227,7 +227,7 @@ class MaterialController extends Controller
     public function bomIndex(Request $request, ProductVariant $variant): JsonResponse
     {
         if (! $request->user()->canAccessMenu('products')) {
-            return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat melihat BOM.'], 403);
+            return response()->json(['message' => __('vendors_materials.not_authorized_bom_view')], 403);
         }
 
         return response()->json([
@@ -243,7 +243,7 @@ class MaterialController extends Controller
     public function costBreakdown(Request $request, ProductVariant $variant, BomCostCalculator $calculator): JsonResponse
     {
         if (! $request->user()->canAccessMenu('products')) {
-            return response()->json(['message' => 'Hanya owner/admin/inventory yang dapat melihat rincian modal.'], 403);
+            return response()->json(['message' => __('vendors_materials.not_authorized_cost_breakdown')], 403);
         }
 
         $breakdown = $calculator->breakdown($variant);

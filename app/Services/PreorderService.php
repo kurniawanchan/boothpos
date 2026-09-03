@@ -92,13 +92,13 @@ class PreorderService
     {
         if (! $preorder->canTransitionTo($newStatus)) {
             throw ValidationException::withMessages([
-                'status' => "Preorder berstatus '{$preorder->status}' tidak dapat berpindah ke '{$newStatus}'.",
+                'status' => __('preorders.invalid_status_transition', ['from' => $preorder->status, 'to' => $newStatus]),
             ]);
         }
 
         if ($newStatus === 'handed_over' && $preorder->outstanding() > 0.01) {
             throw ValidationException::withMessages([
-                'status' => 'Preorder belum lunas, tidak dapat diserahkan. Sisa tagihan: '.$preorder->outstanding(),
+                'status' => __('preorders.not_fully_paid', ['outstanding' => $preorder->outstanding()]),
             ]);
         }
 

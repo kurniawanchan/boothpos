@@ -1,6 +1,29 @@
 import '@testing-library/jest-dom/vitest';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/vue';
+import { config } from '@vue/test-utils';
+import { i18n } from '../resources/js/i18n';
+
+// 002-language-toggle — @testing-library/vue v8 delegates to @vue/test-utils'
+// mount() under the hood, so pushing plugins onto VTU's global config here
+// applies to every render() call project-wide, without editing each of the
+// ~20 test files that call render() with their own `global.plugins` array
+// (those per-file arrays — mostly just Pinia — still work identically
+// alongside this).
+config.global.plugins.push(i18n);
+
+// The ~20 pre-existing component test files assert Indonesian literal
+// text (e.g. `getByRole('button', { name: /produk baru/i })`), written
+// before this feature existed. Rather than rewrite every one of them,
+// default the test-time locale to 'id' (matching the app's own default
+// for guest/pre-login routes) so their assertions keep matching reality.
+// A test that specifically exercises the language toggle (e.g.
+// LanguageSwitcher.test.js) sets `i18n.global.locale.value` explicitly
+// per test, overriding this default.
+afterEach(() => {
+  i18n.global.locale.value = 'id';
+});
+i18n.global.locale.value = 'id';
 
 // BUG YANG DITEMUKAN & DIPERBAIKI — tidak ada cleanup() di antar-test sama
 // sekali sebelum ini. @testing-library/vue TIDAK auto-unmount komponen

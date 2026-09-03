@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
 import { listEvents } from '../api/events';
 import { salesReport, profitReport, artistSettlements } from '../api/reports';
@@ -10,6 +11,7 @@ import StatusPill from '../components/ui/StatusPill.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 
 const auth = useAuthStore();
+const { t } = useI18n();
 
 const loading = ref(true);
 const activeEvent = ref(null);
@@ -52,44 +54,44 @@ const maxSettlement = computed(() => Math.max(1, ...settlements.value.map((s) =>
   <div class="flex flex-col gap-5 px-[26px] pb-10 pt-[22px]">
     <div v-if="!loading && !activeEvent" class="flex items-center gap-3 rounded-card border border-warn-border bg-warn-bg px-4 py-3.5 text-[13px] text-warn-text">
       <i class="ph-duotone ph-info text-[19px]" aria-hidden="true"></i>
-      Tidak ada event berstatus aktif. Buka satu di layar Event untuk melihat ringkasan performa.
+      {{ t('dashboard.no_active_event') }}
     </div>
 
     <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
       <div class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-chart-line-up text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">Penjualan bersih</span></div>
+        <div class="flex items-center gap-2"><i class="ph-duotone ph-chart-line-up text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.net_sales') }}</span></div>
         <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.net_sales ?? 0) }}</span>
-        <span class="text-[11.5px] text-muted-3">{{ activeEvent?.name ?? 'Seluruh event' }}</span>
+        <span class="text-[11.5px] text-muted-3">{{ activeEvent?.name ?? t('dashboard.all_events') }}</span>
       </div>
       <div class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-receipt text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">Transaksi</span></div>
+        <div class="flex items-center gap-2"><i class="ph-duotone ph-receipt text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.transactions') }}</span></div>
         <span class="text-[26px] font-extrabold tracking-tight">{{ sales?.totals?.order_count ?? 0 }}</span>
-        <span class="text-[11.5px] text-muted-3">{{ sales?.totals?.unit_count ?? 0 }} unit terjual</span>
+        <span class="text-[11.5px] text-muted-3">{{ t('dashboard.units_sold', { count: sales?.totals?.unit_count ?? 0 }) }}</span>
       </div>
       <div v-if="auth.canAccessMenu('reports')" class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-vault text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">Keuntungan kotor</span></div>
+        <div class="flex items-center gap-2"><i class="ph-duotone ph-vault text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.gross_profit') }}</span></div>
         <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(profit?.gross_profit ?? 0) }}</span>
-        <span class="text-[11.5px] text-muted-3">Setelah modal, sebelum biaya event</span>
+        <span class="text-[11.5px] text-muted-3">{{ t('dashboard.after_cost_before_event_expense') }}</span>
       </div>
       <div v-else class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-tag text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">Diskon diberikan</span></div>
+        <div class="flex items-center gap-2"><i class="ph-duotone ph-tag text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.discount_given') }}</span></div>
         <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.discount_total ?? 0) }}</span>
-        <span class="text-[11.5px] text-muted-3">Total potongan transaksi</span>
+        <span class="text-[11.5px] text-muted-3">{{ t('dashboard.total_transaction_discount') }}</span>
       </div>
       <div class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-warning text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">Stok menipis</span></div>
+        <div class="flex items-center gap-2"><i class="ph-duotone ph-warning text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.low_stock') }}</span></div>
         <span class="text-[26px] font-extrabold tracking-tight">{{ lowStockItems.length }}</span>
-        <span class="text-[11.5px] text-muted-3">Varian di bawah ambang</span>
+        <span class="text-[11.5px] text-muted-3">{{ t('dashboard.variants_below_threshold') }}</span>
       </div>
     </div>
 
     <div class="grid grid-cols-1 items-start gap-4" :class="auth.canAccessMenu('reports') ? 'xl:grid-cols-[1.6fr_1fr]' : ''">
       <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
         <div class="flex items-baseline justify-between">
-          <span class="text-[14.5px] font-bold">Penjualan per hari</span>
+          <span class="text-[14.5px] font-bold">{{ t('dashboard.sales_per_day') }}</span>
           <span class="text-[11.5px] text-muted-3">GET /reports/sales?group_by=day</span>
         </div>
-        <EmptyState v-if="!loading && !sales?.rows?.length" icon="ph-chart-bar" message="Belum ada penjualan tercatat." />
+        <EmptyState v-if="!loading && !sales?.rows?.length" icon="ph-chart-bar" :message="t('dashboard.no_sales_recorded')" />
         <div v-else class="flex h-[170px] items-end gap-2">
           <div v-for="row in sales?.rows ?? []" :key="row.label" class="flex h-full flex-1 flex-col items-center justify-end gap-1.5">
             <span class="text-[10.5px] font-semibold text-muted-2">{{ formatIDR(row.amount) }}</span>
@@ -100,12 +102,12 @@ const maxSettlement = computed(() => Math.max(1, ...settlements.value.map((s) =>
       </div>
 
       <div v-if="auth.canAccessMenu('reports')" class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
-        <span class="text-[14.5px] font-bold">Hasil per artist</span>
+        <span class="text-[14.5px] font-bold">{{ t('dashboard.results_per_artist') }}</span>
         <!-- GET /reports/artist-settlements now lists every active artist,
              not only those with sales — so this only stays empty when
              there are no active artists at all for the event, never
              because sales are still zero. -->
-        <EmptyState v-if="!loading && !settlements.length" icon="ph-users-three" message="Belum ada artist aktif terdaftar." />
+        <EmptyState v-if="!loading && !settlements.length" icon="ph-users-three" :message="t('dashboard.no_active_artists')" />
         <div v-for="row in settlements" :key="row.artist_id" class="flex flex-col gap-1.5">
           <div class="flex items-baseline justify-between">
             <span class="text-[12.5px] font-semibold">{{ row.artist_name }}</span>
@@ -128,19 +130,19 @@ const maxSettlement = computed(() => Math.max(1, ...settlements.value.map((s) =>
 
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <div class="flex flex-col gap-3 rounded-card border border-line-2 bg-white p-5">
-        <span class="text-[14.5px] font-bold">Stok menipis</span>
-        <EmptyState v-if="!loading && !lowStockItems.length" icon="ph-check-circle" message="Semua stok masih aman." />
+        <span class="text-[14.5px] font-bold">{{ t('dashboard.low_stock') }}</span>
+        <EmptyState v-if="!loading && !lowStockItems.length" icon="ph-check-circle" :message="t('dashboard.all_stock_safe')" />
         <div v-for="item in lowStockItems" :key="item.variant_id" class="flex items-center gap-3 border-b border-line-6 py-2.5 last:border-b-0">
           <div class="flex flex-1 flex-col gap-0.5"><span class="text-[13px] font-semibold">{{ item.product_name }}</span><span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span></div>
           <StatusPill variant="warn">{{ item.current_stock }} / {{ item.low_stock_alert }}</StatusPill>
         </div>
       </div>
       <div class="flex flex-col gap-3 rounded-card border border-line-2 bg-white p-5">
-        <span class="text-[14.5px] font-bold">Pre-order perlu tindakan</span>
-        <EmptyState v-if="!loading && !preorderAlerts.length" icon="ph-check-circle" message="Tidak ada pre-order menunggu." />
+        <span class="text-[14.5px] font-bold">{{ t('dashboard.action_needed_preorders') }}</span>
+        <EmptyState v-if="!loading && !preorderAlerts.length" icon="ph-check-circle" :message="t('dashboard.no_preorders_waiting')" />
         <div v-for="po in preorderAlerts" :key="po.id" class="flex items-center gap-3 border-b border-line-6 py-2.5 last:border-b-0">
           <div class="flex flex-1 flex-col gap-0.5"><span class="text-[13px] font-semibold">{{ po.customer_name }}</span><span class="text-[11px] text-muted-3">{{ po.preorder_number }}</span></div>
-          <StatusPill variant="warn">Menunggu barang</StatusPill>
+          <StatusPill variant="warn">{{ t('dashboard.waiting_for_goods') }}</StatusPill>
         </div>
       </div>
     </div>

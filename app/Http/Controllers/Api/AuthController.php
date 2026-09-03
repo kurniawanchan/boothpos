@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
+use App\Http\Requests\UpdateLanguageRequest;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,13 +23,13 @@ class AuthController extends Controller
         // Improper Error Handling / user enumeration).
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             return response()->json([
-                'message' => 'Username atau password salah.',
+                'message' => __('auth.invalid_credentials'),
             ], 401);
         }
 
         if (! $user->is_active) {
             return response()->json([
-                'message' => 'Akun tidak aktif. Hubungi admin.',
+                'message' => __('auth.inactive_account'),
             ], 401);
         }
 
@@ -49,6 +50,7 @@ class AuthController extends Controller
                 'role' => $user->role?->name,
                 'menu_keys' => $user->role?->menu_keys ?? [],
                 'is_active' => $user->is_active,
+                'language' => $user->language,
             ],
         ]);
     }
@@ -73,6 +75,28 @@ class AuthController extends Controller
             // (bukan per-menu, lihat plan.md Performance Goals).
             'menu_keys' => $user->role?->menu_keys ?? [],
             'is_active' => $user->is_active,
+            'language' => $user->language,
+        ]);
+    }
+
+    /**
+     * Self-service — lihat komentar di UpdateLanguageRequest. Tidak ada
+     * gerbang Policy di sini karena preferensi bahasa bukan hak akses
+     * menu; setiap akun boleh mengubah bahasanya sendiri.
+     */
+    public function updateLanguage(UpdateLanguageRequest $request): JsonResponse
+    {
+        $user = $request->user();
+        $user->update(['language' => $request->validated('language')]);
+
+        return response()->json([
+            'id' => $user->id,
+            'name' => $user->name,
+            'username' => $user->username,
+            'role' => $user->role?->name,
+            'menu_keys' => $user->role?->menu_keys ?? [],
+            'is_active' => $user->is_active,
+            'language' => $user->language,
         ]);
     }
 }

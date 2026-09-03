@@ -1,9 +1,12 @@
 <script setup>
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 defineProps({
   columns: { type: Array, required: true }, // [{ key, label }]
   rows: { type: Array, required: true },
   loading: { type: Boolean, default: false },
-  emptyMessage: { type: String, default: 'Belum ada data.' },
+  emptyMessage: { type: String, default: '' },
   rowKey: { type: String, default: 'id' },
 });
 </script>
@@ -25,10 +28,10 @@ defineProps({
       </thead>
       <tbody>
         <tr v-if="loading">
-          <td :colspan="columns.length" class="px-4 py-12 text-center text-[13px] text-muted-3">Memuat data…</td>
+          <td :colspan="columns.length" class="px-4 py-12 text-center text-[13px] text-muted-3">{{ t('common.loading_data') }}</td>
         </tr>
         <tr v-else-if="rows.length === 0">
-          <td :colspan="columns.length" class="px-4 py-12 text-center text-[13px] text-muted-3">{{ emptyMessage }}</td>
+          <td :colspan="columns.length" class="px-4 py-12 text-center text-[13px] text-muted-3">{{ emptyMessage || t('common.no_data') }}</td>
         </tr>
         <tr v-for="row in rows" v-else :key="row[rowKey]" class="border-b border-line-5 last:border-b-0">
           <td v-for="col in columns" :key="col.key" class="px-4 py-3.5 align-middle text-[13.5px]">

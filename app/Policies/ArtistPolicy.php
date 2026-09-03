@@ -32,13 +32,11 @@ class ArtistPolicy
     public function create(User $user): Response
     {
         if (! $user->canAccessMenu('artists')) {
-            return Response::deny('Anda tidak berhak mengelola artist.');
+            return Response::deny(__('master_data.artist_not_authorized'));
         }
 
         if (! LicenseGate::canCreateArtist()) {
-            return Response::deny(
-                'Instalasi ini memakai lisensi Pro (satu artist). Upgrade ke Master untuk menambah artist lain.'
-            );
+            return Response::deny(__('master_data.artist_license_quota_exceeded'));
         }
 
         return Response::allow();

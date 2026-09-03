@@ -37,7 +37,7 @@ class StoreBomLineRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'material_id.unique' => 'Bahan ini sudah ada di BOM varian ini. Ubah jumlahnya lewat endpoint update.',
+            'material_id.unique' => __('vendors_materials.bom_line_already_exists'),
         ];
     }
 }

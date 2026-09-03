@@ -1,5 +1,6 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listMovements, createAdjustment } from '../api/stock';
 import { lookupVariants } from '../api/products';
@@ -20,6 +21,7 @@ import EmptyState from '../components/ui/EmptyState.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
 const auth = useAuthStore();
+const { t } = useI18n();
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listMovements);
@@ -33,7 +35,7 @@ async function doExport() {
   try {
     await exportMasterData('stock');
   } catch {
-    toast.error('Gagal mengekspor data stok.');
+    toast.error(t('master_data.export_stock_failed'));
   } finally {
     exporting.value = false;
   }
@@ -45,18 +47,25 @@ async function afterImport() {
   await load();
 }
 
-const TYPE_LABEL = { purchase: 'Pembelian', sale: 'Penjualan', preorder_handover: 'Serah pre-order', adjustment: 'Penyesuaian', return: 'Retur', initial: 'Stok awal' };
 const TYPE_VARIANT = { purchase: 'mint', sale: 'neutral', preorder_handover: 'warn', adjustment: 'neutral', return: 'mint', initial: 'neutral' };
+const TYPE_LABEL = computed(() => ({
+  purchase: t('master_data.type_purchase'),
+  sale: t('master_data.type_sale'),
+  preorder_handover: t('master_data.type_preorder_handover'),
+  adjustment: t('master_data.type_adjustment'),
+  return: t('master_data.type_return'),
+  initial: t('master_data.type_initial'),
+}));
 
-const columns = [
-  { key: 'sku', label: 'SKU' },
-  { key: 'type', label: 'Tipe' },
-  { key: 'qty_change', label: 'Perubahan' },
-  { key: 'range', label: 'Sebelum → Sesudah' },
-  { key: 'reason', label: 'Referensi / alasan' },
-  { key: 'user_name', label: 'Oleh' },
-  { key: 'created_at', label: 'Waktu' },
-];
+const columns = computed(() => [
+  { key: 'sku', label: t('master_data.col_sku') },
+  { key: 'type', label: t('master_data.col_type') },
+  { key: 'qty_change', label: t('master_data.col_qty_change') },
+  { key: 'range', label: t('master_data.col_range') },
+  { key: 'reason', label: t('master_data.col_reason') },
+  { key: 'user_name', label: t('master_data.col_by') },
+  { key: 'created_at', label: t('master_data.col_time') },
+]);
 
 function applyFilters(patch) {
   setFilter(patch);
@@ -111,7 +120,7 @@ async function submitAdjustment() {
       reason: adjustReason.value.trim(),
       items: adjustRows.value.filter((r) => r.delta !== 0).map((r) => ({ variant_id: r.variant_id, qty_change: r.delta })),
     });
-    toast.success('Penyesuaian stok tersimpan.');
+    toast.success(t('master_data.adjustment_saved'));
     showAdjust.value = false;
     await load();
   } catch (err) {
@@ -128,7 +137,7 @@ async function submitAdjustment() {
     <div class="flex flex-wrap items-center gap-2.5">
       <BaseSelect
         class="w-52"
-        placeholder="Semua tipe"
+        :placeholder="t('master_data.all_types')"
         :options="Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label }))"
         @update:model-value="(v) => applyFilters({ type: v || undefined })"
       />
@@ -138,21 +147,21 @@ async function submitAdjustment() {
       <template v-if="auth.canAccessMenu('stock')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          Ekspor .xlsx
+          {{ t('common.export_xlsx') }}
         </BaseButton>
         <BaseButton variant="secondary" @click="showImportModal = true">
           <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
-          Impor massal
+          {{ t('common.bulk_import') }}
         </BaseButton>
         <BaseButton @click="openAdjust">
           <i class="ph-duotone ph-sliders-horizontal text-[16px]" aria-hidden="true"></i>
-          Penyesuaian stok
+          {{ t('master_data.stock_adjustment') }}
         </BaseButton>
       </template>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada pergerakan stok.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_stock_movements')">
         <template #cell-sku="{ row }"><span class="font-mono text-[12px] font-semibold">{{ row.sku }}</span></template>
         <template #cell-type="{ row }"><StatusPill :variant="TYPE_VARIANT[row.type]">{{ TYPE_LABEL[row.type] ?? row.type }}</StatusPill></template>
         <template #cell-qty_change="{ row }">
@@ -165,7 +174,7 @@ async function submitAdjustment() {
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showAdjust" title="Penyesuaian stok" max-width-class="max-w-[640px]" @close="showAdjust = false">
+    <BaseModal :open="showAdjust" :title="t('master_data.stock_adjustment')" max-width-class="max-w-[640px]" @close="showAdjust = false">
       <div class="flex flex-col gap-4 px-6 py-5">
         <div v-for="(row, idx) in adjustRows" :key="row.variant_id" class="flex items-center gap-3 rounded-lg border border-line-3 bg-surface-subtle p-3.5">
           <div class="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -173,17 +182,17 @@ async function submitAdjustment() {
             <span class="font-mono text-[11px] text-muted-3">{{ row.sku }} · {{ row.current_stock }} → {{ row.current_stock + row.delta }}</span>
           </div>
           <div class="flex items-center gap-0.5 overflow-hidden rounded-lg border border-line bg-white">
-            <button type="button" class="flex h-[34px] w-[34px] items-center justify-center text-muted-5 hover:bg-line-7" aria-label="Kurangi" @click="bump(row, -1)"><i class="ph-duotone ph-minus text-[14px]" aria-hidden="true"></i></button>
+            <button type="button" class="flex h-[34px] w-[34px] items-center justify-center text-muted-5 hover:bg-line-7" :aria-label="t('master_data.decrease')" @click="bump(row, -1)"><i class="ph-duotone ph-minus text-[14px]" aria-hidden="true"></i></button>
             <span class="min-w-[36px] text-center text-[13.5px] font-bold">{{ row.delta >= 0 ? '+' : '' }}{{ row.delta }}</span>
-            <button type="button" class="flex h-[34px] w-[34px] items-center justify-center text-muted-5 hover:bg-line-7" aria-label="Tambah" @click="bump(row, 1)"><i class="ph-duotone ph-plus text-[14px]" aria-hidden="true"></i></button>
+            <button type="button" class="flex h-[34px] w-[34px] items-center justify-center text-muted-5 hover:bg-line-7" :aria-label="t('master_data.increase')" @click="bump(row, 1)"><i class="ph-duotone ph-plus text-[14px]" aria-hidden="true"></i></button>
           </div>
-          <button type="button" class="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="`Hapus ${row.label}`" @click="removeRow(idx)">
+          <button type="button" class="flex h-[34px] w-[34px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('master_data.delete_row', { label: row.label })" @click="removeRow(idx)">
             <i class="ph-duotone ph-trash text-[14px]" aria-hidden="true"></i>
           </button>
         </div>
 
         <div class="relative">
-          <BaseInput v-model="adjustSearch" label="Cari varian" placeholder="Nama produk atau SKU…" @input="runSearch" />
+          <BaseInput v-model="adjustSearch" :label="t('master_data.search_variant')" :placeholder="t('master_data.search_variant_placeholder')" @input="runSearch" />
           <div v-if="adjustResults.length" class="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-line-2 bg-white shadow-lg">
             <button v-for="v in adjustResults" :key="v.variant_id" type="button" class="flex w-full flex-col gap-0.5 px-3.5 py-2.5 text-left hover:bg-line-7" @click="addRow(v)">
               <span class="text-[13px] font-semibold">{{ v.label }}</span>
@@ -194,23 +203,23 @@ async function submitAdjustment() {
 
         <BaseTextarea
           v-model="adjustReason"
-          label="Alasan penyesuaian"
+          :label="t('master_data.adjustment_reason')"
           required
-          placeholder="Contoh: stok opname 25 Okt, satu unit cacat kemasan"
+          :placeholder="t('master_data.adjustment_reason_placeholder')"
           :rows="3"
         />
         <div class="flex items-start gap-2.5 rounded-lg border border-mint-border bg-mint-50 px-3.5 py-3">
           <i class="ph-duotone ph-shield-check text-[18px] text-brand" aria-hidden="true"></i>
           <span class="text-[12px] leading-relaxed text-muted-4">
-            Setiap baris menulis satu <span class="font-mono text-[11px]">stock_movements</span> bertipe
-            <span class="font-mono text-[11px]">adjustment</span>. Tidak ada update langsung ke kolom stok.
+            {{ t('master_data.adjustment_note') }} <span class="font-mono text-[11px]">stock_movements</span>
+            <span class="font-mono text-[11px]">adjustment</span>. {{ t('master_data.adjustment_note_end') }}
           </span>
         </div>
       </div>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showAdjust = false">Batal</BaseButton>
-          <BaseButton :disabled="!canSubmitAdjustment()" :loading="submitting" @click="submitAdjustment">Simpan penyesuaian</BaseButton>
+          <BaseButton variant="secondary" @click="showAdjust = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :disabled="!canSubmitAdjustment()" :loading="submitting" @click="submitAdjustment">{{ t('master_data.save_adjustment') }}</BaseButton>
         </div>
       </template>
     </BaseModal>

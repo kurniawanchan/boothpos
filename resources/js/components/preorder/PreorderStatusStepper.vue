@@ -1,25 +1,28 @@
 <script setup>
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 
-const STEPS = [
-  { value: 'ordered', label: 'Dipesan' },
-  { value: 'dp_paid', label: 'DP dibayar' },
-  { value: 'arrived', label: 'Barang tiba' },
-  { value: 'settled', label: 'Lunas' },
-  { value: 'handed_over', label: 'Diserahkan' },
-];
+const { t } = useI18n();
+
+const STEPS = computed(() => [
+  { value: 'ordered', label: t('preorders.step_ordered') },
+  { value: 'dp_paid', label: t('preorders.step_dp_paid') },
+  { value: 'arrived', label: t('preorders.step_arrived') },
+  { value: 'settled', label: t('preorders.step_settled') },
+  { value: 'handed_over', label: t('preorders.step_handed_over') },
+]);
 
 const props = defineProps({ status: { type: String, required: true } });
 
-const currentIndex = computed(() => STEPS.findIndex((s) => s.value === props.status));
+const currentIndex = computed(() => STEPS.value.findIndex((s) => s.value === props.status));
 </script>
 
 <template>
   <div v-if="status === 'cancelled'" class="flex items-center gap-2.5 rounded-lg border border-danger-border bg-danger-bg px-4 py-3 text-[13px] font-bold text-danger-text">
     <i class="ph-duotone ph-x-circle text-[19px]" aria-hidden="true"></i>
-    Pre-order dibatalkan
+    {{ t('preorders.cancelled') }}
   </div>
-  <ol v-else class="flex items-start" aria-label="Tahapan status pre-order">
+  <ol v-else class="flex items-start" :aria-label="t('preorders.status_steps_aria')">
     <li v-for="(step, idx) in STEPS" :key="step.value" class="flex flex-1 items-start">
       <div class="flex w-[88px] flex-none flex-col items-center gap-2">
         <span
