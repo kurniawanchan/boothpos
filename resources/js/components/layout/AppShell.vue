@@ -14,6 +14,28 @@ const auth = useAuthStore();
 const settings = useSettingsStore();
 const { t } = useI18n();
 
+// Toggle tampilkan/sembunyikan sidebar — preferensi murni per-perangkat
+// (localStorage), bukan data akun, jadi sengaja tidak disimpan lewat API.
+// Dibungkus try/catch karena localStorage bisa melempar di mode privat
+// beberapa browser; kalau gagal, sidebar cukup selalu tampil (aman).
+const SIDEBAR_VISIBLE_KEY = 'boothpos:sidebar-visible';
+function readStoredSidebarVisible() {
+  try {
+    return localStorage.getItem(SIDEBAR_VISIBLE_KEY) !== 'hidden';
+  } catch {
+    return true;
+  }
+}
+const sidebarVisible = ref(readStoredSidebarVisible());
+function setSidebarVisible(visible) {
+  sidebarVisible.value = visible;
+  try {
+    localStorage.setItem(SIDEBAR_VISIBLE_KEY, visible ? 'visible' : 'hidden');
+  } catch {
+    // Non-fatal — preferensi cukup tidak tersimpan lintas sesi.
+  }
+}
+
 // Sebagian besar layar dinamai persis sama dengan menu_keys-nya
 // (route.name === 'dashboard', 'pos', dst.), jadi judul/subjudul default
 // mengambil dari nav.<name>/<name>_subtitle. Beberapa layar (Produk,
@@ -46,9 +68,33 @@ async function handleLogout() {
 
 <template>
   <div class="flex min-h-screen">
-    <AppSidebar :preorder-alert-count="preorderAlertCount" @logout="handleLogout" />
+    <!-- AppSidebar tetap ter-mount (bukan v-if) SELAMA transisi berjalan
+         supaya lebar wrapper bisa dianimasikan mulus (228px <-> 0);
+         v-if lama menghapus/memasang ulang secara instan tanpa animasi
+         sama sekali. overflow-hidden meng-clip isi <nav> yang tetap
+         w-[228px] internal saat wrapper menyempit — pola "slide collapse"
+         standar. Judul halaman tidak lagi bisa tertutup: tombol
+         "Tampilkan sidebar" sekarang di dalam AppTopbar (ikut alur flex
+         yang sama dengan judul), bukan elemen fixed melayang. -->
+    <div
+      class="flex-none overflow-hidden transition-[width] duration-500 ease-in-out"
+      :style="{ width: sidebarVisible ? '228px' : '0px' }"
+      :aria-hidden="!sidebarVisible"
+      :inert="!sidebarVisible"
+    >
+      <AppSidebar
+        :preorder-alert-count="preorderAlertCount"
+        @logout="handleLogout"
+        @hide-sidebar="setSidebarVisible(false)"
+      />
+    </div>
     <div class="flex min-w-0 flex-1 flex-col">
-      <AppTopbar :title="pageTitle" :subtitle="pageSubtitle" />
+      <AppTopbar
+        :title="pageTitle"
+        :subtitle="pageSubtitle"
+        :sidebar-hidden="!sidebarVisible"
+        @show-sidebar="setSidebarVisible(true)"
+      />
       <main class="min-h-0 flex-1 overflow-auto">
         <RouterView />
       </main>

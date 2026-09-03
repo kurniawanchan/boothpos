@@ -16,7 +16,10 @@
     "active": "Active",
     "inactive": "Inactive",
     "export_xlsx": "Export .xlsx",
-    "bulk_import": "Bulk import"
+    "bulk_import": "Bulk import",
+    "all": "All",
+    "n_selected": "{count} selected",
+    "search_placeholder": "Search…"
   },
   "nav": {
     "aria_label": "Main navigation",
@@ -58,7 +61,11 @@
     "reports_subtitle": "Artist recap, cost & profit",
     "users_subtitle": "Accounts, roles, and per-user menu access",
     "roles_subtitle": "Menu access per role, freely configurable",
-    "settings_subtitle": "License, payment channels, store identity, backups"
+    "settings_subtitle": "License, payment channels, store identity, backups",
+    "profile": "My Profile",
+    "profile_subtitle": "Account details, password, and profile photo",
+    "hide_sidebar": "Hide sidebar",
+    "show_sidebar": "Show sidebar"
   },
   "dashboard": {
     "no_active_event": "No active event. Open one in the Events screen to see a performance summary.",
@@ -79,7 +86,20 @@
     "action_needed_preorders": "Preorders needing action",
     "all_stock_safe": "All stock levels are safe.",
     "no_preorders_waiting": "No preorders waiting.",
-    "waiting_for_goods": "Awaiting goods"
+    "waiting_for_goods": "Awaiting goods",
+    "shortcut_new_sale": "New Sale",
+    "shortcut_new_preorder": "New Pre-order",
+    "shortcut_stock_adjustment": "Adjust Stock",
+    "shortcut_add_product": "Add Product",
+    "out_of_stock": "Out of stock",
+    "pending_preorders": "Pending pre-orders",
+    "view_full_report": "View full report",
+    "view_stock": "View stock movements",
+    "view_preorders": "View all pre-orders",
+    "view_events": "View all events",
+    "sales_by_category": "Sales by category",
+    "sales_by_artist": "Sales by artist",
+    "sales_by_event": "Sales by event"
   },
   "pos": {
     "open_session_first": "Open a cashier session first.",
@@ -241,7 +261,6 @@
     "col_product_name": "Product name",
     "col_artist": "Artist",
     "col_category": "Category",
-    "col_type": "Type",
     "no_products": "No products yet.",
     "preorder": "Pre-order",
     "ready_stock": "Ready stock",
@@ -601,7 +620,6 @@
     "tab_profit": "Cost & Profit",
     "tab_artist_profit": "Artist Cost",
     "pick_event_for_settlement": "Pick an event to see the artist recap.",
-    "col_artist": "Artist",
     "col_unit": "Unit",
     "col_sales": "Sales",
     "col_payable": "Payable",
@@ -742,5 +760,21 @@
     "delete_role_confirm": "The role '{name}' will be deleted. This action cannot be undone."
   },
   "activity_log": {},
-  "errors": {}
+  "errors": {},
+  "profile": {
+    "title": "My Profile",
+    "subtitle": "Account details, password, and profile photo",
+    "photo": "Profile photo",
+    "change_photo": "Change photo",
+    "photo_hint": "JPEG or PNG, max 5 MB.",
+    "photo_updated": "Profile photo updated successfully.",
+    "name": "Name",
+    "username": "Username",
+    "role": "Role",
+    "change_password": "Change Password",
+    "current_password": "Current password",
+    "new_password": "New password",
+    "confirm_password": "Confirm new password",
+    "save_password": "Save password"
+  }
 }

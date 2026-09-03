@@ -52,29 +52,35 @@ describe('PosView — product images & clickable artist filter', () => {
     expect(screen.queryByAltText('Keychain B')).not.toBeInTheDocument();
   });
 
-  it('shows an artist chip row and refetches with artist_id when one is clicked', async () => {
+  // 005-ux-enhancements-dashboard (US1) — chip rows replaced by a
+  // searchable multi-select dropdown (BaseMultiSelect.vue); the artist
+  // dropdown is the first of the two on this screen.
+  it('filters via the searchable artist dropdown and refetches with artist_id', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderPos();
     await screen.findByText('Keychain A');
-    await screen.findByRole('button', { name: 'Artist A' });
 
-    await user.click(screen.getByRole('button', { name: 'Artist A' }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: 1 })));
+    const artistTrigger = screen.getByText('Semua artist');
+    await user.click(artistTrigger);
+    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
   });
 
-  it('returns to showing all artists when the "All" chip for that row is clicked', async () => {
+  it('returns to showing all artists when "All" is re-selected in the dropdown', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderPos();
     await screen.findByText('Keychain A');
-    await screen.findByRole('button', { name: 'Artist A' });
 
-    await user.click(screen.getByRole('button', { name: 'Artist A' }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: 1 })));
+    const artistTrigger = screen.getByText('Semua artist');
+    await user.click(artistTrigger);
+    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
 
-    const allButtons = screen.getAllByRole('button', { name: /^(all|semua)$/i });
-    await user.click(allButtons[0]);
+    // The panel stays open after a selection (multi-select) — pick "All"
+    // directly to clear the selection back to unfiltered.
+    await user.click(await screen.findByRole('option', { name: 'Semua artist' }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.not.objectContaining({ artist_id: expect.anything() })));
   });
 });

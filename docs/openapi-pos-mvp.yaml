@@ -106,6 +106,65 @@ paths:
               schema: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /auth/password:
+    put:
+      tags: [Auth]
+      summary: Ganti password akun sendiri (005-ux-enhancements-dashboard)
+      description: >
+        Self-service — SENGAJA tidak digerbang canAccessMenu('users'), sama
+        seperti /auth/language. Setiap akun boleh mengubah password
+        miliknya sendiri, digerbang hanya oleh current_password yang benar.
+        Token sesi yang sedang dipakai TIDAK dicabut.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, password, password_confirmation]
+              properties:
+                current_password: { type: string }
+                password: { type: string }
+                password_confirmation: { type: string }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/photo:
+    post:
+      tags: [Auth]
+      summary: Ganti foto profil akun sendiri (005-ux-enhancements-dashboard)
+      description: >
+        Self-service — sengaja endpoint TERPISAH dari
+        `POST /users/{user}/photo` (yang digerbang UserPolicy::update() /
+        canAccessMenu('users')). Endpoint ini hanya pernah menyentuh
+        $request->user() sendiri, tidak menerima {user} dari klien, jadi
+        aman dipakai peran tanpa akses menu Pengguna (mis. Kasir).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary, description: "JPEG/PNG, maks 5 MB" }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthenticatedUser' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /auth/language:
     put:
       tags: [Auth]
@@ -504,8 +563,22 @@ paths:
         memperbesar payload untuk konsumen yang tidak butuh.
       parameters:
         - { name: search, in: query, description: "Cocokkan nama produk atau SKU", schema: { type: string } }
-        - { name: artist_id, in: query, schema: { type: integer } }
-        - { name: category_id, in: query, schema: { type: integer } }
+        - name: artist_id
+          in: query
+          description: |
+            005-ux-enhancements-dashboard — sekarang array (dropdown
+            multi-pilih Products/POS): `artist_id[]=1&artist_id[]=2`.
+            Skalar tunggal lama (`artist_id=1`) tetap didukung mundur.
+            Kosong/tidak dikirim = tanpa filter sumbu ini.
+          style: form
+          explode: true
+          schema: { type: array, items: { type: integer } }
+        - name: category_id
+          in: query
+          description: Sama seperti `artist_id` di atas — array, kompatibel mundur.
+          style: form
+          explode: true
+          schema: { type: array, items: { type: integer } }
         - { name: is_preorder, in: query, schema: { type: boolean } }
         - name: with_variants
           in: query
@@ -1426,7 +1499,7 @@ paths:
         - { name: event_id, in: query, schema: { type: integer } }
         - { name: date_from, in: query, schema: { type: string, format: date } }
         - { name: date_to, in: query, schema: { type: string, format: date } }
-        - { name: group_by, in: query, schema: { type: string, enum: [product, category, artist, day], default: product } }
+        - { name: group_by, in: query, schema: { type: string, enum: [product, category, artist, day, event], default: product } }
       responses:
         '200':
           description: Berhasil
@@ -2467,6 +2540,12 @@ components:
           items: { type: string }
           example: [dashboard, pos, session, products, reports, settings]
         is_active: { type: boolean }
+        photo_url:
+          type: string
+          nullable: true
+          description: |
+            005-ux-enhancements-dashboard — dipakai avatar header (AppSidebar)
+            dan layar Profil Saya. null bila belum pernah mengunggah foto.
         language:
           type: string
           enum: [id, en]
@@ -3154,7 +3233,7 @@ components:
         sama-sama benar, cuma menjawab pertanyaan berbeda.
       properties:
         event: { $ref: '#/components/schemas/Event' }
-        group_by: { type: string, enum: [product, category, artist, day] }
+        group_by: { type: string, enum: [product, category, artist, day, event] }
         group_label:
           type: string
           description: |

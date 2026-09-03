@@ -18,6 +18,7 @@ import ProductVariantPickerModal from '../components/pos/ProductVariantPickerMod
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
 import CustomerPickerModal from '../components/forms/CustomerPickerModal.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
+import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 
 const cart = usePosCartStore();
 const toast = useToastStore();
@@ -27,8 +28,11 @@ const session = ref(null);
 const sessionChecked = ref(false);
 const categories = ref([]);
 const artists = ref([]);
-const selectedCategoryId = ref(null);
-const selectedArtistId = ref(null);
+// 005-ux-enhancements-dashboard (US1) — array (multi-select dropdown
+// dengan pencarian), bukan lagi satu ID chip tunggal. Array kosong =
+// "Semua" — lihat BaseMultiSelect.vue.
+const selectedCategoryIds = ref([]);
+const selectedArtistIds = ref([]);
 const search = ref('');
 const browsedProducts = ref([]);
 const searchResults = ref(null);
@@ -63,8 +67,8 @@ async function loadBrowse() {
     // ?with_variants=1 eager-loads every product's variants (including
     // inactive ones) in one extra query total — no more per-product N+1.
     const res = await listProducts({
-      ...(selectedCategoryId.value ? { category_id: selectedCategoryId.value } : {}),
-      ...(selectedArtistId.value ? { artist_id: selectedArtistId.value } : {}),
+      ...(selectedCategoryIds.value.length ? { category_id: selectedCategoryIds.value } : {}),
+      ...(selectedArtistIds.value.length ? { artist_id: selectedArtistIds.value } : {}),
       is_active: true,
       with_variants: 1,
       per_page: 100,
@@ -74,8 +78,11 @@ async function loadBrowse() {
     loadingGrid.value = false;
   }
 }
-watch(selectedCategoryId, loadBrowse);
-watch(selectedArtistId, loadBrowse);
+watch(selectedCategoryIds, loadBrowse);
+watch(selectedArtistIds, loadBrowse);
+
+const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+const categoryOptions = computed(() => categories.value.map((c) => ({ value: c.id, label: c.name })));
 
 const runSearch = useDebouncedFn(async () => {
   const term = search.value.trim();
@@ -218,47 +225,12 @@ function closeReceipt() {
         </div>
       </div>
 
-      <!-- 004-sidebar-menu-reorg (US5, FR-007) — new artist chip row,
-           identical pattern to the pre-existing category row below. -->
-      <div class="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-          :class="!selectedArtistId ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-          @click="selectedArtistId = null"
-        >
-          {{ t('pos.all') }}
-        </button>
-        <button
-          v-for="a in artists"
-          :key="a.id"
-          type="button"
-          class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-          :class="selectedArtistId === a.id ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-          @click="selectedArtistId = a.id"
-        >
-          {{ a.name }}
-        </button>
-      </div>
-      <div class="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-          :class="!selectedCategoryId ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-          @click="selectedCategoryId = null"
-        >
-          {{ t('pos.all') }}
-        </button>
-        <button
-          v-for="c in categories"
-          :key="c.id"
-          type="button"
-          class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-          :class="selectedCategoryId === c.id ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-          @click="selectedCategoryId = c.id"
-        >
-          {{ c.name }}
-        </button>
+      <!-- 005-ux-enhancements-dashboard (US1) — dropdown multi-pilih dengan
+           pencarian, menggantikan baris chip artist/category dari
+           004-sidebar-menu-reorg (lihat research.md R2). -->
+      <div class="flex flex-wrap gap-2.5">
+        <BaseMultiSelect v-model="selectedArtistIds" :options="artistOptions" :all-label="t('master_data.all_artists')" class="w-52" />
+        <BaseMultiSelect v-model="selectedCategoryIds" :options="categoryOptions" :all-label="t('master_data.all_categories')" class="w-52" />
       </div>
 
       <EmptyState v-if="!loadingGrid && cards.length === 0" icon="ph-package" :message="t('pos.no_matching_products')" />

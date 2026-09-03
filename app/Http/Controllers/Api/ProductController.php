@@ -58,8 +58,16 @@ class ProductController extends Controller
                        ->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', "%{$term}%"));
                 });
             })
-            ->when($request->filled('artist_id'), fn ($q) => $q->where('artist_id', $request->integer('artist_id')))
-            ->when($request->filled('category_id'), fn ($q) => $q->where('category_id', $request->integer('category_id')))
+            // 005-ux-enhancements-dashboard (US1) — artist_id/category_id
+            // sekarang array (multi-select dropdown di Products/POS),
+            // bukan lagi skalar tunggal. $request->array() menormalkan
+            // baik `artist_id[]=1&artist_id[]=2` maupun `artist_id=1` lama
+            // menjadi array, jadi kompatibel mundur tanpa perubahan pada
+            // pemanggil lain. array_filter membuang string kosong supaya
+            // whereIn([]) (yang selalu false) tidak diam-diam mengosongkan
+            // hasil ketika parameter ada tapi bernilai kosong.
+            ->when(count(array_filter($request->array('artist_id'))) > 0, fn ($q) => $q->whereIn('artist_id', array_filter($request->array('artist_id'))))
+            ->when(count(array_filter($request->array('category_id'))) > 0, fn ($q) => $q->whereIn('category_id', array_filter($request->array('category_id'))))
             ->when($request->has('is_preorder'), fn ($q) => $q->where('is_preorder', $request->boolean('is_preorder')))
             ->orderBy('name')
             ->paginate($perPage);

@@ -29,6 +29,11 @@ class ReportController extends Controller
         'category' => 'Kategori',
         'artist' => 'Artist',
         'day' => 'Tanggal',
+        // 005-ux-enhancements-dashboard (US2) — grafik "penjualan per
+        // event" di dashboard butuh pengelompokan ini; ditambahkan di
+        // sini (bukan endpoint baru) supaya tetap satu jalur agregasi
+        // penjualan yang sudah teruji mode-scoping-nya, bukan duplikat.
+        'event' => 'Event',
     ];
 
     public function sales(Request $request): JsonResponse
@@ -55,6 +60,7 @@ class ReportController extends Controller
             // walau parameter group_by=category diterima tanpa galat.
             ->join('categories', 'categories.id', '=', 'products.category_id')
             ->join('artists', 'artists.id', '=', 'order_items.artist_id')
+            ->join('events', 'events.id', '=', 'orders.event_id')
             ->where('orders.status', 'completed')
             // 003-seed-demo-live (US3/FR-010) — query hand-rolled DB::table
             // TIDAK ikut Eloquent global scope (DataModeScope); tanpa filter
@@ -74,6 +80,7 @@ class ReportController extends Controller
         [$idExpr, $labelExpr, $idAlias] = match ($groupBy) {
             'category' => ['categories.id', 'categories.name', 'category_id'],
             'artist' => ['artists.id', 'artists.name', 'artist_id'],
+            'event' => ['events.id', 'events.name', 'event_id'],
             'day' => ['DATE(orders.created_at)', 'DATE(orders.created_at)', null],
             default => ['products.id', 'products.name', 'product_id'],
         };

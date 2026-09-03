@@ -209,7 +209,23 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/004-sidebar-menu-reorg/plan.md` (branch
+Active feature plan: `specs/005-ux-enhancements-dashboard/plan.md` (branch
+`005-ux-enhancements-dashboard`) — UX Enhancements: replaces the
+Products/POS artist/category chip filters (added in 004) with a searchable
+multi-select dropdown (new `BaseMultiSelect.vue`, `GET /products`'s
+`artist_id[]`/`category_id[]` now array-capable); adds dashboard shortcut
+tiles, a day-filterable sales panel, category/artist/event charts
+(`chart.js`, dynamically imported), drill-through links, and extra stats
+via new `DashboardController`/`DashboardService` (mode-scoped, gated by the
+caller's existing `menu_keys`, not a new permission concept); adds a
+self-service Profile screen (`PUT /auth/password`, `POST /auth/photo`, both
+self-scoped — deliberately NOT routed through `UserController`'s
+admin-gated `{user}` routes, so every role can manage their own account);
+and fixes the sidebar's "Purchase"→"Pembelian" label and submenu-item color
+inconsistency. See plan.md's Constitution Check for why dashboard
+mode-scoping is this feature's highest-risk item.
+
+Previous feature: `specs/004-sidebar-menu-reorg/plan.md` (branch
 `004-sidebar-menu-reorg`) — Sidebar Menu Reorg + Product Images &
 Clickable Filters: frontend-only reorder of the sidebar (Sesi Kasir →
 Sales → Purchase → Inventaris → Pre-orders) grouping Kategori/Produk/Stok

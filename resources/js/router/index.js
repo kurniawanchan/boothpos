@@ -123,6 +123,14 @@ const routes = [
         component: () => import('../views/SettingsView.vue'),
         meta: { menuKey: 'settings' },
       },
+      {
+        // 005-ux-enhancements-dashboard (US3) — swa-layanan, sengaja
+        // TANPA menuKey supaya setiap peran (termasuk kasir/inventory
+        // tanpa akses menu 'users') bisa mengubah profilnya sendiri.
+        path: 'profile',
+        name: 'profile',
+        component: () => import('../views/ProfileView.vue'),
+      },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },
