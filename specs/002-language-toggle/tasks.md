@@ -310,7 +310,7 @@ mirrors the Phase 7 convention established in `001-user-store-settings`.
       Kasir-role account succeeding despite lacking `users` menu access —
       following this collection's "one real flow plus negative cases"
       convention.
-- [ ] T053 Flag the Principle III constitution conflict explicitly to
+- [X] T053 Flag the Principle III constitution conflict explicitly to
       the developer/product owner (per plan.md's Complexity Tracking) —
       recommend running `/speckit-constitution` to amend Principle III
       (MINOR bump) before this feature merges to `main`. This task does
