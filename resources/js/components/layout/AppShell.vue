@@ -14,6 +14,28 @@ const auth = useAuthStore();
 const settings = useSettingsStore();
 const { t } = useI18n();
 
+// Toggle tampilkan/sembunyikan sidebar — preferensi murni per-perangkat
+// (localStorage), bukan data akun, jadi sengaja tidak disimpan lewat API.
+// Dibungkus try/catch karena localStorage bisa melempar di mode privat
+// beberapa browser; kalau gagal, sidebar cukup selalu tampil (aman).
+const SIDEBAR_VISIBLE_KEY = 'boothpos:sidebar-visible';
+function readStoredSidebarVisible() {
+  try {
+    return localStorage.getItem(SIDEBAR_VISIBLE_KEY) !== 'hidden';
+  } catch {
+    return true;
+  }
+}
+const sidebarVisible = ref(readStoredSidebarVisible());
+function setSidebarVisible(visible) {
+  sidebarVisible.value = visible;
+  try {
+    localStorage.setItem(SIDEBAR_VISIBLE_KEY, visible ? 'visible' : 'hidden');
+  } catch {
+    // Non-fatal — preferensi cukup tidak tersimpan lintas sesi.
+  }
+}
+
 // Sebagian besar layar dinamai persis sama dengan menu_keys-nya
 // (route.name === 'dashboard', 'pos', dst.), jadi judul/subjudul default
 // mengambil dari nav.<name>/<name>_subtitle. Beberapa layar (Produk,
@@ -46,7 +68,25 @@ async function handleLogout() {
 
 <template>
   <div class="flex min-h-screen">
-    <AppSidebar :preorder-alert-count="preorderAlertCount" @logout="handleLogout" />
+    <AppSidebar
+      v-if="sidebarVisible"
+      :preorder-alert-count="preorderAlertCount"
+      @logout="handleLogout"
+      @hide-sidebar="setSidebarVisible(false)"
+    />
+    <!-- Tombol tampilkan kembali — hanya ada saat sidebar disembunyikan,
+         sengaja bukan bagian dari AppSidebar.vue sendiri karena saat itu
+         komponennya tidak ter-render sama sekali. -->
+    <button
+      v-else
+      type="button"
+      class="fixed left-3 top-3 z-40 flex h-9 w-9 items-center justify-center rounded-md border border-line-2 bg-white text-muted-4 shadow-sm transition-colors hover:border-brand hover:text-brand-active"
+      :aria-label="t('nav.show_sidebar')"
+      :title="t('nav.show_sidebar')"
+      @click="setSidebarVisible(true)"
+    >
+      <i class="ph-duotone ph-sidebar-simple text-[17px]" aria-hidden="true"></i>
+    </button>
     <div class="flex min-w-0 flex-1 flex-col">
       <AppTopbar :title="pageTitle" :subtitle="pageSubtitle" />
       <main class="min-h-0 flex-1 overflow-auto">

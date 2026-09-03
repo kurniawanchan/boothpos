@@ -229,8 +229,8 @@ function closeReceipt() {
            pencarian, menggantikan baris chip artist/category dari
            004-sidebar-menu-reorg (lihat research.md R2). -->
       <div class="flex flex-wrap gap-2.5">
-        <BaseMultiSelect v-model="selectedArtistIds" :options="artistOptions" :all-label="t('pos.all')" class="w-52" />
-        <BaseMultiSelect v-model="selectedCategoryIds" :options="categoryOptions" :all-label="t('pos.all')" class="w-52" />
+        <BaseMultiSelect v-model="selectedArtistIds" :options="artistOptions" :all-label="t('master_data.all_artists')" class="w-52" />
+        <BaseMultiSelect v-model="selectedCategoryIds" :options="categoryOptions" :all-label="t('master_data.all_categories')" class="w-52" />
       </div>
 
       <EmptyState v-if="!loadingGrid && cards.length === 0" icon="ph-package" :message="t('pos.no_matching_products')" />

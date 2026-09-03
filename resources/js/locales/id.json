@@ -63,7 +63,9 @@
     "roles_subtitle": "Akses menu per peran, bebas dikonfigurasi",
     "settings_subtitle": "Lisensi, kanal pembayaran, identitas toko, cadangan",
     "profile": "Profil Saya",
-    "profile_subtitle": "Detail akun, password, dan foto profil"
+    "profile_subtitle": "Detail akun, password, dan foto profil",
+    "hide_sidebar": "Sembunyikan sidebar",
+    "show_sidebar": "Tampilkan sidebar"
   },
   "dashboard": {
     "no_active_event": "Tidak ada event berstatus aktif. Buka satu di layar Event untuk melihat ringkasan performa.",

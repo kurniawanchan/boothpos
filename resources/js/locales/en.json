@@ -63,7 +63,9 @@
     "roles_subtitle": "Menu access per role, freely configurable",
     "settings_subtitle": "License, payment channels, store identity, backups",
     "profile": "My Profile",
-    "profile_subtitle": "Account details, password, and profile photo"
+    "profile_subtitle": "Account details, password, and profile photo",
+    "hide_sidebar": "Hide sidebar",
+    "show_sidebar": "Show sidebar"
   },
   "dashboard": {
     "no_active_event": "No active event. Open one in the Events screen to see a performance summary.",

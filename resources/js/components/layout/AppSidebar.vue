@@ -15,7 +15,7 @@ const cart = usePosCartStore();
 const { count: cartCount } = storeToRefs(cart);
 
 const props = defineProps({ preorderAlertCount: { type: Number, default: 0 } });
-defineEmits(['logout']);
+defineEmits(['logout', 'hide-sidebar']);
 
 // 'menuKey' matches app/Support/MenuKeys.php exactly — this is the one
 // place the sidebar decides visibility, delegating to
@@ -122,10 +122,21 @@ watch(
       <div class="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-brand text-[18px] text-white">
         <i class="ph-duotone ph-storefront" aria-hidden="true"></i>
       </div>
-      <div class="flex flex-col leading-tight">
+      <div class="flex min-w-0 flex-1 flex-col leading-tight">
         <span class="text-[15.5px] font-extrabold tracking-tight">BoothPOS</span>
         <span class="text-[10.5px] font-semibold tracking-wide text-muted-3">{{ settings.tierLabel }}</span>
       </div>
+      <!-- Toggle sembunyikan sidebar — state & persistensi ditangani
+           AppShell.vue, komponen ini murni memancarkan permintaan. -->
+      <button
+        type="button"
+        class="flex h-7 w-7 flex-none items-center justify-center rounded-md text-muted-3 transition-colors hover:bg-line-7 hover:text-muted-5"
+        :aria-label="t('nav.hide_sidebar')"
+        :title="t('nav.hide_sidebar')"
+        @click="$emit('hide-sidebar')"
+      >
+        <i class="ph-duotone ph-sidebar-simple text-[16px]" aria-hidden="true"></i>
+      </button>
     </div>
 
     <ul class="flex flex-1 flex-col gap-0.5 overflow-auto px-3">
