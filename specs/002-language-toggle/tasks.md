@@ -209,7 +209,7 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
       → `t('master_data.*')`.
 - [X] T036 [P] [US1] `resources/js/views/{VendorsView,MaterialsView}.vue`
       → `t('vendors_materials.*')`.
-- [ ] T037 [P] [US1] `resources/js/views/{CustomersView,EventsView,SessionView}.vue`,
+- [X] T037 [P] [US1] `resources/js/views/{CustomersView,EventsView,SessionView}.vue`,
       `components/forms/CustomerPickerModal.vue`,
       `components/preorder/PreorderStatusStepper.vue`
       → `t('events_sessions.*')`.
