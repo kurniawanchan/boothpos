@@ -194,7 +194,7 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
 
 ### Frontend string migration for User Story 1
 
-- [ ] T032 [P] [US1] `resources/js/components/layout/AppShell.vue`,
+- [X] T032 [P] [US1] `resources/js/components/layout/AppShell.vue`,
       `AppSidebar.vue`, `AppTopbar.vue` — nav labels/group titles →
       `t('nav.*')`, populate `locales/{id,en}.json` under `nav`.
 - [X] T033 [P] [US1] `resources/js/views/DashboardView.vue` → `t('dashboard.*')`.
