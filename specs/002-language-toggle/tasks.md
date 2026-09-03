@@ -245,7 +245,7 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
       `qa-tests/component/ProductImageUpload.test.js` or `UsersView.test.js`)
       with a case: fill part of a create form, flip the locale mid-edit,
       assert the field's value is unchanged (FR-011).
-- [ ] T046 [US1] Real-browser pass per `quickstart.md` steps 1, 3, 4, 5,
+- [X] T046 [US1] Real-browser pass per `quickstart.md` steps 1, 3, 4, 5,
       7, 8 (login screen unaffected; toggle works and applies instantly
       across at least 3 different screens; per-account isolation on a
       shared device; localized 422/409 messages in both locales; data
@@ -279,7 +279,7 @@ throughout.
       column at all — confirm `MasterDataSheets`/`MasterDataImportService`
       require no change here, and record that confirmation as a comment
       if no code change was needed).
-- [ ] T049 [US2] Real-browser pass per `quickstart.md` step 2 — a freshly
+- [X] T049 [US2] Real-browser pass per `quickstart.md` step 2 — a freshly
       created user and at least one pre-existing seeded account (e.g.
       `kasir02`, which was never touched by this feature's migration
       backfill logic since none is needed) both show English on first
@@ -324,7 +324,7 @@ mirrors the Phase 7 convention established in `001-user-store-settings`.
       string needs to still pass because `lang/id/*.php` holds the exact
       original string) and `npm test` (zero failures/regressions from
       the T032–T041 conversions).
-- [ ] T055 Execute `quickstart.md` step 6 (receipt stays Bahasa Indonesia
+- [X] T055 Execute `quickstart.md` step 6 (receipt stays Bahasa Indonesia
       even when the cashier's UI is set to English) explicitly, then run
       through all 8 quickstart steps once more end-to-end as the final
       consolidated acceptance pass.
