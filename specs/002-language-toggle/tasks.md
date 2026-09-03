@@ -215,7 +215,7 @@ as A — confirm the app opens in Bahasa Indonesia without re-selecting.
       → `t('events_sessions.*')`.
 - [X] T038 [P] [US1] `resources/js/views/PreordersView.vue`,
       `components/payment/RecordPaymentModal.vue` → `t('preorders.*')`.
-- [ ] T039 [P] [US1] `resources/js/views/{SalesView,ReportsView}.vue`,
+- [X] T039 [P] [US1] `resources/js/views/{SalesView,ReportsView}.vue`,
       `components/report/ArtistTransactionsModal.vue` → `t('reports.*')`.
 - [ ] T040 [P] [US1] `resources/js/views/{SettingsView,UsersView,RolesView}.vue`,
       `components/settings/RoleMenuPicker.vue` →

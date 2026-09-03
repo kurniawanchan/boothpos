@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { listEvents } from '../api/events';
@@ -27,6 +28,7 @@ import ArtistTransactionsModal from '../components/report/ArtistTransactionsModa
 // halaman ini sendiri digerbang lewat meta.roles di router — bukan cuma
 // tab-nya — supaya kasir/inventory tidak pernah sampai ke halaman kosong.
 const auth = useAuthStore();
+const { t } = useI18n();
 const toast = useToastStore();
 
 const events = ref([]);
@@ -46,13 +48,13 @@ const loading = ref(false);
 const tabs = computed(() =>
   auth.canAccessMenu('reports')
     ? [
-        { key: 'settlement', label: 'Rekap Artist' },
-        { key: 'profit', label: 'Modal & Untung' },
+        { key: 'settlement', label: t('reports.tab_settlement') },
+        { key: 'profit', label: t('reports.tab_profit') },
         // F9.5 — laporan modal & laba kotor PER ARTIST, tab terpisah dari
         // "Modal & Untung" (yang berskala event) karena angkanya sengaja
         // TIDAK dikurangi biaya event dan akan salah dibaca kalau ditumpuk
         // di tab yang sama tanpa pemisahan visual yang jelas.
-        { key: 'artist-profit', label: 'Modal Artist' },
+        { key: 'artist-profit', label: t('reports.tab_artist_profit') },
       ]
     : []
 );
@@ -88,7 +90,7 @@ async function doExport(report) {
   try {
     await exportReport(report, { event_id: eventId.value || undefined });
   } catch {
-    toast.error('Gagal mengekspor laporan.');
+    toast.error(t('reports.export_report_failed'));
   }
 }
 
@@ -112,7 +114,7 @@ async function submitSettlementPayment() {
       amount: toMoneyString(settlementAmount.value),
       notes: settlementNotes.value || null,
     });
-    toast.success('Pembayaran ke artist tercatat.');
+    toast.success(t('reports.payment_to_artist_recorded'));
     showSettlementPay.value = false;
     await loadActiveTab();
   } catch (err) {
@@ -147,41 +149,41 @@ function openArtistTransactions(row) {
           {{ t.label }}
         </button>
       </div>
-      <BaseSelect class="w-56" v-model="eventId" placeholder="Semua event" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
+      <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
       <span class="flex-1"></span>
       <BaseButton v-if="activeTab === 'settlement'" variant="secondary" @click="doExport('artist-settlements')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-        Ekspor .xlsx
+        {{ t('common.export_xlsx') }}
       </BaseButton>
       <BaseButton v-if="activeTab === 'profit'" variant="secondary" @click="doExport('profit')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-        Ekspor .xlsx
+        {{ t('common.export_xlsx') }}
       </BaseButton>
       <BaseButton v-if="activeTab === 'artist-profit'" variant="secondary" @click="doExport('artist-profit')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-        Ekspor .xlsx
+        {{ t('common.export_xlsx') }}
       </BaseButton>
     </div>
 
     <!-- Settlement tab -->
     <template v-if="activeTab === 'settlement'">
-      <EmptyState v-if="!eventId" icon="ph-calendar-dots" message="Pilih event untuk melihat rekap artist." />
+      <EmptyState v-if="!eventId" icon="ph-calendar-dots" :message="t('reports.pick_event_for_settlement')" />
       <div v-else class="overflow-hidden rounded-card border border-line-2 bg-white">
         <DataTable
           :columns="[
-            { key: 'artist_name', label: 'Artist' },
-            { key: 'total_units', label: 'Unit' },
-            { key: 'total_sales', label: 'Penjualan' },
-            { key: 'payable_amount', label: 'Wajib dibayar' },
-            { key: 'paid_amount', label: 'Sudah dibayar' },
-            { key: 'outstanding', label: 'Sisa' },
-            { key: 'status', label: 'Status' },
+            { key: 'artist_name', label: t('reports.col_artist') },
+            { key: 'total_units', label: t('reports.col_unit') },
+            { key: 'total_sales', label: t('reports.col_sales') },
+            { key: 'payable_amount', label: t('reports.col_payable') },
+            { key: 'paid_amount', label: t('reports.col_paid') },
+            { key: 'outstanding', label: t('reports.col_outstanding') },
+            { key: 'status', label: t('reports.col_status') },
             { key: 'actions', label: '' },
           ]"
           :rows="settlements ?? []"
           :loading="loading"
           row-key="artist_id"
-          empty-message="Belum ada artist aktif — rekap ini mendaftar setiap artist aktif untuk event ini, sekalipun belum ada penjualan."
+          :empty-message="t('reports.no_active_artists_settlement')"
         >
           <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
           <template #cell-payable_amount="{ row }">{{ formatIDR(row.payable_amount) }}</template>
@@ -198,12 +200,12 @@ function openArtistTransactions(row) {
                    settlement, supaya "belum ada penjualan" juga bisa
                    diverifikasi langsung sebagai daftar kosong, bukan
                    kontrol yang hilang begitu saja. -->
-              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openArtistTransactions(row)">Detail transaksi</button>
+              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openArtistTransactions(row)">{{ t('reports.transaction_detail') }}</button>
               <!-- id is null until a real settlement row exists (an artist
                    with zero sales this event) — there is nothing to record a
                    payment against yet, so the action must stay hidden rather
                    than firing a request the backend can't resolve. -->
-              <button v-if="row.id !== null && parseMoney(row.outstanding) > 0" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openSettlementPay(row)">Catat bayar</button>
+              <button v-if="row.id !== null && parseMoney(row.outstanding) > 0" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openSettlementPay(row)">{{ t('reports.record_payment_action') }}</button>
             </div>
           </template>
         </DataTable>
@@ -212,20 +214,20 @@ function openArtistTransactions(row) {
 
     <!-- Profit tab (owner/admin only — hidden entirely for cashier/inventory) -->
     <template v-else-if="activeTab === 'profit'">
-      <EmptyState v-if="!eventId" icon="ph-calendar-dots" message="Pilih event untuk melihat laporan modal & keuntungan." />
+      <EmptyState v-if="!eventId" icon="ph-calendar-dots" :message="t('reports.pick_event_for_profit')" />
       <div v-else-if="profit" class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">Pendapatan</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.revenue) }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">Harga pokok</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.cost_of_goods) }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">Laba kotor</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.gross_profit) }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">Biaya event</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.event_cost) }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-mint-border bg-mint-50 p-4"><span class="text-[11.5px] font-semibold text-brand-active">Laba bersih</span><span class="text-[21px] font-extrabold tracking-tight text-brand-active">{{ formatIDR(profit.net_profit) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.revenue') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.revenue) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.cost_of_goods') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.cost_of_goods) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.gross_profit') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.gross_profit) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.event_cost') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.event_cost) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-mint-border bg-mint-50 p-4"><span class="text-[11.5px] font-semibold text-brand-active">{{ t('reports.net_profit') }}</span><span class="text-[21px] font-extrabold tracking-tight text-brand-active">{{ formatIDR(profit.net_profit) }}</span></div>
       </div>
-      <p class="text-[11.5px] leading-relaxed text-muted-3">Laba kotor memakai nilai snapshot pada order_items, bukan harga master saat laporan dibuka.</p>
+      <p class="text-[11.5px] leading-relaxed text-muted-3">{{ t('reports.profit_snapshot_note') }}</p>
     </template>
 
     <!-- Artist profit tab (F9.5, owner/admin only) -->
     <template v-else-if="activeTab === 'artist-profit'">
-      <EmptyState v-if="!eventId" icon="ph-calendar-dots" message="Pilih event untuk melihat laporan modal & laba per artist." />
+      <EmptyState v-if="!eventId" icon="ph-calendar-dots" :message="t('reports.pick_event_for_artist_profit')" />
       <template v-else>
         <!-- Penjelasan ini WAJIB ada — angka di sini sengaja tidak dikurangi
              event_cost (lihat kriteria penerimaan F9.5), dan tanpa catatan
@@ -234,21 +236,23 @@ function openArtistTransactions(row) {
         <div class="flex items-start gap-2.5 rounded-lg border border-line-2 bg-surface-subtle px-4 py-3">
           <i class="ph-duotone ph-info text-[16px] text-muted-3" aria-hidden="true"></i>
           <p class="text-[12px] leading-relaxed text-muted-3">
-            Laba kotor per artist di sini <span class="font-semibold text-muted-4">belum dikurangi biaya event</span> — biaya event sudah diperhitungkan terpisah pada laba bersih tingkat event di tab "Modal & Untung", supaya tidak dobel-hitung atau dialokasikan tidak adil antar artist.
+            <i18n-t keypath="reports.artist_profit_note" tag="span">
+              <template #bold><span class="font-semibold text-muted-4">{{ t('reports.artist_profit_note_bold') }}</span></template>
+            </i18n-t>
           </p>
         </div>
         <div class="overflow-hidden rounded-card border border-line-2 bg-white">
           <DataTable
             :columns="[
-              { key: 'artist_name', label: 'Artist' },
-              { key: 'total_sales', label: 'Penjualan' },
-              { key: 'modal', label: 'Modal' },
-              { key: 'gross_profit', label: 'Laba kotor' },
+              { key: 'artist_name', label: t('reports.col_artist') },
+              { key: 'total_sales', label: t('reports.col_sales') },
+              { key: 'modal', label: t('reports.col_modal') },
+              { key: 'gross_profit', label: t('reports.col_gross_profit') },
             ]"
             :rows="artistProfit ?? []"
             :loading="loading"
             row-key="artist_id"
-            empty-message="Belum ada penjualan artist pada event ini."
+            :empty-message="t('reports.no_artist_sales')"
           >
             <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
             <template #cell-modal="{ row }">{{ formatIDR(row.modal) }}</template>
@@ -258,16 +262,16 @@ function openArtistTransactions(row) {
       </template>
     </template>
 
-    <BaseModal :open="showSettlementPay" title="Catat pembayaran ke artist" max-width-class="max-w-[400px]" @close="showSettlementPay = false">
+    <BaseModal :open="showSettlementPay" :title="t('reports.record_payment_to_artist')" max-width-class="max-w-[400px]" @close="showSettlementPay = false">
       <div class="flex flex-col gap-3.5 px-6 py-5">
-        <p class="text-[13px] text-muted-4">{{ settlementTarget?.artist_name }} · sisa {{ formatIDR(settlementTarget?.outstanding) }}</p>
-        <BaseInput v-model="settlementAmount" type="number" min="0" label="Jumlah dibayar (Rp)" />
-        <BaseInput v-model="settlementNotes" label="Catatan (opsional)" />
+        <p class="text-[13px] text-muted-4">{{ t('reports.remaining_amount', { artist: settlementTarget?.artist_name, amount: formatIDR(settlementTarget?.outstanding) }) }}</p>
+        <BaseInput v-model="settlementAmount" type="number" min="0" :label="t('reports.amount_paid_rp')" />
+        <BaseInput v-model="settlementNotes" :label="t('reports.notes_optional')" />
       </div>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showSettlementPay = false">Batal</BaseButton>
-          <BaseButton :loading="payingSettlement" @click="submitSettlementPayment">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showSettlementPay = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="payingSettlement" @click="submitSettlementPayment">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
