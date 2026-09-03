@@ -21,6 +21,8 @@ use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\PosDraftController;
+use App\Http\Controllers\Api\PurchaseOrderController;
 use App\Http\Controllers\Api\VendorController;
 use App\Http\Middleware\SetLocaleFromUser;
 use Illuminate\Support\Facades\Route;
@@ -87,6 +89,14 @@ Route::prefix('v1')->group(function () {
         // apiResource.
         Route::apiResource('vendors', VendorController::class);
         Route::apiResource('materials', MaterialController::class);
+
+        // 006-purchase-order-and-ops (US1) — membalik pencoretan PRD §10.2
+        // "purchase management (PO to vendors)" (lihat migrasi
+        // create_purchase_orders_and_items_tables untuk rasional lengkap).
+        Route::apiResource('purchase-orders', PurchaseOrderController::class);
+        Route::patch('/purchase-orders/{purchase_order}/status', [PurchaseOrderController::class, 'updateStatus']);
+        Route::post('/purchase-orders/{purchase_order}/payments', [PurchaseOrderController::class, 'storePayment']);
+        Route::get('/purchase-orders/{purchase_order}/invoice', [PurchaseOrderController::class, 'invoice']);
         Route::post('/materials/{material}/vendor-prices', [MaterialController::class, 'storeVendorPrice']);
         Route::put('/vendor-prices/{vendorPrice}', [MaterialController::class, 'updateVendorPrice']);
         Route::delete('/vendor-prices/{vendorPrice}', [MaterialController::class, 'destroyVendorPrice']);
@@ -113,6 +123,11 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/orders', [OrderController::class, 'index']);
         Route::post('/orders', [OrderController::class, 'store']);
+
+        // 006-purchase-order-and-ops (US4) — draft transaksi kasir, tanpa
+        // efek stok/pembayaran apa pun sampai draft di-checkout jadi order
+        // sungguhan (lihat komentar PosDraftController/Service).
+        Route::apiResource('pos-drafts', PosDraftController::class)->only(['index', 'store', 'show', 'destroy']);
         Route::get('/orders/{order}', [OrderController::class, 'show']);
         Route::post('/orders/{order}/void', [OrderController::class, 'void']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
@@ -134,6 +149,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/reports/sales', [ReportController::class, 'sales']);
         Route::get('/reports/profit', [ReportController::class, 'profit']);
+        Route::get('/reports/purchases', [ReportController::class, 'purchases']);
+        Route::get('/reports/stock-by-artist', [ReportController::class, 'stockByArtist']);
         Route::get('/reports/artist-profit', [ReportController::class, 'artistProfit']);
         Route::get('/reports/artist-settlements', [ReportController::class, 'artistSettlements']);
         Route::get('/reports/artist-settlements/{artist}/transactions', [ReportController::class, 'artistSettlementTransactions']);

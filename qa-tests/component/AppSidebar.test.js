@@ -14,7 +14,7 @@ import { useAuthStore } from '../../resources/js/stores/auth';
 const ROUTE_NAMES = [
   'dashboard', 'pos', 'session', 'events', 'products', 'artists', 'categories',
   'stock', 'vendors', 'materials', 'customers', 'preorders', 'sales', 'reports',
-  'settings', 'users', 'roles', 'profile',
+  'activity-log', 'settings', 'users', 'roles', 'profile',
 ];
 
 function makeRouter() {

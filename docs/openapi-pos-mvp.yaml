@@ -45,6 +45,7 @@ tags:
   - name: Payment
   - name: Report
   - name: Vendor & Bahan Baku
+  - name: Purchase Order
   - name: Import & Export
 
 security:
@@ -277,6 +278,14 @@ paths:
         ```json
         { "settings": [{ "key": "system_mode", "value": "demo", "type": "string", "group": "system" }] }
         ```
+
+        006-purchase-order-and-ops (US7) — juga satu-satunya jalur untuk
+        tiga key baru ini, tidak ada endpoint terpisah: `theme_accent_color`
+        (hex warna, group `appearance`, diterapkan klien sebagai override
+        CSS custom property `--color-brand`), `receipt_footer_text` (group
+        `receipt`, dirender di struk hanya bila terisi — dihilangkan sama
+        sekali, bukan blok kosong, saat kosong), `receipt_show_logo`
+        (boolean-as-string, group `receipt`).
       requestBody:
         required: true
         content:
@@ -945,7 +954,14 @@ paths:
     post:
       tags: [Event & Session]
       summary: Buka sesi kasir
-      description: Ditolak bila pengguna masih memiliki sesi lain berstatus `open`.
+      description: |
+        Ditolak bila pengguna masih memiliki sesi lain berstatus `open`.
+
+        006-purchase-order-and-ops (US6) — `opening_cash_entries[]` opsional
+        memecah `opening_cash` per artist (satu sesi kasir tetap satu baris
+        `cashier_sessions`, bukan satu sesi per artist). Bila diisi, jumlah
+        seluruh `amount` WAJIB persis sama dengan `opening_cash` (422 bila
+        tidak).
       requestBody:
         required: true
         content:
@@ -956,6 +972,15 @@ paths:
               properties:
                 event_id: { type: integer }
                 opening_cash: { type: string, example: "500000.00" }
+                opening_cash_entries:
+                  type: array
+                  nullable: true
+                  items:
+                    type: object
+                    required: [artist_id, amount]
+                    properties:
+                      artist_id: { type: integer }
+                      amount: { type: string, example: "250000.00" }
                 notes: { type: string, nullable: true }
       responses:
         '201':
@@ -964,6 +989,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CashierSession' }
         '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /sessions/{id}/close:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -1275,6 +1301,251 @@ paths:
               schema: { $ref: '#/components/schemas/Receipt' }
 
   # ------------------------------------------------------------------
+  # POS DRAFTS (006-purchase-order-and-ops, US4)
+  # ------------------------------------------------------------------
+  /pos-drafts:
+    get:
+      tags: [Sales]
+      summary: Daftar draft transaksi kasir milik pengguna saat ini
+      description: |
+        Tidak menyentuh stok — checkout tetap menghitung ulang harga dari
+        master data saat draft dilanjutkan, sesuai Constitution IV. Hanya
+        draft milik pengguna yang login (dilingkupi kepemilikan, bukan
+        menu_keys — setiap kasir yang login sudah boleh bertransaksi POS).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PosDraftSummary' }
+    post:
+      tags: [Sales]
+      summary: Simpan keranjang POS saat ini sebagai draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                event_id: { type: integer, nullable: true }
+                customer_id: { type: integer, nullable: true }
+                label: { type: string, nullable: true, maxLength: 100 }
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [variant_id, qty]
+                    properties:
+                      variant_id: { type: integer }
+                      sku: { type: string, nullable: true }
+                      qty: { type: integer, minimum: 1 }
+                      sell_price:
+                        type: string
+                        nullable: true
+                        description: Snapshot tampilan saja, bukan sumber harga sungguhan.
+                discount_amount: { type: string }
+      responses:
+        '201':
+          description: Draft tersimpan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PosDraftSummary' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /pos-drafts/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Sales]
+      summary: Lanjutkan draft — kembalikan keranjang siap dipakai POS
+      description: 404 bila draft bukan milik pengguna yang login (bukan 403 — tidak membocorkan keberadaan draft pengguna lain).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { type: object }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Sales]
+      summary: Buang draft
+      responses:
+        '204': { description: Dibuang }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # ------------------------------------------------------------------
+  # PURCHASE ORDER (006-purchase-order-and-ops, US1)
+  # ------------------------------------------------------------------
+  /purchase-orders:
+    get:
+      tags: [Purchase Order]
+      summary: Daftar purchase order
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [draft, ordered, received, paid, cancelled] } }
+        - { name: vendor_id, in: query, schema: { type: integer } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/PurchaseOrder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Purchase Order]
+      summary: Buat purchase order (selalu berstatus draft)
+      description: |
+        `material_id` wajib untuk baris `line_type=material`, `description`
+        wajib untuk baris `line_type=service` (FR-001). `product_id` selalu
+        opsional apa pun `line_type`-nya (tautan bahan baku ke produk
+        tertentu). `po_number` dibuat server, unik lintas mode DEMO/LIVE.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PurchaseOrderInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseOrder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /purchase-orders/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Purchase Order]
+      summary: Detail purchase order (termasuk items dan payments)
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseOrder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Purchase Order]
+      summary: Perbarui purchase order
+      description: Baris item hanya boleh diubah selama status masih `draft` — 409 bila tidak.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PurchaseOrderInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseOrder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Purchase Order]
+      summary: Hapus purchase order
+      description: Hanya diizinkan selama status masih `draft` — 409 bila tidak.
+      responses:
+        '204': { description: Dihapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /purchase-orders/{id}/status:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Purchase Order]
+      summary: Ubah status purchase order
+      description: |
+        Transisi yang diizinkan: `draft`→`ordered`|`cancelled`,
+        `ordered`→`received`|`cancelled`, `received`→`paid`. Transisi lain
+        ditolak 409. Saat pindah ke `received`, setiap baris `material`
+        menambah `current_stock` bahan baku terkait via
+        `MaterialStockService::applyMovement()` dan mencatat
+        `ActivityLogger` di transaksi yang sama.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [ordered, received, paid, cancelled] }
+                cancel_reason: { type: string, nullable: true, maxLength: 255 }
+      responses:
+        '200':
+          description: Status diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseOrder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /purchase-orders/{id}/payments:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Purchase Order]
+      summary: Catat pembayaran ke vendor untuk purchase order ini
+      description: Lewat PaymentRecorder yang sama dengan pembayaran order/preorder (parameter purchaseOrderId).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method, amount]
+              properties:
+                method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+                channel_id: { type: integer, nullable: true }
+                amount: { type: string }
+                proof_token: { type: string, format: uuid, nullable: true }
+                notes: { type: string, nullable: true, maxLength: 1000 }
+      responses:
+        '201':
+          description: Pembayaran dicatat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseOrder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /purchase-orders/{id}/invoice:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Purchase Order]
+      summary: Data faktur purchase order (dirender jadi PDF di klien)
+      description: |
+        Endpoint ini murni data — sama seperti struk penjualan, PDF-nya
+        dirender di klien lewat html2canvas + jsPDF, bukan generator PDF
+        di server.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PurchaseOrder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ------------------------------------------------------------------
   # PELANGGAN
   # ------------------------------------------------------------------
   /customers:
@@ -1560,6 +1831,74 @@ paths:
                         total_sales: { $ref: '#/components/schemas/Money' }
                         modal: { $ref: '#/components/schemas/Money' }
                         gross_profit: { $ref: '#/components/schemas/Money' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /reports/purchases:
+    get:
+      tags: [Report]
+      summary: Laporan pembelian (006-purchase-order-and-ops, US9)
+      description: |
+        Sumbernya `purchase_orders` (Eloquent, sudah HasDataMode — bukan
+        `DB::table()` mentah seperti /reports/sales), bukan `order_items`.
+        Tidak diskop event. Hanya peran owner dan admin.
+      parameters:
+        - { name: vendor_id, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string, enum: [draft, ordered, received, paid, cancelled] } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        po_number: { type: string }
+                        vendor_name: { type: string }
+                        status: { type: string }
+                        created_at: { type: string, format: date-time }
+                        total_amount: { $ref: '#/components/schemas/Money' }
+                  totals:
+                    type: object
+                    properties:
+                      po_count: { type: integer }
+                      total_amount: { $ref: '#/components/schemas/Money' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /reports/stock-by-artist:
+    get:
+      tags: [Report]
+      summary: Laporan stok per artist (006-purchase-order-and-ops, US10)
+      description: |
+        Sumbernya `product_variants` (sudah HasDataMode via join produk),
+        dijumlahkan `current_stock` per artist. Tidak diskop event. Hanya
+        peran owner dan admin.
+      parameters:
+        - { name: artist_id, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        artist_id: { type: integer }
+                        artist_name: { type: string }
+                        variant_count: { type: integer }
+                        total_stock: { type: integer }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /reports/artist-settlements:
@@ -2966,6 +3305,81 @@ components:
         qr_image_url: { type: string, nullable: true }
         is_active: { type: boolean }
 
+    PosDraftSummary:
+      type: object
+      description: 006-purchase-order-and-ops (US4) — bentuk ringkas untuk daftar; GET /pos-drafts/{id} mengembalikan keranjang penuh siap-checkout, bukan bentuk ini.
+      properties:
+        id: { type: integer }
+        label: { type: string, nullable: true }
+        item_count: { type: integer }
+        total: { $ref: '#/components/schemas/Money' }
+        customer_id: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    PurchaseOrderInput:
+      type: object
+      required: [vendor_id, items]
+      properties:
+        vendor_id: { type: integer }
+        notes: { type: string, nullable: true }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [line_type, qty, unit_price]
+            properties:
+              line_type: { type: string, enum: [material, service] }
+              material_id: { type: integer, nullable: true, description: Wajib bila line_type=material. }
+              product_id: { type: integer, nullable: true, description: Selalu opsional apa pun line_type-nya — menautkan bahan baku ke produk tertentu. }
+              description: { type: string, nullable: true, maxLength: 255, description: Wajib bila line_type=service. }
+              qty: { type: string, example: "10.000" }
+              unit_price: { $ref: '#/components/schemas/Money' }
+
+    PurchaseOrder:
+      type: object
+      properties:
+        id: { type: integer }
+        po_number: { type: string, example: PO-20261012-0001 }
+        vendor_id: { type: integer }
+        vendor_name: { type: string }
+        status: { type: string, enum: [draft, ordered, received, paid, cancelled] }
+        ordered_at: { type: string, format: date-time, nullable: true }
+        received_at: { type: string, format: date-time, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        cancelled_at: { type: string, format: date-time, nullable: true }
+        cancel_reason: { type: string, nullable: true }
+        subtotal: { $ref: '#/components/schemas/Money' }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        paid_amount: { $ref: '#/components/schemas/Money' }
+        notes: { type: string, nullable: true }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              line_type: { type: string, enum: [material, service] }
+              material_id: { type: integer, nullable: true }
+              material_name: { type: string, nullable: true }
+              product_id: { type: integer, nullable: true }
+              product_name: { type: string, nullable: true }
+              description: { type: string, nullable: true }
+              qty: { type: string }
+              unit_price: { $ref: '#/components/schemas/Money' }
+              line_total: { $ref: '#/components/schemas/Money' }
+        payments:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+              amount: { $ref: '#/components/schemas/Money' }
+              notes: { type: string, nullable: true }
+              paid_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
     PaymentInput:
       type: object
       required: [method, amount]
@@ -2982,6 +3396,10 @@ components:
           format: uuid
           nullable: true
           description: Wajib untuk metode non-tunai. Diperoleh dari POST /payment-proofs.
+        notes:
+          type: string
+          nullable: true
+          description: 006-purchase-order-and-ops (US5) — catatan bebas per entri pembayaran, mis. nomor referensi transfer.
         notes: { type: string, nullable: true }
 
     Payment:

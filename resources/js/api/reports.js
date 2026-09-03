@@ -29,6 +29,18 @@ export function artistProfitReport(eventId) {
   return client.get('/reports/artist-profit', { params: { event_id: eventId } }).then((r) => r.data);
 }
 
+// 006-purchase-order-and-ops (US9) — tidak diskop event seperti tab lain di
+// halaman ini, jadi filternya sendiri (vendor_id/status/date_from/date_to).
+export function purchasesReport(params = {}) {
+  return client.get('/reports/purchases', { params }).then((r) => r.data);
+}
+
+// 006-purchase-order-and-ops (US10) — juga tidak diskop event; filter
+// opsionalnya artist_id.
+export function stockByArtistReport(params = {}) {
+  return client.get('/reports/stock-by-artist', { params }).then((r) => r.data);
+}
+
 export function recordSettlementPayment(settlementId, payload) {
   return client
     .post(`/reports/artist-settlements/${settlementId}/payment`, payload)

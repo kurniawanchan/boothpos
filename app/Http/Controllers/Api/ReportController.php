@@ -436,6 +436,101 @@ class ReportController extends Controller
         return response()->json(['event' => $event, 'data' => $rows]);
     }
 
+    /**
+     * 006-purchase-order-and-ops (US9) — laporan pembelian, dipisah dari
+     * artistProfit()/profit() karena sumbernya `purchase_orders`, bukan
+     * `order_items`. Query pakai Eloquent (bukan DB::table() seperti
+     * sales()) karena PurchaseOrder sudah HasDataMode — global scope
+     * otomatis menyaring data_mode, tidak perlu where() eksplisit di sini.
+     */
+    public function purchases(Request $request): JsonResponse
+    {
+        if (! $request->user()->canAccessMenu('reports')) {
+            return response()->json(['message' => __('reports.not_authorized')], 403);
+        }
+
+        $query = \App\Models\PurchaseOrder::query()
+            ->with('vendor')
+            ->when($request->filled('vendor_id'), fn ($q) => $q->where('vendor_id', $request->integer('vendor_id')))
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')->value()))
+            ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
+            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('created_at', '<=', $request->date('date_to')));
+
+        $rows = (clone $query)
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn ($po) => [
+                'id' => $po->id,
+                'po_number' => $po->po_number,
+                'vendor_name' => $po->vendor?->name,
+                'status' => $po->status,
+                'created_at' => $po->created_at?->toIso8601String(),
+                'total_amount' => number_format((float) $po->total_amount, 2, '.', ''),
+            ]);
+
+        $totals = (clone $query)->selectRaw('
+            COUNT(*) as po_count,
+            SUM(total_amount) as total_amount
+        ')->first();
+
+        return response()->json([
+            'rows' => $rows,
+            'totals' => [
+                'po_count' => (int) $totals->po_count,
+                'total_amount' => number_format((float) $totals->total_amount, 2, '.', ''),
+            ],
+        ]);
+    }
+
+    /**
+     * 006-purchase-order-and-ops (US10) — stok per artist. Mulai dari
+     * `artists` (bukan `product_variants`) dengan LEFT JOIN, meniru pola
+     * artistSettlements() di controller ini — supaya artist yang belum
+     * punya produk/stok sama sekali TETAP muncul (variant_count 0,
+     * total_stock 0) alih-alih hilang dari laporan (spec Acceptance
+     * Scenario 3). BUG YANG DITEMUKAN & DIPERBAIKI (revisi awal) — global
+     * scope `DataModeScope` Eloquent HANYA berlaku untuk tabel model yang
+     * di-query langsung (`artists`), BUKAN untuk `products`/
+     * `product_variants` yang di-JOIN manual di sini — sama seperti
+     * catatan di ReportController@sales, jadi tetap butuh where()
+     * data_mode eksplisit untuk kedua tabel itu, meski keduanya
+     * HasDataMode di level model.
+     */
+    public function stockByArtist(Request $request): JsonResponse
+    {
+        if (! $request->user()->canAccessMenu('reports')) {
+            return response()->json(['message' => __('reports.not_authorized')], 403);
+        }
+
+        $rows = Artist::query()
+            ->leftJoin('products', function ($join) {
+                $join->on('products.artist_id', '=', 'artists.id')
+                    ->where('products.data_mode', ModeGate::current());
+            })
+            ->leftJoin('product_variants', function ($join) {
+                $join->on('product_variants.product_id', '=', 'products.id')
+                    ->where('product_variants.data_mode', ModeGate::current());
+            })
+            ->when($request->filled('artist_id'), fn ($q) => $q->where('artists.id', $request->integer('artist_id')))
+            ->selectRaw('
+                artists.id as artist_id,
+                artists.name as artist_name,
+                COUNT(product_variants.id) as variant_count,
+                COALESCE(SUM(product_variants.current_stock), 0) as total_stock
+            ')
+            ->groupBy('artists.id', 'artists.name')
+            ->orderBy('artists.name')
+            ->get()
+            ->map(fn ($row) => [
+                'artist_id' => $row->artist_id,
+                'artist_name' => $row->artist_name,
+                'variant_count' => (int) $row->variant_count,
+                'total_stock' => (int) $row->total_stock,
+            ]);
+
+        return response()->json(['data' => $rows]);
+    }
+
     public function recordSettlementPayment(Request $request, ArtistSettlement $settlement): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {

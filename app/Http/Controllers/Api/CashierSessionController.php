@@ -8,6 +8,7 @@ use App\Models\Event;
 use App\Models\Payment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CashierSessionController extends Controller
 {
@@ -30,6 +31,13 @@ class CashierSessionController extends Controller
             'event_id' => ['required', 'integer', 'exists:events,id'],
             'opening_cash' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
+            // 006-purchase-order-and-ops (US5) — ADITIF, opsional. Server
+            // merekonsiliasi jumlahnya terhadap opening_cash di atas
+            // (bukan mempercayai keduanya independen dari klien,
+            // Constitution IV) — lihat research.md R9.
+            'opening_cash_entries' => ['sometimes', 'array'],
+            'opening_cash_entries.*.artist_id' => ['nullable', 'integer', 'exists:artists,id'],
+            'opening_cash_entries.*.amount' => ['required_with:opening_cash_entries', 'numeric', 'min:0'],
         ]);
 
         $hasOpenSession = CashierSession::where('user_id', $request->user()->id)
@@ -47,16 +55,39 @@ class CashierSessionController extends Controller
             return response()->json(['message' => __('events_sessions.session_only_on_active_event')], 409);
         }
 
-        $session = CashierSession::create([
-            'event_id' => $event->id,
-            'user_id' => $request->user()->id,
-            'opened_at' => now(),
-            'opening_cash' => $validated['opening_cash'],
-            'notes' => $validated['notes'] ?? null,
-            'status' => 'open',
-        ]);
+        $entries = $validated['opening_cash_entries'] ?? [];
+        if ($entries) {
+            $entriesSum = round(array_sum(array_column($entries, 'amount')), 2);
+            if ($entriesSum !== round((float) $validated['opening_cash'], 2)) {
+                return response()->json([
+                    'message' => __('events_sessions.opening_cash_entries_mismatch'),
+                    'errors' => ['opening_cash_entries' => [__('events_sessions.opening_cash_entries_mismatch')]],
+                ], 422);
+            }
+        }
 
-        return response()->json($session, 201);
+        $session = DB::transaction(function () use ($validated, $entries, $request, $event) {
+            $session = CashierSession::create([
+                'event_id' => $event->id,
+                'user_id' => $request->user()->id,
+                'opened_at' => now(),
+                'opening_cash' => $validated['opening_cash'],
+                'notes' => $validated['notes'] ?? null,
+                'status' => 'open',
+            ]);
+
+            foreach ($entries as $entry) {
+                $session->openingCashEntries()->create([
+                    'artist_id' => $entry['artist_id'] ?? null,
+                    'amount' => $entry['amount'],
+                    'created_at' => now(),
+                ]);
+            }
+
+            return $session;
+        });
+
+        return response()->json($session->load('openingCashEntries'), 201);
     }
 
     public function close(Request $request, CashierSession $session): JsonResponse
@@ -119,6 +150,11 @@ class CashierSessionController extends Controller
             'order_count' => $orders->count(),
             'total_sales' => $orders->sum('total_amount'),
             'by_method' => $byMethod,
+            'opening_cash_entries' => $session->openingCashEntries()->with('artist:id,name')->get()->map(fn ($e) => [
+                'artist_id' => $e->artist_id,
+                'artist_name' => $e->artist?->name,
+                'amount' => number_format((float) $e->amount, 2, '.', ''),
+            ]),
         ]);
     }
 }

@@ -8,9 +8,12 @@ import {
   artistSettlements,
   profitReport,
   artistProfitReport,
+  purchasesReport,
+  stockByArtistReport,
   recordSettlementPayment,
   exportReport,
 } from '../api/reports';
+import { listArtists } from '../api/artists';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
@@ -38,6 +41,11 @@ const activeTab = ref('settlement');
 const settlements = ref(null);
 const profit = ref(null);
 const artistProfit = ref(null);
+const purchases = ref(null);
+const stockByArtist = ref(null);
+const artists = ref([]);
+const purchasesStatusFilter = ref('');
+const stockArtistFilter = ref('');
 const loading = ref(false);
 
 // Digerbang di sini JUGA (bukan cuma meta.roles di router) — pola
@@ -55,21 +63,34 @@ const tabs = computed(() =>
         // TIDAK dikurangi biaya event dan akan salah dibaca kalau ditumpuk
         // di tab yang sama tanpa pemisahan visual yang jelas.
         { key: 'artist-profit', label: t('reports.tab_artist_profit') },
+        // 006-purchase-order-and-ops (US9/US10) — dua tab baru ini SENGAJA
+        // tidak diskop event (lihat komentar di api/reports.js): pembelian
+        // dan stok gudang bukan konsep per-event seperti tiga tab di atas.
+        { key: 'purchases', label: t('reports.tab_purchases') },
+        { key: 'stock-by-artist', label: t('reports.tab_stock_by_artist') },
       ]
     : []
 );
+
+// Tab yang butuh eventId dipilih sebelum bisa dimuat — dipakai watch()
+// di bawah supaya tab tanpa event (purchases/stock-by-artist) tidak ikut
+// menunggu eventId ter-set lebih dulu.
+const EVENT_SCOPED_TABS = ['settlement', 'profit', 'artist-profit'];
 
 onMounted(async () => {
   events.value = (await listEvents({ per_page: 100 })).data;
   const active = events.value.find((e) => e.status === 'active');
   eventId.value = active?.id ?? events.value[0]?.id ?? '';
+  artists.value = (await listArtists({ per_page: 100 })).data;
   await loadActiveTab();
 });
 
 watch([eventId, activeTab], loadActiveTab);
+watch([purchasesStatusFilter], () => { if (activeTab.value === 'purchases') loadActiveTab(); });
+watch([stockArtistFilter], () => { if (activeTab.value === 'stock-by-artist') loadActiveTab(); });
 
 async function loadActiveTab() {
-  if (!eventId.value) return;
+  if (EVENT_SCOPED_TABS.includes(activeTab.value) && !eventId.value) return;
   loading.value = true;
   try {
     if (activeTab.value === 'settlement') {
@@ -80,6 +101,11 @@ async function loadActiveTab() {
     } else if (activeTab.value === 'artist-profit') {
       const res = await artistProfitReport(eventId.value);
       artistProfit.value = res.data;
+    } else if (activeTab.value === 'purchases') {
+      purchases.value = await purchasesReport({ status: purchasesStatusFilter.value || undefined });
+    } else if (activeTab.value === 'stock-by-artist') {
+      const res = await stockByArtistReport({ artist_id: stockArtistFilter.value || undefined });
+      stockByArtist.value = res.data;
     }
   } finally {
     loading.value = false;
@@ -149,7 +175,21 @@ function openArtistTransactions(row) {
           {{ t.label }}
         </button>
       </div>
-      <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
+      <BaseSelect v-if="EVENT_SCOPED_TABS.includes(activeTab)" class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
+      <BaseSelect
+        v-else-if="activeTab === 'purchases'"
+        class="w-56"
+        v-model="purchasesStatusFilter"
+        :placeholder="t('reports.purchases_all_status')"
+        :options="['draft', 'ordered', 'received', 'paid', 'cancelled'].map((s) => ({ value: s, label: t(`purchase_orders.status_${s}`) }))"
+      />
+      <BaseSelect
+        v-else-if="activeTab === 'stock-by-artist'"
+        class="w-56"
+        v-model="stockArtistFilter"
+        :placeholder="t('reports.stock_all_artists')"
+        :options="artists.map((a) => ({ value: a.id, label: a.name }))"
+      />
       <span class="flex-1"></span>
       <BaseButton v-if="activeTab === 'settlement'" variant="secondary" @click="doExport('artist-settlements')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
@@ -260,6 +300,51 @@ function openArtistTransactions(row) {
           </DataTable>
         </div>
       </template>
+    </template>
+
+    <!-- Purchases tab (006-purchase-order-and-ops US9) -->
+    <template v-else-if="activeTab === 'purchases'">
+      <div v-if="purchases" class="flex flex-col gap-3.5">
+        <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.purchases_po_count') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ purchases.totals.po_count }}</span></div>
+          <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.purchases_total_amount') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(purchases.totals.total_amount) }}</span></div>
+        </div>
+        <div class="overflow-hidden rounded-card border border-line-2 bg-white">
+          <DataTable
+            :columns="[
+              { key: 'po_number', label: t('purchase_orders.col_number') },
+              { key: 'vendor_name', label: t('purchase_orders.col_vendor') },
+              { key: 'status', label: t('purchase_orders.col_status') },
+              { key: 'created_at', label: t('reports.col_date') },
+              { key: 'total_amount', label: t('purchase_orders.col_total') },
+            ]"
+            :rows="purchases.rows ?? []"
+            :loading="loading"
+            :empty-message="t('reports.no_purchases')"
+          >
+            <template #cell-status="{ row }"><span class="text-[12px] font-semibold capitalize">{{ t(`purchase_orders.status_${row.status}`) }}</span></template>
+            <template #cell-created_at="{ row }">{{ new Date(row.created_at).toLocaleDateString('id-ID') }}</template>
+            <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
+          </DataTable>
+        </div>
+      </div>
+    </template>
+
+    <!-- Stock-by-artist tab (006-purchase-order-and-ops US10) -->
+    <template v-else-if="activeTab === 'stock-by-artist'">
+      <div class="overflow-hidden rounded-card border border-line-2 bg-white">
+        <DataTable
+          :columns="[
+            { key: 'artist_name', label: t('reports.col_artist') },
+            { key: 'variant_count', label: t('reports.stock_col_variant_count') },
+            { key: 'total_stock', label: t('reports.stock_col_total_stock') },
+          ]"
+          :rows="stockByArtist ?? []"
+          :loading="loading"
+          row-key="artist_id"
+          :empty-message="t('reports.no_stock_data')"
+        />
+      </div>
     </template>
 
     <BaseModal :open="showSettlementPay" :title="t('reports.record_payment_to_artist')" max-width-class="max-w-[400px]" @close="showSettlementPay = false">

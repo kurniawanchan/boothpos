@@ -40,6 +40,13 @@ class SettingsController extends Controller
             'artist_count' => LicenseGate::activeArtistCount(),
             'artist_limit_reached' => LicenseGate::artistLimitReached(),
             'system_mode' => ModeGate::current(),
+            // 006-purchase-order-and-ops (US6/US7) — disurfacekan di sini
+            // (bukan hanya lewat GET /settings) supaya bisa diterapkan
+            // SEBELUM layar Pengaturan penuh dimuat, sama seperti
+            // system_mode sudah begitu (research.md R1).
+            'theme_accent_color' => Setting::get('theme_accent_color'),
+            'receipt_footer_text' => Setting::get('receipt_footer_text'),
+            'receipt_show_logo' => filter_var(Setting::get('receipt_show_logo', true), FILTER_VALIDATE_BOOLEAN),
         ]);
     }
 

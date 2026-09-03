@@ -43,4 +43,9 @@ class CashierSession extends Model
     {
         return $this->hasMany(Order::class, 'session_id');
     }
+
+    public function openingCashEntries(): HasMany
+    {
+        return $this->hasMany(SessionOpeningCashEntry::class, 'session_id');
+    }
 }

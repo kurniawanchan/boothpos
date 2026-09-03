@@ -33,6 +33,7 @@ class StoreOrderRequest extends FormRequest
             'payments.*.purpose' => ['sometimes', 'in:full,down_payment,settlement'],
             'payments.*.amount' => ['required', 'numeric', 'min:0.01'],
             'payments.*.proof_token' => ['nullable', 'uuid'],
+            'payments.*.notes' => ['nullable', 'string', 'max:1000'],
         ];
     }
 }

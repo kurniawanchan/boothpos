@@ -70,6 +70,14 @@ class UpdateSettingsRequest extends FormRequest
                     if ($key === 'system_mode' && ! in_array($value, ['demo', 'live'], true)) {
                         $fail('Mode sistem harus salah satu dari: demo, live.');
                     }
+
+                    // 006-purchase-order-and-ops (US6) — pola closure yang
+                    // sama seperti store_contact_email/system_mode di atas:
+                    // theme_accent_color adalah baris settings biasa, tidak
+                    // butuh endpoint baru, hanya validasi formatnya sendiri.
+                    if ($key === 'theme_accent_color' && $value !== null && $value !== '' && ! preg_match('/^#[0-9a-fA-F]{6}$/', $value)) {
+                        $fail('Warna tema harus berupa kode hex 6 digit, mis. #2f9e6e.');
+                    }
                 },
             ],
             'settings.*.type' => ['sometimes', 'in:string,integer,decimal,boolean,json'],

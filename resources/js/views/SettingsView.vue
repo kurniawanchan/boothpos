@@ -9,14 +9,47 @@ import BaseButton from '../components/ui/BaseButton.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
+import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
+import ThemeColorPicker from '../components/settings/ThemeColorPicker.vue';
 
 const settings = useSettingsStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
 const changingTier = ref(false);
+
+// --- Theme color (US6) ------------------------------------------------
+const themeColor = ref(settings.themeAccentColor || '#2f9e6e');
+const savingTheme = ref(false);
+async function saveTheme() {
+  savingTheme.value = true;
+  try {
+    await settings.setThemeAccentColor(themeColor.value);
+    toast.success(t('settings.theme_saved'));
+  } catch (err) {
+    toast.error(err.message);
+  } finally {
+    savingTheme.value = false;
+  }
+}
+
+// --- Receipt display (US7) ---------------------------------------------
+const receiptFooterText = ref(settings.receiptFooterText || '');
+const receiptShowLogo = ref(settings.receiptShowLogo);
+const savingReceiptDisplay = ref(false);
+async function saveReceiptDisplay() {
+  savingReceiptDisplay.value = true;
+  try {
+    await settings.setReceiptDisplay({ footerText: receiptFooterText.value, showLogo: receiptShowLogo.value });
+    toast.success(t('settings.receipt_display_saved'));
+  } catch (err) {
+    toast.error(err.message);
+  } finally {
+    savingReceiptDisplay.value = false;
+  }
+}
 
 // --- System mode DEMO/LIVE (003-seed-demo-live, FR-004/FR-013) -----------
 // Halaman ini sendiri sudah digerbang canAccessMenu('settings') lewat
@@ -328,6 +361,22 @@ onMounted(async () => {
       <p class="border-t border-line-3 pt-3.5 text-[11.5px] leading-relaxed text-muted-3">
         {{ t('settings.tier_switch_note') }}
       </p>
+    </div>
+
+    <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
+      <span class="text-[15px] font-bold tracking-tight">{{ t('settings.theme_section_title') }}</span>
+      <ThemeColorPicker v-model="themeColor" />
+      <BaseButton size="sm" class="self-start" :loading="savingTheme" @click="saveTheme">{{ t('settings.save_theme') }}</BaseButton>
+    </div>
+
+    <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
+      <span class="text-[15px] font-bold tracking-tight">{{ t('settings.receipt_display_section_title') }}</span>
+      <BaseTextarea v-model="receiptFooterText" :label="t('settings.receipt_footer_text')" :rows="3" :placeholder="t('settings.receipt_footer_placeholder')" />
+      <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
+        <input v-model="receiptShowLogo" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
+        {{ t('settings.receipt_show_logo_label') }}
+      </label>
+      <BaseButton size="sm" class="self-start" :loading="savingReceiptDisplay" @click="saveReceiptDisplay">{{ t('settings.save_receipt_display') }}</BaseButton>
     </div>
 
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">

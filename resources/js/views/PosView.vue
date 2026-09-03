@@ -19,6 +19,9 @@ import ReceiptModal from '../components/receipt/ReceiptModal.vue';
 import CustomerPickerModal from '../components/forms/CustomerPickerModal.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
+import BaseButton from '../components/ui/BaseButton.vue';
+import PosDraftsPanel from '../components/pos/PosDraftsPanel.vue';
+import { savePosDraft, resumePosDraft } from '../api/posDrafts';
 
 const cart = usePosCartStore();
 const toast = useToastStore();
@@ -169,7 +172,11 @@ function openPayment() {
   showPayment.value = true;
 }
 
-async function handlePaymentSubmit(payment) {
+async function handlePaymentSubmit(payments) {
+  // 006-purchase-order-and-ops (US2) — PaymentPanel.vue's checkout mode
+  // now emits an ARRAY (one or more entries, split payment), not a single
+  // object — POST /orders already accepted `payments[]` before this
+  // change (research.md R2), so nothing else here needs to change.
   submittingOrder.value = true;
   try {
     const order = await createOrder({
@@ -178,7 +185,7 @@ async function handlePaymentSubmit(payment) {
       local_ref: localRef.value,
       discount_amount: toMoneyString(discount.value),
       items: cart.items.map((i) => ({ variant_id: i.variant_id, qty: i.qty })),
-      payments: [payment],
+      payments,
     });
     lastOrderId.value = order.id;
     showPayment.value = false;
@@ -200,6 +207,58 @@ async function handlePaymentSubmit(payment) {
 function closeReceipt() {
   showReceipt.value = false;
   lastOrderId.value = null;
+}
+
+// --- POS drafts (006-purchase-order-and-ops, US4) -----------------------
+// Save/resume never touches stock or payments — a draft is purely a saved
+// cart snapshot, per spec FR-011/FR-013. Resuming REPLACES the active
+// cart (a cashier is expected to finish or clear what they're doing
+// before pulling up a draft), mirroring how "Save as draft" itself
+// clears the cart it just saved.
+const showDrafts = ref(false);
+const savingDraft = ref(false);
+
+async function saveDraft() {
+  if (cart.isEmpty) return;
+  savingDraft.value = true;
+  try {
+    await savePosDraft({
+      customer_id: selectedCustomer.value?.id ?? null,
+      discount_amount: discount.value || 0,
+      items: cart.items.map((i) => ({ variant_id: i.variant_id, sku: i.sku, qty: i.qty, sell_price: i.sell_price })),
+    });
+    cart.clear();
+    discount.value = 0;
+    selectedCustomer.value = null;
+    toast.success(t('pos.draft_saved'));
+  } catch (err) {
+    toast.error(err.message);
+  } finally {
+    savingDraft.value = false;
+  }
+}
+
+async function resumeDraft(draftId) {
+  try {
+    const resumed = await resumePosDraft(draftId);
+    cart.clear();
+    resumed.items.forEach((item) => cart.add(item));
+    // cart.add() only ever increments qty by 1 per call (its POS-click
+    // contract) — force the snapshot's saved qty afterward instead of
+    // calling add() qty times, which would be both slower and wrong if
+    // stock changed since the draft was saved.
+    resumed.items.forEach((item) => {
+      const line = cart.items.find((i) => i.variant_id === item.variant_id);
+      if (line) line.qty = item.qty;
+    });
+    discount.value = Number(resumed.discount_amount) || 0;
+    if (resumed.warnings.length) {
+      resumed.warnings.forEach((w) => toast.error(w));
+    }
+    showDrafts.value = false;
+  } catch (err) {
+    toast.error(err.message);
+  }
 }
 </script>
 
@@ -223,6 +282,14 @@ function closeReceipt() {
             class="h-[46px] w-full rounded-lg border border-line bg-white pl-10 pr-3.5 text-[14.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           />
         </div>
+        <BaseButton variant="secondary" :disabled="cart.isEmpty" :loading="savingDraft" @click="saveDraft">
+          <i class="ph-duotone ph-note-pencil text-[16px]" aria-hidden="true"></i>
+          {{ t('pos.save_as_draft') }}
+        </BaseButton>
+        <BaseButton variant="secondary" @click="showDrafts = true">
+          <i class="ph-duotone ph-tray text-[16px]" aria-hidden="true"></i>
+          {{ t('pos.drafts_title') }}
+        </BaseButton>
       </div>
 
       <!-- 005-ux-enhancements-dashboard (US1) — dropdown multi-pilih dengan
@@ -327,5 +394,6 @@ function closeReceipt() {
     <ReceiptModal :open="showReceipt" :order-id="lastOrderId" @close="closeReceipt" />
 
     <ProductVariantPickerModal :open="showVariantPicker" :product="variantPickerCard" @close="closeVariantPicker" @select="handleVariantPick" />
+    <PosDraftsPanel :open="showDrafts" @close="showDrafts = false" @resume="resumeDraft" />
   </div>
 </template>

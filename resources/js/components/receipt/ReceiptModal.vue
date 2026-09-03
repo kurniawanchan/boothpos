@@ -172,6 +172,12 @@ watch(
           {{ [receipt.customer_phone, receipt.customer_email].filter(Boolean).join(' · ') }}
         </span>
       </div>
+
+      <!-- 006-purchase-order-and-ops (US7) — omitted entirely when unset,
+           not an empty block, per spec Acceptance Scenario 3. -->
+      <p v-if="receipt.receipt_footer_text" class="border-t border-dashed border-line-2 pt-3 text-center text-[11.5px] leading-relaxed text-muted-3">
+        {{ receipt.receipt_footer_text }}
+      </p>
     </div>
 
     <template #footer>

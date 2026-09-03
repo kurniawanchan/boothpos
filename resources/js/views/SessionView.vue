@@ -1,8 +1,9 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { currentSession, openSession, closeSession, sessionSummary } from '../api/sessions';
 import { listEvents } from '../api/events';
+import { listArtists } from '../api/artists';
 import { useToastStore } from '../stores/toast';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDateTime } from '../utils/date';
@@ -23,6 +24,31 @@ const activeEvents = ref([]);
 const openForm = reactive({ event_id: '', opening_cash: '0', notes: '' });
 const openErrors = reactive({});
 const opening = ref(false);
+
+// 006-purchase-order-and-ops (US5) — rincian kas awal per artist, aditif
+// terhadap opening_cash di atas (lihat komentar
+// CashierSessionController::store()). Baris kosong = fitur tidak dipakai
+// sama sekali, opening_cash tetap dikirim sendirian seperti sebelumnya.
+const artists = ref([]);
+const openingCashEntries = ref([]);
+const useOpeningCashPerArtist = ref(false);
+
+function addOpeningCashEntryRow() {
+  openingCashEntries.value.push({ artist_id: '', amount: '0' });
+}
+function removeOpeningCashEntryRow(idx) {
+  openingCashEntries.value.splice(idx, 1);
+}
+const openingCashEntriesTotal = computed(() =>
+  openingCashEntries.value.reduce((sum, e) => sum + (parseMoney(e.amount) || 0), 0)
+);
+// The server rejects a mismatch (Constitution IV — never trust a client
+// total independent of its parts), so opening_cash is kept in lockstep
+// with the entries total while per-artist mode is on, rather than
+// letting the two drift and surfacing a 422 only after submit.
+watch(openingCashEntriesTotal, (total) => {
+  if (useOpeningCashPerArtist.value) openForm.opening_cash = toMoneyString(total);
+});
 
 const closingCash = ref(0);
 const closeNotes = ref('');
@@ -49,6 +75,7 @@ async function load() {
       const res = await listEvents({ status: 'active', per_page: 50 });
       activeEvents.value = res.data;
       if (activeEvents.value[0]) openForm.event_id = activeEvents.value[0].id;
+      artists.value = (await listArtists({ per_page: 100, is_active: true })).data;
     }
   } catch {
     // Object-level 403 (not this cashier's session) is already toasted by
@@ -66,6 +93,9 @@ async function handleOpen() {
       event_id: Number(openForm.event_id),
       opening_cash: toMoneyString(openForm.opening_cash),
       notes: openForm.notes || null,
+      ...(useOpeningCashPerArtist.value && openingCashEntries.value.length
+        ? { opening_cash_entries: openingCashEntries.value.map((e) => ({ artist_id: e.artist_id ? Number(e.artist_id) : null, amount: toMoneyString(e.amount) })) }
+        : {}),
     });
     toast.success(t('events_sessions.session_opened'));
     await load();
@@ -134,7 +164,30 @@ async function handleClose() {
           :options="activeEvents.map((e) => ({ value: e.id, label: e.name }))"
           :error="openErrors.event_id"
         />
-        <BaseInput v-model="openForm.opening_cash" :label="t('events_sessions.opening_cash_rp')" type="number" min="0" required :error="openErrors.opening_cash" />
+        <BaseInput v-model="openForm.opening_cash" :label="t('events_sessions.opening_cash_rp')" type="number" min="0" required :disabled="useOpeningCashPerArtist" :error="openErrors.opening_cash" />
+
+        <label class="flex items-center gap-2.5 text-[12.5px] font-semibold text-muted-4">
+          <input v-model="useOpeningCashPerArtist" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" @change="openingCashEntries.length === 0 && addOpeningCashEntryRow()" />
+          {{ t('events_sessions.opening_cash_per_artist_toggle') }}
+        </label>
+
+        <div v-if="useOpeningCashPerArtist" class="flex flex-col gap-2.5 rounded-lg border border-line-3 bg-surface-subtle p-3">
+          <div v-for="(entry, idx) in openingCashEntries" :key="idx" class="flex items-end gap-2">
+            <BaseSelect v-model="entry.artist_id" class="flex-1" :label="idx === 0 ? t('events_sessions.artist') : ''" :options="artists.map((a) => ({ value: a.id, label: a.name }))" />
+            <BaseInput v-model="entry.amount" class="w-32" :label="idx === 0 ? t('events_sessions.amount') : ''" type="number" min="0" />
+            <button type="button" class="mb-[11px] flex h-[46px] w-[38px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('common.delete')" @click="removeOpeningCashEntryRow(idx)">
+              <i class="ph-duotone ph-trash text-[15px]" aria-hidden="true"></i>
+            </button>
+          </div>
+          <BaseButton type="button" variant="secondary" size="sm" @click="addOpeningCashEntryRow">
+            <i class="ph-duotone ph-plus text-[14px]" aria-hidden="true"></i>
+            {{ t('events_sessions.add_artist_row') }}
+          </BaseButton>
+          <div class="flex justify-between border-t border-dashed border-line-2 pt-2 text-[12.5px]">
+            <span class="font-bold">{{ t('events_sessions.total') }}</span>
+            <span class="font-extrabold">{{ formatIDR(openingCashEntriesTotal) }}</span>
+          </div>
+        </div>
         <BaseTextarea v-model="openForm.notes" :label="t('events_sessions.notes_optional')" :rows="2" />
         <BaseButton type="submit" size="lg" class="w-full" :loading="opening">
           <i class="ph-duotone ph-lock-simple-open text-[17px]" aria-hidden="true"></i>
@@ -170,6 +223,14 @@ async function handleClose() {
           <div class="flex flex-col gap-1 rounded-lg border border-line-3 bg-surface-subtle p-3.5">
             <span class="text-[11.5px] font-semibold text-muted-2">{{ t('events_sessions.cash_sales') }}</span>
             <span class="text-[20px] font-extrabold tracking-tight">{{ formatIDR(cashSalesAmount) }}</span>
+          </div>
+        </div>
+
+        <div v-if="summary?.opening_cash_entries?.length" class="flex flex-col gap-2">
+          <span class="text-[13px] font-bold">{{ t('events_sessions.opening_cash_per_artist_toggle') }}</span>
+          <div v-for="(e, idx) in summary.opening_cash_entries" :key="idx" class="flex items-center justify-between border-b border-line-6 py-2 last:border-b-0 text-[12.5px]">
+            <span>{{ e.artist_name || t('events_sessions.unattributed') }}</span>
+            <span class="font-bold">{{ formatIDR(e.amount) }}</span>
           </div>
         </div>
 

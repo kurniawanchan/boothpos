@@ -10,4 +10,5 @@ return [
     'not_authorized_cost_breakdown' => 'Hanya owner/admin/inventory yang dapat melihat rincian modal.',
     'vendor_price_already_exists' => 'Vendor ini sudah punya harga untuk bahan ini. Ubah harganya lewat endpoint update.',
     'bom_line_already_exists' => 'Bahan ini sudah ada di BOM varian ini. Ubah jumlahnya lewat endpoint update.',
+    'insufficient_material_stock' => 'Stok bahan :material tidak cukup (tersedia: :available).',
 ];
