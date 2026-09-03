@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listPreorders, getPreorder, createPreorder, updatePreorderStatus, createPreorderPayment } from '../api/preorders';
 import { createShipment, updateShipment } from '../api/shipments';
@@ -23,23 +24,34 @@ import RecordPaymentModal from '../components/payment/RecordPaymentModal.vue';
 import PreorderStatusStepper from '../components/preorder/PreorderStatusStepper.vue';
 
 const toast = useToastStore();
+const { t } = useI18n();
 
-const STATUS_LABEL = { ordered: 'Dipesan', dp_paid: 'DP dibayar', arrived: 'Barang tiba', settled: 'Lunas', handed_over: 'Diserahkan', cancelled: 'Dibatalkan' };
+const STATUS_LABEL = computed(() => ({
+  ordered: t('preorders.step_ordered'),
+  dp_paid: t('preorders.step_dp_paid'),
+  arrived: t('preorders.step_arrived'),
+  settled: t('preorders.step_settled'),
+  handed_over: t('preorders.step_handed_over'),
+  cancelled: t('events_sessions.status_cancelled'),
+}));
 const STATUS_VARIANT = { ordered: 'neutral', dp_paid: 'warn', arrived: 'mint', settled: 'mint', handed_over: 'dark', cancelled: 'danger' };
-const FULFILLMENT_LABEL = { pickup: 'Ambil sendiri', courier: 'Kurir' };
+const FULFILLMENT_LABEL = computed(() => ({
+  pickup: t('preorders.fulfillment_pickup'),
+  courier: t('preorders.fulfillment_courier'),
+}));
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listPreorders);
 onMounted(load);
 
-const columns = [
-  { key: 'preorder_number', label: 'Nomor' },
-  { key: 'customer_name', label: 'Pelanggan' },
-  { key: 'status', label: 'Status' },
-  { key: 'fulfillment', label: 'Pemenuhan' },
-  { key: 'total_amount', label: 'Total' },
-  { key: 'outstanding', label: 'Sisa' },
+const columns = computed(() => [
+  { key: 'preorder_number', label: t('preorders.col_number') },
+  { key: 'customer_name', label: t('preorders.col_customer') },
+  { key: 'status', label: t('preorders.col_status') },
+  { key: 'fulfillment', label: t('preorders.col_fulfillment') },
+  { key: 'total_amount', label: t('preorders.col_total') },
+  { key: 'outstanding', label: t('preorders.col_outstanding') },
   { key: 'actions', label: '' },
-];
+]);
 
 // --- Create form (no mockup reference — designed fresh) ----------------
 const showCreate = ref(false);
@@ -109,7 +121,7 @@ async function submitCreate() {
       notes: createNotes.value || null,
       items: createItems.value.map((i) => ({ variant_id: i.variant_id, qty: i.qty })),
     });
-    toast.success('Pre-order dibuat.');
+    toast.success(t('preorders.preorder_created'));
     showCreate.value = false;
     await load();
   } catch (err) {
@@ -173,7 +185,7 @@ async function markArrived() {
   transitioning.value = true;
   try {
     await updatePreorderStatus(detail.value.id, 'arrived');
-    toast.success('Ditandai barang tiba — stok bertambah.');
+    toast.success(t('preorders.arrived_marked'));
     await Promise.all([refreshDetail(), load()]);
   } catch {
     // 409 (lompatan status tidak valid) sudah ditoast global.
@@ -186,7 +198,7 @@ async function markHandedOver() {
   transitioning.value = true;
   try {
     await updatePreorderStatus(detail.value.id, 'handed_over');
-    toast.success('Ditandai diserahkan ke pelanggan — stok berkurang.');
+    toast.success(t('preorders.handed_over_marked'));
     await Promise.all([refreshDetail(), load()]);
   } catch {
     // 409 (belum lunas) sudah ditoast global dengan pesan servernya.
@@ -199,7 +211,7 @@ async function submitCancel() {
   transitioning.value = true;
   try {
     await updatePreorderStatus(detail.value.id, 'cancelled', cancelReason.value || null);
-    toast.success('Pre-order dibatalkan.');
+    toast.success(t('preorders.preorder_cancelled'));
     showCancelForm.value = false;
     cancelReason.value = '';
     await Promise.all([refreshDetail(), load()]);
@@ -216,7 +228,7 @@ async function submitPayment(payload) {
   recordingPayment.value = true;
   try {
     await createPreorderPayment(detail.value.id, payload);
-    toast.success('Pembayaran tersimpan.');
+    toast.success(t('preorders.payment_saved'));
     showRecordPayment.value = false;
     await Promise.all([refreshDetail(), load()]);
   } catch (err) {
@@ -249,7 +261,7 @@ async function saveShipment() {
       shipping_cost: detail.value.shipping_cost,
     });
     showShipmentForm.value = false;
-    toast.success('Data pengiriman tersimpan.');
+    toast.success(t('preorders.shipment_saved'));
   } catch (err) {
     if (err.isValidation) toast.error(Object.values(err.errors)[0]?.[0] ?? err.message);
     // 409 (bukan fulfillment kurir / sudah ada pengiriman) sudah ditoast global.
@@ -260,21 +272,21 @@ async function saveShipment() {
 
 async function markPacked() {
   shipment.value = await updateShipment(shipment.value.id, { status: 'packed' });
-  toast.success('Ditandai dikemas.');
+  toast.success(t('preorders.marked_packed'));
 }
 
 async function saveTrackingAndShip() {
   if (!shipment.value.tracking_number) {
-    toast.warning('Isi nomor resi terlebih dahulu.');
+    toast.warning(t('preorders.fill_tracking_number_first'));
     return;
   }
   shipment.value = await updateShipment(shipment.value.id, { tracking_number: shipment.value.tracking_number, status: 'shipped' });
-  toast.success('Resi tersimpan, status dikirim.');
+  toast.success(t('preorders.tracking_saved_shipped'));
 }
 
 async function markDelivered() {
   shipment.value = await updateShipment(shipment.value.id, { status: 'delivered' });
-  toast.success('Ditandai diterima pelanggan.');
+  toast.success(t('preorders.marked_delivered'));
 }
 </script>
 
@@ -283,42 +295,42 @@ async function markDelivered() {
     <div class="flex flex-wrap items-center gap-2.5">
       <BaseSelect
         class="w-48"
-        placeholder="Semua status"
+        :placeholder="t('preorders.all_status')"
         :options="Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))"
         @update:model-value="(v) => setFilter({ status: v || undefined })"
       />
       <BaseSelect
         class="w-44"
-        placeholder="Semua pemenuhan"
-        :options="[{ value: 'pickup', label: 'Ambil sendiri' }, { value: 'courier', label: 'Kurir' }]"
+        :placeholder="t('preorders.all_fulfillment')"
+        :options="[{ value: 'pickup', label: t('preorders.fulfillment_pickup') }, { value: 'courier', label: t('preorders.fulfillment_courier') }]"
         @update:model-value="(v) => setFilter({ fulfillment: v || undefined })"
       />
       <span class="flex-1"></span>
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Pre-order baru
+        {{ t('preorders.new_preorder') }}
       </BaseButton>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada pre-order.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('preorders.no_preorders')">
         <template #cell-preorder_number="{ row }"><span class="font-mono text-[12.5px] font-semibold">{{ row.preorder_number }}</span></template>
         <template #cell-status="{ row }"><StatusPill :variant="STATUS_VARIANT[row.status]">{{ STATUS_LABEL[row.status] }}</StatusPill></template>
         <template #cell-fulfillment="{ row }">{{ FULFILLMENT_LABEL[row.fulfillment] }}</template>
         <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
         <template #cell-outstanding="{ row }">{{ formatIDR(row.outstanding) }}</template>
         <template #cell-actions="{ row }">
-          <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openDetail(row)">Detail</button>
+          <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openDetail(row)">{{ t('preorders.detail') }}</button>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
     <!-- Create form — no mockup reference, designed fresh -->
-    <BaseModal :open="showCreate" title="Pre-order baru" max-width-class="max-w-[560px]" @close="showCreate = false">
+    <BaseModal :open="showCreate" :title="t('preorders.new_preorder')" max-width-class="max-w-[560px]" @close="showCreate = false">
       <div class="flex flex-col gap-4 px-6 py-5">
         <button type="button" class="flex items-center justify-between gap-3 rounded-lg border border-line px-3.5 py-3 text-left hover:border-brand" @click="showCreateCustomerPicker = true">
-          <span class="text-[13.5px] font-semibold">{{ createCustomer?.name ?? 'Pilih pelanggan…' }}</span>
+          <span class="text-[13.5px] font-semibold">{{ createCustomer?.name ?? t('preorders.pick_customer_ellipsis') }}</span>
           <i class="ph-duotone ph-caret-right text-[15px] text-muted-3" aria-hidden="true"></i>
         </button>
         <p v-if="createErrors.customer_id" class="text-[12px] font-medium text-danger-text">{{ createErrors.customer_id }}</p>
@@ -330,7 +342,7 @@ async function markDelivered() {
             :class="createFulfillment === 'pickup' ? 'border-brand bg-mint-50 text-brand-active' : 'border-line text-muted-5'"
             @click="createFulfillment = 'pickup'"
           >
-            Ambil sendiri
+            {{ t('preorders.fulfillment_pickup') }}
           </button>
           <button
             type="button"
@@ -338,25 +350,25 @@ async function markDelivered() {
             :class="createFulfillment === 'courier' ? 'border-brand bg-mint-50 text-brand-active' : 'border-line text-muted-5'"
             @click="createFulfillment = 'courier'"
           >
-            Kurir
+            {{ t('preorders.fulfillment_courier') }}
           </button>
         </div>
 
-        <BaseInput v-if="createFulfillment === 'courier'" v-model="createShippingCost" type="number" min="0" label="Ongkos kirim (Rp)" />
-        <BaseInput v-model="createExpectedDate" type="date" label="Estimasi tiba (opsional)" />
+        <BaseInput v-if="createFulfillment === 'courier'" v-model="createShippingCost" type="number" min="0" :label="t('preorders.shipping_cost_rp')" />
+        <BaseInput v-model="createExpectedDate" type="date" :label="t('preorders.eta_optional')" />
 
         <div v-for="(item, idx) in createItems" :key="item.variant_id" class="flex items-center gap-3 rounded-lg border border-line-3 bg-surface-subtle p-3">
           <div class="flex min-w-0 flex-1 flex-col gap-0.5"><span class="text-[13px] font-semibold">{{ item.label }}</span><span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span></div>
           <div class="flex items-center gap-0.5 overflow-hidden rounded-lg border border-line bg-white">
-            <button type="button" class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7" aria-label="Kurangi" @click="bumpCreateItem(item, -1)"><i class="ph-duotone ph-minus text-[13px]" aria-hidden="true"></i></button>
+            <button type="button" class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7" :aria-label="t('preorders.decrease')" @click="bumpCreateItem(item, -1)"><i class="ph-duotone ph-minus text-[13px]" aria-hidden="true"></i></button>
             <span class="min-w-[26px] text-center text-[13px] font-bold">{{ item.qty }}</span>
-            <button type="button" class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7" aria-label="Tambah" @click="bumpCreateItem(item, 1)"><i class="ph-duotone ph-plus text-[13px]" aria-hidden="true"></i></button>
+            <button type="button" class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7" :aria-label="t('preorders.increase')" @click="bumpCreateItem(item, 1)"><i class="ph-duotone ph-plus text-[13px]" aria-hidden="true"></i></button>
           </div>
-          <button type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="`Hapus ${item.label}`" @click="removeCreateItem(idx)"><i class="ph-duotone ph-trash text-[13px]" aria-hidden="true"></i></button>
+          <button type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('preorders.delete_item', { name: item.label })" @click="removeCreateItem(idx)"><i class="ph-duotone ph-trash text-[13px]" aria-hidden="true"></i></button>
         </div>
 
         <div class="relative">
-          <BaseInput v-model="createSearch" label="Tambah item" placeholder="Cari nama produk atau SKU…" @input="runCreateSearch" />
+          <BaseInput v-model="createSearch" :label="t('preorders.add_item')" :placeholder="t('preorders.search_product_or_sku_placeholder')" @input="runCreateSearch" />
           <div v-if="createResults.length" class="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-line-2 bg-white shadow-lg">
             <button v-for="v in createResults" :key="v.variant_id" type="button" class="flex w-full flex-col gap-0.5 px-3.5 py-2.5 text-left hover:bg-line-7" @click="addCreateItem(v)">
               <span class="text-[13px] font-semibold">{{ v.label }}</span>
@@ -365,17 +377,17 @@ async function markDelivered() {
           </div>
         </div>
 
-        <BaseTextarea v-model="createNotes" label="Catatan" :rows="2" />
+        <BaseTextarea v-model="createNotes" :label="t('preorders.notes')" :rows="2" />
 
         <div class="flex items-baseline justify-between border-t border-dashed border-line-2 pt-3">
-          <span class="text-[13.5px] font-bold">Total estimasi</span>
+          <span class="text-[13.5px] font-bold">{{ t('preorders.estimated_total') }}</span>
           <span class="text-[20px] font-extrabold tracking-tight">{{ formatIDR(createTotal) }}</span>
         </div>
       </div>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showCreate = false">Batal</BaseButton>
-          <BaseButton :disabled="!canSubmitCreate" :loading="creating" @click="submitCreate">Simpan pre-order</BaseButton>
+          <BaseButton variant="secondary" @click="showCreate = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :disabled="!canSubmitCreate" :loading="creating" @click="submitCreate">{{ t('preorders.save_preorder') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
@@ -389,99 +401,99 @@ async function markDelivered() {
       max-width-class="max-w-[880px]"
       @close="showDetail = false"
     >
-      <div v-if="detailLoading" class="py-14 text-center text-[13px] text-muted-3">Memuat…</div>
+      <div v-if="detailLoading" class="py-14 text-center text-[13px] text-muted-3">{{ t('preorders.loading') }}</div>
       <div v-else-if="detail" class="flex flex-col gap-[18px]">
         <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
-          <span class="text-[14.5px] font-bold">Status pre-order</span>
+          <span class="text-[14.5px] font-bold">{{ t('preorders.preorder_status') }}</span>
           <PreorderStatusStepper :status="detail.status" />
           <div v-if="!['handed_over', 'cancelled'].includes(detail.status)" class="flex flex-wrap items-center gap-2.5 pt-1.5">
-            <BaseButton v-if="detail.status === 'dp_paid'" size="sm" :loading="transitioning" @click="markArrived">Tandai barang tiba</BaseButton>
-            <BaseButton v-if="detail.status === 'settled'" size="sm" :loading="transitioning" @click="markHandedOver">Tandai diserahkan</BaseButton>
-            <BaseButton v-if="['ordered', 'dp_paid', 'arrived'].includes(detail.status)" variant="danger" size="sm" @click="showCancelForm = true">Batalkan</BaseButton>
-            <span class="text-[11.5px] leading-relaxed text-muted-3">Diserahkan hanya diizinkan bila pelunasan sudah menutup total.</span>
+            <BaseButton v-if="detail.status === 'dp_paid'" size="sm" :loading="transitioning" @click="markArrived">{{ t('preorders.mark_arrived') }}</BaseButton>
+            <BaseButton v-if="detail.status === 'settled'" size="sm" :loading="transitioning" @click="markHandedOver">{{ t('preorders.mark_handed_over') }}</BaseButton>
+            <BaseButton v-if="['ordered', 'dp_paid', 'arrived'].includes(detail.status)" variant="danger" size="sm" @click="showCancelForm = true">{{ t('preorders.cancel_preorder_btn') }}</BaseButton>
+            <span class="text-[11.5px] leading-relaxed text-muted-3">{{ t('preorders.handover_note') }}</span>
           </div>
         </div>
 
         <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr]">
           <div class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
-            <span class="text-[14.5px] font-bold">Item dipesan</span>
+            <span class="text-[14.5px] font-bold">{{ t('preorders.ordered_items') }}</span>
             <div v-for="line in detailLines" :key="line.id" class="flex items-start gap-3 border-b border-line-6 pb-3 last:border-b-0">
               <span class="min-w-[28px] text-[14px] font-bold text-brand-active">{{ line.qty }}×</span>
               <div class="flex flex-1 flex-col gap-0.5"><span class="text-[13.5px] font-semibold">{{ line.name_snapshot }}</span><span class="font-mono text-[11px] text-muted-3">{{ line.sku_snapshot }} · {{ formatIDR(line.sell_price) }}</span></div>
               <span class="text-[13.5px] font-bold">{{ formatIDR(line.line_total) }}</span>
             </div>
             <div class="flex flex-col gap-2">
-              <div class="flex justify-between text-[12.5px]"><span class="text-muted">Subtotal</span><span class="font-semibold">{{ formatIDR(detail.subtotal) }}</span></div>
-              <div class="flex justify-between text-[12.5px]"><span class="text-muted">Ongkos kirim</span><span class="font-semibold">{{ formatIDR(detail.shipping_cost) }}</span></div>
-              <div class="flex items-baseline justify-between border-t border-dashed border-line-2 pt-2.5"><span class="text-[13.5px] font-bold">Total tagihan</span><span class="text-[22px] font-extrabold tracking-tight">{{ formatIDR(detail.total_amount) }}</span></div>
-              <div class="flex justify-between text-[12.5px]"><span class="text-muted">Sudah dibayar</span><span class="font-semibold">{{ formatIDR(detail.paid_amount) }}</span></div>
-              <div v-if="parseMoney(detail.outstanding) > 0" class="flex items-center justify-between rounded-lg border border-warn-border bg-warn-bg px-3.5 py-2.5"><span class="text-[12.5px] font-bold text-warn-text">Sisa tagihan</span><span class="text-[17px] font-extrabold text-warn-text">{{ formatIDR(detail.outstanding) }}</span></div>
+              <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.subtotal') }}</span><span class="font-semibold">{{ formatIDR(detail.subtotal) }}</span></div>
+              <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.shipping_cost') }}</span><span class="font-semibold">{{ formatIDR(detail.shipping_cost) }}</span></div>
+              <div class="flex items-baseline justify-between border-t border-dashed border-line-2 pt-2.5"><span class="text-[13.5px] font-bold">{{ t('preorders.total_due') }}</span><span class="text-[22px] font-extrabold tracking-tight">{{ formatIDR(detail.total_amount) }}</span></div>
+              <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.already_paid') }}</span><span class="font-semibold">{{ formatIDR(detail.paid_amount) }}</span></div>
+              <div v-if="parseMoney(detail.outstanding) > 0" class="flex items-center justify-between rounded-lg border border-warn-border bg-warn-bg px-3.5 py-2.5"><span class="text-[12.5px] font-bold text-warn-text">{{ t('preorders.outstanding_balance') }}</span><span class="text-[17px] font-extrabold text-warn-text">{{ formatIDR(detail.outstanding) }}</span></div>
             </div>
-            <span class="text-[11.5px] leading-relaxed text-muted-3">Ongkos kirim masuk ke total tagihan, tidak terhitung sebagai pendapatan penjualan produk.</span>
+            <span class="text-[11.5px] leading-relaxed text-muted-3">{{ t('preorders.shipping_cost_note') }}</span>
           </div>
 
           <div class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
-            <span class="text-[14.5px] font-bold">Pembayaran</span>
+            <span class="text-[14.5px] font-bold">{{ t('preorders.payment') }}</span>
             <p class="text-[12px] leading-relaxed text-muted-3">
-              Riwayat rinci per pembayaran belum disediakan API saat ini — lihat catatan pada laporan sesi. Total dibayar dan sisa tagihan di atas tetap akurat.
+              {{ t('preorders.payment_history_note') }}
             </p>
             <BaseButton v-if="parseMoney(detail.outstanding) > 0" @click="showRecordPayment = true">
               <i class="ph-duotone ph-plus-circle text-[17px]" aria-hidden="true"></i>
-              Catat pelunasan
+              {{ t('preorders.record_settlement') }}
             </BaseButton>
           </div>
         </div>
 
         <div v-if="detail.fulfillment === 'courier'" class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
           <div class="flex items-center justify-between gap-3">
-            <span class="text-[14.5px] font-bold">Pengiriman kurir</span>
+            <span class="text-[14.5px] font-bold">{{ t('preorders.courier_shipping') }}</span>
             <StatusPill v-if="shipment" variant="warn">{{ shipment.status }}</StatusPill>
           </div>
 
           <div v-if="!shipment && !showShipmentForm" class="flex flex-col items-start gap-2.5">
-            <EmptyState icon="ph-truck" message="Belum ada data pengiriman untuk pre-order ini." />
-            <BaseButton size="sm" @click="openShipmentForm">Buat data pengiriman</BaseButton>
+            <EmptyState icon="ph-truck" :message="t('preorders.no_shipment_data')" />
+            <BaseButton size="sm" @click="openShipmentForm">{{ t('preorders.create_shipment_data') }}</BaseButton>
           </div>
 
           <form v-else-if="showShipmentForm" class="grid grid-cols-2 gap-3.5" @submit.prevent="saveShipment">
-            <BaseInput v-model="shipmentForm.courier_name" label="Kurir" required />
-            <BaseInput v-model="shipmentForm.tracking_number" label="Nomor resi (opsional)" />
-            <BaseInput v-model="shipmentForm.recipient_name" label="Nama penerima" required />
-            <BaseInput v-model="shipmentForm.recipient_phone" label="Telepon penerima" required />
-            <BaseInput v-model="shipmentForm.address_line" label="Alamat" required class="col-span-2" />
-            <BaseInput v-model="shipmentForm.city" label="Kota" required />
-            <BaseInput v-model="shipmentForm.postal_code" label="Kode pos" />
+            <BaseInput v-model="shipmentForm.courier_name" :label="t('preorders.courier')" required />
+            <BaseInput v-model="shipmentForm.tracking_number" :label="t('preorders.tracking_number_optional')" />
+            <BaseInput v-model="shipmentForm.recipient_name" :label="t('preorders.recipient_name')" required />
+            <BaseInput v-model="shipmentForm.recipient_phone" :label="t('preorders.recipient_phone')" required />
+            <BaseInput v-model="shipmentForm.address_line" :label="t('preorders.address')" required class="col-span-2" />
+            <BaseInput v-model="shipmentForm.city" :label="t('preorders.city')" required />
+            <BaseInput v-model="shipmentForm.postal_code" :label="t('preorders.postal_code')" />
             <div class="col-span-2 flex justify-end gap-2.5">
-              <BaseButton variant="secondary" type="button" @click="showShipmentForm = false">Batal</BaseButton>
-              <BaseButton type="submit" :loading="savingShipment">Simpan pengiriman</BaseButton>
+              <BaseButton variant="secondary" type="button" @click="showShipmentForm = false">{{ t('common.cancel') }}</BaseButton>
+              <BaseButton type="submit" :loading="savingShipment">{{ t('preorders.save_shipment') }}</BaseButton>
             </div>
           </form>
 
           <div v-else class="flex flex-col gap-3.5">
             <div class="grid grid-cols-2 gap-3.5 text-[13px]">
-              <div><span class="text-muted-3">Kurir</span><div class="font-semibold">{{ shipment.courier_name }}</div></div>
-              <div><span class="text-muted-3">Penerima</span><div class="font-semibold">{{ shipment.recipient_name }} · {{ shipment.recipient_phone }}</div></div>
-              <div class="col-span-2"><span class="text-muted-3">Alamat</span><div class="font-semibold">{{ shipment.address_line }}, {{ shipment.city }}</div></div>
+              <div><span class="text-muted-3">{{ t('preorders.courier') }}</span><div class="font-semibold">{{ shipment.courier_name }}</div></div>
+              <div><span class="text-muted-3">{{ t('preorders.recipient') }}</span><div class="font-semibold">{{ shipment.recipient_name }} · {{ shipment.recipient_phone }}</div></div>
+              <div class="col-span-2"><span class="text-muted-3">{{ t('preorders.address') }}</span><div class="font-semibold">{{ shipment.address_line }}, {{ shipment.city }}</div></div>
             </div>
-            <BaseInput v-model="shipment.tracking_number" label="Nomor resi" placeholder="Belum diisi" />
+            <BaseInput v-model="shipment.tracking_number" :label="t('preorders.tracking_number')" :placeholder="t('preorders.not_filled_yet')" />
             <div class="flex justify-end gap-2.5">
-              <BaseButton v-if="shipment.status === 'pending'" variant="secondary" size="sm" @click="markPacked">Tandai dikemas</BaseButton>
-              <BaseButton v-if="['pending', 'packed'].includes(shipment.status)" size="sm" @click="saveTrackingAndShip">Simpan resi &amp; kirim</BaseButton>
-              <BaseButton v-if="shipment.status === 'shipped'" size="sm" @click="markDelivered">Tandai diterima</BaseButton>
+              <BaseButton v-if="shipment.status === 'pending'" variant="secondary" size="sm" @click="markPacked">{{ t('preorders.mark_packed') }}</BaseButton>
+              <BaseButton v-if="['pending', 'packed'].includes(shipment.status)" size="sm" @click="saveTrackingAndShip">{{ t('preorders.save_tracking_and_ship') }}</BaseButton>
+              <BaseButton v-if="shipment.status === 'shipped'" size="sm" @click="markDelivered">{{ t('preorders.mark_delivered') }}</BaseButton>
             </div>
           </div>
         </div>
       </div>
     </BaseDrawer>
 
-    <BaseModal :open="showCancelForm" title="Batalkan pre-order" max-width-class="max-w-[420px]" @close="showCancelForm = false">
+    <BaseModal :open="showCancelForm" :title="t('preorders.cancel_preorder')" max-width-class="max-w-[420px]" @close="showCancelForm = false">
       <div class="flex flex-col gap-3.5 px-6 py-5">
-        <BaseTextarea v-model="cancelReason" label="Alasan pembatalan" :rows="3" />
+        <BaseTextarea v-model="cancelReason" :label="t('preorders.cancel_reason')" :rows="3" />
       </div>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showCancelForm = false">Tutup</BaseButton>
-          <BaseButton variant="danger" :loading="transitioning" @click="submitCancel">Batalkan pre-order</BaseButton>
+          <BaseButton variant="secondary" @click="showCancelForm = false">{{ t('master_data.close') }}</BaseButton>
+          <BaseButton variant="danger" :loading="transitioning" @click="submitCancel">{{ t('preorders.cancel_preorder') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
@@ -492,7 +504,7 @@ async function markDelivered() {
       :due-amount="detail.outstanding"
       :purpose="paymentPurpose"
       :submitting="recordingPayment"
-      title="Catat pelunasan pre-order"
+      :title="t('preorders.record_preorder_settlement')"
       @close="showRecordPayment = false"
       @submit="submitPayment"
     />
