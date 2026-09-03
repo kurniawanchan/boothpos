@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
 import { listSettings, updateSettings, uploadStoreLogo } from '../api/settings';
@@ -11,6 +12,7 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 
 const settings = useSettingsStore();
+const { t } = useI18n();
 const toast = useToastStore();
 
 const changingTier = ref(false);
@@ -20,7 +22,7 @@ async function pickTier(enabled) {
   changingTier.value = true;
   try {
     await updateSettings([{ key: 'multi_artist_enabled', value: enabled, type: 'boolean', group: 'licensing' }]);
-    toast.success(`Beralih ke ${enabled ? 'Master' : 'Pro'}.`);
+    toast.success(t('settings.switched_to', { tier: enabled ? t('settings.master') : t('settings.pro') }));
     await settings.load();
   } catch (err) {
     toast.error(err.message);
@@ -76,7 +78,7 @@ async function saveStoreIdentity() {
       { key: 'store_contact_phone', value: storeForm.store_contact_phone, type: 'string', group: 'receipt' },
       { key: 'store_contact_email', value: storeForm.store_contact_email, type: 'string', group: 'receipt' },
     ]);
-    toast.success('Identitas toko disimpan.');
+    toast.success(t('settings.store_identity_saved'));
   } catch (err) {
     if (err.isValidation) {
       // Backend mengembalikan error terikat indeks array ('settings.5.value')
@@ -102,12 +104,12 @@ function onLogoChange(e) {
   logoFile.value = null;
   if (!file) return;
   if (!file.type.startsWith('image/')) {
-    logoError.value = 'Berkas harus berupa gambar.';
+    logoError.value = t('settings.image_must_be_image');
     e.target.value = '';
     return;
   }
   if (file.size > MAX_IMAGE_BYTES) {
-    logoError.value = 'Ukuran gambar maksimal 5 MB.';
+    logoError.value = t('settings.image_max_size');
     e.target.value = '';
     return;
   }
@@ -122,7 +124,7 @@ async function saveLogo() {
     storeLogoPath.value = res.data.value;
     logoFile.value = null;
     if (logoInputEl.value) logoInputEl.value.value = '';
-    toast.success('Logo toko diperbarui.');
+    toast.success(t('settings.store_logo_updated'));
   } catch (err) {
     logoError.value = err.isValidation ? Object.values(err.errors)[0]?.[0] ?? err.message : err.message;
   } finally {
@@ -186,12 +188,12 @@ function onQrImageChange(e) {
   qrImageFile.value = null;
   if (!file) return;
   if (!file.type.startsWith('image/')) {
-    qrImageError.value = 'Berkas harus berupa gambar.';
+    qrImageError.value = t('settings.image_must_be_image');
     e.target.value = '';
     return;
   }
   if (file.size > MAX_IMAGE_BYTES) {
-    qrImageError.value = 'Ukuran gambar maksimal 5 MB.';
+    qrImageError.value = t('settings.image_max_size');
     e.target.value = '';
     return;
   }
@@ -206,10 +208,10 @@ async function saveChannel() {
   try {
     if (editingChannel.value) {
       await updatePaymentChannel(editingChannel.value.id, payload, { qrImage: qrImageFile.value, removeQrImage: removeQrImage.value });
-      toast.success('Kanal pembayaran diperbarui.');
+      toast.success(t('settings.channel_updated'));
     } else {
       await createPaymentChannel(payload, { qrImage: qrImageFile.value });
-      toast.success('Kanal pembayaran ditambahkan.');
+      toast.success(t('settings.channel_created'));
     }
     showChannelForm.value = false;
     await loadChannels();
@@ -229,7 +231,7 @@ onMounted(async () => {
 <template>
   <div class="grid grid-cols-1 items-start gap-[18px] px-[26px] pb-10 pt-[22px] xl:grid-cols-2">
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
-      <span class="text-[15px] font-bold tracking-tight">Tingkat lisensi</span>
+      <span class="text-[15px] font-bold tracking-tight">{{ t('settings.license_tier') }}</span>
       <div class="flex flex-col gap-2.5">
         <button
           type="button"
@@ -240,8 +242,8 @@ onMounted(async () => {
         >
           <span class="mt-1 h-2.5 w-2.5 flex-none rounded-full" :class="!settings.multiArtistEnabled ? 'bg-brand' : 'bg-line-2'"></span>
           <span class="flex flex-col gap-0.5">
-            <span class="text-[13.5px] font-bold">Pro</span>
-            <span class="text-[12px] leading-relaxed text-muted-3">Satu artist aktif (mewakili toko sendiri).</span>
+            <span class="text-[13.5px] font-bold">{{ t('settings.pro') }}</span>
+            <span class="text-[12px] leading-relaxed text-muted-3">{{ t('settings.pro_desc') }}</span>
           </span>
         </button>
         <button
@@ -253,46 +255,46 @@ onMounted(async () => {
         >
           <span class="mt-1 h-2.5 w-2.5 flex-none rounded-full" :class="settings.multiArtistEnabled ? 'bg-brand' : 'bg-line-2'"></span>
           <span class="flex flex-col gap-0.5">
-            <span class="text-[13.5px] font-bold">Master</span>
-            <span class="text-[12px] leading-relaxed text-muted-3">Jumlah artist tidak dibatasi.</span>
+            <span class="text-[13.5px] font-bold">{{ t('settings.master') }}</span>
+            <span class="text-[12px] leading-relaxed text-muted-3">{{ t('settings.master_desc') }}</span>
           </span>
         </button>
       </div>
       <p class="border-t border-line-3 pt-3.5 text-[11.5px] leading-relaxed text-muted-3">
-        Peralihan Master → Pro tidak menghapus atau menggabungkan data artist yang sudah ada; sistem hanya memblokir pembuatan artist baru.
+        {{ t('settings.tier_switch_note') }}
       </p>
     </div>
 
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
       <div class="flex items-center justify-between">
-        <span class="text-[15px] font-bold tracking-tight">Kanal pembayaran</span>
-        <BaseButton variant="secondary" size="sm" @click="openChannelForm">Tambah</BaseButton>
+        <span class="text-[15px] font-bold tracking-tight">{{ t('settings.payment_channels') }}</span>
+        <BaseButton variant="secondary" size="sm" @click="openChannelForm">{{ t('settings.add') }}</BaseButton>
       </div>
       <div v-for="c in channels" :key="c.id" class="flex items-center gap-3 rounded-lg border border-line-3 bg-surface-subtle px-3.5 py-3">
-        <img v-if="c.qr_image_url" :src="c.qr_image_url" :alt="`Kode QR ${c.provider}`" class="h-10 w-10 flex-none rounded-md border border-line-2 object-contain" />
+        <img v-if="c.qr_image_url" :src="c.qr_image_url" :alt="t('pos.qr_code_for', { provider: c.provider })" class="h-10 w-10 flex-none rounded-md border border-line-2 object-contain" />
         <i v-else class="ph-duotone text-[21px] text-brand" :class="c.type === 'bank_transfer' ? 'ph-bank' : 'ph-qr-code'" aria-hidden="true"></i>
         <div class="flex flex-1 flex-col gap-0.5">
           <span class="text-[13.5px] font-bold">{{ c.provider }}</span>
-          <span class="font-mono text-[12px] text-muted-2">{{ c.account_number || '—' }} · a.n. {{ c.account_name }}</span>
+          <span class="font-mono text-[12px] text-muted-2">{{ t('settings.channel_account_number', { number: c.account_number || '—', name: c.account_name }) }}</span>
         </div>
-        <StatusPill :variant="c.is_active ? 'mint' : 'neutral'">{{ c.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
-        <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openChannelEdit(c)">Edit</button>
+        <StatusPill :variant="c.is_active ? 'mint' : 'neutral'">{{ c.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
+        <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openChannelEdit(c)">{{ t('common.edit') }}</button>
       </div>
       <p class="border-t border-line-3 pt-3.5 text-[11.5px] leading-relaxed text-muted-3">
-        Peran kasir menerima nomor tersamar pada daftar; nomor penuh hanya muncul saat kanal dipilih untuk satu transaksi.
+        {{ t('settings.cashier_masked_number_note') }}
       </p>
     </div>
 
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
-      <span class="text-[15px] font-bold tracking-tight">Identitas toko</span>
+      <span class="text-[15px] font-bold tracking-tight">{{ t('settings.store_identity') }}</span>
 
       <div class="flex flex-col gap-1.5">
-        <label class="text-[12.5px] font-semibold text-muted-4" for="store-logo">Logo toko</label>
+        <label class="text-[12.5px] font-semibold text-muted-4" for="store-logo">{{ t('settings.store_logo') }}</label>
         <div class="flex items-center gap-3">
           <img
             v-if="storeLogoUrl"
             :src="storeLogoUrl"
-            alt="Logo toko saat ini"
+            :alt="t('settings.current_store_logo')"
             class="h-16 w-16 flex-none rounded-md border border-line-2 object-contain"
           />
           <div class="flex flex-1 flex-col gap-1.5">
@@ -305,14 +307,14 @@ onMounted(async () => {
               @change="onLogoChange"
             />
             <p v-if="logoError" class="text-[12px] font-semibold text-danger-text">{{ logoError }}</p>
-            <BaseButton v-if="logoFile" size="sm" class="self-start" :loading="uploadingLogo" @click="saveLogo">Unggah logo</BaseButton>
+            <BaseButton v-if="logoFile" size="sm" class="self-start" :loading="uploadingLogo" @click="saveLogo">{{ t('settings.upload_logo') }}</BaseButton>
           </div>
         </div>
       </div>
 
-      <BaseInput v-model="storeForm.store_name" label="Nama toko (tercetak di struk)" />
+      <BaseInput v-model="storeForm.store_name" :label="t('settings.store_name_receipt')" />
       <label class="flex flex-col gap-1.5">
-        <span class="text-[12.5px] font-semibold text-muted-4">Alamat lengkap</span>
+        <span class="text-[12.5px] font-semibold text-muted-4">{{ t('settings.full_address') }}</span>
         <textarea
           v-model="storeForm.store_address"
           rows="3"
@@ -321,40 +323,40 @@ onMounted(async () => {
         ></textarea>
         <span v-if="storeErrors.store_address" class="text-[12px] font-medium text-danger-text">{{ storeErrors.store_address }}</span>
       </label>
-      <BaseInput v-model="storeForm.store_contact" label="Kontak toko" />
-      <BaseInput v-model="storeForm.store_contact_person" label="Nama kontak person" :error="storeErrors.store_contact_person" />
-      <BaseInput v-model="storeForm.store_contact_phone" label="Telepon" :error="storeErrors.store_contact_phone" />
-      <BaseInput v-model="storeForm.store_contact_email" label="Email" type="email" :error="storeErrors.store_contact_email" />
-      <BaseButton class="self-start" :loading="savingStore" @click="saveStoreIdentity">Simpan</BaseButton>
+      <BaseInput v-model="storeForm.store_contact" :label="t('settings.store_contact')" />
+      <BaseInput v-model="storeForm.store_contact_person" :label="t('settings.contact_person_name')" :error="storeErrors.store_contact_person" />
+      <BaseInput v-model="storeForm.store_contact_phone" :label="t('settings.phone')" :error="storeErrors.store_contact_phone" />
+      <BaseInput v-model="storeForm.store_contact_email" :label="t('settings.email')" type="email" :error="storeErrors.store_contact_email" />
+      <BaseButton class="self-start" :loading="savingStore" @click="saveStoreIdentity">{{ t('common.save') }}</BaseButton>
     </div>
 
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
-      <span class="text-[15px] font-bold tracking-tight">Cadangan data</span>
+      <span class="text-[15px] font-bold tracking-tight">{{ t('settings.data_backup') }}</span>
       <div class="flex items-center gap-3 rounded-lg border border-mint-border bg-mint-50 px-3.5 py-3">
         <i class="ph-duotone ph-hard-drives text-[22px] text-brand" aria-hidden="true"></i>
         <div class="flex flex-1 flex-col gap-0.5">
-          <span class="text-[13px] font-bold text-brand-active">Dijalankan dari konsol server</span>
-          <span class="text-[11.5px] text-muted-4">php artisan app:backup — tidak ada endpoint HTTP untuk ini.</span>
+          <span class="text-[13px] font-bold text-brand-active">{{ t('settings.run_from_server_console') }}</span>
+          <span class="text-[11.5px] text-muted-4">{{ t('settings.backup_command_note') }}</span>
         </div>
       </div>
       <p class="text-[11.5px] leading-relaxed text-muted-3">
-        Berkas bukti pembayaran dicadangkan terpisah dari dump basis data. Jalankan perintah di atas langsung di server tempat BoothPOS terpasang, bukan dari layar ini.
+        {{ t('settings.backup_files_note') }}
       </p>
     </div>
 
-    <BaseModal :open="showChannelForm" :title="editingChannel ? 'Ubah kanal pembayaran' : 'Tambah kanal pembayaran'" max-width-class="max-w-[440px]" @close="showChannelForm = false">
+    <BaseModal :open="showChannelForm" :title="editingChannel ? t('settings.edit_channel') : t('settings.add_channel')" max-width-class="max-w-[440px]" @close="showChannelForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveChannel">
-        <BaseSelect v-model="channelForm.type" label="Tipe" :options="[{ value: 'bank_transfer', label: 'Transfer bank' }, { value: 'qr_ewallet', label: 'QR e-wallet' }]" />
-        <BaseInput v-model="channelForm.provider" label="Nama penyedia" required :error="channelErrors.provider" />
-        <BaseInput v-model="channelForm.account_name" label="Nama pemilik rekening" required :error="channelErrors.account_name" />
-        <BaseInput v-if="channelForm.type === 'bank_transfer'" v-model="channelForm.account_number" label="Nomor rekening" required :error="channelErrors.account_number" />
+        <BaseSelect v-model="channelForm.type" :label="t('settings.type')" :options="[{ value: 'bank_transfer', label: t('settings.bank_transfer') }, { value: 'qr_ewallet', label: t('settings.qr_ewallet') }]" />
+        <BaseInput v-model="channelForm.provider" :label="t('settings.provider_name')" required :error="channelErrors.provider" />
+        <BaseInput v-model="channelForm.account_name" :label="t('settings.account_holder_name')" required :error="channelErrors.account_name" />
+        <BaseInput v-if="channelForm.type === 'bank_transfer'" v-model="channelForm.account_number" :label="t('settings.account_number')" required :error="channelErrors.account_number" />
 
         <div v-if="channelForm.type === 'qr_ewallet'" class="flex flex-col gap-1.5">
-          <label class="text-[12.5px] font-semibold text-muted-4" for="channel-qr-image">Gambar kode QR</label>
+          <label class="text-[12.5px] font-semibold text-muted-4" for="channel-qr-image">{{ t('settings.qr_code_image') }}</label>
           <img
             v-if="editingChannel?.qr_image_url && !removeQrImage && !qrImageFile"
             :src="editingChannel.qr_image_url"
-            alt="Kode QR saat ini"
+            :alt="t('settings.current_qr_code')"
             class="h-28 w-28 self-start rounded-md border border-line-2 object-contain"
           />
           <input
@@ -368,14 +370,14 @@ onMounted(async () => {
           <p v-if="qrImageError" class="text-[12px] font-semibold text-danger-text">{{ qrImageError }}</p>
           <label v-if="editingChannel?.qr_image_url" class="flex items-center gap-2 text-[12.5px] font-semibold text-muted-4">
             <input v-model="removeQrImage" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
-            Hapus gambar QR yang ada
+            {{ t('settings.remove_existing_qr') }}
           </label>
         </div>
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showChannelForm = false">Batal</BaseButton>
-          <BaseButton :loading="savingChannel" @click="saveChannel">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showChannelForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="savingChannel" @click="saveChannel">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>

@@ -1,5 +1,6 @@
 <script setup>
-import { reactive, ref, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listRoles, createRole, updateRole, deleteRole } from '../api/roles';
 import { useAuthStore } from '../stores/auth';
@@ -15,6 +16,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import RoleMenuPicker from '../components/settings/RoleMenuPicker.vue';
 
 const auth = useAuthStore();
+const { t } = useI18n();
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listRoles);
@@ -23,13 +25,13 @@ const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value ||
 
 onMounted(load);
 
-const columns = [
-  { key: 'name', label: 'Nama Peran' },
-  { key: 'menu_keys', label: 'Akses Menu' },
-  { key: 'user_count', label: 'Pengguna' },
-  { key: 'is_system_default', label: 'Tipe' },
+const columns = computed(() => [
+  { key: 'name', label: t('roles.col_role_name') },
+  { key: 'menu_keys', label: t('roles.col_menu_access') },
+  { key: 'user_count', label: t('roles.col_users') },
+  { key: 'is_system_default', label: t('roles.col_type') },
   { key: 'actions', label: '' },
-];
+]);
 
 const showForm = ref(false);
 const editingRole = ref(null);
@@ -58,10 +60,10 @@ async function saveRole() {
   try {
     if (editingRole.value) {
       await updateRole(editingRole.value.id, payload);
-      toast.success('Peran diperbarui.');
+      toast.success(t('roles.role_updated'));
     } else {
       await createRole(payload);
-      toast.success('Peran dibuat.');
+      toast.success(t('roles.role_created'));
     }
     showForm.value = false;
     await load();
@@ -91,7 +93,7 @@ async function performDelete() {
   deleting.value = true;
   try {
     await deleteRole(deleteTarget.value.id);
-    toast.success('Peran dihapus.');
+    toast.success(t('roles.role_deleted'));
     showDelete.value = false;
     await load();
   } catch {
@@ -110,57 +112,57 @@ async function performDelete() {
     <div class="flex flex-wrap items-center gap-2.5">
       <div class="relative flex min-w-[230px] flex-1 items-center">
         <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="role-search">Cari peran</label>
+        <label class="sr-only" for="role-search">{{ t('roles.search_role') }}</label>
         <input
           id="role-search"
           v-model="search"
-          placeholder="Cari nama peran…"
+          :placeholder="t('roles.search_role_placeholder')"
           class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           @input="debouncedSearch"
         />
       </div>
       <BaseButton v-if="auth.canAccessMenu('roles')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Tambah peran
+        {{ t('roles.add_role') }}
       </BaseButton>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada peran.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('roles.no_roles')">
         <template #cell-name="{ row }"><span class="font-semibold">{{ row.name }}</span></template>
         <template #cell-menu_keys="{ row }">
-          <span class="text-[12.5px] text-muted-4">{{ row.menu_keys.length }} menu</span>
+          <span class="text-[12.5px] text-muted-4">{{ t('roles.menu_count', { count: row.menu_keys.length }) }}</span>
         </template>
-        <template #cell-user_count="{ row }">{{ row.user_count }} pengguna</template>
+        <template #cell-user_count="{ row }">{{ t('roles.user_count', { count: row.user_count }) }}</template>
         <template #cell-is_system_default="{ row }">
-          <StatusPill :variant="row.is_system_default ? 'neutral' : 'mint'">{{ row.is_system_default ? 'Bawaan' : 'Kustom' }}</StatusPill>
+          <StatusPill :variant="row.is_system_default ? 'neutral' : 'mint'">{{ row.is_system_default ? t('roles.default_type') : t('roles.custom_type') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">Hapus</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingRole ? 'Ubah peran' : 'Peran baru'" max-width-class="max-w-[560px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingRole ? t('roles.edit_role') : t('roles.new_role')" max-width-class="max-w-[560px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveRole">
-        <BaseInput v-model="form.name" label="Nama peran" required maxlength="50" :error="formErrors.name" />
+        <BaseInput v-model="form.name" :label="t('roles.role_name')" required maxlength="50" :error="formErrors.name" />
         <RoleMenuPicker v-model="form.menu_keys" :error="formErrors['menu_keys.0'] || formErrors.menu_keys" />
         <div class="mt-1 flex justify-end gap-2">
-          <BaseButton type="button" variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton type="submit" :loading="saving">Simpan</BaseButton>
+          <BaseButton type="button" variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton type="submit" :loading="saving">{{ t('common.save') }}</BaseButton>
         </div>
       </form>
     </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"
-      title="Hapus peran?"
-      :message="`Peran '${deleteTarget?.name}' akan dihapus. Tindakan ini tidak bisa dibatalkan.`"
-      confirm-label="Ya, hapus"
+      :title="t('roles.delete_role')"
+      :message="t('roles.delete_role_confirm', { name: deleteTarget?.name })"
+      :confirm-label="t('vendors_materials.yes_delete')"
       :loading="deleting"
       @close="showDelete = false"
       @confirm="performDelete"

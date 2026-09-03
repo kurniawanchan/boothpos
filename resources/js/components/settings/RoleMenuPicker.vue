@@ -1,8 +1,10 @@
 <script setup>
 import { onMounted, ref, useId } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { listMenuKeys } from '../../api/roles';
 
 const idPrefix = useId();
+const { t } = useI18n();
 
 /**
  * Grid checkbox atas registry menu App\Support\MenuKeys — v-model-able
@@ -40,8 +42,8 @@ function toggle(key) {
 
 <template>
   <fieldset class="flex flex-col gap-2">
-    <legend class="text-[12.5px] font-semibold text-muted-4">Akses menu</legend>
-    <p v-if="loading" class="text-[12.5px] text-muted-3">Memuat daftar menu…</p>
+    <legend class="text-[12.5px] font-semibold text-muted-4">{{ t('roles.menu_access') }}</legend>
+    <p v-if="loading" class="text-[12.5px] text-muted-3">{{ t('roles.loading_menu_list') }}</p>
     <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-3">
       <label
         v-for="opt in options"

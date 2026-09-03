@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listUsers, createUser, updateUser, deleteUser, uploadUserPhoto } from '../api/users';
 import { listRoles } from '../api/roles';
@@ -16,6 +17,7 @@ import BaseSelect from '../components/ui/BaseSelect.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 
 const auth = useAuthStore();
+const { t, locale } = useI18n();
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listUsers);
@@ -23,12 +25,12 @@ const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
 
 const roleOptions = ref([]);
-const roleFilterOptions = computed(() => [{ value: '', label: 'Semua peran' }, ...roleOptions.value]);
-const statusFilterOptions = [
-  { value: '', label: 'Semua status' },
-  { value: '1', label: 'Aktif' },
-  { value: '0', label: 'Nonaktif' },
-];
+const roleFilterOptions = computed(() => [{ value: '', label: t('users.all_roles') }, ...roleOptions.value]);
+const statusFilterOptions = computed(() => [
+  { value: '', label: t('users.all_status') },
+  { value: '1', label: t('users.active') },
+  { value: '0', label: t('users.inactive') },
+]);
 const roleFilter = ref('');
 const statusFilter = ref('');
 
@@ -57,18 +59,18 @@ function onStatusFilterChange(value) {
   setFilter({ is_active: value === '' ? undefined : value });
 }
 
-const columns = [
-  { key: 'name', label: 'Nama' },
-  { key: 'username', label: 'Username' },
-  { key: 'role', label: 'Peran' },
-  { key: 'last_login_at', label: 'Terakhir Akses' },
-  { key: 'is_active', label: 'Status' },
+const columns = computed(() => [
+  { key: 'name', label: t('users.col_name') },
+  { key: 'username', label: t('users.col_username') },
+  { key: 'role', label: t('users.col_role') },
+  { key: 'last_login_at', label: t('users.col_last_access') },
+  { key: 'is_active', label: t('users.col_status') },
   { key: 'actions', label: '' },
-];
+]);
 
 function formatLastAccess(value) {
-  if (!value) return 'Belum pernah';
-  return new Date(value).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+  if (!value) return t('users.never_accessed');
+  return new Date(value).toLocaleString(locale.value === 'id' ? 'id-ID' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
 const showForm = ref(false);
@@ -131,10 +133,10 @@ async function saveUser() {
     let saved;
     if (editingUser.value) {
       saved = await updateUser(editingUser.value.id, payload);
-      toast.success('Pengguna diperbarui.');
+      toast.success(t('users.user_updated'));
     } else {
       saved = await createUser(payload);
-      toast.success('Pengguna dibuat.');
+      toast.success(t('users.user_created'));
     }
 
     if (photoFile.value && saved?.id) {
@@ -159,7 +161,7 @@ async function performDelete() {
   deleting.value = true;
   try {
     await deleteUser(deleteTarget.value.id);
-    toast.success('Pengguna dihapus.');
+    toast.success(t('users.user_deleted'));
     showDelete.value = false;
     await load();
   } catch {
@@ -175,29 +177,29 @@ async function performDelete() {
     <div class="flex flex-wrap items-center gap-2.5">
       <div class="relative flex min-w-[230px] flex-1 items-center">
         <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="user-search">Cari pengguna</label>
+        <label class="sr-only" for="user-search">{{ t('users.search_user') }}</label>
         <input
           id="user-search"
           v-model="search"
-          placeholder="Cari nama atau username…"
+          :placeholder="t('users.search_user_placeholder')"
           class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           @input="debouncedSearch"
         />
       </div>
       <div class="w-[180px]">
-        <BaseSelect :model-value="roleFilter" :options="roleFilterOptions" placeholder="Semua peran" @update:model-value="onRoleFilterChange" />
+        <BaseSelect :model-value="roleFilter" :options="roleFilterOptions" :placeholder="t('users.all_roles')" @update:model-value="onRoleFilterChange" />
       </div>
       <div class="w-[160px]">
-        <BaseSelect :model-value="statusFilter" :options="statusFilterOptions" placeholder="Semua status" @update:model-value="onStatusFilterChange" />
+        <BaseSelect :model-value="statusFilter" :options="statusFilterOptions" :placeholder="t('users.all_status')" @update:model-value="onStatusFilterChange" />
       </div>
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        Tambah pengguna
+        {{ t('users.add_user') }}
       </BaseButton>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" empty-message="Belum ada pengguna.">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('users.no_users')">
         <template #cell-name="{ row }">
           <div class="flex items-center gap-2.5">
             <img v-if="row.photo_url" :src="row.photo_url" class="h-8 w-8 rounded-full object-cover" alt="" />
@@ -212,18 +214,18 @@ async function performDelete() {
           <span class="text-[12.5px] text-muted-4">{{ formatLastAccess(row.last_login_at) }}</span>
         </template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? 'Aktif' : 'Nonaktif' }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('users.active') : t('users.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">Edit</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
             <button
               v-if="!isSelf(row)"
               type="button"
               class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text"
               @click="confirmDelete(row)"
             >
-              Hapus
+              {{ t('common.delete') }}
             </button>
           </div>
         </template>
@@ -231,29 +233,29 @@ async function performDelete() {
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingUser ? 'Ubah pengguna' : 'Pengguna baru'" max-width-class="max-w-[480px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingUser ? t('users.edit_user') : t('users.new_user')" max-width-class="max-w-[480px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveUser">
-        <BaseInput v-model="form.name" label="Nama" required maxlength="100" :error="formErrors.name" />
-        <BaseInput v-model="form.username" label="Username" required maxlength="50" :error="formErrors.username" />
+        <BaseInput v-model="form.name" :label="t('users.name')" required maxlength="100" :error="formErrors.name" />
+        <BaseInput v-model="form.username" :label="t('users.username')" required maxlength="50" :error="formErrors.username" />
         <BaseInput
           v-model="form.password"
-          label="Password"
+          :label="t('users.password')"
           type="password"
           :required="!editingUser"
-          :hint="editingUser ? 'Kosongkan bila tidak ingin mengubah password.' : ''"
+          :hint="editingUser ? t('users.password_hint_edit') : ''"
           :error="formErrors.password"
         />
         <BaseSelect
           v-model="form.role_id"
-          label="Peran"
+          :label="t('users.role')"
           required
           :options="roleOptions"
           :disabled="isSelf(editingUser ?? {})"
-          :hint="isSelf(editingUser ?? {}) ? 'Tidak dapat mengganti peran akun sendiri.' : ''"
+          :hint="isSelf(editingUser ?? {}) ? t('users.cannot_change_own_role') : ''"
           :error="formErrors.role_id"
         />
         <div class="flex flex-col gap-1.5">
-          <span class="text-[12.5px] font-semibold text-muted-4">Foto</span>
+          <span class="text-[12.5px] font-semibold text-muted-4">{{ t('users.photo') }}</span>
           <input type="file" accept="image/jpeg,image/png" class="text-[12.5px]" @change="onPhotoChange" />
         </div>
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
@@ -263,22 +265,22 @@ async function performDelete() {
             class="h-4 w-4 rounded border-line accent-brand"
             :disabled="isSelf(editingUser ?? {})"
           />
-          Aktif
+          {{ t('users.active') }}
         </label>
       </form>
       <template #footer>
         <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">Batal</BaseButton>
-          <BaseButton :loading="saving" @click="saveUser">Simpan</BaseButton>
+          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton :loading="saving" @click="saveUser">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"
-      title="Hapus pengguna"
-      :message="`Hapus ${deleteTarget?.name}?`"
-      confirm-label="Ya, hapus"
+      :title="t('users.delete_user')"
+      :message="t('users.delete_user_confirm', { name: deleteTarget?.name })"
+      :confirm-label="t('vendors_materials.yes_delete')"
       :loading="deleting"
       @close="showDelete = false"
       @confirm="performDelete"
