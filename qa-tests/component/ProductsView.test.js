@@ -34,7 +34,7 @@ function renderProducts() {
   return render(ProductsView, { global: { plugins: [pinia] } });
 }
 
-// 004-sidebar-menu-reorg US4/US5
+// 004-sidebar-menu-reorg US4/US5, 005-ux-enhancements-dashboard US1
 describe('ProductsView — product images & clickable filters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -53,30 +53,34 @@ describe('ProductsView — product images & clickable filters', () => {
     expect(screen.queryByAltText('Keychain B')).not.toBeInTheDocument();
   });
 
-  it('filters by clicking an artist chip and returns to "all" via the All chip', async () => {
+  it('filters via the searchable artist dropdown and returns to "all" by re-selecting it', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderProducts();
     await screen.findByText('Keychain A');
-    await screen.findByRole('button', { name: 'Artist A' });
 
-    await user.click(screen.getByRole('button', { name: 'Artist A' }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: 1 })));
+    await user.click(screen.getByText(/semua artist/i));
+    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
 
-    await user.click(screen.getAllByText(/semua artist/i)[0]);
+    // The panel stays open after a selection (multi-select) — pick "All"
+    // directly to clear the selection back to unfiltered.
+    await user.click(await screen.findByRole('option', { name: /semua artist/i }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.not.objectContaining({ artist_id: expect.anything() })));
   });
 
-  it('filters by clicking a category chip, combinable with the artist filter', async () => {
+  it('filters via the category dropdown, combinable with the artist filter', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderProducts();
     await screen.findByText('Keychain A');
-    await screen.findByRole('button', { name: 'Artist A' });
 
-    await user.click(screen.getByRole('button', { name: 'Artist A' }));
-    await user.click(screen.getByRole('button', { name: 'Kategori A' }));
+    await user.click(screen.getByText(/semua artist/i));
+    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
 
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: 1, category_id: 1 })));
+    await user.click(screen.getByText(/semua kategori/i));
+    await user.click(await screen.findByRole('option', { name: 'Kategori A' }));
+
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1], category_id: [1] })));
   });
 });

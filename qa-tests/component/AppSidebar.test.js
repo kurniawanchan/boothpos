@@ -14,7 +14,7 @@ import { useAuthStore } from '../../resources/js/stores/auth';
 const ROUTE_NAMES = [
   'dashboard', 'pos', 'session', 'events', 'products', 'artists', 'categories',
   'stock', 'vendors', 'materials', 'customers', 'preorders', 'sales', 'reports',
-  'settings', 'users', 'roles',
+  'settings', 'users', 'roles', 'profile',
 ];
 
 function makeRouter() {
@@ -46,7 +46,7 @@ const ALL_MENU_KEYS = [
 describe('AppSidebar — order and grouping (004-sidebar-menu-reorg)', () => {
   beforeEach(() => {});
 
-  it('renders top-level items in the requested order: Sesi Kasir, Sales, Purchase, Inventaris, Pre-orders', async () => {
+  it('renders top-level items in the requested order: Sesi Kasir, Sales, Pembelian, Inventaris, Pre-orders', async () => {
     await renderSidebar(ALL_MENU_KEYS);
     const nav = screen.getByRole('navigation');
 
@@ -55,14 +55,14 @@ describe('AppSidebar — order and grouping (004-sidebar-menu-reorg)', () => {
     const items = Array.from(nav.querySelectorAll(':scope > ul > li')).map((li) => li.textContent.replace(/\s+/g, ' ').trim());
     const idxSession = items.findIndex((t) => t.includes('Sesi Kasir'));
     const idxSales = items.findIndex((t) => t.includes('Penjualan'));
-    const idxPurchase = items.findIndex((t) => t.includes('Purchase'));
+    const idxPembelian = items.findIndex((t) => t.includes('Pembelian'));
     const idxInventaris = items.findIndex((t) => t.includes('Inventaris'));
     const idxPreorders = items.findIndex((t) => t.includes('Pre-order'));
 
     expect(idxSession).toBeGreaterThanOrEqual(0);
     expect(idxSales).toBeGreaterThan(idxSession);
-    expect(idxPurchase).toBeGreaterThan(idxSales);
-    expect(idxInventaris).toBeGreaterThan(idxPurchase);
+    expect(idxPembelian).toBeGreaterThan(idxSales);
+    expect(idxInventaris).toBeGreaterThan(idxPembelian);
     expect(idxPreorders).toBeGreaterThan(idxInventaris);
   });
 
@@ -78,14 +78,14 @@ describe('AppSidebar — order and grouping (004-sidebar-menu-reorg)', () => {
     expect(children).toEqual(['Kategori', 'Produk', 'Stok']);
   });
 
-  it('groups Vendor and Bahan Baku under "Purchase"', async () => {
+  it('groups Vendor and Bahan Baku under "Pembelian"', async () => {
     await renderSidebar(ALL_MENU_KEYS);
-    await screen.findByText('Purchase');
+    await screen.findByText('Pembelian');
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /Purchase/ }));
+    await user.click(screen.getByRole('button', { name: /Pembelian/ }));
 
-    const group = screen.getByRole('button', { name: /Purchase/ }).closest('li');
+    const group = screen.getByRole('button', { name: /Pembelian/ }).closest('li');
     const children = Array.from(group.querySelectorAll('ul li')).map((li) => li.textContent.trim());
     expect(children).toEqual(['Vendor', 'Bahan Baku']);
   });
@@ -107,9 +107,9 @@ describe('AppSidebar — order and grouping (004-sidebar-menu-reorg)', () => {
     expect(screen.queryByText('Inventaris')).not.toBeInTheDocument();
   });
 
-  it('hides the "Purchase" group entirely when neither Vendor nor Bahan Baku is accessible', async () => {
+  it('hides the "Pembelian" group entirely when neither Vendor nor Bahan Baku is accessible', async () => {
     const kasirKeys = ['dashboard', 'pos', 'session', 'events', 'customers', 'preorders', 'sales'];
     await renderSidebar(kasirKeys);
-    expect(screen.queryByText('Purchase')).not.toBeInTheDocument();
+    expect(screen.queryByText('Pembelian')).not.toBeInTheDocument();
   });
 });

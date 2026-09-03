@@ -17,6 +17,7 @@ import BaseButton from '../components/ui/BaseButton.vue';
 import BaseDrawer from '../components/ui/BaseDrawer.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
+import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
@@ -28,10 +29,16 @@ const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listProducts);
 const search = ref('');
-const artistFilter = ref('');
-const categoryFilter = ref('');
+// 005-ux-enhancements-dashboard (US1) — filter artist/category sekarang
+// array (multi-select dropdown dengan pencarian), bukan lagi satu nilai
+// chip tunggal dari 004-sidebar-menu-reorg. Array kosong = "Semua".
+const artistFilter = ref([]);
+const categoryFilter = ref([]);
 const artists = ref([]);
 const categories = ref([]);
+
+const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+const categoryOptions = computed(() => categories.value.map((c) => ({ value: c.id, label: c.name })));
 
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
 
@@ -42,7 +49,10 @@ onMounted(async () => {
 });
 
 function applyFilters() {
-  setFilter({ artist_id: artistFilter.value || undefined, category_id: categoryFilter.value || undefined });
+  setFilter({
+    artist_id: artistFilter.value.length ? artistFilter.value : undefined,
+    category_id: categoryFilter.value.length ? categoryFilter.value : undefined,
+  });
 }
 
 const exporting = ref(false);
@@ -336,48 +346,24 @@ async function performDelete() {
       </template>
     </div>
 
-    <!-- 004-sidebar-menu-reorg (US5, FR-007) — chip filters replacing the
-         previous BaseSelect dropdowns, mirroring PosView.vue's existing
-         category-chip pattern exactly (see contracts/ui-contract.md). -->
-    <div class="flex flex-wrap gap-1.5">
-      <button
-        type="button"
-        class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-        :class="!artistFilter ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-        @click="artistFilter = ''; applyFilters()"
-      >
-        {{ t('master_data.all_artists') }}
-      </button>
-      <button
-        v-for="a in artists"
-        :key="a.id"
-        type="button"
-        class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-        :class="artistFilter === a.id ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-        @click="artistFilter = a.id; applyFilters()"
-      >
-        {{ a.name }}
-      </button>
-    </div>
-    <div class="flex flex-wrap gap-1.5">
-      <button
-        type="button"
-        class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-        :class="!categoryFilter ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-        @click="categoryFilter = ''; applyFilters()"
-      >
-        {{ t('master_data.all_categories') }}
-      </button>
-      <button
-        v-for="c in categories"
-        :key="c.id"
-        type="button"
-        class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-        :class="categoryFilter === c.id ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-        @click="categoryFilter = c.id; applyFilters()"
-      >
-        {{ c.name }}
-      </button>
+    <!-- 005-ux-enhancements-dashboard (US1) — dropdown multi-pilih dengan
+         pencarian, menggantikan chip filter tunggal dari
+         004-sidebar-menu-reorg (lihat research.md R2). -->
+    <div class="flex flex-wrap gap-2.5">
+      <BaseMultiSelect
+        v-model="artistFilter"
+        :options="artistOptions"
+        :all-label="t('master_data.all_artists')"
+        class="w-56"
+        @update:model-value="applyFilters"
+      />
+      <BaseMultiSelect
+        v-model="categoryFilter"
+        :options="categoryOptions"
+        :all-label="t('master_data.all_categories')"
+        class="w-56"
+        @update:model-value="applyFilters"
+      />
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">

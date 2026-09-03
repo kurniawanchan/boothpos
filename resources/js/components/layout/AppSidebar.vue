@@ -151,12 +151,12 @@ watch(
           <button
             type="button"
             class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-[13.5px] font-medium text-muted-4 transition-colors hover:bg-line-7"
-            :class="item.children.some((c) => c.name === route.name) ? 'text-brand-active' : ''"
+            :class="item.children.some((c) => c.name === route.name) ? 'bg-mint-100 font-bold text-brand-active' : ''"
             :aria-expanded="isGroupExpanded(item)"
             @click="toggleGroup(item)"
           >
             <i class="ph-duotone text-[17px]" :class="item.icon" aria-hidden="true"></i>
-            <span class="flex-1 text-left font-bold">{{ t(item.label) }}</span>
+            <span class="flex-1 text-left">{{ t(item.label) }}</span>
             <i
               class="ph-duotone ph-caret-down text-[13px] transition-transform"
               :class="{ 'rotate-180': isGroupExpanded(item) }"
@@ -179,15 +179,21 @@ watch(
     </ul>
 
     <div class="flex flex-col gap-2.5 border-t border-line-3 p-3">
-      <div class="flex items-center gap-2.5 px-1 py-1.5">
-        <div class="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full bg-mint-100 text-[12px] font-bold text-brand-active">
+      <RouterLink :to="{ name: 'profile' }" class="flex items-center gap-2.5 rounded-md px-1 py-1.5 transition-colors hover:bg-line-7">
+        <img
+          v-if="auth.user?.photo_url"
+          :src="auth.user.photo_url"
+          :alt="auth.user?.name"
+          class="h-[30px] w-[30px] flex-none rounded-full object-cover"
+        />
+        <div v-else class="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full bg-mint-100 text-[12px] font-bold text-brand-active">
           {{ (auth.user?.name || '?').slice(0, 2).toUpperCase() }}
         </div>
         <div class="flex min-w-0 flex-col">
           <span class="truncate text-[12.5px] font-semibold">{{ auth.user?.name }} · {{ auth.user?.username }}</span>
           <span class="text-[11px] capitalize text-muted-3">{{ auth.user?.role }}</span>
         </div>
-      </div>
+      </RouterLink>
       <button
         type="button"
         class="flex items-center justify-center gap-2 rounded-md border border-line px-3 py-2 text-[12.5px] font-bold text-muted-4 transition-colors hover:border-danger-border-hover hover:bg-danger-bg hover:text-danger-text"

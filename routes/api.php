@@ -36,6 +36,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::put('/auth/language', [AuthController::class, 'updateLanguage']);
+        // 005-ux-enhancements-dashboard (US3) — swa-layanan, sengaja
+        // terpisah dari /users/{user} (lihat komentar
+        // AuthController::updatePassword/updatePhoto).
+        Route::put('/auth/password', [AuthController::class, 'updatePassword']);
+        Route::post('/auth/photo', [AuthController::class, 'updatePhoto']);
 
         Route::get('/settings/features', [SettingsController::class, 'features']);
         Route::get('/settings', [SettingsController::class, 'index']);
