@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  T012/T031 — PLACEHOLDER. This adaptive-icon XML references foreground/
+  background drawables that are NOT included in this commit — generating
+  real raster/vector brand artwork is outside what can be produced in this
+  environment. Before this app is actually built, replace
+  @drawable/ic_launcher_foreground and @drawable/ic_launcher_background
+  with real BoothPOS brand artwork (see resources/css/app.css's --color-brand
+  token for the palette to match), then verify per quickstart.md step 9.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/boothpos_brand" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PLACEHOLDER — see ic_launcher.xml in this same directory. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/boothpos_brand" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

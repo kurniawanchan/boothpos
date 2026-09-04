@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- T012 — app label reads "BoothPOS", not a generic browser/webview
+         label (spec FR-007/US3). -->
+    <string name="app_name">BoothPOS</string>
+
+    <string name="notification_channel_runtime">Layanan BoothPOS</string>
+    <string name="notification_channel_runtime_description">Menjaga server BoothPOS lokal tetap berjalan selama aplikasi digunakan</string>
+    <string name="notification_running_title">BoothPOS sedang berjalan</string>
+    <string name="notification_running_body">Server lokal aktif di perangkat ini</string>
+
+    <!-- research.md R6 — cold-start loading state, never a blank screen. -->
+    <string name="splash_starting_database">Menyiapkan basis data lokal…</string>
+    <string name="splash_starting_server">Menyiapkan server lokal…</string>
+    <string name="splash_first_run">Menyiapkan BoothPOS untuk pertama kali — mohon tunggu…</string>
+    <string name="splash_failed">Gagal memulai BoothPOS di perangkat ini. Coba tutup dan buka ulang aplikasi.</string>
+    <string name="splash_retry">Coba lagi</string>
+
+    <!-- US2 — backup/restore, FR-006–FR-011. -->
+    <string name="backup_action">Cadangkan data</string>
+    <string name="backup_in_progress">Membuat cadangan…</string>
+    <string name="backup_success">Cadangan berhasil dibuat.</string>
+    <string name="backup_failed">Gagal membuat cadangan.</string>
+    <string name="restore_action">Pulihkan dari cadangan</string>
+    <string name="restore_confirm_title">Timpa data yang ada?</string>
+    <string name="restore_confirm_message">Memulihkan cadangan akan MENIMPA seluruh data yang ada di perangkat ini saat ini. Tindakan ini tidak dapat dibatalkan. Lanjutkan?</string>
+    <string name="restore_confirm_proceed">Ya, timpa dan pulihkan</string>
+    <string name="restore_confirm_cancel">Batal</string>
+    <string name="restore_invalid_file">Berkas yang dipilih bukan cadangan BoothPOS yang valid.</string>
+    <string name="restore_success">Data berhasil dipulihkan.</string>
+    <string name="restore_failed">Gagal memulihkan data.</string>
+    <string name="only_copy_warning_title">Perangkat ini menyimpan satu-satunya salinan data Anda</string>
+    <string name="only_copy_warning_message">Data di perangkat ini TIDAK tersimpan di tempat lain kecuali Anda membuat cadangan sendiri. Jika perangkat hilang, rusak, atau di-reset tanpa cadangan, seluruh data akan hilang secara permanen.</string>
+    <string name="only_copy_warning_dismiss">Mengerti</string>
+</resources>

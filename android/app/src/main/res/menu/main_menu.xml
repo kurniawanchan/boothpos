@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- T023 — native backup/restore triggers (US2), chosen over a web-UI
+     bridge; see MainActivity's onCreateOptionsMenu comment. -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/action_backup"
+        android:title="@string/backup_action"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_restore"
+        android:title="@string/restore_action"
+        app:showAsAction="never" />
+</menu>
