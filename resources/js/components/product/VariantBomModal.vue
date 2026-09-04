@@ -179,7 +179,7 @@ async function performDelete() {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="line in breakdown?.lines ?? []" :key="line.bom_line_id" class="border-t border-line-5">
+            <tr v-for="line in breakdown?.lines ?? []" :key="line.bom_line_id" class="border-t border-line-5 transition-colors hover:bg-line-7">
               <td class="px-3 py-2">{{ line.material_name }} <span class="text-muted-3">({{ line.unit }})</span></td>
               <td class="px-3 py-2 text-right">{{ line.qty_needed }}</td>
               <td class="px-3 py-2 text-right">{{ formatIDR(line.unit_cost) }}</td>

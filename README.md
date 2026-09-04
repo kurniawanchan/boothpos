@@ -538,29 +538,47 @@ sama:
    ini (bagian dari 120 test yang lulus), menutup gap yang disebutkan
    versi README sebelumnya.
 
-## Bug yang ditemukan saat eksekusi fitur 009-ui-ux-refinements (2026-09-04)
+## Bug yang ditemukan saat eksekusi fitur 010-split-payment-preorder-reports (2026-09-05)
 
-Ditemukan lewat verifikasi browser sungguhan (Playwright) terhadap
-`SakanaFridgeDemoSeeder`, BUKAN cuma baca kode — keduanya adalah teks
-UI ber-hardcode yang lolos dari sapuan grep otomatis karena tidak lewat
-mekanisme i18n:
+Ditemukan lewat verifikasi browser sungguhan (Playwright, alur nyata
+buat-preorder → split pembayaran → cek laporan) — bukan cuma baca kode
+atau `php artisan test`, yang keduanya sudah hijau sebelum bug ini
+ketahuan:
 
-1. **`resources/js/views/LoginView.vue`** — paragraf marketing hardcoded
-   masih menyebut "rekap hasil per **artist**" setelah rename Artist→Penjual
-   (spec 009 US3). Halaman login sengaja TIDAK memakai `vue-i18n` (lihat
-   catatan di kepala file, keputusan dari fitur 002-language-toggle), jadi
-   sapuan grep berbasis `resources/js/locales/*.json` tidak menjangkaunya.
-   Diperbaiki: "artist" → "penjual" langsung di teks Indonesia file
-   tersebut.
-2. **`resources/js/locales/{id,en}.json` kunci `settings_subtitle`** —
-   masih menyebut "cadangan"/"backups" setelah section Data Backup
-   dihapus dari `SettingsView.vue` (spec 009 US8). Subtitle halaman ini
-   adalah string terpisah dari section yang dihapus, jadi tidak ikut
-   terhapus otomatis. Diperbaiki: "Lisensi, kanal pembayaran, identitas
-   toko, cadangan" → "Lisensi, kanal pembayaran, identitas toko" (ID),
-   demikian pula versi EN.
+1. **`resources/js/views/ReportsView.vue` — baris laporan Pre-order baru
+   hilang/salah data.** Baris hasil `GET /reports/preorders` tidak punya
+   field `id`, sedangkan `DataTable.vue` memakai `row[rowKey]` (default
+   `'id'`) sebagai `:key` pada `v-for` — tanpa `id`, setiap baris ber-key
+   `undefined` dan Vue keliru mengenali beberapa baris berbeda sebagai
+   satu node yang sama, sehingga status `dp_paid` tidak tampil sama
+   sekali dan baris `arrived` menampilkan data hanya salah satu dari dua
+   preorder yang seharusnya digabung. Diperbaiki dengan composite key
+   sintetis `${status}__${payment_completeness}` sebelum data dikirim ke
+   `DataTable`.
+2. **Filter event pada tab Pre-order tidak bisa dikosongkan kembali ke
+   "semua event".** `BaseSelect`'s `:placeholder` cuma teks tampilan saat
+   kosong; tab-tab lain yang pakai filter event memang mewajibkan satu
+   event terpilih (ada `EmptyState` kalau `eventId` kosong), jadi celah
+   ini baru kelihatan di tab Pre-order — satu-satunya tab yang boleh
+   `eventId` kosong, karena preorder memang boleh tidak terikat event
+   (`event_id` nullable by design, beda dari Order). Diperbaiki dengan
+   menambah opsi eksplisit `{ value: '', label: 'All events' }` khusus
+   untuk tab ini.
+3. **(Dicatat, BUKAN diperbaiki — di luar cakupan fitur ini)**
+   `PreorderService::recordPayment()` tidak punya guard kelebihan bayar
+   sama sekali — satu panggilan dengan `amount` melebihi sisa tagihan,
+   atau panggilan susulan setelah preorder sudah `settled`, tetap
+   berhasil (201) dan mendorong `paid_amount` melebihi `total_amount`.
+   Ini bukan bug baru dari split-payment (satu panggilan overpay biasa
+   pun sudah kena), jadi sengaja tidak diperbaiki di sini — dikunci lewat
+   test yang mendokumentasikan perilaku ini apa adanya
+   (`tests/Feature/PreorderTest.php`), dicatat di sini sebagai tugas
+   lanjutan (guard validasi input/aturan bisnis) sebelum event
+   sungguhan.
 
-Keduanya baru terlihat lewat pemeriksaan visual layar sungguhan (bukan
-cuma `grep`/test otomatis), sesuai Constitution Principle II — dicatat di
-sini sebagai pengingat bahwa rename/penghapusan section harus disertai
-sapuan visual, tidak cukup sapuan teks pada file locale saja.
+Ketiganya baru terlihat lewat alur pengguna nyata di browser, sesuai
+Constitution Principle II — dicatat di sini sebagai pengingat bahwa
+laporan baru yang barisnya tidak berbasis entitas ber-`id` (agregasi
+`GROUP BY`) butuh key sintetis eksplisit sebelum dikirim ke `DataTable`,
+dan filter opsional (boleh kosong) butuh opsi "semua" yang eksplisit,
+bukan mengandalkan placeholder semata.

@@ -85,6 +85,99 @@ class ReportController extends Controller
         // menaut baris ke halaman detail entitas (mis. detail produk +
         // total stok, Task 2) — sebelumnya hanya label yang dipilih tanpa
         // ID apa pun untuk ditaut.
+        [$idExpr, $labelExpr, $idAlias] = match ($groupBy) {
+            'category' => ['categories.id', 'categories.name', 'category_id'],
+            'artist' => ['artists.id', 'artists.name', 'artist_id'],
+            'event' => ['events.id', 'events.name', 'event_id'],
+            'day' => ['DATE(orders.created_at)', 'DATE(orders.created_at)', null],
+            default => ['products.id', 'products.name', 'product_id'],
+        };
+
+        // 010-split-payment-preorder-reports (US5/FR-011/FR-012, research.md
+        // R1) — Preorder yang belum lunas TIDAK boleh menyumbang nilai
+        // penuh line_total-nya ke laporan (itu barang yang belum tentu
+        // dibayar lunas). Uang yang diakui dibatasi pada yang BENAR-BENAR
+        // terkumpul di tabel `payments` (bukan cache preorders.paid_amount,
+        // yang bisa basi — lihat komentar SettlementService), lalu
+        // diproporsikan ke tiap item sesuai porsi line_total-nya terhadap
+        // subtotal preorder. Preorder 'cancelled' selalu menyumbang nol.
+        // Query terpisah (bukan loop per-preorder) yang di-agregasi lalu
+        // digabung SEKALI ke $rows/$totals di PHP di bawah — bukan
+        // UNION ALL, karena order_items dan preorder_items punya kolom
+        // (discount_amount) yang tidak simetris, dan penggabungan di PHP
+        // di sini tetap satu query tambahan, bukan N+1.
+        $preorderBase = $this->preorderRecognizedRevenueBase($request);
+
+        [$poIdExpr, $poLabelExpr] = match ($groupBy) {
+            'category' => ['categories.id', 'categories.name'],
+            'artist' => ['artists.id', 'artists.name'],
+            'event' => ['events.id', 'events.name'],
+            // Tidak ada tanggal pembayaran tunggal untuk preorder (uang bisa
+            // masuk bertahap) — sebagai proksi kami pakai tanggal preorder
+            // DIBUAT, konsisten dengan bagaimana 'day' pada order memakai
+            // tanggal transaksi terjadi. ASUMSI yang didokumentasikan di
+            // sini karena tidak ada satu tanggal "benar" untuk uang yang
+            // terkumpul dari beberapa pembayaran terpisah.
+            'day' => ['DATE(preorders.created_at)', 'DATE(preorders.created_at)'],
+            default => ['products.id', 'products.name'],
+        };
+
+        $fraction = self::PREORDER_FRACTION_EXPR;
+        $preorderRows = (clone $preorderBase)
+            ->selectRaw("
+                {$poIdExpr} as entity_id,
+                {$poLabelExpr} as label,
+                SUM(preorder_items.qty * ({$fraction})) as unit_count,
+                SUM(preorder_items.line_total * ({$fraction})) as amount
+            ")
+            ->groupBy(DB::raw($poIdExpr))
+            ->get();
+
+        $rows = (clone $base)
+            ->selectRaw("
+                {$idExpr} as entity_id,
+                {$labelExpr} as label,
+                SUM(order_items.qty) as unit_count,
+                SUM(order_items.line_total) as amount
+            ")
+            ->groupBy(DB::raw($idExpr))
+            ->get();
+
+        // Gabung baris order + preorder yang sudah masing-masing diagregasi
+        // di SQL, dikunci oleh entity_id (atau label untuk group_by=day yang
+        // entity_id-nya selalu null).
+        $merged = [];
+        foreach ($rows as $row) {
+            $key = $idAlias === null ? $row->label : $row->entity_id;
+            $merged[$key] = [
+                'entity_id' => $idAlias === null ? null : $row->entity_id,
+                'label' => $row->label,
+                'unit_count' => (float) $row->unit_count,
+                'amount' => (float) $row->amount,
+            ];
+        }
+        foreach ($preorderRows as $row) {
+            $key = $idAlias === null ? $row->label : $row->entity_id;
+            if (! isset($merged[$key])) {
+                $merged[$key] = [
+                    'entity_id' => $idAlias === null ? null : $row->entity_id,
+                    'label' => $row->label,
+                    'unit_count' => 0.0,
+                    'amount' => 0.0,
+                ];
+            }
+            $merged[$key]['unit_count'] += (float) $row->unit_count;
+            $merged[$key]['amount'] += (float) $row->amount;
+        }
+
+        $rows = collect(array_values($merged))
+            ->sortByDesc('amount')
+            ->values()
+            ->map(function (array $data) {
+                $data['amount'] = number_format($data['amount'], 2, '.', '');
+
+                return $data;
+            });
         if ($groupBy === 'customer') {
             // 009-ui-ux-refinements (US6/T046) — satu query GROUP BY per
             // orders.customer_id, sama seperti pola artist/day di atas
@@ -155,6 +248,20 @@ class ReportController extends Controller
             SUM(order_items.line_total) as net_sales
         ')->first();
 
+        $preorderTotals = (clone $preorderBase)->selectRaw("
+            SUM(preorder_items.qty * ({$fraction})) as unit_count,
+            SUM(preorder_items.line_total * ({$fraction})) as amount
+        ")->first();
+
+        // unit_count tetap dibiarkan numerik apa adanya (mengikuti bentuk
+        // asli dari DB sebelum perubahan ini, yang juga tidak pernah
+        // di-number_format) — hanya kolom uang yang wajib string 2-desimal
+        // per konvensi "Money is returned as a string" di seluruh laporan
+        // ini (lihat gross_sales/net_sales di bawah dan amount per baris).
+        $totals->unit_count = (float) ($totals->unit_count ?? 0) + (float) ($preorderTotals->unit_count ?? 0);
+        $totals->gross_sales = number_format((float) ($totals->gross_sales ?? 0) + (float) ($preorderTotals->amount ?? 0), 2, '.', '');
+        $totals->net_sales = number_format((float) ($totals->net_sales ?? 0) + (float) ($preorderTotals->amount ?? 0), 2, '.', '');
+
         $event = $request->filled('event_id') ? Event::find($request->integer('event_id')) : null;
 
         // Task 1 — daftar TRANSAKSI (satu baris = satu order 'completed'),
@@ -220,6 +327,49 @@ class ReportController extends Controller
         ]);
     }
 
+    /**
+     * 010-split-payment-preorder-reports (US5, research.md R1) — porsi
+     * subtotal preorder yang sudah BENAR-BENAR terkumpul di `payments`
+     * (bukan cache preorders.paid_amount). Dipakai sebagai faktor pengali
+     * line_total/qty/cost_price tiap preorder_items di titik pemakaian —
+     * satu ekspresi SQL yang dievaluasi per baris hasil JOIN, bukan
+     * dihitung lewat loop PHP per-preorder.
+     */
+    private const PREORDER_FRACTION_EXPR = 'CASE WHEN preorders.subtotal > 0 THEN COALESCE(pc.collected, 0) / preorders.subtotal ELSE 0 END';
+
+    /**
+     * Dasar query (FROM + JOIN + filter, TANPA select) yang dipakai bersama
+     * oleh sales()/profit() untuk mengagregasi pendapatan preorder yang
+     * diakui. Subquery `pc` menjumlahkan payments.amount per preorder,
+     * mengecualikan verification='rejected' (research.md R1) — dihitung
+     * SEKALI di sini lewat leftJoinSub, bukan N+1 per preorder. Preorder
+     * 'cancelled' dikeluarkan sepenuhnya lewat where() di bawah, bukan
+     * cuma fraction=0, supaya statusnya tidak diam-diam ikut ke-JOIN.
+     */
+    private function preorderRecognizedRevenueBase(Request $request)
+    {
+        $collected = DB::table('payments')
+            ->select('preorder_id', DB::raw('SUM(amount) as collected'))
+            ->whereNotNull('preorder_id')
+            ->where('verification', '!=', 'rejected')
+            ->where('data_mode', ModeGate::current())
+            ->groupBy('preorder_id');
+
+        return DB::table('preorder_items')
+            ->join('preorders', 'preorders.id', '=', 'preorder_items.preorder_id')
+            ->join('product_variants', 'product_variants.id', '=', 'preorder_items.variant_id')
+            ->join('products', 'products.id', '=', 'product_variants.product_id')
+            ->join('categories', 'categories.id', '=', 'products.category_id')
+            ->join('artists', 'artists.id', '=', 'preorder_items.artist_id')
+            ->join('events', 'events.id', '=', 'preorders.event_id')
+            ->leftJoinSub($collected, 'pc', 'pc.preorder_id', '=', 'preorders.id')
+            ->where('preorders.status', '!=', 'cancelled')
+            ->where('preorder_items.data_mode', ModeGate::current())
+            ->when($request->filled('event_id'), fn ($q) => $q->where('preorders.event_id', $request->integer('event_id')))
+            ->when($request->filled('date_from'), fn ($q) => $q->whereDate('preorders.created_at', '>=', $request->date('date_from')))
+            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('preorders.created_at', '<=', $request->date('date_to')));
+    }
+
     public function profit(Request $request): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {
@@ -244,8 +394,23 @@ class ReportController extends Controller
                 SUM(order_items.cost_price * order_items.qty) as cost_of_goods
             ')->first();
 
-        $revenue = (float) ($totals->revenue ?? 0);
-        $cost = (float) ($totals->cost_of_goods ?? 0);
+        // 010-split-payment-preorder-reports (US5/FR-011, research.md R1/R7)
+        // — sama seperti sales(), pendapatan preorder yang diakui (uang
+        // terkumpul, diproporsikan per item) ditambahkan ke revenue, dan
+        // cost_price*qty-nya diproporsikan dengan RATIO YANG SAMA (bukan
+        // cost_price penuh) untuk ditambahkan ke cost_of_goods — PreorderItem
+        // sudah punya snapshot cost_price/sell_price/line_total yang sama
+        // persis bentuknya dengan OrderItem (confirmed di PreorderItem.php).
+        $fraction = self::PREORDER_FRACTION_EXPR;
+        $preorderTotals = $this->preorderRecognizedRevenueBase($request)
+            ->where('preorders.event_id', $eventId)
+            ->selectRaw("
+                SUM(preorder_items.line_total * ({$fraction})) as revenue,
+                SUM(preorder_items.cost_price * preorder_items.qty * ({$fraction})) as cost_of_goods
+            ")->first();
+
+        $revenue = (float) ($totals->revenue ?? 0) + (float) ($preorderTotals->revenue ?? 0);
+        $cost = (float) ($totals->cost_of_goods ?? 0) + (float) ($preorderTotals->cost_of_goods ?? 0);
         $grossProfit = $revenue - $cost;
         $netProfit = $grossProfit - (float) $event->event_cost;
 
@@ -610,6 +775,68 @@ class ReportController extends Controller
             ]);
 
         return response()->json(['data' => $rows]);
+    }
+
+    /**
+     * 010-split-payment-preorder-reports (US6) — laporan baru khusus
+     * pre-order: hitungan & nominal per status × kelengkapan pembayaran
+     * (unpaid/partial/paid). Berbeda dari sales()/profit() yang hanya
+     * menjumlah pendapatan pre-order yang SUDAH terbayar — laporan ini
+     * tentang STATE pre-order, jadi pre-order 'cancelled' tetap tampil
+     * di breakdown status meski tidak berkontribusi pendapatan.
+     *
+     * amount_collected dihitung live dari SUM(payments.amount) (bukan
+     * cache preorders.paid_amount yang bisa drift — research.md R1/R6),
+     * mengecualikan pembayaran yang verifikasinya 'rejected', sama
+     * seperti aturan sales()/profit() untuk order_items.
+     *
+     * Satu query SQL ber-GROUP BY, bukan loop PHP per pre-order
+     * (Constitution V), mengikuti pola sales() yang sudah ada.
+     */
+    public function preorders(Request $request): JsonResponse
+    {
+        if (! $request->user()->canAccessMenu('reports')) {
+            return response()->json(['message' => __('reports.not_authorized')], 403);
+        }
+
+        $collected = DB::table('payments')
+            ->selectRaw('preorder_id, SUM(amount) as amount_collected')
+            ->whereNotNull('preorder_id')
+            ->where('verification', '!=', 'rejected')
+            ->groupBy('preorder_id');
+
+        $rows = DB::table('preorders')
+            ->leftJoinSub($collected, 'collected', 'collected.preorder_id', '=', 'preorders.id')
+            // 003-seed-demo-live — query hand-rolled DB::table TIDAK ikut
+            // Eloquent global scope, lihat catatan di sales().
+            ->where('preorders.data_mode', ModeGate::current())
+            ->when($request->filled('event_id'), fn ($q) => $q->where('preorders.event_id', $request->integer('event_id')))
+            ->selectRaw("
+                preorders.status as status,
+                CASE
+                    WHEN COALESCE(collected.amount_collected, 0) <= 0 THEN 'unpaid'
+                    WHEN COALESCE(collected.amount_collected, 0) >= preorders.total_amount THEN 'paid'
+                    ELSE 'partial'
+                END as payment_completeness,
+                COUNT(*) as preorder_count,
+                SUM(preorders.total_amount) as total_order_value,
+                SUM(COALESCE(collected.amount_collected, 0)) as total_collected,
+                SUM(GREATEST(preorders.total_amount - COALESCE(collected.amount_collected, 0), 0)) as total_outstanding
+            ")
+            ->groupBy('preorders.status', 'payment_completeness')
+            ->orderBy('preorders.status')
+            ->orderBy('payment_completeness')
+            ->get()
+            ->map(fn ($row) => [
+                'status' => $row->status,
+                'payment_completeness' => $row->payment_completeness,
+                'preorder_count' => (int) $row->preorder_count,
+                'total_order_value' => number_format((float) $row->total_order_value, 2, '.', ''),
+                'total_collected' => number_format((float) $row->total_collected, 2, '.', ''),
+                'total_outstanding' => number_format((float) $row->total_outstanding, 2, '.', ''),
+            ]);
+
+        return response()->json(['rows' => $rows]);
     }
 
     public function recordSettlementPayment(Request $request, ArtistSettlement $settlement): JsonResponse

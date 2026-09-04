@@ -41,6 +41,15 @@ export function stockByArtistReport(params = {}) {
   return client.get('/reports/stock-by-artist', { params }).then((r) => r.data);
 }
 
+// 010-split-payment-preorder-reports (US6) — laporan khusus pre-order:
+// jumlah & nominal dikelompokkan per status × payment_completeness. Tidak
+// diskop event secara wajib (event_id opsional, sama seperti purchasesReport
+// di atas), tapi ReportsView memfilternya lewat eventId yang sama seperti
+// tab lain agar konsisten dengan filter event di halaman ini.
+export function preorderReport(params = {}) {
+  return client.get('/reports/preorders', { params }).then((r) => r.data);
+}
+
 export function recordSettlementPayment(settlementId, payload) {
   return client
     .post(`/reports/artist-settlements/${settlementId}/payment`, payload)

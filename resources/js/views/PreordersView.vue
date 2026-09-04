@@ -8,7 +8,6 @@ import {
   getPreorder,
   createPreorder,
   updatePreorderStatus,
-  createPreorderPayment,
   exportPreorders,
   downloadPreorderImportTemplate,
   importPreorders,
@@ -19,6 +18,7 @@ import { lookupVariants } from '../api/products';
 import { useToastStore } from '../stores/toast';
 import { useAuthStore } from '../stores/auth';
 import PreorderInvoiceModal from '../components/preorder/PreorderInvoiceModal.vue';
+import PreorderPaymentReceiptModal from '../components/preorder/PreorderPaymentReceiptModal.vue';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDate, formatDateTime } from '../utils/date';
@@ -177,7 +177,6 @@ const transitioning = ref(false);
 const showCancelForm = ref(false);
 const cancelReason = ref('');
 const showRecordPayment = ref(false);
-const recordingPayment = ref(false);
 
 const showShipmentForm = ref(false);
 const shipment = ref(null);
@@ -197,6 +196,19 @@ const savingShipment = ref(false);
 // --- Print invoice/receipt (US2) -----------------------------------------
 const showInvoiceModal = ref(false);
 const invoicePreorderId = ref(null);
+
+// 010-split-payment-preorder-reports (US4, T020) — struk pembayaran per
+// baris riwayat, terpisah dari invoice pesanan di atas (research.md R5).
+const showPaymentReceiptModal = ref(false);
+const receiptPreorderId = ref(null);
+const receiptPaymentId = ref(null);
+
+function openPaymentReceipt(paymentId) {
+  if (!detail.value) return;
+  receiptPreorderId.value = detail.value.id;
+  receiptPaymentId.value = paymentId;
+  showPaymentReceiptModal.value = true;
+}
 
 function openInvoice(row) {
   invoicePreorderId.value = row.id;
@@ -378,18 +390,13 @@ async function submitCancel() {
 
 const paymentPurpose = computed(() => (detail.value?.status === 'arrived' ? 'settlement' : 'down_payment'));
 
-async function submitPayment(payload) {
-  recordingPayment.value = true;
-  try {
-    await createPreorderPayment(detail.value.id, payload);
-    toast.success(t('preorders.payment_saved'));
-    showRecordPayment.value = false;
-    await Promise.all([refreshDetail(), load()]);
-  } catch (err) {
-    if (err.isValidation) toast.error(Object.values(err.errors)[0]?.[0] ?? err.message);
-  } finally {
-    recordingPayment.value = false;
-  }
+// 010-split-payment-preorder-reports (US2/T007) — RecordPaymentModal now
+// submits each split entry itself (sequential calls to the existing
+// POST /preorders/{id}/payments, research.md R2) and only asks the parent
+// to refresh once every entry has succeeded.
+async function handlePaymentSaved() {
+  showRecordPayment.value = false;
+  await Promise.all([refreshDetail(), load()]);
 }
 
 function openShipmentForm() {
@@ -619,6 +626,34 @@ async function markDelivered() {
             <p class="text-[12px] leading-relaxed text-muted-3">
               {{ t('preorders.payment_history_note') }}
             </p>
+
+            <!-- 010-split-payment-preorder-reports (US4, T020) — setiap
+                 entri pembayaran (termasuk split-payment, FR-005) tampil
+                 satu per satu dengan tombol cetak struk per entri. -->
+            <div v-if="(detail.payments ?? []).length" class="flex flex-col gap-2">
+              <div
+                v-for="p in detail.payments"
+                :key="p.id"
+                class="flex items-center justify-between gap-2 rounded-lg border border-line-2 px-3 py-2.5"
+              >
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-[12.5px] font-semibold">
+                    {{ p.purpose === 'settlement' ? t('preorders.payment_event_settlement') : t('preorders.payment_event_down_payment') }}
+                    · {{ formatIDR(p.amount) }}
+                  </span>
+                  <span class="text-[11px] text-muted-3">{{ formatDateTime(p.paid_at) }}</span>
+                </div>
+                <button
+                  type="button"
+                  class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active"
+                  @click="openPaymentReceipt(p.id)"
+                >
+                  {{ t('preorders.print_payment_receipt') }}
+                </button>
+              </div>
+            </div>
+            <p v-else class="text-[12px] text-muted-3">{{ t('preorders.payment_history_empty') }}</p>
+
             <BaseButton v-if="parseMoney(detail.outstanding) > 0" @click="showRecordPayment = true">
               <i class="ph-duotone ph-plus-circle text-[17px]" aria-hidden="true"></i>
               {{ t('preorders.record_settlement') }}
@@ -703,18 +738,25 @@ async function markDelivered() {
     <RecordPaymentModal
       v-if="detail"
       :open="showRecordPayment"
+      :preorder-id="detail.id"
       :due-amount="detail.outstanding"
       :purpose="paymentPurpose"
-      :submitting="recordingPayment"
       :title="t('preorders.record_preorder_settlement')"
       @close="showRecordPayment = false"
-      @submit="submitPayment"
+      @saved="handlePaymentSaved"
     />
 
     <PreorderInvoiceModal
       :open="showInvoiceModal"
       :preorder-id="invoicePreorderId"
       @close="showInvoiceModal = false"
+    />
+
+    <PreorderPaymentReceiptModal
+      :open="showPaymentReceiptModal"
+      :preorder-id="receiptPreorderId"
+      :payment-id="receiptPaymentId"
+      @close="showPaymentReceiptModal = false"
     />
   </div>
 </template>

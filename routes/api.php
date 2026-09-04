@@ -166,6 +166,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/artist-profit', [ReportController::class, 'artistProfit']);
         Route::get('/reports/artist-settlements', [ReportController::class, 'artistSettlements']);
         Route::get('/reports/artist-settlements/{artist}/transactions', [ReportController::class, 'artistSettlementTransactions']);
+        // 010-split-payment-preorder-reports (US6) — laporan baru khusus
+        // pre-order (status × kelengkapan pembayaran), gated sama seperti
+        // laporan lain di atas (canAccessMenu('reports') di dalam method).
+        Route::get('/reports/preorders', [ReportController::class, 'preorders']);
         Route::post('/reports/artist-settlements/{settlement}/payment', [ReportController::class, 'recordSettlementPayment']);
         Route::get('/reports/{report}/export', [ReportController::class, 'export'])
             ->where('report', 'sales|profit|artist-settlements|artist-profit');
