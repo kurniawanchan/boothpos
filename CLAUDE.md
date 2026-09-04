@@ -209,7 +209,44 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/008-android-installer/plan.md` (branch
+Active feature plan: `specs/010-split-payment-preorder-reports/plan.md`
+(branch `010-split-payment-preorder-reports`) — six changes: making the
+already-existing multi-entry split-payment capability actually visible at
+POS checkout (today `PaymentPanel.vue` gives zero on-screen affordance
+that splitting is possible before a user stumbles into it) and making it
+actually *work* for Preorders (today `PaymentPanel`'s `mode="record"`
+branch never accumulates entries — every submit sends exactly one payment,
+and `POST /preorders/{id}/payments` only ever accepted one payment object
+per call; fixed by having the frontend accumulate entries and submit them
+as sequential calls to that same, unmodified endpoint — no new batch
+endpoint, see research.md R2); row-hover highlight added to `DataTable.vue`
+plus four other components that render their own raw `<table>` outside it;
+a new `PreorderPaymentReceiptModal.vue` (POS-receipt-styled, clearly
+marked "Pre-order" + status, one receipt per payment event) built off
+`GET /preorders/{id}`'s already-loaded `payments` relation — deliberately
+NOT a reuse of `ReceiptModal.vue` (order-specific fields don't map) or
+`PreorderInvoiceModal.vue` (a different document, the order confirmation);
+Preorder revenue merged into `sales()`/`profit()`/`artistSettlements()`
+using only cash actually collected (summed live from `payments`, never
+from the `preorders.paid_amount` cache, which can drift), prorated across
+a preorder's items/artists by each item's value share — the one genuinely
+non-obvious design decision in this plan, since a naive merge of full
+`preorder_items.line_total` would overcount an unpaid or partially-paid
+preorder's revenue; and a wholly new `GET /reports/preorders` endpoint
+(no prior aggregate existed) grouping by status × payment-completeness.
+See research.md R1–R7 for the full reasoning.
+
+Previous feature: `specs/009-ui-ux-refinements/plan.md` (branch
+`009-ui-ux-refinements`, PR #8 open, not yet merged to `main` as of this
+plan) — login/navbar cleanup, Sales page popup redesign, Artist→Penjual/
+Sellers label rename, guarded Event/Customer delete, customer transaction
+history, Dashboard per-customer stats, stock-by-artist drilldown, and
+removal of the Settings Data Backup section. See that plan for the
+`Customer::orders()/preorders()` and `Event::preorders()` relations it
+introduced, and the `group_by=customer` addition to `GET /reports/sales`
+that `010`'s `sales()` preorder-merge work builds on top of.
+
+Previous feature: `specs/008-android-installer/plan.md` (branch
 `008-android-installer`) — a **fully standalone** Android tablet build of
 BoothPOS: the entire existing PHP/Laravel + Vue app runs unmodified,
 on-device, with zero network dependency for core operation — NOT a thin

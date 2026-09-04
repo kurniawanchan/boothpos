@@ -78,7 +78,7 @@ watch(
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(item, idx) in tx.items" :key="idx" class="border-t border-line-5">
+              <tr v-for="(item, idx) in tx.items" :key="idx" class="border-t border-line-5 transition-colors hover:bg-line-7">
                 <td class="px-3 py-1.5 font-mono">{{ item.sku }}</td>
                 <td class="px-3 py-1.5">{{ item.name }}</td>
                 <td class="px-3 py-1.5 text-right">{{ item.qty }}</td>

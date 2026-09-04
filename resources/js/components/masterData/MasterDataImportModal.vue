@@ -217,7 +217,7 @@ const isDone = computed(() => !!result.value?.applied);
               </tr>
             </thead>
             <tbody>
-              <tr v-for="(e, i) in rejected.errors" :key="i" class="border-t border-line-5 align-top">
+              <tr v-for="(e, i) in rejected.errors" :key="i" class="border-t border-line-5 align-top transition-colors hover:bg-line-7">
                 <td class="px-3 py-2">{{ e.sheet ?? '—' }}</td>
                 <td class="px-3 py-2 font-mono">{{ e.row ?? '—' }}</td>
                 <td class="px-3 py-2 font-mono">{{ e.column ?? '—' }}</td>

@@ -104,7 +104,7 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
               </tr>
             </thead>
             <tbody>
-              <tr v-for="v in product.variants" :key="v.id" class="border-t border-line-5">
+              <tr v-for="v in product.variants" :key="v.id" class="border-t border-line-5 transition-colors hover:bg-line-7">
                 <td class="px-3 py-2 font-mono text-[12px]">{{ v.sku }}</td>
                 <td class="px-3 py-2">{{ v.variant_name }}</td>
                 <td class="px-3 py-2 text-right">{{ formatIDR(v.sell_price) }}</td>

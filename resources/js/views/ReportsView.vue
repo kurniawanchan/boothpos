@@ -10,6 +10,7 @@ import {
   artistProfitReport,
   purchasesReport,
   stockByArtistReport,
+  preorderReport,
   recordSettlementPayment,
   exportReport,
 } from '../api/reports';
@@ -43,6 +44,7 @@ const profit = ref(null);
 const artistProfit = ref(null);
 const purchases = ref(null);
 const stockByArtist = ref(null);
+const preorderStats = ref(null);
 const artists = ref([]);
 const purchasesStatusFilter = ref('');
 const stockArtistFilter = ref('');
@@ -68,6 +70,12 @@ const tabs = computed(() =>
         // dan stok gudang bukan konsep per-event seperti tiga tab di atas.
         { key: 'purchases', label: t('reports.tab_purchases') },
         { key: 'stock-by-artist', label: t('reports.tab_stock_by_artist') },
+        // 010-split-payment-preorder-reports (US6) — laporan pre-order baru,
+        // event_id-nya OPSIONAL di backend (bukan wajib seperti tiga tab
+        // event-scoped di atas), jadi tab ini sengaja TIDAK dimasukkan ke
+        // EVENT_SCOPED_TABS (yang menahan pemuatan sampai eventId terisi) —
+        // filter event di sini hanya mempersempit, bukan prasyarat.
+        { key: 'preorder', label: t('reports.tab_preorder') },
       ]
     : []
 );
@@ -76,6 +84,24 @@ const tabs = computed(() =>
 // di bawah supaya tab tanpa event (purchases/stock-by-artist) tidak ikut
 // menunggu eventId ter-set lebih dulu.
 const EVENT_SCOPED_TABS = ['settlement', 'profit', 'artist-profit'];
+
+// 010-split-payment-preorder-reports (US6, T036) — REUSE PreordersView.vue's
+// exact status-label keys (preorders.step_* + events_sessions.status_cancelled)
+// instead of inventing new wording, per the constraint to keep status copy
+// consistent across the app.
+const PREORDER_STATUS_LABEL = computed(() => ({
+  ordered: t('preorders.step_ordered'),
+  dp_paid: t('preorders.step_dp_paid'),
+  arrived: t('preorders.step_arrived'),
+  settled: t('preorders.step_settled'),
+  handed_over: t('preorders.step_handed_over'),
+  cancelled: t('events_sessions.status_cancelled'),
+}));
+const PAYMENT_COMPLETENESS_LABEL = computed(() => ({
+  unpaid: t('reports.preorder_completeness_unpaid'),
+  partial: t('reports.preorder_completeness_partial'),
+  paid: t('reports.preorder_completeness_paid'),
+}));
 
 onMounted(async () => {
   events.value = (await listEvents({ per_page: 100 })).data;
@@ -106,6 +132,15 @@ async function loadActiveTab() {
     } else if (activeTab.value === 'stock-by-artist') {
       const res = await stockByArtistReport({ artist_id: stockArtistFilter.value || undefined });
       stockByArtist.value = res.data;
+    } else if (activeTab.value === 'preorder') {
+      const res = await preorderReport({ event_id: eventId.value || undefined });
+      // BUG YANG DITEMUKAN & DIPERBAIKI (010-split-payment-preorder-reports, verifikasi browser):
+      // baris laporan ini tidak punya field `id`, sedangkan DataTable.vue memakai
+      // `row[rowKey]` (default 'id') sebagai :key v-for — tanpa id, setiap baris
+      // ber-key `undefined` dan Vue salah mengenali baris sebagai satu node yang
+      // sama, sehingga sebagian baris (mis. status dp_paid) tidak tampil dan baris
+      // lain menampilkan data yang salah. Diperbaiki dengan composite key sintetis.
+      preorderStats.value = res.rows.map((row) => ({ ...row, id: `${row.status}__${row.payment_completeness}` }));
     }
   } finally {
     loading.value = false;
@@ -175,7 +210,26 @@ function openArtistTransactions(row) {
           {{ t.label }}
         </button>
       </div>
-      <BaseSelect v-if="EVENT_SCOPED_TABS.includes(activeTab)" class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
+      <!-- BUG YANG DITEMUKAN & DIPERBAIKI (010-split-payment-preorder-reports,
+           verifikasi browser): BaseSelect's `:placeholder` hanya teks tampilan
+           saat kosong, BUKAN opsi yang bisa dipilih ulang untuk mengosongkan
+           `eventId` — semua tab EVENT_SCOPED_TABS lain memang mewajibkan satu
+           event (ada EmptyState kalau eventId kosong), jadi celah ini baru
+           kelihatan di tab Pre-order, satu-satunya tab yang boleh eventId
+           kosong (preorder boleh tidak terikat event). Tanpa opsi "All events"
+           eksplisit, pengguna tidak bisa kembali ke tampilan semua-event
+           setelah memilih satu event. -->
+      <BaseSelect
+        v-if="EVENT_SCOPED_TABS.includes(activeTab) || activeTab === 'preorder'"
+        class="w-56"
+        v-model="eventId"
+        :placeholder="t('reports.all_events')"
+        :options="
+          activeTab === 'preorder'
+            ? [{ value: '', label: t('reports.all_events') }, ...events.map((e) => ({ value: e.id, label: e.name }))]
+            : events.map((e) => ({ value: e.id, label: e.name }))
+        "
+      />
       <BaseSelect
         v-else-if="activeTab === 'purchases'"
         class="w-56"
@@ -344,6 +398,33 @@ function openArtistTransactions(row) {
           row-key="artist_id"
           :empty-message="t('reports.no_stock_data')"
         />
+      </div>
+    </template>
+
+    <!-- Preorder tab (010-split-payment-preorder-reports US6) — satu baris
+         per kombinasi status × payment_completeness, persis seperti bentuk
+         agregasi yang dikembalikan API (lihat research.md R6). -->
+    <template v-else-if="activeTab === 'preorder'">
+      <div class="overflow-hidden rounded-card border border-line-2 bg-white">
+        <DataTable
+          :columns="[
+            { key: 'status', label: t('reports.col_status') },
+            { key: 'payment_completeness', label: t('reports.preorder_col_payment_completeness') },
+            { key: 'preorder_count', label: t('reports.preorder_col_count') },
+            { key: 'total_order_value', label: t('reports.preorder_col_order_value') },
+            { key: 'total_collected', label: t('reports.preorder_col_collected') },
+            { key: 'total_outstanding', label: t('reports.preorder_col_outstanding') },
+          ]"
+          :rows="preorderStats ?? []"
+          :loading="loading"
+          :empty-message="t('reports.no_preorder_report_data')"
+        >
+          <template #cell-status="{ row }">{{ PREORDER_STATUS_LABEL[row.status] ?? row.status }}</template>
+          <template #cell-payment_completeness="{ row }">{{ PAYMENT_COMPLETENESS_LABEL[row.payment_completeness] ?? row.payment_completeness }}</template>
+          <template #cell-total_order_value="{ row }">{{ formatIDR(row.total_order_value) }}</template>
+          <template #cell-total_collected="{ row }">{{ formatIDR(row.total_collected) }}</template>
+          <template #cell-total_outstanding="{ row }">{{ formatIDR(row.total_outstanding) }}</template>
+        </DataTable>
       </div>
     </template>
 

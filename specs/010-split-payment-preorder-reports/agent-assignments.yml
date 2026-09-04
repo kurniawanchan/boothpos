@@ -1,0 +1,158 @@
+# Agent Assignments
+# Feature: 010-split-payment-preorder-reports
+# Generated: 2026-09-04
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "architect"
+    source: "user"
+    description: "Technical design docs, ADRs, C4 descriptions, API/OpenAPI references"
+  - name: "backend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors server-side code (Go, Python, Java, Node, Rust, C#, Ruby)"
+  - name: "claire"
+    source: "user"
+    description: "Jira Delivery Specialist — creates/refines/reviews Jira tickets"
+  - name: "frontend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors client-side/UI code (Vue, React, Svelte, Angular)"
+  - name: "pm"
+    source: "user"
+    description: "Pulls requirements into PRDs; decomposes design docs into Jira tickets"
+  - name: "qa"
+    source: "user"
+    description: "Test planning/strategy, scaffolds runnable tests, API test automation"
+  - name: "reviewer"
+    source: "user"
+    description: "Code/security review, PR/diff audits"
+  - name: "sre"
+    source: "user"
+    description: "Release readiness and incident postmortems"
+
+assignments:
+  T001:
+    agent: "default"
+    reason: "Environment go/no-go check, no code change"
+  T002:
+    agent: "frontend-engineer"
+    reason: "Vue component template/logic change (PaymentPanel.vue)"
+  T003:
+    agent: "frontend-engineer"
+    reason: "vue-i18n locale JSON files"
+  T004:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T005:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T006:
+    agent: "frontend-engineer"
+    reason: "Vue component logic change (PaymentPanel.vue record mode)"
+  T007:
+    agent: "frontend-engineer"
+    reason: "Vue component logic (RecordPaymentModal.vue sequential calls)"
+  T008:
+    agent: "frontend-engineer"
+    reason: "Vue component state/UI for per-entry submission progress"
+  T009:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T010:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T011:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T012:
+    agent: "frontend-engineer"
+    reason: "Vue component (DataTable.vue) CSS class change"
+  T013:
+    agent: "frontend-engineer"
+    reason: "Vue component (VariantBomModal.vue) CSS class change"
+  T014:
+    agent: "frontend-engineer"
+    reason: "Vue component (ArtistTransactionsModal.vue) CSS class change"
+  T015:
+    agent: "frontend-engineer"
+    reason: "Vue component (MasterDataImportModal.vue) CSS class change"
+  T016:
+    agent: "frontend-engineer"
+    reason: "Vue component (ProductDetailModal.vue) CSS class change"
+  T017:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T018:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T019:
+    agent: "frontend-engineer"
+    reason: "New Vue component (PreorderPaymentReceiptModal.vue)"
+  T020:
+    agent: "frontend-engineer"
+    reason: "Vue view — new action wiring (PreordersView.vue)"
+  T021:
+    agent: "frontend-engineer"
+    reason: "vue-i18n locale JSON files"
+  T022:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T023:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T024:
+    agent: "backend-engineer"
+    reason: "Laravel controller/query extension (ReportController::sales)"
+  T025:
+    agent: "backend-engineer"
+    reason: "Laravel controller/query extension (ReportController::profit)"
+  T026:
+    agent: "backend-engineer"
+    reason: "Laravel service extension (SettlementService)"
+  T027:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T028:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T029:
+    agent: "backend-engineer"
+    reason: "API contract doc update owned alongside the backend query change"
+  T030:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T031:
+    agent: "backend-engineer"
+    reason: "Laravel controller/query — new report endpoint"
+  T032:
+    agent: "backend-engineer"
+    reason: "Laravel route definition"
+  T033:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/ (new file)"
+  T034:
+    agent: "frontend-engineer"
+    reason: "JS API client function (reports.js)"
+  T035:
+    agent: "frontend-engineer"
+    reason: "Vue view — new report tab UI"
+  T036:
+    agent: "frontend-engineer"
+    reason: "vue-i18n locale JSON files"
+  T037:
+    agent: "backend-engineer"
+    reason: "API contract doc update owned alongside the backend route change"
+  T038:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T039:
+    agent: "backend-engineer"
+    reason: "Runs php artisan test full suite"
+  T040:
+    agent: "frontend-engineer"
+    reason: "Runs npm test full Vitest suite"
+  T041:
+    agent: "default"
+    reason: "End-to-end manual quickstart validation, not a code-authoring task"
+  T042:
+    agent: "default"
+    reason: "Documentation/README update, cross-cutting"

@@ -33,7 +33,7 @@ defineProps({
         <tr v-else-if="rows.length === 0">
           <td :colspan="columns.length" class="px-4 py-12 text-center text-[13px] text-muted-3">{{ emptyMessage || t('common.no_data') }}</td>
         </tr>
-        <tr v-for="row in rows" v-else :key="row[rowKey]" class="border-b border-line-5 last:border-b-0">
+        <tr v-for="row in rows" v-else :key="row[rowKey]" class="border-b border-line-5 last:border-b-0 transition-colors hover:bg-line-7">
           <td v-for="col in columns" :key="col.key" class="px-4 py-3.5 align-middle text-[13.5px]">
             <slot :name="`cell-${col.key}`" :row="row">{{ row[col.key] }}</slot>
           </td>

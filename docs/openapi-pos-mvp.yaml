@@ -1921,6 +1921,15 @@ paths:
     get:
       tags: [Report]
       summary: Laporan penjualan
+      description: |
+        010-split-payment-preorder-reports (US5) — totals dan setiap baris
+        `rows[]` sejak fitur ini kini juga memuat pendapatan yang DIAKUI
+        dari Pre-order, digabung ke angka penjualan Order biasa. "Diakui"
+        berarti dibatasi pada uang yang benar-benar terkumpul di
+        `payments` (bukan nilai penuh pre-order), diproporsikan ke tiap
+        item sesuai porsi `line_total`-nya terhadap subtotal pre-order;
+        pre-order berstatus `cancelled` selalu menyumbang nol. Bentuk
+        respons tidak berubah, hanya nilainya lebih lengkap.
       parameters:
         - { name: event_id, in: query, schema: { type: integer } }
         - { name: date_from, in: query, schema: { type: string, format: date } }
@@ -1941,6 +1950,13 @@ paths:
         Laba kotor dihitung dari nilai snapshot pada `order_items`, bukan
         harga master saat laporan dibuka. Laba bersih mengurangkan
         `event_cost`. Hanya peran owner dan admin.
+
+        010-split-payment-preorder-reports (US5) — `revenue` dan
+        `cost_of_goods` sejak fitur ini juga memuat kontribusi Pre-order:
+        pendapatan yang benar-benar terkumpul (bukan nilai penuh
+        pre-order) beserta `cost_price` yang diproporsikan dengan rasio
+        yang sama, memakai aturan diakui/proporsi yang sama seperti
+        `GET /reports/sales` di atas. Bentuk respons tidak berubah.
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -2056,6 +2072,49 @@ paths:
                         total_stock: { type: integer }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /reports/preorders:
+    get:
+      tags: [Report]
+      summary: Laporan khusus pre-order (010-split-payment-preorder-reports, US6)
+      description: |
+        Laporan baru, terpisah dari `GET /reports/sales`/`profit` — fokus
+        pada STATE pre-order (status × kelengkapan pembayaran), bukan hanya
+        pendapatan yang sudah diakui. Satu baris per kombinasi
+        `status` (`ordered`/`dp_paid`/`arrived`/`settled`/`handed_over`/
+        `cancelled`) × `payment_completeness` (`unpaid`/`partial`/`paid`).
+
+        `total_collected` dihitung live dari `SUM(payments.amount)`
+        (verifikasi bukan `rejected`), bukan cache `preorders.paid_amount`
+        (research.md R1/R6) — sama seperti aturan pengakuan pendapatan yang
+        dipakai `GET /reports/sales`/`profit` untuk pre-order. Pre-order
+        `cancelled` tetap tampil di breakdown status (berbeda dari
+        `sales()`/`profit()` yang menganggapnya menyumbang nol pendapatan).
+
+        Hanya peran owner/admin (`canAccessMenu('reports')`, sama seperti
+        laporan lain di file ini).
+      parameters:
+        - { name: event_id, in: query, schema: { type: integer }, description: 'Filter ke satu event (FR-014).' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
+                        payment_completeness: { type: string, enum: [unpaid, partial, paid] }
+                        preorder_count: { type: integer }
+                        total_order_value: { type: string, example: '1500000.00' }
+                        total_collected: { type: string, example: '500000.00' }
+                        total_outstanding: { type: string, example: '1000000.00' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /reports/artist-settlements:
     get:
       tags: [Report]
@@ -2068,6 +2127,13 @@ paths:
         penjualan sama sekali di event ini (seluruh nilai uang `"0.00"`,
         `total_units` 0, `status` `unpaid`, `id` `null`). Artist nonaktif
         hanya ikut bila punya baris settlement di event ini.
+
+        010-split-payment-preorder-reports (US5) — `total_sales`/
+        `total_units` sejak fitur ini juga memuat kontribusi Pre-order,
+        dihitung ulang dari `preorder_items`/`payments` dengan aturan
+        diakui/proporsi yang sama seperti `GET /reports/sales`
+        (pre-order `cancelled` menyumbang nol). Bentuk respons tidak
+        berubah.
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:

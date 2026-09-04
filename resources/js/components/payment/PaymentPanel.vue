@@ -70,7 +70,22 @@ const entriesTotal = computed(() => entries.value.reduce((sum, e) => sum + parse
 // is counted — this is what the current entry's inputs are validated
 // against, and what's shown as the running balance banner.
 const remainingBeforeCurrent = computed(() => Math.max(dueNum.value - entriesTotal.value, 0));
-const isSplitting = computed(() => props.mode === 'checkout' && entries.value.length > 0);
+// 010-split-payment-preorder-reports (US2/T006) — the always-visible split
+// UI and its "covers the remaining balance" math now apply to mode="record"
+// too, not just checkout, so a preorder payment can be split exactly like a
+// POS checkout payment (research.md R2).
+const isSplitting = computed(() => entries.value.length > 0);
+
+// 010-split-payment-preorder-reports (US1/T002, US2/T006) — single source of
+// truth for "will clicking submit finish [the sale|this payment], or just
+// commit a partial entry and keep going". Both the submit-button label and
+// submit() itself read this, so the label can never drift from the actual
+// behavior (research.md R3).
+const coversRemainingBalance = computed(() => {
+  return method.value === 'cash'
+    ? amount.value >= remainingBeforeCurrent.value
+    : remainingBeforeCurrent.value - amount.value <= 0;
+});
 
 const change = computed(() =>
   props.mode === 'checkout' && method.value === 'cash' ? Math.max(amount.value - remainingBeforeCurrent.value, 0) : 0
@@ -147,30 +162,23 @@ function resetCurrentEntryFields() {
 }
 
 /**
- * Checkout mode's single button does double duty: if the current entry
- * doesn't yet cover the whole remaining balance, it's committed to
- * `entries` and the form resets for the next entry (split continues). If
- * it does cover it (or this is the only/last entry), the full entries
- * array is emitted as one `submit` — the cashier never has to press a
- * separate "add" button for the common single-method case.
+ * The single button does double duty in both checkout and record modes: if
+ * the current entry doesn't yet cover the whole remaining balance, it's
+ * committed to `entries` and the form resets for the next entry (split
+ * continues). If it does cover it (or this is the only/last entry), the
+ * full entries array is emitted as one `submit` — the user never has to
+ * press a separate "add" button for the common single-method case.
+ * 010-split-payment-preorder-reports (US2/T006) — mode="record" used to
+ * always emit a single payload immediately; it now accumulates into
+ * `entries[]` exactly like checkout (research.md R2). The caller
+ * (RecordPaymentModal) turns the emitted array into sequential API calls.
  */
 function submit() {
-  if (props.mode !== 'checkout') {
-    if (!canSubmitCurrent.value) return;
-    emit('submit', currentEntryPayload());
-    return;
-  }
-
   if (!canSubmitCurrent.value) return;
 
   const newEntry = currentEntryPayload();
-  const willRemain = remainingBeforeCurrent.value - parseMoney(newEntry.amount);
 
-  // Cash can overpay (change) even on the final entry — anything else
-  // must land exactly on or under the remaining balance to be "complete".
-  const coversBalance = method.value === 'cash' ? amount.value >= remainingBeforeCurrent.value : willRemain <= 0;
-
-  if (coversBalance) {
+  if (coversRemainingBalance.value) {
     emit('submit', [...entries.value, newEntry]);
     return;
   }
@@ -196,6 +204,14 @@ function reset() {
 defineExpose({ reset });
 
 const METHOD_LABELS = { cash: 'pos.method_cash', bank_transfer: 'pos.method_transfer', qr_ewallet: 'pos.method_qris' };
+
+// 010-split-payment-preorder-reports (US1/T002) — the submit button does
+// double duty (see submit() above); its label must say so up front rather
+// than staying on the static submitLabel prop regardless of what the click
+// will actually do.
+const submitButtonLabel = computed(() =>
+  !coversRemainingBalance.value ? t('pos.add_and_continue') : props.submitLabel
+);
 </script>
 
 <template>
@@ -207,9 +223,13 @@ const METHOD_LABELS = { cash: 'pos.method_cash', bank_transfer: 'pos.method_tran
       <span class="text-[24px] font-extrabold tracking-tight text-ink">{{ formatIDR(isSplitting ? remainingBeforeCurrent : dueAmount) }}</span>
     </div>
 
-    <!-- Split payment (US2) — entries already committed for this checkout. -->
-    <div v-if="entries.length" class="flex flex-col gap-1.5 rounded-lg border border-line-3 bg-surface-subtle p-3">
+    <!-- Split payment (US1/US2, 010-split-payment-preorder-reports) — always
+         visible in both checkout and record modes, even before the first
+         entry is committed, so the capability itself is discoverable, not
+         just its result. -->
+    <div class="flex flex-col gap-1.5 rounded-lg border border-line-3 bg-surface-subtle p-3">
       <span class="text-[11px] font-bold uppercase tracking-wider text-muted-3">{{ t('pos.payments_so_far') }}</span>
+      <p v-if="!entries.length" class="text-[12px] leading-relaxed text-muted-3">{{ t('pos.split_payment_hint') }}</p>
       <div v-for="(e, idx) in entries" :key="idx" class="flex items-center justify-between gap-2 text-[12.5px]">
         <span>{{ t(METHOD_LABELS[e.method] ?? e.method) }}</span>
         <div class="flex items-center gap-2">
@@ -262,7 +282,7 @@ const METHOD_LABELS = { cash: 'pos.method_cash', bank_transfer: 'pos.method_tran
 
     <div class="flex flex-col gap-2">
       <BaseButton variant="primary" size="lg" class="w-full" :disabled="!canSubmitCurrent" :loading="submitting || uploading" @click="submit">
-        {{ submitLabel }}
+        {{ submitButtonLabel }}
       </BaseButton>
       <p class="text-center text-[11px] leading-relaxed text-muted-3">
         <template v-if="method === 'cash'">{{ t('pos.cash_no_proof_needed') }}</template>
