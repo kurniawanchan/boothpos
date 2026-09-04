@@ -68,7 +68,8 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('artists', ArtistController::class);
         Route::apiResource('categories', CategoryController::class);
         Route::post('/categories/{category}/image', [CategoryController::class, 'uploadImage']);
-        Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'update']);
+        Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::get('/customers/{customer}/transactions', [CustomerController::class, 'transactions']);
 
         Route::apiResource('products', ProductController::class);
         Route::post('/products/{product}/image', [ProductController::class, 'uploadImage']);

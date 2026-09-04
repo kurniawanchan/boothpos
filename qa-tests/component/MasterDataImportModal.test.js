@@ -120,7 +120,7 @@ describe('MasterDataImportModal', () => {
     await fireEvent.click(screen.getByRole('button', { name: /pratinjau/i }));
 
     expect(await screen.findByText(/belum ada data yang diubah/i)).toBeInTheDocument();
-    expect(screen.getByText('Artist')).toBeInTheDocument();
+    expect(screen.getByText('Penjual')).toBeInTheDocument();
     expect(screen.getByText('+1 baru')).toBeInTheDocument();
     expect(screen.getByText(/catatan toko/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /terapkan impor/i })).toBeInTheDocument();

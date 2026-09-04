@@ -59,13 +59,13 @@ describe('ProductsView — product images & clickable filters', () => {
     renderProducts();
     await screen.findByText('Keychain A');
 
-    await user.click(screen.getByText(/semua artist/i));
+    await user.click(screen.getByText(/semua penjual/i));
     await user.click(await screen.findByRole('option', { name: 'Artist A' }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
 
     // The panel stays open after a selection (multi-select) — pick "All"
     // directly to clear the selection back to unfiltered.
-    await user.click(await screen.findByRole('option', { name: /semua artist/i }));
+    await user.click(await screen.findByRole('option', { name: /semua penjual/i }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.not.objectContaining({ artist_id: expect.anything() })));
   });
 
@@ -75,7 +75,7 @@ describe('ProductsView — product images & clickable filters', () => {
     renderProducts();
     await screen.findByText('Keychain A');
 
-    await user.click(screen.getByText(/semua artist/i));
+    await user.click(screen.getByText(/semua penjual/i));
     await user.click(await screen.findByRole('option', { name: 'Artist A' }));
 
     await user.click(screen.getByText(/semua kategori/i));

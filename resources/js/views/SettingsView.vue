@@ -444,20 +444,6 @@ onMounted(async () => {
       <BaseButton class="self-start" :loading="savingStore" @click="saveStoreIdentity">{{ t('common.save') }}</BaseButton>
     </div>
 
-    <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
-      <span class="text-[15px] font-bold tracking-tight">{{ t('settings.data_backup') }}</span>
-      <div class="flex items-center gap-3 rounded-lg border border-mint-border bg-mint-50 px-3.5 py-3">
-        <i class="ph-duotone ph-hard-drives text-[22px] text-brand" aria-hidden="true"></i>
-        <div class="flex flex-1 flex-col gap-0.5">
-          <span class="text-[13px] font-bold text-brand-active">{{ t('settings.run_from_server_console') }}</span>
-          <span class="text-[11.5px] text-muted-4">{{ t('settings.backup_command_note') }}</span>
-        </div>
-      </div>
-      <p class="text-[11.5px] leading-relaxed text-muted-3">
-        {{ t('settings.backup_files_note') }}
-      </p>
-    </div>
-
     <ConfirmDialog
       :open="pendingMode !== null"
       :title="t('settings.system_mode_section_title')"

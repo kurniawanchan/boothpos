@@ -2,7 +2,7 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listEvents, createEvent, updateEvent, updateEventStatus } from '../api/events';
+import { listEvents, createEvent, updateEvent, updateEventStatus, deleteEvent } from '../api/events';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { formatIDR, toMoneyString } from '../utils/money';
@@ -15,10 +15,17 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
+import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 
 const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
+
+// Event delete is owner/admin only server-side (EventPolicy::delete) —
+// menu_keys("settings") is broader (also gates create/edit/status), so
+// mirror PreordersView's isOwnerOrAdmin computed rather than reusing
+// canAccessMenu('settings') for this specific control.
+const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));
 
 const { items, meta, params, loading, load, setPage, setFilter } = usePaginatedList(listEvents);
 onMounted(load);
@@ -105,6 +112,30 @@ async function transition(event, status) {
     // oleh interceptor bersama — pesan servernya sudah cukup jelas.
   }
 }
+
+const showDelete = ref(false);
+const deleteTarget = ref(null);
+const deleting = ref(false);
+
+function confirmDelete(event) {
+  deleteTarget.value = event;
+  showDelete.value = true;
+}
+
+async function performDelete() {
+  deleting.value = true;
+  try {
+    await deleteEvent(deleteTarget.value.id);
+    toast.success(t('events_sessions.event_deleted'));
+    showDelete.value = false;
+    await load();
+  } catch {
+    // 409 (masih ada transaksi/pre-order) sudah ditoast oleh interceptor
+    // bersama — pesan servernya sudah cukup jelas.
+  } finally {
+    deleting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -143,6 +174,7 @@ async function transition(event, status) {
             <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'active')">{{ t('events_sessions.activate') }}</button>
             <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="transition(row, 'cancelled')">{{ t('events_sessions.cancel_event') }}</button>
             <button v-if="row.status === 'active'" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'closed')">{{ t('events_sessions.close_event') }}</button>
+            <button v-if="isOwnerOrAdmin" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>
@@ -167,5 +199,15 @@ async function transition(event, status) {
         </div>
       </template>
     </BaseModal>
+
+    <ConfirmDialog
+      :open="showDelete"
+      :title="t('events_sessions.delete_event')"
+      :message="t('events_sessions.delete_event_confirm', { name: deleteTarget?.name })"
+      :confirm-label="t('common.delete')"
+      :loading="deleting"
+      @close="showDelete = false"
+      @confirm="performDelete"
+    />
   </div>
 </template>

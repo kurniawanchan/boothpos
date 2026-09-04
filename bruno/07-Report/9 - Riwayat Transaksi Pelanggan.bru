@@ -1,0 +1,24 @@
+meta {
+  name: 9 - Riwayat Transaksi Pelanggan
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{base_url}}/customers/{{customer_id}}/transactions
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("riwayat gabungan order + preorder pelanggan ini (009-ui-ux-refinements US5)", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data).to.be.an("array");
+    const types = res.body.data.map((row) => row.type);
+    expect(types).to.include("order");
+    expect(types).to.include("preorder");
+  });
+}

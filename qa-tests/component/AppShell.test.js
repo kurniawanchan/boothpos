@@ -46,6 +46,56 @@ function sidebarWrapper() {
   return screen.getByRole('navigation', { name: /navigasi utama/i, hidden: true }).parentElement;
 }
 
+describe('AppShell — topbar store name / active event / logout (009-ui-ux-refinements US1)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('renders the storeName and activeEvent passed down to AppTopbar when settings/events resolve them', async () => {
+    const { default: AppTopbar } = await import('../../resources/js/components/layout/AppTopbar.vue');
+    const { render: renderComponent } = await import('@testing-library/vue');
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.user = { id: 1, name: 'Test User', username: 'test', role: 'Owner' };
+    const router = makeRouter();
+    router.push('/dashboard');
+    await router.isReady();
+
+    renderComponent(AppTopbar, {
+      props: {
+        title: 'Beranda',
+        storeName: 'Sakana Fridge',
+        activeEvent: { id: 1, name: 'Comic Frontier 2026' },
+      },
+      global: { plugins: [pinia, router] },
+    });
+
+    expect(screen.getByText('Sakana Fridge')).toBeInTheDocument();
+    expect(screen.getByText('Comic Frontier 2026')).toBeInTheDocument();
+  });
+
+  it('renders the logout button label through the nav.logout i18n key', async () => {
+    const { default: AppTopbar } = await import('../../resources/js/components/layout/AppTopbar.vue');
+    const { render: renderComponent } = await import('@testing-library/vue');
+    const { i18n } = await import('../../resources/js/i18n');
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const auth = useAuthStore();
+    auth.user = { id: 1, name: 'Test User', username: 'test', role: 'Owner' };
+    const router = makeRouter();
+    router.push('/dashboard');
+    await router.isReady();
+
+    i18n.global.locale.value = 'id';
+    renderComponent(AppTopbar, { props: { title: 'Beranda' }, global: { plugins: [pinia, router] } });
+    expect(screen.getByRole('button', { name: /keluar/i })).toBeInTheDocument();
+
+    i18n.global.locale.value = 'en';
+    expect(i18n.global.t('nav.logout')).not.toBe('Keluar');
+  });
+});
+
 describe('AppShell — sidebar show/hide toggle', () => {
   beforeEach(() => {
     localStorage.clear();

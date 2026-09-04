@@ -172,6 +172,26 @@ class ReportDataModeIsolationTest extends TestCase
         ], $owner);
     }
 
+    // 009-ui-ux-refinements (US6/T047) — group_by=customer harus ikut
+    // pola data_mode ini: hand-rolled DB::table() di sales() cabang
+    // 'customer' hanya menyaring via order_items.data_mode yang sudah
+    // ada di $base, jadi order DEMO tidak boleh ikut ter-SUM ke baris
+    // pelanggan LIVE.
+    public function test_sales_report_group_by_customer_never_mixes_demo_into_live(): void
+    {
+        $owner = $this->actingAsOwner();
+        $this->createOrderInMode('live', $owner, 100000);
+        $this->createOrderInMode('demo', $owner, 999999);
+
+        Setting::updateOrCreate(['key' => 'system_mode'], ['value' => 'live', 'type' => 'string', 'group' => 'system']);
+
+        $response = $this->getJson('/api/v1/reports/sales?group_by=customer');
+
+        $response->assertOk();
+        $totalAmountSum = collect($response->json('rows'))->sum(fn ($row) => (float) $row['total_amount']);
+        $this->assertSame(100000.0, $totalAmountSum);
+    }
+
     public function test_preorder_service_rejects_a_customer_id_belonging_to_a_different_mode(): void
     {
         $owner = $this->actingAsOwner();

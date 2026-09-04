@@ -47,6 +47,12 @@ class SettingsController extends Controller
             'theme_accent_color' => Setting::get('theme_accent_color'),
             'receipt_footer_text' => Setting::get('receipt_footer_text'),
             'receipt_show_logo' => filter_var(Setting::get('receipt_show_logo', true), FILTER_VALIDATE_BOOLEAN),
+            // 009-ui-ux-refinements (US1/FR-019) — nama toko untuk navbar,
+            // sama seperti SettingsView::storeNameKey(), key berbeda per
+            // mode ('store_name_demo' vs 'store_name') supaya tidak saling
+            // menimpa. Disurfacekan di sini (bukan hanya GET /settings)
+            // supaya tersedia app-wide tanpa endpoint owner/admin-only.
+            'store_name' => Setting::get(ModeGate::current() === 'demo' ? 'store_name_demo' : 'store_name'),
         ]);
     }
 

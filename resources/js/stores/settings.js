@@ -23,6 +23,7 @@ export const useSettingsStore = defineStore('settings', {
     themeAccentColor: null,
     receiptFooterText: '',
     receiptShowLogo: true,
+    storeName: '',
     loaded: false,
   }),
   getters: {
@@ -40,6 +41,7 @@ export const useSettingsStore = defineStore('settings', {
         this.themeAccentColor = data.theme_accent_color ?? null;
         this.receiptFooterText = data.receipt_footer_text ?? '';
         this.receiptShowLogo = data.receipt_show_logo ?? true;
+        this.storeName = data.store_name ?? '';
         applyThemeAccentColor(this.themeAccentColor);
       } finally {
         this.loaded = true;

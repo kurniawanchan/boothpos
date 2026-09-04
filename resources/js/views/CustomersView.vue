@@ -2,7 +2,8 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listCustomers, createCustomer, updateCustomer } from '../api/customers';
+import { listCustomers, createCustomer, updateCustomer, deleteCustomer } from '../api/customers';
+import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import DataTable from '../components/ui/DataTable.vue';
@@ -11,9 +12,18 @@ import BaseButton from '../components/ui/BaseButton.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
+import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import CustomerTransactionsModal from '../components/customer/CustomerTransactionsModal.vue';
 
+const auth = useAuthStore();
 const toast = useToastStore();
 const { t } = useI18n();
+
+// Customer delete is owner/admin only server-side (CustomerPolicy::delete)
+// — mirrors PreordersView's/EventsView's isOwnerOrAdmin computed since
+// this view has no canAccessMenu gate today (create/edit are open to all
+// roles that can reach the screen).
+const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listCustomers);
 const search = ref('');
@@ -84,6 +94,40 @@ async function saveCustomer() {
     saving.value = false;
   }
 }
+
+const showDelete = ref(false);
+const deleteTarget = ref(null);
+const deleting = ref(false);
+
+function confirmDelete(customer) {
+  deleteTarget.value = customer;
+  showDelete.value = true;
+}
+
+// Read-only, so visible to every role that can reach this screen at all
+// (no isOwnerOrAdmin gate) — same visibility as the existing "edit" action.
+const showTransactions = ref(false);
+const transactionsCustomerId = ref(null);
+
+function openTransactions(customer) {
+  transactionsCustomerId.value = customer.id;
+  showTransactions.value = true;
+}
+
+async function performDelete() {
+  deleting.value = true;
+  try {
+    await deleteCustomer(deleteTarget.value.id);
+    toast.success(t('events_sessions.customer_deleted'));
+    showDelete.value = false;
+    await load();
+  } catch {
+    // 409 (masih ada transaksi/pre-order) sudah ditoast oleh interceptor
+    // bersama — pesan servernya sudah cukup jelas.
+  } finally {
+    deleting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -112,7 +156,11 @@ async function saveCustomer() {
         <template #cell-email="{ row }">{{ row.email || '—' }}</template>
         <template #cell-social_handle="{ row }">{{ row.social_handle || '—' }}</template>
         <template #cell-actions="{ row }">
-          <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openTransactions(row)">{{ t('events_sessions.view_transactions') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button v-if="isOwnerOrAdmin" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
+          </div>
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
@@ -133,5 +181,17 @@ async function saveCustomer() {
         </div>
       </template>
     </BaseModal>
+
+    <CustomerTransactionsModal :open="showTransactions" :customer-id="transactionsCustomerId" @close="showTransactions = false" />
+
+    <ConfirmDialog
+      :open="showDelete"
+      :title="t('events_sessions.delete_customer')"
+      :message="t('events_sessions.delete_customer_confirm', { name: deleteTarget?.name })"
+      :confirm-label="t('common.delete')"
+      :loading="deleting"
+      @close="showDelete = false"
+      @confirm="performDelete"
+    />
   </div>
 </template>

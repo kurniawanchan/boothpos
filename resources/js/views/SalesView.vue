@@ -10,8 +10,7 @@ import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import DataTable from '../components/ui/DataTable.vue';
-import ProductDetailModal from '../components/product/ProductDetailModal.vue';
-import ReceiptModal from '../components/receipt/ReceiptModal.vue';
+import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
@@ -23,7 +22,6 @@ const { t } = useI18n();
 
 const events = ref([]);
 const eventId = ref('');
-const groupBy = ref('product');
 const sales = ref(null);
 const loading = ref(false);
 
@@ -34,12 +32,17 @@ onMounted(async () => {
   await load();
 });
 
-watch([eventId, groupBy], load);
+watch(eventId, load);
 
 async function load() {
   loading.value = true;
   try {
-    sales.value = await salesReport({ event_id: eventId.value || undefined, group_by: groupBy.value });
+    // 009-ui-ux-refinements US2 (T016) — group_by tidak lagi dikirim: tabel
+    // ringkasan per produk/kategori/artist/hari dihapus dari halaman ini,
+    // hanya daftar transaksi mentah yang dipakai sekarang. Backend tetap
+    // default ke 'product' bila parameter ini tak ada (ReportController::sales()),
+    // jadi totals/transactions tidak berubah bentuk.
+    sales.value = await salesReport({ event_id: eventId.value || undefined });
   } finally {
     loading.value = false;
   }
@@ -51,19 +54,6 @@ async function doExport() {
   } catch {
     toast.error(t('reports.export_report_failed'));
   }
-}
-
-// Server supplies the column label per group_by ("Produk"/"Kategori"/"Artist"/"Tanggal")
-// — never hardcode it here, that's the exact bug the user reported.
-const salesColumns = computed(() => [{ key: 'label', label: sales.value?.group_label ?? t('reports.label') }, { key: 'unit_count', label: t('reports.unit') }, { key: 'amount', label: t('reports.amount') }]);
-
-const showProductDetail = ref(false);
-const detailProductId = ref(null);
-
-function openRowDetail(row) {
-  if (groupBy.value !== 'product' || !row.entity_id) return;
-  detailProductId.value = row.entity_id;
-  showProductDetail.value = true;
 }
 
 const transactionColumns = computed(() => [
@@ -100,12 +90,14 @@ const filteredTransactions = computed(() => {
   });
 });
 
-const showReceipt = ref(false);
-const receiptOrderId = ref(null);
+// T017 — klik nomor transaksi tak lagi membuka ReceiptModal (struk cetak),
+// melainkan popup "Produk Terjual" (TransactionItemsModal, T015/T016).
+const showItems = ref(false);
+const itemsOrderId = ref(null);
 
-function openReceipt(transaction) {
-  receiptOrderId.value = transaction.id;
-  showReceipt.value = true;
+function openItems(transaction) {
+  itemsOrderId.value = transaction.id;
+  showItems.value = true;
 }
 
 // Follow-up 2 (FR-023) — klik nama artist adalah pintasan mengisi kotak
@@ -129,16 +121,6 @@ function showCustomerDetail(row) {
   <div class="flex flex-col gap-4 px-[26px] pb-10 pt-5">
     <div class="flex flex-wrap items-center gap-2.5">
       <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
-      <BaseSelect
-        class="w-40"
-        v-model="groupBy"
-        :options="[
-          { value: 'product', label: t('reports.group_by_product') },
-          { value: 'category', label: t('reports.group_by_category') },
-          { value: 'artist', label: t('reports.group_by_artist') },
-          { value: 'day', label: t('reports.group_by_day') },
-        ]"
-      />
       <span class="flex-1"></span>
       <BaseButton variant="secondary" @click="doExport">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
@@ -152,27 +134,11 @@ function showCustomerDetail(row) {
       <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.gross_sales') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.gross_sales ?? 0) }}</span></div>
       <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.net_sales') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.net_sales ?? 0) }}</span></div>
     </div>
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="salesColumns" :rows="sales?.rows ?? []" :loading="loading" :empty-message="t('reports.no_sales_data')">
-        <template #cell-label="{ row }">
-          <button
-            v-if="groupBy === 'product' && row.entity_id"
-            type="button"
-            class="text-left font-semibold text-brand-active underline decoration-dotted hover:text-brand"
-            @click="openRowDetail(row)"
-          >
-            {{ row.label }}
-          </button>
-          <span v-else>{{ row.label }}</span>
-        </template>
-        <template #cell-amount="{ row }">{{ formatIDR(row.amount) }}</template>
-      </DataTable>
-    </div>
 
-    <!-- Daftar transaksi asli — ringkasan per produk di atas mengelompokkan
-         per produk (2 baris bisa mewakili 3 transaksi bila dua di antaranya
-         membeli produk yang sama), jadi daftar ini ditampilkan berdampingan
-         supaya jumlah transaksi selalu bisa diverifikasi langsung. -->
+    <!-- 009-ui-ux-refinements US2 (T016) — daftar transaksi mentah kini
+         konten utama/paling atas halaman ini; tabel ringkasan per
+         produk/kategori/artist/hari (dan selektor group_by-nya) DIHAPUS,
+         bukan disusun ulang, per FR-004/Acceptance Scenario 1. -->
     <div class="flex flex-col gap-2">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <span class="text-[13px] font-bold tracking-tight">{{ t('reports.transaction_list', { count: filteredTransactions.length }) }}</span>
@@ -195,7 +161,7 @@ function showCustomerDetail(row) {
           :empty-message="transactionSearch ? t('reports.no_matching_transactions') : t('reports.no_transactions')"
         >
           <template #cell-order_number="{ row }">
-            <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" @click="openReceipt(row)">{{ row.order_number }}</button>
+            <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" @click="openItems(row)">{{ row.order_number }}</button>
           </template>
           <template #cell-customer_name="{ row }">
             <button
@@ -219,14 +185,13 @@ function showCustomerDetail(row) {
           <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
           <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
           <template #cell-actions="{ row }">
-            <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openReceipt(row)">{{ t('reports.view_receipt') }}</button>
+            <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openItems(row)">{{ t('reports.view_items') }}</button>
           </template>
         </DataTable>
       </div>
     </div>
 
-    <ProductDetailModal :open="showProductDetail" :product-id="detailProductId" @close="showProductDetail = false" />
-    <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" :close-label="t('reports.close')" @close="showReceipt = false" />
+    <TransactionItemsModal :open="showItems" :order-id="itemsOrderId" @close="showItems = false" />
 
     <BaseModal :open="detailCustomer !== null" :title="t('reports.customer_detail')" max-width-class="max-w-[360px]" @close="detailCustomer = null">
       <div v-if="detailCustomer" class="flex flex-col gap-2.5 px-6 py-5 text-[13.5px]">

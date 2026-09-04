@@ -87,7 +87,7 @@ describe('DashboardView — shortcuts, day filter, charts, links', () => {
   it('renders an empty state for the category/artist/event charts when there is no data', async () => {
     await renderDashboard(['dashboard']);
     await screen.findByText('Penjualan per kategori');
-    expect(screen.getByText('Penjualan per artist')).toBeInTheDocument();
+    expect(screen.getByText('Penjualan per penjual')).toBeInTheDocument();
     expect(screen.getByText('Penjualan per event')).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getAllByText(/belum ada penjualan tercatat/i).length).toBeGreaterThanOrEqual(3));

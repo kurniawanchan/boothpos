@@ -60,7 +60,11 @@ class OrderController extends Controller
 
     public function show(Order $order): JsonResponse
     {
-        return response()->json(new OrderResource($order->load(['items', 'payments'])));
+        // items.variant dimuat agar OrderResource bisa menyertakan product_id
+        // per item — dibutuhkan oleh popup "Produk Terjual" di halaman Sales
+        // (009-ui-ux-refinements US2) supaya klik nama produk bisa membuka
+        // ProductDetailModal tanpa endpoint baru.
+        return response()->json(new OrderResource($order->load(['items.variant', 'payments'])));
     }
 
     public function void(Request $request, Order $order): JsonResponse
