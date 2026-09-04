@@ -553,6 +553,128 @@ class ReportTest extends TestCase
     }
 
     // =====================================================================
+    // 009-ui-ux-refinements (US6/T047) — group_by=customer
+    // =====================================================================
+
+    // Agregasi benar lintas beberapa pelanggan/order: dua order Budi (di
+    // hari berbeda) harus digabung jadi satu baris, order walk-in (tanpa
+    // customer_id) muncul sebagai baris tersendiri dengan customer_id null.
+    public function test_sales_report_group_by_customer_aggregates_across_multiple_orders_per_customer(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+        $artist = Artist::factory()->create();
+        $category = Category::factory()->create();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'AAAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
+
+        $budi = Customer::factory()->create(['name' => 'Budi Santoso']);
+        $citra = Customer::factory()->create(['name' => 'Citra Lestari']);
+
+        $orderService = app(OrderService::class);
+
+        // Dua order milik Budi — harus tergabung jadi satu baris.
+        $orderService->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'customer_id' => $budi->id,
+            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 10000]],
+        ], $cashier);
+        $orderService->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'customer_id' => $budi->id,
+            'items' => [['variant_id' => $variant->id, 'qty' => 2]],
+            'payments' => [['method' => 'cash', 'amount' => 20000]],
+        ], $cashier);
+
+        // Satu order Citra.
+        $orderService->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'customer_id' => $citra->id,
+            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 10000]],
+        ], $cashier);
+
+        // Satu order walk-in (tanpa customer_id).
+        $orderService->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 10000]],
+        ], $cashier);
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+
+        $response = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=customer");
+        $response->assertOk();
+
+        $this->assertEquals('Pelanggan', $response->json('group_label'));
+
+        $rows = collect($response->json('rows'))->keyBy('customer_id');
+
+        $this->assertSame(2, $rows[$budi->id]['transaction_count']);
+        $this->assertSame('30000.00', $rows[$budi->id]['total_amount']); // 10000 + 20000
+        $this->assertSame('Budi Santoso', $rows[$budi->id]['customer_name']);
+
+        $this->assertSame(1, $rows[$citra->id]['transaction_count']);
+        $this->assertSame('10000.00', $rows[$citra->id]['total_amount']);
+
+        $walkIn = $rows[null] ?? null;
+        $this->assertNotNull($walkIn, 'baris walk-in (customer_id null) harus tetap muncul');
+        $this->assertSame(1, $walkIn['transaction_count']);
+        $this->assertSame('10000.00', $walkIn['total_amount']);
+        $this->assertNull($walkIn['customer_name']);
+    }
+
+    // Filter rentang tanggal (date_from/date_to) yang sudah dipakai grouping
+    // lain harus tetap berlaku untuk group_by=customer.
+    public function test_sales_report_group_by_customer_respects_date_range_filter(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+
+        $event = Event::factory()->create(['status' => 'active']);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+        $artist = Artist::factory()->create();
+        $category = Category::factory()->create();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'AAAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
+
+        $customer = Customer::factory()->create(['name' => 'Dedi Kurnia']);
+
+        $inRange = app(OrderService::class)->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'customer_id' => $customer->id,
+            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 10000]],
+        ], $cashier);
+        $inRange->forceFill(['created_at' => now()])->save();
+
+        $outOfRange = app(OrderService::class)->create([
+            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
+            'customer_id' => $customer->id,
+            'items' => [['variant_id' => $variant->id, 'qty' => 5]],
+            'payments' => [['method' => 'cash', 'amount' => 50000]],
+        ], $cashier);
+        $outOfRange->forceFill(['created_at' => now()->subDays(10)])->save();
+
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+
+        $today = now()->toDateString();
+        $response = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=customer&date_from={$today}&date_to={$today}");
+
+        $response->assertOk();
+        $rows = collect($response->json('rows'))->keyBy('customer_id');
+
+        $this->assertSame(1, $rows[$customer->id]['transaction_count']);
+        $this->assertSame('10000.00', $rows[$customer->id]['total_amount']);
+    }
+
+    // =====================================================================
     // F9.5 — modal & laba kotor per artist
     // =====================================================================
 

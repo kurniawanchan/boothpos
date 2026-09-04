@@ -1,0 +1,27 @@
+meta {
+  name: 5 - Hapus Event Baru Tanpa Transaksi
+  type: http
+  seq: 5
+}
+post {
+  url: {{base_url}}/events
+  body: json
+  auth: none
+}
+headers { Authorization: Bearer {{owner_token}} }
+body:json {
+  {
+    "name": "Event Sekali Pakai (akan dihapus)",
+    "location": "Gudang Sementara",
+    "start_date": "2026-11-01",
+    "end_date": "2026-11-02"
+  }
+}
+script:post-response {
+  if (res.status === 201) { bru.setVar("throwaway_event_id", res.body.id); }
+}
+tests {
+  test("event sekali-pakai dibuat, tanpa order/preorder", function () {
+    expect(res.status).to.equal(201);
+  });
+}

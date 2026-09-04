@@ -1,0 +1,20 @@
+meta {
+  name: 11 - Hapus Pelanggan Sekali Pakai (berhasil)
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{base_url}}/customers/{{throwaway_customer_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("hapus pelanggan tanpa transaksi berhasil 204 (009-ui-ux-refinements US4)", function () {
+    expect(res.status).to.equal(204);
+  });
+}

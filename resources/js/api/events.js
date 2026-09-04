@@ -19,3 +19,7 @@ export function updateEvent(id, payload) {
 export function updateEventStatus(id, status) {
   return client.patch(`/events/${id}/status`, { status }).then((r) => r.data);
 }
+
+export function deleteEvent(id) {
+  return client.delete(`/events/${id}`);
+}

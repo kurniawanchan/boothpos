@@ -40,6 +40,10 @@ const dateTo = ref('');
 const categoryReport = ref(null);
 const artistChartReport = ref(null);
 const eventReport = ref(null);
+// US6 (T048/T049) — statistik per pelanggan, mengikuti filter tanggal
+// yang sama dengan panel "Penjualan per hari" (bukan filter terpisah,
+// sesuai FR-016/acceptance scenario 3).
+const customerReport = ref(null);
 
 // US2 (FR-007) — shortcut aksi umum, digerbang menu_keys yang sama persis
 // dengan yang sudah dipakai AppSidebar.vue (Constitution IV: server sudah
@@ -61,6 +65,19 @@ async function loadSalesPanel() {
     date_to: dateTo.value || undefined,
   });
   sales.value = res;
+}
+
+// US6 (T048/T049) — R8: group_by=customer di endpoint sales report yang
+// sama, diskop event aktif + filter tanggal yang sama seperti panel
+// "Penjualan per hari" di atas.
+async function loadCustomerPanel() {
+  const res = await salesReport({
+    event_id: activeEvent.value?.id,
+    group_by: 'customer',
+    date_from: dateFrom.value || undefined,
+    date_to: dateTo.value || undefined,
+  });
+  customerReport.value = res;
 }
 
 async function loadBreakdownCharts() {
@@ -100,13 +117,19 @@ onMounted(async () => {
       tasks.push(profitReport(eventId).then((r) => (profit.value = r)));
       tasks.push(artistSettlements(eventId).then((r) => (settlements.value = r.data)));
     }
+    if (auth.canAccessMenu('reports')) {
+      tasks.push(loadCustomerPanel());
+    }
     await Promise.allSettled(tasks);
   } finally {
     loading.value = false;
   }
 });
 
-watch([dateFrom, dateTo], loadSalesPanel);
+watch([dateFrom, dateTo], () => {
+  loadSalesPanel();
+  if (auth.canAccessMenu('reports')) loadCustomerPanel();
+});
 
 const maxDayAmount = computed(() => Math.max(1, ...(sales.value?.rows ?? []).map((r) => parseMoney(r.amount))));
 const maxSettlement = computed(() => Math.max(1, ...settlements.value.map((s) => parseMoney(s.total_sales))));
@@ -129,6 +152,25 @@ function chartDataFromRows(rows) {
 const categoryChartData = computed(() => chartDataFromRows(categoryReport.value?.rows));
 const artistChartData = computed(() => chartDataFromRows(artistChartReport.value?.rows));
 const eventChartData = computed(() => chartDataFromRows(eventReport.value?.rows));
+
+// US6 (T048) — bentuk baris group_by=customer beda dari grouping lain
+// (customer_id/customer_name/total_amount, bukan entity_id/label/amount,
+// lihat CLAUDE.md & ReportController), jadi dipetakan terpisah alih-alih
+// memaksakannya lewat chartDataFromRows(). customer_name null berarti
+// pembeli walk-in (LEFT JOIN customers), bukan baris yang harus hilang.
+const customerChartData = computed(() => {
+  const list = customerReport.value?.rows ?? [];
+  return {
+    labels: list.map((r) => r.customer_name ?? t('dashboard.customer_walk_in')),
+    datasets: [
+      {
+        data: list.map((r) => parseMoney(r.total_amount)),
+        backgroundColor: list.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+        borderWidth: 0,
+      },
+    ],
+  };
+});
 
 const chartOptions = {
   responsive: true,
@@ -281,6 +323,40 @@ const doughnutOptions = {
         <EmptyState v-if="!loading && !eventReport?.rows?.length" icon="ph-chart-bar" :message="t('dashboard.no_sales_recorded')" />
         <div v-else class="h-[190px]"><Bar :data="eventChartData" :options="chartOptions" /></div>
         <RouterLink :to="{ name: 'events' }" class="self-start text-[12px] font-semibold text-brand-active hover:underline">{{ t('dashboard.view_events') }} →</RouterLink>
+      </div>
+    </div>
+
+    <!-- US6 (T048/T049) — statistik per pelanggan: tabel + chart, mengikuti
+         filter tanggal dateFrom/dateTo yang sama seperti panel "Penjualan
+         per hari" di atas (FR-016). Digerbang canAccessMenu('reports')
+         sama seperti panel analitik lain di Dashboard ini. -->
+    <div v-if="auth.canAccessMenu('reports')" class="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <div class="flex flex-col gap-3 rounded-card border border-line-2 bg-white p-5">
+        <span class="text-[14.5px] font-bold">{{ t('dashboard.customer_statistics') }}</span>
+        <EmptyState v-if="!loading && !customerReport?.rows?.length" icon="ph-users-three" :message="t('dashboard.no_customer_data')" />
+        <div v-else class="overflow-x-auto">
+          <table class="w-full text-left text-[12.5px]">
+            <thead>
+              <tr class="border-b border-line-6 text-[11px] font-semibold uppercase text-muted-3">
+                <th class="py-2 pr-2">{{ t('dashboard.customer_name') }}</th>
+                <th class="py-2 pr-2 text-right">{{ t('dashboard.customer_transaction_count') }}</th>
+                <th class="py-2 text-right">{{ t('dashboard.customer_total_amount') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in customerReport?.rows ?? []" :key="row.customer_id ?? 'walk-in'" class="border-b border-line-6 last:border-b-0">
+                <td class="py-2 pr-2 font-semibold">{{ row.customer_name ?? t('dashboard.customer_walk_in') }}</td>
+                <td class="py-2 pr-2 text-right">{{ row.transaction_count }}</td>
+                <td class="py-2 text-right font-bold text-brand-active">{{ formatIDR(row.total_amount) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="flex flex-col gap-3 rounded-card border border-line-2 bg-white p-5">
+        <span class="text-[14.5px] font-bold">{{ t('dashboard.customer_statistics') }}</span>
+        <EmptyState v-if="!loading && !customerReport?.rows?.length" icon="ph-users-three" :message="t('dashboard.no_customer_data')" />
+        <div v-else class="h-[220px]"><Doughnut :data="customerChartData" :options="doughnutOptions" /></div>
       </div>
     </div>
 

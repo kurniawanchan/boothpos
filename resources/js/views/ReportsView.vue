@@ -14,7 +14,6 @@ import {
   recordSettlementPayment,
   exportReport,
 } from '../api/reports';
-import { listArtists } from '../api/artists';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
@@ -23,6 +22,7 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import ArtistTransactionsModal from '../components/report/ArtistTransactionsModal.vue';
+import StockByArtistDetailModal from '../components/report/StockByArtistDetailModal.vue';
 
 // Tab "Penjualan" dikeluarkan menjadi halaman/menu tersendiri (SalesView.vue)
 // — laporan penjualan terbuka untuk semua peran, sedangkan ketiga tab yang
@@ -47,7 +47,6 @@ const stockByArtist = ref(null);
 const preorderStats = ref(null);
 const artists = ref([]);
 const purchasesStatusFilter = ref('');
-const stockArtistFilter = ref('');
 const loading = ref(false);
 
 // Digerbang di sini JUGA (bukan cuma meta.roles di router) — pola
@@ -107,13 +106,11 @@ onMounted(async () => {
   events.value = (await listEvents({ per_page: 100 })).data;
   const active = events.value.find((e) => e.status === 'active');
   eventId.value = active?.id ?? events.value[0]?.id ?? '';
-  artists.value = (await listArtists({ per_page: 100 })).data;
   await loadActiveTab();
 });
 
 watch([eventId, activeTab], loadActiveTab);
 watch([purchasesStatusFilter], () => { if (activeTab.value === 'purchases') loadActiveTab(); });
-watch([stockArtistFilter], () => { if (activeTab.value === 'stock-by-artist') loadActiveTab(); });
 
 async function loadActiveTab() {
   if (EVENT_SCOPED_TABS.includes(activeTab.value) && !eventId.value) return;
@@ -130,7 +127,11 @@ async function loadActiveTab() {
     } else if (activeTab.value === 'purchases') {
       purchases.value = await purchasesReport({ status: purchasesStatusFilter.value || undefined });
     } else if (activeTab.value === 'stock-by-artist') {
-      const res = await stockByArtistReport({ artist_id: stockArtistFilter.value || undefined });
+      // Tanpa artist_id — respons ringkasan (array per-penjual) tidak
+      // berubah, per research.md R9. Detail per-varian hanya diambil saat
+      // baris diklik (lihat openStockDetail / StockByArtistDetailModal),
+      // BUKAN dieksekusi eagerly untuk semua penjual sekaligus.
+      const res = await stockByArtistReport();
       stockByArtist.value = res.data;
     } else if (activeTab.value === 'preorder') {
       const res = await preorderReport({ event_id: eventId.value || undefined });
@@ -193,6 +194,17 @@ function openArtistTransactions(row) {
   artistTransactionsTarget.value = row;
   showArtistTransactions.value = true;
 }
+
+// US7 (009-ui-ux-refinements) — drill-down varian per penjual dari tab
+// "Stok per Penjual", dipicu HANYA saat baris diklik (lihat
+// StockByArtistDetailModal untuk pemanggilan endpoint on-demand-nya).
+const showStockDetail = ref(false);
+const stockDetailTarget = ref(null);
+
+function openStockDetail(row) {
+  stockDetailTarget.value = row;
+  showStockDetail.value = true;
+}
 </script>
 
 <template>
@@ -236,13 +248,6 @@ function openArtistTransactions(row) {
         v-model="purchasesStatusFilter"
         :placeholder="t('reports.purchases_all_status')"
         :options="['draft', 'ordered', 'received', 'paid', 'cancelled'].map((s) => ({ value: s, label: t(`purchase_orders.status_${s}`) }))"
-      />
-      <BaseSelect
-        v-else-if="activeTab === 'stock-by-artist'"
-        class="w-56"
-        v-model="stockArtistFilter"
-        :placeholder="t('reports.stock_all_artists')"
-        :options="artists.map((a) => ({ value: a.id, label: a.name }))"
       />
       <span class="flex-1"></span>
       <BaseButton v-if="activeTab === 'settlement'" variant="secondary" @click="doExport('artist-settlements')">
@@ -392,12 +397,19 @@ function openArtistTransactions(row) {
             { key: 'artist_name', label: t('reports.col_artist') },
             { key: 'variant_count', label: t('reports.stock_col_variant_count') },
             { key: 'total_stock', label: t('reports.stock_col_total_stock') },
+            { key: 'actions', label: '' },
           ]"
           :rows="stockByArtist ?? []"
           :loading="loading"
           row-key="artist_id"
           :empty-message="t('reports.no_stock_data')"
-        />
+        >
+          <template #cell-actions="{ row }">
+            <div class="flex justify-end">
+              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openStockDetail(row)">{{ t('reports.stock_detail_action') }}</button>
+            </div>
+          </template>
+        </DataTable>
       </div>
     </template>
 
@@ -448,6 +460,13 @@ function openArtistTransactions(row) {
       :artist-name="artistTransactionsTarget?.artist_name"
       :event-id="eventId"
       @close="showArtistTransactions = false"
+    />
+
+    <StockByArtistDetailModal
+      :open="showStockDetail"
+      :artist-id="stockDetailTarget?.artist_id"
+      :artist-name="stockDetailTarget?.artist_name"
+      @close="showStockDetail = false"
     />
   </div>
 </template>

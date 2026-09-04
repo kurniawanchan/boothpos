@@ -5,17 +5,20 @@ import SalesView from '../../resources/js/views/SalesView.vue';
 import { listEvents } from '../../resources/js/api/events';
 import { salesReport } from '../../resources/js/api/reports';
 import { getProduct } from '../../resources/js/api/products';
-import { getReceipt } from '../../resources/js/api/orders';
+import { getOrder } from '../../resources/js/api/orders';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), exportReport: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ getProduct: vi.fn() }));
-vi.mock('../../resources/js/api/orders', () => ({ getReceipt: vi.fn() }));
+vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn() }));
 
 // This is the actual regression case from the bug report: "Transaksi: 3
 // tapi tabel cuma ada 2 baris" — two of three orders bought the same
 // product, so the per-product aggregate legitimately has 2 rows while
-// there really are 3 transactions. The fix surfaces both, side by side.
+// there really are 3 transactions. 009-ui-ux-refinements US2 removed the
+// per-product aggregate table entirely, so `rows`/`group_label` are no
+// longer rendered — kept in the fixture only because salesReport() still
+// returns them (frontend simply ignores them now).
 const SALES_RESPONSE = {
   event: { id: 1, name: 'Event A' },
   group_by: 'product',
@@ -48,22 +51,47 @@ describe('SalesView', () => {
     salesReport.mockResolvedValue(SALES_RESPONSE);
   });
 
-  it('uses the server-supplied group_label instead of a hardcoded "Label" header', async () => {
+  // 009-ui-ux-refinements US2 — the per-product/category/artist/day summary
+  // table and its group_by selector are gone; the transaction list is the
+  // page's only/primary table now.
+  it('renders no product-summary table, only the transaction list', async () => {
     renderSales();
-    expect(await screen.findByText('Produk')).toBeInTheDocument();
-    expect(screen.queryByText('Label')).not.toBeInTheDocument();
+    await screen.findByText('ORD-001');
+    expect(screen.queryByText('Stiker Holografik')).not.toBeInTheDocument();
+    expect(screen.queryByText('Per produk')).not.toBeInTheDocument();
   });
 
-  it('renders all real transactions even when the per-product breakdown has fewer rows', async () => {
+  it('renders all real transactions', async () => {
     renderSales();
-    await screen.findByText('Stiker Holografik');
+    await screen.findByText('ORD-001');
     expect(screen.getByText(/daftar transaksi \(3\)/i)).toBeInTheDocument();
     expect(screen.getByText('ORD-001')).toBeInTheDocument();
     expect(screen.getByText('ORD-002')).toBeInTheDocument();
     expect(screen.getByText('ORD-003')).toBeInTheDocument();
   });
 
-  it('opens the product detail view when a product-grouped row label is clicked', async () => {
+  it('opens the "products sold" popup (not the receipt) when clicking a transaction number', async () => {
+    getOrder.mockResolvedValue({
+      id: 101,
+      order_number: 'ORD-001',
+      items: [{ id: 1, variant_id: 1, artist_id: 1, product_id: 10, sku_snapshot: 'ABCST0001', name_snapshot: 'Stiker Holografik', qty: 2, sell_price: '30000.00', line_total: '60000.00' }],
+    });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSales();
+    await screen.findByText('ORD-001');
+    await user.click(screen.getByRole('button', { name: 'ORD-001' }));
+    await waitFor(() => expect(getOrder).toHaveBeenCalledWith(101));
+    expect(await screen.findByText('Produk Terjual')).toBeInTheDocument();
+    expect(screen.getAllByText('Stiker Holografik').length).toBeGreaterThan(0);
+  });
+
+  it('opens the product detail view when a product name is clicked inside the products-sold popup', async () => {
+    getOrder.mockResolvedValue({
+      id: 101,
+      order_number: 'ORD-001',
+      items: [{ id: 1, variant_id: 1, artist_id: 1, product_id: 10, sku_snapshot: 'ABCST0001', name_snapshot: 'Stiker Holografik', qty: 2, sell_price: '30000.00', line_total: '60000.00' }],
+    });
     getProduct.mockResolvedValue({
       id: 10,
       name: 'Stiker Holografik',
@@ -78,36 +106,12 @@ describe('SalesView', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderSales();
-    const link = await screen.findByRole('button', { name: 'Stiker Holografik' });
-    await user.click(link);
+    await screen.findByText('ORD-001');
+    await user.click(screen.getByRole('button', { name: 'ORD-001' }));
+    const productLink = await screen.findByRole('button', { name: 'Stiker Holografik' });
+    await user.click(productLink);
     await waitFor(() => expect(getProduct).toHaveBeenCalledWith(10));
     expect(await screen.findByText('Total stok tersedia (semua varian)')).toBeInTheDocument();
-    expect((await screen.findAllByText('12')).length).toBeGreaterThan(0);
-  });
-
-  it('opens the receipt for a transaction row via "Lihat struk"', async () => {
-    getReceipt.mockResolvedValue({
-      order_number: 'ORD-001',
-      store_name: 'Toko A',
-      event_name: 'Event A',
-      created_at: '2026-09-01T10:00:00Z',
-      cashier_name: 'Kasir A',
-      items: [{ name: 'Stiker Holografik', qty: 2, price: '30000.00', line_total: '60000.00', artist_name: 'Nekoyama Studio' }],
-      subtotal: '60000.00',
-      discount_amount: '0.00',
-      total_amount: '60000.00',
-      payment_summary: [],
-      change_amount: '0.00',
-    });
-    const { default: userEvent } = await import('@testing-library/user-event');
-    const user = userEvent.setup();
-    renderSales();
-    const btn = await screen.findAllByRole('button', { name: /lihat struk/i });
-    await user.click(btn[0]);
-    await waitFor(() => expect(getReceipt).toHaveBeenCalledWith(101));
-    expect((await screen.findAllByText('ORD-001')).length).toBeGreaterThan(0);
-    expect(screen.getByText('Toko A')).toBeInTheDocument();
-    expect(screen.getAllByText(/Nekoyama Studio/).length).toBeGreaterThan(0);
   });
 });
 
@@ -166,14 +170,14 @@ describe('SalesView — transaction search (F10.6)', () => {
     expect(screen.getByText('ORD-003')).toBeInTheDocument();
   });
 
-  it('opens the receipt when clicking the transaction number itself', async () => {
-    getReceipt.mockResolvedValue({ order_number: 'ORD-001', store_name: 'Toko A', event_name: 'Event A', created_at: '2026-09-01T10:00:00Z', cashier_name: 'Kasir A', items: [], subtotal: '0', discount_amount: '0', total_amount: '0', payment_summary: [], change_amount: '0' });
+  it('opens the products-sold popup when clicking the transaction number itself', async () => {
+    getOrder.mockResolvedValue({ id: 101, order_number: 'ORD-001', items: [] });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderSales();
     await screen.findByText('ORD-001');
     await user.click(screen.getByRole('button', { name: 'ORD-001' }));
-    await waitFor(() => expect(getReceipt).toHaveBeenCalledWith(101));
+    await waitFor(() => expect(getOrder).toHaveBeenCalledWith(101));
   });
 
   it('shows a customer detail popover when clicking the customer name', async () => {

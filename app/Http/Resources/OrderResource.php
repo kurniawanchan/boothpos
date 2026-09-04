@@ -25,6 +25,11 @@ class OrderResource extends JsonResource
             'created_at' => $this->created_at,
             'items' => $this->whenLoaded('items', fn () => $this->items->map(fn ($i) => [
                 'id' => $i->id, 'variant_id' => $i->variant_id, 'artist_id' => $i->artist_id,
+                // product_id hanya terisi bila relasi variant dimuat (lihat
+                // OrderController::show()) — dibutuhkan popup "Produk Terjual"
+                // di Sales (009-ui-ux-refinements US2) untuk membuka
+                // ProductDetailModal dari klik nama produk.
+                'product_id' => $i->relationLoaded('variant') ? $i->variant?->product_id : null,
                 'sku_snapshot' => $i->sku_snapshot, 'name_snapshot' => $i->name_snapshot,
                 'qty' => $i->qty, 'sell_price' => number_format((float) $i->sell_price, 2, '.', ''),
                 'line_total' => number_format((float) $i->line_total, 2, '.', ''),

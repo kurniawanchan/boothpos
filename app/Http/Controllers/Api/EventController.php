@@ -6,12 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreEventRequest;
 use App\Http\Requests\UpdateEventRequest;
 use App\Models\Event;
+use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class EventController extends Controller
 {
+    public function __construct(private ActivityLogger $activityLogger) {}
+
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Event::class);
@@ -91,5 +95,45 @@ class EventController extends Controller
         }
 
         return response()->json($event->fresh());
+    }
+
+    public function destroy(Request $request, Event $event): JsonResponse
+    {
+        $this->authorize('delete', $event);
+
+        // Guard — event yang pernah punya order/pre-order (status apa pun)
+        // tidak boleh dihapus, mengikuti pola guard hapus Artist/Category
+        // (lihat plan 009-ui-ux-refinements R6). CATATAN: Order/Preorder
+        // TIDAK memakai trait SoftDeletes (dikonfirmasi di kedua model dan
+        // migrasinya, tidak ada kolom deleted_at) — ->withTrashed() akan
+        // fatal error (BadMethodCallException) bila dipanggil di sini,
+        // jadi 'any status' saja sudah setara 'any status, any-trashed'
+        // untuk kedua model ini.
+        $hasTransactions = $event->orders()->exists() || $event->preorders()->exists();
+
+        if ($hasTransactions) {
+            return response()->json([
+                'message' => __('events_sessions.event_delete_has_transactions'),
+            ], 409);
+        }
+
+        // F13.4 — hapus data adalah tindakan sensitif; log ditulis DI DALAM
+        // transaksi yang sama dengan delete-nya (atomik, ikut rollback bersama).
+        DB::transaction(function () use ($event, $request) {
+            $snapshot = $event->only($event->getFillable());
+
+            $event->delete();
+
+            $this->activityLogger->log(
+                userId: $request->user()?->id,
+                action: 'deleted',
+                entityType: 'Event',
+                entityId: $event->id,
+                description: "Menghapus event {$event->name}.",
+                oldValues: $snapshot,
+            );
+        });
+
+        return response()->json(null, 204);
     }
 }

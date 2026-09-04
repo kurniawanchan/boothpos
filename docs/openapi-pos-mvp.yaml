@@ -909,6 +909,18 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Event' }
+    delete:
+      tags: [Event & Session]
+      summary: Hapus event
+      description: |
+        009-ui-ux-refinements (US4). Soft delete, owner/admin saja. Ditolak
+        (409) bila event masih memiliki order atau pre-order (status apa
+        pun) yang mereferensikannya.
+      responses:
+        '204': { description: Berhasil }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /events/{id}/status:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -1600,6 +1612,52 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Customer' }
+    delete:
+      tags: [Master Data]
+      summary: Hapus pelanggan
+      description: |
+        009-ui-ux-refinements (US4). Soft delete, owner/admin saja. Ditolak
+        (409) bila pelanggan masih memiliki order atau pre-order (status
+        apa pun) yang mereferensikannya.
+      responses:
+        '204': { description: Berhasil }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /customers/{id}/transactions:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Master Data]
+      summary: Riwayat transaksi pelanggan
+      description: |
+        009-ui-ux-refinements (US5). Menggabungkan order dan pre-order milik
+        pelanggan menjadi satu daftar ringkas, diurutkan berdasarkan tanggal
+        terbaru. Tier otorisasi baca sama dengan GET /customers (tidak
+        diperluas). `status` untuk order memakai kolom status miliknya
+        sendiri (completed/voided); untuk pre-order memakai kolom status
+        pre-order (ordered/dp_paid/arrived/settled/handed_over/cancelled).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string, enum: [order, preorder] }
+                        id: { type: integer }
+                        number: { type: string }
+                        status: { type: string }
+                        total_amount: { type: string }
+                        date: { type: string, format: date-time }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ------------------------------------------------------------------
   # PRE-ORDER
@@ -1934,7 +1992,7 @@ paths:
         - { name: event_id, in: query, schema: { type: integer } }
         - { name: date_from, in: query, schema: { type: string, format: date } }
         - { name: date_to, in: query, schema: { type: string, format: date } }
-        - { name: group_by, in: query, schema: { type: string, enum: [product, category, artist, day, event], default: product } }
+        - { name: group_by, in: query, schema: { type: string, enum: [product, category, artist, day, event, customer], default: product } }
       responses:
         '200':
           description: Berhasil
@@ -2046,31 +2104,49 @@ paths:
   /reports/stock-by-artist:
     get:
       tags: [Report]
-      summary: Laporan stok per artist (006-purchase-order-and-ops, US10)
+      summary: Laporan stok per artist (006-purchase-order-and-ops, US10; drilldown 009-ui-ux-refinements, US7)
       description: |
         Sumbernya `product_variants` (sudah HasDataMode via join produk),
         dijumlahkan `current_stock` per artist. Tidak diskop event. Hanya
         peran owner dan admin.
+
+        Tanpa `artist_id`: mengembalikan array ringkasan per artist (bentuk
+        lama, tidak berubah). Dengan `artist_id`: mengembalikan detail
+        tingkat variant untuk SATU artist tersebut, dengan join
+        artist→products→variants yang sama satu level lebih dalam
+        (bukan endpoint/query terpisah).
       parameters:
-        - { name: artist_id, in: query, schema: { type: integer } }
+        - name: artist_id
+          in: query
+          description: |
+            Opsional. Bila diisi, respons berganti bentuk menjadi detail
+            satu artist (lihat StockByArtistDetail). 404 bila artist_id
+            tidak ditemukan atau berada di mode DEMO/LIVE yang sedang
+            tidak aktif.
+          schema: { type: integer }
       responses:
         '200':
           description: Berhasil
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        artist_id: { type: integer }
-                        artist_name: { type: string }
-                        variant_count: { type: integer }
-                        total_stock: { type: integer }
+                oneOf:
+                  - type: object
+                    description: Ringkasan seluruh artist (artist_id tidak diisi)
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            artist_id: { type: integer }
+                            artist_name: { type: string }
+                            variant_count: { type: integer }
+                            total_stock: { type: integer }
+                  - $ref: '#/components/schemas/StockByArtistDetail'
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: artist_id tidak ditemukan pada mode DEMO/LIVE yang aktif
 
   /reports/preorders:
     get:
@@ -3046,6 +3122,26 @@ components:
 
   schemas:
 
+    StockByArtistDetail:
+      type: object
+      description: |
+        Bentuk respons GET /reports/stock-by-artist ketika query param
+        artist_id diisi (009-ui-ux-refinements, US7).
+      properties:
+        artist_id: { type: integer }
+        artist_name: { type: string }
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              variant_id: { type: integer }
+              sku: { type: string }
+              variant_name: { type: string, nullable: true }
+              current_stock: { type: integer }
+        variant_count: { type: integer }
+        total_stock: { type: integer }
+
     Error:
       type: object
       properties:
@@ -3870,9 +3966,19 @@ components:
         transaksi berbeda yang membeli produk yang sama menghasilkan dua
         entri `transactions` tapi hanya satu baris `rows` — keduanya
         sama-sama benar, cuma menjawab pertanyaan berbeda.
+
+        009-ui-ux-refinements (US6) — `group_by=customer` dipakai
+        statistik per-pelanggan di Dashboard. Baris untuk grouping ini
+        punya bentuk BERBEDA dari `rows[]` generik di bawah (lihat
+        `SalesReportCustomerRow`): `customer_id`/`customer_name`/
+        `transaction_count`/`total_amount`, bukan
+        `entity_id`/`label`/`unit_count`/`amount` — karena "transaksi"
+        di sini dihitung `COUNT(DISTINCT orders.id)`, bukan
+        `SUM(order_items.qty)`. `customer_id`/`customer_name` bernilai
+        `null` untuk order walk-in (tanpa pelanggan tercatat).
       properties:
         event: { $ref: '#/components/schemas/Event' }
-        group_by: { type: string, enum: [product, category, artist, day, event] }
+        group_by: { type: string, enum: [product, category, artist, day, event, customer] }
         group_label:
           type: string
           description: |
@@ -3890,6 +3996,10 @@ components:
             net_sales: { $ref: '#/components/schemas/Money' }
         rows:
           type: array
+          description: |
+            Bentuk baris berbeda untuk `group_by=customer` — lihat
+            `SalesReportCustomerRow` alih-alih skema inline di bawah,
+            yang berlaku untuk product/category/artist/day/event.
           items:
             type: object
             properties:
@@ -3930,6 +4040,26 @@ components:
                   tidak ada parameter pencarian sisi server yang baru.
               item_count: { type: integer }
               total_amount: { $ref: '#/components/schemas/Money' }
+
+    SalesReportCustomerRow:
+      type: object
+      description: |
+        009-ui-ux-refinements (US6/FR-016) — bentuk `rows[]` saat
+        `group_by=customer` pada `GET /reports/sales`, dipakai statistik
+        per-pelanggan Dashboard. Satu query `GROUP BY orders.customer_id`
+        (Constitution Principle V), bukan loop per-pelanggan.
+      properties:
+        customer_id:
+          type: integer
+          nullable: true
+          description: |
+            `null` untuk order walk-in (orders.customer_id nullable) —
+            baris ini tetap muncul, bukan hilang diam-diam dari laporan.
+        customer_name: { type: string, nullable: true }
+        transaction_count:
+          type: integer
+          description: COUNT(DISTINCT orders.id) untuk pelanggan ini.
+        total_amount: { $ref: '#/components/schemas/Money' }
 
     ProfitReport:
       type: object

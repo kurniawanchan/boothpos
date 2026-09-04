@@ -1,0 +1,21 @@
+meta {
+  name: 7 - Laporan Penjualan per Pelanggan
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{base_url}}/reports/sales?event_id={{event_id}}&group_by=customer
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("group_by=customer tampil, mengagregasi transaksi per pelanggan (009-ui-ux-refinements US6)", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.rows).to.be.an("array");
+  });
+}

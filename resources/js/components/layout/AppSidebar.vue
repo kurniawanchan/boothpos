@@ -15,7 +15,7 @@ const cart = usePosCartStore();
 const { count: cartCount } = storeToRefs(cart);
 
 const props = defineProps({ preorderAlertCount: { type: Number, default: 0 } });
-defineEmits(['logout', 'hide-sidebar']);
+defineEmits(['hide-sidebar']);
 
 // 'menuKey' matches app/Support/MenuKeys.php exactly — this is the one
 // place the sidebar decides visibility, delegating to
@@ -190,31 +190,5 @@ watch(
         </template>
       </li>
     </ul>
-
-    <div class="flex flex-col gap-2.5 border-t border-line-3 p-3">
-      <RouterLink :to="{ name: 'profile' }" class="flex items-center gap-2.5 rounded-md px-1 py-1.5 transition-colors hover:bg-line-7">
-        <img
-          v-if="auth.user?.photo_url"
-          :src="auth.user.photo_url"
-          :alt="auth.user?.name"
-          class="h-[30px] w-[30px] flex-none rounded-full object-cover"
-        />
-        <div v-else class="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-full bg-mint-100 text-[12px] font-bold text-brand-active">
-          {{ (auth.user?.name || '?').slice(0, 2).toUpperCase() }}
-        </div>
-        <div class="flex min-w-0 flex-col">
-          <span class="truncate text-[12.5px] font-semibold">{{ auth.user?.name }} · {{ auth.user?.username }}</span>
-          <span class="text-[11px] capitalize text-muted-3">{{ auth.user?.role }}</span>
-        </div>
-      </RouterLink>
-      <button
-        type="button"
-        class="flex items-center justify-center gap-2 rounded-md border border-line px-3 py-2 text-[12.5px] font-bold text-muted-4 transition-colors hover:border-danger-border-hover hover:bg-danger-bg hover:text-danger-text"
-        @click="$emit('logout')"
-      >
-        <i class="ph-duotone ph-sign-out text-[15px]" aria-hidden="true"></i>
-        Keluar
-      </button>
-    </div>
   </nav>
 </template>

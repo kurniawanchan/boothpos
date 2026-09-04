@@ -16,7 +16,6 @@ const form = reactive({ username: '', password: '' });
 const errors = reactive({ username: '', password: '' });
 const formError = ref('');
 const submitting = ref(false);
-const appHost = window.location.host;
 
 async function onSubmit() {
   errors.username = '';
@@ -54,9 +53,6 @@ async function onSubmit() {
 
         <div class="flex flex-col gap-1.5">
           <h1 class="text-[26px] font-bold tracking-tight">Masuk ke kasir</h1>
-          <p class="text-[14px] leading-relaxed text-muted">
-            Instalasi lokal · <span class="font-mono text-[12.5px]">{{ appHost }}</span>
-          </p>
         </div>
 
         <div class="flex flex-col gap-3.5">
@@ -86,28 +82,14 @@ async function onSubmit() {
     </div>
 
     <div class="hidden flex-col justify-between bg-ink px-10 py-20 md:flex">
-      <span class="text-[12px] font-semibold uppercase tracking-[0.14em] text-mint-accent">BoothPOS · Instalasi lokal</span>
+      <span class="text-[12px] font-semibold uppercase tracking-[0.14em] text-mint-accent">BoothPOS</span>
       <div class="flex flex-col gap-[18px]">
         <h2 class="max-w-[420px] text-[34px] font-bold leading-[1.22] tracking-tight text-white text-balance">
           Kasir tetap jalan walau sinyal venue mati.
         </h2>
         <p class="max-w-[400px] text-[14.5px] leading-relaxed text-dark-muted">
-          Seluruh transaksi terikat ke event aktif, rekap hasil per artist terhitung otomatis saat event ditutup.
+          Seluruh transaksi terikat ke event aktif, rekap hasil per penjual terhitung otomatis saat event ditutup.
         </p>
-      </div>
-      <div class="flex gap-10">
-        <div class="flex flex-col gap-1">
-          <span class="text-[22px] font-bold text-white">&lt; 30 dtk</span>
-          <span class="text-[12px] text-dark-muted-2">per transaksi</span>
-        </div>
-        <div class="flex flex-col gap-1">
-          <span class="text-[22px] font-bold text-white">&lt; 15 mnt</span>
-          <span class="text-[12px] text-dark-muted-2">rekap artist</span>
-        </div>
-        <div class="flex flex-col gap-1">
-          <span class="text-[22px] font-bold text-white">0</span>
-          <span class="text-[12px] text-dark-muted-2">transaksi hilang</span>
-        </div>
       </div>
     </div>
   </div>

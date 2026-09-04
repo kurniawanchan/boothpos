@@ -1,0 +1,224 @@
+# Agent Assignments
+# Feature: 009-ui-ux-refinements
+# Generated: 2026-09-04
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "architect"
+    source: "user"
+    description: "Technical design docs, ADRs, C4 descriptions, API/OpenAPI references"
+  - name: "backend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors server-side code (Go, Python, Java, Node, Rust, C#, Ruby)"
+  - name: "claire"
+    source: "user"
+    description: "Jira Delivery Specialist — creates/refines/reviews Jira tickets"
+  - name: "frontend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors client-side/UI code (Vue, React, Svelte, Angular)"
+  - name: "pm"
+    source: "user"
+    description: "Pulls requirements into PRDs; decomposes design docs into Jira tickets"
+  - name: "qa"
+    source: "user"
+    description: "Test planning/strategy, scaffolds runnable tests, API test automation"
+  - name: "reviewer"
+    source: "user"
+    description: "Code/security review, PR/diff audits"
+  - name: "sre"
+    source: "user"
+    description: "Release readiness and incident postmortems"
+
+assignments:
+  T001:
+    agent: "default"
+    reason: "Environment go/no-go check, no code change"
+  T002:
+    agent: "backend-engineer"
+    reason: "Eloquent relation on app/Models/Customer.php"
+  T003:
+    agent: "backend-engineer"
+    reason: "Eloquent relation on app/Models/Event.php"
+  T004:
+    agent: "backend-engineer"
+    reason: "Laravel policy ability on CustomerPolicy.php"
+  T005:
+    agent: "backend-engineer"
+    reason: "Laravel policy ability on EventPolicy.php"
+  T006:
+    agent: "frontend-engineer"
+    reason: "vue-i18n locale JSON files"
+  T007:
+    agent: "frontend-engineer"
+    reason: "Vue view template edit (LoginView.vue)"
+  T008:
+    agent: "frontend-engineer"
+    reason: "Vue component + live-browser color verification (AppSidebar.vue)"
+  T009:
+    agent: "frontend-engineer"
+    reason: "Vue component refactor moving UI from sidebar to topbar"
+  T010:
+    agent: "frontend-engineer"
+    reason: "vue-i18n wiring on relocated logout button"
+  T011:
+    agent: "frontend-engineer"
+    reason: "New props + state-source lookup in AppTopbar.vue"
+  T012:
+    agent: "frontend-engineer"
+    reason: "Prop plumbing through AppShell.vue"
+  T013:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/, matches qa agent's test-scaffolding scope"
+  T014:
+    agent: "default"
+    reason: "Manual browser verification pass, not a code-authoring task"
+  T015:
+    agent: "frontend-engineer"
+    reason: "New Vue component (TransactionItemsModal.vue)"
+  T016:
+    agent: "frontend-engineer"
+    reason: "Vue view layout reorder (SalesView.vue)"
+  T017:
+    agent: "frontend-engineer"
+    reason: "Vue event-handler rewiring"
+  T018:
+    agent: "frontend-engineer"
+    reason: "Vue component wiring (product-detail popup)"
+  T019:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T020:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T021:
+    agent: "frontend-engineer"
+    reason: "Vue locale JSON value edits"
+  T022:
+    agent: "frontend-engineer"
+    reason: "Vue locale JSON value edits"
+  T023:
+    agent: "backend-engineer"
+    reason: "Laravel lang/ PHP file value edits"
+  T024:
+    agent: "backend-engineer"
+    reason: "Laravel lang/ PHP file value edits"
+  T025:
+    agent: "default"
+    reason: "Cross-cutting grep verification, no single domain"
+  T026:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T027:
+    agent: "backend-engineer"
+    reason: "Laravel controller method (EventController::destroy)"
+  T028:
+    agent: "backend-engineer"
+    reason: "Laravel controller method (CustomerController::destroy)"
+  T029:
+    agent: "backend-engineer"
+    reason: "Laravel route definition"
+  T030:
+    agent: "backend-engineer"
+    reason: "Laravel route definition"
+  T031:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T032:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T033:
+    agent: "frontend-engineer"
+    reason: "JS API client function (events.js)"
+  T034:
+    agent: "frontend-engineer"
+    reason: "JS API client function (customers.js)"
+  T035:
+    agent: "frontend-engineer"
+    reason: "Vue view — role-gated delete action UI"
+  T036:
+    agent: "frontend-engineer"
+    reason: "Vue view — role-gated delete action UI"
+  T037:
+    agent: "backend-engineer"
+    reason: "API contract doc update owned alongside the backend route change (same-commit requirement)"
+  T038:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T039:
+    agent: "backend-engineer"
+    reason: "Laravel controller method (CustomerController::transactions)"
+  T040:
+    agent: "backend-engineer"
+    reason: "Laravel route definition"
+  T041:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T042:
+    agent: "frontend-engineer"
+    reason: "JS API client function (customers.js)"
+  T043:
+    agent: "frontend-engineer"
+    reason: "Vue view — transaction-history UI"
+  T044:
+    agent: "backend-engineer"
+    reason: "API contract doc update owned alongside the backend route change"
+  T045:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T046:
+    agent: "backend-engineer"
+    reason: "Laravel controller/query extension (ReportController::sales)"
+  T047:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T048:
+    agent: "frontend-engineer"
+    reason: "Vue view — Dashboard table + Chart.js panel"
+  T049:
+    agent: "frontend-engineer"
+    reason: "Vue logic — filter wiring"
+  T050:
+    agent: "backend-engineer"
+    reason: "API contract doc update owned alongside the backend query change"
+  T051:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T052:
+    agent: "backend-engineer"
+    reason: "Laravel controller/query extension (ReportController::stockByArtist)"
+  T053:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T054:
+    agent: "frontend-engineer"
+    reason: "Vue view — drilldown popup UI"
+  T055:
+    agent: "backend-engineer"
+    reason: "API contract doc update owned alongside the backend query change"
+  T056:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T057:
+    agent: "frontend-engineer"
+    reason: "Vue view template edit (SettingsView.vue)"
+  T058:
+    agent: "frontend-engineer"
+    reason: "Vue locale JSON key removal"
+  T059:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T060:
+    agent: "default"
+    reason: "Cross-cutting grep verification, no single domain"
+  T061:
+    agent: "backend-engineer"
+    reason: "Runs php artisan test full suite"
+  T062:
+    agent: "frontend-engineer"
+    reason: "Runs npm test full Vitest suite"
+  T063:
+    agent: "default"
+    reason: "End-to-end manual quickstart validation, not a code-authoring task"
+  T064:
+    agent: "default"
+    reason: "Documentation/README update, cross-cutting"
