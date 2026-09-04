@@ -1,0 +1,20 @@
+meta {
+  name: 11 - Hapus Pelanggan Gagal (masih ada transaksi) (negative)
+  type: http
+  seq: 11
+}
+
+delete {
+  url: {{base_url}}/customers/{{customer_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("hapus pelanggan ditolak 409 karena sudah punya order/preorder (009-ui-ux-refinements US4)", function () {
+    expect(res.status).to.equal(409);
+  });
+}

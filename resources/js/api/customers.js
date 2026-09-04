@@ -11,3 +11,11 @@ export function createCustomer(payload) {
 export function updateCustomer(id, payload) {
   return client.put(`/customers/${id}`, payload).then((r) => r.data);
 }
+
+export function deleteCustomer(id) {
+  return client.delete(`/customers/${id}`);
+}
+
+export function customerTransactions(id) {
+  return client.get(`/customers/${id}/transactions`).then((r) => r.data);
+}

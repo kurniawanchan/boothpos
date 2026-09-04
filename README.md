@@ -537,3 +537,30 @@ sama:
    lulus lewat `ArtistDeleteGuardTest`/`CategoryDeleteGuardTest` pada sesi
    ini (bagian dari 120 test yang lulus), menutup gap yang disebutkan
    versi README sebelumnya.
+
+## Bug yang ditemukan saat eksekusi fitur 009-ui-ux-refinements (2026-09-04)
+
+Ditemukan lewat verifikasi browser sungguhan (Playwright) terhadap
+`SakanaFridgeDemoSeeder`, BUKAN cuma baca kode — keduanya adalah teks
+UI ber-hardcode yang lolos dari sapuan grep otomatis karena tidak lewat
+mekanisme i18n:
+
+1. **`resources/js/views/LoginView.vue`** — paragraf marketing hardcoded
+   masih menyebut "rekap hasil per **artist**" setelah rename Artist→Penjual
+   (spec 009 US3). Halaman login sengaja TIDAK memakai `vue-i18n` (lihat
+   catatan di kepala file, keputusan dari fitur 002-language-toggle), jadi
+   sapuan grep berbasis `resources/js/locales/*.json` tidak menjangkaunya.
+   Diperbaiki: "artist" → "penjual" langsung di teks Indonesia file
+   tersebut.
+2. **`resources/js/locales/{id,en}.json` kunci `settings_subtitle`** —
+   masih menyebut "cadangan"/"backups" setelah section Data Backup
+   dihapus dari `SettingsView.vue` (spec 009 US8). Subtitle halaman ini
+   adalah string terpisah dari section yang dihapus, jadi tidak ikut
+   terhapus otomatis. Diperbaiki: "Lisensi, kanal pembayaran, identitas
+   toko, cadangan" → "Lisensi, kanal pembayaran, identitas toko" (ID),
+   demikian pula versi EN.
+
+Keduanya baru terlihat lewat pemeriksaan visual layar sungguhan (bukan
+cuma `grep`/test otomatis), sesuai Constitution Principle II — dicatat di
+sini sebagai pengingat bahwa rename/penghapusan section harus disertai
+sapuan visual, tidak cukup sapuan teks pada file locale saja.

@@ -79,7 +79,7 @@ describe('ReportsView — artist transaction drill-down (F11.6)', () => {
     auth.user = { id: 2, role: 'Kasir', name: 'Kasir', menu_keys: ['dashboard', 'pos'] };
     render(ReportsView, { global: { plugins: [pinia] } });
     await screen.findByRole('combobox'); // event selector — always rendered regardless of role
-    expect(screen.queryByText('Rekap Artist')).not.toBeInTheDocument();
+    expect(screen.queryByText('Rekap Penjual')).not.toBeInTheDocument();
   });
 });
 
@@ -104,7 +104,7 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
-    const tab = await screen.findByRole('button', { name: 'Modal Artist' });
+    const tab = await screen.findByRole('button', { name: 'Modal Penjual' });
     await user.click(tab);
     await waitFor(() => expect(artistProfitReport).toHaveBeenCalledWith(1));
     expect(await screen.findByText('Artist A')).toBeInTheDocument();
@@ -115,7 +115,7 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
-    await user.click(await screen.findByRole('button', { name: 'Modal Artist' }));
+    await user.click(await screen.findByRole('button', { name: 'Modal Penjual' }));
     expect(await screen.findByText(/belum dikurangi biaya event/i)).toBeInTheDocument();
   });
 
@@ -126,6 +126,6 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
     auth.user = { id: 3, role: 'Inventory', name: 'Gudang', menu_keys: ['dashboard', 'products', 'stock'] };
     render(ReportsView, { global: { plugins: [pinia] } });
     await screen.findByRole('combobox'); // event selector — always rendered regardless of role
-    expect(screen.queryByText('Modal Artist')).not.toBeInTheDocument();
+    expect(screen.queryByText('Modal Penjual')).not.toBeInTheDocument();
   });
 });

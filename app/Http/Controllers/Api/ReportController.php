@@ -34,6 +34,14 @@ class ReportController extends Controller
         // sini (bukan endpoint baru) supaya tetap satu jalur agregasi
         // penjualan yang sudah teruji mode-scoping-nya, bukan duplikat.
         'event' => 'Event',
+        // 009-ui-ux-refinements (US6/FR-016) — dipakai Dashboard untuk
+        // statistik per-pelanggan (tabel + chart). Baris untuk grouping
+        // ini punya bentuk berbeda (customer_id/customer_name/
+        // transaction_count/total_amount, bukan entity_id/label/
+        // unit_count/amount generik) karena "transaksi" di sini berarti
+        // COUNT(DISTINCT orders.id), bukan SUM(order_items.qty) — lihat
+        // cabang group_by === 'customer' di bawah.
+        'customer' => 'Pelanggan',
     ];
 
     public function sales(Request $request): JsonResponse
@@ -77,35 +85,67 @@ class ReportController extends Controller
         // menaut baris ke halaman detail entitas (mis. detail produk +
         // total stok, Task 2) — sebelumnya hanya label yang dipilih tanpa
         // ID apa pun untuk ditaut.
-        [$idExpr, $labelExpr, $idAlias] = match ($groupBy) {
-            'category' => ['categories.id', 'categories.name', 'category_id'],
-            'artist' => ['artists.id', 'artists.name', 'artist_id'],
-            'event' => ['events.id', 'events.name', 'event_id'],
-            'day' => ['DATE(orders.created_at)', 'DATE(orders.created_at)', null],
-            default => ['products.id', 'products.name', 'product_id'],
-        };
+        if ($groupBy === 'customer') {
+            // 009-ui-ux-refinements (US6/T046) — satu query GROUP BY per
+            // orders.customer_id, sama seperti pola artist/day di atas
+            // (bukan loop per-customer, Constitution Principle V).
+            // LEFT JOIN customers (bukan INNER) karena customer_id
+            // nullable untuk pembeli walk-in — baris "walk-in" tetap
+            // muncul dengan customer_id/customer_name null, bukan hilang
+            // diam-diam dari laporan. Tidak perlu filter data_mode
+            // tambahan pada 'customers': order_items.data_mode sudah
+            // menyaring baris sumbernya, dan customer_id yang tersimpan
+            // pada order sudah divalidasi lintas-mode saat order dibuat
+            // (lihat CLAUDE.md, catatan customer_id re-fetch di
+            // OrderService/PreorderService).
+            $rows = (clone $base)
+                ->leftJoin('customers', 'customers.id', '=', 'orders.customer_id')
+                ->selectRaw('
+                    orders.customer_id as customer_id,
+                    customers.name as customer_name,
+                    COUNT(DISTINCT orders.id) as transaction_count,
+                    SUM(order_items.line_total) as total_amount
+                ')
+                ->groupBy('orders.customer_id', 'customers.name')
+                ->orderByDesc('total_amount')
+                ->get()
+                ->map(function ($row) {
+                    $data = (array) $row;
+                    $data['total_amount'] = number_format((float) $data['total_amount'], 2, '.', '');
 
-        $rows = (clone $base)
-            ->selectRaw("
-                {$idExpr} as entity_id,
-                {$labelExpr} as label,
-                SUM(order_items.qty) as unit_count,
-                SUM(order_items.line_total) as amount
-            ")
-            ->groupBy(DB::raw($idExpr))
-            ->orderByDesc('amount')
-            ->get()
-            ->map(function ($row) use ($idAlias) {
-                $data = (array) $row;
-                // Untuk group_by=day tidak ada entitas untuk ditaut — id
-                // dikembalikan null secara eksplisit alih-alih menghapus
-                // key-nya, supaya bentuk baris tetap konsisten antar
-                // group_by dan frontend tidak perlu isset() check.
-                $data['entity_id'] = $idAlias === null ? null : $data['entity_id'];
-                $data['amount'] = number_format((float) $data['amount'], 2, '.', '');
+                    return $data;
+                });
+        } else {
+            [$idExpr, $labelExpr, $idAlias] = match ($groupBy) {
+                'category' => ['categories.id', 'categories.name', 'category_id'],
+                'artist' => ['artists.id', 'artists.name', 'artist_id'],
+                'event' => ['events.id', 'events.name', 'event_id'],
+                'day' => ['DATE(orders.created_at)', 'DATE(orders.created_at)', null],
+                default => ['products.id', 'products.name', 'product_id'],
+            };
 
-                return $data;
-            });
+            $rows = (clone $base)
+                ->selectRaw("
+                    {$idExpr} as entity_id,
+                    {$labelExpr} as label,
+                    SUM(order_items.qty) as unit_count,
+                    SUM(order_items.line_total) as amount
+                ")
+                ->groupBy(DB::raw($idExpr))
+                ->orderByDesc('amount')
+                ->get()
+                ->map(function ($row) use ($idAlias) {
+                    $data = (array) $row;
+                    // Untuk group_by=day tidak ada entitas untuk ditaut — id
+                    // dikembalikan null secara eksplisit alih-alih menghapus
+                    // key-nya, supaya bentuk baris tetap konsisten antar
+                    // group_by dan frontend tidak perlu isset() check.
+                    $data['entity_id'] = $idAlias === null ? null : $data['entity_id'];
+                    $data['amount'] = number_format((float) $data['amount'], 2, '.', '');
+
+                    return $data;
+                });
+        }
 
         $totals = (clone $base)->selectRaw('
             COUNT(DISTINCT orders.id) as order_count,
@@ -495,11 +535,53 @@ class ReportController extends Controller
      * catatan di ReportController@sales, jadi tetap butuh where()
      * data_mode eksplisit untuk kedua tabel itu, meski keduanya
      * HasDataMode di level model.
+     *
+     * 009-ui-ux-refinements (US7) — drilldown opsional lewat ?artist_id=.
+     * Sengaja MENAMBAH satu level ke join artist→products→variants yang
+     * sudah ada di atas (bukan query paralel baru), supaya kedua mode
+     * (ringkasan semua artist vs. detail satu artist) selalu konsisten
+     * terhadap sumber data yang sama. artist_id divalidasi lewat
+     * Artist::findOrFail() (bukan sekadar exists:artists,id) supaya
+     * global scope DataModeScope otomatis menolak artist_id yang valid
+     * di database tapi milik mode DEMO/LIVE lain — respons 404, sama
+     * seperti pola findOrFail() lain di controller ini.
      */
     public function stockByArtist(Request $request): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {
             return response()->json(['message' => __('reports.not_authorized')], 403);
+        }
+
+        if ($request->filled('artist_id')) {
+            $artist = Artist::findOrFail($request->integer('artist_id'));
+
+            $variants = \App\Models\ProductVariant::query()
+                ->join('products', function ($join) {
+                    $join->on('products.id', '=', 'product_variants.product_id')
+                        ->where('products.data_mode', ModeGate::current());
+                })
+                ->where('products.artist_id', $artist->id)
+                ->where('product_variants.data_mode', ModeGate::current())
+                ->orderBy('product_variants.variant_name')
+                ->get([
+                    'product_variants.id as variant_id',
+                    'product_variants.sku',
+                    'product_variants.variant_name',
+                    'product_variants.current_stock',
+                ]);
+
+            return response()->json([
+                'artist_id' => $artist->id,
+                'artist_name' => $artist->name,
+                'variants' => $variants->map(fn ($v) => [
+                    'variant_id' => $v->variant_id,
+                    'sku' => $v->sku,
+                    'variant_name' => $v->variant_name,
+                    'current_stock' => (int) $v->current_stock,
+                ])->values(),
+                'variant_count' => $variants->count(),
+                'total_stock' => (int) $variants->sum('current_stock'),
+            ]);
         }
 
         $rows = Artist::query()
@@ -511,7 +593,6 @@ class ReportController extends Controller
                 $join->on('product_variants.product_id', '=', 'products.id')
                     ->where('product_variants.data_mode', ModeGate::current());
             })
-            ->when($request->filled('artist_id'), fn ($q) => $q->where('artists.id', $request->integer('artist_id')))
             ->selectRaw('
                 artists.id as artist_id,
                 artists.name as artist_name,

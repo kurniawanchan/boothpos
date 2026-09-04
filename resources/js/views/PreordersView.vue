@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute, useRouter } from 'vue-router';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import {
   listPreorders,
@@ -59,7 +60,21 @@ const FULFILLMENT_LABEL = computed(() => ({
 }));
 
 const { items, meta, loading, load, setPage, setFilter, params } = usePaginatedList(listPreorders);
+const route = useRoute();
+const router = useRouter();
+
 onMounted(load);
+
+// 009-ui-ux-refinements US5 (T043) — CustomerTransactionsModal.vue
+// navigates here with ?preorder_id=<id> to open this existing detail
+// drawer rather than duplicating it in the Customers screen. The query
+// param is stripped once consumed so a refresh doesn't reopen it.
+onMounted(async () => {
+  const id = route.query.preorder_id;
+  if (!id) return;
+  await openDetailById(id);
+  router.replace({ query: { ...route.query, preorder_id: undefined } });
+});
 
 // 007-preorder-import-export-notify (US1) — pencarian nama pelanggan,
 // debounced sama seperti pola pencarian ProductsView.vue.
@@ -284,6 +299,28 @@ async function openDetail(row) {
     // report) — customer_name is carried over from the already-loaded
     // list row instead of being re-fetched.
     detail.value = { ...full, customer_name: row.customer_name, fulfillment: full.fulfillment ?? row.fulfillment };
+  } finally {
+    detailLoading.value = false;
+  }
+}
+
+// 009-ui-ux-refinements US5 (T043) — deep-link entry point from
+// CustomerTransactionsModal.vue (CustomersView.vue), which only has a
+// preorder id, not a list row. Unlike openDetail() above, GET
+// /preorders/{id} (show()) DOES eager-load 'customer' (see
+// PreorderController::show()), so customer_name/fulfillment come from the
+// same response instead of a list row.
+async function openDetailById(id) {
+  showDetail.value = true;
+  detailLoading.value = true;
+  shipment.value = null;
+  showShipmentForm.value = false;
+  try {
+    const full = await getPreorder(id);
+    detail.value = { ...full, customer_name: full.customer?.name ?? '', fulfillment: full.fulfillment };
+  } catch (err) {
+    showDetail.value = false;
+    toast.error(err.message || t('preorders.load_failed'));
   } finally {
     detailLoading.value = false;
   }

@@ -1,0 +1,20 @@
+meta {
+  name: 6 - Hapus Event Baru (berhasil)
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{base_url}}/events/{{throwaway_event_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("hapus event tanpa transaksi berhasil 204 (009-ui-ux-refinements US4)", function () {
+    expect(res.status).to.equal(204);
+  });
+}

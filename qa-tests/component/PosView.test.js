@@ -61,7 +61,7 @@ describe('PosView — product images & clickable artist filter', () => {
     renderPos();
     await screen.findByText('Keychain A');
 
-    const artistTrigger = screen.getByText('Semua artist');
+    const artistTrigger = screen.getByText('Semua penjual');
     await user.click(artistTrigger);
     await user.click(await screen.findByRole('option', { name: 'Artist A' }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
@@ -73,14 +73,14 @@ describe('PosView — product images & clickable artist filter', () => {
     renderPos();
     await screen.findByText('Keychain A');
 
-    const artistTrigger = screen.getByText('Semua artist');
+    const artistTrigger = screen.getByText('Semua penjual');
     await user.click(artistTrigger);
     await user.click(await screen.findByRole('option', { name: 'Artist A' }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
 
     // The panel stays open after a selection (multi-select) — pick "All"
     // directly to clear the selection back to unfiltered.
-    await user.click(await screen.findByRole('option', { name: 'Semua artist' }));
+    await user.click(await screen.findByRole('option', { name: 'Semua penjual' }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.not.objectContaining({ artist_id: expect.anything() })));
   });
 });

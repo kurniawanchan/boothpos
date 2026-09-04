@@ -40,6 +40,14 @@ dari nol sampai laporan, termasuk skenario negatif kritis:
 - Vendor, Bahan Baku, dan BOM (pasca-MVP): vendor → bahan → harga vendor →
   BOM varian → rincian modal (`cost-breakdown`), serta guard hapus 409
   saat vendor/bahan masih dipakai
+- Refinements UI/UX 009 (pasca-MVP, 2026-09-04): laporan penjualan dengan
+  `group_by=customer`, drilldown level-varian pada laporan stok per artist
+  (`?artist_id=`), riwayat transaksi gabungan order+preorder per pelanggan
+  (`GET /customers/{id}/transactions`), dan guard hapus 409 untuk
+  event/pelanggan yang masih punya transaksi — plus jalur sukses (204)
+  lewat event/pelanggan sekali-pakai yang dibuat lalu langsung dihapus
+  agar tidak mengganggu `{{event_id}}`/`{{customer_id}}` yang dipakai
+  folder-folder lain
 
 ## Yang TIDAK divalidasi koleksi ini
 
@@ -63,3 +71,28 @@ dan `04-Payment/CATATAN.md`. Request impor Excel butuh dua workbook
 `09-MasterData-ImportExport`, dan `10-Vendor-Material-BOM` adalah
 kapabilitas pasca-MVP yang ditambahkan pada 2026-09-01/02 — lihat catatan
 bertanggal di `CLAUDE.md`/`README.md`/PRD §10.2 untuk konteksnya.
+
+Request baru untuk fitur 009-ui-ux-refinements (2026-09-04) ditambahkan
+sebagai nomor urut baru pada folder yang sudah ada, BUKAN folder baru,
+karena semuanya adalah tambahan pada endpoint yang sudah ada
+(`/reports/sales`, `/reports/stock-by-artist`) atau endpoint kecil satu
+tujuan (`DELETE /events/{id}`, `DELETE /customers/{id}`,
+`GET /customers/{id}/transactions`) yang paling pas ditaruh dekat request
+sejenis yang sudah ada:
+- `02-MasterData/10-11`: buat lalu hapus satu pelanggan sekali-pakai
+  (`{{throwaway_customer_id}}`) untuk memverifikasi jalur hapus **sukses**
+  (204) tanpa menyentuh `{{customer_id}}` bersama yang dipakai
+  05-Order/06-Preorder/07-Report.
+- `03-Event-Session/5-6`: pola yang sama untuk event
+  (`{{throwaway_event_id}}`).
+- `07-Report/7-9`: `group_by=customer`, drilldown stok per artist
+  (`?artist_id=`), dan riwayat transaksi pelanggan — ditaruh di folder
+  Report karena butuh `{{event_id}}`/`{{customer_id}}`/`{{artist_id}}`
+  yang baru terisi penuh (order DAN preorder) setelah folder 05-06
+  selesai jalan.
+- `07-Report/10-11`: guard hapus **gagal** (409) untuk event dan
+  pelanggan bersama — sengaja ditaruh PALING AKHIR di seluruh koleksi
+  (bukan di folder asalnya) karena baru pada titik ini `{{event_id}}`/
+  `{{customer_id}}` sudah pasti punya order/preorder untuk memicu 409-nya.
+  Jangan pindahkan ke lebih awal — akan false-negative (200/204) kalau
+  dijalankan sebelum 05-Order/06-Preorder membuat transaksinya.

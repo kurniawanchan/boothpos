@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { listPreorders } from '../../api/preorders';
+import { listEvents } from '../../api/events';
 import AppSidebar from './AppSidebar.vue';
 import AppTopbar from './AppTopbar.vue';
 
@@ -13,6 +14,13 @@ const router = useRouter();
 const auth = useAuthStore();
 const settings = useSettingsStore();
 const { t } = useI18n();
+
+// 009-ui-ux-refinements US1/FR-019 — sama seperti DashboardView.vue:
+// tidak ada endpoint "event aktif saat ini" khusus, jadi event
+// `status=active` pertama dianggap sedang berlangsung. Dimuat sekali di
+// sini (bukan di tiap view) supaya nama event tersedia di navbar setiap
+// layar (research.md R11).
+const activeEvent = ref(null);
 
 // Toggle tampilkan/sembunyikan sidebar — preferensi murni per-perangkat
 // (localStorage), bukan data akun, jadi sengaja tidak disimpan lewat API.
@@ -58,6 +66,12 @@ onMounted(async () => {
   } catch {
     // Non-fatal — the badge just stays at 0 if this fails.
   }
+  try {
+    const eventsRes = await listEvents({ status: 'active', per_page: 1 });
+    activeEvent.value = eventsRes.data[0] ?? null;
+  } catch {
+    // Non-fatal — navbar simply omits the event name if this fails.
+  }
 });
 
 async function handleLogout() {
@@ -84,7 +98,6 @@ async function handleLogout() {
     >
       <AppSidebar
         :preorder-alert-count="preorderAlertCount"
-        @logout="handleLogout"
         @hide-sidebar="setSidebarVisible(false)"
       />
     </div>
@@ -92,8 +105,11 @@ async function handleLogout() {
       <AppTopbar
         :title="pageTitle"
         :subtitle="pageSubtitle"
+        :store-name="settings.storeName"
+        :active-event="activeEvent"
         :sidebar-hidden="!sidebarVisible"
         @show-sidebar="setSidebarVisible(true)"
+        @logout="handleLogout"
       />
       <main class="min-h-0 flex-1 overflow-auto">
         <RouterView />
