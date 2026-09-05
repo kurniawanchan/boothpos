@@ -1,0 +1,54 @@
+# Local-development Docker build context exclusions
+# (specs/015-dockerize-dev-environment).
+
+.git/
+.DS_Store
+
+# Dependencies — installed inside the container via the entrypoint /
+# CMD scripts, and kept out of anonymous volumes' way (research.md R5).
+vendor/
+node_modules/
+
+# Build artifacts.
+public/build/
+public/hot/
+bootstrap/cache/*
+!bootstrap/cache/.gitignore
+
+# Laravel runtime/log artifacts.
+storage/*.log
+storage/app/*
+!storage/app/.gitignore
+storage/framework/cache/*
+!storage/framework/cache/.gitignore
+storage/framework/sessions/*
+!storage/framework/sessions/.gitignore
+storage/framework/testing/*
+!storage/framework/testing/.gitignore
+storage/framework/views/*
+!storage/framework/views/.gitignore
+storage/logs/*
+!storage/logs/.gitignore
+
+# Never bake real secrets into a build context — the Docker path's env
+# is supplied at runtime via env_file, not baked into the image.
+.env
+.env.backup
+.env.production
+.env.testing
+.env.testing.local
+
+.phpunit.result.cache
+.playwright-mcp/
+
+# Editor/IDE local state.
+.fleet
+.idea
+.vscode
+.zed
+
+# Android installer build outputs (unrelated to this app's image).
+android/.gradle
+android/.idea
+android/build
+android/app/build

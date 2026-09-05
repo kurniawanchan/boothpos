@@ -126,6 +126,47 @@ akun dev di §4. Semua endpoint API ada di bawah prefix `/api/v1` (lihat
 `docs/openapi-pos-mvp.yaml` untuk kontrak lengkap). Untuk uji API murni
 tanpa UI, tetap bisa lewat `curl`, koleksi Bruno (§6), atau Postman.
 
+**Mode C — Docker Compose (opsional, untuk kontributor tanpa PHP/Node/MySQL
+terpasang native — spesifikasi lengkap: `specs/015-dockerize-dev-environment/`):**
+
+Ini murni tooling development lokal — sama sekali TIDAK mengubah cara
+produk sungguhan di-deploy ke laptop toko (§9 tetap berlaku apa adanya).
+Mode A/B di atas terus bekerja tanpa perubahan; ini opsi tambahan, bukan
+pengganti.
+
+```bash
+cp .env.docker.example .env   # BUKAN .env.example — lihat komentar di
+                               # dalam file itu sendiri
+docker compose up             # sekali, membangun image kalau belum ada
+```
+
+Perintah di atas menjalankan tiga service (`mysql`, `app`, `node`) sekaligus:
+migration otomatis dijalankan (idempotent), TAPI seeding data demo tetap
+langkah manual yang disengaja:
+
+```bash
+docker compose exec app php artisan db:seed                              # akun dev
+docker compose exec app php artisan db:seed --class=SakanaFridgeDemoSeeder  # data contoh
+```
+
+Buka `http://localhost:8000` (atau `http://localhost:5173` untuk jalur
+hot-reload Vite, sama seperti Mode B) di browser.
+
+- **Data bertahan** melewati `docker compose down` + `up` lagi (volume
+  MySQL bernama, bukan sekali pakai). Untuk reset bersih total (migration
+  dari nol, tanpa data): `docker compose down -v` lalu `docker compose up`
+  lagi.
+- **Menjalankan test di dalam Docker** (hasilnya harus identik dengan
+  native — lihat §5):
+  ```bash
+  docker compose exec app php artisan test
+  docker compose exec node npm test
+  ```
+- Jangan jalankan Mode A/B (native `php artisan serve`/`npm run dev`) dan
+  Mode C bersamaan — keduanya memakai port host yang sama (8000/5173) dan
+  akan langsung gagal jelas ("port is already allocated"), bukan berjalan
+  diam-diam berdampingan.
+
 ## 4. Login & kredensial dev
 
 Login pakai field **`username`**, BUKAN `email`:

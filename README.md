@@ -330,6 +330,19 @@ bukan logika bisnis inti — logika bisnis inti (transaksi, stok, harga,
 lisensi) yang sudah ditinjau baris per baris di sesi-sesi sebelumnya lolos
 tanpa perlu diubah.
 
+**Menjalankan lewat Docker (opsional, 015-dockerize-dev-environment)** —
+untuk kontributor tanpa PHP/Node/MySQL terpasang native. Murni tooling
+development lokal; tidak mengubah cara instalasi toko sungguhan sama
+sekali. Detail lengkap: `docs/RUNBOOK.md` §3 Mode C,
+`specs/015-dockerize-dev-environment/quickstart.md`.
+
+```bash
+cp .env.docker.example .env   # BUKAN .env.example (stale, default sqlite)
+docker compose up
+docker compose exec app php artisan db:seed
+docker compose exec app php artisan db:seed --class=SakanaFridgeDemoSeeder
+```
+
 ## Bug yang ditemukan saat eksekusi (bukan lagi ASUMSI — dibuktikan lewat test)
 
 Seluruhnya ditemukan lewat test yang gagal, diperbaiki, lalu test yang
@@ -633,3 +646,60 @@ dijalankan, bukan dibaca), sesuai Constitution Principle II — dicatat di
 sini sebagai pengingat bahwa method laporan yang punya banyak cabang
 `group_by`/mode PALING rawan menyimpan blok kode duplikat/usang dari
 iterasi sebelumnya yang lolos review statis.
+
+## Bug yang ditemukan saat eksekusi fitur 015-dockerize-dev-environment (2026-09-05)
+
+Fitur ini murni tooling development (Docker Compose untuk PHP/Node/MySQL
+lokal) — empat bug nyata ditemukan lewat `docker compose up`/`docker
+compose exec ... test` sungguhan, bukan dari membaca dokumentasi:
+
+1. **Build image PHP gagal di ekstensi `mbstring`** — galat pkg-config
+   "ONIG_CFLAGS/ONIG_LIBS not found". `mbstring` butuh library oniguruma
+   (`libonig-dev`) untuk dikompilasi dari source; paket itu tidak ada di
+   daftar `apt-get install` semula di `docker/php/Dockerfile`. Diperbaiki
+   dengan menambahkannya ke daftar paket.
+2. **`composer install` di dalam container gagal total** — belasan
+   conflict "requires php >=8.4.1" untuk paket `symfony/*` yang sudah
+   ter-lock. `docker/php/Dockerfile` semula memakai `php:8.3-cli`
+   mengikuti floor yang DIDEKLARASIKAN `composer.json` (`"php": "^8.3"`),
+   tapi `composer.lock` yang sungguhan sudah meng-resolve `symfony/*` ke
+   versi 8.1.x yang requirement RIIL-nya `php >=8.4.1` — artinya
+   `composer.json` sendiri sudah basi/menyesatkan relatif terhadap lock
+   file yang sungguhan dipakai. Diperbaiki dengan `php:8.4-cli`, mengikuti
+   `composer.lock` yang nyata (sama seperti mesin dev native ini yang juga
+   sudah PHP 8.4.5) — bukan `composer.json`'s deklarasi semver semata.
+3. **Halaman login blank sama sekali di browser, `ERR_EMPTY_RESPONSE` di
+   console untuk `@vite/client`/`main.js`/`app.css`.** Vite di dalam
+   container dijalankan dengan `--host 0.0.0.0` supaya bisa diakses dari
+   luar container, tapi `laravel-vite-plugin` menulis file `public/hot`
+   memakai host itu APA ADANYA — browser di HOST lalu mencoba connect ke
+   `http://0.0.0.0:5173/...` (bukan alamat yang valid dari luar container)
+   dan gagal total. Diperbaiki dengan `vite.config.js`'s `server.origin`
+   baru (dibaca dari env `VITE_DEV_SERVER_ORIGIN`, di-set
+   `docker-compose.yml`'s service `node` ke `http://localhost:5173`; tetap
+   `undefined` secara native, perilaku asli tidak berubah). Perbaikan ini
+   sendiri sempat memunculkan bug KEDUA: begitu `server.origin` diatur
+   eksplisit, browser mulai menolak load cross-origin `@vite/client` lewat
+   CORS ("Access-Control-Allow-Origin" balik ke origin Vite sendiri, bukan
+   origin halaman) — diperbaiki dengan `server.cors: true` eksplisit
+   (memperlebar, bukan mempersempit, apa yang sudah diizinkan).
+4. **`php artisan test` di dalam container: 10 dari 424 test gagal**,
+   padahal selalu 424/424 hijau secara native di mesin yang sama. Root
+   cause BUKAN Docker — seluruh suite berjalan dalam SATU proses PHP, dan
+   driver cache `array` (`.env.testing`) hanyalah array PHP statis yang
+   hidup selama proses itu, jadi nilai yang di-cache satu test (mis.
+   `Setting::get('system_mode')` via `ModeGate`) bisa bocor ke test lain
+   yang tidak pernah menyentuh setting itu — `RefreshDatabase` mereset
+   DATABASE, bukan cache. Bug ini SUDAH ada sebelum fitur ini; baru
+   kelihatan sekarang karena urutan discovery test PHPUnit (tidak dijamin
+   sama di semua filesystem) berbeda antara APFS native dan filesystem
+   container Linux, sehingga ketergantungan urutan yang sebelumnya lolos
+   diam-diam jadi kelihatan. Diperbaiki dengan `Cache::flush()` di
+   `tests/TestCase::setUp()` — murni kebersihan test, tidak menyentuh kode
+   produksi sama sekali. Setelah perbaikan: 424/424 identik native maupun
+   Docker.
+
+Semua empat ditemukan lewat eksekusi sungguhan (`docker compose up`/
+`docker compose exec ... test`), sesuai Constitution Principle II — bug
+#4 khususnya adalah pengingat bahwa "selalu hijau di satu mesin" tidak
+membuktikan test itu benar-benar terisolasi satu sama lain.

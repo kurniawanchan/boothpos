@@ -209,9 +209,33 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/014-sales-receipt-event-footer/plan.md`
+Active feature plan: `specs/015-dockerize-dev-environment/plan.md`
+(branch `015-dockerize-dev-environment`, branched from `main`) — a Docker
+Compose setup (`mysql`+`app`+`node` services) reproducing the existing
+native dev workflow (`laradock-mysql-1` + `php artisan serve` +
+`npm run dev`) as one reproducible, one-command stack — **local
+development tooling only**, explicitly NOT a new store-deployment channel
+(clarified before speccing; "production" still means a native,
+Docker-free install on the shopkeeper's machine, per this file's own
+opening description). PHP image pinned to 8.3 (composer.json's declared
+floor, not whatever the host happens to have — research.md R2); required
+PHP extensions traced to `maatwebsite/excel`'s own declared requirements,
+not guessed (R3); one MySQL container seeds both `boothpos`/`boothpos_test`
+databases via an init script, exactly mirroring this file's own existing
+two-database convention (R4); `vendor/`/`node_modules/` get anonymous
+volumes so the dev bind-mount doesn't shadow container-installed
+dependencies (R5); `vite.config.js`'s dev-server proxy target becomes
+configurable via an env var that defaults to today's exact hardcoded
+value, so the native (non-Docker) workflow is provably unaffected (R6);
+migrations run automatically on container start (idempotent), but
+seeding (`SakanaFridgeDemoSeeder`) stays a deliberate manual step, not
+auto-run (R7); the Docker path's env file is NOT a copy of the existing
+`.env.example`, which is stale stock Laravel boilerplate defaulting to
+SQLite (R8). See research.md R1–R8.
+
+Previous feature: `specs/014-sales-receipt-event-footer/plan.md`
 (branch `014-sales-receipt-event-footer`, branched from `main` — 012/013
-already merged) — two small additive changes: restoring the "View
+already merged, shipped, PR #11 merged) — two small additive changes: restoring the "View
 receipt" action on the Sales list (removed as a *trigger* during `009`'s
 redesign in favor of the products-sold popup, but `ReceiptModal.vue` and
 `GET /orders/{id}/receipt` were never touched, so this is a pure frontend
