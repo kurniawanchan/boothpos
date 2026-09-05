@@ -95,4 +95,39 @@ describe('PreorderInvoiceModal', () => {
     expect(screen.getByText(/Some Seller/)).toBeInTheDocument();
     expect(screen.queryByText(/null/)).not.toBeInTheDocument();
   });
+
+  // 014-sales-receipt-event-footer (US2, T015) — event name/location/dates
+  // footer, mirroring ReceiptModal.vue's eventInfoLine pattern, additionally
+  // gated on invoice.event_name being truthy.
+  it('renders the event name/location and a date range when the preorder invoice has event info', async () => {
+    getPreorderInvoiceMock.mockResolvedValue({
+      ...arrivedInvoice,
+      event_name: 'Sakana Fridge Meet & Greet',
+      event_location: 'Jakarta',
+      event_start_date: '2026-09-10',
+      event_end_date: '2026-09-12',
+    });
+    renderModal({ open: true, preorderId: 1 });
+
+    await screen.findAllByText('PO-0001');
+    expect(screen.getByText(/Jakarta/)).toBeInTheDocument();
+    expect(screen.getByText(/–/)).toBeInTheDocument();
+    expect(screen.queryByText(/null/)).not.toBeInTheDocument();
+  });
+
+  it('omits the entire event-info footer block when the preorder has no event', async () => {
+    getPreorderInvoiceMock.mockResolvedValue({
+      ...arrivedInvoice,
+      event_name: null,
+      event_location: null,
+      event_start_date: null,
+      event_end_date: null,
+    });
+    renderModal({ open: true, preorderId: 1 });
+
+    await screen.findAllByText('PO-0001');
+    expect(screen.queryByText(id.events_sessions.location)).not.toBeInTheDocument();
+    expect(screen.queryByText(id.events_sessions.col_dates)).not.toBeInTheDocument();
+    expect(screen.queryByText(/null/)).not.toBeInTheDocument();
+  });
 });

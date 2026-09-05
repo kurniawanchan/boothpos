@@ -140,6 +140,12 @@ class OrderController extends Controller
             'customer_email' => $order->customer?->email,
             'order_number' => $order->order_number,
             'event_name' => $order->event->name,
+            // 014-sales-receipt-event-footer (US2, R2) — event Order tidak
+            // pernah null (beda dengan Preorder), tapi kolom tanggalnya
+            // sendiri masih bisa null, jadi tetap pakai ?->toDateString().
+            'event_location' => $order->event->location,
+            'event_start_date' => $order->event->start_date?->toDateString(),
+            'event_end_date' => $order->event->end_date?->toDateString(),
             'cashier_name' => $order->cashier->name,
             'created_at' => $order->created_at,
             'items' => $order->items->map(fn ($i) => [

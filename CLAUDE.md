@@ -209,9 +209,23 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/013-preorder-list-filters-receipt/plan.md`
+Active feature plan: `specs/014-sales-receipt-event-footer/plan.md`
+(branch `014-sales-receipt-event-footer`, branched from `main` — 012/013
+already merged) — two small additive changes: restoring the "View
+receipt" action on the Sales list (removed as a *trigger* during `009`'s
+redesign in favor of the products-sold popup, but `ReceiptModal.vue` and
+`GET /orders/{id}/receipt` were never touched, so this is a pure frontend
+rewire, zero backend change, and purely additive alongside the existing
+products-sold action); and event name/location/dates added to the footer
+of both the POS receipt and the pre-order invoice/receipt, needing one
+new `Preorder::event()` relation (mirroring the already-existing
+`Order::event()`) since a preorder's event is optional and Order's isn't.
+No shared footer component extracted for what is currently only two call
+sites (research.md R4). See research.md R1–R4.
+
+Previous feature: `specs/013-preorder-list-filters-receipt/plan.md`
 (branch `013-preorder-list-filters-receipt`, branched from
-`012-seller-preorder-report-detail-export`) — five additive changes to the
+`012-seller-preorder-report-detail-export`, PR #10 open) — five additive changes to the
 Pre-orders screen, none requiring a schema change: a seller filter + a
 visible seller column/detail (finally surfacing `preorder_items.artist_id`,
 which already existed but was never exposed as a relation or in any

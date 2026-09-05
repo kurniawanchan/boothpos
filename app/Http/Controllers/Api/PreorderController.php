@@ -85,11 +85,18 @@ class PreorderController extends Controller
      */
     public function invoice(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items', 'payments', 'customer']);
+        $preorder->load(['items', 'payments', 'customer', 'event']);
 
         return response()->json([
             ...$this->present($preorder),
             'document_type' => \App\Support\PreorderDocumentType::forStatus($preorder->status),
+            // 014-sales-receipt-event-footer (US2, R2) — event_id preorder
+            // opsional (beda dengan Order yang selalu punya event), jadi
+            // semua field ini null-safe lewat ?->.
+            'event_name' => $preorder->event?->name,
+            'event_location' => $preorder->event?->location,
+            'event_start_date' => $preorder->event?->start_date?->toDateString(),
+            'event_end_date' => $preorder->event?->end_date?->toDateString(),
         ]);
     }
 

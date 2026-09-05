@@ -6,7 +6,7 @@ import BaseButton from '../ui/BaseButton.vue';
 import StatusPill from '../ui/StatusPill.vue';
 import { getPreorderInvoice } from '../../api/preorders';
 import { formatIDR } from '../../utils/money';
-import { formatDateTime } from '../../utils/date';
+import { formatDate, formatDateTime } from '../../utils/date';
 import { useToastStore } from '../../stores/toast';
 
 /**
@@ -61,6 +61,19 @@ const heading = computed(() => {
 
 const statusLabel = computed(() => (invoice.value ? t(STATUS_LABEL_KEY[invoice.value.status] ?? invoice.value.status) : ''));
 const statusVariant = computed(() => STATUS_VARIANT[invoice.value?.status] ?? 'neutral');
+
+// 014-sales-receipt-event-footer (US2, FR-005/006/007) — logika sama
+// dengan ReceiptModal.vue (research.md R3/R4), diduplikasi sengaja
+// karena tidak ada shared component untuk footer dua-baris ini.
+const eventInfoLine = computed(() => {
+  if (!invoice.value) return '';
+  const start = invoice.value.event_start_date;
+  const end = invoice.value.event_end_date;
+  if (start && end) {
+    return start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`;
+  }
+  return formatDate(start || end || null) === '—' ? '' : formatDate(start || end);
+});
 
 async function load() {
   if (!props.preorderId) {
@@ -154,6 +167,17 @@ async function downloadPdf() {
         <p v-if="invoice.document_type === 'cancelled'" class="text-center text-[12px] font-semibold text-danger-text">
           {{ t('preorders.document_cancelled_note') }}
         </p>
+
+        <!-- 014-sales-receipt-event-footer (US2) — hilang seluruhnya jika
+             preorder tidak terikat event sama sekali (FR-005), atau jika
+             event ada tapi tidak punya lokasi maupun tanggal (FR-006). -->
+        <div
+          v-if="invoice.event_name && (invoice.event_location || eventInfoLine)"
+          class="flex flex-col items-center gap-0.5 border-t border-dashed border-line-2 pt-3 text-center text-[11px] text-muted-3"
+        >
+          <span v-if="invoice.event_location">{{ t('events_sessions.location') }}: {{ invoice.event_location }}</span>
+          <span v-if="eventInfoLine">{{ t('events_sessions.col_dates') }}: {{ eventInfoLine }}</span>
+        </div>
       </div>
     </div>
 
