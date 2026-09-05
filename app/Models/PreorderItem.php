@@ -21,4 +21,9 @@ class PreorderItem extends Model
     }
 
     public function variant(): BelongsTo { return $this->belongsTo(ProductVariant::class, 'variant_id'); }
+
+    // 013-preorder-list-filters-receipt (T002) — relasi ke penjual (artist)
+    // per item; kolom artist_id sudah ada & diisi PreorderService, ini
+    // hanya menambahkan relasi Eloquent yang belum ada.
+    public function artist(): BelongsTo { return $this->belongsTo(Artist::class, 'artist_id'); }
 }

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { listEvents } from '../api/events';
+import { listArtists } from '../api/artists';
 import {
   artistSettlements,
   profitReport,
@@ -23,6 +24,7 @@ import EmptyState from '../components/ui/EmptyState.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import ArtistTransactionsModal from '../components/report/ArtistTransactionsModal.vue';
 import StockByArtistDetailModal from '../components/report/StockByArtistDetailModal.vue';
+import PreorderReportDetailModal from '../components/report/PreorderReportDetailModal.vue';
 
 // Tab "Penjualan" dikeluarkan menjadi halaman/menu tersendiri (SalesView.vue)
 // — laporan penjualan terbuka untuk semua peran, sedangkan ketiga tab yang
@@ -45,9 +47,38 @@ const artistProfit = ref(null);
 const purchases = ref(null);
 const stockByArtist = ref(null);
 const preorderStats = ref(null);
+// 012-seller-preorder-report-detail-export (US2) — toggle antara ringkasan
+// status × payment_completeness (default, sudah ada) dan breakdown per
+// penjual (`breakdown=artist`, lihat research.md R2). Breakdown dimuat
+// terpisah, hanya saat toggle diaktifkan — bukan sekaligus dengan ringkasan
+// — mengikuti pola "jangan eager-fetch apa yang belum tentu dilihat" yang
+// sudah dipakai StockByArtistDetailModal di tab lain.
+const preorderView = ref('summary');
+const preorderByArtist = ref(null);
 const artists = ref([]);
 const purchasesStatusFilter = ref('');
 const loading = ref(false);
+
+// Tambahan: filter "semua penjual" vs satu penjual, dipakai di semua tab yang
+// punya dimensi per-penjual (settlement, artist-profit, stock-by-artist, dan
+// preorder view "per penjual"). Difilter di sisi klien karena semua tab ini
+// SUDAH memuat baris untuk seluruh penjual sekaligus (row-per-artist) — tidak
+// ada endpoint baru yang dibutuhkan, filter ini hanya mempersempit tampilan.
+const artistFilter = ref('');
+
+// Field mana yang dijumlahkan (sebagai uang vs angka polos) untuk baris
+// Grand Total tiap tab — satu tempat, dipakai oleh computed *Totals di bawah,
+// supaya baris footer tidak menduplikasi logika sum per tab.
+function sumRows(rows, moneyKeys = [], countKeys = []) {
+  const totals = {};
+  for (const k of moneyKeys) totals[k] = 0;
+  for (const k of countKeys) totals[k] = 0;
+  for (const row of rows) {
+    for (const k of moneyKeys) totals[k] += parseMoney(row[k]);
+    for (const k of countKeys) totals[k] += Number(row[k]) || 0;
+  }
+  return totals;
+}
 
 // Digerbang di sini JUGA (bukan cuma meta.roles di router) — pola
 // pertahanan berlapis yang sudah dipakai di seluruh aplikasi ini (mis.
@@ -106,6 +137,7 @@ onMounted(async () => {
   events.value = (await listEvents({ per_page: 100 })).data;
   const active = events.value.find((e) => e.status === 'active');
   eventId.value = active?.id ?? events.value[0]?.id ?? '';
+  artists.value = (await listArtists({ per_page: 100, is_active: true })).data;
   await loadActiveTab();
 });
 
@@ -142,11 +174,88 @@ async function loadActiveTab() {
       // sama, sehingga sebagian baris (mis. status dp_paid) tidak tampil dan baris
       // lain menampilkan data yang salah. Diperbaiki dengan composite key sintetis.
       preorderStats.value = res.rows.map((row) => ({ ...row, id: `${row.status}__${row.payment_completeness}` }));
+      if (preorderView.value === 'artist') await loadPreorderByArtist();
     }
   } finally {
     loading.value = false;
   }
 }
+
+// 012-seller-preorder-report-detail-export (US2, T010) — breakdown per
+// penjual, dipanggil saat toggle "Per Penjual" diaktifkan (baik dari watch
+// di bawah maupun dari loadActiveTab() di atas kalau toggle sudah aktif
+// ketika tab/eventId berganti). Baris ini juga tidak punya `id` alami —
+// sama seperti bug composite-key ringkasan di atas — jadi disintesis
+// dengan pola yang sama, kali ini disertakan artist_id supaya unik per
+// kombinasi penjual × status × payment_completeness.
+async function loadPreorderByArtist() {
+  const res = await preorderReport({ event_id: eventId.value || undefined, breakdown: 'artist' });
+  preorderByArtist.value = res.rows.map((row) => ({
+    ...row,
+    id: `${row.artist_id}__${row.status}__${row.payment_completeness}`,
+  }));
+}
+
+watch(preorderView, async (view) => {
+  if (activeTab.value === 'preorder' && view === 'artist' && !preorderByArtist.value) {
+    loading.value = true;
+    try {
+      await loadPreorderByArtist();
+    } finally {
+      loading.value = false;
+    }
+  }
+});
+
+// Baris terfilter per tab (BUKAN memfilter `.value` sumbernya sendiri —
+// supaya kalau filter dikosongkan lagi, seluruh baris asli masih ada tanpa
+// perlu reload) + totals Grand Total-nya masing-masing, dijumlah dari baris
+// yang SEDANG TAMPIL (jadi kalau pengguna memilih satu penjual, "Grand
+// Total"-nya otomatis menjadi subtotal penjual itu saja — itulah cara fitur
+// ini "memisahkan total per penjual" tanpa endpoint atau tabel terpisah).
+const filteredSettlements = computed(() =>
+  !artistFilter.value ? (settlements.value ?? []) : (settlements.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
+);
+const settlementTotals = computed(() => sumRows(filteredSettlements.value, ['total_sales', 'payable_amount', 'paid_amount', 'outstanding'], ['total_units']));
+
+const filteredArtistProfit = computed(() =>
+  !artistFilter.value ? (artistProfit.value ?? []) : (artistProfit.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
+);
+const artistProfitTotals = computed(() => sumRows(filteredArtistProfit.value, ['total_sales', 'modal', 'gross_profit']));
+
+const filteredStockByArtist = computed(() =>
+  !artistFilter.value ? (stockByArtist.value ?? []) : (stockByArtist.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
+);
+const stockByArtistTotals = computed(() => sumRows(filteredStockByArtist.value, [], ['variant_count', 'total_stock']));
+
+const purchasesTotals = computed(() => sumRows(purchases.value?.rows ?? [], ['total_amount']));
+
+const preorderSummaryTotals = computed(() => sumRows(preorderStats.value ?? [], ['total_order_value', 'total_collected', 'total_outstanding'], ['preorder_count']));
+
+const filteredPreorderByArtist = computed(() =>
+  !artistFilter.value ? (preorderByArtist.value ?? []) : (preorderByArtist.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
+);
+const preorderByArtistTotals = computed(() => sumRows(filteredPreorderByArtist.value, ['total_order_value', 'total_collected', 'total_outstanding'], ['preorder_count']));
+
+// Subtotal per penjual untuk tab Pre-order "Per Penjual" — hanya berguna saat
+// filter = "Semua penjual" (kalau sudah difilter ke satu penjual, baris
+// footer Grand Total DI ATAS sudah persis jadi subtotal penjual itu).
+// Ditampilkan sebagai ringkasan terpisah di atas tabel, bukan menyisipkan
+// baris ke tengah DataTable, supaya tidak perlu mengubah DataTable.vue lagi
+// jadi tahu soal grouping.
+const preorderArtistSubtotals = computed(() => {
+  const map = new Map();
+  for (const row of filteredPreorderByArtist.value) {
+    const key = row.artist_id;
+    if (!map.has(key)) map.set(key, { artist_id: key, artist_name: row.artist_name, preorder_count: 0, total_order_value: 0, total_collected: 0, total_outstanding: 0 });
+    const entry = map.get(key);
+    entry.preorder_count += Number(row.preorder_count) || 0;
+    entry.total_order_value += parseMoney(row.total_order_value);
+    entry.total_collected += parseMoney(row.total_collected);
+    entry.total_outstanding += parseMoney(row.total_outstanding);
+  }
+  return [...map.values()];
+});
 
 async function doExport(report) {
   try {
@@ -205,6 +314,18 @@ function openStockDetail(row) {
   stockDetailTarget.value = row;
   showStockDetail.value = true;
 }
+
+// 012-seller-preorder-report-detail-export (US3, T016) — drill-down dari
+// satu baris laporan Pre-order (ringkasan ATAU per penjual) ke daftar
+// pre-order individual yang menyusunnya, dipicu HANYA saat baris diklik —
+// sama seperti pola StockByArtistDetailModal di atas.
+const showPreorderDetail = ref(false);
+const preorderDetailTarget = ref(null);
+
+function openPreorderDetail(row) {
+  preorderDetailTarget.value = row;
+  showPreorderDetail.value = true;
+}
 </script>
 
 <template>
@@ -249,6 +370,16 @@ function openStockDetail(row) {
         :placeholder="t('reports.purchases_all_status')"
         :options="['draft', 'ordered', 'received', 'paid', 'cancelled'].map((s) => ({ value: s, label: t(`purchase_orders.status_${s}`) }))"
       />
+      <!-- Filter "semua penjual" vs satu penjual — hanya di tab yang punya
+           dimensi per-penjual (baris = satu penjual, atau breakdown
+           per-penjual di tab Pre-order). -->
+      <BaseSelect
+        v-if="['settlement', 'artist-profit', 'stock-by-artist'].includes(activeTab) || (activeTab === 'preorder' && preorderView === 'artist')"
+        class="w-56"
+        v-model="artistFilter"
+        :placeholder="t('reports.all_sellers')"
+        :options="[{ value: '', label: t('reports.all_sellers') }, ...artists.map((a) => ({ value: a.id, label: a.name }))]"
+      />
       <span class="flex-1"></span>
       <BaseButton v-if="activeTab === 'settlement'" variant="secondary" @click="doExport('artist-settlements')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
@@ -259,6 +390,18 @@ function openStockDetail(row) {
         {{ t('common.export_xlsx') }}
       </BaseButton>
       <BaseButton v-if="activeTab === 'artist-profit'" variant="secondary" @click="doExport('artist-profit')">
+        <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+        {{ t('common.export_xlsx') }}
+      </BaseButton>
+      <BaseButton v-if="activeTab === 'purchases'" variant="secondary" @click="doExport('purchases')">
+        <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+        {{ t('common.export_xlsx') }}
+      </BaseButton>
+      <BaseButton v-if="activeTab === 'stock-by-artist'" variant="secondary" @click="doExport('stock-by-artist')">
+        <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+        {{ t('common.export_xlsx') }}
+      </BaseButton>
+      <BaseButton v-if="activeTab === 'preorder'" variant="secondary" @click="doExport('preorder')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         {{ t('common.export_xlsx') }}
       </BaseButton>
@@ -279,7 +422,7 @@ function openStockDetail(row) {
             { key: 'status', label: t('reports.col_status') },
             { key: 'actions', label: '' },
           ]"
-          :rows="settlements ?? []"
+          :rows="filteredSettlements"
           :loading="loading"
           row-key="artist_id"
           :empty-message="t('reports.no_active_artists_settlement')"
@@ -306,6 +449,18 @@ function openStockDetail(row) {
                    than firing a request the backend can't resolve. -->
               <button v-if="row.id !== null && parseMoney(row.outstanding) > 0" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openSettlementPay(row)">{{ t('reports.record_payment_action') }}</button>
             </div>
+          </template>
+          <template #footer>
+            <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
+              <td class="px-4 py-3 text-[13px]">{{ t('reports.grand_total') }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ settlementTotals.total_units }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.total_sales) }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.payable_amount) }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.paid_amount) }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.outstanding) }}</td>
+              <td class="px-4 py-3"></td>
+              <td class="px-4 py-3"></td>
+            </tr>
           </template>
         </DataTable>
       </div>
@@ -348,7 +503,7 @@ function openStockDetail(row) {
               { key: 'modal', label: t('reports.col_modal') },
               { key: 'gross_profit', label: t('reports.col_gross_profit') },
             ]"
-            :rows="artistProfit ?? []"
+            :rows="filteredArtistProfit"
             :loading="loading"
             row-key="artist_id"
             :empty-message="t('reports.no_artist_sales')"
@@ -356,6 +511,14 @@ function openStockDetail(row) {
             <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
             <template #cell-modal="{ row }">{{ formatIDR(row.modal) }}</template>
             <template #cell-gross_profit="{ row }"><span class="font-semibold text-brand-active">{{ formatIDR(row.gross_profit) }}</span></template>
+            <template #footer>
+              <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
+                <td class="px-4 py-3 text-[13px]">{{ t('reports.grand_total') }}</td>
+                <td class="px-4 py-3 text-[13px]">{{ formatIDR(artistProfitTotals.total_sales) }}</td>
+                <td class="px-4 py-3 text-[13px]">{{ formatIDR(artistProfitTotals.modal) }}</td>
+                <td class="px-4 py-3 text-[13px] text-brand-active">{{ formatIDR(artistProfitTotals.gross_profit) }}</td>
+              </tr>
+            </template>
           </DataTable>
         </div>
       </template>
@@ -384,6 +547,12 @@ function openStockDetail(row) {
             <template #cell-status="{ row }"><span class="text-[12px] font-semibold capitalize">{{ t(`purchase_orders.status_${row.status}`) }}</span></template>
             <template #cell-created_at="{ row }">{{ new Date(row.created_at).toLocaleDateString('id-ID') }}</template>
             <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
+            <template #footer>
+              <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
+                <td class="px-4 py-3 text-[13px]" colspan="4">{{ t('reports.grand_total') }}</td>
+                <td class="px-4 py-3 text-[13px]">{{ formatIDR(purchasesTotals.total_amount) }}</td>
+              </tr>
+            </template>
           </DataTable>
         </div>
       </div>
@@ -399,7 +568,7 @@ function openStockDetail(row) {
             { key: 'total_stock', label: t('reports.stock_col_total_stock') },
             { key: 'actions', label: '' },
           ]"
-          :rows="stockByArtist ?? []"
+          :rows="filteredStockByArtist"
           :loading="loading"
           row-key="artist_id"
           :empty-message="t('reports.no_stock_data')"
@@ -409,7 +578,144 @@ function openStockDetail(row) {
               <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openStockDetail(row)">{{ t('reports.stock_detail_action') }}</button>
             </div>
           </template>
+          <template #footer>
+            <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
+              <td class="px-4 py-3 text-[13px]">{{ t('reports.grand_total') }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ stockByArtistTotals.variant_count }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ stockByArtistTotals.total_stock }}</td>
+              <td class="px-4 py-3"></td>
+            </tr>
+          </template>
         </DataTable>
+      </div>
+    </template>
+
+    <!-- Preorder tab (010-split-payment-preorder-reports US6) — satu baris
+         per kombinasi status × payment_completeness, persis seperti bentuk
+         agregasi yang dikembalikan API (lihat research.md R6). -->
+    <template v-else-if="activeTab === 'preorder'">
+      <!-- 012-seller-preorder-report-detail-export (US2) — toggle ringkasan
+           vs. per-penjual, memakai gaya button-group yang sama dengan tab
+           utama di atas (bg-track/p-1), bukan komponen tab baru. -->
+      <div class="flex gap-1.5 rounded-lg bg-track p-1 self-start">
+        <button
+          type="button"
+          class="rounded-md px-3.5 py-1.5 text-[12.5px] font-bold transition-colors"
+          :class="preorderView === 'summary' ? 'bg-white text-brand-active shadow-sm' : 'text-muted-4'"
+          @click="preorderView = 'summary'"
+        >
+          {{ t('reports.preorder_view_summary') }}
+        </button>
+        <button
+          type="button"
+          class="rounded-md px-3.5 py-1.5 text-[12.5px] font-bold transition-colors"
+          :class="preorderView === 'artist' ? 'bg-white text-brand-active shadow-sm' : 'text-muted-4'"
+          @click="preorderView = 'artist'"
+        >
+          {{ t('reports.preorder_view_by_artist') }}
+        </button>
+      </div>
+
+      <div class="overflow-hidden rounded-card border border-line-2 bg-white">
+        <DataTable
+          v-if="preorderView === 'summary'"
+          :columns="[
+            { key: 'status', label: t('reports.col_status') },
+            { key: 'payment_completeness', label: t('reports.preorder_col_payment_completeness') },
+            { key: 'preorder_count', label: t('reports.preorder_col_count') },
+            { key: 'total_order_value', label: t('reports.preorder_col_order_value') },
+            { key: 'total_collected', label: t('reports.preorder_col_collected') },
+            { key: 'total_outstanding', label: t('reports.preorder_col_outstanding') },
+            { key: 'actions', label: '' },
+          ]"
+          :rows="preorderStats ?? []"
+          :loading="loading"
+          :empty-message="t('reports.no_preorder_report_data')"
+        >
+          <template #cell-status="{ row }">{{ PREORDER_STATUS_LABEL[row.status] ?? row.status }}</template>
+          <template #cell-payment_completeness="{ row }">{{ PAYMENT_COMPLETENESS_LABEL[row.payment_completeness] ?? row.payment_completeness }}</template>
+          <template #cell-total_order_value="{ row }">{{ formatIDR(row.total_order_value) }}</template>
+          <template #cell-total_collected="{ row }">{{ formatIDR(row.total_collected) }}</template>
+          <template #cell-total_outstanding="{ row }">{{ formatIDR(row.total_outstanding) }}</template>
+          <template #cell-actions="{ row }">
+            <div class="flex justify-end">
+              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openPreorderDetail(row)">{{ t('reports.preorder_detail_action') }}</button>
+            </div>
+          </template>
+          <template #footer>
+            <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
+              <td class="px-4 py-3 text-[13px]" colspan="2">{{ t('reports.grand_total') }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ preorderSummaryTotals.preorder_count }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(preorderSummaryTotals.total_order_value) }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(preorderSummaryTotals.total_collected) }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(preorderSummaryTotals.total_outstanding) }}</td>
+              <td class="px-4 py-3"></td>
+            </tr>
+          </template>
+        </DataTable>
+        <DataTable
+          v-else
+          :columns="[
+            { key: 'artist_name', label: t('reports.col_artist') },
+            { key: 'status', label: t('reports.col_status') },
+            { key: 'payment_completeness', label: t('reports.preorder_col_payment_completeness') },
+            { key: 'preorder_count', label: t('reports.preorder_col_count') },
+            { key: 'total_order_value', label: t('reports.preorder_col_order_value') },
+            { key: 'total_collected', label: t('reports.preorder_col_collected') },
+            { key: 'total_outstanding', label: t('reports.preorder_col_outstanding') },
+            { key: 'actions', label: '' },
+          ]"
+          :rows="filteredPreorderByArtist"
+          :loading="loading"
+          :empty-message="t('reports.no_preorder_report_data')"
+        >
+          <template #cell-status="{ row }">{{ PREORDER_STATUS_LABEL[row.status] ?? row.status }}</template>
+          <template #cell-payment_completeness="{ row }">{{ PAYMENT_COMPLETENESS_LABEL[row.payment_completeness] ?? row.payment_completeness }}</template>
+          <template #cell-total_order_value="{ row }">{{ formatIDR(row.total_order_value) }}</template>
+          <template #cell-total_collected="{ row }">{{ formatIDR(row.total_collected) }}</template>
+          <template #cell-total_outstanding="{ row }">{{ formatIDR(row.total_outstanding) }}</template>
+          <template #cell-actions="{ row }">
+            <div class="flex justify-end">
+              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openPreorderDetail(row)">{{ t('reports.preorder_detail_action') }}</button>
+            </div>
+          </template>
+          <template #footer>
+            <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
+              <td class="px-4 py-3 text-[13px]" colspan="3">{{ t('reports.grand_total') }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ preorderByArtistTotals.preorder_count }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(preorderByArtistTotals.total_order_value) }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(preorderByArtistTotals.total_collected) }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ formatIDR(preorderByArtistTotals.total_outstanding) }}</td>
+              <td class="px-4 py-3"></td>
+            </tr>
+          </template>
+        </DataTable>
+      </div>
+
+      <!-- Subtotal per penjual — hanya tampil saat filter = "semua penjual"
+           DAN datanya mencakup lebih dari satu penjual (kalau sudah difilter
+           ke satu penjual, baris Grand Total di footer tabel di atas SUDAH
+           jadi subtotal penjual itu, jadi blok ini jadi berlebihan). -->
+      <div
+        v-if="preorderView === 'artist' && !artistFilter && preorderArtistSubtotals.length > 1"
+        class="overflow-hidden rounded-card border border-line-2 bg-white"
+      >
+        <DataTable
+          :columns="[
+            { key: 'artist_name', label: t('reports.col_artist') },
+            { key: 'preorder_count', label: t('reports.preorder_col_count') },
+            { key: 'total_order_value', label: t('reports.preorder_col_order_value') },
+            { key: 'total_collected', label: t('reports.preorder_col_collected') },
+            { key: 'total_outstanding', label: t('reports.preorder_col_outstanding') },
+          ]"
+          :rows="preorderArtistSubtotals"
+          row-key="artist_id"
+        >
+          <template #cell-total_order_value="{ row }">{{ formatIDR(row.total_order_value) }}</template>
+          <template #cell-total_collected="{ row }">{{ formatIDR(row.total_collected) }}</template>
+          <template #cell-total_outstanding="{ row }">{{ formatIDR(row.total_outstanding) }}</template>
+        </DataTable>
+        <p class="border-t border-line-2 px-4 py-2 text-[11px] text-muted-3">{{ t('reports.preorder_subtotal_per_seller_note') }}</p>
       </div>
     </template>
 
@@ -467,6 +773,14 @@ function openStockDetail(row) {
       :artist-id="stockDetailTarget?.artist_id"
       :artist-name="stockDetailTarget?.artist_name"
       @close="showStockDetail = false"
+    />
+
+    <PreorderReportDetailModal
+      :open="showPreorderDetail"
+      :status="preorderDetailTarget?.status"
+      :payment-completeness="preorderDetailTarget?.payment_completeness"
+      :artist-id="preorderDetailTarget?.artist_id"
+      @close="showPreorderDetail = false"
     />
   </div>
 </template>

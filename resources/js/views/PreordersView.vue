@@ -12,9 +12,11 @@ import {
   downloadPreorderImportTemplate,
   importPreorders,
   resendPreorderNotification,
+  getPreorderSummary,
 } from '../api/preorders';
 import { createShipment, updateShipment } from '../api/shipments';
 import { lookupVariants } from '../api/products';
+import { listArtists } from '../api/artists';
 import { useToastStore } from '../stores/toast';
 import { useAuthStore } from '../stores/auth';
 import PreorderInvoiceModal from '../components/preorder/PreorderInvoiceModal.vue';
@@ -63,7 +65,37 @@ const { items, meta, loading, load, setPage, setFilter, params } = usePaginatedL
 const route = useRoute();
 const router = useRouter();
 
+// 013-preorder-list-filters-receipt (US5, T026) — summary aggregate always
+// refetched alongside the list, using the exact same filter params
+// (`params` from usePaginatedList is the single source of truth for
+// "what's currently filtered", see api-deltas.md), so the two never
+// disagree.
+const summary = ref(null);
+const summaryLoading = ref(false);
+
+async function loadSummary() {
+  summaryLoading.value = true;
+  try {
+    summary.value = await getPreorderSummary({ ...params });
+  } finally {
+    summaryLoading.value = false;
+  }
+}
+
+function applyFilter(patch) {
+  setFilter(patch);
+  loadSummary();
+}
+
+// 013-preorder-list-filters-receipt (US1, T008) — filter penjual, pola
+// sama seperti seller filter di ReportsView.vue.
+const artists = ref([]);
+
 onMounted(load);
+onMounted(loadSummary);
+onMounted(async () => {
+  artists.value = (await listArtists({ per_page: 100, is_active: true })).data;
+});
 
 // 009-ui-ux-refinements US5 (T043) — CustomerTransactionsModal.vue
 // navigates here with ?preorder_id=<id> to open this existing detail
@@ -79,11 +111,12 @@ onMounted(async () => {
 // 007-preorder-import-export-notify (US1) — pencarian nama pelanggan,
 // debounced sama seperti pola pencarian ProductsView.vue.
 const customerSearch = ref('');
-const debouncedCustomerSearch = useDebouncedFn(() => setFilter({ search: customerSearch.value || undefined }), 300);
+const debouncedCustomerSearch = useDebouncedFn(() => applyFilter({ search: customerSearch.value || undefined }), 300);
 
 const columns = computed(() => [
   { key: 'preorder_number', label: t('preorders.col_number') },
   { key: 'customer_name', label: t('preorders.col_customer') },
+  { key: 'sellers', label: t('preorders.col_seller') },
   { key: 'status', label: t('preorders.col_status') },
   { key: 'fulfillment', label: t('preorders.col_fulfillment') },
   { key: 'total_amount', label: t('preorders.col_total') },
@@ -453,6 +486,30 @@ async function markDelivered() {
 
 <template>
   <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
+    <!-- 013-preorder-list-filters-receipt (US5, T026) — summary refetched
+         through applyFilter()/onMounted alongside the list itself, using
+         the same params, so it never disagrees with what's on screen. -->
+    <div v-if="summary" class="flex flex-wrap items-stretch gap-2.5 rounded-card border border-line-2 bg-white p-4">
+      <div class="flex min-w-[150px] flex-col gap-0.5 pr-4">
+        <span class="text-[11.5px] text-muted-3">{{ t('preorders.summary_transaction_count') }}</span>
+        <span class="text-[19px] font-extrabold tracking-tight">{{ summary.transaction_count }}</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-1.5 border-l border-line-6 pl-4">
+        <StatusPill v-for="s in summary.by_status" :key="s.status" :variant="STATUS_VARIANT[s.status]">
+          {{ STATUS_LABEL[s.status] }} · {{ s.count }} · {{ formatIDR(s.total_amount) }}
+        </StatusPill>
+      </div>
+      <span class="flex-1"></span>
+      <div class="flex min-w-[150px] flex-col gap-0.5 border-l border-line-6 pl-4">
+        <span class="text-[11.5px] text-muted-3">{{ t('preorders.summary_grand_total') }}</span>
+        <span class="text-[19px] font-extrabold tracking-tight">{{ formatIDR(summary.grand_total) }}</span>
+      </div>
+      <div class="flex min-w-[150px] flex-col gap-0.5 border-l border-line-6 pl-4">
+        <span class="text-[11.5px] text-muted-3">{{ t('preorders.summary_outstanding') }}</span>
+        <span class="text-[19px] font-extrabold tracking-tight text-warn-text">{{ formatIDR(summary.total_outstanding) }}</span>
+      </div>
+    </div>
+
     <div class="flex flex-wrap items-center gap-2.5">
       <div class="relative flex min-w-[230px] items-center">
         <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
@@ -469,13 +526,19 @@ async function markDelivered() {
         class="w-48"
         :placeholder="t('preorders.all_status')"
         :options="Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))"
-        @update:model-value="(v) => setFilter({ status: v || undefined })"
+        @update:model-value="(v) => applyFilter({ status: v || undefined })"
       />
       <BaseSelect
         class="w-44"
         :placeholder="t('preorders.all_fulfillment')"
         :options="[{ value: 'pickup', label: t('preorders.fulfillment_pickup') }, { value: 'courier', label: t('preorders.fulfillment_courier') }]"
-        @update:model-value="(v) => setFilter({ fulfillment: v || undefined })"
+        @update:model-value="(v) => applyFilter({ fulfillment: v || undefined })"
+      />
+      <BaseSelect
+        class="w-48"
+        :placeholder="t('preorders.all_sellers')"
+        :options="[{ value: '', label: t('preorders.all_sellers') }, ...artists.map((a) => ({ value: a.id, label: a.name }))]"
+        @update:model-value="(v) => applyFilter({ artist_id: v || undefined })"
       />
       <span class="flex-1"></span>
       <template v-if="isOwnerOrAdmin">
@@ -500,9 +563,15 @@ async function markDelivered() {
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
       <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('preorders.no_preorders')">
-        <template #cell-preorder_number="{ row }"><span class="font-mono text-[12.5px] font-semibold">{{ row.preorder_number }}</span></template>
+        <template #cell-preorder_number="{ row }">
+          <!-- 013-preorder-list-filters-receipt (US2, T019) — reuses the
+               existing openDetail(row) handler (research.md R7), a second
+               entry point into the row's already-existing "Detail" action. -->
+          <button type="button" class="font-mono text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openDetail(row)">{{ row.preorder_number }}</button>
+        </template>
         <template #cell-status="{ row }"><StatusPill :variant="STATUS_VARIANT[row.status]">{{ STATUS_LABEL[row.status] }}</StatusPill></template>
         <template #cell-fulfillment="{ row }">{{ FULFILLMENT_LABEL[row.fulfillment] }}</template>
+        <template #cell-sellers="{ row }">{{ row.sellers?.length ? row.sellers.map((s) => s.name).join(', ') : '—' }}</template>
         <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
         <template #cell-outstanding="{ row }">{{ formatIDR(row.outstanding) }}</template>
         <template #cell-actions="{ row }">
@@ -608,7 +677,11 @@ async function markDelivered() {
             <span class="text-[14.5px] font-bold">{{ t('preorders.ordered_items') }}</span>
             <div v-for="line in detailLines" :key="line.id" class="flex items-start gap-3 border-b border-line-6 pb-3 last:border-b-0">
               <span class="min-w-[28px] text-[14px] font-bold text-brand-active">{{ line.qty }}×</span>
-              <div class="flex flex-1 flex-col gap-0.5"><span class="text-[13.5px] font-semibold">{{ line.name_snapshot }}</span><span class="font-mono text-[11px] text-muted-3">{{ line.sku_snapshot }} · {{ formatIDR(line.sell_price) }}</span></div>
+              <div class="flex flex-1 flex-col gap-0.5">
+                <span class="text-[13.5px] font-semibold">{{ line.name_snapshot }}</span>
+                <span class="font-mono text-[11px] text-muted-3">{{ line.sku_snapshot }} · {{ formatIDR(line.sell_price) }}</span>
+                <span v-if="line.artist_name" class="text-[10.5px] text-muted-3">{{ line.artist_name }}</span>
+              </div>
               <span class="text-[13.5px] font-bold">{{ formatIDR(line.line_total) }}</span>
             </div>
             <div class="flex flex-col gap-2">

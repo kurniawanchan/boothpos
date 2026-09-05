@@ -1672,6 +1672,7 @@ paths:
         - { name: customer_id, in: query, schema: { type: integer } }
         - { name: fulfillment, in: query, schema: { type: string, enum: [pickup, courier] } }
         - { name: search, in: query, description: "007-preorder-import-export-notify (US1) — cocok parsial, tidak peka huruf besar/kecil, terhadap nama pelanggan.", schema: { type: string } }
+        - { name: artist_id, in: query, description: "013-preorder-list-filters-receipt (US1) — hanya pre-order yang punya minimal satu item milik penjual ini (via `whereHas`, tidak menduplikasi baris pre-order yang punya beberapa item dari penjual yang sama).", schema: { type: integer } }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -1758,6 +1759,46 @@ paths:
                     properties:
                       document_type: { type: string, enum: [invoice, receipt, cancelled] }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /preorders/summary:
+    get:
+      tags: [Preorder]
+      summary: Statistik ringkas daftar pre-order (013-preorder-list-filters-receipt, US5)
+      description: |
+        Menghormati filter yang SAMA PERSIS dengan `GET /preorders`
+        (`status`/`event_id`/`customer_id`/`fulfillment`/`search`/`artist_id`,
+        via helper `applyFilters()` yang sama) sehingga statistik ini tidak
+        pernah berbeda dari apa yang sedang ditampilkan di layar. `total_amount`/
+        `paid_amount` diambil langsung dari kolom `Preorder` yang sudah
+        otoritatif (bukan rekonsiliasi ulang dari `payments`) — lihat
+        research.md R3 fitur ini untuk alasannya.
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] } }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: customer_id, in: query, schema: { type: integer } }
+        - { name: fulfillment, in: query, schema: { type: string, enum: [pickup, courier] } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: artist_id, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transaction_count: { type: integer }
+                  by_status:
+                    type: array
+                    description: Selalu 6 entri (semua status), nol-diisi ("0.00") untuk status tanpa baris yang cocok.
+                    items:
+                      type: object
+                      properties:
+                        status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
+                        count: { type: integer, description: "Jumlah (qty) pre-order berstatus ini dalam himpunan terfilter." }
+                        total_amount: { $ref: '#/components/schemas/Money' }
+                  grand_total: { $ref: '#/components/schemas/Money' }
+                  total_outstanding: { $ref: '#/components/schemas/Money' }
 
   /preorders/export:
     get:
@@ -2168,6 +2209,28 @@ paths:
 
         Hanya peran owner/admin (`canAccessMenu('reports')`, sama seperti
         laporan lain di file ini).
+
+        012-seller-preorder-report-detail-export — tiga mode tambahan lewat
+        endpoint yang SAMA (bukan route baru, research.md R3/R4):
+        1. `?breakdown=artist` — baris ringkasan di atas dipecah per
+           `artist_id`/`artist_name` (join `preorder_items`), dengan
+           proporsi yang SAMA seperti diakui-dari-`payments` di atas.
+           Cancelled tidak muncul sebagai bucket tersendiri di mode ini
+           (beda dari mode default), konsekuensi dari memakai ulang helper
+           `preorderRecognizedRevenueBase()` yang sudah memfilter
+           `status != 'cancelled'` — didokumentasikan di kode, bukan bug.
+        2. `?status=&payment_completeness=` (opsional `artist_id`) —
+           drill-down: daftar preorder INDIVIDUAL yang menyusun satu baris
+           ringkasan/breakdown, bukan agregat.
+      parameters:
+        - { name: event_id, in: query, schema: { type: integer }, description: 'Filter ke satu event (FR-014).' }
+        - { name: breakdown, in: query, schema: { type: string, enum: [artist] }, description: '012 US2 — pecah baris ringkasan per seller.' }
+        - { name: status, in: query, schema: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }, description: '012 US3 — hadir bersama payment_completeness memicu mode drill-down.' }
+        - { name: payment_completeness, in: query, schema: { type: string, enum: [unpaid, partial, paid] }, description: '012 US3 — dipakai bersama status untuk drill-down.' }
+        - { name: artist_id, in: query, schema: { type: integer }, description: '012 US3 — opsional, mempersempit drill-down ke satu seller.' }
+      responses:
+        '200':
+          description: Berhasil — bentuk respons tergantung parameter (lihat description)
       parameters:
         - { name: event_id, in: query, schema: { type: integer }, description: 'Filter ke satu event (FR-014).' }
       responses:
@@ -2180,6 +2243,33 @@ paths:
                 properties:
                   rows:
                     type: array
+                    description: |
+                      Tanpa parameter tambahan: baris ringkasan status ×
+                      payment_completeness. Dengan `breakdown=artist`: baris
+                      per seller (menambah `artist_id`/`artist_name`).
+                      Dengan `status`+`payment_completeness`: daftar
+                      preorder individual (bentuk berbeda, lihat di bawah).
+                    items:
+                      oneOf:
+                        - type: object
+                          properties:
+                            status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
+                            payment_completeness: { type: string, enum: [unpaid, partial, paid] }
+                            artist_id: { type: integer, description: 'Hanya ada saat breakdown=artist.' }
+                            artist_name: { type: string, description: 'Hanya ada saat breakdown=artist.' }
+                            preorder_count: { type: integer }
+                            total_order_value: { type: string, example: '1500000.00' }
+                            total_collected: { type: string, example: '500000.00' }
+                            total_outstanding: { type: string, example: '1000000.00' }
+                        - type: object
+                          description: Baris drill-down (saat status+payment_completeness diberikan)
+                          properties:
+                            preorder_id: { type: integer }
+                            preorder_number: { type: string }
+                            customer_name: { type: string, nullable: true }
+                            order_value: { type: string, example: '75000.00' }
+                            collected: { type: string, example: '75000.00' }
+                            outstanding: { type: string, example: '0.00' }
                     items:
                       type: object
                       properties:
@@ -2240,6 +2330,19 @@ paths:
         booth ini bisa berisi item dari BEBERAPA artist sekaligus, `items[]`
         pada setiap baris HANYA memuat item milik artist yang diminta —
         bukan seluruh isi order tersebut. Hanya peran owner dan admin.
+
+        012-seller-preorder-report-detail-export (US1) — `transactions[]`
+        sekarang juga menyertakan entri bersumber Pre-order (bukan hanya
+        Order), dibedakan lewat `source`. Field pengidentifikasi berganti
+        nama dari `order_id`/`order_total_for_artist` menjadi `key`/
+        `amount_for_artist` karena entri pre-order tidak punya `order_id`.
+        Nilai `amount_for_artist` untuk entri pre-order adalah porsi yang
+        SUDAH TERKUMPUL (diproporsikan, research.md R1 di 010 & 012),
+        bukan nilai penuh preorder — konsisten dengan `total_sales` di
+        `GET /reports/artist-settlements`. Preorder berstatus `cancelled`
+        tidak pernah muncul di sini. Perbaikan sekaligus: query ini
+        sebelumnya tidak memfilter `data_mode` sama sekali (celah lama,
+        ditutup di fitur ini).
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -2261,8 +2364,9 @@ paths:
                     items:
                       type: object
                       properties:
-                        order_id: { type: integer }
-                        order_number: { type: string }
+                        key: { type: string, example: 'order-42', description: '"order-<id>" atau "preorder-<id>".' }
+                        number: { type: string, description: 'order_number atau preorder_number.' }
+                        source: { type: string, enum: [order, preorder] }
                         created_at: { type: string, format: date-time, nullable: true }
                         items:
                           type: array
@@ -2273,7 +2377,7 @@ paths:
                               name: { type: string }
                               qty: { type: integer }
                               line_total: { $ref: '#/components/schemas/Money' }
-                        order_total_for_artist:
+                        amount_for_artist:
                           $ref: '#/components/schemas/Money'
         '403': { $ref: '#/components/responses/Forbidden' }
 
@@ -2305,7 +2409,7 @@ paths:
       - name: report
         in: path
         required: true
-        schema: { type: string, enum: [sales, profit, artist-settlements, artist-profit] }
+        schema: { type: string, enum: [sales, profit, artist-settlements, artist-profit, purchases, stock-by-artist, preorder] }
     get:
       tags: [Report]
       summary: Ekspor laporan ke Excel
@@ -2318,6 +2422,17 @@ paths:
         tidak berubah) dan "Detail Transaksi" (baru — satu baris flat per
         item per order, lintas semua artist di event ini: artist_name,
         order_number, date, item_name, qty, line_total).
+
+        012-seller-preorder-report-detail-export (US4) — tiga tipe laporan
+        yang sebelumnya sama sekali tidak bisa diekspor:
+        - `report=purchases` — satu sheet, baris sama seperti
+          `GET /reports/purchases`.
+        - `report=stock-by-artist` — satu sheet, SELALU bentuk ringkasan
+          (per-seller), bahkan bila request punya `artist_id` — ekspor ini
+          tidak pernah memakai bentuk detail per-varian.
+        - `report=preorder` — DUA sheet seperti `artist-settlements`:
+          "Ringkasan" (bentuk `GET /reports/preorders` default) dan
+          "Per Seller" (bentuk `?breakdown=artist`).
       parameters:
         - { name: event_id, in: query, schema: { type: integer } }
       responses:
@@ -3886,6 +4001,14 @@ components:
         paid_amount: { $ref: '#/components/schemas/Money' }
         outstanding: { $ref: '#/components/schemas/Money' }
         created_at: { type: string, format: date-time }
+        sellers:
+          type: array
+          description: "013-preorder-list-filters-receipt (US1) — set penjual berbeda-beda di seluruh item pre-order ini, urutan kemunculan pertama."
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
 
     Preorder:
       type: object
@@ -3903,6 +4026,14 @@ components:
         outstanding: { $ref: '#/components/schemas/Money' }
         expected_date: { type: string, format: date, nullable: true }
         cancel_reason: { type: string, nullable: true }
+        sellers:
+          type: array
+          description: "013-preorder-list-filters-receipt (US1) — set penjual berbeda-beda di seluruh item pre-order ini, urutan kemunculan pertama."
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
         items:
           type: array
           items:
@@ -3910,7 +4041,8 @@ components:
             properties:
               id: { type: integer }
               variant_id: { type: integer }
-              artist_name: { type: string }
+              artist_id: { type: integer, nullable: true, description: "013-preorder-list-filters-receipt (US1)." }
+              artist_name: { type: string, nullable: true }
               sku_snapshot: { type: string }
               name_snapshot: { type: string }
               qty: { type: integer }

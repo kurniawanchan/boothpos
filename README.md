@@ -582,3 +582,54 @@ laporan baru yang barisnya tidak berbasis entitas ber-`id` (agregasi
 `GROUP BY`) butuh key sintetis eksplisit sebelum dikirim ke `DataTable`,
 dan filter opsional (boleh kosong) butuh opsi "semua" yang eksplisit,
 bukan mengandalkan placeholder semata.
+
+## Bug yang ditemukan saat eksekusi fitur 012-seller-preorder-report-detail-export (2026-09-05)
+
+Ditemukan lewat kombinasi test otomatis baru dan verifikasi browser
+sungguhan (Playwright) — dua di antaranya adalah regresi LAMA dari fitur
+010 yang lolos sebelumnya karena tidak ada test yang menegaskan kasus
+"artist yang HANYA punya pre-order, tanpa order reguler sama sekali":
+
+1. **`ReportController::sales()` — baris per-artist/kategori/produk/hari
+   menghilangkan kontribusi pre-order sepenuhnya (regresi dari 010),
+   walau `totals` di respons yang sama tetap benar.** Method ini punya DUA
+   penghitungan `$rows` yang tumpang tindih: yang pertama (benar)
+   menggabungkan hasil agregasi `order_items` dan `preorder_items` yang
+   sudah diproporsikan; tapi untuk semua `group_by` SELAIN `customer`,
+   sebuah blok `else` di bawahnya menghitung ULANG `$rows` dari
+   `order_items` SAJA dan menimpa hasil gabungan itu — kemungkinan sisa
+   kode lama yang lupa dihapus saat logika gabungan pre-order ditambahkan
+   di 010. Efeknya: seorang artist yang hanya berjualan lewat pre-order
+   (tanpa satu pun order reguler) hilang total dari tabel baris laporan,
+   padahal `totals.net_sales` (dihitung terpisah) tetap menyertakan
+   kontribusinya — sebuah inkonsistensi antara kartu ringkasan dan tabel
+   baris yang mudah tidak disadari. Ditemukan lewat dua test yang sudah
+   ADA sejak 010 (`test_sales_and_profit_reports_include_only_the_
+   collected_portion_of_a_partially_paid_preorder`,
+   `test_a_partially_paid_preorder_with_two_artists_prorates_the_
+   collected_amount_by_line_value_share`) yang ternyata SUDAH gagal
+   sebelum fitur 012 dimulai — diperbaiki dengan menghapus blok `else`
+   yang duplikat (bukan memperbaikinya), karena `$rows` yang benar sudah
+   dihitung tepat di atasnya.
+2. **`GET /reports/stock-by-artist/export?artist_id=X` — 500
+   "Undefined array key data".** `stockByArtist()` mengembalikan bentuk
+   respons BERBEDA tergantung ada-tidaknya `artist_id` (ringkasan
+   per-seller dengan key `data`, vs detail per-varian tanpa key itu sama
+   sekali) — jalur export yang baru ditambahkan di fitur ini hanya
+   mendukung bentuk ringkasan. Tidak tercapai lewat tombol export di UI
+   (yang tidak pernah mengirim `artist_id`), tapi tetap 500 kalau
+   dipanggil manual dengan parameter itu. Diperbaiki dengan helper
+   `stockByArtistSummaryOnly()` yang selalu memaksa mode ringkasan,
+   apa pun query string yang menyertainya.
+3. **(Perbaikan cepat, bukan bug produksi)** Percobaan pertama memperbaiki
+   #2 memakai `tap(clone $request)->query->remove('artist_id')` — salah,
+   karena `tap()` bentuk higher-order tidak meneruskan akses properti
+   seperti itu, menghasilkan galat baru
+   ("Undefined property: HigherOrderTapProxy::$query") yang ketahuan
+   lewat re-run test yang sama sebelum sempat dianggap selesai.
+
+Semua tiga ditemukan lewat eksekusi sungguhan (test yang benar-benar
+dijalankan, bukan dibaca), sesuai Constitution Principle II — dicatat di
+sini sebagai pengingat bahwa method laporan yang punya banyak cabang
+`group_by`/mode PALING rawan menyimpan blok kode duplikat/usang dari
+iterasi sebelumnya yang lolos review statis.

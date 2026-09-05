@@ -57,15 +57,23 @@ watch(
     <div v-else class="flex flex-col gap-3.5 px-6 py-5">
       <div
         v-for="tx in transactions"
-        :key="tx.order_id"
+        :key="tx.key"
         class="flex flex-col gap-2.5 rounded-lg border border-line-2 p-3.5"
       >
         <div class="flex items-center justify-between gap-2">
-          <div class="flex flex-col">
-            <span class="font-mono text-[12.5px] font-bold text-brand-active">{{ tx.order_number }}</span>
+          <div class="flex flex-col gap-1">
+            <div class="flex items-center gap-1.5">
+              <span class="font-mono text-[12.5px] font-bold text-brand-active">{{ tx.number }}</span>
+              <span
+                class="rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
+                :class="tx.source === 'preorder' ? 'bg-warn-bg text-warn-text' : 'bg-mint-100 text-brand-active'"
+              >
+                {{ tx.source === 'preorder' ? t('reports.transaction_type_preorder') : t('reports.transaction_type_order') }}
+              </span>
+            </div>
             <span class="text-[11.5px] text-muted-3">{{ tx.created_at ? formatDateTime(tx.created_at) : '—' }}</span>
           </div>
-          <span class="text-[14px] font-extrabold tracking-tight">{{ formatIDR(tx.order_total_for_artist) }}</span>
+          <span class="text-[14px] font-extrabold tracking-tight">{{ formatIDR(tx.amount_for_artist) }}</span>
         </div>
         <div class="overflow-hidden rounded-md border border-line-5">
           <table class="w-full border-collapse text-[12.5px]">

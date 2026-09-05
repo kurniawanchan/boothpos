@@ -39,11 +39,12 @@ describe('ReportsView — artist transaction drill-down (F11.6)', () => {
     artist: { id: 5, name: 'Artist A' },
     transactions: [
       {
-        order_id: 201,
-        order_number: 'ORD-201',
+        key: 'order-201',
+        number: 'ORD-201',
+        source: 'order',
         created_at: '2026-09-01T09:00:00Z',
         items: [{ sku: 'ABCST0001', name: 'Stiker Holografik', qty: 3, line_total: '90000.00' }],
-        order_total_for_artist: '90000.00',
+        amount_for_artist: '90000.00',
       },
     ],
   };
@@ -78,7 +79,7 @@ describe('ReportsView — artist transaction drill-down (F11.6)', () => {
     const auth = useAuthStore();
     auth.user = { id: 2, role: 'Kasir', name: 'Kasir', menu_keys: ['dashboard', 'pos'] };
     render(ReportsView, { global: { plugins: [pinia] } });
-    await screen.findByRole('combobox'); // event selector — always rendered regardless of role
+    await screen.findAllByRole('combobox'); // event selector (+ seller filter) — always rendered regardless of role
     expect(screen.queryByText('Rekap Penjual')).not.toBeInTheDocument();
   });
 });
@@ -108,7 +109,10 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
     await user.click(tab);
     await waitFor(() => expect(artistProfitReport).toHaveBeenCalledWith(1));
     expect(await screen.findByText('Artist A')).toBeInTheDocument();
-    expect(screen.getByText('Rp 60.000')).toBeInTheDocument();
+    // Rp 60.000 appears twice with only one row: once in the data row, once
+    // in the new Grand Total footer row (which mirrors the single row's own
+    // total when there's nothing else to sum).
+    expect(screen.getAllByText('Rp 60.000')).toHaveLength(2);
   });
 
   it('shows a note that the figure excludes event_cost, not a net-profit figure', async () => {
@@ -125,7 +129,7 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
     const auth = useAuthStore();
     auth.user = { id: 3, role: 'Inventory', name: 'Gudang', menu_keys: ['dashboard', 'products', 'stock'] };
     render(ReportsView, { global: { plugins: [pinia] } });
-    await screen.findByRole('combobox'); // event selector — always rendered regardless of role
+    await screen.findAllByRole('combobox'); // event selector (+ seller filter) — always rendered regardless of role
     expect(screen.queryByText('Modal Penjual')).not.toBeInTheDocument();
   });
 });

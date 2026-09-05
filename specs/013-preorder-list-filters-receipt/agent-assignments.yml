@@ -1,0 +1,134 @@
+# Agent Assignments
+# Feature: 013-preorder-list-filters-receipt
+# Generated: 2026-09-05
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "architect"
+    source: "user"
+    description: "Technical design docs, ADRs, C4 descriptions, API/OpenAPI references"
+  - name: "backend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors server-side code (Go, Python, Java, Node, Rust, C#, Ruby)"
+  - name: "claire"
+    source: "user"
+    description: "Jira Delivery Specialist — creates/refines/reviews Jira tickets"
+  - name: "frontend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors client-side/UI code (Vue, React, Svelte, Angular)"
+  - name: "pm"
+    source: "user"
+    description: "Pulls requirements into PRDs; decomposes design docs into Jira tickets"
+  - name: "qa"
+    source: "user"
+    description: "Test planning/strategy, scaffolds runnable tests, API test automation"
+  - name: "reviewer"
+    source: "user"
+    description: "Code/security review, PR/diff audits"
+  - name: "sre"
+    source: "user"
+    description: "Release readiness and incident postmortems"
+
+assignments:
+  T001:
+    agent: "default"
+    reason: "Environment go/no-go check, no code change"
+  T002:
+    agent: "backend-engineer"
+    reason: "Eloquent relation addition (PreorderItem::artist())"
+  T003:
+    agent: "backend-engineer"
+    reason: "Laravel controller refactor (applyFilters() extraction)"
+  T004:
+    agent: "backend-engineer"
+    reason: "Laravel controller — sellersFor() helper + present() wiring"
+  T005:
+    agent: "backend-engineer"
+    reason: "Laravel controller — artist_id filter + eager-load"
+  T006:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T007:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T008:
+    agent: "frontend-engineer"
+    reason: "Vue view — seller filter UI"
+  T009:
+    agent: "frontend-engineer"
+    reason: "Vue view — seller column"
+  T010:
+    agent: "frontend-engineer"
+    reason: "Vue view — detail drawer seller info"
+  T011:
+    agent: "frontend-engineer"
+    reason: "vue-i18n locale JSON files"
+  T012:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T013:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T014:
+    agent: "frontend-engineer"
+    reason: "Vue component restyle (PreorderInvoiceModal.vue)"
+  T015:
+    agent: "frontend-engineer"
+    reason: "Vue component — per-item seller display"
+  T016:
+    agent: "frontend-engineer"
+    reason: "vue-i18n locale JSON files"
+  T017:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T018:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T019:
+    agent: "frontend-engineer"
+    reason: "Vue view — clickable transaction number wiring"
+  T020:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T021:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T022:
+    agent: "backend-engineer"
+    reason: "Laravel controller — new summary() aggregate action"
+  T023:
+    agent: "backend-engineer"
+    reason: "Route registration (routes/api.php)"
+  T024:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T025:
+    agent: "frontend-engineer"
+    reason: "JS API client addition (preorders.js)"
+  T026:
+    agent: "frontend-engineer"
+    reason: "Vue view — summary statistics display"
+  T027:
+    agent: "frontend-engineer"
+    reason: "vue-i18n locale JSON files"
+  T028:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T029:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T030:
+    agent: "frontend-engineer"
+    reason: "vue-i18n locale JSON files — Print to Receipt rename"
+  T031:
+    agent: "default"
+    reason: "Manual verification pass (language switch + behavior check)"
+  T032:
+    agent: "backend-engineer"
+    reason: "API contract doc update owned alongside the backend changes"
+  T033:
+    agent: "default"
+    reason: "Runs both full test suites, not a code-authoring task"
+  T034:
+    agent: "default"
+    reason: "Documentation/README update, cross-cutting, contingent on bugs found"

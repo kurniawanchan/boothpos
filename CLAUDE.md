@@ -209,7 +209,68 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/010-split-payment-preorder-reports/plan.md`
+Active feature plan: `specs/013-preorder-list-filters-receipt/plan.md`
+(branch `013-preorder-list-filters-receipt`, branched from
+`012-seller-preorder-report-detail-export`) — five additive changes to the
+Pre-orders screen, none requiring a schema change: a seller filter + a
+visible seller column/detail (finally surfacing `preorder_items.artist_id`,
+which already existed but was never exposed as a relation or in any
+response — a preorder can span more than one seller, same as an
+order/POS cart); making the transaction number clickable to open the same
+detail view its existing "Detail" button already opens; restyling
+`PreorderInvoiceModal.vue` to match the POS receipt's visual conventions
+while showing the preorder's live granular status, reusing the
+"Pre-order marking + StatusPill" pattern `PreorderPaymentReceiptModal.vue`
+already established in `010` (this fully absorbs the dormant, unplanned
+`011-preorder-invoice-receipt-style` spec — `011` needs no separate
+implementation); renaming the two "Print"-wording locale keys actually
+used on this screen to "Receipt" wording, in both languages; and a new
+`GET /preorders/summary` aggregate endpoint (transaction count, per-status
+totals, grand total, outstanding), computed from the same filtered query
+`index()` already builds so it can never disagree with what's on screen —
+deliberately reusing `Preorder.total_amount`/`paid_amount` directly rather
+than the artist-proration recognized-revenue rule `010`/`012` use
+elsewhere, since that rule solves a different, per-seller-attribution
+problem this preorder-level summary doesn't have. See research.md R1–R7.
+
+Previous feature: `specs/012-seller-preorder-report-detail-export/plan.md`
+(branch `012-seller-preorder-report-detail-export`, branched from
+`010-split-payment-preorder-reports` — not `main` — since it directly
+extends that feature's report tabs) — four additive changes: merging
+preorder-sourced transactions into `artistSettlementTransactions()`'s
+per-seller drill-down (today it queries only `OrderItem`, so the Seller
+Recap total already includes preorder revenue per `010` but its own
+detail view can't explain that total — also closes a real, unrelated gap
+found while touching this method: it had **no `data_mode` filter at
+all**); adding a per-artist breakdown to `GET /reports/preorders` — a
+genuinely bigger change than "add a GROUP BY column," since that query
+currently has zero join to `preorder_items` and aggregates at the
+`preorders` header level, so the breakdown requires the same
+cash-collected/proration rule `010` established, applied one level
+deeper; a new on-demand drilldown modal (mirroring `009`'s
+`StockByArtistDetailModal.vue` pattern) that lists the individual
+preorders behind any Pre-order report row and opens them via
+`PreordersView.vue`'s already-existing `route.query.preorder_id`
+deep-link rather than new navigation; and Excel export added to the three
+report tabs that had none (Purchases, Stock by Seller, Pre-order) — the
+first two via plain `GenericArrayExport`, Pre-order via the
+`MultiSheetArrayExport`/`SheetArrayExport` two-sheet pattern already
+established by `exportArtistSettlements()`, since its export must carry
+both the summary and the new per-seller breakdown. See research.md R1–R6
+for the full reasoning.
+
+Previous feature: `specs/011-preorder-invoice-receipt-style/plan.md`
+(branch `011-preorder-invoice-receipt-style`, branched from `main`) —
+restyles the preorder invoice document (`PreorderInvoiceModal.vue`) to
+match the POS sale receipt's visual layout (store header, dashed-line
+itemization, prominent total, download-as-image/PDF), while keeping it
+unmistakably marked as a preorder with its live current status — a
+restyle of an already-related component (it already documents itself as
+following `ReceiptModal.vue`'s pattern), not a rebuild, and explicitly
+scoped to the invoice document only (not `010`'s separate per-payment-event
+receipt).
+
+Previous feature: `specs/010-split-payment-preorder-reports/plan.md`
 (branch `010-split-payment-preorder-reports`) — six changes: making the
 already-existing multi-entry split-payment capability actually visible at
 POS checkout (today `PaymentPanel.vue` gives zero on-screen affordance
