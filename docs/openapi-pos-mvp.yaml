@@ -47,6 +47,7 @@ tags:
   - name: Vendor & Bahan Baku
   - name: Purchase Order
   - name: Import & Export
+  - name: Company Onboarding
 
 security:
   - bearerAuth: []
@@ -2755,6 +2756,252 @@ paths:
         '204': { description: Berhasil }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /business-types:
+    get:
+      tags: [Company Onboarding]
+      summary: Daftar jenis bisnis
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: is_active, in: query, schema: { type: boolean } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/BusinessType' }
+    post:
+      tags: [Company Onboarding]
+      summary: Buat jenis bisnis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BusinessTypeInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BusinessType' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /business-types/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Company Onboarding]
+      summary: Detail jenis bisnis
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BusinessType' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Company Onboarding]
+      summary: Perbarui jenis bisnis
+      description: Kolom `code` tidak dapat diubah setelah dibuat.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BusinessTypeInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BusinessType' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Company Onboarding]
+      summary: Hapus jenis bisnis
+      description: Soft delete. Ditolak (409) bila masih dirujuk company manapun.
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /packages:
+    get:
+      tags: [Company Onboarding]
+      summary: Daftar paket
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: is_active, in: query, schema: { type: boolean } }
+        - { name: license_tier, in: query, schema: { type: string, enum: [pro, master] } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Package' }
+    post:
+      tags: [Company Onboarding]
+      summary: Buat paket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PackageInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Package' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /packages/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Company Onboarding]
+      summary: Detail paket
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Package' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Company Onboarding]
+      summary: Perbarui paket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PackageInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Package' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Company Onboarding]
+      summary: Hapus paket
+      description: Soft delete. Ditolak (409) bila masih dirujuk company manapun. `license_tier` bersifat deskriptif saja — tidak pernah diterapkan otomatis ke Setting `multi_artist_enabled` instalasi ini.
+      responses:
+        '204': { description: Berhasil }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /companies:
+    get:
+      tags: [Company Onboarding]
+      summary: Daftar company
+      description: Pipeline sales/ops internal — bukan entitas multi-tenant. Digerbang menu key 'companies' (owner/admin only).
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [pending_activation, active] } }
+        - { name: business_type_id, in: query, schema: { type: integer } }
+        - { name: package_id, in: query, schema: { type: integer } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Company' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Company Onboarding]
+      summary: Onboarding company
+      description: Membuat company (status pending_activation) + owner User tidak aktif, lalu mengirim kode aktivasi 6 digit ke contact_email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompanyOnboardInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /companies/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Company Onboarding]
+      summary: Detail company
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /companies/{id}/resend-activation:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Company Onboarding]
+      summary: Kirim ulang kode aktivasi
+      description: Membatalkan kode sebelumnya (bila ada) dan menerbitkan kode baru. Ditolak (409) bila company sudah aktif.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /companies/{id}/activate:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Company Onboarding]
+      summary: Aktivasi company
+      description: Rate-limited (10/menit). Kode salah/kedaluwarsa/company sudah aktif ditolak 422 dengan alasan yang bisa dibedakan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /materials:
     get:
       tags: [Vendor & Bahan Baku]
@@ -3436,6 +3683,72 @@ components:
         contact_email: { type: string, nullable: true }
         notes: { type: string, nullable: true }
         is_active: { type: boolean, default: true }
+
+    BusinessType:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, maxLength: 20, example: RETAIL }
+        name: { type: string }
+        is_active: { type: boolean }
+        company_count: { type: integer, nullable: true, readOnly: true }
+
+    BusinessTypeInput:
+      type: object
+      required: [code, name]
+      properties:
+        code: { type: string, maxLength: 20, description: Permanen setelah dibuat. }
+        name: { type: string, maxLength: 100 }
+        is_active: { type: boolean, default: true }
+
+    Package:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        license_tier: { type: string, enum: [pro, master], description: Deskriptif saja — tidak diterapkan otomatis ke Setting multi_artist_enabled instalasi ini. }
+        is_active: { type: boolean }
+        company_count: { type: integer, nullable: true, readOnly: true }
+
+    PackageInput:
+      type: object
+      required: [name, license_tier]
+      properties:
+        name: { type: string, maxLength: 100 }
+        description: { type: string, nullable: true }
+        license_tier: { type: string, enum: [pro, master] }
+        is_active: { type: boolean, default: true }
+
+    Company:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        address: { type: string, nullable: true }
+        contact_name: { type: string }
+        contact_email: { type: string }
+        contact_phone: { type: string, nullable: true }
+        status: { type: string, enum: [pending_activation, active] }
+        activated_at: { type: string, format: date-time, nullable: true }
+        business_type: { $ref: '#/components/schemas/BusinessType' }
+        package: { $ref: '#/components/schemas/Package' }
+        owner_username: { type: string, readOnly: true }
+        created_at: { type: string, format: date-time }
+
+    CompanyOnboardInput:
+      type: object
+      required: [business_type_id, package_id, name, contact_name, contact_email, owner_username, owner_password]
+      properties:
+        business_type_id: { type: integer, description: Harus merujuk business type yang masih aktif. }
+        package_id: { type: integer, description: Harus merujuk package yang masih aktif. }
+        name: { type: string, maxLength: 150 }
+        address: { type: string, nullable: true }
+        contact_name: { type: string, maxLength: 100 }
+        contact_email: { type: string, format: email }
+        contact_phone: { type: string, nullable: true }
+        owner_username: { type: string, maxLength: 50, description: Harus unik lintas seluruh tabel users. }
+        owner_password: { type: string, minLength: 8 }
 
     Material:
       type: object

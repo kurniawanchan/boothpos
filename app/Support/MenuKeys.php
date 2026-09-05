@@ -35,6 +35,7 @@ class MenuKeys
         'purchase_orders' => 'Purchase Order',
         'customers' => 'Pelanggan',
         'preorders' => 'Pre-order',
+        'companies' => 'Perusahaan',
         'sales' => 'Penjualan',
         'reports' => 'Laporan',
         'users' => 'Pengguna',

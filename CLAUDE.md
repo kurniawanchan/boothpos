@@ -209,7 +209,34 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/016-docker-store-deployment/plan.md`
+Active feature plan: `specs/017-company-onboarding/plan.md`
+(branch `017-company-onboarding`, branched from `main`) — Company/Package/
+Business Type as new administratively-managed entities inside THIS
+existing single BoothPOS installation: an internal sales/onboarding CRM
+tracker, explicitly NOT a multi-tenant runtime pivot (confirmed with the
+product owner before speccing — see spec.md's "Scope clarified" note).
+An owner/admin onboards a company (business type + package + details +
+contact + initial owner username/password); the system creates an
+inactive owner `User` row and emails a single-use, hashed, 24h-expiring
+6-digit activation code (research.md R2) to the contact — submitting the
+correct code flips the company active and the owner user usable.
+Package's `license_tier` (pro/master) is recorded on the Company as
+DESCRIPTIVE DATA ONLY — it is deliberately never auto-applied to this
+install's own `LicenseGate`/`multi_artist_enabled` Setting, since that's
+a single global value and blindly overwriting it per-company-onboarded
+would silently change what an ALREADY-USING company is licensed for
+(research.md R4 — a real correctness risk, not just out-of-scope).
+New `companies` menu key (owner/admin only, via a default-roles
+migration mirroring `purchase_orders`'s own). Every activation-email send
+attempt is logged in `company_activation_notifications`, an exact
+structural mirror of the existing `preorder_notifications`/
+`PreorderNotifier` pattern (including the `mail.default === 'log'` ->
+`skipped_not_configured` convention) rather than a new audit-log shape.
+Activation endpoint is rate-limited (`throttle:10,1`) since a 6-digit
+code is a real brute-force target without it (research.md R5). See
+research.md R1-R7 for the full reasoning.
+
+Previous feature: `specs/016-docker-store-deployment/plan.md`
 (branch `016-docker-store-deployment`, branched from `main`) — a SECOND,
 production-shaped Docker path (`docker/store/`, `docker-compose.store.yml`),
 entirely separate from feature 015's dev-only setup below. Dated note

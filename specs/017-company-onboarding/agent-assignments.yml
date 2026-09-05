@@ -1,0 +1,188 @@
+# Agent Assignments
+# Feature: 017-company-onboarding
+# Generated: 2026-09-05
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "architect"
+    source: "user"
+    description: "Design docs / ADRs / OpenAPI"
+  - name: "backend-engineer"
+    source: "user"
+    description: "Server-side code; defaults to opening a Bitbucket PR via the pull-request skill"
+  - name: "claire"
+    source: "user"
+    description: "Jira ticket authoring"
+  - name: "frontend-engineer"
+    source: "user"
+    description: "Vue/React UI; unconditionally defaults to Mekari Pixel (@mekari/pixel3) + Figma MCP fetch"
+  - name: "pm"
+    source: "user"
+    description: "PRD pulling / Jira decomposition"
+  - name: "qa"
+    source: "user"
+    description: "Test strategy / Postman-Newman API automation scaffolding into qa-tests/api/"
+  - name: "reviewer"
+    source: "user"
+    description: "Code/security review"
+  - name: "sre"
+    source: "user"
+    description: "Bitbucket->ACR->ACK release pipeline / postmortems"
+
+assignments:
+  T001:
+    agent: "default"
+    reason: "Migration stub scaffolding, Laravel-specific, no match"
+  T002:
+    agent: "default"
+    reason: "Repo-specific lang-file i18n convention"
+  T003:
+    agent: "default"
+    reason: "Laravel migration, no match"
+  T004:
+    agent: "default"
+    reason: "Laravel migration, no match"
+  T005:
+    agent: "default"
+    reason: "Laravel migration, no match"
+  T006:
+    agent: "default"
+    reason: "Laravel migration, no match"
+  T007:
+    agent: "default"
+    reason: "Laravel migration (default-roles menu key), no match"
+  T008:
+    agent: "default"
+    reason: "Eloquent model, repo-specific conventions (HasDataMode)"
+  T009:
+    agent: "default"
+    reason: "Eloquent model, repo-specific conventions"
+  T010:
+    agent: "default"
+    reason: "Eloquent model, repo-specific conventions (HasDataMode)"
+  T011:
+    agent: "default"
+    reason: "Eloquent model mirroring existing PreorderNotification"
+  T012:
+    agent: "default"
+    reason: "Policy mirroring existing VendorPolicy pattern"
+  T013:
+    agent: "default"
+    reason: "FormRequests mirroring existing StoreVendorRequest pattern"
+  T014:
+    agent: "default"
+    reason: "API Resource, repo-specific conventions"
+  T015:
+    agent: "default"
+    reason: "backend-engineer's Bitbucket-PR default conflicts with this repo's GitHub/explicit-request workflow"
+  T016:
+    agent: "default"
+    reason: "Route registration, no match"
+  T017:
+    agent: "default"
+    reason: "Repo-specific lang-file convention"
+  T018:
+    agent: "default"
+    reason: "tests/Feature/ (PHPUnit/MySQL) convention, not qa agent's Postman/Newman default"
+  T019:
+    agent: "default"
+    reason: "tests/Feature/ convention, not qa agent's Postman/Newman default"
+  T020:
+    agent: "default"
+    reason: "Mailable class mirroring existing PreorderStatusMail"
+  T021:
+    agent: "default"
+    reason: "Core business-logic Service class, repo-specific patterns (research.md R2/R3/R7)"
+  T022:
+    agent: "default"
+    reason: "FormRequest, repo-specific validation conventions"
+  T023:
+    agent: "default"
+    reason: "Policy, repo-specific menu-key gating"
+  T024:
+    agent: "default"
+    reason: "API Resource, repo-specific conventions"
+  T025:
+    agent: "default"
+    reason: "backend-engineer's Bitbucket-PR default conflicts with this repo's workflow"
+  T026:
+    agent: "default"
+    reason: "Route registration, no match"
+  T027:
+    agent: "default"
+    reason: "Repo-specific lang-file convention"
+  T028:
+    agent: "default"
+    reason: "Test execution/verification, repo-specific test convention"
+  T029:
+    agent: "default"
+    reason: "frontend-engineer's unconditional Mekari Pixel + Figma MCP default directly conflicts with CLAUDE.md's explicit 'no Mekari Pixel' rule for this product"
+  T030:
+    agent: "default"
+    reason: "Manual browser/API verification, repo-specific Constitution II requirement"
+  T031:
+    agent: "default"
+    reason: "tests/Feature/ convention, not qa agent's Postman/Newman default"
+  T032:
+    agent: "default"
+    reason: "Core business-logic Service method, repo-specific patterns (research.md R2/R5)"
+  T033:
+    agent: "default"
+    reason: "FormRequest, repo-specific validation conventions"
+  T034:
+    agent: "default"
+    reason: "backend-engineer's Bitbucket-PR default conflicts with this repo's workflow"
+  T035:
+    agent: "default"
+    reason: "Route registration + throttle middleware, no match"
+  T036:
+    agent: "default"
+    reason: "Repo-specific lang-file convention"
+  T037:
+    agent: "default"
+    reason: "Test execution/verification, repo-specific test convention"
+  T038:
+    agent: "default"
+    reason: "frontend-engineer's Mekari Pixel + Figma MCP default conflicts with CLAUDE.md"
+  T039:
+    agent: "default"
+    reason: "Manual browser/API verification, repo-specific Constitution II requirement"
+  T040:
+    agent: "default"
+    reason: "tests/Feature/ convention, not qa agent's Postman/Newman default"
+  T041:
+    agent: "default"
+    reason: "FormRequests, repo-specific validation conventions"
+  T042:
+    agent: "default"
+    reason: "API Resource, repo-specific conventions"
+  T043:
+    agent: "default"
+    reason: "backend-engineer's Bitbucket-PR default conflicts with this repo's workflow"
+  T044:
+    agent: "default"
+    reason: "Route registration, no match"
+  T045:
+    agent: "default"
+    reason: "Repo-specific lang-file convention"
+  T046:
+    agent: "default"
+    reason: "Test execution/verification, repo-specific test convention"
+  T047:
+    agent: "default"
+    reason: "frontend-engineer's Mekari Pixel + Figma MCP default conflicts with CLAUDE.md"
+  T048:
+    agent: "default"
+    reason: "Manual browser/API verification, repo-specific Constitution II requirement"
+  T049:
+    agent: "default"
+    reason: "docs/openapi-pos-mvp.yaml update, repo-specific Documentation & Change Discipline rule"
+  T050:
+    agent: "default"
+    reason: "Role-gating test sweep, repo-specific test convention"
+  T051:
+    agent: "default"
+    reason: "Full regression test run, repo-specific test convention"
+  T052:
+    agent: "default"
+    reason: "Final quickstart sign-off, repo-specific verification convention"
