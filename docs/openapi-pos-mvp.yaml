@@ -35,6 +35,7 @@ servers:
     description: Instalasi lokal pada laptop operasional
 
 tags:
+  - name: License
   - name: Auth
   - name: Master Data
   - name: Settings
@@ -56,6 +57,59 @@ security:
 # PATHS
 # =====================================================================
 paths:
+
+  # ------------------------------------------------------------------
+  # LICENSE (018-license-activation)
+  # ------------------------------------------------------------------
+  # Kedua endpoint ini SENGAJA tanpa auth DAN dikecualikan dari
+  # EnsureInstallationIsActivated (satu-satunya pengecualian selain
+  # keduanya sendiri) — harus tetap terjangkau selagi instalasi belum
+  # teraktivasi sama sekali (FR-002). Setiap endpoint LAIN di berkas ini
+  # mengembalikan 423 selagi belum aktif — tidak diulang di tiap path
+  # demi keterbacaan, cukup dicatat sekali di sini.
+  /license/status:
+    get:
+      tags: [License]
+      summary: Status aktivasi instalasi ini
+      security: []
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activated: { type: boolean }
+
+  /license/activate:
+    post:
+      tags: [License]
+      summary: Aktivasi instalasi dengan kunci lisensi
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_key]
+              properties:
+                license_key: { type: string, description: 'base64(payload).base64(signature) — string tunggal yang ditempel dari email vendor.' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activated: { type: boolean }
+        '422':
+          description: Kunci lisensi tidak valid — satu alasan generik saja, tidak membedakan bentuk salah dari tanda tangan salah (FR-003).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
 
   # ------------------------------------------------------------------
   # AUTH

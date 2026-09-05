@@ -1,7 +1,19 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { useLicenseStore } from '../stores/license';
 
 const routes = [
+  {
+    // 018-license-activation — satu-satunya rute yang dikecualikan dari
+    // gerbang lisensi itu sendiri (lihat beforeEach di bawah). Sengaja
+    // TIDAK memakai meta.public (yang berarti sesuatu berbeda: "boleh
+    // diakses tanpa login") — rute ini boleh diakses tanpa AKTIVASI,
+    // bukan tanpa login, dua konsep yang berbeda.
+    path: '/activate',
+    name: 'activate',
+    component: () => import('../views/LicenseLockView.vue'),
+    meta: { licenseExempt: true },
+  },
   {
     path: '/login',
     name: 'login',
@@ -181,6 +193,29 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
+  const license = useLicenseStore();
+
+  // 018-license-activation — dicek LEBIH DULU, sebelum pemeriksaan auth
+  // apa pun di bawah (research.md R4): instalasi yang belum teraktivasi
+  // mengunci SEMUA rute, termasuk /login, tidak terkecuali (FR-002).
+  // Ini murni cermin UX — penegakan sungguhan ada di
+  // EnsureInstallationIsActivated di server (Constitution IV); guard ini
+  // hanya mencegah layar asli sempat ter-render sebelum API menolaknya.
+  if (!license.ready) {
+    await license.restore();
+  }
+
+  if (!license.activated) {
+    if (to.name !== 'activate') {
+      return { name: 'activate' };
+    }
+    return true;
+  }
+
+  if (to.name === 'activate') {
+    return { name: 'dashboard' };
+  }
+
   const auth = useAuthStore();
 
   // Vue Router can resolve its first navigation before main.js's own

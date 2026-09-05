@@ -8,6 +8,7 @@ import '@phosphor-icons/web/duotone';
 import App from './App.vue';
 import router from './router';
 import { useAuthStore } from './stores/auth';
+import { useLicenseStore } from './stores/license';
 import { i18n } from './i18n';
 
 const app = createApp(App);
@@ -18,6 +19,10 @@ app.use(i18n);
 // Restore the session (if any) from sessionStorage before the first route
 // resolves, so navigation guards see accurate auth state on a hard refresh.
 const auth = useAuthStore();
-auth.restore().finally(() => {
+// 018-license-activation — checked alongside auth, before the app
+// mounts, for the same reason: without this, the router's first
+// navigation could resolve before the license status is known.
+const license = useLicenseStore();
+Promise.all([auth.restore(), license.restore()]).finally(() => {
   app.mount('#app');
 });

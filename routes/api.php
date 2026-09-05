@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\EventController;
+use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\MasterDataExportController;
 use App\Http\Controllers\Api\MasterDataImportController;
 use App\Http\Controllers\Api\MaterialController;
@@ -31,6 +32,13 @@ use App\Http\Middleware\SetLocaleFromUser;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
+
+    // 018-license-activation — kedua endpoint ini SENGAJA tanpa
+    // auth:sanctum DAN dikecualikan dari EnsureInstallationIsActivated
+    // (lihat middleware itu sendiri) — harus tetap bisa dijangkau
+    // selagi instalasi belum ter-aktivasi sama sekali (FR-002).
+    Route::get('/license/status', [LicenseController::class, 'status']);
+    Route::post('/license/activate', [LicenseController::class, 'activate']);
 
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
