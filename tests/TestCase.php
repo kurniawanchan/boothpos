@@ -2,8 +2,11 @@
 
 namespace Tests;
 
+use App\Models\LicenseActivation;
+use App\Support\MachineFingerprint;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -27,5 +30,27 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
         Cache::flush();
+
+        // BUG YANG DITEMUKAN & DIPERBAIKI (018-license-activation) —
+        // terverifikasi lewat `php artisan test` sungguhan: menambahkan
+        // gerbang EnsureInstallationIsActivated GLOBAL ke seluruh grup
+        // middleware 'api' membuat 364 dari ~430 test lama gagal dengan
+        // 423, karena tidak satu pun test itu pernah mengaktivasi
+        // instalasinya lebih dulu — mereka semua ditulis sebelum fitur
+        // ini ada, dan tidak seharusnya perlu tahu tentang lisensi sama
+        // sekali. Baris ini membuat setiap test SECARA DEFAULT berjalan
+        // di instalasi yang sudah teraktivasi (fingerprint mesin yang
+        // menjalankan test itu sendiri), persis seperti keadaan
+        // sungguhan setelah operator mengaktivasi sekali. Test yang
+        // MEMANG menguji perilaku gerbang lisensi itu sendiri
+        // (LicenseActivationTest) meng-override setUp()-nya sendiri
+        // untuk menghapus baris ini lagi, supaya bisa menguji dari
+        // keadaan belum teraktivasi.
+        LicenseActivation::query()->create([
+            'license_id' => 'test-suite',
+            'issued_to' => 'Test Suite',
+            'machine_fingerprint_hash' => Hash::make(MachineFingerprint::current()),
+            'activated_at' => now(),
+        ]);
     }
 }

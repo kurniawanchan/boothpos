@@ -34,6 +34,14 @@ export class ApiError extends Error {
   get isNotFound() {
     return this.status === 404;
   }
+
+  // 018-license-activation — installation not activated. The router
+  // guard (not this interceptor) is the actual redirect mechanism, per
+  // research.md R4; this getter exists for any caller that wants to
+  // check it directly, mirroring the other status getters above.
+  get isLocked() {
+    return this.status === 423;
+  }
 }
 
 const FALLBACK_MESSAGE = 'Terjadi kesalahan. Silakan coba lagi.';
