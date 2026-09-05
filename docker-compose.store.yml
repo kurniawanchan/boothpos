@@ -62,6 +62,15 @@ services:
       # balik ke berkas `.env` HOST yang sama, dan APP_KEY yang
       # ter-generate sekali tetap ada di restart/upgrade berikutnya.
       - ${ENV_FILE:-.env}:/var/www/html/.env
+      # 018-license-activation — mengikat fingerprint mesin (research.md
+      # R3) ke HOST, bukan ke container-nya sendiri. Tanpa bind-mount
+      # ini, MachineFingerprint akan membaca /etc/machine-id MILIK
+      # CONTAINER, yang berganti setiap container dibuat ulang (mis. saat
+      # upgrade rutin, lihat §10.2 RUNBOOK/quickstart 016) — memicu
+      # lockout palsu pada instalasi yang sebetulnya sudah sah teraktivasi
+      # (research.md R6). Read-only karena aplikasi tidak pernah perlu
+      # menulis ke sana.
+      - /etc/machine-id:/etc/machine-id:ro
     depends_on:
       mysql:
         condition: service_healthy

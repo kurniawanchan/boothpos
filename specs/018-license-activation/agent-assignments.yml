@@ -1,0 +1,116 @@
+# Agent Assignments
+# Feature: 018-license-activation
+# Generated: 2026-09-06
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "architect"
+    source: "user"
+    description: "Design docs / ADRs / OpenAPI"
+  - name: "backend-engineer"
+    source: "user"
+    description: "Server-side code; defaults to opening a Bitbucket PR via the pull-request skill"
+  - name: "claire"
+    source: "user"
+    description: "Jira ticket authoring"
+  - name: "frontend-engineer"
+    source: "user"
+    description: "Vue/React UI; unconditionally defaults to Mekari Pixel (@mekari/pixel3) + Figma MCP fetch"
+  - name: "pm"
+    source: "user"
+    description: "PRD pulling / Jira decomposition"
+  - name: "qa"
+    source: "user"
+    description: "Test strategy / Postman-Newman API automation scaffolding into qa-tests/api/"
+  - name: "reviewer"
+    source: "user"
+    description: "Code/security review"
+  - name: "sre"
+    source: "user"
+    description: "Bitbucket->ACR->ACK release pipeline / postmortems"
+
+assignments:
+  T001:
+    agent: "default"
+    reason: "Repo-specific lang-file i18n convention"
+  T002:
+    agent: "default"
+    reason: "One-off local Ed25519 keypair generation, no match"
+  T003:
+    agent: "default"
+    reason: "Laravel migration, no match"
+  T004:
+    agent: "default"
+    reason: "Eloquent model, repo-specific conventions"
+  T005:
+    agent: "default"
+    reason: "Security-critical signing helper (sodium), no match"
+  T006:
+    agent: "default"
+    reason: "OS-specific fingerprint helper, no match"
+  T007:
+    agent: "default"
+    reason: "Core business-logic Service class, repo-specific patterns (research.md R4/R7)"
+  T008:
+    agent: "default"
+    reason: "Global security middleware, no match"
+  T009:
+    agent: "default"
+    reason: "bootstrap/app.php middleware registration, no match"
+  T010:
+    agent: "default"
+    reason: "FormRequest, repo-specific validation conventions"
+  T011:
+    agent: "default"
+    reason: "backend-engineer's Bitbucket-PR default conflicts with this repo's GitHub/explicit-request workflow"
+  T012:
+    agent: "default"
+    reason: "Route registration, no match"
+  T013:
+    agent: "default"
+    reason: "Repo-specific lang-file convention"
+  T014:
+    agent: "default"
+    reason: "tests/Feature/ (PHPUnit/MySQL) convention, not qa agent's Postman/Newman default"
+  T015:
+    agent: "default"
+    reason: "API client module, repo-specific conventions"
+  T016:
+    agent: "default"
+    reason: "Pinia store mirroring existing useAuthStore shape, repo-specific"
+  T017:
+    agent: "default"
+    reason: "frontend-engineer's unconditional Mekari Pixel + Figma MCP default directly conflicts with CLAUDE.md's explicit 'no Mekari Pixel' rule for this product"
+  T018:
+    agent: "default"
+    reason: "Vue Router config + main.js boot sequence, repo-specific"
+  T019:
+    agent: "default"
+    reason: "Manual browser/API verification, repo-specific Constitution II requirement"
+  T020:
+    agent: "default"
+    reason: "Router guard extension mirroring existing beforeEach pattern"
+  T021:
+    agent: "default"
+    reason: "Manual browser/API verification, repo-specific Constitution II requirement"
+  T022:
+    agent: "default"
+    reason: "Mailable mirroring existing CompanyActivationMail/PreorderStatusMail pattern"
+  T023:
+    agent: "default"
+    reason: "Vendor-side Artisan CLI command, security-critical, no match"
+  T024:
+    agent: "default"
+    reason: "Manual verification, repo-specific"
+  T025:
+    agent: "default"
+    reason: "docker-compose.store.yml edit (feature 016 artifact), repo-specific"
+  T026:
+    agent: "default"
+    reason: "docs/openapi-pos-mvp.yaml update, repo-specific Documentation & Change Discipline rule"
+  T027:
+    agent: "default"
+    reason: "Full regression test run, repo-specific test convention"
+  T028:
+    agent: "default"
+    reason: "Final quickstart sign-off, repo-specific verification convention"

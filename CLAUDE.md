@@ -209,7 +209,71 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/016-docker-store-deployment/plan.md`
+Active feature plan: `specs/018-license-activation/plan.md`
+(branch `018-license-activation`, branched from `main`) — a global gate
+blocking every application function until THIS installation has redeemed
+a valid, vendor-signed license key, matching the existing "one-time
+license installed locally per store" business model. Fully separate from
+feature 017's Company Onboarding CRM tracker (explicit product-owner
+scope decision) — this gates the installation itself, before the login
+screen is even reachable, for ANY URL including direct API hits.
+Vendor-signed Ed25519 key (PHP's built-in `sodium` extension, no new
+dependency), verifiable entirely offline against a public key baked into
+the app — the app itself can never forge a valid key, since only the
+vendor's own local, never-committed private key can sign one. On first
+successful verification, binds to a machine fingerprint (`/etc/machine-id`
+on Linux, `IOPlatformUUID` via `ioreg` on macOS — hashed, one-way,
+mirroring how this codebase already hashes passwords) stored in a new
+`license_activations` table (NOT `HasDataMode`-scoped — installation-level
+security data, same category as `payment_channels`) — copying an
+activated installation's data to a different machine fails closed
+(fingerprint mismatch), verified manually since this has no automated-test
+equivalent. Enforced by a global backend middleware first (`423 Locked`
+on every route except the two license endpoints, including `/auth/login`
+itself) — the frontend router guard is a UX mirror only, never the real
+security boundary (Constitution IV). License generation is vendor-side
+CLI tooling (`php artisan license:generate`), never a customer-facing
+screen — mirrors feature 016's maintainer-vs-shipped-product separation;
+safe to ship the command's code since it's cryptographically inert
+without the vendor's own private key, which no customer's `.env` ever
+contains. Feature 016's `docker-compose.store.yml` gets one small
+addition (bind-mounting the HOST's `/etc/machine-id`) so a store's
+license survives routine container-recreate upgrades rather than
+false-locking on every one. Honest, explicitly-documented limitation:
+this fully-offline design cannot detect the *same* key being activated
+on two independently-fresh machines — only "copying an already-activated
+install's data elsewhere" is technically prevented; the rest is a
+vendor-side business-process concern, not a technical control. See
+research.md R1-R8 for the full reasoning.
+
+Previous feature: `specs/017-company-onboarding/plan.md`
+(branch `017-company-onboarding`, branched from `main`) — Company/Package/
+Business Type as new administratively-managed entities inside THIS
+existing single BoothPOS installation: an internal sales/onboarding CRM
+tracker, explicitly NOT a multi-tenant runtime pivot (confirmed with the
+product owner before speccing — see spec.md's "Scope clarified" note).
+An owner/admin onboards a company (business type + package + details +
+contact + initial owner username/password); the system creates an
+inactive owner `User` row and emails a single-use, hashed, 24h-expiring
+6-digit activation code (research.md R2) to the contact — submitting the
+correct code flips the company active and the owner user usable.
+Package's `license_tier` (pro/master) is recorded on the Company as
+DESCRIPTIVE DATA ONLY — it is deliberately never auto-applied to this
+install's own `LicenseGate`/`multi_artist_enabled` Setting, since that's
+a single global value and blindly overwriting it per-company-onboarded
+would silently change what an ALREADY-USING company is licensed for
+(research.md R4 — a real correctness risk, not just out-of-scope).
+New `companies` menu key (owner/admin only, via a default-roles
+migration mirroring `purchase_orders`'s own). Every activation-email send
+attempt is logged in `company_activation_notifications`, an exact
+structural mirror of the existing `preorder_notifications`/
+`PreorderNotifier` pattern (including the `mail.default === 'log'` ->
+`skipped_not_configured` convention) rather than a new audit-log shape.
+Activation endpoint is rate-limited (`throttle:10,1`) since a 6-digit
+code is a real brute-force target without it (research.md R5). See
+research.md R1-R7 for the full reasoning.
+
+Previous feature: `specs/016-docker-store-deployment/plan.md`
 (branch `016-docker-store-deployment`, branched from `main`) — a SECOND,
 production-shaped Docker path (`docker/store/`, `docker-compose.store.yml`),
 entirely separate from feature 015's dev-only setup below. Dated note
