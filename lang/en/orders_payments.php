@@ -14,4 +14,6 @@ return [
     'change_exceeds_cash_received' => 'Change cannot exceed the cash amount received.',
     'already_voided' => 'This transaction was already voided.',
     'customer_not_found' => 'Customer not found.',
+    'discount_exceeds_line_value' => 'The discount for variant :sku exceeds that line\'s value.',
+    'discount_exceeds_subtotal' => 'The order discount exceeds the subtotal.',
 ];

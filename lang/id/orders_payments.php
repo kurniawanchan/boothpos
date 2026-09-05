@@ -14,4 +14,6 @@ return [
     'change_exceeds_cash_received' => 'Kembalian tidak dapat melebihi jumlah tunai yang diterima.',
     'already_voided' => 'Transaksi sudah dibatalkan sebelumnya.',
     'customer_not_found' => 'Customer tidak ditemukan.',
+    'discount_exceeds_line_value' => 'Diskon untuk varian :sku melebihi nilai baris itu sendiri.',
+    'discount_exceeds_subtotal' => 'Diskon transaksi melebihi subtotal.',
 ];

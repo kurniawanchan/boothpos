@@ -173,6 +173,59 @@ class OrderTest extends TestCase
         $response->assertStatus(409);
     }
 
+    // --- Diskon (security review 2026-09-05, SEC-H1/SEC-H2) -----------
+
+    public function test_per_item_discount_reduces_total_amount_and_matches_line_total(): void
+    {
+        // variant sell_price 25000 x qty 2 = 50000 mentah; diskon item
+        // 20000 => line_total 30000. Sebelum SEC-H1 diperbaiki,
+        // total_amount tetap 50000 (mengabaikan diskon item) meski
+        // order_items.line_total sudah 30000 — nilainya saling berbeda.
+        $response = $this->postJson('/api/v1/orders', $this->basePayload([
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 2, 'discount_amount' => 20000]],
+            'payments' => [['method' => 'cash', 'amount' => 30000]],
+        ]));
+
+        $response->assertCreated()
+            ->assertJsonPath('total_amount', '30000.00')
+            ->assertJsonPath('subtotal', '30000.00');
+        $this->assertDatabaseHas('order_items', [
+            'variant_id' => $this->variant->id,
+            'discount_amount' => '20000.00',
+            'line_total' => '30000.00',
+        ]);
+    }
+
+    public function test_per_item_discount_exceeding_line_value_is_rejected(): void
+    {
+        // SEC-H2 — diskon item (60000) melebihi nilai barisnya sendiri
+        // (25000 x 2 = 50000), yang sebelumnya hanya divalidasi 'min:0'
+        // tanpa batas atas.
+        $response = $this->postJson('/api/v1/orders', $this->basePayload([
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 2, 'discount_amount' => 60000]],
+            'payments' => [['method' => 'cash', 'amount' => 0.01]],
+        ]));
+
+        // ValidationException dari OrderService dipetakan ke 409 (konflik
+        // aturan bisnis), bukan 422 — lihat OrderController::store().
+        $response->assertStatus(409)->assertJsonPath('errors.items.0', __('orders_payments.discount_exceeds_line_value', ['sku' => $this->variant->sku]));
+        $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_order_level_discount_exceeding_subtotal_is_rejected(): void
+    {
+        // SEC-H2 — diskon tingkat order (60000) melebihi subtotal
+        // (25000 x 2 = 50000), yang sebelumnya bisa membuat total_amount
+        // negatif.
+        $response = $this->postJson('/api/v1/orders', $this->basePayload([
+            'discount_amount' => 60000,
+            'payments' => [['method' => 'cash', 'amount' => 0.01]],
+        ]));
+
+        $response->assertStatus(409)->assertJsonPath('errors.discount_amount.0', __('orders_payments.discount_exceeds_subtotal'));
+        $this->assertDatabaseCount('orders', 0);
+    }
+
     // --- Negative: sesi kasir -----------------------------------------
 
     public function test_order_rejected_when_session_already_closed(): void
