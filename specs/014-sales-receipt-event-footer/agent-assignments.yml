@@ -1,0 +1,89 @@
+# Agent Assignments
+# Feature: 014-sales-receipt-event-footer
+# Generated: 2026-09-05
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "architect"
+    source: "user"
+    description: "Technical design docs, ADRs, C4 descriptions, API/OpenAPI references"
+  - name: "backend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors server-side code (Go, Python, Java, Node, Rust, C#, Ruby)"
+  - name: "claire"
+    source: "user"
+    description: "Jira Delivery Specialist — creates/refines/reviews Jira tickets"
+  - name: "frontend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors client-side/UI code (Vue, React, Svelte, Angular)"
+  - name: "pm"
+    source: "user"
+    description: "Pulls requirements into PRDs; decomposes design docs into Jira tickets"
+  - name: "qa"
+    source: "user"
+    description: "Test planning/strategy, scaffolds runnable tests, API test automation"
+  - name: "reviewer"
+    source: "user"
+    description: "Code/security review, PR/diff audits"
+  - name: "sre"
+    source: "user"
+    description: "Release readiness and incident postmortems"
+
+assignments:
+  T001:
+    agent: "default"
+    reason: "Environment go/no-go check, no code change"
+  T002:
+    agent: "frontend-engineer"
+    reason: "Vue view — re-import ReceiptModal + state/handler wiring"
+  T003:
+    agent: "frontend-engineer"
+    reason: "Vue view — action button + modal mount"
+  T004:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T005:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T006:
+    agent: "backend-engineer"
+    reason: "Eloquent relation addition (Preorder::event())"
+  T007:
+    agent: "backend-engineer"
+    reason: "Laravel controller — eager-load + response fields"
+  T008:
+    agent: "backend-engineer"
+    reason: "Laravel controller — response fields"
+  T009:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T010:
+    agent: "backend-engineer"
+    reason: "PHPUnit feature test under tests/Feature/"
+  T011:
+    agent: "frontend-engineer"
+    reason: "Vue component — footer block + date computation"
+  T012:
+    agent: "frontend-engineer"
+    reason: "Vue component — same footer block, second component"
+  T013:
+    agent: "frontend-engineer"
+    reason: "vue-i18n locale JSON files"
+  T014:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T015:
+    agent: "qa"
+    reason: "Vitest spec authored under qa-tests/"
+  T016:
+    agent: "default"
+    reason: "Manual browser verification pass"
+  T017:
+    agent: "backend-engineer"
+    reason: "API contract doc update owned alongside the backend changes"
+  T018:
+    agent: "default"
+    reason: "Runs both full test suites, not a code-authoring task"
+  T019:
+    agent: "default"
+    reason: "Documentation/README update, cross-cutting, contingent on bugs found"

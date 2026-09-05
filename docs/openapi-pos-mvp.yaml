@@ -1758,6 +1758,10 @@ paths:
                   - type: object
                     properties:
                       document_type: { type: string, enum: [invoice, receipt, cancelled] }
+                      event_name: { type: string, nullable: true, description: "014-sales-receipt-event-footer — null when the preorder has no event_id." }
+                      event_location: { type: string, nullable: true }
+                      event_start_date: { type: string, format: date, nullable: true }
+                      event_end_date: { type: string, format: date, nullable: true }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /preorders/summary:
@@ -3944,6 +3948,9 @@ components:
         store_contact_email: { type: string, nullable: true }
         order_number: { type: string }
         event_name: { type: string }
+        event_location: { type: string, nullable: true, description: "014-sales-receipt-event-footer." }
+        event_start_date: { type: string, format: date, nullable: true }
+        event_end_date: { type: string, format: date, nullable: true }
         cashier_name: { type: string }
         created_at: { type: string, format: date-time }
         items:

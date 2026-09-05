@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Artist;
 use App\Models\Category;
 use App\Models\Customer;
+use App\Models\Event;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
@@ -154,6 +155,42 @@ class PreorderTest extends TestCase
 
         $afterStatus = $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->json();
         $this->assertSame($this->customer->id, $afterStatus['customer']['id']);
+    }
+
+    // 014-sales-receipt-event-footer (US2) — invoice preorder kini juga
+    // menampilkan info event, tapi event_id di preorder opsional (beda
+    // dengan Order yang selalu punya event), jadi kedua kasus diuji.
+    public function test_invoice_includes_event_info_when_preorder_has_event(): void
+    {
+        $event = Event::factory()->create();
+
+        $preorder = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id,
+            'fulfillment' => 'pickup',
+            'event_id' => $event->id,
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
+        ])->json();
+
+        $response = $this->getJson("/api/v1/preorders/{$preorder['id']}/invoice");
+
+        $response->assertOk()
+            ->assertJsonPath('event_name', $event->name)
+            ->assertJsonPath('event_location', $event->location)
+            ->assertJsonPath('event_start_date', $event->start_date?->toDateString())
+            ->assertJsonPath('event_end_date', $event->end_date?->toDateString());
+    }
+
+    public function test_invoice_event_fields_are_null_when_preorder_has_no_event(): void
+    {
+        $preorder = $this->createPreorder();
+
+        $response = $this->getJson("/api/v1/preorders/{$preorder['id']}/invoice");
+
+        $response->assertOk()
+            ->assertJsonPath('event_name', null)
+            ->assertJsonPath('event_location', null)
+            ->assertJsonPath('event_start_date', null)
+            ->assertJsonPath('event_end_date', null);
     }
 
     public function test_shipment_appears_in_response_once_created(): void

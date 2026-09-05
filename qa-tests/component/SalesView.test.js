@@ -5,12 +5,12 @@ import SalesView from '../../resources/js/views/SalesView.vue';
 import { listEvents } from '../../resources/js/api/events';
 import { salesReport } from '../../resources/js/api/reports';
 import { getProduct } from '../../resources/js/api/products';
-import { getOrder } from '../../resources/js/api/orders';
+import { getOrder, getReceipt } from '../../resources/js/api/orders';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), exportReport: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ getProduct: vi.fn() }));
-vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn() }));
+vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn(), getReceipt: vi.fn() }));
 
 // This is the actual regression case from the bug report: "Transaksi: 3
 // tapi tabel cuma ada 2 baris" — two of three orders bought the same
@@ -68,6 +68,48 @@ describe('SalesView', () => {
     expect(screen.getByText('ORD-001')).toBeInTheDocument();
     expect(screen.getByText('ORD-002')).toBeInTheDocument();
     expect(screen.getByText('ORD-003')).toBeInTheDocument();
+  });
+
+  // 014-sales-receipt-event-footer US1 — "View receipt" is a new, separate
+  // action button alongside "View items", not a replacement.
+  it('clicking "View receipt" calls getReceipt with the row id and opens the receipt modal', async () => {
+    getReceipt.mockResolvedValue({
+      order_number: 'ORD-001',
+      store_name: 'Sakana Fridge',
+      event_name: 'Event A',
+      created_at: '2026-09-01T10:00:00Z',
+      cashier_name: 'Kasir A',
+      items: [],
+      subtotal: '60000.00',
+      total: '60000.00',
+    });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSales();
+    await screen.findByText('ORD-001');
+    await user.click(screen.getAllByRole('button', { name: 'Lihat struk' })[0]);
+    await waitFor(() => expect(getReceipt).toHaveBeenCalledWith(101));
+    expect(await screen.findByText('ORD-001', { selector: 'span.font-mono' })).toBeInTheDocument();
+    expect(screen.getByText('Sakana Fridge')).toBeInTheDocument();
+  });
+
+  // Regression (FR-003): the pre-existing "View items" action must still
+  // open the products-sold popup exactly as before, unaffected by the new
+  // receipt button sitting next to it.
+  it('clicking "View items" still opens the products-sold popup, unaffected by the new receipt button', async () => {
+    getOrder.mockResolvedValue({
+      id: 101,
+      order_number: 'ORD-001',
+      items: [{ id: 1, variant_id: 1, artist_id: 1, product_id: 10, sku_snapshot: 'ABCST0001', name_snapshot: 'Stiker Holografik', qty: 2, sell_price: '30000.00', line_total: '60000.00' }],
+    });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderSales();
+    await screen.findByText('ORD-001');
+    await user.click(screen.getAllByRole('button', { name: 'Lihat produk' })[0]);
+    await waitFor(() => expect(getOrder).toHaveBeenCalledWith(101));
+    expect(await screen.findByText('Produk Terjual')).toBeInTheDocument();
+    expect(getReceipt).not.toHaveBeenCalled();
   });
 
   it('opens the "products sold" popup (not the receipt) when clicking a transaction number', async () => {

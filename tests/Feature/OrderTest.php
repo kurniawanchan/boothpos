@@ -255,4 +255,20 @@ class OrderTest extends TestCase
             ->assertJsonPath('store_logo_url', null)
             ->assertJsonPath('store_contact_person', null);
     }
+
+    // 014-sales-receipt-event-footer (US2) — footer struk kini juga
+    // menampilkan info event (lokasi & tanggal), bukan cuma nama.
+    public function test_receipt_includes_event_location_and_dates(): void
+    {
+        $order = $this->postJson('/api/v1/orders', $this->basePayload())->json();
+
+        $response = $this->getJson("/api/v1/orders/{$order['id']}/receipt");
+
+        $event = $this->session->event;
+
+        $response->assertOk()
+            ->assertJsonPath('event_location', $event->location)
+            ->assertJsonPath('event_start_date', $event->start_date?->toDateString())
+            ->assertJsonPath('event_end_date', $event->end_date?->toDateString());
+    }
 }

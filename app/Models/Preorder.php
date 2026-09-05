@@ -29,6 +29,7 @@ class Preorder extends Model
 
     public function items(): HasMany { return $this->hasMany(PreorderItem::class); }
     public function payments(): HasMany { return $this->hasMany(Payment::class); }
+    public function event(): BelongsTo { return $this->belongsTo(Event::class); }
     public function customer(): BelongsTo { return $this->belongsTo(Customer::class); }
     public function shipment(): HasOne { return $this->hasOne(Shipment::class); }
     public function notifications(): HasMany { return $this->hasMany(PreorderNotification::class); }

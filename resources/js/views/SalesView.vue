@@ -11,6 +11,7 @@ import BaseButton from '../components/ui/BaseButton.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
+import ReceiptModal from '../components/receipt/ReceiptModal.vue';
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
@@ -90,14 +91,24 @@ const filteredTransactions = computed(() => {
   });
 });
 
-// T017 — klik nomor transaksi tak lagi membuka ReceiptModal (struk cetak),
-// melainkan popup "Produk Terjual" (TransactionItemsModal, T015/T016).
+// T017 — klik nomor transaksi tetap membuka popup "Produk Terjual"
+// (TransactionItemsModal, T015/T016), bukan ReceiptModal (struk cetak).
+// 014-sales-receipt-event-footer US1 — struk itu sendiri kini bisa
+// dilihat lagi lewat tombol "View receipt" terpisah di kolom aksi.
 const showItems = ref(false);
 const itemsOrderId = ref(null);
 
 function openItems(transaction) {
   itemsOrderId.value = transaction.id;
   showItems.value = true;
+}
+
+const showReceipt = ref(false);
+const receiptOrderId = ref(null);
+
+function openReceipt(row) {
+  receiptOrderId.value = row.id;
+  showReceipt.value = true;
 }
 
 // Follow-up 2 (FR-023) — klik nama artist adalah pintasan mengisi kotak
@@ -186,12 +197,14 @@ function showCustomerDetail(row) {
           <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
           <template #cell-actions="{ row }">
             <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openItems(row)">{{ t('reports.view_items') }}</button>
+            <button type="button" class="ml-3 text-[12.5px] font-semibold text-brand-active" @click="openReceipt(row)">{{ t('reports.view_receipt') }}</button>
           </template>
         </DataTable>
       </div>
     </div>
 
     <TransactionItemsModal :open="showItems" :order-id="itemsOrderId" @close="showItems = false" />
+    <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" @close="showReceipt = false" />
 
     <BaseModal :open="detailCustomer !== null" :title="t('reports.customer_detail')" max-width-class="max-w-[360px]" @close="detailCustomer = null">
       <div v-if="detailCustomer" class="flex flex-col gap-2.5 px-6 py-5 text-[13.5px]">
