@@ -83,7 +83,23 @@ class OrderService
 
                 $qty = (int) $itemInput['qty'];
                 $discount = (float) ($itemInput['discount_amount'] ?? 0);
-                $lineTotal = ((float) $variant->sell_price * $qty) - $discount;
+                $lineValue = (float) $variant->sell_price * $qty;
+
+                // BUG YANG DITEMUKAN & DIPERBAIKI (security review 2026-09-05,
+                // SEC-H2) — discount_amount per item semula hanya divalidasi
+                // 'min:0' di StoreOrderRequest, tanpa batas atas. Klien tidak
+                // pernah mengirim field ini (lihat SEC-H1 di bawah), jadi ini
+                // hanya bisa dieksploitasi lewat panggilan API langsung, tapi
+                // tetap perlu ditutup di sini karena butuh harga variant yang
+                // sudah resolved server-side (tidak bisa jadi FormRequest rule
+                // statis).
+                if ($discount > $lineValue) {
+                    throw ValidationException::withMessages([
+                        'items' => __('orders_payments.discount_exceeds_line_value', ['sku' => $variant->sku]),
+                    ]);
+                }
+
+                $lineTotal = $lineValue - $discount;
 
                 $lineData[] = [
                     'variant' => $variant,
@@ -92,11 +108,35 @@ class OrderService
                     'line_total' => $lineTotal,
                 ];
 
-                $subtotal += (float) $variant->sell_price * $qty;
+                // BUG YANG DITEMUKAN & DIPERBAIKI (security review 2026-09-05,
+                // SEC-H1) — $subtotal SEBELUMNYA mengakumulasi harga MENTAH
+                // (sell_price * qty), mengabaikan $discount per item sama
+                // sekali. total_amount pesanan (dihitung dari $subtotal di
+                // bawah) akibatnya TIDAK PERNAH mencerminkan diskon per item,
+                // padahal order_items.line_total (yang dipakai laporan/
+                // settlement artist) SUDAH mencerminkannya — total_amount
+                // pesanan bisa berbeda dari SUM(order_items.line_total)-nya
+                // sendiri. $subtotal sekarang mengakumulasi $lineTotal
+                // (pasca-diskon-item), sehingga total_amount = subtotal -
+                // discount_amount (order-level) tetap konsisten dengan jumlah
+                // baris itemnya, dan invarian struk "Total = Subtotal -
+                // Diskon" tetap benar.
+                $subtotal += $lineTotal;
                 $totalCost += (float) $variant->cost_price * $qty;
             }
 
             $orderDiscount = (float) ($data['discount_amount'] ?? 0);
+
+            // SEC-H2 (lanjutan) — diskon tingkat order pun sebelumnya tanpa
+            // batas atas; ditutup di sini sekarang $subtotal sudah benar
+            // (pasca-diskon-item), sehingga total_amount tidak akan pernah
+            // negatif lagi untuk kombinasi diskon apa pun.
+            if ($orderDiscount > $subtotal) {
+                throw ValidationException::withMessages([
+                    'discount_amount' => __('orders_payments.discount_exceeds_subtotal'),
+                ]);
+            }
+
             $totalAmount = $subtotal - $orderDiscount;
 
             $paidAmount = collect($data['payments'])->sum('amount');
