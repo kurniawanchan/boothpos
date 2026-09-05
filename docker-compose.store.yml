@@ -1,0 +1,70 @@
+# Real store-deployment stack (specs/016-docker-store-deployment/).
+# Distinct from docker-compose.yml (feature 015, dev-only: bind mounts,
+# anonymous volumes, a separate `node` hot-reload service). This file
+# has no bind mount and no `node` service — the `app` image already
+# carries the built assets (docker/store/Dockerfile).
+#
+# Usage: cp .env.store.example .env && docker compose -f docker-compose.store.yml up -d
+
+services:
+  mysql:
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-change-me-before-real-use}
+      MYSQL_DATABASE: ${DB_DATABASE:-boothpos}
+    volumes:
+      # Named volume — decoupled from the `app` image's own lifecycle.
+      # Upgrading `app` to a new version never touches this (research.md R2).
+      - boothpos_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_PASSWORD:-change-me-before-real-use}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  app:
+    image: ${STORE_IMAGE:-boothpos-store:latest}
+    build:
+      context: .
+      dockerfile: docker/store/Dockerfile
+    env_file:
+      # Parameterized so a verification/CI run can point at a different
+      # env file (e.g. ENV_FILE=.env.store.test) without ever touching a
+      # real deployment's actual .env — defaults to the documented ".env"
+      # for real usage (BUG YANG DITEMUKAN & DIPERBAIKI, verified via a
+      # real `docker compose up`: a literal `env_file: .env` is NOT
+      # variable-substituted by Compose, unlike `${...}` elsewhere in
+      # this file, so a hardcoded value here cannot be overridden at all
+      # without this).
+      - ${ENV_FILE:-.env}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind-mounted from a real host path (the operator's actual
+      # external drive) so app:backup/app:restore's output is genuinely
+      # portable off the machine, not trapped in a Docker-managed
+      # volume (research.md R5). The container-side path MUST match
+      # BACKUP_EXTERNAL_PATH in .env.
+      - ${BACKUP_EXTERNAL_PATH:-/mnt/backup}:${BACKUP_EXTERNAL_PATH:-/mnt/backup}
+      # BUG YANG DITEMUKAN & DIPERBAIKI (016-docker-store-deployment) —
+      # terverifikasi lewat `docker compose up` sungguhan: TANPA
+      # bind-mount apa pun, tidak ada berkas `.env` sungguhan di dalam
+      # container sama sekali — `env_file:` di atas hanya menyuntikkan
+      # environment variables ke proses, TIDAK menciptakan berkas
+      # `/var/www/html/.env`. Akibatnya `php artisan key:generate` tidak
+      # punya berkas untuk ditulisi (APP_KEY tidak pernah ter-generate,
+      # error "No application encryption key has been specified"), dan
+      # bahkan jika dipaksa generate di memori, key baru itu akan hilang
+      # setiap container di-restart (tidak ada tempat persisten). Solusi:
+      # bind-mount SATU BERKAS `.env` saja (bukan seluruh source code —
+      # ini konfigurasi, bukan kode) sehingga `key:generate` menulis
+      # balik ke berkas `.env` HOST yang sama, dan APP_KEY yang
+      # ter-generate sekali tetap ada di restart/upgrade berikutnya.
+      - ${ENV_FILE:-.env}:/var/www/html/.env
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  boothpos_mysql_data:

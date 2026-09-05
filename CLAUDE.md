@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-BoothPOS — a POS system for event-based multi-artist merchandise booths, sold as a **one-time license installed locally per store**. Laravel API + Vue SPA both run on one machine and are reached over `localhost`; there is no cloud tier, no separate frontend server, and no multi-tenancy. "Production" means a shopkeeper's laptop at an event venue.
+BoothPOS — a POS system for event-based multi-artist merchandise booths, sold as a **one-time license installed locally per store**. Laravel API + Vue SPA both run on one machine and are reached over `localhost`; there is no cloud tier, no separate frontend server, and no multi-tenancy. "Production" means a shopkeeper's laptop at an event venue — as of `016-docker-store-deployment` (dated note, 2026-09-05), that laptop MAY run BoothPOS via Docker instead of a native install; both are real, supported production paths, not just feature 015's dev-only tooling. See that feature's plan for the details.
 
 Docs in `docs/` are the spec source of truth: `PRD-POS-Event-Multivendor.md`, `openapi-pos-mvp.yaml`, `schema-pos-mvp.sql`, `wbs-pos-mvp.md`, `uml-pos-mvp.md`. `docs/RUNBOOK.md` is the operational command reference; `README.md` carries the narrative history and the full list of bugs found during execution.
 
@@ -209,15 +209,42 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/015-dockerize-dev-environment/plan.md`
+Active feature plan: `specs/016-docker-store-deployment/plan.md`
+(branch `016-docker-store-deployment`, branched from `main`) — a SECOND,
+production-shaped Docker path (`docker/store/`, `docker-compose.store.yml`),
+entirely separate from feature 015's dev-only setup below. Dated note
+(2026-09-05): this REVERSES feature 015's own documented "not a new
+store-deployment channel" decision — a real store may now be deployed via
+Docker as an alternative to the native install, not just via dev tooling.
+Single self-contained image (Composer/npm build baked in at image-build
+time, no bind mounts, no Node service at runtime) + `mysql` service with a
+named volume decoupled from the app image's lifecycle, so an app-image
+upgrade never touches persisted data. Distributed BOTH via container
+registry (`docker pull`) AND an offline `.tar` archive (`docker save`/
+`docker load`, for venues with unreliable internet) — both paths converge
+on the same compose file/image tag. Migrations auto-run on start, reusing
+015's idempotent entrypoint pattern. `app:backup`/`app:restore` (WBS 9.2)
+stay unmodified — the new image bundles `mysqldump`/`mysql` client tools,
+and `BACKUP_EXTERNAL_PATH` bind-mounts a real host path so backups remain
+portable to a physical external drive, per existing RUNBOOK §9 guidance.
+Upgrades and seeding stay fully manual, no auto-update/version-check
+(product-owner decision, spec.md clarifications) — consistent with this
+product's existing no-cloud-tier posture. See research.md R1-R7.
+
+Previous feature: `specs/015-dockerize-dev-environment/plan.md`
 (branch `015-dockerize-dev-environment`, branched from `main`) — a Docker
 Compose setup (`mysql`+`app`+`node` services) reproducing the existing
 native dev workflow (`laradock-mysql-1` + `php artisan serve` +
 `npm run dev`) as one reproducible, one-command stack — **local
 development tooling only**, explicitly NOT a new store-deployment channel
-(clarified before speccing; "production" still means a native,
-Docker-free install on the shopkeeper's machine, per this file's own
-opening description). PHP image pinned to 8.3 (composer.json's declared
+at the time it was built (clarified before speccing; "production" meant a
+native, Docker-free install on the shopkeeper's machine). **This
+"not-a-deployment-channel" framing was superseded by
+`016-docker-store-deployment` (2026-09-05)** — a real store may now be
+deployed via Docker too, through a wholly separate `docker/store/` tree,
+never this feature's dev-only `docker/php|node` images. Everything else
+below about this feature's own dev-tooling design remains accurate. PHP
+image pinned to 8.3 (composer.json's declared
 floor, not whatever the host happens to have — research.md R2); required
 PHP extensions traced to `maatwebsite/excel`'s own declared requirements,
 not guessed (R3); one MySQL container seeds both `boothpos`/`boothpos_test`
