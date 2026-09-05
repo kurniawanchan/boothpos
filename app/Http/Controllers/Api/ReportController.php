@@ -941,6 +941,11 @@ class ReportController extends Controller
             ->selectRaw("
                 preorders.status as status,
                 {$completeness} as payment_completeness,
+                CASE
+                    WHEN COALESCE(collected.amount_collected, 0) <= 0 THEN 'unpaid'
+                    WHEN COALESCE(collected.amount_collected, 0) >= preorders.total_amount THEN 'paid'
+                    ELSE 'partial'
+                END as payment_completeness,
                 COUNT(*) as preorder_count,
                 SUM(preorders.total_amount) as total_order_value,
                 SUM(COALESCE(collected.amount_collected, 0)) as total_collected,

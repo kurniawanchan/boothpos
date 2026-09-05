@@ -2231,6 +2231,11 @@ paths:
       responses:
         '200':
           description: Berhasil — bentuk respons tergantung parameter (lihat description)
+      parameters:
+        - { name: event_id, in: query, schema: { type: integer }, description: 'Filter ke satu event (FR-014).' }
+      responses:
+        '200':
+          description: Berhasil
           content:
             application/json:
               schema:
@@ -2265,6 +2270,15 @@ paths:
                             order_value: { type: string, example: '75000.00' }
                             collected: { type: string, example: '75000.00' }
                             outstanding: { type: string, example: '0.00' }
+                    items:
+                      type: object
+                      properties:
+                        status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
+                        payment_completeness: { type: string, enum: [unpaid, partial, paid] }
+                        preorder_count: { type: integer }
+                        total_order_value: { type: string, example: '1500000.00' }
+                        total_collected: { type: string, example: '500000.00' }
+                        total_outstanding: { type: string, example: '1000000.00' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /reports/artist-settlements:

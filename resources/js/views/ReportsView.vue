@@ -719,6 +719,33 @@ function openPreorderDetail(row) {
       </div>
     </template>
 
+    <!-- Preorder tab (010-split-payment-preorder-reports US6) — satu baris
+         per kombinasi status × payment_completeness, persis seperti bentuk
+         agregasi yang dikembalikan API (lihat research.md R6). -->
+    <template v-else-if="activeTab === 'preorder'">
+      <div class="overflow-hidden rounded-card border border-line-2 bg-white">
+        <DataTable
+          :columns="[
+            { key: 'status', label: t('reports.col_status') },
+            { key: 'payment_completeness', label: t('reports.preorder_col_payment_completeness') },
+            { key: 'preorder_count', label: t('reports.preorder_col_count') },
+            { key: 'total_order_value', label: t('reports.preorder_col_order_value') },
+            { key: 'total_collected', label: t('reports.preorder_col_collected') },
+            { key: 'total_outstanding', label: t('reports.preorder_col_outstanding') },
+          ]"
+          :rows="preorderStats ?? []"
+          :loading="loading"
+          :empty-message="t('reports.no_preorder_report_data')"
+        >
+          <template #cell-status="{ row }">{{ PREORDER_STATUS_LABEL[row.status] ?? row.status }}</template>
+          <template #cell-payment_completeness="{ row }">{{ PAYMENT_COMPLETENESS_LABEL[row.payment_completeness] ?? row.payment_completeness }}</template>
+          <template #cell-total_order_value="{ row }">{{ formatIDR(row.total_order_value) }}</template>
+          <template #cell-total_collected="{ row }">{{ formatIDR(row.total_collected) }}</template>
+          <template #cell-total_outstanding="{ row }">{{ formatIDR(row.total_outstanding) }}</template>
+        </DataTable>
+      </div>
+    </template>
+
     <BaseModal :open="showSettlementPay" :title="t('reports.record_payment_to_artist')" max-width-class="max-w-[400px]" @close="showSettlementPay = false">
       <div class="flex flex-col gap-3.5 px-6 py-5">
         <p class="text-[13px] text-muted-4">{{ t('reports.remaining_amount', { artist: settlementTarget?.artist_name, amount: formatIDR(settlementTarget?.outstanding) }) }}</p>
