@@ -323,3 +323,86 @@ toko, sesuai model lisensi BoothPOS):
   `npm run build`); server yang berjalan sehari-hari di toko cukup
   `php artisan serve` (atau setara) melayani hasil build statis di
   `public/build/`.
+
+## 10. Deployment toko via Docker (opsional, `specs/016-docker-store-deployment/`)
+
+**PENTING** — ini BUKAN Mode C di §3. Mode C (`docker-compose.yml`,
+feature 015) murni tooling development lokal (bind-mount source, hot-reload).
+Bagian ini memakai berkas yang sama sekali berbeda
+(`docker-compose.store.yml`, `docker/store/`) yang dirancang sebagai
+JALUR DEPLOYMENT SUNGGUHAN — image sudah membawa `vendor/`/`public/build/`
+hasil build, tanpa bind-mount, tanpa clone source code di laptop toko.
+Instalasi native (§2-§9 di atas) tetap didukung penuh dan tidak berubah —
+ini alternatif, bukan pengganti.
+
+### 10.1 Setup pertama kali
+
+Operator TIDAK perlu clone repo ini — cukup image (registry atau file
+offline) + satu berkas konfigurasi.
+
+```bash
+cp .env.store.example .env
+# WAJIB diganti sebelum dipakai sungguhan: DB_PASSWORD, BACKUP_EXTERNAL_PATH
+```
+
+**Jalur registry** (kalau venue punya internet stabil):
+```bash
+docker compose -f docker-compose.store.yml pull
+docker compose -f docker-compose.store.yml up -d
+```
+
+**Jalur offline** (tanpa internet sama sekali — file `.tar` dipindah lewat
+USB/download, dibuat oleh maintainer lewat `docker/store/package-release.sh`):
+```bash
+docker load -i boothpos-store-<versi>.tar
+docker compose -f docker-compose.store.yml up -d
+```
+
+Kedua jalur berakhir sama: migration jalan otomatis (idempotent, sama
+seperti Mode C dev), buka `http://localhost:8000`. Seeding data
+(`db:seed`/`SakanaFridgeDemoSeeder`) TETAP langkah manual yang disengaja,
+persis seperti instalasi native — lihat §9, kredensial dev
+(`password123`) HARUS diganti saat provisioning toko sungguhan.
+
+### 10.2 Update ke versi baru
+
+Sepenuhnya manual — TIDAK ada pengecekan versi otomatis di dalam app
+(sesuai desain produk ini yang memang tanpa cloud tier).
+
+**Jalur registry**:
+```bash
+docker compose -f docker-compose.store.yml pull app
+docker compose -f docker-compose.store.yml up -d app
+```
+
+**Jalur offline**:
+```bash
+docker load -i boothpos-store-<versi-baru>.tar
+# ubah tag image `app` di docker-compose.store.yml ke versi baru
+docker compose -f docker-compose.store.yml up -d app
+```
+
+Service `mysql` dan volume-nya TIDAK PERNAH ikut tersentuh oleh kedua
+jalur update di atas — data toko aman terlepas dari perubahan image `app`.
+Kalau update bermasalah, image tag versi sebelumnya masih tersimpan lokal
+(hasil `docker load`/`pull` sebelumnya) — arahkan kembali tag image di
+compose file ke versi lama lalu `up -d app` lagi sebagai rollback manual.
+Migration bersifat searah (tidak ada auto-rollback skema), sama seperti
+keterbatasan instalasi native saat ini.
+
+### 10.3 Backup & restore
+
+Perintah PERSIS SAMA dengan §7 — tidak dimodifikasi sama sekali untuk
+jalur Docker ini:
+
+```bash
+docker compose -f docker-compose.store.yml exec app php artisan app:backup
+docker compose -f docker-compose.store.yml exec app php artisan app:restore <path> [--force]
+```
+
+Image `app` sudah membawa `mysqldump`/`mysql` client bawaan (tidak perlu
+trik `docker exec` ke container lain seperti di §7 untuk mesin dev), dan
+`BACKUP_EXTERNAL_PATH` di `.env` di-bind-mount ke path host yang sama
+persis lewat `docker-compose.store.yml` — arahkan ke titik mount drive
+eksternal fisik yang sungguhan tercolok di laptop toko, bukan folder di
+disk yang sama (persis peringatan §9).

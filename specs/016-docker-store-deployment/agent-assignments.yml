@@ -1,0 +1,92 @@
+# Agent Assignments
+# Feature: 016-docker-store-deployment
+# Generated: 2026-09-05
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "architect"
+    source: "user"
+    description: "Design docs / ADRs / OpenAPI"
+  - name: "backend-engineer"
+    source: "user"
+    description: "Server-side code in Go/Python/Java/Node/Rust/C#/Ruby"
+  - name: "claire"
+    source: "user"
+    description: "Jira ticket authoring"
+  - name: "frontend-engineer"
+    source: "user"
+    description: "Client-side/UI code (Vue/React/etc.)"
+  - name: "pm"
+    source: "user"
+    description: "PRD pulling / Jira decomposition"
+  - name: "qa"
+    source: "user"
+    description: "Test strategy / test scaffolding"
+  - name: "reviewer"
+    source: "user"
+    description: "Code/security review"
+  - name: "sre"
+    source: "user"
+    description: "Release pipeline (Bitbucket->ACR->ACK) / postmortems"
+
+assignments:
+  T001:
+    agent: "default"
+    reason: "Directory scaffolding, no specialized agent needed"
+  T002:
+    agent: "default"
+    reason: "Config file (.env.store.example), no match"
+  T003:
+    agent: "default"
+    reason: ".dockerignore check, no match"
+  T004:
+    agent: "default"
+    reason: "Docker packaging (Dockerfile) — no infra/devops agent registered"
+  T005:
+    agent: "default"
+    reason: "Shell script (entrypoint.sh), no match"
+  T006:
+    agent: "default"
+    reason: "Docker Compose packaging, no match"
+  T007:
+    agent: "default"
+    reason: "Shell script (package-release.sh), no match"
+  T008:
+    agent: "default"
+    reason: "Verification of entrypoint behavior"
+  T009:
+    agent: "default"
+    reason: "Docs (RUNBOOK.md), Indonesian-convention repo docs, no match"
+  T010:
+    agent: "default"
+    reason: "Manual quickstart verification"
+  T011:
+    agent: "default"
+    reason: "Manual quickstart verification (offline path)"
+  T012:
+    agent: "default"
+    reason: "Verification of volume decoupling"
+  T013:
+    agent: "default"
+    reason: "Docs (upgrade procedure)"
+  T014:
+    agent: "default"
+    reason: "Manual quickstart verification (restart/upgrade)"
+  T015:
+    agent: "default"
+    reason: "Docker packaging (Dockerfile addition)"
+  T016:
+    agent: "default"
+    reason: "Docker Compose packaging (bind mount)"
+  T017:
+    agent: "default"
+    reason: "Docs (backup/restore)"
+  T018:
+    agent: "default"
+    reason: "Manual quickstart verification (backup/restore)"
+  T019:
+    agent: "default"
+    reason: "Test-suite verification inside built image"
+  T020:
+    agent: "default"
+    reason: "Final end-to-end sign-off"
