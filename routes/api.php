@@ -3,14 +3,17 @@
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\ArtistController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BusinessTypeController;
 use App\Http\Controllers\Api\CashierSessionController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\MasterDataExportController;
 use App\Http\Controllers\Api\MasterDataImportController;
 use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PackageController;
 use App\Http\Controllers\Api\PaymentChannelController;
 use App\Http\Controllers\Api\PaymentProofController;
 use App\Http\Controllers\Api\PreorderController;
@@ -101,6 +104,19 @@ Route::prefix('v1')->group(function () {
         Route::post('/materials/{material}/vendor-prices', [MaterialController::class, 'storeVendorPrice']);
         Route::put('/vendor-prices/{vendorPrice}', [MaterialController::class, 'updateVendorPrice']);
         Route::delete('/vendor-prices/{vendorPrice}', [MaterialController::class, 'destroyVendorPrice']);
+
+        // 017-company-onboarding — pipeline sales/ops internal, gated
+        // 'companies' menu key (owner/admin only, lihat migrasi
+        // add_companies_menu_key_to_default_roles). Tidak apiResource
+        // penuh untuk companies — tidak ada update/destroy di scope
+        // fitur ini (spec.md tidak memintanya).
+        Route::apiResource('business-types', BusinessTypeController::class);
+        Route::apiResource('packages', PackageController::class);
+        Route::get('/companies', [CompanyController::class, 'index']);
+        Route::post('/companies', [CompanyController::class, 'store']);
+        Route::get('/companies/{company}', [CompanyController::class, 'show']);
+        Route::post('/companies/{company}/resend-activation', [CompanyController::class, 'resendActivation']);
+        Route::post('/companies/{company}/activate', [CompanyController::class, 'activate'])->middleware('throttle:10,1');
 
         Route::get('/variants/{variant}/bom', [MaterialController::class, 'bomIndex']);
         Route::post('/variants/{variant}/bom', [MaterialController::class, 'storeBomLine']);

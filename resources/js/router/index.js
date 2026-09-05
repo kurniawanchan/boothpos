@@ -81,6 +81,30 @@ const routes = [
         meta: { titleKey: 'nav.purchase_orders', subtitleKey: 'nav.purchase_orders_subtitle', menuKey: 'purchase_orders' },
       },
       {
+        path: 'companies',
+        name: 'companies',
+        component: () => import('../views/CompaniesView.vue'),
+        meta: { menuKey: 'companies' },
+      },
+      {
+        path: 'packages',
+        name: 'packages',
+        component: () => import('../views/PackagesView.vue'),
+        meta: { menuKey: 'companies' },
+      },
+      {
+        path: 'business-types',
+        name: 'business-types',
+        component: () => import('../views/BusinessTypesView.vue'),
+        // BUG YANG DITEMUKAN & DIPERBAIKI (017-company-onboarding) —
+        // terverifikasi lewat browser sungguhan: AppShell's default
+        // fallback title key adalah `nav.${route.name}`, dan nama route
+        // ini mengandung tanda hubung ('business-types'), sama seperti
+        // 'purchase-orders' yang karena itu SUDAH memakai titleKey
+        // eksplisit (underscore) alih-alih mengandalkan fallback.
+        meta: { titleKey: 'nav.business_types', subtitleKey: 'nav.business_types_subtitle', menuKey: 'companies' },
+      },
+      {
         path: 'customers',
         name: 'customers',
         component: () => import('../views/CustomersView.vue'),
