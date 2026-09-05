@@ -1,0 +1,67 @@
+# Local-development environment for BoothPOS (specs/015-dockerize-dev-environment).
+# Not a production/store deployment artifact — see research.md R1.
+#
+# Usage: cp .env.docker.example .env && docker compose up
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      # DB_USERNAME=root in .env.docker.example, so the root password IS
+      # the app's DB_PASSWORD (research.md R4/R8) — fine for a local-only
+      # container, never internet-reachable.
+      MYSQL_ROOT_PASSWORD: boothpos_local_dev
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pboothpos_local_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    volumes:
+      # Bind mount first, then the anonymous volume over vendor/ so the
+      # container's own composer install output isn't shadowed
+      # (research.md R5 — ordering matters).
+      - .:/var/www/html
+      - /var/www/html/vendor
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  node:
+    build:
+      context: .
+      dockerfile: docker/node/Dockerfile
+    volumes:
+      - .:/var/www/html
+      - /var/www/html/node_modules
+    environment:
+      # Overrides whatever .env may also define for this var — only the
+      # node container needs the Docker-network hostname (research.md R6).
+      VITE_API_PROXY_TARGET: http://app:8000
+      # The browser-facing origin Vite should write into public/hot —
+      # without this, Vite's own --host 0.0.0.0 bind leaks into that file
+      # verbatim and the browser tries (and fails) to reach
+      # http://0.0.0.0:5173 directly. See vite.config.js's server.origin
+      # comment for the full bug writeup.
+      VITE_DEV_SERVER_ORIGIN: http://localhost:5173
+    ports:
+      - "5173:5173"
+    depends_on:
+      - app
+
+volumes:
+  mysql_data:

@@ -1,0 +1,83 @@
+# Agent Assignments
+# Feature: 015-dockerize-dev-environment
+# Generated: 2026-09-05
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "architect"
+    source: "user"
+    description: "Technical design docs, ADRs, C4 descriptions, API/OpenAPI references"
+  - name: "backend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors server-side code (Go, Python, Java, Node, Rust, C#, Ruby)"
+  - name: "claire"
+    source: "user"
+    description: "Jira Delivery Specialist — creates/refines/reviews Jira tickets"
+  - name: "frontend-engineer"
+    source: "user"
+    description: "Writes/reviews/refactors client-side/UI code (Vue, React, Svelte, Angular)"
+  - name: "pm"
+    source: "user"
+    description: "Pulls requirements into PRDs; decomposes design docs into Jira tickets"
+  - name: "qa"
+    source: "user"
+    description: "Test planning/strategy, scaffolds runnable tests, API test automation"
+  - name: "reviewer"
+    source: "user"
+    description: "Code/security review, PR/diff audits"
+  - name: "sre"
+    source: "user"
+    description: "Release readiness and incident postmortems"
+
+assignments:
+  T001:
+    agent: "default"
+    reason: "Environment go/no-go check, no code change"
+  T002:
+    agent: "backend-engineer"
+    reason: "MySQL init script (infra/database concern)"
+  T003:
+    agent: "backend-engineer"
+    reason: "PHP container image definition"
+  T004:
+    agent: "backend-engineer"
+    reason: "Shell entrypoint wiring composer/artisan lifecycle"
+  T005:
+    agent: "backend-engineer"
+    reason: "Node container image definition (infra ownership, consistent with the rest of the Docker setup)"
+  T006:
+    agent: "frontend-engineer"
+    reason: "vite.config.js — client-side build tool config"
+  T007:
+    agent: "backend-engineer"
+    reason: "docker-compose.yml — integration point for all services"
+  T008:
+    agent: "backend-engineer"
+    reason: "Environment file owned alongside the backend/infra changes"
+  T009:
+    agent: "backend-engineer"
+    reason: ".dockerignore owned alongside the Docker build context"
+  T010:
+    agent: "default"
+    reason: "Manual verification pass (fresh stack up, login, persistence, reset)"
+  T011:
+    agent: "default"
+    reason: "Manual verification pass (Dockerized backend test suite)"
+  T012:
+    agent: "default"
+    reason: "Manual verification pass (Dockerized frontend test suite)"
+  T013:
+    agent: "default"
+    reason: "Manual verification pass (native workflow unaffected)"
+  T014:
+    agent: "default"
+    reason: "Manual verification pass (port-conflict behavior)"
+  T015:
+    agent: "backend-engineer"
+    reason: "Documentation for the infra this agent built, kept alongside the code it describes"
+  T016:
+    agent: "default"
+    reason: "Runs native test suites, not a code-authoring task"
+  T017:
+    agent: "default"
+    reason: "Documentation/README update, cross-cutting, contingent on bugs found"
