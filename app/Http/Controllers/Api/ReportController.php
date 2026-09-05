@@ -208,37 +208,22 @@ class ReportController extends Controller
 
                     return $data;
                 });
-        } else {
-            [$idExpr, $labelExpr, $idAlias] = match ($groupBy) {
-                'category' => ['categories.id', 'categories.name', 'category_id'],
-                'artist' => ['artists.id', 'artists.name', 'artist_id'],
-                'event' => ['events.id', 'events.name', 'event_id'],
-                'day' => ['DATE(orders.created_at)', 'DATE(orders.created_at)', null],
-                default => ['products.id', 'products.name', 'product_id'],
-            };
-
-            $rows = (clone $base)
-                ->selectRaw("
-                    {$idExpr} as entity_id,
-                    {$labelExpr} as label,
-                    SUM(order_items.qty) as unit_count,
-                    SUM(order_items.line_total) as amount
-                ")
-                ->groupBy(DB::raw($idExpr))
-                ->orderByDesc('amount')
-                ->get()
-                ->map(function ($row) use ($idAlias) {
-                    $data = (array) $row;
-                    // Untuk group_by=day tidak ada entitas untuk ditaut — id
-                    // dikembalikan null secara eksplisit alih-alih menghapus
-                    // key-nya, supaya bentuk baris tetap konsisten antar
-                    // group_by dan frontend tidak perlu isset() check.
-                    $data['entity_id'] = $idAlias === null ? null : $data['entity_id'];
-                    $data['amount'] = number_format((float) $data['amount'], 2, '.', '');
-
-                    return $data;
-                });
         }
+        // BUG YANG DITEMUKAN & DIPERBAIKI (012-seller-preorder-report-detail-export,
+        // ditemukan lewat test test_sales_and_profit_reports_include_only_the_
+        // collected_portion_of_a_partially_paid_preorder) — cabang `else` di sini
+        // DULU menghitung ULANG `$rows` dari `$base` (order_items) SAJA, menimpa
+        // hasil gabungan order+preorder yang sudah benar dari `$merged`/`$rows` di
+        // baris ~173 dengan agregasi order-only. Efeknya, artist yang HANYA punya
+        // preorder (tanpa satu pun order reguler) hilang total dari baris laporan
+        // sales() untuk group_by selain 'customer', walau `$totals` (dihitung
+        // terpisah di bawah) tetap benar menyertakan kontribusi preorder — jadi
+        // total di kartu ringkasan sudah benar sementara tabel barisnya salah,
+        // sebuah inkonsistensi yang mudah tidak disadari. `$rows` dari baris
+        // 173-180 SUDAH benar (gabungan order+preorder, terurut, entity_id null
+        // untuk group_by=day) untuk setiap group_by selain 'customer' — cabang
+        // `else` yang menimpanya dihapus, bukan diperbaiki, karena computation-nya
+        // memang duplikat dari yang sudah dilakukan di atas.
 
         $totals = (clone $base)->selectRaw('
             COUNT(DISTINCT orders.id) as order_count,
@@ -346,6 +331,27 @@ class ReportController extends Controller
      * 'cancelled' dikeluarkan sepenuhnya lewat where() di bawah, bukan
      * cuma fraction=0, supaya statusnya tidak diam-diam ikut ke-JOIN.
      */
+    /**
+     * 012-seller-preorder-report-detail-export (T007, data-model.md
+     * "Pre-order per-seller breakdown row") — ekspresi CASE payment_completeness
+     * (unpaid/partial/paid) dipakai identik oleh preorders() di path default
+     * (header, alias `collected.amount_collected`) maupun path
+     * `breakdown=artist` (alias `pc.collected` dari preorderRecognizedRevenueBase()),
+     * supaya kedua path tidak diam-diam punya definisi "lunas" yang berbeda.
+     * Diparameterkan lewat nama kolom SUM(payments.amount) karena kedua path
+     * memakai alias subquery yang berbeda.
+     */
+    private function paymentCompletenessCaseExpr(string $collectedColumn): string
+    {
+        return "
+            CASE
+                WHEN COALESCE({$collectedColumn}, 0) <= 0 THEN 'unpaid'
+                WHEN COALESCE({$collectedColumn}, 0) >= preorders.total_amount THEN 'paid'
+                ELSE 'partial'
+            END
+        ";
+    }
+
     private function preorderRecognizedRevenueBase(Request $request)
     {
         $collected = DB::table('payments')
@@ -515,6 +521,16 @@ class ReportController extends Controller
      * dikelompokkan per order, supaya order dengan item dari artist lain
      * tidak ikut ditampilkan atau nilainya tidak tercampur ke artist ini.
      */
+    /**
+     * 012-seller-preorder-report-detail-export (US1, research.md R1) — detail
+     * transaksi seorang seller pada suatu event, MENGGABUNGKAN penjualan
+     * reguler (orders) dan preorder yang sudah terkumpul pembayarannya,
+     * supaya totalnya bisa ditelusuri sampai ke transaksi pembentuknya
+     * (FR-001..FR-004). Dua query terpisah (order & preorder) digabung dan
+     * di-sort ulang di PHP — BUKAN satu UNION SQL — karena OrderItem dan
+     * PreorderItem punya kolom yang tidak simetris (lihat research.md R1
+     * "Alternatives considered"), pola yang sama seperti sales()/profit().
+     */
     public function artistSettlementTransactions(Request $request, Artist $artist): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {
@@ -529,6 +545,12 @@ class ReportController extends Controller
             ->where('orders.event_id', $eventId)
             ->where('orders.status', 'completed')
             ->where('order_items.artist_id', $artist->id)
+            // BUG YANG DITEMUKAN & DIPERBAIKI (012, R1) — query join
+            // hand-rolled ini sebelumnya TIDAK PUNYA filter data_mode sama
+            // sekali, berbeda dari semua query join lain di controller ini.
+            // Ditambahkan di sini sejalan dengan aturan codebase ("query
+            // hand-rolled tidak mewarisi Eloquent global scope").
+            ->where('order_items.data_mode', ModeGate::current())
             ->orderByDesc('orders.created_at')
             ->get([
                 'orders.id as order_id',
@@ -540,14 +562,15 @@ class ReportController extends Controller
                 'order_items.line_total',
             ]);
 
-        $transactions = $items
+        $orderTransactions = $items
             ->groupBy('order_id')
             ->map(function ($rowsForOrder) {
                 $first = $rowsForOrder->first();
 
                 return [
-                    'order_id' => $first->order_id,
-                    'order_number' => $first->order_number,
+                    'key' => 'order-'.$first->order_id,
+                    'number' => $first->order_number,
+                    'source' => 'order',
                     'created_at' => $first->order_created_at
                         ? \Illuminate\Support\Carbon::parse($first->order_created_at)->toIso8601String()
                         : null,
@@ -559,12 +582,73 @@ class ReportController extends Controller
                         'qty' => (int) $r->qty,
                         'line_total' => number_format((float) $r->line_total, 2, '.', ''),
                     ])->values(),
-                    'order_total_for_artist' => number_format(
+                    'amount_for_artist' => number_format(
                         (float) $rowsForOrder->sum('line_total'), 2, '.', ''
                     ),
+                    // Dipakai hanya untuk sort gabungan di bawah, dibuang
+                    // sebelum dikirim ke response.
+                    '_sort_at' => $first->order_created_at,
                 ];
             })
             ->values();
+
+        // 012 (US1, R1) — sisi preorder, memakai basis query DAN rumus
+        // proporsi yang SAMA PERSIS dengan sales()/profit()
+        // (preorderRecognizedRevenueBase() + PREORDER_FRACTION_EXPR),
+        // supaya jumlah detail ini selalu sama dengan total Seller Recap
+        // yang sudah dihitung dengan rumus itu (FR-002/FR-003). Preorder
+        // 'cancelled' sudah dikeluarkan di dalam base query itu sendiri
+        // (FR-004).
+        $fraction = self::PREORDER_FRACTION_EXPR;
+        $preorderRows = $this->preorderRecognizedRevenueBase($request)
+            ->where('preorders.event_id', $eventId)
+            ->where('preorder_items.artist_id', $artist->id)
+            ->orderByDesc('preorders.created_at')
+            ->get([
+                'preorders.id as preorder_id',
+                'preorders.preorder_number',
+                'preorders.created_at as preorder_created_at',
+                'preorder_items.name_snapshot',
+                'preorder_items.sku_snapshot',
+                'preorder_items.qty',
+                'preorder_items.line_total',
+                DB::raw("(preorder_items.line_total * ({$fraction})) as recognized_amount"),
+            ]);
+
+        $preorderTransactions = $preorderRows
+            ->groupBy('preorder_id')
+            ->map(function ($rowsForPreorder) {
+                $first = $rowsForPreorder->first();
+
+                return [
+                    'key' => 'preorder-'.$first->preorder_id,
+                    'number' => $first->preorder_number,
+                    'source' => 'preorder',
+                    'created_at' => $first->preorder_created_at
+                        ? \Illuminate\Support\Carbon::parse($first->preorder_created_at)->toIso8601String()
+                        : null,
+                    'items' => $rowsForPreorder->map(fn ($r) => [
+                        'sku' => $r->sku_snapshot,
+                        'name' => $r->name_snapshot,
+                        'qty' => (int) $r->qty,
+                        'line_total' => number_format((float) $r->line_total, 2, '.', ''),
+                    ])->values(),
+                    // Bagian artist ini dari jumlah yang SUDAH TERKUMPUL
+                    // (bukan nilai penuh preorder) — FR-002/Acceptance
+                    // Scenario 3.
+                    'amount_for_artist' => number_format(
+                        (float) $rowsForPreorder->sum('recognized_amount'), 2, '.', ''
+                    ),
+                    '_sort_at' => $first->preorder_created_at,
+                ];
+            })
+            ->values();
+
+        $transactions = $orderTransactions
+            ->concat($preorderTransactions)
+            ->sortByDesc(fn ($tx) => $tx['_sort_at'] ?? '')
+            ->values()
+            ->map(fn ($tx) => \Illuminate\Support\Arr::except($tx, ['_sort_at']));
 
         return response()->json([
             'event' => $event,
@@ -711,6 +795,27 @@ class ReportController extends Controller
      * di database tapi milik mode DEMO/LIVE lain — respons 404, sama
      * seperti pola findOrFail() lain di controller ini.
      */
+    /**
+     * BUG YANG DITEMUKAN & DIPERBAIKI (012-seller-preorder-report-detail-export,
+     * ditemukan lewat test T022) — stockByArtist() mengembalikan bentuk respons
+     * BERBEDA tergantung ada-tidaknya `artist_id` di request (ringkasan per-artist
+     * dengan key 'data', vs detail per-varian tanpa key 'data' sama sekali). Jalur
+     * export di export() hanya mendukung bentuk ringkasan; kalau request yang
+     * diteruskan ke sana kebetulan membawa `artist_id` (mis. dipanggil manual atau
+     * lewat query string lama), Excel::download akan 500 dengan
+     * "Undefined array key data". Helper ini memaksa jalur ringkasan dengan
+     * membuat instance Request BARU tanpa `artist_id`, bukan menimpa query string
+     * request yang sedang diproses — export laporan stok per-artist secara desain
+     * memang selalu berbentuk ringkasan, tidak pernah berbasis satu artist.
+     */
+    private function stockByArtistSummaryOnly(Request $request): JsonResponse
+    {
+        $summaryRequest = Request::create($request->fullUrlWithQuery(['artist_id' => null]), 'GET');
+        $summaryRequest->setUserResolver($request->getUserResolver());
+
+        return $this->stockByArtist($summaryRequest);
+    }
+
     public function stockByArtist(Request $request): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {
@@ -799,11 +904,33 @@ class ReportController extends Controller
             return response()->json(['message' => __('reports.not_authorized')], 403);
         }
 
+        // 012-seller-preorder-report-detail-export (US2/T007, research.md R2)
+        // — path baru, terpisah total dari agregasi header di bawah, dipicu
+        // oleh ?breakdown=artist. TIDAK mengubah query/shape default sama
+        // sekali (FR-005 aditif, bukan pengganti).
+        if ($request->query('breakdown') === 'artist') {
+            return $this->preordersByArtist($request);
+        }
+
+        // 012-seller-preorder-report-detail-export (US3/T013, research.md R3,
+        // data-model.md "Pre-order drilldown row") — path KETIGA, dipicu oleh
+        // hadirnya `status` (dengan atau tanpa `payment_completeness`/
+        // `artist_id`), mengembalikan daftar preorder individual, bukan
+        // agregat. Endpoint sama (FR: reuse, bukan route baru) — dibedakan
+        // lewat presence parameter, bukan ?breakdown= lain, karena drilldown
+        // ini bukan "cara pengelompokan baru" seperti breakdown=artist,
+        // melainkan "buka baris yang sudah dikelompokkan".
+        if ($request->filled('status')) {
+            return $this->preordersDrilldown($request);
+        }
+
         $collected = DB::table('payments')
             ->selectRaw('preorder_id, SUM(amount) as amount_collected')
             ->whereNotNull('preorder_id')
             ->where('verification', '!=', 'rejected')
             ->groupBy('preorder_id');
+
+        $completeness = $this->paymentCompletenessCaseExpr('collected.amount_collected');
 
         $rows = DB::table('preorders')
             ->leftJoinSub($collected, 'collected', 'collected.preorder_id', '=', 'preorders.id')
@@ -813,11 +940,7 @@ class ReportController extends Controller
             ->when($request->filled('event_id'), fn ($q) => $q->where('preorders.event_id', $request->integer('event_id')))
             ->selectRaw("
                 preorders.status as status,
-                CASE
-                    WHEN COALESCE(collected.amount_collected, 0) <= 0 THEN 'unpaid'
-                    WHEN COALESCE(collected.amount_collected, 0) >= preorders.total_amount THEN 'paid'
-                    ELSE 'partial'
-                END as payment_completeness,
+                {$completeness} as payment_completeness,
                 COUNT(*) as preorder_count,
                 SUM(preorders.total_amount) as total_order_value,
                 SUM(COALESCE(collected.amount_collected, 0)) as total_collected,
@@ -835,6 +958,164 @@ class ReportController extends Controller
                 'total_collected' => number_format((float) $row->total_collected, 2, '.', ''),
                 'total_outstanding' => number_format((float) $row->total_outstanding, 2, '.', ''),
             ]);
+
+        return response()->json(['rows' => $rows]);
+    }
+
+    /**
+     * 012-seller-preorder-report-detail-export (US2/T007, data-model.md
+     * "Pre-order per-seller breakdown row", research.md R2) — breakdown
+     * per-artis dari preorders(), dipicu oleh ?breakdown=artist.
+     *
+     * Beda dari path default: JOIN ke preorder_items (via
+     * preorderRecognizedRevenueBase(), dipakai ulang dari 010 supaya tidak
+     * ada rumus proporsi kedua untuk pertanyaan yang sama — "berapa bagian
+     * preorder ini milik artis X"). Konsekuensinya, path ini otomatis
+     * mengecualikan preorder 'cancelled' sepenuhnya (base query sudah
+     * where status != cancelled), sesuai edge case spec: breakdown
+     * per-seller tidak boleh memasukkan preorder cancelled ke total uang.
+     *
+     * total_order_value/total_collected/total_outstanding di sini adalah
+     * proporsi (share) artis atas item preorder tsb, BUKAN total_amount
+     * penuh header seperti path default — jumlah semua artist_id untuk
+     * status/payment_completeness yang sama akan match baris ringkasan
+     * path default untuk kombinasi tsb (di luar cancelled).
+     *
+     * preorder_count = COUNT(DISTINCT preorders.id): satu preorder dengan
+     * 2 item milik artis yang sama dihitung sekali, bukan dua kali.
+     *
+     * Satu query SQL ber-GROUP BY (Constitution V) — tidak ada loop PHP
+     * per preorder.
+     */
+    private function preordersByArtist(Request $request): JsonResponse
+    {
+        $fraction = self::PREORDER_FRACTION_EXPR;
+        $completeness = $this->paymentCompletenessCaseExpr('pc.collected');
+
+        $rows = $this->preorderRecognizedRevenueBase($request)
+            ->selectRaw("
+                preorder_items.artist_id as artist_id,
+                artists.name as artist_name,
+                preorders.status as status,
+                {$completeness} as payment_completeness,
+                COUNT(DISTINCT preorders.id) as preorder_count,
+                SUM(preorder_items.line_total) as total_order_value,
+                SUM(preorder_items.line_total * ({$fraction})) as total_collected,
+                GREATEST(
+                    SUM(preorder_items.line_total) - SUM(preorder_items.line_total * ({$fraction})),
+                    0
+                ) as total_outstanding
+            ")
+            ->groupBy('preorder_items.artist_id', 'artists.name', 'preorders.status', 'payment_completeness')
+            ->orderBy('artists.name')
+            ->orderBy('preorders.status')
+            ->orderBy('payment_completeness')
+            ->get()
+            ->map(fn ($row) => [
+                'artist_id' => (int) $row->artist_id,
+                'artist_name' => $row->artist_name,
+                'status' => $row->status,
+                'payment_completeness' => $row->payment_completeness,
+                'preorder_count' => (int) $row->preorder_count,
+                'total_order_value' => number_format((float) $row->total_order_value, 2, '.', ''),
+                'total_collected' => number_format((float) $row->total_collected, 2, '.', ''),
+                'total_outstanding' => number_format((float) $row->total_outstanding, 2, '.', ''),
+            ]);
+
+        return response()->json(['rows' => $rows]);
+    }
+
+    /**
+     * 012-seller-preorder-report-detail-export (US3/T013, research.md R3,
+     * data-model.md "Pre-order drilldown row") — daftar preorder individual
+     * di balik satu baris ringkasan status×payment_completeness (path
+     * default), atau satu baris status×payment_completeness×artist_id
+     * (path breakdown=artist) ketika `artist_id` turut diberikan.
+     *
+     * Tanpa artist_id: order_value/collected/outstanding adalah total milik
+     * preorder itu sendiri (preorders.total_amount & SUM(payments.amount)),
+     * SAMA PERSIS dengan definisi yang dipakai path default di atas
+     * (paymentCompletenessCaseExpr() + agregasi collected yang sama) supaya
+     * jumlah baris drilldown = baris ringkasan (invariant SC-003/FR-007).
+     *
+     * Dengan artist_id: order_value/collected/outstanding adalah PORSI milik
+     * artis tsb, dihitung lewat helper yang SAMA dengan preordersByArtist()
+     * (preorderRecognizedRevenueBase() + PREORDER_FRACTION_EXPR), di-GROUP
+     * BY per preorder (bukan per item) supaya satu preorder dengan >1 item
+     * milik artis yang sama tetap satu baris drilldown.
+     */
+    private function preordersDrilldown(Request $request): JsonResponse
+    {
+        $status = $request->string('status')->toString();
+        $artistId = $request->filled('artist_id') ? $request->integer('artist_id') : null;
+
+        if ($artistId !== null) {
+            $fraction = self::PREORDER_FRACTION_EXPR;
+            $completeness = $this->paymentCompletenessCaseExpr('pc.collected');
+
+            $query = $this->preorderRecognizedRevenueBase($request)
+                ->leftJoin('customers', 'customers.id', '=', 'preorders.customer_id')
+                ->where('preorder_items.artist_id', $artistId)
+                ->where('preorders.status', $status)
+                ->selectRaw("
+                    preorders.id as preorder_id,
+                    preorders.preorder_number as preorder_number,
+                    customers.name as customer_name,
+                    {$completeness} as payment_completeness,
+                    SUM(preorder_items.line_total) as order_value,
+                    SUM(preorder_items.line_total * ({$fraction})) as collected,
+                    GREATEST(
+                        SUM(preorder_items.line_total) - SUM(preorder_items.line_total * ({$fraction})),
+                        0
+                    ) as outstanding
+                ")
+                ->groupBy('preorders.id', 'preorders.preorder_number', 'customers.name', 'payment_completeness');
+
+            if ($request->filled('payment_completeness')) {
+                $query = $query->havingRaw('payment_completeness = ?', [$request->string('payment_completeness')->toString()]);
+            }
+
+            $rows = $query->orderBy('preorders.preorder_number')->get();
+        } else {
+            $collected = DB::table('payments')
+                ->selectRaw('preorder_id, SUM(amount) as amount_collected')
+                ->whereNotNull('preorder_id')
+                ->where('verification', '!=', 'rejected')
+                ->groupBy('preorder_id');
+
+            $completeness = $this->paymentCompletenessCaseExpr('collected.amount_collected');
+
+            $query = DB::table('preorders')
+                ->leftJoinSub($collected, 'collected', 'collected.preorder_id', '=', 'preorders.id')
+                ->leftJoin('customers', 'customers.id', '=', 'preorders.customer_id')
+                ->where('preorders.data_mode', ModeGate::current())
+                ->where('preorders.status', $status)
+                ->when($request->filled('event_id'), fn ($q) => $q->where('preorders.event_id', $request->integer('event_id')))
+                ->selectRaw("
+                    preorders.id as preorder_id,
+                    preorders.preorder_number as preorder_number,
+                    customers.name as customer_name,
+                    {$completeness} as payment_completeness,
+                    preorders.total_amount as order_value,
+                    COALESCE(collected.amount_collected, 0) as collected,
+                    GREATEST(preorders.total_amount - COALESCE(collected.amount_collected, 0), 0) as outstanding
+                ");
+
+            if ($request->filled('payment_completeness')) {
+                $query = $query->havingRaw('payment_completeness = ?', [$request->string('payment_completeness')->toString()]);
+            }
+
+            $rows = $query->orderBy('preorders.preorder_number')->get();
+        }
+
+        $rows = $rows->map(fn ($row) => [
+            'preorder_id' => (int) $row->preorder_id,
+            'preorder_number' => $row->preorder_number,
+            'customer_name' => $row->customer_name,
+            'order_value' => number_format((float) $row->order_value, 2, '.', ''),
+            'collected' => number_format((float) $row->collected, 2, '.', ''),
+            'outstanding' => number_format((float) $row->outstanding, 2, '.', ''),
+        ]);
 
         return response()->json(['rows' => $rows]);
     }
@@ -860,7 +1141,7 @@ class ReportController extends Controller
      */
     public function export(Request $request, string $report)
     {
-        if (! in_array($report, ['sales', 'profit', 'artist-settlements', 'artist-profit'], true)) {
+        if (! in_array($report, ['sales', 'profit', 'artist-settlements', 'artist-profit', 'purchases', 'stock-by-artist', 'preorder'], true)) {
             return response()->json(['message' => __('reports.unknown_report')], 404);
         }
 
@@ -873,6 +1154,15 @@ class ReportController extends Controller
             return $this->exportArtistSettlements($request);
         }
 
+        // 012-seller-preorder-report-detail-export (US4/T021, research.md R5)
+        // — 'preorder' juga punya kebutuhan dua sheet (ringkasan status ×
+        // kelengkapan pembayaran + breakdown per seller dari US2), jadi
+        // ditangani lewat jalurnya sendiri, sama seperti 'artist-settlements'
+        // di atas, alih-alih dipaksa masuk ke GenericArrayExport satu-sheet.
+        if ($report === 'preorder') {
+            return $this->exportPreorderReport($request);
+        }
+
         // BUG YANG DITEMUKAN & DIPERBAIKI — match() di bawah sebelumnya
         // tidak punya cabang 'profit' walau route mengizinkan nilai itu
         // (lihat where('report', 'sales|profit|artist-settlements') di
@@ -883,6 +1173,15 @@ class ReportController extends Controller
             'sales' => [$this->sales($request), 'rows', 'laporan-penjualan.xlsx'],
             'profit' => [$this->profit($request), null, 'laporan-profit.xlsx'],
             'artist-profit' => [$this->artistProfit($request), 'data', 'laporan-modal-artist.xlsx'],
+            'purchases' => [$this->purchases($request), 'rows', 'laporan-pembelian.xlsx'],
+            // BUG YANG DITEMUKAN & DIPERBAIKI (012-seller-preorder-report-detail-export,
+            // ditemukan via test T022) — stockByArtist() mengembalikan bentuk RESPONS
+            // BERBEDA saat query string membawa `artist_id` (detail per-varian, tanpa
+            // key 'data') vs tanpa `artist_id` (ringkasan per-artist, key 'data'). Jalur
+            // export ini HANYA mendukung bentuk ringkasan — request()->query('artist_id')
+            // dihapus dulu supaya export selalu memanggil mode ringkasan, apa pun query
+            // string yang menyertainya, alih-alih 500 "Undefined array key data".
+            'stock-by-artist' => [$this->stockByArtistSummaryOnly($request), 'data', 'laporan-stok-per-artist.xlsx'],
         };
 
         // profit(), artistProfit() menegakkan otorisasinya sendiri (403
@@ -964,6 +1263,54 @@ class ReportController extends Controller
                 new \App\Exports\SheetArrayExport('Detail Transaksi', $detailHeadings, $detailRows),
             ]),
             'rekap-artist.xlsx'
+        );
+    }
+
+    /**
+     * 012-seller-preorder-report-detail-export (US4/T021, research.md R5)
+     * — ekspor laporan Pre-order dua sheet: "Ringkasan" (agregat
+     * status × kelengkapan pembayaran, bentuk lama dari preorders()) dan
+     * "Per Seller" (breakdown per artist dari US2, preorders(breakdown=artist)).
+     * Mengikuti pola exportArtistSettlements() persis — MultiSheetArrayExport
+     * dipilih karena GenericArrayExport tidak mendukung multi-sheet, dan
+     * FR-011 secara eksplisit meminta breakdown per seller ikut dalam
+     * ekspor yang sama (satu unduhan, bukan dua tombol export terpisah —
+     * lihat alternatif yang ditolak di research.md R5).
+     */
+    private function exportPreorderReport(Request $request)
+    {
+        $summaryResponse = $this->preorders($request);
+
+        if ($summaryResponse->getStatusCode() !== 200) {
+            return $summaryResponse;
+        }
+
+        $summaryPayload = json_decode($summaryResponse->getContent(), true);
+        $summaryRows = $summaryPayload['rows'];
+
+        // Panggil ulang preorders() dengan breakdown=artist ditambahkan ke
+        // query request yang sama (merge(), bukan request baru) supaya
+        // seluruh parameter lain (event_id, dll.) yang sudah ada di request
+        // asli tetap ikut terbawa tanpa perlu disalin ulang manual.
+        $request->merge(['breakdown' => 'artist']);
+        $breakdownResponse = $this->preorders($request);
+
+        if ($breakdownResponse->getStatusCode() !== 200) {
+            return $breakdownResponse;
+        }
+
+        $breakdownPayload = json_decode($breakdownResponse->getContent(), true);
+        $breakdownRows = $breakdownPayload['rows'];
+
+        $summaryHeadings = ['status', 'payment_completeness', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'];
+        $breakdownHeadings = ['artist_id', 'artist_name', 'status', 'payment_completeness', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'];
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\MultiSheetArrayExport([
+                new \App\Exports\SheetArrayExport('Ringkasan', $summaryHeadings, $summaryRows),
+                new \App\Exports\SheetArrayExport('Per Seller', $breakdownHeadings, $breakdownRows),
+            ]),
+            'laporan-preorder.xlsx'
         );
     }
 }

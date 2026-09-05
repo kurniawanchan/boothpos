@@ -286,6 +286,132 @@ class PreorderTest extends TestCase
         $this->assertDatabaseCount('payments', 3);
     }
 
+    /**
+     * 013-preorder-list-filters-receipt (T006/T007) — bikin variant kedua
+     * dari artist yang berbeda dengan $this->variant, supaya tes bisa
+     * membuat preorder lintas-penjual.
+     */
+    private function createVariantForNewArtist(): ProductVariant
+    {
+        $artist = Artist::factory()->create();
+        $category = Category::factory()->create();
+        $product = Product::factory()->create([
+            'artist_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true,
+        ]);
+
+        return $product->variants()->create([
+            'sku' => 'OTHERFIG0001', 'sell_price' => 200000, 'cost_price' => 100000, 'current_stock' => 0,
+        ]);
+    }
+
+    public function test_artist_id_filter_returns_only_preorders_with_matching_item_artist(): void
+    {
+        $matching = $this->createPreorder();
+
+        $otherVariant = $this->createVariantForNewArtist();
+        $nonMatching = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id,
+            'fulfillment' => 'pickup',
+            'items' => [['variant_id' => $otherVariant->id, 'qty' => 1]],
+        ])->json();
+
+        $artistId = $this->variant->product->artist_id;
+
+        $response = $this->getJson("/api/v1/preorders?artist_id={$artistId}");
+        $response->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($matching['id']));
+        $this->assertFalse($ids->contains($nonMatching['id']));
+    }
+
+    public function test_artist_id_filter_combines_with_status_filter(): void
+    {
+        $preorder = $this->createPreorder();
+        $artistId = $this->variant->product->artist_id;
+
+        // preorder baru tanpa pembayaran masih berstatus 'ordered'
+        $matchingOrdered = $this->getJson("/api/v1/preorders?artist_id={$artistId}&status=ordered");
+        $matchingOrdered->assertOk();
+        $this->assertTrue(collect($matchingOrdered->json('data'))->pluck('id')->contains($preorder['id']));
+
+        $matchingDpPaid = $this->getJson("/api/v1/preorders?artist_id={$artistId}&status=dp_paid");
+        $matchingDpPaid->assertOk();
+        $this->assertFalse(collect($matchingDpPaid->json('data'))->pluck('id')->contains($preorder['id']));
+    }
+
+    public function test_preorder_with_multiple_items_same_artist_appears_once_in_filtered_list(): void
+    {
+        $preorder = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id,
+            'fulfillment' => 'pickup',
+            'items' => [
+                ['variant_id' => $this->variant->id, 'qty' => 1],
+                ['variant_id' => $this->variant->id, 'qty' => 1],
+                ['variant_id' => $this->variant->id, 'qty' => 1],
+            ],
+        ])->json();
+
+        $artistId = $this->variant->product->artist_id;
+
+        $response = $this->getJson("/api/v1/preorders?artist_id={$artistId}");
+        $response->assertOk();
+
+        $matching = collect($response->json('data'))->filter(fn ($row) => $row['id'] === $preorder['id']);
+        $this->assertCount(1, $matching);
+    }
+
+    public function test_list_and_detail_responses_include_sellers(): void
+    {
+        $preorder = $this->createPreorder();
+        $artist = $this->variant->product->artist;
+
+        $listResponse = $this->getJson('/api/v1/preorders');
+        $listResponse->assertOk();
+
+        $row = collect($listResponse->json('data'))->firstWhere('id', $preorder['id']);
+        $this->assertNotNull($row);
+        $this->assertEquals([['id' => $artist->id, 'name' => $artist->name]], $row['sellers']);
+
+        $detailResponse = $this->getJson("/api/v1/preorders/{$preorder['id']}");
+        $detailResponse->assertOk();
+        $detailResponse->assertJsonPath('sellers', [['id' => $artist->id, 'name' => $artist->name]]);
+        $detailResponse->assertJsonPath('items.0.artist_id', $artist->id);
+        $detailResponse->assertJsonPath('items.0.artist_name', $artist->name);
+    }
+
+    public function test_preorder_with_items_from_two_different_artists_shows_both_in_sellers(): void
+    {
+        $otherVariant = $this->createVariantForNewArtist();
+
+        $preorder = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id,
+            'fulfillment' => 'pickup',
+            'items' => [
+                ['variant_id' => $this->variant->id, 'qty' => 1],
+                ['variant_id' => $otherVariant->id, 'qty' => 1],
+            ],
+        ])->json();
+
+        $firstArtist = $this->variant->product->artist;
+        $secondArtist = $otherVariant->product->artist;
+
+        $detailResponse = $this->getJson("/api/v1/preorders/{$preorder['id']}");
+        $detailResponse->assertOk();
+
+        $sellerIds = collect($detailResponse->json('sellers'))->pluck('id');
+        $this->assertCount(2, $sellerIds);
+        $this->assertTrue($sellerIds->contains($firstArtist->id));
+        $this->assertTrue($sellerIds->contains($secondArtist->id));
+
+        $listResponse = $this->getJson('/api/v1/preorders');
+        $row = collect($listResponse->json('data'))->firstWhere('id', $preorder['id']);
+        $listSellerIds = collect($row['sellers'])->pluck('id');
+        $this->assertCount(2, $listSellerIds);
+        $this->assertTrue($listSellerIds->contains($firstArtist->id));
+        $this->assertTrue($listSellerIds->contains($secondArtist->id));
+    }
+
     private function createProofToken(): string
     {
         $proof = \App\Models\PaymentProof::create([
@@ -305,5 +431,128 @@ class PreorderTest extends TestCase
             'type' => 'bank_transfer', 'provider' => 'BCA',
             'account_name' => 'Test', 'account_number' => '123', 'is_active' => true,
         ]);
+    }
+
+    /**
+     * 013-preorder-list-filters-receipt (T024, FR-010-013) — transaction_count/
+     * grand_total/total_outstanding cocok dengan penjumlahan manual atas
+     * beberapa preorder berstatus berbeda: satu 'ordered' (300000, belum
+     * dibayar), satu 'dp_paid' (300000, dibayar 100000 lewat down_payment).
+     */
+    public function test_summary_totals_match_manual_sum_of_seeded_preorders(): void
+    {
+        $ordered = $this->createPreorder();
+
+        $dpPaid = $this->createPreorder();
+        $this->postJson("/api/v1/preorders/{$dpPaid['id']}/payments", [
+            'method' => 'cash', 'amount' => 100000, 'purpose' => 'down_payment',
+        ])->assertCreated();
+
+        $response = $this->getJson('/api/v1/preorders/summary');
+        $response->assertOk();
+
+        // 2 preorder, masing-masing 300000 -> grand_total 600000
+        // outstanding = 600000 - 100000 (baru dp_paid yang sudah dibayar) = 500000
+        $this->assertEquals(2, $response->json('transaction_count'));
+        $this->assertEquals('600000.00', $response->json('grand_total'));
+        $this->assertEquals('500000.00', $response->json('total_outstanding'));
+
+        $byStatus = collect($response->json('by_status'))->keyBy('status');
+        $this->assertEquals(1, $byStatus['ordered']['count']);
+        $this->assertEquals('300000.00', $byStatus['ordered']['total_amount']);
+        $this->assertEquals(1, $byStatus['dp_paid']['count']);
+        $this->assertEquals('300000.00', $byStatus['dp_paid']['total_amount']);
+    }
+
+    /**
+     * FR-011 — keenam status harus selalu muncul, termasuk yang tidak
+     * punya baris sama sekali di himpunan yang difilter (zero-filled
+     * "0.00", bukan hilang dari array).
+     */
+    public function test_summary_by_status_always_lists_all_six_statuses_zero_filled(): void
+    {
+        $this->createPreorder();
+
+        $response = $this->getJson('/api/v1/preorders/summary');
+        $response->assertOk();
+
+        $byStatus = collect($response->json('by_status'))->keyBy('status');
+
+        $this->assertEquals(
+            ['ordered', 'dp_paid', 'arrived', 'settled', 'handed_over', 'cancelled'],
+            $byStatus->keys()->all()
+        );
+        $this->assertEquals(0, $byStatus['handed_over']['count']);
+        $this->assertEquals('0.00', $byStatus['handed_over']['total_amount']);
+        $this->assertEquals(0, $byStatus['cancelled']['count']);
+        $this->assertEquals('0.00', $byStatus['cancelled']['total_amount']);
+        $this->assertEquals(1, $byStatus['ordered']['count']);
+        $this->assertEquals('300000.00', $byStatus['ordered']['total_amount']);
+    }
+
+    /**
+     * FR-013 — filter yang sama (artist_id, status, fulfillment) yang
+     * dipakai index() harus mempersempit summary() secara identik, lewat
+     * applyFilters() yang sama (research.md R4).
+     */
+    public function test_summary_respects_artist_id_status_and_fulfillment_filters(): void
+    {
+        $matching = $this->createPreorder();
+
+        $otherVariant = $this->createVariantForNewArtist();
+        $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id,
+            'fulfillment' => 'pickup',
+            'items' => [['variant_id' => $otherVariant->id, 'qty' => 1]],
+        ])->assertCreated();
+
+        $artistId = $this->variant->product->artist_id;
+
+        $response = $this->getJson("/api/v1/preorders/summary?artist_id={$artistId}&status=ordered&fulfillment=pickup");
+        $response->assertOk();
+
+        $this->assertEquals(1, $response->json('transaction_count'));
+        $this->assertEquals('300000.00', $response->json('grand_total'));
+
+        $mismatchedStatus = $this->getJson("/api/v1/preorders/summary?artist_id={$artistId}&status=dp_paid");
+        $mismatchedStatus->assertOk();
+        $this->assertEquals(0, $mismatchedStatus->json('transaction_count'));
+        $this->assertEquals('0.00', $mismatchedStatus->json('grand_total'));
+    }
+
+    /**
+     * DEMO/LIVE isolation (CLAUDE.md) — Preorder pakai HasDataMode + global
+     * scope, jadi summary() (query Eloquent biasa lewat applyFilters())
+     * seharusnya sudah otomatis mengecualikan baris DEMO saat berjalan di
+     * mode LIVE. Tes ini membuktikan itu, bukan sekadar mengasumsikannya.
+     */
+    public function test_summary_excludes_demo_mode_preorder_when_running_in_live_mode(): void
+    {
+        \App\Support\ModeGate::runAs('live', fn () => $this->createPreorder());
+
+        \App\Support\ModeGate::runAs('demo', function () {
+            $demoCustomer = Customer::factory()->create();
+            $demoArtist = Artist::factory()->create();
+            $demoCategory = Category::factory()->create();
+            $demoProduct = Product::factory()->create([
+                'artist_id' => $demoArtist->id, 'category_id' => $demoCategory->id, 'is_preorder' => true,
+            ]);
+            $demoVariant = $demoProduct->variants()->create([
+                'sku' => 'DEMOFIG0001', 'sell_price' => 300000, 'cost_price' => 150000, 'current_stock' => 0,
+            ]);
+
+            $this->postJson('/api/v1/preorders', [
+                'customer_id' => $demoCustomer->id,
+                'fulfillment' => 'pickup',
+                'items' => [['variant_id' => $demoVariant->id, 'qty' => 1]],
+            ])->assertCreated();
+        });
+
+        $response = \App\Support\ModeGate::runAs('live', fn () => $this->getJson('/api/v1/preorders/summary'));
+        $response->assertOk();
+
+        // Hanya 1 (LIVE) yang terhitung, bukan 2 (LIVE + DEMO).
+        $this->assertEquals(1, $response->json('transaction_count'));
+        $this->assertEquals('300000.00', $response->json('grand_total'));
     }
 }

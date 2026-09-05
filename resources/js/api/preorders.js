@@ -4,6 +4,13 @@ export function listPreorders(params = {}) {
   return client.get('/preorders', { params }).then((r) => r.data);
 }
 
+// 013-preorder-list-filters-receipt (US5, T025) — same filter set as
+// listPreorders() above, applied via the shared applyFilters() helper
+// server-side (contracts/api-deltas.md), so the two never disagree.
+export function getPreorderSummary(params = {}) {
+  return client.get('/preorders/summary', { params }).then((r) => r.data);
+}
+
 export function getPreorder(id) {
   return client.get(`/preorders/${id}`).then((r) => r.data);
 }

@@ -39,6 +39,12 @@ defineProps({
           </td>
         </tr>
       </tbody>
+      <!-- Footer opsional (mis. baris Grand Total) — hanya dirender kalau slot
+           diisi oleh pemanggil, jadi tabel yang tidak butuh ringkasan tidak
+           terpengaruh sama sekali. -->
+      <tfoot v-if="$slots.footer && !loading && rows.length > 0">
+        <slot name="footer" />
+      </tfoot>
     </table>
   </div>
 </template>

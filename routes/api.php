@@ -142,6 +142,13 @@ Route::prefix('v1')->group(function () {
         Route::get('/preorders/import/template', [PreorderController::class, 'importTemplate']);
         Route::post('/preorders/import', [PreorderController::class, 'import']);
 
+        // 013-preorder-list-filters-receipt (T023) — rute statis 'summary'
+        // WAJIB didaftarkan SEBELUM apiResource('preorders', ...)'s 'show'
+        // (GET /preorders/{preorder}), dengan alasan sama seperti
+        // 'export'/'import' di atas: supaya "summary" tidak tertangkap
+        // sebagai {preorder} id dan gagal route-model-binding.
+        Route::get('/preorders/summary', [PreorderController::class, 'summary']);
+
         Route::apiResource('preorders', PreorderController::class)->only(['index', 'store', 'show']);
         Route::patch('/preorders/{preorder}/status', [PreorderController::class, 'updateStatus']);
         Route::post('/preorders/{preorder}/payments', [PreorderController::class, 'storePayment']);
@@ -172,6 +179,6 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/preorders', [ReportController::class, 'preorders']);
         Route::post('/reports/artist-settlements/{settlement}/payment', [ReportController::class, 'recordSettlementPayment']);
         Route::get('/reports/{report}/export', [ReportController::class, 'export'])
-            ->where('report', 'sales|profit|artist-settlements|artist-profit');
+            ->where('report', 'sales|profit|artist-settlements|artist-profit|purchases|stock-by-artist|preorder');
     });
 });

@@ -10,6 +10,7 @@ use App\Models\Preorder;
 use App\Services\PreorderExportImportService;
 use App\Services\PreorderNotifier;
 use App\Services\PreorderService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -27,18 +28,13 @@ class PreorderController extends Controller
     {
         $perPage = min((int) $request->integer('per_page', 25), 100);
 
-        $preorders = Preorder::query()
-            ->with('customer')
-            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
-            ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
-            ->when($request->filled('customer_id'), fn ($q) => $q->where('customer_id', $request->integer('customer_id')))
-            ->when($request->filled('fulfillment'), fn ($q) => $q->where('fulfillment', $request->string('fulfillment')))
-            // 007-preorder-import-export-notify (US1) — parsial, tidak peka
-            // huruf besar/kecil, terhadap nama pelanggan (research.md R1).
-            ->when($request->filled('search'), fn ($q) => $q->whereHas(
-                'customer',
-                fn ($cq) => $cq->where('name', 'like', '%' . $request->string('search')->value() . '%')
-            ))
+        // 013-preorder-list-filters-receipt (T005) — eager-load items.artist
+        // supaya sellersFor() tidak lazy-load per baris di list yang
+        // dipaginasi (risiko N+1).
+        $query = Preorder::query()->with(['customer', 'items.artist']);
+        $query = $this->applyFilters($query, $request);
+
+        $preorders = $query
             ->orderByDesc('created_at')
             ->paginate($perPage);
 
@@ -50,6 +46,7 @@ class PreorderController extends Controller
             'paid_amount' => number_format((float) $p->paid_amount, 2, '.', ''),
             'outstanding' => number_format($p->outstanding(), 2, '.', ''),
             'created_at' => $p->created_at,
+            'sellers' => $this->sellersFor($p),
         ]);
 
         return response()->json([
@@ -161,6 +158,102 @@ class PreorderController extends Controller
         ]);
     }
 
+    /**
+     * 013-preorder-list-filters-receipt (T022, FR-010-013) — statistik
+     * agregat atas himpunan preorder yang SAMA yang sedang difilter di
+     * index(), lewat helper applyFilters() yang sama (research.md R4) —
+     * supaya list dan ringkasan tidak pernah berbeda soal "apa yang
+     * sedang difilter". Pakai total_amount/paid_amount milik Preorder
+     * langsung (bukan rekomputasi live dari payments) karena keduanya
+     * sudah otoritatif di level preorder (research.md R3, beda dengan
+     * kebutuhan proration per-artist di ReportController).
+     */
+    public function summary(Request $request): JsonResponse
+    {
+        $query = Preorder::query();
+        $query = $this->applyFilters($query, $request);
+
+        $transactionCount = (clone $query)->count();
+
+        $groupedByStatus = (clone $query)
+            ->selectRaw('status, COUNT(*) as cnt, SUM(total_amount) as total')
+            ->groupBy('status')
+            ->get()
+            ->keyBy('status');
+
+        $statuses = ['ordered', 'dp_paid', 'arrived', 'settled', 'handed_over', 'cancelled'];
+
+        // 013-preorder-list-filters-receipt (US5, klarifikasi pengguna) —
+        // "total untuk setiap status" dimaksudkan sebagai JUMLAH (qty)
+        // transaksi per status, bukan cuma nilai uangnya — jadi tiap
+        // status membawa `count` di samping `total_amount`, bukan salah
+        // satunya saja.
+        $byStatus = array_map(fn ($status) => [
+            'status' => $status,
+            'count' => (int) ($groupedByStatus[$status]->cnt ?? 0),
+            'total_amount' => number_format((float) ($groupedByStatus[$status]->total ?? 0), 2, '.', ''),
+        ], $statuses);
+
+        $grandTotal = (float) (clone $query)->sum('total_amount');
+        $totalPaid = (float) (clone $query)->sum('paid_amount');
+
+        return response()->json([
+            'transaction_count' => $transactionCount,
+            'by_status' => $byStatus,
+            'grand_total' => number_format($grandTotal, 2, '.', ''),
+            'total_outstanding' => number_format($grandTotal - $totalPaid, 2, '.', ''),
+        ]);
+    }
+
+    /**
+     * 013-preorder-list-filters-receipt (T003) — hasil ekstraksi rantai
+     * filter index() apa adanya (perilaku identik), ditambah filter
+     * artist_id baru. Pakai whereHas (WHERE EXISTS), BUKAN join, supaya
+     * satu Preorder dengan beberapa item dari artist yang sama tidak
+     * pernah terduplikasi (research.md R2).
+     */
+    private function applyFilters(Builder $query, Request $request): Builder
+    {
+        return $query
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
+            ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
+            ->when($request->filled('customer_id'), fn ($q) => $q->where('customer_id', $request->integer('customer_id')))
+            ->when($request->filled('fulfillment'), fn ($q) => $q->where('fulfillment', $request->string('fulfillment')))
+            // 007-preorder-import-export-notify (US1) — parsial, tidak peka
+            // huruf besar/kecil, terhadap nama pelanggan (research.md R1).
+            ->when($request->filled('search'), fn ($q) => $q->whereHas(
+                'customer',
+                fn ($cq) => $cq->where('name', 'like', '%' . $request->string('search')->value() . '%')
+            ))
+            ->when($request->filled('artist_id'), fn ($q) => $q->whereHas(
+                'items',
+                fn ($iq) => $iq->where('artist_id', $request->integer('artist_id'))
+            ));
+    }
+
+    /**
+     * 013-preorder-list-filters-receipt (T004) — daftar penjual unik
+     * (id, name) lintas item preorder, urut kemunculan pertama. Null-safe:
+     * item dengan artist_id yang tidak resolve (referensi menggantung)
+     * dilewati, tidak crash.
+     */
+    private function sellersFor(Preorder $preorder): array
+    {
+        $sellers = [];
+
+        foreach ($preorder->items as $item) {
+            $artist = $item->artist;
+
+            if (! $artist || isset($sellers[$artist->id])) {
+                continue;
+            }
+
+            $sellers[$artist->id] = ['id' => $artist->id, 'name' => $artist->name];
+        }
+
+        return array_values($sellers);
+    }
+
     private function presentNotification(?\App\Models\PreorderNotification $notification): ?array
     {
         if (! $notification) {
@@ -230,11 +323,16 @@ class PreorderController extends Controller
             'outstanding' => number_format($preorder->outstanding(), 2, '.', ''),
             'expected_date' => $preorder->expected_date?->toDateString(),
             'cancel_reason' => $preorder->cancel_reason,
+            // 013-preorder-list-filters-receipt (T004) — daftar penjual unik
+            // yang muncul di preorder ini, dipakai frontend untuk kolom
+            // seller di list & tampilan invoice per-item.
+            'sellers' => $this->sellersFor($preorder),
             'items' => $preorder->relationLoaded('items') ? $preorder->items->map(fn ($i) => [
                 'id' => $i->id, 'variant_id' => $i->variant_id, 'sku_snapshot' => $i->sku_snapshot,
                 'name_snapshot' => $i->name_snapshot, 'qty' => $i->qty,
                 'sell_price' => number_format((float) $i->sell_price, 2, '.', ''),
                 'line_total' => number_format((float) $i->line_total, 2, '.', ''),
+                'artist_id' => $i->artist_id, 'artist_name' => $i->artist?->name,
             ]) : [],
             // Sebelumnya hilang total dari present() meski show() sudah
             // meng-eager-load ketiganya (dan openapi-pos-mvp.yaml sudah lama

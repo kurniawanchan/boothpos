@@ -3,6 +3,7 @@ import { ref, watch, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
+import StatusPill from '../ui/StatusPill.vue';
 import { getPreorderInvoice } from '../../api/preorders';
 import { formatIDR } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
@@ -16,7 +17,27 @@ import { useToastStore } from '../../stores/toast';
  * (PreorderDocumentType, satu sumber kebenaran) — komponen ini hanya
  * memilih judul/label berdasarkan nilai itu, tidak menghitung ulang
  * pemetaan status sendiri.
+ *
+ * 013-preorder-list-filters-receipt (US3, research.md R5) — restyle
+ * memakai konvensi visual yang sudah ditetapkan
+ * PreorderPaymentReceiptModal.vue (010): header terpusat dengan badge
+ * "Pre-order" + StatusPill status granular yang berjalan (bukan sekadar
+ * document_type badge yang sudah ada), pemisah item bergaris putus-putus,
+ * dan tipografi total yang menonjol, mengikuti ReceiptModal.vue. Logika
+ * heading/badge/footer berbasis document_type TETAP dipertahankan —
+ * StatusPill ini TAMBAHAN, bukan pengganti. STATUS_LABEL_KEY/STATUS_VARIANT
+ * sengaja diduplikasi dari PreorderPaymentReceiptModal.vue (belum ada
+ * composable bersama untuk ini; menciptakannya di luar cakupan tugas ini).
  */
+const STATUS_LABEL_KEY = {
+  ordered: 'preorders.step_ordered',
+  dp_paid: 'preorders.step_dp_paid',
+  arrived: 'preorders.step_arrived',
+  settled: 'preorders.step_settled',
+  handed_over: 'preorders.step_handed_over',
+  cancelled: 'events_sessions.status_cancelled',
+};
+const STATUS_VARIANT = { ordered: 'neutral', dp_paid: 'warn', arrived: 'mint', settled: 'mint', handed_over: 'dark', cancelled: 'danger' };
 const props = defineProps({
   open: { type: Boolean, default: false },
   preorderId: { type: [Number, String, null], default: null },
@@ -37,6 +58,9 @@ const heading = computed(() => {
   if (invoice.value.document_type === 'cancelled') return t('preorders.document_cancelled_title');
   return t('preorders.document_invoice_title');
 });
+
+const statusLabel = computed(() => (invoice.value ? t(STATUS_LABEL_KEY[invoice.value.status] ?? invoice.value.status) : ''));
+const statusVariant = computed(() => STATUS_VARIANT[invoice.value?.status] ?? 'neutral');
 
 async function load() {
   if (!props.preorderId) {
@@ -92,23 +116,36 @@ async function downloadPdf() {
         </BaseButton>
       </div>
 
-      <div ref="docEl" class="flex flex-col gap-4 bg-white p-4">
-        <div class="flex flex-col gap-0.5">
-          <span class="text-[17px] font-extrabold tracking-tight">{{ invoice.preorder_number }}</span>
-          <span class="text-[12.5px] text-muted-2">{{ invoice.customer?.name }}</span>
+      <div ref="docEl" class="flex flex-col gap-[18px] bg-white p-4">
+        <div class="flex flex-col items-center gap-1.5 text-center">
+          <span
+            class="rounded-full bg-warn-bg px-3 py-1 text-[11.5px] font-extrabold uppercase tracking-wide text-warn-text"
+          >{{ t('preorders.preorder_marking_label') }}</span>
+          <span class="mt-1 font-mono text-[15px] font-bold">{{ invoice.preorder_number }}</span>
+          <span v-if="invoice.customer?.name" class="text-[12.5px] text-muted-2">{{ invoice.customer.name }}</span>
+          <StatusPill :variant="statusVariant">{{ statusLabel }}</StatusPill>
         </div>
 
-        <div class="flex flex-col gap-2.5 border-y border-dashed border-line-2 py-3.5">
+        <div class="flex flex-col gap-3 border-y border-dashed border-line-2 py-4">
           <div v-for="item in invoice.items" :key="item.id" class="flex items-start gap-2.5">
-            <span class="min-w-[26px] text-[13px] font-bold text-brand-active">{{ item.qty }}×</span>
-            <span class="flex-1 text-[13.5px] font-semibold leading-snug">{{ item.name_snapshot }}</span>
-            <span class="text-[13.5px] font-bold">{{ formatIDR(item.line_total) }}</span>
+            <span class="min-w-[26px] text-[15px] font-bold text-brand-active">{{ item.qty }}×</span>
+            <div class="flex flex-1 flex-col gap-0.5">
+              <span class="text-[14.5px] font-semibold leading-snug">{{ item.name_snapshot }}</span>
+              <span class="text-[12px] text-muted-3">
+                {{ formatIDR(item.sell_price) }}
+                <template v-if="item.artist_name"> · {{ item.artist_name }}</template>
+              </span>
+            </div>
+            <span class="text-[14.5px] font-bold">{{ formatIDR(item.line_total) }}</span>
           </div>
         </div>
 
-        <div class="flex flex-col gap-1.5">
-          <div class="flex justify-between text-[13px]"><span class="text-muted">{{ t('preorders.total_amount') }}</span><span class="font-bold">{{ formatIDR(invoice.total_amount) }}</span></div>
-          <div class="flex justify-between text-[13px]"><span class="text-muted">{{ t('preorders.paid_amount') }}</span><span class="font-semibold">{{ formatIDR(invoice.paid_amount) }}</span></div>
+        <div class="flex flex-col gap-2">
+          <div class="flex items-baseline justify-between border-t border-line-3 pt-2.5">
+            <span class="text-[16px] font-bold">{{ t('preorders.total_amount') }}</span>
+            <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(invoice.total_amount) }}</span>
+          </div>
+          <div class="flex justify-between text-[13.5px]"><span class="text-muted">{{ t('preorders.paid_amount') }}</span><span class="font-semibold">{{ formatIDR(invoice.paid_amount) }}</span></div>
           <div v-if="invoice.document_type === 'invoice'" class="flex justify-between border-t border-line-3 pt-1.5 text-[14px]">
             <span class="font-bold">{{ t('preorders.outstanding') }}</span><span class="font-extrabold text-brand-active">{{ formatIDR(invoice.outstanding) }}</span>
           </div>
