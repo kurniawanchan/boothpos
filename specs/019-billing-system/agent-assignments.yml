@@ -1,0 +1,52 @@
+# Agent Assignments
+# Feature: 019-billing-system
+# Generated: 2026-09-06
+# Command: /speckit.agent-assign.assign
+
+agents_scanned:
+  - name: "architect"
+    source: "user"
+    description: "Design docs / ADRs / OpenAPI"
+  - name: "backend-engineer"
+    source: "user"
+    description: "Server-side code; defaults to opening a Bitbucket PR via the pull-request skill"
+  - name: "claire"
+    source: "user"
+    description: "Jira ticket authoring"
+  - name: "frontend-engineer"
+    source: "user"
+    description: "Vue/React UI; unconditionally defaults to Mekari Pixel (@mekari/pixel3) + Figma MCP fetch"
+  - name: "pm"
+    source: "user"
+    description: "PRD pulling / Jira decomposition"
+  - name: "qa"
+    source: "user"
+    description: "Test strategy / Postman-Newman API automation scaffolding into qa-tests/api/"
+  - name: "reviewer"
+    source: "user"
+    description: "Code/security review"
+  - name: "sre"
+    source: "user"
+    description: "Bitbucket->ACR->ACK release pipeline / postmortems"
+
+assignments:
+  T001: { agent: "default", reason: "Laravel migration, no match" }
+  T002: { agent: "default", reason: "Eloquent model, repo-specific conventions" }
+  T003: { agent: "default", reason: "Policy mirroring existing CompanyPolicy pattern" }
+  T004: { agent: "default", reason: "Business-logic Service, repo-specific transition-guard pattern" }
+  T005: { agent: "default", reason: "Repo-specific lang-file convention" }
+  T006: { agent: "default", reason: "FormRequest, repo-specific validation conventions" }
+  T007: { agent: "default", reason: "API Resource, repo-specific conventions" }
+  T008: { agent: "default", reason: "backend-engineer's Bitbucket-PR default conflicts with this repo's workflow" }
+  T009: { agent: "default", reason: "Route registration, no match" }
+  T010: { agent: "default", reason: "tests/Feature/ convention, not qa agent's Postman/Newman default" }
+  T011: { agent: "default", reason: "Test execution, repo-specific convention" }
+  T012: { agent: "default", reason: "backend-engineer's Bitbucket-PR default conflicts with this repo's workflow" }
+  T013: { agent: "default", reason: "Route registration, no match" }
+  T014: { agent: "default", reason: "tests/Feature/ convention, not qa agent's Postman/Newman default" }
+  T015: { agent: "default", reason: "Test execution, repo-specific convention" }
+  T016: { agent: "default", reason: "API client module, repo-specific conventions" }
+  T017: { agent: "default", reason: "frontend-engineer's Mekari Pixel + Figma MCP default conflicts with CLAUDE.md" }
+  T018: { agent: "default", reason: "Manual browser/API verification, repo-specific Constitution II requirement" }
+  T019: { agent: "default", reason: "docs/openapi-pos-mvp.yaml update, repo-specific Documentation & Change Discipline rule" }
+  T020: { agent: "default", reason: "Full regression test run, repo-specific test convention" }
