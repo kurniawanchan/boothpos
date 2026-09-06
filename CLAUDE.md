@@ -209,7 +209,26 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/018-license-activation/plan.md`
+Active feature plan: `specs/019-billing-system/plan.md`
+(branch `019-billing-system`, branched from `main`) — adds `Invoice` as a
+new entity tied to `Company` (017): a manually-entered billing record
+(amount, due date, status: unpaid/paid/cancelled), no payment-gateway
+integration, matching the existing internal-CRM-tracker scope. Fills the
+gap between "a company picked a package" (017) and "the vendor manually
+sends a license key after payment" (018) — this is what tells staff
+*whether* payment happened; it does not itself trigger license
+generation. Reuses 017's `companies` menu key (no new permission
+surface) and its `Package`/`BusinessType` non-`HasDataMode` precedent in
+reverse: `Invoice` IS `HasDataMode`-scoped (a transactional record tied
+to a scoped `Company`), unlike `Package`/`BusinessType`. Status
+transitions (`markPaid()`/`cancel()`) are guarded in a small
+`InvoiceService`, mirroring `PurchaseOrderService`'s existing
+transition-guard pattern — invalid transitions (e.g. re-marking an
+already-paid invoice) return 409. Amount is a fixed snapshot at creation,
+never recomputed from the company's current package (Constitution IV's
+historical-snapshot convention). See research.md R1-R4.
+
+Previous feature: `specs/018-license-activation/plan.md`
 (branch `018-license-activation`, branched from `main`) — a global gate
 blocking every application function until THIS installation has redeemed
 a valid, vendor-signed license key, matching the existing "one-time
