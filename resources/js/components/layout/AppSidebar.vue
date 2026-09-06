@@ -61,6 +61,16 @@ const NAV_DEFS = [
     ],
   },
   { name: 'preorders', label: 'nav.preorders', icon: 'ph-clock-countdown', menuKey: 'preorders' },
+  {
+    key: 'companies-group',
+    label: 'nav.companies_group',
+    icon: 'ph-buildings',
+    children: [
+      { name: 'companies', label: 'nav.companies', menuKey: 'companies' },
+      { name: 'packages', label: 'nav.packages', menuKey: 'companies' },
+      { name: 'business-types', label: 'nav.business_types', menuKey: 'companies' },
+    ],
+  },
   { name: 'events', label: 'nav.events', icon: 'ph-calendar-dots', menuKey: 'events' },
   { name: 'artists', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'artists' },
   { name: 'customers', label: 'nav.customers', icon: 'ph-address-book', menuKey: 'customers' },
