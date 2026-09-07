@@ -25,17 +25,17 @@ class StoreCompanyRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // Hanya business type/package yang masih aktif boleh dipilih
+            // Hanya business type/license yang masih aktif boleh dipilih
             // untuk company BARU (data-model.md's validation rules) —
             // company yang sudah ada tetap menampilkan rujukan lamanya
-            // meski business type/package itu belakangan dinonaktifkan.
+            // meski business type/license itu belakangan dinonaktifkan.
             'business_type_id' => [
                 'required', 'integer',
                 Rule::exists('business_types', 'id')->where('is_active', true)->whereNull('deleted_at'),
             ],
-            'package_id' => [
+            'license_id' => [
                 'required', 'integer',
-                Rule::exists('packages', 'id')->where('is_active', true)->whereNull('deleted_at'),
+                Rule::exists('licenses', 'id')->where('is_active', true)->whereNull('deleted_at'),
             ],
             'name' => ['required', 'string', 'max:150'],
             'address' => ['nullable', 'string'],

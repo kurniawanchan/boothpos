@@ -9,12 +9,15 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\EventController;
+use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\InvoiceExportImportController;
+use App\Http\Controllers\Api\InvoicePaymentSettingController;
+use App\Http\Controllers\Api\LicenseCatalogController;
 use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\MasterDataExportController;
 use App\Http\Controllers\Api\MasterDataImportController;
 use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\OrderController;
-use App\Http\Controllers\Api\PackageController;
 use App\Http\Controllers\Api\PaymentChannelController;
 use App\Http\Controllers\Api\PaymentProofController;
 use App\Http\Controllers\Api\PreorderController;
@@ -59,6 +62,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/settings', [SettingsController::class, 'index']);
         Route::put('/settings', [SettingsController::class, 'update']);
         Route::post('/settings/store-logo', [SettingsController::class, 'uploadStoreLogo']);
+        Route::get('/settings/payment', [InvoicePaymentSettingController::class, 'show']);
+        Route::put('/settings/payment', [InvoicePaymentSettingController::class, 'update']);
 
         Route::get('/activity-logs', [ActivityLogController::class, 'index']);
 
@@ -115,16 +120,41 @@ Route::prefix('v1')->group(function () {
 
         // 017-company-onboarding — pipeline sales/ops internal, gated
         // 'companies' menu key (owner/admin only, lihat migrasi
-        // add_companies_menu_key_to_default_roles). Tidak apiResource
-        // penuh untuk companies — tidak ada update/destroy di scope
-        // fitur ini (spec.md tidak memintanya).
+        // add_companies_menu_key_to_default_roles).
+        // 019-billing-system (second expansion, T087) — update/destroy
+        // ditambahkan (research.md R10/R11); tetap bukan apiResource penuh
+        // karena tidak ada 'store' terpisah dari onboarding flow di atas.
         Route::apiResource('business-types', BusinessTypeController::class);
-        Route::apiResource('packages', PackageController::class);
+        // 019-billing-system — rename dari /packages (research.md R1',
+        // R0). LicenseCatalogController, BUKAN LicenseController — nama
+        // itu sudah dipakai gerbang aktivasi instalasi 018 di atas.
+        Route::apiResource('licenses', LicenseCatalogController::class);
         Route::get('/companies', [CompanyController::class, 'index']);
         Route::post('/companies', [CompanyController::class, 'store']);
         Route::get('/companies/{company}', [CompanyController::class, 'show']);
-        Route::post('/companies/{company}/resend-activation', [CompanyController::class, 'resendActivation']);
+        Route::put('/companies/{company}', [CompanyController::class, 'update']);
+        Route::delete('/companies/{company}', [CompanyController::class, 'destroy']);
         Route::post('/companies/{company}/activate', [CompanyController::class, 'activate'])->middleware('throttle:10,1');
+        Route::post('/companies/{company}/deactivate', [CompanyController::class, 'deactivate'])->middleware('throttle:10,1');
+
+        // 019-billing-system (contracts/api.md, research.md R2') — Invoice
+        // kini dokumen mandiri dengan menu sendiri ('invoices'), bukan lagi
+        // anak /companies/{company}. /invoices/summary WAJIB didaftarkan
+        // SEBELUM apiResource('invoices', ...)'s {invoice} agar 'summary'
+        // tidak ditangkap sebagai route-model-binding {invoice} (pola sama
+        // dengan /preorders/export di atas apiResource('preorders', ...)).
+        Route::get('/invoices/summary', [InvoiceController::class, 'summary']);
+        // 019-billing-system (T075) — sama seperti /preorders/export di
+        // atas apiResource('preorders', ...): rute statis ini WAJIB
+        // didaftarkan SEBELUM apiResource('invoices', ...)'s {invoice}
+        // supaya 'export'/'import' tidak ditangkap sebagai route-model-
+        // binding {invoice}.
+        Route::get('/invoices/export', [InvoiceExportImportController::class, 'export']);
+        Route::get('/invoices/import/template', [InvoiceExportImportController::class, 'importTemplate']);
+        Route::post('/invoices/import', [InvoiceExportImportController::class, 'import']);
+        Route::post('/invoices/{invoice}/mark-paid', [InvoiceController::class, 'markPaid']);
+        Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel']);
+        Route::apiResource('invoices', InvoiceController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
 
         Route::get('/variants/{variant}/bom', [MaterialController::class, 'bomIndex']);
         Route::post('/variants/{variant}/bom', [MaterialController::class, 'storeBomLine']);

@@ -1,52 +1,286 @@
 # Agent Assignments
-# Feature: 019-billing-system
+# Feature: 019-billing-system (License & Invoice Management, expanded scope)
 # Generated: 2026-09-06
 # Command: /speckit.agent-assign.assign
 
 agents_scanned:
   - name: "architect"
     source: "user"
-    description: "Design docs / ADRs / OpenAPI"
+    description: "Technical design docs, ADRs, C4, API reference/OpenAPI"
   - name: "backend-engineer"
     source: "user"
-    description: "Server-side code; defaults to opening a Bitbucket PR via the pull-request skill"
-  - name: "claire"
-    source: "user"
-    description: "Jira ticket authoring"
+    description: "Server-side code: implement/review/refactor"
   - name: "frontend-engineer"
     source: "user"
-    description: "Vue/React UI; unconditionally defaults to Mekari Pixel (@mekari/pixel3) + Figma MCP fetch"
-  - name: "pm"
-    source: "user"
-    description: "PRD pulling / Jira decomposition"
+    description: "Client-side/UI code (Vue, React, etc.)"
   - name: "qa"
     source: "user"
-    description: "Test strategy / Postman-Newman API automation scaffolding into qa-tests/api/"
+    description: "Test planning/scaffolding/automation"
   - name: "reviewer"
     source: "user"
     description: "Code/security review"
   - name: "sre"
     source: "user"
-    description: "Bitbucket->ACR->ACK release pipeline / postmortems"
+    description: "Release/deploy/incident response"
+  - name: "claire"
+    source: "user"
+    description: "Jira ticket authoring"
+  - name: "pm"
+    source: "user"
+    description: "PRD authoring / Jira decomposition"
 
 assignments:
-  T001: { agent: "default", reason: "Laravel migration, no match" }
-  T002: { agent: "default", reason: "Eloquent model, repo-specific conventions" }
-  T003: { agent: "default", reason: "Policy mirroring existing CompanyPolicy pattern" }
-  T004: { agent: "default", reason: "Business-logic Service, repo-specific transition-guard pattern" }
-  T005: { agent: "default", reason: "Repo-specific lang-file convention" }
-  T006: { agent: "default", reason: "FormRequest, repo-specific validation conventions" }
-  T007: { agent: "default", reason: "API Resource, repo-specific conventions" }
-  T008: { agent: "default", reason: "backend-engineer's Bitbucket-PR default conflicts with this repo's workflow" }
-  T009: { agent: "default", reason: "Route registration, no match" }
-  T010: { agent: "default", reason: "tests/Feature/ convention, not qa agent's Postman/Newman default" }
-  T011: { agent: "default", reason: "Test execution, repo-specific convention" }
-  T012: { agent: "default", reason: "backend-engineer's Bitbucket-PR default conflicts with this repo's workflow" }
-  T013: { agent: "default", reason: "Route registration, no match" }
-  T014: { agent: "default", reason: "tests/Feature/ convention, not qa agent's Postman/Newman default" }
-  T015: { agent: "default", reason: "Test execution, repo-specific convention" }
-  T016: { agent: "default", reason: "API client module, repo-specific conventions" }
-  T017: { agent: "default", reason: "frontend-engineer's Mekari Pixel + Figma MCP default conflicts with CLAUDE.md" }
-  T018: { agent: "default", reason: "Manual browser/API verification, repo-specific Constitution II requirement" }
-  T019: { agent: "default", reason: "docs/openapi-pos-mvp.yaml update, repo-specific Documentation & Change Discipline rule" }
-  T020: { agent: "default", reason: "Full regression test run, repo-specific test convention" }
+  T021:
+    agent: "backend-engineer"
+    reason: "Migration/schema change (rename packages->licenses + pricing columns)"
+  T022:
+    agent: "backend-engineer"
+    reason: "Migration/schema change (rename company FK column)"
+  T023:
+    agent: "backend-engineer"
+    reason: "Eloquent model rename/expansion"
+  T024:
+    agent: "backend-engineer"
+    reason: "Eloquent model relation rename"
+  T025:
+    agent: "backend-engineer"
+    reason: "FormRequest rename + new validation rules"
+  T026:
+    agent: "backend-engineer"
+    reason: "API resource rename + new fields"
+  T027:
+    agent: "backend-engineer"
+    reason: "Policy rename + menu-key gate change"
+  T028:
+    agent: "backend-engineer"
+    reason: "Controller rename, avoids collision with feature 018's LicenseController"
+  T029:
+    agent: "backend-engineer"
+    reason: "Support class registry update (MenuKeys)"
+  T030:
+    agent: "backend-engineer"
+    reason: "Default-roles migration, mirrors existing companies-menu-key migration"
+  T031:
+    agent: "backend-engineer"
+    reason: "Default-roles migration, same pattern as T030"
+  T032:
+    agent: "backend-engineer"
+    reason: "Backend lang files (lang/id, lang/en)"
+  T033:
+    agent: "backend-engineer"
+    reason: "Route registration"
+  T034:
+    agent: "default"
+    reason: "Repo-wide grep/sweep and fix-up task, not scoped to one component"
+  T035:
+    agent: "default"
+    reason: "Migrate + run test suite, a verification step not new code"
+  T036:
+    agent: "backend-engineer"
+    reason: "Database seeder"
+  T037:
+    agent: "default"
+    reason: "Run seeder and verify rows, a verification step"
+  T038:
+    agent: "frontend-engineer"
+    reason: "Frontend API wrapper module"
+  T039:
+    agent: "frontend-engineer"
+    reason: "New Vue screen (LicensesView.vue)"
+  T040:
+    agent: "frontend-engineer"
+    reason: "Sidebar nav + router entry"
+  T041:
+    agent: "backend-engineer"
+    reason: "PHP feature test rename/extension"
+  T042:
+    agent: "default"
+    reason: "Manual browser verification walkthrough"
+  T043:
+    agent: "backend-engineer"
+    reason: "Migration/schema change (expand invoices table)"
+  T044:
+    agent: "backend-engineer"
+    reason: "Eloquent model update"
+  T045:
+    agent: "backend-engineer"
+    reason: "Service method - business logic (invoice numbering)"
+  T046:
+    agent: "backend-engineer"
+    reason: "Service method - business logic (delete guard)"
+  T047:
+    agent: "backend-engineer"
+    reason: "Service method - business logic (guarded update)"
+  T048:
+    agent: "backend-engineer"
+    reason: "FormRequest rewrite"
+  T049:
+    agent: "backend-engineer"
+    reason: "New FormRequest"
+  T050:
+    agent: "backend-engineer"
+    reason: "API resource field update"
+  T051:
+    agent: "backend-engineer"
+    reason: "Policy menu-key gate change"
+  T052:
+    agent: "backend-engineer"
+    reason: "Controller CRUD + summary endpoint"
+  T053:
+    agent: "backend-engineer"
+    reason: "Route registration"
+  T054:
+    agent: "frontend-engineer"
+    reason: "Frontend API wrapper additions"
+  T055:
+    agent: "frontend-engineer"
+    reason: "New Vue screen (InvoicesView.vue)"
+  T056:
+    agent: "frontend-engineer"
+    reason: "New Vue component (invoice form)"
+  T057:
+    agent: "frontend-engineer"
+    reason: "New Vue component, client-side PDF/image download pattern"
+  T058:
+    agent: "frontend-engineer"
+    reason: "Vue component removal/cleanup"
+  T059:
+    agent: "frontend-engineer"
+    reason: "Sidebar nav + router entry"
+  T060:
+    agent: "backend-engineer"
+    reason: "PHP feature test extension"
+  T061:
+    agent: "default"
+    reason: "Manual browser verification walkthrough"
+  T062:
+    agent: "frontend-engineer"
+    reason: "Vue data wiring to existing endpoint"
+  T063:
+    agent: "default"
+    reason: "Manual verification"
+  T064:
+    agent: "backend-engineer"
+    reason: "Migration - new table"
+  T065:
+    agent: "backend-engineer"
+    reason: "Eloquent model - new singleton entity"
+  T066:
+    agent: "backend-engineer"
+    reason: "Controller - new endpoint"
+  T067:
+    agent: "backend-engineer"
+    reason: "Route registration"
+  T068:
+    agent: "backend-engineer"
+    reason: "Cross-layer default value wiring, backend-owned business rule"
+  T069:
+    agent: "frontend-engineer"
+    reason: "New Vue screen (SettingsPaymentView.vue)"
+  T070:
+    agent: "frontend-engineer"
+    reason: "Sidebar nav child + router entry"
+  T071:
+    agent: "backend-engineer"
+    reason: "New PHP feature test"
+  T072:
+    agent: "default"
+    reason: "Manual verification"
+  T073:
+    agent: "backend-engineer"
+    reason: "Excel import class, mirrors existing PreorderImport"
+  T074:
+    agent: "backend-engineer"
+    reason: "Service class, mirrors existing PreorderExportImportService"
+  T075:
+    agent: "backend-engineer"
+    reason: "Route registration"
+  T076:
+    agent: "frontend-engineer"
+    reason: "Vue UI wiring for export/import buttons"
+  T077:
+    agent: "backend-engineer"
+    reason: "PHP feature test extension"
+  T078:
+    agent: "default"
+    reason: "Manual verification"
+  T079:
+    agent: "backend-engineer"
+    reason: "API documentation, closely tied to the routes just implemented"
+  T080:
+    agent: "default"
+    reason: "Full regression test run, a verification step"
+  T081:
+    agent: "default"
+    reason: "Manual verification (role gating)"
+  T082:
+    agent: "default"
+    reason: "Documentation bookkeeping (spec.md status line)"
+
+  # --- Second expansion (2026-09-06): T083-T104 ---
+  T083:
+    agent: "backend-engineer"
+    reason: "FormRequest, new class separate from StoreCompanyRequest"
+  T084:
+    agent: "backend-engineer"
+    reason: "Service method - business logic (Company delete guard)"
+  T085:
+    agent: "backend-engineer"
+    reason: "Policy - new abilities on existing menu key"
+  T086:
+    agent: "backend-engineer"
+    reason: "Controller - new update/destroy actions"
+  T087:
+    agent: "backend-engineer"
+    reason: "Route registration"
+  T088:
+    agent: "backend-engineer"
+    reason: "Backend lang files"
+  T089:
+    agent: "frontend-engineer"
+    reason: "Frontend API wrapper additions"
+  T090:
+    agent: "frontend-engineer"
+    reason: "Vue UI - Edit/Delete actions on existing view"
+  T091:
+    agent: "backend-engineer"
+    reason: "PHP feature test extension"
+  T092:
+    agent: "default"
+    reason: "Manual browser verification walkthrough"
+  T093:
+    agent: "backend-engineer"
+    reason: "Controller - eager-load addition"
+  T094:
+    agent: "backend-engineer"
+    reason: "API resource - new nested field"
+  T095:
+    agent: "backend-engineer"
+    reason: "PHP feature test extension"
+  T096:
+    agent: "frontend-engineer"
+    reason: "Vue UI - new detail-view row"
+  T097:
+    agent: "default"
+    reason: "Manual verification (detail view + PDF/image)"
+  T098:
+    agent: "frontend-engineer"
+    reason: "Vue UI - new Edit button wiring existing form"
+  T099:
+    agent: "frontend-engineer"
+    reason: "Vue UI - new Delete button wiring existing API"
+  T100:
+    agent: "frontend-engineer"
+    reason: "Vue component test extension"
+  T101:
+    agent: "default"
+    reason: "Manual verification (edit/delete UI)"
+  T102:
+    agent: "backend-engineer"
+    reason: "API documentation, closely tied to new routes/resource shape"
+  T103:
+    agent: "default"
+    reason: "Full regression test run, a verification step"
+  T104:
+    agent: "default"
+    reason: "Documentation bookkeeping (spec.md status line)"

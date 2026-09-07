@@ -53,3 +53,6 @@ yarn-error.log
 /android/.cxx
 /android/app/src/main/assets/runtime/
 /android/app/src/main/assets/laravel/
+
+# Playwright MCP browser-verification artifacts (screenshots, traces)
+/.playwright-mcp/

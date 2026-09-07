@@ -13,13 +13,16 @@ class Invoice extends Model
     use HasDataMode, HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'company_id', 'amount', 'due_date', 'status', 'paid_at', 'notes',
+        'invoice_number', 'company_id', 'license_id', 'subtotal', 'discount',
+        'grand_total', 'due_date', 'status', 'paid_at', 'payment_information', 'notes',
     ];
 
     protected function casts(): array
     {
         return [
-            'amount' => 'decimal:2',
+            'subtotal' => 'decimal:2',
+            'discount' => 'decimal:2',
+            'grand_total' => 'decimal:2',
             'due_date' => 'date',
             'paid_at' => 'date',
         ];
@@ -28,5 +31,13 @@ class Invoice extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    // 019-billing-system (data-model.md) — snapshot referensi lisensi yang
+    // ditagih; harga di License boleh berubah kapan saja tanpa memengaruhi
+    // subtotal/grand_total invoice yang sudah dibuat (FR-013).
+    public function license(): BelongsTo
+    {
+        return $this->belongsTo(License::class);
     }
 }

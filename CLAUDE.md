@@ -210,23 +210,41 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 
 <!-- SPECKIT START -->
 Active feature plan: `specs/019-billing-system/plan.md`
-(branch `019-billing-system`, branched from `main`) — adds `Invoice` as a
-new entity tied to `Company` (017): a manually-entered billing record
-(amount, due date, status: unpaid/paid/cancelled), no payment-gateway
-integration, matching the existing internal-CRM-tracker scope. Fills the
-gap between "a company picked a package" (017) and "the vendor manually
-sends a license key after payment" (018) — this is what tells staff
-*whether* payment happened; it does not itself trigger license
-generation. Reuses 017's `companies` menu key (no new permission
-surface) and its `Package`/`BusinessType` non-`HasDataMode` precedent in
-reverse: `Invoice` IS `HasDataMode`-scoped (a transactional record tied
-to a scoped `Company`), unlike `Package`/`BusinessType`. Status
-transitions (`markPaid()`/`cancel()`) are guarded in a small
-`InvoiceService`, mirroring `PurchaseOrderService`'s existing
-transition-guard pattern — invalid transitions (e.g. re-marking an
-already-paid invoice) return 409. Amount is a fixed snapshot at creation,
-never recomputed from the company's current package (Constitution IV's
-historical-snapshot convention). See research.md R1-R4.
+(branch `019-billing-system`, branched from `main`) — scope expanded
+2026-09-06 (dated note): the smaller pass below (Invoice as a modal under
+Companies, `Package` reused as-is) shipped first and is this update's
+starting point, not discarded. This update **renames/expands `Package` →
+`License`** (adds `price`, `payment_type` one_time/subscription — a
+descriptive label only, no automated recurring billing — plus its own
+top-level menu, seeded Pro/Master rows visible identically in DEMO/LIVE)
+and **expands `Invoice`** into a full standalone document: its own
+top-level menu (separate from both Companies and Licenses), a generated
+`invoice_number` (unique across both data modes, mirroring
+`PreorderService::generateNumber()`'s `withoutGlobalScope` pattern),
+`license_id` + `subtotal`/`discount`/`grand_total` (a fixed snapshot,
+never recomputed if the License's price later changes), full CRUD with
+paid-invoices undeletable through any path (409), summary statistics,
+client-side PDF/image download (reusing `ReceiptModal.vue`'s exact
+`html2canvas`+`jsPDF` pattern — no server-side PDF generation), and a
+separate single-sheet Excel export/import workbook mirroring feature
+007's `PreorderExportImportService` (not folded into the master-data
+workbook — invoices are transactional, not master data). Adds a new
+Settings → Payment submenu (`invoice_payment_settings`, one
+administrative row, not `HasDataMode`-scoped) as a sibling route under
+`AppSidebar.vue`'s existing `settings-group`, gated on the existing
+`settings` menu key. Naming note: the new `LicenseCatalogController`
+(deliberately not named `LicenseController`) avoids colliding with
+018's unrelated, already-shipped `LicenseController` (installation
+activation gate — a completely different concept). See research.md
+R0-R9' for the full reasoning.
+
+Original small-scope pass (superseded above, kept for history): added
+`Invoice` as a new entity tied to `Company` (017), a manually-entered
+billing record (amount, due date, status: unpaid/paid/cancelled), no
+payment-gateway integration. Reused 017's `companies` menu key. Status
+transitions (`markPaid()`/`cancel()`) guarded in `InvoiceService`,
+mirroring `PurchaseOrderService`'s transition-guard pattern. See
+research.md R1-R4 for that original reasoning.
 
 Previous feature: `specs/018-license-activation/plan.md`
 (branch `018-license-activation`, branched from `main`) — a global gate

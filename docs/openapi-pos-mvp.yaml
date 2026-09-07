@@ -293,6 +293,56 @@ paths:
                       pernah dibuat (instalasi baru TIDAK PERNAH diam-diam
                       mulai dalam mode DEMO).
 
+  /settings/payment:
+    get:
+      tags: [Settings]
+      summary: Ambil pengaturan informasi pembayaran invoice
+      description: |
+        Singleton (satu baris, id selalu 1) berisi informasi pembayaran
+        (nama bank, nomor rekening, atas nama, instruksi) yang dijadikan
+        default `payment_information` saat invoice baru dibuat
+        (019-billing-system, FR-008/FR-015). Dibuat kosong secara otomatis
+        pada akses pertama. Digerbang dengan menu key `settings` yang sudah
+        ada (bukan menu key baru).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoicePaymentSetting' }
+        '403':
+          description: Peran tanpa akses menu settings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    put:
+      tags: [Settings]
+      summary: Perbarui pengaturan informasi pembayaran invoice
+      description: |
+        Selalu updateOrCreate(['id' => 1], ...) — tidak pernah membuat baris
+        kedua meskipun dipanggil berulang kali.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bank_name: { type: string, nullable: true }
+                account_number: { type: string, nullable: true }
+                account_holder: { type: string, nullable: true }
+                instructions: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvoicePaymentSetting' }
+        '403':
+          description: Peran tanpa akses menu settings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /settings:
     get:
       tags: [Settings]
@@ -2885,10 +2935,11 @@ paths:
         '204': { description: Berhasil }
         '409': { $ref: '#/components/responses/Conflict' }
 
-  /packages:
+  /licenses:
     get:
       tags: [Company Onboarding]
-      summary: Daftar paket
+      summary: Daftar lisensi
+      description: 019-billing-system — rename dari /packages (research.md R1'). Digerbang menu key 'licenses' (owner/admin only), bukan lagi 'companies'.
       parameters:
         - { name: search, in: query, schema: { type: string } }
         - { name: is_active, in: query, schema: { type: boolean } }
@@ -2907,55 +2958,55 @@ paths:
                     properties:
                       data:
                         type: array
-                        items: { $ref: '#/components/schemas/Package' }
+                        items: { $ref: '#/components/schemas/License' }
     post:
       tags: [Company Onboarding]
-      summary: Buat paket
+      summary: Buat lisensi
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/PackageInput' }
+            schema: { $ref: '#/components/schemas/LicenseInput' }
       responses:
         '201':
           description: Dibuat
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Package' }
+              schema: { $ref: '#/components/schemas/License' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
-  /packages/{id}:
+  /licenses/{id}:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     get:
       tags: [Company Onboarding]
-      summary: Detail paket
+      summary: Detail lisensi
       responses:
         '200':
           description: Berhasil
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Package' }
+              schema: { $ref: '#/components/schemas/License' }
         '404': { $ref: '#/components/responses/NotFound' }
     put:
       tags: [Company Onboarding]
-      summary: Perbarui paket
+      summary: Perbarui lisensi
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/PackageInput' }
+            schema: { $ref: '#/components/schemas/LicenseInput' }
       responses:
         '200':
           description: Diperbarui
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Package' }
+              schema: { $ref: '#/components/schemas/License' }
         '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Company Onboarding]
-      summary: Hapus paket
-      description: Soft delete. Ditolak (409) bila masih dirujuk company manapun. `license_tier` bersifat deskriptif saja — tidak pernah diterapkan otomatis ke Setting `multi_artist_enabled` instalasi ini.
+      summary: Hapus lisensi
+      description: Soft delete. Ditolak (409) bila masih dirujuk company manapun. `license_tier` bersifat deskriptif saja — tidak pernah diterapkan otomatis ke Setting `multi_artist_enabled` instalasi ini. `payment_type` juga deskriptif saja — tidak ada billing berulang otomatis (FR-017).
       responses:
         '204': { description: Berhasil }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -2969,7 +3020,7 @@ paths:
         - { name: search, in: query, schema: { type: string } }
         - { name: status, in: query, schema: { type: string, enum: [pending_activation, active] } }
         - { name: business_type_id, in: query, schema: { type: integer } }
-        - { name: package_id, in: query, schema: { type: integer } }
+        - { name: license_id, in: query, schema: { type: integer } }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -2989,7 +3040,7 @@ paths:
     post:
       tags: [Company Onboarding]
       summary: Onboarding company
-      description: Membuat company (status pending_activation) + owner User tidak aktif, lalu mengirim kode aktivasi 6 digit ke contact_email.
+      description: Membuat company (status pending_activation) + owner User tidak aktif. Aktivasi tidak lagi lewat kode email (research.md R14, 019-billing-system third expansion) — lihat POST /companies/{id}/activate.
       requestBody:
         required: true
         content:
@@ -3017,13 +3068,49 @@ paths:
               schema: { $ref: '#/components/schemas/Company' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Company Onboarding]
+      summary: Edit company (019-billing-system, second expansion)
+      description: Mengedit data bisnis/kontak company. TIDAK menyentuh owner_username/owner_password/status/activation_* (research.md R11).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompanyUpdateInput' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Company' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Company Onboarding]
+      summary: Hapus company (019-billing-system, second expansion)
+      description: Ditolak 409 bila company masih memiliki invoice tercatat (research.md R10). license_id TIDAK dijadikan guard — setiap company selalu punya satu license by design.
+      responses:
+        '204': { description: Terhapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
-  /companies/{id}/resend-activation:
+  /companies/{id}/activate:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     post:
       tags: [Company Onboarding]
-      summary: Kirim ulang kode aktivasi
-      description: Membatalkan kode sebelumnya (bila ada) dan menerbitkan kode baru. Ditolak (409) bila company sudah aktif.
+      summary: Aktivasi company (019-billing-system, third expansion)
+      description: >-
+        Rate-limited (10/menit). Tidak lagi butuh kode aktivasi dari email
+        klien (research.md R14) — staf owner/admin penyedia, satu-satunya
+        yang punya akses ke endpoint ini, tidak pernah punya jalan sah
+        untuk tahu kode yang dikirim ke email klien. Diganti syarat yang
+        BISA diverifikasi langsung: company ini sudah punya minimal satu
+        Invoice berstatus 'paid'. Ditolak (409) bila company sudah aktif
+        atau belum ada invoice lunas — bukan lagi 422 (bukan kesalahan
+        input, melainkan konflik aturan bisnis, sama seperti delete-guard
+        Invoice/License/Company lain di kodebase ini).
       responses:
         '200':
           description: Berhasil
@@ -3033,28 +3120,268 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
 
-  /companies/{id}/activate:
+  /companies/{id}/deactivate:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     post:
       tags: [Company Onboarding]
-      summary: Aktivasi company
-      description: Rate-limited (10/menit). Kode salah/kedaluwarsa/company sudah aktif ditolak 422 dengan alasan yang bisa dibedakan.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [code]
-              properties:
-                code: { type: string, pattern: '^[0-9]{6}$' }
+      summary: Nonaktifkan company (019-billing-system, third expansion)
+      description: >-
+        Rate-limited (10/menit). Kebalikan dari POST /companies/{id}/activate
+        — mengunci login owner user (is_active=false) dan mengembalikan
+        status company ke pending_activation, TANPA menghapus company atau
+        riwayat invoice-nya sama sekali. Ditolak (409) bila company belum
+        aktif.
       responses:
         '200':
           description: Berhasil
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Company' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /invoices:
+    get:
+      tags: [Billing]
+      summary: Daftar invoice keseluruhan (019-billing-system — menu mandiri, bukan lagi anak Company)
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [unpaid, paid, cancelled] } }
+        - { name: company_id, in: query, schema: { type: integer } }
+        - { name: license_id, in: query, schema: { type: integer } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/Invoice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Billing]
+      summary: Buat invoice
+      description: Server menghitung invoice_number dan grand_total (subtotal - discount) — tidak pernah dipercaya dari client (research.md R3'/R4', FR-013).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_id, license_id, subtotal, due_date]
+              properties:
+                company_id: { type: integer }
+                license_id: { type: integer }
+                subtotal: { type: number, format: float, minimum: 0.01 }
+                discount: { type: number, format: float, minimum: 0, default: 0, description: Jumlah tetap, tidak boleh melebihi subtotal. }
+                due_date: { type: string, format: date }
+                payment_information: { type: string, nullable: true }
+                notes: { type: string, nullable: true }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /invoices/summary:
+    get:
+      tags: [Billing]
+      summary: Statistik invoice (FR-012)
+      description: Dihitung langsung dari query invoice yang sama, ter-scope data_mode aktif — tidak bisa disagree dengan daftar invoice pada layar yang sama.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  unpaid:
+                    type: object
+                    properties:
+                      count: { type: integer }
+                      total: { type: string }
+                  paid:
+                    type: object
+                    properties:
+                      count: { type: integer }
+                      total: { type: string }
+                  overall_count: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /invoices/export:
+    get:
+      tags: [Billing]
+      summary: Ekspor daftar invoice ke .xlsx (019-billing-system, T074/T075)
+      description: Hanya owner/admin (inline isOwnerOrAdmin(), meniru `GET /preorders/export`). Menghormati filter yang sama dengan `GET /invoices` (`status`/`company_id`/`license_id`).
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [unpaid, paid, cancelled] } }
+        - { name: company_id, in: query, schema: { type: integer } }
+        - { name: license_id, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berkas .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /invoices/import/template:
+    get:
+      tags: [Billing]
+      summary: Unduh template impor invoice (019-billing-system, T074/T075)
+      description: Hanya owner/admin. Kolom header sama persis dengan yang divalidasi `POST /invoices/import`.
+      responses:
+        '200':
+          description: Berkas .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /invoices/import:
+    post:
+      tags: [Billing]
+      summary: Impor batch invoice dari .xlsx (019-billing-system, T074/T075)
+      description: |
+        Hanya owner/admin. Validasi PENUH dulu, baru diterapkan sekaligus
+        dalam satu transaksi (all-or-nothing, meniru
+        `PreorderExportImportService`/`MasterDataImportService`, research.md
+        R6') — bila ada satu baris gagal, TIDAK ADA yang disimpan. Baris
+        dengan `invoice_number` KOSONG adalah CREATE (`company_name`/
+        `license_name` di-resolve ke Company/License by name; nomor invoice
+        dibuat via `InvoiceService::generateNumber()`, `grand_total` selalu
+        dihitung server dari subtotal-discount, tidak pernah diimpor). Baris
+        dengan `invoice_number` TERISI adalah UPDATE pada invoice yang sudah
+        ada; ditolak (per-row error, seluruh impor gagal) bila invoice
+        tersebut sudah berstatus `paid` (FR-011) atau bila `invoice_number`
+        tidak ditemukan. `dry_run=1` melewati jalur validasi yang identik
+        untuk pratinjau tanpa menyimpan.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: Berkas .xlsx dengan tata kolom sama dengan template. }
+                dry_run: { type: string, enum: ['1'], description: Validasi tanpa menyimpan (pratinjau). }
+      responses:
+        '201':
+          description: Tersimpan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created_count: { type: integer }
+                  updated_count: { type: integer }
+                  invoice_ids: { type: array, items: { type: integer } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Validasi gagal — tidak ada baris yang disimpan.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  row_errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        errors: { type: array, items: { type: string } }
+
+  /invoices/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Billing]
+      summary: Detail invoice
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Billing]
+      summary: Perbarui invoice
+      description: Ditolak 409 bila status sudah paid (FR-011) — grand_total dihitung ulang di server dari subtotal/discount yang dikirim.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [company_id, license_id, subtotal, due_date]
+              properties:
+                company_id: { type: integer }
+                license_id: { type: integer }
+                subtotal: { type: number, format: float, minimum: 0.01 }
+                discount: { type: number, format: float, minimum: 0, default: 0 }
+                due_date: { type: string, format: date }
+                payment_information: { type: string, nullable: true }
+                notes: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Billing]
+      summary: Hapus invoice
+      description: Ditolak 409 bila status sudah paid (FR-011) — invoice lunas adalah catatan keuangan final.
+      responses:
+        '204': { description: Berhasil dihapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /invoices/{id}/mark-paid:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Billing]
+      summary: Tandai invoice lunas
+      description: Hanya invoice berstatus unpaid yang bisa ditransisikan. Selain itu ditolak 409 (research.md R1).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /invoices/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Billing]
+      summary: Batalkan invoice
+      description: Hanya invoice berstatus unpaid yang bisa ditransisikan. Selain itu ditolak 409.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invoice' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /materials:
     get:
@@ -3562,6 +3889,19 @@ components:
         variant_count: { type: integer }
         total_stock: { type: integer }
 
+    InvoicePaymentSetting:
+      type: object
+      description: |
+        Singleton konfigurasi informasi pembayaran invoice
+        (019-billing-system US4). Bukan HasDataMode-scoped — data
+        administratif, tampil identik di mode DEMO/LIVE.
+      properties:
+        id: { type: integer, example: 1 }
+        bank_name: { type: string, nullable: true }
+        account_number: { type: string, nullable: true }
+        account_holder: { type: string, nullable: true }
+        instructions: { type: string, nullable: true }
+
     Error:
       type: object
       properties:
@@ -3755,23 +4095,28 @@ components:
         name: { type: string, maxLength: 100 }
         is_active: { type: boolean, default: true }
 
-    Package:
+    License:
       type: object
+      description: 019-billing-system — rename dari Package (research.md R1').
       properties:
         id: { type: integer }
         name: { type: string }
         description: { type: string, nullable: true }
         license_tier: { type: string, enum: [pro, master], description: Deskriptif saja — tidak diterapkan otomatis ke Setting multi_artist_enabled instalasi ini. }
+        price: { type: string, description: 'Angka desimal sebagai string, mis. "500000.00".' }
+        payment_type: { type: string, enum: [one_time, subscription], description: Label deskriptif saja — tidak ada billing berulang otomatis (FR-017). }
         is_active: { type: boolean }
         company_count: { type: integer, nullable: true, readOnly: true }
 
-    PackageInput:
+    LicenseInput:
       type: object
-      required: [name, license_tier]
+      required: [name, license_tier, price, payment_type]
       properties:
         name: { type: string, maxLength: 100 }
         description: { type: string, nullable: true }
         license_tier: { type: string, enum: [pro, master] }
+        price: { type: number, minimum: 0 }
+        payment_type: { type: string, enum: [one_time, subscription] }
         is_active: { type: boolean, default: true }
 
     Company:
@@ -3784,18 +4129,19 @@ components:
         contact_email: { type: string }
         contact_phone: { type: string, nullable: true }
         status: { type: string, enum: [pending_activation, active] }
+        can_activate: { type: boolean, readOnly: true, description: 'research.md R14 (019-billing-system, third expansion) — true bila status belum active DAN sudah ada minimal satu Invoice berstatus paid milik company ini.' }
         activated_at: { type: string, format: date-time, nullable: true }
         business_type: { $ref: '#/components/schemas/BusinessType' }
-        package: { $ref: '#/components/schemas/Package' }
+        license: { $ref: '#/components/schemas/License' }
         owner_username: { type: string, readOnly: true }
         created_at: { type: string, format: date-time }
 
     CompanyOnboardInput:
       type: object
-      required: [business_type_id, package_id, name, contact_name, contact_email, owner_username, owner_password]
+      required: [business_type_id, license_id, name, contact_name, contact_email, owner_username, owner_password]
       properties:
         business_type_id: { type: integer, description: Harus merujuk business type yang masih aktif. }
-        package_id: { type: integer, description: Harus merujuk package yang masih aktif. }
+        license_id: { type: integer, description: Harus merujuk lisensi yang masih aktif. }
         name: { type: string, maxLength: 150 }
         address: { type: string, nullable: true }
         contact_name: { type: string, maxLength: 100 }
@@ -3803,6 +4149,60 @@ components:
         contact_phone: { type: string, nullable: true }
         owner_username: { type: string, maxLength: 50, description: Harus unik lintas seluruh tabel users. }
         owner_password: { type: string, minLength: 8 }
+
+    CompanyUpdateInput:
+      type: object
+      description: 019-billing-system (second expansion, research.md R11) — TIDAK termasuk owner_username/owner_password (creation-only, kredensial owner tidak pernah diubah lewat edit company).
+      required: [business_type_id, license_id, name, contact_name, contact_email]
+      properties:
+        business_type_id: { type: integer, description: Harus merujuk business type yang masih aktif. }
+        license_id: { type: integer, description: Harus merujuk lisensi yang masih aktif. }
+        name: { type: string, maxLength: 150 }
+        address: { type: string, nullable: true }
+        contact_name: { type: string, maxLength: 100 }
+        contact_email: { type: string, format: email }
+        contact_phone: { type: string, nullable: true }
+
+    Invoice:
+      type: object
+      description: 019-billing-system — Invoice sebagai dokumen mandiri (research.md R3'/R4'), bukan lagi anak Company/Package.
+      properties:
+        id: { type: integer }
+        invoice_number: { type: string, description: "Digenerate server, unik lintas mode DEMO/LIVE, format INV-{YYYYMM}-{seq} (research.md R3')." }
+        company_id: { type: integer }
+        company:
+          type: object
+          nullable: true
+          readOnly: true
+          description: research.md R12 — business_type dibaca live dari relasi Company::businessType(), BUKAN snapshot seperti license/subtotal di bawah (mendeskripsikan Company itu sendiri, bukan fakta pembayaran yang dibekukan saat invoice dibuat).
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            business_type:
+              type: object
+              nullable: true
+              readOnly: true
+              properties:
+                id: { type: integer }
+                name: { type: string }
+        license_id: { type: integer }
+        license:
+          type: object
+          nullable: true
+          readOnly: true
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            payment_type: { type: string, enum: [one_time, subscription] }
+        subtotal: { type: string, description: 'Angka desimal sebagai string, mis. "500000.00".' }
+        discount: { type: string, description: 'Angka desimal sebagai string — jumlah tetap, bukan persentase (research.md R4).' }
+        grand_total: { type: string, description: 'subtotal - discount, DISIMPAN saat dibuat — tidak pernah dihitung ulang dari license.price yang berubah kemudian (FR-013).' }
+        due_date: { type: string, format: date }
+        status: { type: string, enum: [unpaid, paid, cancelled] }
+        paid_at: { type: string, format: date, nullable: true }
+        payment_information: { type: string, nullable: true, description: Default dari invoice_payment_settings saat dibuat, bisa ditimpa per-invoice (FR-015). }
+        notes: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
 
     Material:
       type: object

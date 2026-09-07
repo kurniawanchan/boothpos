@@ -1,7 +1,7 @@
-# Specification Quality Checklist: Billing Records for Company Onboarding
+# Specification Quality Checklist: License & Invoice Management
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
-**Created**: 2026-09-06
+**Created**: 2026-09-06 (updated same day — scope expanded)
 **Feature**: [spec.md](../spec.md)
 
 ## Content Quality
@@ -31,5 +31,7 @@
 
 ## Notes
 
-- Low-effort pass (user-selected): scope decisions made as documented Assumptions rather than clarification questions, since each has a clear, low-risk default grounded in features 017/018's existing, already-confirmed scope boundaries (internal tracker, manual-only, no payment gateway, no license auto-trigger).
+- The single most scope-determining ambiguity (does "subscription" require an automated recurring-billing engine?) was resolved with the product owner before drafting, via AskUserQuestion — confirmed descriptive-only, no automation.
+- **Second expansion (2026-09-06)**: added Company edit/delete (FR-018/FR-019, US5), Settings→Payment structured fields + Company business type surfaced in the invoice detail view and its PDF/image capture (FR-008a, expanded FR-009), and closed a real gap — Invoice edit/delete was already supported server-side (FR-011, prior pass) but had no Edit/Delete action in the Invoice detail UI (`InvoiceDetailModal.vue` today only offers Mark Paid/Cancel/Download). No new [NEEDS CLARIFICATION] markers — the one genuine ambiguity (what blocks Company delete) was resolved with an informed default (Invoice references only, documented in Assumptions) rather than asked, consistent with this session's established low-effort-default convention.
+- **`plan.md`/`research.md`/`data-model.md`/`contracts/api.md`/`quickstart.md`/`tasks.md` are STALE again** relative to this second expansion — they describe the FIRST expansion only (License rename, standalone Invoice, statistics, Settings→Payment), which is itself fully implemented and verified (482/482 backend, 214/216 frontend tests). Re-run `/speckit-plan` before implementing this second expansion; the existing implementation is this update's starting point, not something to discard.
 - Ready for `/speckit-plan`.

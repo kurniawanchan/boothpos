@@ -36,6 +36,8 @@ class MenuKeys
         'customers' => 'Pelanggan',
         'preorders' => 'Pre-order',
         'companies' => 'Perusahaan',
+        'licenses' => 'Lisensi',
+        'invoices' => 'Invoice',
         'sales' => 'Penjualan',
         'reports' => 'Laporan',
         'users' => 'Pengguna',

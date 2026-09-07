@@ -67,10 +67,16 @@ const NAV_DEFS = [
     icon: 'ph-buildings',
     children: [
       { name: 'companies', label: 'nav.companies', menuKey: 'companies' },
-      { name: 'packages', label: 'nav.packages', menuKey: 'companies' },
       { name: 'business-types', label: 'nav.business_types', menuKey: 'companies' },
     ],
   },
+  // 019-billing-system (R2') — 'License' bukan lagi 'Package' yang
+  // menumpang menu 'companies-group'; sekarang menu utama sendiri,
+  // top-level, tidak bersarang di grup manapun.
+  { name: 'licenses', label: 'nav.licenses', icon: 'ph-seal-check', menuKey: 'licenses' },
+  // 019-billing-system (T059) — Invoice sekarang menu top-level sendiri,
+  // terpisah dari Companies dan Licenses (research.md R2').
+  { name: 'invoices', label: 'nav.invoices', icon: 'ph-receipt', menuKey: 'invoices' },
   { name: 'events', label: 'nav.events', icon: 'ph-calendar-dots', menuKey: 'events' },
   { name: 'artists', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'artists' },
   { name: 'customers', label: 'nav.customers', icon: 'ph-address-book', menuKey: 'customers' },
@@ -82,6 +88,9 @@ const NAV_DEFS = [
     icon: 'ph-gear-six',
     children: [
       { name: 'settings', label: 'nav.settings', menuKey: 'settings' },
+      // 019-billing-system (T070, R7') — submenu baru, menu key SAMA
+      // ('settings') sengaja tidak dibuat baru per research.md R7'.
+      { name: 'settings-payment', label: 'nav.settings_payment', menuKey: 'settings' },
       { name: 'users', label: 'nav.users', menuKey: 'users' },
       { name: 'roles', label: 'nav.roles', menuKey: 'roles' },
     ],

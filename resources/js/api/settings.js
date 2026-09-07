@@ -20,3 +20,14 @@ export function uploadStoreLogo(file) {
   form.append('image', file);
   return client.post('/settings/store-logo', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
 }
+
+// 019-billing-system (T069, R7') — konfigurasi informasi pembayaran invoice,
+// singleton terpisah dari tabel `settings` key-value (lihat research.md R8'),
+// digerbang menu key 'settings' yang sudah ada (bukan permission baru).
+export function getPaymentSettings() {
+  return client.get('/settings/payment').then((r) => r.data);
+}
+
+export function updatePaymentSettings(payload) {
+  return client.put('/settings/payment', payload).then((r) => r.data);
+}

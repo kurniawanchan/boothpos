@@ -2,7 +2,7 @@
 import { reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { listBusinessTypes } from '../../api/businessTypes';
-import { listPackages } from '../../api/packages';
+import { listLicenses } from '../../api/licenses';
 import { createCompany } from '../../api/companies';
 import { useToastStore } from '../../stores/toast';
 import BaseModal from '../ui/BaseModal.vue';
@@ -23,7 +23,7 @@ const loadingOptions = ref(false);
 
 const form = reactive({
   business_type_id: '',
-  package_id: '',
+  license_id: '',
   name: '',
   address: '',
   contact_name: '',
@@ -37,7 +37,7 @@ const saving = ref(false);
 
 function resetForm() {
   Object.assign(form, {
-    business_type_id: '', package_id: '', name: '', address: '',
+    business_type_id: '', license_id: '', name: '', address: '',
     contact_name: '', contact_email: '', contact_phone: '',
     owner_username: '', owner_password: '',
   });
@@ -49,10 +49,10 @@ async function loadOptions() {
   try {
     const [businessTypes, packages] = await Promise.all([
       listBusinessTypes({ is_active: 1, per_page: 100 }),
-      listPackages({ is_active: 1, per_page: 100 }),
+      listLicenses({ is_active: 1, per_page: 100 }),
     ]);
     businessTypeOptions.value = businessTypes.data.map((b) => ({ value: b.id, label: b.name }));
-    packageOptions.value = packages.data.map((p) => ({ value: p.id, label: `${p.name} (${t(`companies.license_tier_${p.license_tier}`)})` }));
+    packageOptions.value = packages.data.map((l) => ({ value: l.id, label: `${l.name} (${t(`companies.license_tier_${l.license_tier}`)})` }));
   } finally {
     loadingOptions.value = false;
   }
@@ -70,7 +70,7 @@ async function submit() {
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   const payload = {
     business_type_id: form.business_type_id,
-    package_id: form.package_id,
+    license_id: form.license_id,
     name: form.name,
     address: form.address || null,
     contact_name: form.contact_name,
@@ -104,12 +104,12 @@ async function submit() {
         :error="formErrors.business_type_id"
       />
       <BaseSelect
-        v-model="form.package_id"
-        :label="t('companies.package')"
+        v-model="form.license_id"
+        :label="t('companies.license')"
         :options="packageOptions"
         required
         :disabled="loadingOptions"
-        :error="formErrors.package_id"
+        :error="formErrors.license_id"
       />
       <BaseInput v-model="form.name" :label="t('companies.company_name')" required maxlength="150" :error="formErrors.name" />
       <BaseTextarea v-model="form.address" :label="t('companies.company_address')" :rows="2" :error="formErrors.address" />
