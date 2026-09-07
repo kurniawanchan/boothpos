@@ -12,10 +12,18 @@ export function createCompany(payload) {
   return client.post('/companies', payload).then((r) => r.data);
 }
 
-export function resendActivation(id) {
-  return client.post(`/companies/${id}/resend-activation`).then((r) => r.data);
+export function activateCompany(id) {
+  return client.post(`/companies/${id}/activate`).then((r) => r.data);
 }
 
-export function activateCompany(id, code) {
-  return client.post(`/companies/${id}/activate`, { code }).then((r) => r.data);
+export function deactivateCompany(id) {
+  return client.post(`/companies/${id}/deactivate`).then((r) => r.data);
+}
+
+export function updateCompany(id, payload) {
+  return client.put(`/companies/${id}`, payload).then((r) => r.data);
+}
+
+export function deleteCompany(id) {
+  return client.delete(`/companies/${id}`).then((r) => r.data);
 }

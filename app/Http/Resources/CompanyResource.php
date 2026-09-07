@@ -17,9 +17,15 @@ class CompanyResource extends JsonResource
             'contact_email' => $this->contact_email,
             'contact_phone' => $this->contact_phone,
             'status' => $this->status,
+            // 019-billing-system (third expansion, research.md R14) —
+            // sinyal untuk frontend kapan tombol "Activate" boleh
+            // ditampilkan: belum aktif DAN sudah punya minimal satu
+            // Invoice 'paid'. paid_invoices_count di-set via withCount()/
+            // loadCount() di CompanyController, bukan query N+1 di sini.
+            'can_activate' => $this->status !== 'active' && ($this->paid_invoices_count ?? 0) > 0,
             'activated_at' => $this->activated_at?->toIso8601String(),
             'business_type' => new BusinessTypeResource($this->whenLoaded('businessType')),
-            'package' => new PackageResource($this->whenLoaded('package')),
+            'license' => new LicenseResource($this->whenLoaded('license')),
             'owner_username' => $this->whenLoaded('owner', fn () => $this->owner->username),
             'created_at' => $this->created_at?->toIso8601String(),
         ];

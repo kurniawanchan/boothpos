@@ -15,7 +15,7 @@ class Company extends Model
 
     protected $fillable = [
         'business_type_id',
-        'package_id',
+        'license_id',
         'name',
         'address',
         'contact_name',
@@ -45,9 +45,9 @@ class Company extends Model
         return $this->belongsTo(BusinessType::class);
     }
 
-    public function package(): BelongsTo
+    public function license(): BelongsTo
     {
-        return $this->belongsTo(Package::class);
+        return $this->belongsTo(License::class);
     }
 
     public function owner(): BelongsTo
@@ -58,5 +58,15 @@ class Company extends Model
     public function activationNotifications(): HasMany
     {
         return $this->hasMany(CompanyActivationNotification::class);
+    }
+
+    // 019-billing-system (second expansion, research.md R10) — dipakai
+    // sebagai delete guard: company dengan riwayat invoice tidak boleh
+    // dihapus, meski license_id-nya sendiri TIDAK dijadikan guard (setiap
+    // company selalu punya satu license by design, itu bukan guard, itu
+    // no-op).
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
     }
 }

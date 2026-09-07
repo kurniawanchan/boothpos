@@ -3,7 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\BusinessType;
-use App\Models\Package;
+use App\Models\License;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -16,7 +16,7 @@ class CompanyFactory extends Factory
     {
         return [
             'business_type_id' => BusinessType::factory(),
-            'package_id' => Package::factory(),
+            'license_id' => License::factory(),
             'name' => fake()->company(),
             'address' => fake()->address(),
             'contact_name' => fake()->name(),

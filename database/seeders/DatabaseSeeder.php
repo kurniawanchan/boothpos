@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\License;
 use App\Models\PaymentChannel;
 use App\Models\Role;
 use App\Models\Setting;
@@ -26,6 +27,7 @@ class DatabaseSeeder extends Seeder
         $this->seedUsers();
         $this->seedSettings();
         $this->seedPaymentChannels();
+        $this->seedLicenses();
     }
 
     /**
@@ -88,6 +90,46 @@ class DatabaseSeeder extends Seeder
 
         foreach ($settings as $setting) {
             Setting::updateOrCreate(['key' => $setting['key']], $setting);
+        }
+    }
+
+    /**
+     * 019-billing-system (research.md R9') — instalasi baru harus punya
+     * baris "Pro" dan "Master" di katalog License sejak awal (FR-003),
+     * bukan menunggu owner/admin membuatnya manual dulu. `insertOrIgnore`
+     * dikunci pada `name` supaya idempotent — dijalankan ulang tidak
+     * menduplikasi atau menimpa harga yang sudah diubah owner/admin lewat
+     * layar CRUD License.
+     *
+     * PENTING: harga di bawah ini CONTOH/PLACEHOLDER, bukan harga resmi —
+     * boleh (dan wajar) diubah kapan saja lewat layar License setelah
+     * seeding awal ini.
+     */
+    private function seedLicenses(): void
+    {
+        $licenses = [
+            [
+                'name' => 'Pro',
+                'description' => 'Fitur inti POS single-artist untuk toko dengan satu penjual/brand.',
+                'license_tier' => 'pro',
+                'price' => 500000,
+                'payment_type' => 'subscription',
+                'is_active' => true,
+            ],
+            [
+                'name' => 'Master',
+                'description' => 'Seluruh fitur Pro ditambah dukungan multi-artist/multi-vendor dalam satu booth.',
+                'license_tier' => 'master',
+                'price' => 2000000,
+                'payment_type' => 'one_time',
+                'is_active' => true,
+            ],
+        ];
+
+        foreach ($licenses as $license) {
+            if (! License::where('name', $license['name'])->exists()) {
+                License::create($license);
+            }
         }
     }
 

@@ -2,7 +2,7 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listPackages, createPackage, updatePackage, deletePackage } from '../api/packages';
+import { listLicenses, createLicense, updateLicense, deleteLicense } from '../api/licenses';
 import { useToastStore } from '../stores/toast';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
@@ -14,28 +14,39 @@ import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 
+// 019-billing-system — layar mandiri baru untuk `License` (menggantikan
+// `PackagesView.vue`, yang dihapus di komit yang sama). License sekarang
+// punya menu key sendiri ('licenses', lihat MenuKeys::ALL &
+// AppSidebar.vue's NAV_DEFS) — tidak lagi menumpang menu key 'companies'.
+
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage } = usePaginatedList(listPackages);
+const { items, meta, loading, load, setPage } = usePaginatedList(listLicenses);
 onMounted(load);
 
 const licenseTierOptions = computed(() => [
-  { value: 'pro', label: t('companies.license_tier_pro') },
-  { value: 'master', label: t('companies.license_tier_master') },
+  { value: 'pro', label: t('licenses.license_tier_pro') },
+  { value: 'master', label: t('licenses.license_tier_master') },
+]);
+
+const paymentTypeOptions = computed(() => [
+  { value: 'one_time', label: t('licenses.payment_type_one_time') },
+  { value: 'subscription', label: t('licenses.payment_type_subscription') },
 ]);
 
 const columns = computed(() => [
   { key: 'name', label: t('master_data.col_name') },
-  { key: 'license_tier', label: t('companies.col_license_tier') },
-  { key: 'company_count', label: t('companies.col_company_count') },
+  { key: 'license_tier', label: t('licenses.col_license_tier') },
+  { key: 'price', label: t('licenses.col_price') },
+  { key: 'payment_type', label: t('licenses.col_payment_type') },
   { key: 'is_active', label: t('master_data.col_status') },
   { key: 'actions', label: '' },
 ]);
 
 const showForm = ref(false);
-const editingPackage = ref(null);
-const form = reactive({ name: '', description: '', license_tier: 'pro', is_active: true });
+const editingLicense = ref(null);
+const form = reactive({ name: '', description: '', license_tier: 'pro', price: '', payment_type: 'one_time', is_active: true });
 const formErrors = reactive({});
 const saving = ref(false);
 
@@ -44,40 +55,44 @@ const deleteTarget = ref(null);
 const deleting = ref(false);
 
 function openCreate() {
-  editingPackage.value = null;
-  Object.assign(form, { name: '', description: '', license_tier: 'pro', is_active: true });
+  editingLicense.value = null;
+  Object.assign(form, { name: '', description: '', license_tier: 'pro', price: '', payment_type: 'one_time', is_active: true });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
 
-function openEdit(pkg) {
-  editingPackage.value = pkg;
+function openEdit(license) {
+  editingLicense.value = license;
   Object.assign(form, {
-    name: pkg.name,
-    description: pkg.description ?? '',
-    license_tier: pkg.license_tier,
-    is_active: pkg.is_active,
+    name: license.name,
+    description: license.description ?? '',
+    license_tier: license.license_tier,
+    price: license.price,
+    payment_type: license.payment_type,
+    is_active: license.is_active,
   });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
 
-async function savePackage() {
+async function saveLicense() {
   saving.value = true;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   const payload = {
     name: form.name,
     description: form.description || null,
     license_tier: form.license_tier,
+    price: form.price,
+    payment_type: form.payment_type,
     is_active: form.is_active,
   };
   try {
-    if (editingPackage.value) {
-      await updatePackage(editingPackage.value.id, payload);
-      toast.success(t('companies.package_updated'));
+    if (editingLicense.value) {
+      await updateLicense(editingLicense.value.id, payload);
+      toast.success(t('licenses.license_updated'));
     } else {
-      await createPackage(payload);
-      toast.success(t('companies.package_created'));
+      await createLicense(payload);
+      toast.success(t('licenses.license_created'));
     }
     showForm.value = false;
     await load();
@@ -88,20 +103,20 @@ async function savePackage() {
   }
 }
 
-function confirmDelete(pkg) {
-  deleteTarget.value = pkg;
+function confirmDelete(license) {
+  deleteTarget.value = license;
   showDelete.value = true;
 }
 
 async function performDelete() {
   deleting.value = true;
   try {
-    await deletePackage(deleteTarget.value.id);
-    toast.success(t('companies.package_deleted'));
+    await deleteLicense(deleteTarget.value.id);
+    toast.success(t('licenses.license_deleted'));
     showDelete.value = false;
     await load();
   } catch {
-    // 409 (masih dirujuk company) sudah ditoast oleh interceptor bersama.
+    // 409 (masih dirujuk Company/Invoice) sudah ditoast oleh interceptor bersama.
   } finally {
     deleting.value = false;
   }
@@ -113,16 +128,17 @@ async function performDelete() {
     <div class="flex flex-wrap items-center justify-end gap-2.5">
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('companies.new_package_btn') }}
+        {{ t('licenses.new_license_btn') }}
       </BaseButton>
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('companies.no_packages')">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('licenses.no_licenses')">
         <template #cell-license_tier="{ row }">
-          <StatusPill variant="mint">{{ t(`companies.license_tier_${row.license_tier}`) }}</StatusPill>
+          <StatusPill variant="mint">{{ t(`licenses.license_tier_${row.license_tier}`) }}</StatusPill>
         </template>
-        <template #cell-company_count="{ row }">{{ row.company_count ?? 0 }}</template>
+        <template #cell-price="{ row }">{{ row.price }}</template>
+        <template #cell-payment_type="{ row }">{{ t(`licenses.payment_type_${row.payment_type}`) }}</template>
         <template #cell-is_active="{ row }">
           <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
@@ -136,11 +152,13 @@ async function performDelete() {
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingPackage ? t('companies.edit_package') : t('companies.new_package')" max-width-class="max-w-[480px]" @close="showForm = false">
-      <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="savePackage">
-        <BaseInput v-model="form.name" :label="t('companies.package_name')" required maxlength="100" :error="formErrors.name" />
+    <BaseModal :open="showForm" :title="editingLicense ? t('licenses.edit_license') : t('licenses.new_license')" max-width-class="max-w-[480px]" @close="showForm = false">
+      <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveLicense">
+        <BaseInput v-model="form.name" :label="t('licenses.license_name')" required maxlength="100" :error="formErrors.name" />
         <BaseTextarea v-model="form.description" :label="t('master_data.notes')" :rows="2" :error="formErrors.description" />
-        <BaseSelect v-model="form.license_tier" :label="t('companies.license_tier')" :options="licenseTierOptions" required :error="formErrors.license_tier" />
+        <BaseSelect v-model="form.license_tier" :label="t('licenses.license_tier')" :options="licenseTierOptions" required :error="formErrors.license_tier" />
+        <BaseInput v-model="form.price" type="number" min="0" step="0.01" :label="t('licenses.price')" required :error="formErrors.price" />
+        <BaseSelect v-model="form.payment_type" :label="t('licenses.payment_type')" :options="paymentTypeOptions" required :error="formErrors.payment_type" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
           {{ t('common.active') }}
@@ -149,15 +167,15 @@ async function performDelete() {
       <template #footer>
         <div class="flex justify-end gap-2.5">
           <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
-          <BaseButton :loading="saving" @click="savePackage">{{ t('common.save') }}</BaseButton>
+          <BaseButton :loading="saving" @click="saveLicense">{{ t('common.save') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"
-      :title="t('companies.delete_package')"
-      :message="t('companies.delete_package_confirm', { name: deleteTarget?.name })"
+      :title="t('licenses.delete_license')"
+      :message="t('licenses.delete_license_confirm', { name: deleteTarget?.name })"
       :confirm-label="t('vendors_materials.yes_delete')"
       :loading="deleting"
       @close="showDelete = false"

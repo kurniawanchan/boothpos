@@ -26,4 +26,19 @@ class CompanyPolicy
     {
         return $user->canAccessMenu('companies');
     }
+
+    public function deactivate(User $user, Company $company): bool
+    {
+        return $user->canAccessMenu('companies');
+    }
+
+    public function update(User $user, Company $company): bool
+    {
+        return $user->canAccessMenu('companies');
+    }
+
+    public function delete(User $user, Company $company): bool
+    {
+        return $user->canAccessMenu('companies');
+    }
 }

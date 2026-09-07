@@ -99,10 +99,16 @@ const routes = [
         meta: { menuKey: 'companies' },
       },
       {
-        path: 'packages',
-        name: 'packages',
-        component: () => import('../views/PackagesView.vue'),
-        meta: { menuKey: 'companies' },
+        path: 'licenses',
+        name: 'licenses',
+        component: () => import('../views/LicensesView.vue'),
+        meta: { menuKey: 'licenses' },
+      },
+      {
+        path: 'invoices',
+        name: 'invoices',
+        component: () => import('../views/InvoicesView.vue'),
+        meta: { menuKey: 'invoices' },
       },
       {
         path: 'business-types',
@@ -170,6 +176,14 @@ const routes = [
         name: 'settings',
         component: () => import('../views/SettingsView.vue'),
         meta: { menuKey: 'settings' },
+      },
+      {
+        // 019-billing-system (T070, R7') — submenu tersendiri, digerbang
+        // menu key 'settings' yang sudah ada (bukan permission baru).
+        path: 'settings/payment',
+        name: 'settings-payment',
+        component: () => import('../views/SettingsPaymentView.vue'),
+        meta: { titleKey: 'nav.settings_payment', menuKey: 'settings' },
       },
       {
         // 005-ux-enhancements-dashboard (US3) — swa-layanan, sengaja
