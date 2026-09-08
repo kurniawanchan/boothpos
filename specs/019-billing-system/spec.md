@@ -8,6 +8,8 @@
 
 Prior (second) expansion, also implemented and verified: Company edit/delete added (`PUT`/`DELETE /companies/{company}`, delete blocked 409 if any Invoice references the company). `Invoice`'s detail view/PDF/image now surface the billed Company's business type (read live) alongside its existing payment-information snapshot. Invoice Edit/Delete actions added to `InvoiceDetailModal.vue`'s footer (backend already supported both since the prior expansion; this closed a pure UI gap).
 
+**Fourth expansion (2026-09-07, navigation only)**: Companies, Business Types, Licenses, and Invoices are consolidated into one collapsible "Admin" top-level sidebar group (`admin-group`), replacing their previous placement (Companies as its own group, Licenses and Invoices each as separate top-level items). No menu-key/permission changes — the four screens keep their existing `companies`/`companies`/`licenses`/`invoices` menu keys, this is purely a navigation-grouping change (FR-022).
+
 **Real bug found and fixed during manual verification** (not just automated tests): `InvoiceService::generateNumber()` counted only non-soft-deleted invoices when checking for a free number, but the `invoice_number` UNIQUE constraint is enforced at the database level regardless of `deleted_at` — so a soft-deleted invoice's number could be silently reissued to a new invoice, causing a `1062 Duplicate entry` failure. Reproduced live (create → delete → create again collided), fixed with `withTrashed()` in the uniqueness check, and covered by a new regression test (`test_generating_invoice_number_accounts_for_soft_deleted_invoices`).
 
 **Scope expanded again (dated note, 2026-09-06, second expansion)**: adds full Company edit/delete (Company management previously had no update/destroy at all — onboarding-only, an explicit original-scope limit from feature 017); adds the Settings → Payment singleton's structured fields (bank name/account number/account holder/instructions) to the invoice detail view and its PDF/image capture, not just the free-text `payment_information` field; adds the billed Company's business type to the invoice detail view and its PDF/image capture (already required on the CREATE form per FR-008, but never surfaced back in the read view); and closes the Invoice-edit/delete UI gap described above.
@@ -148,6 +150,10 @@ An owner/admin configures the store's payment information (e.g., bank account de
 
 - **FR-020**: A Company MUST be activatable (unlocking its owner user's login) only once it has at least one Invoice with status `paid` — **not** via a 6-digit code emailed to the client, since the only staff who can reach the activation action (owner/admin, gated by the `companies` menu key) have no legitimate way to know a code sent to the client's own inbox.
 - **FR-021**: An owner/admin MUST be able to deactivate an already-active Company (reverting it to `pending_activation` and locking its owner user's login) without deleting the Company or any of its Invoice history — for cases like a lapsed subscription or misuse.
+
+**Navigation (fourth expansion)**
+
+- **FR-022**: Companies, Business Types, Licenses, and Invoices MUST be reachable from one collapsible "Admin" top-level sidebar group, rather than scattered as separate top-level items — these four screens are all administrative/provider-facing entities, distinct from the store's own day-to-day operational menus (POS, Sales, Inventory, etc.).
 
 **Carried over from the original pass**
 

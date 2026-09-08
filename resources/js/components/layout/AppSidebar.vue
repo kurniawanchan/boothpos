@@ -61,22 +61,23 @@ const NAV_DEFS = [
     ],
   },
   { name: 'preorders', label: 'nav.preorders', icon: 'ph-clock-countdown', menuKey: 'preorders' },
+  // 019-billing-system (fourth expansion, FR-022) — Companies/Business
+  // Types/Licenses/Invoices digabung dalam satu grup "Admin", mengganti
+  // 'companies-group' + dua item top-level terpisah (Licenses/Invoices)
+  // dari expansion sebelumnya — keempatnya adalah entitas administratif/
+  // provider-facing, berbeda dari menu operasional toko sehari-hari
+  // (POS, Sales, Inventaris, dst). Menu key TIDAK berubah sama sekali.
   {
-    key: 'companies-group',
-    label: 'nav.companies_group',
+    key: 'admin-group',
+    label: 'nav.admin_group',
     icon: 'ph-buildings',
     children: [
       { name: 'companies', label: 'nav.companies', menuKey: 'companies' },
       { name: 'business-types', label: 'nav.business_types', menuKey: 'companies' },
+      { name: 'licenses', label: 'nav.licenses', menuKey: 'licenses' },
+      { name: 'invoices', label: 'nav.invoices', menuKey: 'invoices' },
     ],
   },
-  // 019-billing-system (R2') — 'License' bukan lagi 'Package' yang
-  // menumpang menu 'companies-group'; sekarang menu utama sendiri,
-  // top-level, tidak bersarang di grup manapun.
-  { name: 'licenses', label: 'nav.licenses', icon: 'ph-seal-check', menuKey: 'licenses' },
-  // 019-billing-system (T059) — Invoice sekarang menu top-level sendiri,
-  // terpisah dari Companies dan Licenses (research.md R2').
-  { name: 'invoices', label: 'nav.invoices', icon: 'ph-receipt', menuKey: 'invoices' },
   { name: 'events', label: 'nav.events', icon: 'ph-calendar-dots', menuKey: 'events' },
   { name: 'artists', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'artists' },
   { name: 'customers', label: 'nav.customers', icon: 'ph-address-book', menuKey: 'customers' },

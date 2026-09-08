@@ -27,6 +27,7 @@ const columns = computed(() => [
   { key: 'business_type', label: t('companies.business_type') },
   { key: 'license', label: t('companies.license') },
   { key: 'contact', label: t('master_data.col_contact') },
+  { key: 'owner_username', label: t('companies.owner_username') },
   { key: 'status', label: t('master_data.col_status') },
   { key: 'actions', label: '' },
 ]);
@@ -151,6 +152,9 @@ async function afterUpdated() {
             <span>{{ row.contact_name }}</span>
             <span class="text-muted-3">{{ row.contact_email }}</span>
           </div>
+        </template>
+        <template #cell-owner_username="{ row }">
+          <span class="font-mono text-[12.5px]">{{ row.owner_username ?? '—' }}</span>
         </template>
         <template #cell-status="{ row }">
           <StatusPill :variant="row.status === 'active' ? 'mint' : 'neutral'">
