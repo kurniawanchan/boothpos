@@ -15,7 +15,7 @@ services:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
-      - "3306:3306"
+      - "3307:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pboothpos_local_dev"]
       interval: 5s
@@ -57,9 +57,9 @@ services:
       # verbatim and the browser tries (and fails) to reach
       # http://0.0.0.0:5173 directly. See vite.config.js's server.origin
       # comment for the full bug writeup.
-      VITE_DEV_SERVER_ORIGIN: http://localhost:5173
+      VITE_DEV_SERVER_ORIGIN: http://localhost:5174
     ports:
-      - "5173:5173"
+      - "5174:5173"
     depends_on:
       - app
 
