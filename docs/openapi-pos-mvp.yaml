@@ -4849,8 +4849,11 @@ components:
       properties:
         event_id: { type: integer, nullable: true }
         customer_id: { type: integer }
-        fulfillment: { type: string, enum: [pickup, courier] }
+        fulfillment: { type: string, enum: [pickup, courier], description: "021-preorder-form-updates — label ditampilkan sebagai 'Mail Order' untuk nilai 'courier' (perubahan label saja, lihat research.md Decision 4)." }
         shipping_cost: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money', description: "021-preorder-form-updates (US2) — nominal Rupiah tetap, opsional, default 0. 422 bila melebihi subtotal+shipping_cost." }
+        pickup_day: { type: string, format: date, nullable: true, description: "021-preorder-form-updates (US3) — hanya berlaku saat fulfillment=pickup DAN event_id terisi; harus berada dalam rentang tanggal event tersebut (422 bila tidak)." }
+        courier_name: { type: string, nullable: true, description: "021-preorder-form-updates (US3) — hanya berlaku saat fulfillment=courier; default 'JNE' bila kosong; harus salah satu dari daftar App\\Support\\Couriers." }
         expected_date: { type: string, format: date, nullable: true }
         notes: { type: string, nullable: true }
         items:
@@ -4888,12 +4891,16 @@ components:
         customer: { $ref: '#/components/schemas/Customer' }
         status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
         fulfillment: { type: string, enum: [pickup, courier] }
+        created_at: { type: string, format: date-time, description: "024-invoice-layout-shipping-slip — ditambahkan ke present() (sebelumnya hanya ada di PreorderSummary/index())." }
         subtotal: { $ref: '#/components/schemas/Money' }
         shipping_cost: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money', description: "021-preorder-form-updates (US2) — 0.00 untuk pre-order dari sebelum fitur ini." }
         total_amount: { $ref: '#/components/schemas/Money' }
         paid_amount: { $ref: '#/components/schemas/Money' }
         outstanding: { $ref: '#/components/schemas/Money' }
         expected_date: { type: string, format: date, nullable: true }
+        pickup_day: { type: string, format: date, nullable: true, description: "021-preorder-form-updates (US3) — tanggal ASLI (bukan label 'Day 1'), diturunkan dari rentang tanggal event saat dibuat." }
+        courier_name: { type: string, nullable: true, description: "021-preorder-form-updates (US3) — nilai DEFAULT/preferensi yang dipilih saat preorder dibuat; BUKAN Shipment.courier_name (kolom terpisah, diisi ulang saat shipment sungguhan dibuat)." }
         cancel_reason: { type: string, nullable: true }
         sellers:
           type: array

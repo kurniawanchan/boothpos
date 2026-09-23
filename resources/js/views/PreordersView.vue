@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { usePaginatedList } from '../composables/usePaginatedList';
@@ -7,16 +7,21 @@ import {
   listPreorders,
   getPreorder,
   createPreorder,
+  updatePreorder,
+  deletePreorder,
   updatePreorderStatus,
   exportPreorders,
   downloadPreorderImportTemplate,
   importPreorders,
   resendPreorderNotification,
   getPreorderSummary,
+  bulkPreorderInvoices,
+  bulkEmailPreorderInvoices,
 } from '../api/preorders';
 import { createShipment, updateShipment } from '../api/shipments';
 import { lookupVariants } from '../api/products';
 import { listArtists } from '../api/artists';
+import { listEvents } from '../api/events';
 import { useToastStore } from '../stores/toast';
 import { useAuthStore } from '../stores/auth';
 import PreorderInvoiceModal from '../components/preorder/PreorderInvoiceModal.vue';
@@ -24,6 +29,7 @@ import PreorderPaymentReceiptModal from '../components/preorder/PreorderPaymentR
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDate, formatDateTime } from '../utils/date';
+import { buildInvoiceHtml } from '../utils/invoiceDocument';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -34,7 +40,8 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
-import CustomerPickerModal from '../components/forms/CustomerPickerModal.vue';
+import CustomerSearchDropdown from '../components/preorder/CustomerSearchDropdown.vue';
+import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import RecordPaymentModal from '../components/payment/RecordPaymentModal.vue';
 import PreorderStatusStepper from '../components/preorder/PreorderStatusStepper.vue';
 
@@ -56,9 +63,18 @@ const STATUS_LABEL = computed(() => ({
   cancelled: t('events_sessions.status_cancelled'),
 }));
 const STATUS_VARIANT = { ordered: 'neutral', dp_paid: 'warn', arrived: 'mint', settled: 'mint', handed_over: 'dark', cancelled: 'danger' };
+// 021-preorder-form-updates (US3, research.md Decision 5) — HARUS tetap
+// sinkron dengan App\Support\Couriers::OPTIONS/DEFAULT di backend (satu
+// sumber definisi konseptual, disalin ke sini karena tidak ada mekanisme
+// berbagi konstanta PHP<->JS di codebase ini). Backend tetap sumber
+// kebenaran untuk validasi; daftar ini hanya untuk render dropdown.
+const COURIER_OPTIONS = ['JNE', 'J&T', 'SiCepat', 'Pos Indonesia', 'Other'];
+const COURIER_DEFAULT = 'JNE';
 const FULFILLMENT_LABEL = computed(() => ({
   pickup: t('preorders.fulfillment_pickup'),
-  courier: t('preorders.fulfillment_courier'),
+  // 021-preorder-form-updates (US3, FR-007) — label saja yang berubah;
+  // nilai enum tersimpan tetap 'courier' (research.md Decision 4).
+  courier: t('preorders.fulfillment_mail_order'),
 }));
 
 const { items, meta, loading, load, setPage, setFilter, params } = usePaginatedList(listPreorders);
@@ -97,6 +113,16 @@ onMounted(async () => {
   artists.value = (await listArtists({ per_page: 100, is_active: true })).data;
 });
 
+// 021-preorder-form-updates (US3, research.md Decision 9) — form New
+// Preorder TIDAK PERNAH punya pemilih event sebelum fitur ini; ditambah
+// di sini karena hari-jemput (di bawah) butuh event untuk menurunkan
+// pilihan tanggalnya.
+const events = ref([]);
+onMounted(async () => {
+  events.value = (await listEvents({ per_page: 100 })).data;
+});
+const eventOptions = computed(() => events.value.map((e) => ({ value: e.id, label: e.name })));
+
 // 009-ui-ux-refinements US5 (T043) — CustomerTransactionsModal.vue
 // navigates here with ?preorder_id=<id> to open this existing detail
 // drawer rather than duplicating it in the Customers screen. The query
@@ -114,6 +140,7 @@ const customerSearch = ref('');
 const debouncedCustomerSearch = useDebouncedFn(() => applyFilter({ search: customerSearch.value || undefined }), 300);
 
 const columns = computed(() => [
+  { key: 'select', label: '' },
   { key: 'preorder_number', label: t('preorders.col_number') },
   { key: 'customer_name', label: t('preorders.col_customer') },
   { key: 'sellers', label: t('preorders.col_seller') },
@@ -147,9 +174,14 @@ const runCreateSearch = useDebouncedFn(async () => {
 }, 300);
 
 function openCreate() {
+  editingPreorderId.value = null;
   createCustomer.value = null;
   createFulfillment.value = 'pickup';
   createShippingCost.value = '0';
+  createDiscount.value = '0';
+  createEventId.value = '';
+  createPickupDay.value = '';
+  createCourierName.value = COURIER_DEFAULT;
   createExpectedDate.value = '';
   createNotes.value = '';
   createItems.value = [];
@@ -171,28 +203,86 @@ function bumpCreateItem(item, step) {
   item.qty = Math.max(1, item.qty + step);
 }
 
+// 021-preorder-form-updates (US1, FR-006) — entri langsung sebagai
+// pelengkap stepper +/- yang sudah ada, bukan penggantinya. Minimum 1
+// tetap dijaga di sini (bukan cuma di backend) supaya UI tidak sempat
+// menampilkan 0/negatif sebelum request dikirim.
+function setCreateItemQty(item, rawValue) {
+  const parsed = parseInt(rawValue, 10);
+  item.qty = Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+}
+
 function removeCreateItem(idx) {
   createItems.value.splice(idx, 1);
 }
 
+// 021-preorder-form-updates (US3, research.md Decision 2) — pilihan hari
+// jemput diturunkan dari rentang tanggal ASLI event yang dipilih, bukan
+// label generik "Day 1"/"Day 2" tetap. Tidak ada apa pun untuk dipilih
+// kalau belum ada event terpilih (FR-008a).
+const createSelectedEvent = computed(() => events.value.find((e) => e.id === createEventId.value) ?? null);
+const createPickupDayOptions = computed(() => {
+  const event = createSelectedEvent.value;
+  if (!event) return [];
+  const options = [];
+  let cursor = new Date(event.start_date);
+  const end = new Date(event.end_date);
+  let dayNumber = 1;
+  while (cursor <= end) {
+    const iso = cursor.toISOString().slice(0, 10);
+    options.push({ value: iso, label: `${t('preorders.pickup_day_option', { day: dayNumber })} (${formatDate(iso)})` });
+    cursor.setDate(cursor.getDate() + 1);
+    dayNumber++;
+  }
+  return options;
+});
+
+// FR-011 — beralih fulfillment membersihkan field yang tidak lagi
+// relevan, dan mengganti event/hilangnya event membersihkan hari jemput
+// yang sudah tidak valid (FR-009a versi form; versi backend untuk
+// preorder yang SUDAH tersimpan ada di T026/EventController).
+watch(createFulfillment, (mode) => {
+  if (mode === 'pickup') createCourierName.value = COURIER_DEFAULT;
+  else createPickupDay.value = '';
+});
+watch(createEventId, () => {
+  if (!createPickupDayOptions.value.some((o) => o.value === createPickupDay.value)) {
+    createPickupDay.value = '';
+  }
+});
+
 const createSubtotal = computed(() => createItems.value.reduce((sum, i) => sum + parseMoney(i.sell_price) * i.qty, 0));
-const createTotal = computed(() => createSubtotal.value + (createFulfillment.value === 'courier' ? Number(createShippingCost.value) || 0 : 0));
+// 021-preorder-form-updates (US2) — diskon dikurangkan di sisi tampilan
+// juga, murni untuk pratinjau langsung; server tetap yang menghitung
+// ulang dan memvalidasi nilai final (Constitution IV).
+const createTotal = computed(() => Math.max(0, createSubtotal.value + (createFulfillment.value === 'courier' ? Number(createShippingCost.value) || 0 : 0) - (Number(createDiscount.value) || 0)));
 const canSubmitCreate = computed(() => !!createCustomer.value && createItems.value.length > 0);
 
 async function submitCreate() {
   if (!canSubmitCreate.value) return;
   creating.value = true;
   Object.keys(createErrors).forEach((k) => delete createErrors[k]);
+  const payload = {
+    customer_id: createCustomer.value.id,
+    event_id: createEventId.value || null,
+    fulfillment: createFulfillment.value,
+    shipping_cost: createFulfillment.value === 'courier' ? toMoneyString(createShippingCost.value) : undefined,
+    discount: toMoneyString(createDiscount.value),
+    pickup_day: createFulfillment.value === 'pickup' ? (createPickupDay.value || null) : null,
+    courier_name: createFulfillment.value === 'courier' ? createCourierName.value : null,
+    expected_date: createExpectedDate.value || null,
+    notes: createNotes.value || null,
+    items: createItems.value.map((i) => ({ variant_id: i.variant_id, qty: i.qty })),
+  };
   try {
-    await createPreorder({
-      customer_id: createCustomer.value.id,
-      fulfillment: createFulfillment.value,
-      shipping_cost: createFulfillment.value === 'courier' ? toMoneyString(createShippingCost.value) : undefined,
-      expected_date: createExpectedDate.value || null,
-      notes: createNotes.value || null,
-      items: createItems.value.map((i) => ({ variant_id: i.variant_id, qty: i.qty })),
-    });
-    toast.success(t('preorders.preorder_created'));
+    if (editingPreorderId.value) {
+      await updatePreorder(editingPreorderId.value, payload);
+      toast.success(t('preorders.preorder_updated'));
+      if (detail.value?.id === editingPreorderId.value) await openDetail({ id: editingPreorderId.value, customer_name: createCustomer.value.name, fulfillment: payload.fulfillment });
+    } else {
+      await createPreorder(payload);
+      toast.success(t('preorders.preorder_created'));
+    }
     showCreate.value = false;
     await load();
   } catch (err) {
@@ -219,9 +309,7 @@ const shipmentForm = reactive({
   recipient_name: '',
   recipient_phone: '',
   address_line: '',
-  city: '',
   province: '',
-  postal_code: '',
   notes: '',
 });
 const savingShipment = ref(false);
@@ -433,15 +521,23 @@ async function handlePaymentSaved() {
 }
 
 function openShipmentForm() {
+  // 022-preorder-invoice-crud-overhaul (US2, FR-005) — nama/telepon/alamat
+  // pra-isi dari data pelanggan yang sudah tercatat saat preorder dibuat;
+  // tetap bisa diedit sebelum disimpan (mis. kirim ke alamat lain / hadiah).
+  // Kosong (bukan nilai keliru) kalau data pelanggan itu sendiri belum
+  // lengkap (Edge Cases spec.md), sama seperti staf mengisi manual untuk
+  // pelanggan walk-in.
+  const customer = detail.value?.customer;
   Object.assign(shipmentForm, {
-    courier_name: '',
+    // 021-preorder-form-updates (US3, research.md Decision 1) — pra-isi
+    // dari nilai DEFAULT yang dipilih saat preorder dibuat; shipment
+    // sungguhan tetap kolom sendiri, bisa diubah bebas di sini.
+    courier_name: detail.value?.courier_name || COURIER_DEFAULT,
     tracking_number: '',
-    recipient_name: '',
-    recipient_phone: '',
-    address_line: '',
-    city: '',
+    recipient_name: customer?.name || '',
+    recipient_phone: customer?.phone || '',
+    address_line: customer?.address || '',
     province: '',
-    postal_code: '',
     notes: '',
   });
   showShipmentForm.value = true;
@@ -531,7 +627,7 @@ async function markDelivered() {
       <BaseSelect
         class="w-44"
         :placeholder="t('preorders.all_fulfillment')"
-        :options="[{ value: 'pickup', label: t('preorders.fulfillment_pickup') }, { value: 'courier', label: t('preorders.fulfillment_courier') }]"
+        :options="[{ value: 'pickup', label: t('preorders.fulfillment_pickup') }, { value: 'courier', label: t('preorders.fulfillment_mail_order') }]"
         @update:model-value="(v) => applyFilter({ fulfillment: v || undefined })"
       />
       <BaseSelect
@@ -585,13 +681,21 @@ async function markDelivered() {
     </div>
 
     <!-- Create form — no mockup reference, designed fresh -->
-    <BaseModal :open="showCreate" :title="t('preorders.new_preorder')" max-width-class="max-w-[560px]" @close="showCreate = false">
+    <BaseModal :open="showCreate" :title="editingPreorderId ? t('preorders.edit_preorder') : t('preorders.new_preorder')" max-width-class="max-w-[560px]" @close="showCreate = false">
       <div class="flex flex-col gap-4 px-6 py-5">
-        <button type="button" class="flex items-center justify-between gap-3 rounded-lg border border-line px-3.5 py-3 text-left hover:border-brand" @click="showCreateCustomerPicker = true">
-          <span class="text-[13.5px] font-semibold">{{ createCustomer?.name ?? t('preorders.pick_customer_ellipsis') }}</span>
-          <i class="ph-duotone ph-caret-right text-[15px] text-muted-3" aria-hidden="true"></i>
-        </button>
+        <CustomerSearchDropdown v-model="createCustomer" />
         <p v-if="createErrors.customer_id" class="text-[12px] font-medium text-danger-text">{{ createErrors.customer_id }}</p>
+
+        <!-- 021-preorder-form-updates (US3, research.md Decision 9) — form
+             ini SEBELUMNYA tidak punya pemilih event sama sekali; hari
+             jemput di bawah butuh event untuk menurunkan pilihan
+             tanggalnya. -->
+        <BaseSelect
+          v-model="createEventId"
+          :label="t('preorders.event_optional')"
+          :options="eventOptions"
+          :placeholder="t('preorders.no_event_selected')"
+        />
 
         <div class="grid grid-cols-2 gap-2.5">
           <button
@@ -608,18 +712,44 @@ async function markDelivered() {
             :class="createFulfillment === 'courier' ? 'border-brand bg-mint-50 text-brand-active' : 'border-line text-muted-5'"
             @click="createFulfillment = 'courier'"
           >
-            {{ t('preorders.fulfillment_courier') }}
+            {{ t('preorders.fulfillment_mail_order') }}
           </button>
         </div>
 
+        <!-- 021-preorder-form-updates (US3) — hari jemput hanya muncul kalau
+             fulfillment=pickup DAN event sudah dipilih (FR-008/FR-008a);
+             tidak ada picker generik "Day 1/Day 2" tanpa event. -->
+        <BaseSelect
+          v-if="createFulfillment === 'pickup' && createSelectedEvent"
+          v-model="createPickupDay"
+          :label="t('preorders.pickup_day_label')"
+          :options="createPickupDayOptions"
+          :placeholder="t('preorders.select_pickup_day')"
+        />
         <BaseInput v-if="createFulfillment === 'courier'" v-model="createShippingCost" type="number" min="0" :label="t('preorders.shipping_cost_rp')" />
+        <!-- 021-preorder-form-updates (US3) — dropdown kurir, default JNE,
+             hanya muncul untuk fulfillment=courier ("Mail Order"). -->
+        <BaseSelect
+          v-if="createFulfillment === 'courier'"
+          v-model="createCourierName"
+          :label="t('preorders.courier')"
+          :options="COURIER_OPTIONS.map((c) => ({ value: c, label: c }))"
+        />
+        <BaseInput v-model="createDiscount" type="number" min="0" :label="t('preorders.discount_rp')" :error="createErrors.discount" />
         <BaseInput v-model="createExpectedDate" type="date" :label="t('preorders.eta_optional')" />
 
         <div v-for="(item, idx) in createItems" :key="item.variant_id" class="flex items-center gap-3 rounded-lg border border-line-3 bg-surface-subtle p-3">
           <div class="flex min-w-0 flex-1 flex-col gap-0.5"><span class="text-[13px] font-semibold">{{ item.label }}</span><span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span></div>
           <div class="flex items-center gap-0.5 overflow-hidden rounded-lg border border-line bg-white">
             <button type="button" class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7" :aria-label="t('preorders.decrease')" @click="bumpCreateItem(item, -1)"><i class="ph-duotone ph-minus text-[13px]" aria-hidden="true"></i></button>
-            <span class="min-w-[26px] text-center text-[13px] font-bold">{{ item.qty }}</span>
+            <input
+              type="number"
+              min="1"
+              class="h-[30px] w-[44px] border-x border-line text-center text-[13px] font-bold outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+              :aria-label="t('preorders.qty_direct_entry', { name: item.label })"
+              :value="item.qty"
+              @change="(e) => setCreateItemQty(item, e.target.value)"
+            />
             <button type="button" class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7" :aria-label="t('preorders.increase')" @click="bumpCreateItem(item, 1)"><i class="ph-duotone ph-plus text-[13px]" aria-hidden="true"></i></button>
           </div>
           <button type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('preorders.delete_item', { name: item.label })" @click="removeCreateItem(idx)"><i class="ph-duotone ph-trash text-[13px]" aria-hidden="true"></i></button>
@@ -645,12 +775,10 @@ async function markDelivered() {
       <template #footer>
         <div class="flex justify-end gap-2.5">
           <BaseButton variant="secondary" @click="showCreate = false">{{ t('common.cancel') }}</BaseButton>
-          <BaseButton :disabled="!canSubmitCreate" :loading="creating" @click="submitCreate">{{ t('preorders.save_preorder') }}</BaseButton>
+          <BaseButton :disabled="!canSubmitCreate" :loading="creating" @click="submitCreate">{{ editingPreorderId ? t('common.save') : t('preorders.save_preorder') }}</BaseButton>
         </div>
       </template>
     </BaseModal>
-    <CustomerPickerModal :open="showCreateCustomerPicker" @close="showCreateCustomerPicker = false" @select="(c) => (createCustomer = c)" />
-
     <!-- Detail drawer -->
     <BaseDrawer
       :open="showDetail"
@@ -687,6 +815,9 @@ async function markDelivered() {
             <div class="flex flex-col gap-2">
               <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.subtotal') }}</span><span class="font-semibold">{{ formatIDR(detail.subtotal) }}</span></div>
               <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.shipping_cost') }}</span><span class="font-semibold">{{ formatIDR(detail.shipping_cost) }}</span></div>
+              <div v-if="detail.pickup_day" class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.pickup_day_label') }}</span><span class="font-semibold">{{ formatDate(detail.pickup_day) }}</span></div>
+              <div v-if="detail.courier_name" class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.courier') }}</span><span class="font-semibold">{{ detail.courier_name }}</span></div>
+              <div v-if="parseMoney(detail.discount) > 0" class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.discount_label') }}</span><span class="font-semibold text-danger-text">-{{ formatIDR(detail.discount) }}</span></div>
               <div class="flex items-baseline justify-between border-t border-dashed border-line-2 pt-2.5"><span class="text-[13.5px] font-bold">{{ t('preorders.total_due') }}</span><span class="text-[22px] font-extrabold tracking-tight">{{ formatIDR(detail.total_amount) }}</span></div>
               <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.already_paid') }}</span><span class="font-semibold">{{ formatIDR(detail.paid_amount) }}</span></div>
               <div v-if="parseMoney(detail.outstanding) > 0" class="flex items-center justify-between rounded-lg border border-warn-border bg-warn-bg px-3.5 py-2.5"><span class="text-[12.5px] font-bold text-warn-text">{{ t('preorders.outstanding_balance') }}</span><span class="text-[17px] font-extrabold text-warn-text">{{ formatIDR(detail.outstanding) }}</span></div>
@@ -766,13 +897,11 @@ async function markDelivered() {
           </div>
 
           <form v-else-if="showShipmentForm" class="grid grid-cols-2 gap-3.5" @submit.prevent="saveShipment">
-            <BaseInput v-model="shipmentForm.courier_name" :label="t('preorders.courier')" required />
+            <BaseSelect v-model="shipmentForm.courier_name" :label="t('preorders.courier')" :options="COURIER_OPTIONS.map((c) => ({ value: c, label: c }))" />
             <BaseInput v-model="shipmentForm.tracking_number" :label="t('preorders.tracking_number_optional')" />
             <BaseInput v-model="shipmentForm.recipient_name" :label="t('preorders.recipient_name')" required />
             <BaseInput v-model="shipmentForm.recipient_phone" :label="t('preorders.recipient_phone')" required />
             <BaseInput v-model="shipmentForm.address_line" :label="t('preorders.address')" required class="col-span-2" />
-            <BaseInput v-model="shipmentForm.city" :label="t('preorders.city')" required />
-            <BaseInput v-model="shipmentForm.postal_code" :label="t('preorders.postal_code')" />
             <div class="col-span-2 flex justify-end gap-2.5">
               <BaseButton variant="secondary" type="button" @click="showShipmentForm = false">{{ t('common.cancel') }}</BaseButton>
               <BaseButton type="submit" :loading="savingShipment">{{ t('preorders.save_shipment') }}</BaseButton>
@@ -783,7 +912,7 @@ async function markDelivered() {
             <div class="grid grid-cols-2 gap-3.5 text-[13px]">
               <div><span class="text-muted-3">{{ t('preorders.courier') }}</span><div class="font-semibold">{{ shipment.courier_name }}</div></div>
               <div><span class="text-muted-3">{{ t('preorders.recipient') }}</span><div class="font-semibold">{{ shipment.recipient_name }} · {{ shipment.recipient_phone }}</div></div>
-              <div class="col-span-2"><span class="text-muted-3">{{ t('preorders.address') }}</span><div class="font-semibold">{{ shipment.address_line }}, {{ shipment.city }}</div></div>
+              <div class="col-span-2"><span class="text-muted-3">{{ t('preorders.address') }}</span><div class="font-semibold">{{ shipment.address_line }}</div></div>
             </div>
             <BaseInput v-model="shipment.tracking_number" :label="t('preorders.tracking_number')" :placeholder="t('preorders.not_filled_yet')" />
             <div class="flex justify-end gap-2.5">
@@ -830,6 +959,16 @@ async function markDelivered() {
       :preorder-id="receiptPreorderId"
       :payment-id="receiptPaymentId"
       @close="showPaymentReceiptModal = false"
+    />
+
+    <ConfirmDialog
+      :open="showDeleteConfirm"
+      :title="t('preorders.delete_preorder')"
+      :message="t('preorders.delete_preorder_confirm', { number: deleteTarget?.preorder_number })"
+      :confirm-label="t('common.delete')"
+      :loading="deletingPreorder"
+      @close="showDeleteConfirm = false"
+      @confirm="performDeletePreorder"
     />
   </div>
 </template>

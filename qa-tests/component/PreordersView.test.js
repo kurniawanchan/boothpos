@@ -194,3 +194,187 @@ describe('PreordersView — summary panel (013 US5)', () => {
     expect(getPreorderSummary.mock.calls.length).toBeGreaterThan(1);
   });
 });
+
+/**
+ * 021-preorder-form-updates (US1) — customer field collapses from a
+ * button-opens-a-second-modal flow into one inline searchable dropdown,
+ * plus quantity direct-entry alongside the existing +/- stepper.
+ */
+describe('PreordersView — inline customer dropdown & quantity direct-entry (021 US1)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } });
+    listCustomers.mockResolvedValue({ data: [{ id: 5, name: 'Siti Aminah', phone: '0812' }] });
+    lookupVariants.mockResolvedValue({ data: [{ variant_id: 1, sku: 'ABC123', label: 'Keychain — Standard', sell_price: '15000.00' }] });
+  });
+
+  it('shows matching customers inline with no separate modal, and selecting one sets the customer', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderPreorders();
+
+    await user.click(screen.getByRole('button', { name: 'Pre-order baru' }));
+    await user.click(screen.getByText('Pilih pelanggan…'));
+    await user.type(screen.getByPlaceholderText('Ketik untuk mencari…'), 'Siti');
+
+    const match = await screen.findByText('Siti Aminah');
+    // No BaseModal dialog element should exist for a second "Pick a
+    // customer" pop-up — the dropdown is a Teleported panel, not a modal.
+    expect(screen.queryByRole('dialog', { name: /pilih pelanggan/i })).not.toBeInTheDocument();
+
+    await user.click(match);
+    expect(await screen.findByText('Siti Aminah')).toBeInTheDocument();
+  });
+
+  it('allows typing a quantity directly for an added item, in addition to the +/- stepper', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderPreorders();
+
+    await user.click(screen.getByRole('button', { name: 'Pre-order baru' }));
+    await user.type(screen.getByLabelText('Tambah item'), 'Keychain');
+    await user.click(await screen.findByText('Keychain — Standard'));
+
+    const qtyInput = screen.getByLabelText('Jumlah Keychain — Standard');
+    expect(qtyInput).toHaveValue(1);
+
+    await user.clear(qtyInput);
+    await user.type(qtyInput, '5');
+    await user.tab(); // triggers @change
+
+    expect(qtyInput).toHaveValue(5);
+  });
+});
+
+/**
+ * 022-preorder-invoice-crud-overhaul (US1) — Edit/Delete row actions are
+ * status-gated per FR-001a/FR-003: Edit hidden for handed_over/cancelled,
+ * Delete shown only for "ordered".
+ */
+describe('PreordersView — edit/delete row actions (022 US1)', () => {
+  const GATED_ROWS = [
+    { id: 20, preorder_number: 'PO-0020', customer_name: 'A', status: 'ordered', fulfillment: 'pickup', total_amount: '1.00', outstanding: '1.00', sellers: [] },
+    { id: 21, preorder_number: 'PO-0021', customer_name: 'B', status: 'dp_paid', fulfillment: 'pickup', total_amount: '1.00', outstanding: '1.00', sellers: [] },
+    { id: 22, preorder_number: 'PO-0022', customer_name: 'C', status: 'handed_over', fulfillment: 'pickup', total_amount: '1.00', outstanding: '1.00', sellers: [] },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: GATED_ROWS, meta: { current_page: 1, per_page: 25, total: 3, last_page: 1 } });
+  });
+
+  it('shows Delete only for the "ordered" row, and Edit for every row except handed_over/cancelled', async () => {
+    await renderPreorders();
+    await screen.findByText('PO-0020');
+
+    const orderedRow = screen.getByText('PO-0020').closest('tr');
+    const dpPaidRow = screen.getByText('PO-0021').closest('tr');
+    const handedOverRow = screen.getByText('PO-0022').closest('tr');
+
+    expect(orderedRow).toHaveTextContent('Hapus');
+    expect(orderedRow).toHaveTextContent('Edit');
+    expect(dpPaidRow).not.toHaveTextContent('Hapus');
+    expect(dpPaidRow).toHaveTextContent('Edit');
+    expect(handedOverRow).not.toHaveTextContent('Hapus');
+    expect(handedOverRow).not.toHaveTextContent('Edit');
+  });
+
+  it('opens a delete confirmation and calls deletePreorder on confirm', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    deletePreorder.mockResolvedValue();
+    await renderPreorders();
+    await screen.findByText('PO-0020');
+
+    const orderedRow = screen.getByText('PO-0020').closest('tr');
+    await user.click(within(orderedRow).getByText('Hapus'));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Hapus pre-order' });
+    await user.click(within(dialog).getByRole('button', { name: 'Hapus' }));
+
+    await waitFor(() => expect(deletePreorder).toHaveBeenCalledWith(20));
+  });
+
+  it('loads the full preorder and opens the edit form pre-filled', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue({
+      id: 20, preorder_number: 'PO-0020', status: 'ordered', fulfillment: 'pickup',
+      customer_id: 5, customer: { id: 5, name: 'A' }, discount: '0.00', shipping_cost: '0.00',
+      items: [{ variant_id: 1, sku_snapshot: 'ABC123', name_snapshot: 'Keychain', sell_price: '15000.00', qty: 2 }],
+    });
+    await renderPreorders();
+    await screen.findByText('PO-0020');
+
+    const orderedRow = screen.getByText('PO-0020').closest('tr');
+    await user.click(within(orderedRow).getByText('Edit'));
+
+    await waitFor(() => expect(getPreorder).toHaveBeenCalledWith(20));
+    expect(await screen.findByText('Ubah pre-order')).toBeInTheDocument();
+    expect(screen.getByDisplayValue(2)).toBeInTheDocument();
+  });
+});
+
+/**
+ * 022-preorder-invoice-crud-overhaul (US6, FR-016) — customer picker shows
+ * a scrollable default list on open, before any search text is typed.
+ */
+describe('PreordersView — customer picker default list (022 US6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } });
+    listCustomers.mockResolvedValue({ data: [{ id: 5, name: 'Siti Aminah', phone: '0812' }] });
+  });
+
+  it('fetches and shows customers as soon as the dropdown opens, with no search text typed', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderPreorders();
+
+    await user.click(screen.getByRole('button', { name: 'Pre-order baru' }));
+    await user.click(screen.getByText('Pilih pelanggan…'));
+
+    await waitFor(() => expect(listCustomers).toHaveBeenCalledWith(expect.objectContaining({ search: '' })));
+    expect(await screen.findByText('Siti Aminah')).toBeInTheDocument();
+  });
+});
+
+/**
+ * 022-preorder-invoice-crud-overhaul (US5, FR-013/FR-014/FR-015) — bulk
+ * toolbar only appears once a row is selected, and bulk email reports a
+ * sent/skipped summary.
+ */
+describe('PreordersView — bulk select and email (022 US5)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+  });
+
+  it('shows the bulk-actions toolbar only after selecting a row, and reports the send/skip summary', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    bulkEmailPreorderInvoices.mockResolvedValue({ data: [{ preorder_id: 10, status: 'sent' }] });
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    expect(screen.queryByRole('button', { name: /Email invoices|Kirim email/ })).not.toBeInTheDocument();
+
+    const row = screen.getByText('PO-0010').closest('tr');
+    await user.click(within(row).getByRole('checkbox'));
+
+    const emailButton = await screen.findByRole('button', { name: 'Kirim email' });
+    await user.click(emailButton);
+
+    await waitFor(() => expect(bulkEmailPreorderInvoices).toHaveBeenCalledWith([10], 'invoice'));
+    const { useToastStore } = await import('../../resources/js/stores/toast');
+    await waitFor(() => expect(useToastStore().items.some((i) => i.message === '1 email terkirim, 0 dilewati.')).toBe(true));
+  });
+});

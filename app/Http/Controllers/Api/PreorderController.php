@@ -323,12 +323,30 @@ class PreorderController extends Controller
             'id' => $preorder->id, 'preorder_number' => $preorder->preorder_number,
             'event_id' => $preorder->event_id, 'status' => $preorder->status,
             'fulfillment' => $preorder->fulfillment,
+            // 024-invoice-layout-shipping-slip — sebelumnya hanya ada di
+            // index(), tak pernah ikut present() padahal invoicePayload()
+            // meng-spread present() (research.md Decision 1).
+            'created_at' => $preorder->created_at?->toIso8601String(),
             'subtotal' => number_format((float) $preorder->subtotal, 2, '.', ''),
             'shipping_cost' => number_format((float) $preorder->shipping_cost, 2, '.', ''),
+            // 021-preorder-form-updates — nominal Rupiah tetap, sudah
+            // dihitung ke dalam total_amount saat create() (tidak pernah
+            // dihitung ulang di sini), tapi ditampilkan terpisah supaya
+            // invoice/detail bisa menunjukkan "subtotal - diskon = total".
+            'discount' => number_format((float) $preorder->discount, 2, '.', ''),
             'total_amount' => number_format((float) $preorder->total_amount, 2, '.', ''),
             'paid_amount' => number_format((float) $preorder->paid_amount, 2, '.', ''),
             'outstanding' => number_format($preorder->outstanding(), 2, '.', ''),
             'expected_date' => $preorder->expected_date?->toDateString(),
+            // 021-preorder-form-updates — tanggal ASLI (bukan label "Day 1"),
+            // diturunkan dari rentang tanggal event saat create() (research.md
+            // Decision 2); null bila fulfillment=courier atau tak ada event.
+            'pickup_day' => $preorder->pickup_day?->toDateString(),
+            // 021-preorder-form-updates — nilai DEFAULT/preferensi yang
+            // dipilih saat preorder dibuat, BUKAN shipments.courier_name
+            // (yang tetap kolom terpisah, wajib diisi ulang saat shipment
+            // sungguhan dibuat — research.md Decision 1).
+            'courier_name' => $preorder->courier_name,
             'cancel_reason' => $preorder->cancel_reason,
             // 013-preorder-list-filters-receipt (T004) — daftar penjual unik
             // yang muncul di preorder ini, dipakai frontend untuk kolom

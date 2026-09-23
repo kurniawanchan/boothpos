@@ -55,7 +55,37 @@ class EventController extends Controller
 
     public function update(UpdateEventRequest $request, Event $event): JsonResponse
     {
-        $event->update($request->validated());
+        // 021-preorder-form-updates (US3, FR-009a) — hari jemput preorder
+        // diturunkan dari rentang tanggal event (research.md Decision 2);
+        // kalau tanggal event berubah sehingga hari yang sudah dipilih
+        // jadi di luar rentang baru, hari itu HARUS dibersihkan, bukan
+        // dibiarkan diam-diam menunjuk tanggal yang sudah tidak valid.
+        // Satu transaksi dengan update event itu sendiri.
+        DB::transaction(function () use ($request, $event) {
+            $event->update($request->validated());
+            $event->refresh();
+
+            $event->preorders()
+                ->whereNotNull('pickup_day')
+                ->where(function ($q) use ($event) {
+                    $q->whereDate('pickup_day', '<', $event->start_date)
+                        ->orWhereDate('pickup_day', '>', $event->end_date);
+                })
+                ->update(['pickup_day' => null]);
+
+            // 023-event-availability-invoice-redesign (US1, FR-003,
+            // research.md Decision 2) — sama alasannya dengan
+            // pembersihan pickup_day di atas: kalau tanggal event
+            // berubah sehingga event jadi satu hari, pilihan
+            // "hari tersedia" yang sudah dipilih tidak lagi punya arti
+            // (tidak ada lagi dua hari untuk dibedakan) dan harus
+            // dibersihkan, bukan dibiarkan diam-diam menunjuk pilihan
+            // yang sudah tidak valid. Satu transaksi yang sama.
+            if ($event->start_date->equalTo($event->end_date) && $event->available_on !== null) {
+                $event->update(['available_on' => null]);
+            }
+        });
+
         return response()->json($event->fresh());
     }
 
