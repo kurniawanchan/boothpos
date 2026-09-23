@@ -556,7 +556,21 @@
     "col_transaction_status": "Status",
     "col_transaction_total": "Total",
     "col_transaction_date": "Tanggal",
-    "customer_deleted": "Pelanggan dihapus."
+    "customer_deleted": "Pelanggan dihapus.",
+    "address": "Alamat",
+    "export_customers_action": "Ekspor .xlsx",
+    "export_customers_failed": "Gagal mengekspor data pelanggan.",
+    "import_customers_action": "Impor",
+    "import_customers_help": "Unggah berkas .xlsx berisi daftar pelanggan. Baris dengan email yang sudah terdaftar akan memperbarui pelanggan tersebut, bukan membuat duplikat.",
+    "download_customer_template_action": "Unduh template",
+    "import_file_label": "Berkas .xlsx",
+    "import_preview_action": "Pratinjau",
+    "import_preview_summary": "{created} pelanggan baru akan dibuat, {updated} pelanggan akan diperbarui.",
+    "import_preview_has_errors": "Ditemukan kesalahan — tidak ada yang akan disimpan:",
+    "import_row_error": "Baris {row}: {error}",
+    "import_confirm_action": "Konfirmasi impor",
+    "import_customers_success": "Impor berhasil — {created} pelanggan baru, {updated} pelanggan diperbarui.",
+    "import_customers_failed": "Gagal mengimpor berkas."
   },
   "preorders": {
     "load_failed": "Gagal memuat detail pre-order.",
@@ -782,7 +796,6 @@
     "transaction_type_order": "Penjualan",
     "transaction_type_preorder": "Pre-order",
     "col_qty": "Qty",
-    "col_subtotal": "Subtotal",
     "tab_preorder": "Pre-order",
     "preorder_col_payment_completeness": "Kelengkapan pembayaran",
     "preorder_col_count": "Jumlah pre-order",
@@ -921,7 +934,19 @@
     "delete_role": "Hapus peran?",
     "delete_role_confirm": "Peran '{name}' akan dihapus. Tindakan ini tidak bisa dibatalkan."
   },
-  "activity_log": {},
+  "activity_log": {
+    "col_when": "Waktu",
+    "col_who": "Pengguna",
+    "col_action": "Aksi",
+    "col_entity": "Entitas",
+    "col_description": "Deskripsi",
+    "filter_action": "Aksi",
+    "filter_entity_type": "Jenis entitas",
+    "filter_date_from": "Dari tanggal",
+    "filter_date_to": "Sampai tanggal",
+    "no_logs": "Belum ada aktivitas tercatat.",
+    "not_authorized": "Anda tidak memiliki akses ke log aktivitas."
+  },
   "errors": {},
   "profile": {
     "title": "Profil Saya",
@@ -938,19 +963,6 @@
     "new_password": "Password baru",
     "confirm_password": "Konfirmasi password baru",
     "save_password": "Simpan password"
-  },
-  "activity_log": {
-    "col_when": "Waktu",
-    "col_who": "Pengguna",
-    "col_action": "Aksi",
-    "col_entity": "Entitas",
-    "col_description": "Deskripsi",
-    "filter_action": "Aksi",
-    "filter_entity_type": "Jenis entitas",
-    "filter_date_from": "Dari tanggal",
-    "filter_date_to": "Sampai tanggal",
-    "no_logs": "Belum ada aktivitas tercatat.",
-    "not_authorized": "Anda tidak memiliki akses ke log aktivitas."
   },
   "purchase_orders": {
     "col_number": "No. PO",

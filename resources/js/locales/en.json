@@ -556,7 +556,21 @@
     "col_transaction_status": "Status",
     "col_transaction_total": "Total",
     "col_transaction_date": "Date",
-    "customer_deleted": "Customer deleted."
+    "customer_deleted": "Customer deleted.",
+    "address": "Address",
+    "export_customers_action": "Export .xlsx",
+    "export_customers_failed": "Failed to export customer data.",
+    "import_customers_action": "Import",
+    "import_customers_help": "Upload an .xlsx file with your customer list. A row whose email is already registered updates that customer instead of creating a duplicate.",
+    "download_customer_template_action": "Download template",
+    "import_file_label": ".xlsx file",
+    "import_preview_action": "Preview",
+    "import_preview_summary": "{created} new customer(s) will be created, {updated} will be updated.",
+    "import_preview_has_errors": "Errors found — nothing will be saved:",
+    "import_row_error": "Row {row}: {error}",
+    "import_confirm_action": "Confirm import",
+    "import_customers_success": "Import successful — {created} new, {updated} updated.",
+    "import_customers_failed": "Failed to import the file."
   },
   "preorders": {
     "load_failed": "Failed to load pre-order detail.",
@@ -782,7 +796,6 @@
     "transaction_type_order": "Sale",
     "transaction_type_preorder": "Pre-order",
     "col_qty": "Qty",
-    "col_subtotal": "Subtotal",
     "tab_preorder": "Pre-order",
     "preorder_col_payment_completeness": "Payment completeness",
     "preorder_col_count": "Preorder count",
@@ -921,7 +934,19 @@
     "delete_role": "Delete role?",
     "delete_role_confirm": "The role '{name}' will be deleted. This action cannot be undone."
   },
-  "activity_log": {},
+  "activity_log": {
+    "col_when": "Time",
+    "col_who": "User",
+    "col_action": "Action",
+    "col_entity": "Entity",
+    "col_description": "Description",
+    "filter_action": "Action",
+    "filter_entity_type": "Entity type",
+    "filter_date_from": "From date",
+    "filter_date_to": "To date",
+    "no_logs": "No activity recorded yet.",
+    "not_authorized": "You do not have access to the activity log."
+  },
   "errors": {},
   "profile": {
     "title": "My Profile",
@@ -938,19 +963,6 @@
     "new_password": "New password",
     "confirm_password": "Confirm new password",
     "save_password": "Save password"
-  },
-  "activity_log": {
-    "col_when": "Time",
-    "col_who": "User",
-    "col_action": "Action",
-    "col_entity": "Entity",
-    "col_description": "Description",
-    "filter_action": "Action",
-    "filter_entity_type": "Entity type",
-    "filter_date_from": "From date",
-    "filter_date_to": "To date",
-    "no_logs": "No activity recorded yet.",
-    "not_authorized": "You do not have access to the activity log."
   },
   "purchase_orders": {
     "col_number": "PO Number",

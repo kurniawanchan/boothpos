@@ -157,11 +157,24 @@ hot-reload Vite, sama seperti Mode B) di browser.
   dari nol, tanpa data): `docker compose down -v` lalu `docker compose up`
   lagi.
 - **Menjalankan test di dalam Docker** (hasilnya harus identik dengan
-  native — lihat §5):
+  native — lihat §5). **PENTING, BUG DITEMUKAN (020-customer-data-import-export)**:
+  `docker compose exec app php artisan test` TANPA flag `-e` di bawah ini
+  diam-diam menjalankan test melawan `boothpos` (database DEV SUNGGUHAN),
+  BUKAN `boothpos_test` — `env_file: .env` pada service `app` di
+  `docker-compose.yml` menyuntik `APP_ENV=local`/`DB_DATABASE=boothpos`
+  sebagai environment variable level-OS di dalam container, yang menang
+  atas `.env.testing` DAN atas `<env force="true">` di `phpunit.xml`
+  (sudah dicoba, terbukti tidak cukup — lihat komentar di phpunit.xml).
+  Akibatnya `RefreshDatabase` MENGHAPUS seluruh data dev/demo setiap kali
+  test dijalankan, tanpa satu pun error. Override env secara eksplisit
+  setiap kali menjalankan test di Docker:
   ```bash
-  docker compose exec app php artisan test
+  docker compose exec -e APP_ENV=testing -e DB_DATABASE=boothpos_test app php artisan test
   docker compose exec node npm test
   ```
+  Kalau data dev/demo kamu hilang setelah menjalankan test tanpa flag ini,
+  jalankan ulang `php artisan db:seed` + `db:seed --class=SakanaFridgeDemoSeeder`
+  (§3 di atas) untuk memulihkannya.
 - Jangan jalankan Mode A/B (native `php artisan serve`/`npm run dev`) dan
   Mode C bersamaan — keduanya memakai port host yang sama (8000/5173) dan
   akan langsung gagal jelas ("port is already allocated"), bukan berjalan

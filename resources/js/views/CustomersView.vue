@@ -2,7 +2,15 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listCustomers, createCustomer, updateCustomer, deleteCustomer } from '../api/customers';
+import {
+  listCustomers,
+  createCustomer,
+  updateCustomer,
+  deleteCustomer,
+  exportCustomers,
+  downloadCustomerImportTemplate,
+  importCustomers,
+} from '../api/customers';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
@@ -25,6 +33,16 @@ const { t } = useI18n();
 // roles that can reach the screen).
 const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));
 
+// 020-customer-data-import-export — cermin kosmetik saja dari gerbang
+// server-side sesungguhnya (CustomerController::authorizedForBulkOperation(),
+// canAccessAnyMenu(['artists','categories','products','stock','vendors',
+// 'materials','roles','users'])). Owner/admin punya SELURUH menu_keys,
+// inventory punya persis daftar itu, kasir tidak — jadi tiga peran ini
+// (bukan hanya isOwnerOrAdmin di atas) yang dicerminkan di sini, per
+// Constitution III (kontrol yang tidak boleh dipakai peran ini disembunyikan
+// total, bukan ditampilkan lalu ditolak 403).
+const canBulkManageCustomers = computed(() => ['owner', 'admin', 'inventory'].includes((auth.role || '').toLowerCase()));
+
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listCustomers);
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
@@ -44,13 +62,13 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editingCustomer = ref(null);
-const form = reactive({ name: '', phone: '', email: '', social_handle: '', notes: '' });
+const form = reactive({ name: '', phone: '', email: '', social_handle: '', notes: '', address: '' });
 const formErrors = reactive({});
 const saving = ref(false);
 
 function openCreate() {
   editingCustomer.value = null;
-  Object.assign(form, { name: '', phone: '', email: '', social_handle: '', notes: '' });
+  Object.assign(form, { name: '', phone: '', email: '', social_handle: '', notes: '', address: '' });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -63,6 +81,7 @@ function openEdit(customer) {
     email: customer.email ?? '',
     social_handle: customer.social_handle ?? '',
     notes: customer.notes ?? '',
+    address: customer.address ?? '',
   });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
@@ -77,6 +96,7 @@ async function saveCustomer() {
     email: form.email || null,
     social_handle: form.social_handle || null,
     notes: form.notes || null,
+    address: form.address || null,
   };
   try {
     if (editingCustomer.value) {
@@ -128,6 +148,110 @@ async function performDelete() {
     deleting.value = false;
   }
 }
+
+// --- Export/import (020-customer-data-import-export) ----------------------
+const exporting = ref(false);
+
+async function doExportCustomers() {
+  exporting.value = true;
+  try {
+    const blob = await exportCustomers();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'customers.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    toast.error(err.message || t('events_sessions.export_customers_failed'));
+  } finally {
+    exporting.value = false;
+  }
+}
+
+async function doDownloadCustomerImportTemplate() {
+  const blob = await downloadCustomerImportTemplate();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'template-customers.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+const showImport = ref(false);
+const importFile = ref(null);
+const previewing = ref(false);
+const importing = ref(false);
+const previewResult = ref(null); // { created_count, updated_count, row_errors }
+
+function openImport() {
+  importFile.value = null;
+  previewResult.value = null;
+  showImport.value = true;
+}
+
+function closeImport() {
+  showImport.value = false;
+  importFile.value = null;
+  previewResult.value = null;
+}
+
+function onImportFileChosen(e) {
+  importFile.value = e.target.files?.[0] || null;
+  previewResult.value = null;
+}
+
+function importErrorToRowErrors(err) {
+  return err.status === 409 && err.data?.row_errors ? err.data.row_errors : null;
+}
+
+// 020-customer-data-import-export (US3) — pratinjau lewat dry_run=1,
+// jalur validasi yang IDENTIK dengan impor sungguhan (tidak ada logika
+// pratinjau terpisah di frontend maupun backend), sebelum tombol
+// "Konfirmasi impor" diaktifkan.
+async function doPreviewImport() {
+  if (!importFile.value) return;
+  previewing.value = true;
+  previewResult.value = null;
+  try {
+    const result = await importCustomers(importFile.value, true);
+    previewResult.value = { created_count: result.created_count, updated_count: result.updated_count, row_errors: [] };
+  } catch (err) {
+    const rowErrors = importErrorToRowErrors(err);
+    if (rowErrors) {
+      previewResult.value = { created_count: 0, updated_count: 0, row_errors: rowErrors };
+    } else {
+      toast.error(err.message || t('events_sessions.import_customers_failed'));
+    }
+  } finally {
+    previewing.value = false;
+  }
+}
+
+async function doConfirmImport() {
+  if (!importFile.value || !previewResult.value || previewResult.value.row_errors.length > 0) return;
+  importing.value = true;
+  try {
+    const result = await importCustomers(importFile.value, false);
+    toast.success(t('events_sessions.import_customers_success', { created: result.created_count, updated: result.updated_count }));
+    closeImport();
+    await load();
+  } catch (err) {
+    const rowErrors = importErrorToRowErrors(err);
+    if (rowErrors) {
+      previewResult.value = { created_count: 0, updated_count: 0, row_errors: rowErrors };
+    } else {
+      toast.error(err.message || t('events_sessions.import_customers_failed'));
+    }
+  } finally {
+    importing.value = false;
+  }
+}
 </script>
 
 <template>
@@ -144,6 +268,16 @@ async function performDelete() {
           @input="debouncedSearch"
         />
       </div>
+      <template v-if="canBulkManageCustomers">
+        <BaseButton variant="secondary" :loading="exporting" @click="doExportCustomers">
+          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+          {{ t('events_sessions.export_customers_action') }}
+        </BaseButton>
+        <BaseButton variant="secondary" @click="openImport">
+          <i class="ph-duotone ph-upload-simple text-[16px]" aria-hidden="true"></i>
+          {{ t('events_sessions.import_customers_action') }}
+        </BaseButton>
+      </template>
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('events_sessions.new_customer') }}
@@ -170,6 +304,7 @@ async function performDelete() {
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveCustomer">
         <BaseInput v-model="form.name" :label="t('events_sessions.name')" required maxlength="100" :error="formErrors.name" />
         <BaseInput v-model="form.phone" :label="t('events_sessions.phone')" :error="formErrors.phone" />
+        <BaseTextarea v-model="form.address" :label="t('events_sessions.address')" :rows="3" :error="formErrors.address" />
         <BaseInput v-model="form.email" type="email" :label="t('events_sessions.email')" :error="formErrors.email" />
         <BaseInput v-model="form.social_handle" :label="t('events_sessions.social_handle')" :error="formErrors.social_handle" />
         <BaseTextarea v-model="form.notes" :label="t('events_sessions.notes')" :rows="2" :error="formErrors.notes" />
@@ -183,6 +318,52 @@ async function performDelete() {
     </BaseModal>
 
     <CustomerTransactionsModal :open="showTransactions" :customer-id="transactionsCustomerId" @close="showTransactions = false" />
+
+    <BaseModal :open="showImport" :title="t('events_sessions.import_customers_action')" max-width-class="max-w-[480px]" @close="closeImport">
+      <div class="flex flex-col gap-4 px-6 py-5">
+        <p class="text-[13px] text-muted-4">{{ t('events_sessions.import_customers_help') }}</p>
+        <button type="button" class="self-start text-[12.5px] font-semibold text-brand-active underline" @click="doDownloadCustomerImportTemplate">
+          {{ t('events_sessions.download_customer_template_action') }}
+        </button>
+
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[13px] font-semibold" for="customer-import-file">{{ t('events_sessions.import_file_label') }}</label>
+          <input id="customer-import-file" type="file" accept=".xlsx" class="text-[13px]" @change="onImportFileChosen" />
+        </div>
+
+        <BaseButton variant="secondary" :disabled="!importFile" :loading="previewing" @click="doPreviewImport">
+          {{ t('events_sessions.import_preview_action') }}
+        </BaseButton>
+
+        <div v-if="previewResult" class="flex flex-col gap-2 rounded-lg border border-line-2 bg-mint-50 p-3.5">
+          <template v-if="previewResult.row_errors.length === 0">
+            <p class="text-[13px] font-semibold text-brand-active">
+              {{ t('events_sessions.import_preview_summary', { created: previewResult.created_count, updated: previewResult.updated_count }) }}
+            </p>
+          </template>
+          <template v-else>
+            <p class="text-[13px] font-semibold text-danger-text">{{ t('events_sessions.import_preview_has_errors') }}</p>
+            <ul class="flex flex-col gap-1 text-[12.5px] text-danger-text">
+              <li v-for="rowError in previewResult.row_errors" :key="rowError.row">
+                {{ t('events_sessions.import_row_error', { row: rowError.row, error: rowError.errors[0] }) }}
+              </li>
+            </ul>
+          </template>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2.5">
+          <BaseButton variant="secondary" @click="closeImport">{{ t('common.cancel') }}</BaseButton>
+          <BaseButton
+            :disabled="!previewResult || previewResult.row_errors.length > 0"
+            :loading="importing"
+            @click="doConfirmImport"
+          >
+            {{ t('events_sessions.import_confirm_action') }}
+          </BaseButton>
+        </div>
+      </template>
+    </BaseModal>
 
     <ConfirmDialog
       :open="showDelete"

@@ -768,26 +768,18 @@ i.ph-duotone{line-height:1}
             </select>
           </label>
         </div>
-        <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px">
-          <label style="display:flex;flex-direction:column;gap:6px">
+        <label style="display:flex;flex-direction-column;gap:6px">
             <span style="font-size:12.5px;font-weight:600;color:#4A5A53">Nama produk</span>
             <input value="{{ pfName }}" onInput="{{ onPfName }}" style="{{ pfInputStyle }}" style-focus="border-color:#2F9E6E;box-shadow:0 0 0 3px #E4F3EC">
           </label>
-          <label style="display:flex;flex-direction:column;gap:6px">
-            <span style="font-size:12.5px;font-weight:600;color:#4A5A53">Segmen produk (3)</span>
-            <input value="{{ pfSegment }}" onInput="{{ onPfSegment }}" maxlength="3" style="{{ pfInputStyle }}" style-focus="border-color:#2F9E6E;box-shadow:0 0 0 3px #E4F3EC">
-          </label>
-        </div>
       </div>
 
       <div style="background:#14201B;border-radius:13px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
-        <div style="font-size:10.5px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#6E8579">Kode produk otomatis · 12 karakter</div>
+        <div style="font-size:10.5px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#6E8579">Kode produk otomatis · seller + urutan per-seller</div>
         <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
-          <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="font-family:ui-monospace,Menlo,monospace;font-size:30px;font-weight:700;color:#fff;letter-spacing:0.04em">{{ pfArtistCode }}</span><span style="font-size:10px;color:#6E8579">artist · 3</span></div>
-          <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="font-family:ui-monospace,Menlo,monospace;font-size:30px;font-weight:700;color:#8FC9AE;letter-spacing:0.04em">{{ pfCatCode }}</span><span style="font-size:10px;color:#6E8579">kategori · 2</span></div>
-          <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="font-family:ui-monospace,Menlo,monospace;font-size:30px;font-weight:700;color:#fff;letter-spacing:0.04em">{{ pfSegment }}</span><span style="font-size:10px;color:#6E8579">produk · 3</span></div>
-          <div style="display:flex;flex-direction:column;gap:6px;align-items:center"><span style="font-family:ui-monospace,Menlo,monospace;font-size:30px;font-weight:700;color:#8FC9AE;letter-spacing:0.04em">0007</span><span style="font-size:10px;color:#6E8579">urutan · 4</span></div>
-          <div style="flex:1;min-width:180px;display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+          <div style="display:flex;flex-direction-column;gap:6px;align-items:center"><span style="font-family:ui-monospace,Menlo,monospace;font-size:30px;font-weight:700;color:#fff;letter-spacing:0.04em">{{ pfArtistCode }}</span><span style="font-size:10px;color:#6E8579">seller · 3</span></div>
+          <div style="display:flex;flex-direction-column;gap:6px;align-items:center"><span style="font-family:ui-monospace,Menlo,monospace;font-size:24px;font-weight:700;color:#8FC9AE;letter-spacing:0.04em">1</span><span style="font-size:10px;color:#6E8579">urutan · per-seller</span></div>
+          <div style="flex:1;min-width:180px;display:flex;flex-direction-column;gap:6px;align-items:flex-end">
             <span style="font-family:ui-monospace,Menlo,monospace;font-size:18px;font-weight:700;color:#fff;background:#1F2E27;border:1px solid #2C3E35;border-radius:8px;padding:7px 12px">{{ pfCodeSample }}</span>
             <span style="font-size:10.5px;color:#6E8579">permanen setelah dibuat</span>
           </div>
@@ -995,18 +987,18 @@ const P = (id, sku, name, a, c, cost, sell, stock, po) => ({
 });
 
 const PRODUCTS = [
-  P(1, "RYUKYSAK0007", "Keychain Sakura", "Ryuuka Studio", "KY", 18000, 45000, 32),
-  P(2, "RYUASSAK0011", "Acrylic Stand Sakura", "Ryuuka Studio", "AS", 52000, 120000, 12),
-  P(3, "MKOSTHNM0003", "Sticker Set Hanami", "Mikoto Art", "ST", 8000, 25000, 60),
-  P(4, "MKOPNKTS0004", "Enamel Pin Kitsune", "Mikoto Art", "PN", 22000, 55000, 6),
-  P(5, "HNBPCNEO0002", "Poster A3 Neon City", "Hanabi Ink", "PC", 26000, 75000, 20),
-  P(6, "HNBKYYUK0005", "Keychain Yukata Charm", "Hanabi Ink", "KY", 15000, 40000, 0),
-  P(7, "ZRABGTOT0001", "Tote Bag Zora", "Zora Craft", "BG", 58000, 135000, 15),
-  P(8, "ZRAASMEC0009", "Acrylic Stand Mecha", "Zora Craft", "AS", 61000, 145000, 4),
-  P(9, "KTSSTKTS0012", "Sticker Pack Katsu", "Katsu Works", "ST", 9500, 30000, 44),
-  P(10, "KTSKYCHB0008", "Keychain Set Chibi", "Katsu Works", "KY", 24000, 60000, 18),
-  P(11, "RYUPCART0013", "Artbook Limited", "Ryuuka Studio", "PC", 110000, 250000, 0, true),
-  P(12, "RYUPNSAK0014", "Enamel Pin Sakura", "Ryuuka Studio", "PN", 26000, 65000, 25)
+  P(1, "RYU10001", "Keychain Sakura", "Ryuuka Studio", "KY", 18000, 45000, 32),
+  P(2, "RYU20001", "Acrylic Stand Sakura", "Ryuuka Studio", "AS", 52000, 120000, 12),
+  P(3, "MKO10001", "Sticker Set Hanami", "Mikoto Art", "ST", 8000, 25000, 60),
+  P(4, "MKO20001", "Enamel Pin Kitsune", "Mikoto Art", "PN", 22000, 55000, 6),
+  P(5, "HNB10001", "Poster A3 Neon City", "Hanabi Ink", "PC", 26000, 75000, 20),
+  P(6, "HNB20001", "Keychain Yukata Charm", "Hanabi Ink", "KY", 15000, 40000, 0),
+  P(7, "ZRA10001", "Tote Bag Zora", "Zora Craft", "BG", 58000, 135000, 15),
+  P(8, "ZRA20001", "Acrylic Stand Mecha", "Zora Craft", "AS", 61000, 145000, 4),
+  P(9, "KTS10001", "Sticker Pack Katsu", "Katsu Works", "ST", 9500, 30000, 44),
+  P(10, "KTS20001", "Keychain Set Chibi", "Katsu Works", "KY", 24000, 60000, 18),
+  P(11, "RYU30001", "Artbook Limited", "Ryuuka Studio", "PC", 110000, 250000, 0, true),
+  P(12, "RYU40001", "Enamel Pin Sakura", "Ryuuka Studio", "PN", 26000, 65000, 25)
 ];
 
 const ANNOT = {
@@ -1035,7 +1027,7 @@ class Component extends DCLogic {
     paying: false, method: "cash", cashIn: 250000, proof: false,
     receipt: false, reportTab: "sales", tier: null,
     overlay: null,
-    pf: { artistId: 1, catId: 1, name: "Keychain Sakura", segment: "SAK", isPo: false, markup: 150 },
+    pf: { artistId: 1, catId: 1, name: "Keychain Sakura", isPo: false, markup: 150 },
     pfVariants: [
       { name: "Standard", cost: 18000, sell: 45000, low: 5 },
       { name: "Glitter", cost: 22000, sell: 55000, low: 5 }
@@ -1272,9 +1264,9 @@ class Component extends DCLogic {
         style: "height:100%;background:#2F9E6E;border-radius:4px;width:" + Math.round(v / maxA * 100) + "%"
       })),
       lowStock: [
-        { name: "Acrylic Stand Mecha", sku: "ZRAASMEC0009", label: "Sisa 4", style: "font-size:11.5px;font-weight:700;color:#8A6A1E;background:#FBF7EC;padding:4px 9px;border-radius:999px" },
+        { name: "Acrylic Stand Mecha", sku: "ZRA20001", label: "Sisa 4", style: "font-size:11.5px;font-weight:700;color:#8A6A1E;background:#FBF7EC;padding:4px 9px;border-radius:999px" },
         { name: "Enamel Pin Kitsune", sku: "MKOPNKTS0004", label: "Sisa 6", style: "font-size:11.5px;font-weight:700;color:#8A6A1E;background:#FBF7EC;padding:4px 9px;border-radius:999px" },
-        { name: "Keychain Yukata Charm", sku: "HNBKYYUK0005", label: "Habis", style: "font-size:11.5px;font-weight:700;color:#A2534B;background:#FBEDEC;padding:4px 9px;border-radius:999px" }
+        { name: "Keychain Yukata Charm", sku: "HNB20001", label: "Habis", style: "font-size:11.5px;font-weight:700;color:#A2534B;background:#FBEDEC;padding:4px 9px;border-radius:999px" }
       ],
       poAlerts: [
         { name: "PO-20261025-0003", sub: "Dewi A. · Artbook Limited ×1", label: "Belum lunas", style: "font-size:11.5px;font-weight:700;color:#8A6A1E;background:#FBF7EC;padding:4px 9px;border-radius:999px" },
@@ -1403,9 +1395,9 @@ class Component extends DCLogic {
       showPreorder: st.overlay === "preorder",
       showStockAdj: st.overlay === "stockadj",
 
-      pfName: pf.name, pfSegment: seg, pfPrefix: prefix,
-      pfArtistCode: artist.code, pfCatCode: cat.code,
-      pfCodeSample: prefix + "0007",
+      pfName: pf.name, pfPrefix: artist.code + "1",
+      pfArtistCode: artist.code,
+      pfCodeSample: artist.code + "10001",
       onPfName: e => this.setPf("name", e.target.value),
       onPfSegment: e => this.setPf("segment", e.target.value),
       onPfArtist: e => this.setPf("artistId", parseInt(e.target.value, 10)),
@@ -1428,7 +1420,7 @@ class Component extends DCLogic {
         num: i + 1
       })),
       poItems: [
-        { name: "Acrylic Stand Mecha", sku: "ZRAASMEC0009", qty: "2×", price: "Rp 145.000", line: "Rp 290.000" }
+        { name: "Acrylic Stand Mecha", sku: "ZRA20001", qty: "2×", price: "Rp 145.000", line: "Rp 290.000" }
       ],
       poPayments: [
         { label: "DP · transfer BCA", when: "24 Okt 2026, 15:02", amount: "Rp 160.000", proof: "bukti-dp-0002.jpg", style: "font-size:11px;font-weight:700;color:#1E6B4B;background:#E4F3EC;padding:3px 8px;border-radius:999px" }
@@ -1509,10 +1501,10 @@ class Component extends DCLogic {
       hint: "Cari SKU…", cta: "Penyesuaian stok", filters: ["Tipe", "Tanggal"],
       meta: "Menampilkan 8 dari 1.204 pergerakan",
       rows: [
-        ["25 Okt 13:42", "RYUKYSAK0007", "sale", -2, 34, 32, "TRX-20261025-0042", "Rina"],
-        ["25 Okt 13:41", "KTSSTKTS0012", "sale", -3, 47, 44, "TRX-20261025-0042", "Rina"],
-        ["25 Okt 12:18", "ZRAASMEC0009", "adjustment", -1, 5, 4, "Cacat kemasan", "Rina"],
-        ["25 Okt 11:55", "HNBKYYUK0005", "sale", -1, 1, 0, "TRX-20261025-0031", "Rina"],
+        ["25 Okt 13:42", "RYU10001", "sale", -2, 34, 32, "TRX-20261025-0042", "Rina"],
+        ["25 Okt 13:41", "KTS10001", "sale", -3, 47, 44, "TRX-20261025-0042", "Rina"],
+        ["25 Okt 12:18", "ZRA20001", "adjustment", -1, 5, 4, "Cacat kemasan", "Rina"],
+        ["25 Okt 11:55", "HNB20001", "sale", -1, 1, 0, "TRX-20261025-0031", "Rina"],
         ["25 Okt 10:02", "MKOPNKTS0004", "sale", -2, 8, 6, "TRX-20261025-0014", "Rina"],
         ["24 Okt 21:30", "RYUPCART0013", "preorder_handover", -1, 1, 0, "PO-20261024-0008", "Rina"],
         ["24 Okt 09:00", "ZRABGTOT0001", "initial", 15, 0, 15, "Stok awal event", "Admin"],

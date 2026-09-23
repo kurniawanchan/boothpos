@@ -3,18 +3,79 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Exports\GenericArrayExport;
 use App\Http\Requests\StoreCustomerRequest;
 use App\Http\Requests\UpdateCustomerRequest;
 use App\Http\Resources\CustomerResource;
 use App\Models\Customer;
 use App\Services\ActivityLogger;
+use App\Services\CustomerExportImportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Maatwebsite\Excel\Facades\Excel;
 
 class CustomerController extends Controller
 {
-    public function __construct(private ActivityLogger $activityLogger) {}
+    public function __construct(
+        private ActivityLogger $activityLogger,
+        private CustomerExportImportService $exportImportService,
+    ) {}
+
+    /**
+     * 020-customer-data-import-export — gerbangnya SAMA PERSIS dengan
+     * bulk master-data lain (MasterDataExportController, ImportMasterDataRequest):
+     * canAccessAnyMenu(['artists', 'categories', 'products', 'stock',
+     * 'vendors', 'materials', 'roles', 'users']) — bukan isOwnerOrAdmin().
+     * CATATAN: 'customers' SENGAJA tidak dimasukkan ke daftar menu_keys ini
+     * — kalau dimasukkan, kasir (yang juga punya menu_keys 'customers'
+     * untuk CRUD satu-per-satu) ikut lolos, padahal ekspor/impor massal
+     * PII pelanggan harus tetap ketat di tier owner/admin/inventory saja
+     * (satu-satunya tiga peran yang SEMUANYA memiliki seluruh menu_keys
+     * pada daftar di atas — lihat migrasi 2026_10_09_000002). CLAUDE.md
+     * menyebut ini "canManageMasterData()" sebagai nama konsep — method
+     * itu TIDAK benar-benar ada di kode; mekanisme sungguhannya adalah
+     * pengecekan menu_keys ini.
+     */
+    public function export(Request $request)
+    {
+        abort_unless($this->authorizedForBulkOperation($request), 403, __('customers.not_authorized'));
+
+        return Excel::download(new GenericArrayExport($this->exportImportService->export()), 'customers.xlsx');
+    }
+
+    public function importTemplate(Request $request)
+    {
+        abort_unless($this->authorizedForBulkOperation($request), 403, __('customers.not_authorized'));
+
+        return Excel::download(new GenericArrayExport($this->exportImportService->template()), 'template-customers.xlsx');
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        abort_unless($this->authorizedForBulkOperation($request), 403, __('customers.not_authorized'));
+
+        $request->validate([
+            'file' => Rule::file()->max(10240)->rules(['mimes:xlsx']),
+        ]);
+
+        $result = $this->exportImportService->import($request->file('file'), $request->boolean('dry_run'), $request->user());
+
+        if (! $result['applied'] && ! $result['dry_run']) {
+            return response()->json([
+                'message' => __('customers.import_nothing_saved'),
+                'row_errors' => $result['row_errors'],
+            ], 409);
+        }
+
+        return response()->json([
+            'dry_run' => $result['dry_run'],
+            'created_count' => $result['created_count'],
+            'updated_count' => $result['updated_count'],
+            'row_errors' => $result['row_errors'],
+        ], $result['dry_run'] ? 200 : 201);
+    }
 
     public function index(Request $request): JsonResponse
     {
@@ -136,5 +197,12 @@ class CustomerController extends Controller
         });
 
         return response()->json(null, 204);
+    }
+
+    private function authorizedForBulkOperation(Request $request): bool
+    {
+        return $request->user()?->canAccessAnyMenu([
+            'artists', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users',
+        ]) ?? false;
     }
 }

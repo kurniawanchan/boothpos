@@ -18,7 +18,28 @@
         </include>
     </source>
     <php>
-        <env name="APP_ENV" value="testing"/>
+        <!--
+        BUG DITEMUKAN (020-customer-data-import-export, verifikasi manual
+        Constitution II) — TIDAK SEPENUHNYA TERTUTUP oleh force="true" di
+        bawah ini, dicatat di sini sebagai peringatan sampai ada perbaikan
+        permanen di docker-compose.yml. docker-compose.yml service `app`
+        memakai `env_file: .env`, yang menyuntikkan APP_ENV=local dan
+        DB_DATABASE=boothpos (database DEV SUNGGUHAN) sebagai environment
+        variable level-OS DI DALAM CONTAINER — lapisan yang lebih dalam
+        daripada apa pun yang bisa disentuh dari userland PHP. `force`
+        PHPUnit di sini TERBUKTI TIDAK CUKUP (diverifikasi langsung: env
+        tetap 'local', DB tetap 'boothpos' walau force="true" dipasang).
+        Akibatnya, di lingkungan Docker (BUKAN native), `docker compose
+        exec app php artisan test` diam-diam berjalan melawan `boothpos`
+        (database dev asli) dan RefreshDatabase MENGHAPUS seluruh data
+        dev/demo di sana tanpa satu pun error terlihat.
+
+        SATU-SATUNYA workaround yang terbukti benar-benar bekerja (lihat
+        docs/RUNBOOK.md): override eksplisit di level `docker compose
+        exec`, BUKAN lewat berkas ini:
+          docker compose exec -e APP_ENV=testing -e DB_DATABASE=boothpos_test app php artisan test
+        -->
+        <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

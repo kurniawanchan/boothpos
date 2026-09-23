@@ -17,7 +17,7 @@ class Customer extends Model
 {
     use HasDataMode, HasFactory, SoftDeletes;
 
-    protected $fillable = ['name', 'phone', 'email', 'social_handle', 'notes'];
+    protected $fillable = ['name', 'phone', 'email', 'social_handle', 'notes', 'address'];
 
     public function orders(): HasMany
     {

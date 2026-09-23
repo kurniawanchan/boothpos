@@ -84,6 +84,14 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('artists', ArtistController::class);
         Route::apiResource('categories', CategoryController::class);
         Route::post('/categories/{category}/image', [CategoryController::class, 'uploadImage']);
+        // 020-customer-data-import-export — rute statis DIDAFTARKAN
+        // sebelum apiResource, mengikuti konvensi yang sama seperti
+        // /preorders/export (meski resource ini hari ini belum
+        // mendaftarkan GET /customers/{customer}, urutan ini tetap dijaga
+        // sebagai proteksi terhadap penambahan rute {customer} di masa depan).
+        Route::get('/customers/export', [CustomerController::class, 'export']);
+        Route::get('/customers/import/template', [CustomerController::class, 'importTemplate']);
+        Route::post('/customers/import', [CustomerController::class, 'import']);
         Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'update', 'destroy']);
         Route::get('/customers/{customer}/transactions', [CustomerController::class, 'transactions']);
 
