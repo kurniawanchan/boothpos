@@ -153,10 +153,17 @@ const columns = computed(() => [
 
 // --- Create form (no mockup reference — designed fresh) ----------------
 const showCreate = ref(false);
-const showCreateCustomerPicker = ref(false);
+// 022-preorder-invoice-crud-overhaul (US1) — null berarti mode "buat
+// baru"; berisi id berarti form yang SAMA persis sedang dipakai untuk
+// mengedit preorder tsb (submitCreate() bercabang berdasar ini).
+const editingPreorderId = ref(null);
 const createCustomer = ref(null);
 const createFulfillment = ref('pickup');
 const createShippingCost = ref('0');
+const createDiscount = ref('0');
+const createEventId = ref('');
+const createPickupDay = ref('');
+const createCourierName = ref(COURIER_DEFAULT);
 const createExpectedDate = ref('');
 const createNotes = ref('');
 const createItems = ref([]);
@@ -185,6 +192,32 @@ function openCreate() {
   createExpectedDate.value = '';
   createNotes.value = '';
   createItems.value = [];
+  createSearch.value = '';
+  createResults.value = [];
+  Object.keys(createErrors).forEach((k) => delete createErrors[k]);
+  showCreate.value = true;
+}
+
+// 022-preorder-invoice-crud-overhaul (US1, FR-001) — form YANG SAMA
+// dengan "buat baru" di atas, hanya diisi ulang dari data preorder yang
+// sudah ada dan disubmit lewat updatePreorder() (lihat submitCreate()).
+// Tidak ada form terpisah untuk edit — item/diskon/fulfillment/dst semua
+// field yang sama persis yang sudah ada di form ini.
+async function openEdit(row) {
+  const full = await getPreorder(row.id);
+  editingPreorderId.value = full.id;
+  createCustomer.value = full.customer ?? { id: full.customer_id ?? null, name: row.customer_name };
+  createFulfillment.value = full.fulfillment;
+  createShippingCost.value = String(full.shipping_cost ?? '0');
+  createDiscount.value = String(full.discount ?? '0');
+  createEventId.value = full.event_id ?? '';
+  createPickupDay.value = full.pickup_day ?? '';
+  createCourierName.value = full.courier_name ?? COURIER_DEFAULT;
+  createExpectedDate.value = full.expected_date ?? '';
+  createNotes.value = full.notes ?? '';
+  createItems.value = (full.items ?? []).map((i) => ({
+    variant_id: i.variant_id, sku: i.sku_snapshot, label: i.name_snapshot, sell_price: i.sell_price, qty: i.qty,
+  }));
   createSearch.value = '';
   createResults.value = [];
   Object.keys(createErrors).forEach((k) => delete createErrors[k]);
@@ -292,6 +325,35 @@ async function submitCreate() {
   }
 }
 
+// 022-preorder-invoice-crud-overhaul (US1, FR-003/FR-004) — hanya
+// dipanggil untuk baris berstatus "ordered" (tombol Hapus sendiri sudah
+// disembunyikan untuk status lain — lihat cell-actions), tapi 409 dari
+// server tetap ditangani (mis. race condition status berubah di tab lain).
+const showDeleteConfirm = ref(false);
+const deleteTarget = ref(null);
+const deletingPreorder = ref(false);
+
+function confirmDeletePreorder(row) {
+  deleteTarget.value = row;
+  showDeleteConfirm.value = true;
+}
+
+async function performDeletePreorder() {
+  deletingPreorder.value = true;
+  try {
+    await deletePreorder(deleteTarget.value.id);
+    toast.success(t('preorders.preorder_deleted'));
+    showDeleteConfirm.value = false;
+    await load();
+  } catch {
+    // 409 (status bukan "ordered" / sudah ada pembayaran) sudah ditoast
+    // oleh interceptor global — dialog tetap terbuka supaya pesan itu
+    // terlihat di belakangnya.
+  } finally {
+    deletingPreorder.value = false;
+  }
+}
+
 // --- Detail drawer -------------------------------------------------------
 const showDetail = ref(false);
 const detail = ref(null);
@@ -334,6 +396,81 @@ function openPaymentReceipt(paymentId) {
 function openInvoice(row) {
   invoicePreorderId.value = row.id;
   showInvoiceModal.value = true;
+}
+
+// --- Bulk download/email (022-preorder-invoice-crud-overhaul US5) ---------
+const selectedIds = ref(new Set());
+const bulkDocumentType = ref('invoice');
+const bulkDownloading = ref(false);
+const bulkEmailing = ref(false);
+
+function toggleSelected(id) {
+  const next = new Set(selectedIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  selectedIds.value = next;
+}
+
+async function doBulkDownload() {
+  const ids = [...selectedIds.value];
+  if (!ids.length) return;
+  bulkDownloading.value = true;
+  try {
+    const { data: invoices } = await bulkPreorderInvoices(ids, bulkDocumentType.value);
+    const [{ default: JSZip }, { default: html2canvas }, { jsPDF }] = await Promise.all([
+      import('jszip'), import('html2canvas'), import('jspdf'),
+    ]);
+    const zip = new JSZip();
+
+    // Sequential, not parallel — rendering N canvases at once would freeze
+    // the tab for a realistic batch size (plan.md Performance Goals).
+    for (const invoice of invoices) {
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '-9999px';
+      container.innerHTML = buildInvoiceHtml(invoice, bulkDocumentType.value);
+      document.body.appendChild(container);
+      const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2 });
+      document.body.removeChild(container);
+
+      const imgData = canvas.toDataURL('image/png');
+      const widthPt = (canvas.width * 72) / 96;
+      const heightPt = (canvas.height * 72) / 96;
+      const pdf = new jsPDF({ orientation: heightPt >= widthPt ? 'portrait' : 'landscape', unit: 'pt', format: [widthPt, heightPt] });
+      pdf.addImage(imgData, 'PNG', 0, 0, widthPt, heightPt);
+      zip.file(`${bulkDocumentType.value}-${invoice.preorder_number}.pdf`, pdf.output('blob'));
+    }
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `preorder-${bulkDocumentType.value}s.zip`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    toast.error(err.message || t('preorders.bulk_download_failed'));
+  } finally {
+    bulkDownloading.value = false;
+  }
+}
+
+async function doBulkEmail() {
+  const ids = [...selectedIds.value];
+  if (!ids.length) return;
+  bulkEmailing.value = true;
+  try {
+    const { data: results } = await bulkEmailPreorderInvoices(ids, bulkDocumentType.value);
+    const sentCount = results.filter((r) => r.status === 'sent').length;
+    const skippedCount = results.length - sentCount;
+    toast.success(t('preorders.bulk_email_summary', { sent: sentCount, skipped: skippedCount }));
+  } catch (err) {
+    toast.error(err.message || t('preorders.bulk_email_failed'));
+  } finally {
+    bulkEmailing.value = false;
+  }
 }
 
 // --- Export/import (US3) --------------------------------------------------
@@ -657,8 +794,38 @@ async function markDelivered() {
       </BaseButton>
     </div>
 
+    <!-- 022-preorder-invoice-crud-overhaul (US5) — hanya muncul ketika ada
+         baris terpilih (Edge Cases spec.md: bulk action tidak tersedia
+         untuk 0 baris terpilih). -->
+    <div v-if="selectedIds.size > 0" class="flex flex-wrap items-center gap-2.5 rounded-card border border-mint-border bg-mint-50 px-4 py-3">
+      <span class="text-[12.5px] font-semibold text-brand-active">{{ t('preorders.selected_count', { count: selectedIds.size }) }}</span>
+      <BaseSelect
+        v-model="bulkDocumentType"
+        class="w-48"
+        :options="[{ value: 'invoice', label: t('preorders.document_invoice_title') }, { value: 'payment_invoice', label: t('preorders.payment_receipt_title') }]"
+      />
+      <span class="flex-1"></span>
+      <BaseButton variant="secondary" size="sm" :loading="bulkDownloading" @click="doBulkDownload">
+        <i class="ph-duotone ph-file-zip text-[15px]" aria-hidden="true"></i>
+        {{ t('preorders.bulk_download_action') }}
+      </BaseButton>
+      <BaseButton variant="secondary" size="sm" :loading="bulkEmailing" @click="doBulkEmail">
+        <i class="ph-duotone ph-envelope-simple text-[15px]" aria-hidden="true"></i>
+        {{ t('preorders.bulk_email_action') }}
+      </BaseButton>
+    </div>
+
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
       <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('preorders.no_preorders')">
+        <template #cell-select="{ row }">
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border-line-3"
+            :checked="selectedIds.has(row.id)"
+            :aria-label="t('preorders.select_row', { number: row.preorder_number })"
+            @change="toggleSelected(row.id)"
+          />
+        </template>
         <template #cell-preorder_number="{ row }">
           <!-- 013-preorder-list-filters-receipt (US2, T019) — reuses the
                existing openDetail(row) handler (research.md R7), a second
@@ -673,6 +840,22 @@ async function markDelivered() {
         <template #cell-actions="{ row }">
           <div class="flex items-center justify-end gap-3">
             <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openInvoice(row)">{{ t('preorders.print_action') }}</button>
+            <!-- 022-preorder-invoice-crud-overhaul (US1, FR-001a) — disembunyikan
+                 (bukan cuma dinonaktifkan) untuk transaksi yang sudah tertutup,
+                 supaya tidak ada tombol yang mengarah ke aksi yang pasti ditolak. -->
+            <button
+              v-if="!['handed_over', 'cancelled'].includes(row.status)"
+              type="button"
+              class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active"
+              @click="openEdit(row)"
+            >{{ t('common.edit') }}</button>
+            <!-- FR-003/FR-004 — hanya bisa dihapus selagi "Ordered". -->
+            <button
+              v-if="row.status === 'ordered'"
+              type="button"
+              class="text-[12.5px] font-semibold text-danger-text"
+              @click="confirmDeletePreorder(row)"
+            >{{ t('common.delete') }}</button>
             <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openDetail(row)">{{ t('preorders.detail') }}</button>
           </div>
         </template>

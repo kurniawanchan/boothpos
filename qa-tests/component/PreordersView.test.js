@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/vue';
+import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import PreordersView from '../../resources/js/views/PreordersView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listPreorders, getPreorder, getPreorderSummary } from '../../resources/js/api/preorders';
+import { listPreorders, getPreorder, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices } from '../../resources/js/api/preorders';
 import { listArtists } from '../../resources/js/api/artists';
+import { listCustomers } from '../../resources/js/api/customers';
+import { lookupVariants } from '../../resources/js/api/products';
+import { listEvents } from '../../resources/js/api/events';
 import id from '../../resources/js/locales/id.json';
 import en from '../../resources/js/locales/en.json';
 
@@ -21,16 +24,22 @@ vi.mock('../../resources/js/api/preorders', () => ({
   listPreorders: vi.fn(),
   getPreorder: vi.fn(),
   createPreorder: vi.fn(),
+  updatePreorder: vi.fn(),
+  deletePreorder: vi.fn(),
   updatePreorderStatus: vi.fn(),
   exportPreorders: vi.fn(),
   downloadPreorderImportTemplate: vi.fn(),
   importPreorders: vi.fn(),
   resendPreorderNotification: vi.fn(),
   getPreorderSummary: vi.fn(),
+  bulkPreorderInvoices: vi.fn(),
+  bulkEmailPreorderInvoices: vi.fn(),
 }));
 vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
 vi.mock('../../resources/js/api/shipments', () => ({ createShipment: vi.fn(), updateShipment: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ lookupVariants: vi.fn() }));
+vi.mock('../../resources/js/api/customers', () => ({ listCustomers: vi.fn(), createCustomer: vi.fn() }));
+vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 
 const ARTISTS = [
   { id: 1, name: 'Artist A' },
@@ -83,6 +92,7 @@ describe('PreordersView — seller filter and column (013 US1)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
   });
 
@@ -161,6 +171,7 @@ describe('PreordersView — summary panel (013 US5)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
     getPreorderSummary.mockResolvedValue(SUMMARY);
   });

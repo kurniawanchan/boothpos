@@ -19,6 +19,15 @@ export function createPreorder(payload) {
   return client.post('/preorders', payload).then((r) => r.data);
 }
 
+// 022-preorder-invoice-crud-overhaul (US1)
+export function updatePreorder(id, payload) {
+  return client.patch(`/preorders/${id}`, payload).then((r) => r.data);
+}
+
+export function deletePreorder(id) {
+  return client.delete(`/preorders/${id}`).then((r) => r.data);
+}
+
 export function updatePreorderStatus(id, status, cancelReason = null) {
   return client
     .patch(`/preorders/${id}/status`, { status, cancel_reason: cancelReason })
@@ -53,4 +62,13 @@ export function importPreorders(file, dryRun = false) {
 // 007-preorder-import-export-notify (US4) — owner/admin only server-side.
 export function resendPreorderNotification(id) {
   return client.post(`/preorders/${id}/notifications/resend`).then((r) => r.data);
+}
+
+// 022-preorder-invoice-crud-overhaul (US5)
+export function bulkPreorderInvoices(preorderIds, document = 'invoice') {
+  return client.post('/preorders/bulk-invoices', { preorder_ids: preorderIds, document }).then((r) => r.data);
+}
+
+export function bulkEmailPreorderInvoices(preorderIds, document = 'invoice') {
+  return client.post('/preorders/bulk-email', { preorder_ids: preorderIds, document }).then((r) => r.data);
 }

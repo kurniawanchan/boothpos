@@ -5,23 +5,32 @@ namespace App\Http\Controllers\Api;
 use App\Exports\GenericArrayExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StorePreorderRequest;
+use App\Http\Requests\UpdatePreorderRequest;
 use App\Http\Resources\CustomerResource;
+use App\Mail\PreorderInvoiceMail;
 use App\Models\Preorder;
+use App\Models\PreorderNotification;
+use App\Services\ImageUploadService;
 use App\Services\PreorderExportImportService;
 use App\Services\PreorderNotifier;
 use App\Services\PreorderService;
+use App\Support\BuildsInvoiceDocument;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 
 class PreorderController extends Controller
 {
+    use BuildsInvoiceDocument;
+
     public function __construct(
         private PreorderService $preorderService,
         private PreorderExportImportService $exportImportService,
         private PreorderNotifier $notifier,
+        private ImageUploadService $imageUploadService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -76,6 +85,40 @@ class PreorderController extends Controller
     }
 
     /**
+     * 022-preorder-invoice-crud-overhaul (US1, FR-001/FR-001a/FR-002) —
+     * status guard & delta stok sepenuhnya ada di PreorderService::update();
+     * di sini hanya memetakan ValidationException-nya jadi 409 (konflik
+     * aturan bisnis, bukan 422 shape/validasi form — CLAUDE.md API
+     * conventions).
+     */
+    public function update(UpdatePreorderRequest $request, Preorder $preorder): JsonResponse
+    {
+        try {
+            $preorder = $this->preorderService->update($preorder, $request->validated(), $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 409);
+        }
+
+        return response()->json($this->present($preorder));
+    }
+
+    /**
+     * 022-preorder-invoice-crud-overhaul (US1, FR-003/FR-004) — 409 kalau
+     * status bukan "ordered" atau sudah ada pembayaran; pesan mengarahkan
+     * ke aksi "Cancel" yang sudah ada.
+     */
+    public function destroy(Preorder $preorder): JsonResponse
+    {
+        try {
+            $this->preorderService->delete($preorder);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 409);
+        }
+
+        return response()->json(null, 204);
+    }
+
+    /**
      * 007-preorder-import-export-notify (US2) — data mentah untuk
      * invoice/struk; PDF-nya sendiri dirender di klien (html2canvas +
      * jsPDF), sama seperti pola ReceiptModal.vue/PO invoice (research.md
@@ -87,7 +130,96 @@ class PreorderController extends Controller
     {
         $preorder->load(['items', 'payments', 'customer', 'event']);
 
-        return response()->json([
+        return response()->json($this->invoicePayload($preorder));
+    }
+
+    /**
+     * 022-preorder-invoice-crud-overhaul (US5, FR-013, research.md
+     * Decision 5) — mengembalikan payload invoice LENGKAP (sama persis
+     * dengan invoice()) untuk setiap id yang diminta, dalam SATU respons —
+     * supaya frontend bisa merender+zip banyak PDF sekaligus di klien
+     * tanpa N request berurutan, tanpa pernah membuat PDF di server.
+     */
+    public function bulkInvoices(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'preorder_ids' => ['required', 'array', 'min:1'],
+            'preorder_ids.*' => ['integer', 'exists:preorders,id'],
+            'document' => ['required', 'in:invoice,payment_invoice'],
+        ]);
+
+        $preorders = Preorder::with(['items', 'payments', 'customer', 'event'])
+            ->whereIn('id', $validated['preorder_ids'])
+            ->get();
+
+        $data = $preorders->map(fn (Preorder $p) => $this->invoicePayload($p))->all();
+
+        return response()->json(['data' => $data]);
+    }
+
+    /**
+     * 022-preorder-invoice-crud-overhaul (US5, FR-014/FR-015) — satu email
+     * per pre-order terpilih, memakai PreorderInvoiceMail (badan HTML,
+     * TANPA lampiran PDF — research.md Decision 5), mengikuti pola
+     * catat-setiap-percobaan PreorderNotifier yang sudah ada (trigger baru
+     * `bulk_invoice_email`, bukan bentuk log baru). SELALU 200 dengan
+     * laporan per-baris — satu pelanggan tanpa email tidak boleh
+     * menggagalkan seluruh batch (FR-015).
+     */
+    public function bulkEmailInvoices(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'preorder_ids' => ['required', 'array', 'min:1'],
+            'preorder_ids.*' => ['integer', 'exists:preorders,id'],
+            'document' => ['required', 'in:invoice,payment_invoice'],
+        ]);
+
+        $preorders = Preorder::with(['items', 'customer', 'payments'])
+            ->whereIn('id', $validated['preorder_ids'])
+            ->get();
+
+        $results = $preorders->map(function (Preorder $preorder) use ($validated) {
+            $email = $preorder->customer?->email;
+            $payment = $validated['document'] === 'payment_invoice' ? $preorder->payments->last() : null;
+
+            $status = $this->sendBulkInvoiceEmail($preorder, $validated['document'], $email, $payment);
+
+            return ['preorder_id' => $preorder->id, 'status' => $status];
+        });
+
+        return response()->json(['data' => $results]);
+    }
+
+    private function sendBulkInvoiceEmail(Preorder $preorder, string $document, ?string $email, $payment): string
+    {
+        if (empty($email)) {
+            $status = 'skipped_no_email';
+        } elseif (config('mail.default') === 'log') {
+            $status = 'skipped_not_configured';
+        } else {
+            try {
+                Mail::to($email)->send(new PreorderInvoiceMail($preorder, $document, $payment));
+                $status = 'sent';
+            } catch (\Throwable $e) {
+                $status = 'failed';
+            }
+        }
+
+        PreorderNotification::create([
+            'preorder_id' => $preorder->id,
+            'trigger' => 'bulk_invoice_email',
+            'document_type' => $document,
+            'recipient_email' => $email,
+            'status' => $status,
+            'sent_at' => now(),
+        ]);
+
+        return $status;
+    }
+
+    private function invoicePayload(Preorder $preorder): array
+    {
+        return [
             ...$this->present($preorder),
             'document_type' => \App\Support\PreorderDocumentType::forStatus($preorder->status),
             // 014-sales-receipt-event-footer (US2, R2) — event_id preorder
@@ -97,7 +229,13 @@ class PreorderController extends Controller
             'event_location' => $preorder->event?->location,
             'event_start_date' => $preorder->event?->start_date?->toDateString(),
             'event_end_date' => $preorder->event?->end_date?->toDateString(),
-        ]);
+            // 023-event-availability-invoice-redesign (US2) — diselesaikan
+            // ke tanggal asli lewat Event::availableOnDate(), satu-satunya
+            // tempat pemetaan 'day_1'/'day_2' -> tanggal terjadi.
+            'event_available_on_date' => $preorder->event?->availableOnDate()?->toDateString(),
+            // 022-preorder-invoice-crud-overhaul (US3, research.md Decision 1/2)
+            ...$this->buildInvoiceDocumentFields($this->imageUploadService),
+        ];
     }
 
     /**
@@ -380,9 +518,7 @@ class PreorderController extends Controller
                 'recipient_name' => $preorder->shipment->recipient_name,
                 'recipient_phone' => $preorder->shipment->recipient_phone,
                 'address_line' => $preorder->shipment->address_line,
-                'city' => $preorder->shipment->city,
                 'province' => $preorder->shipment->province,
-                'postal_code' => $preorder->shipment->postal_code,
                 'status' => $preorder->shipment->status,
                 'shipped_at' => $preorder->shipment->shipped_at,
                 'delivered_at' => $preorder->shipment->delivered_at,

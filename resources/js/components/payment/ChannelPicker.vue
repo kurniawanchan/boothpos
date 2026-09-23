@@ -1,6 +1,7 @@
 <script setup>
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import ImageLightbox from '../ui/ImageLightbox.vue';
 
 const { t } = useI18n();
 
@@ -11,6 +12,12 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue']);
 
 const selected = computed(() => props.channels.find((c) => c.id === props.modelValue) ?? null);
+
+// 022-preorder-invoice-crud-overhaul (US3, FR-011) — QR diperbesar dan bisa
+// diklik untuk tampilan penuh; komponen popup-nya (ImageLightbox.vue) satu
+// definisi yang sama dipakai lagi oleh invoice pre-order (research.md
+// Decision 8) — bukan hasil ditulis dua kali per layar.
+const showQrLightbox = ref(false);
 
 // BUG YANG DITEMUKAN & DIPERBAIKI: saat hanya ada satu kanal pembayaran
 // (mis. satu channel Gopay qr_ewallet), chip pemilihan hanya dirender
@@ -50,17 +57,31 @@ watch(
     </div>
     <div v-if="selected" class="flex flex-col gap-2 rounded-lg border border-mint-border bg-mint-50 px-4 py-3.5">
       <span class="text-[11.5px] font-bold uppercase tracking-wider text-dark-muted-2">{{ selected.provider }}</span>
-      <img
+      <button
         v-if="selected.type === 'qr_ewallet' && selected.qr_image_url"
-        :src="selected.qr_image_url"
-        :alt="t('pos.qr_code_for', { provider: selected.provider })"
-        class="h-40 w-40 self-center rounded-md border border-line-2 object-contain"
-      />
+        type="button"
+        class="self-center"
+        :aria-label="t('pos.enlarge_qr')"
+        @click="showQrLightbox = true"
+      >
+        <img
+          :src="selected.qr_image_url"
+          :alt="t('pos.qr_code_for', { provider: selected.provider })"
+          class="h-56 w-56 cursor-zoom-in rounded-md border border-line-2 object-contain transition-transform hover:scale-[1.02]"
+        />
+      </button>
       <span v-else class="font-mono text-[27px] font-extrabold tracking-wide text-ink" style="font-variant-numeric: tabular-nums">
         {{ selected.account_number || '—' }}
       </span>
       <span class="text-[13px] text-muted-4">{{ t('pos.account_holder', { name: selected.account_name }) }}</span>
     </div>
     <p v-else class="text-[12.5px] text-muted-3">{{ t('pos.pick_channel_above') }}</p>
+
+    <ImageLightbox
+      :open="showQrLightbox"
+      :src="selected?.qr_image_url"
+      :alt="selected ? t('pos.qr_code_for', { provider: selected.provider }) : ''"
+      @close="showQrLightbox = false"
+    />
   </div>
 </template>

@@ -4,9 +4,12 @@ namespace App\Services;
 
 use App\Models\Concerns\DataModeScope;
 use App\Models\Customer;
+use App\Models\Event;
 use App\Models\Preorder;
 use App\Models\ProductVariant;
 use App\Models\User;
+use App\Support\Couriers;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -72,8 +75,11 @@ class PreorderService
                 'fulfillment' => $data['fulfillment'],
                 'subtotal' => $subtotal,
                 'shipping_cost' => $shippingCost,
-                'total_amount' => $subtotal + $shippingCost,
+                'discount' => $discount,
+                'total_amount' => $subtotal + $shippingCost - $discount,
                 'expected_date' => $data['expected_date'] ?? null,
+                'pickup_day' => $pickupDay,
+                'courier_name' => $courierName,
                 'notes' => $data['notes'] ?? null,
             ]);
 

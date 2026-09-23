@@ -4,8 +4,9 @@ import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import StatusPill from '../ui/StatusPill.vue';
+import ImageLightbox from '../ui/ImageLightbox.vue';
 import { getPreorderInvoice } from '../../api/preorders';
-import { formatIDR } from '../../utils/money';
+import { formatIDR, parseMoney } from '../../utils/money';
 import { formatDate, formatDateTime } from '../../utils/date';
 import { useToastStore } from '../../stores/toast';
 
@@ -51,6 +52,11 @@ const invoice = ref(null);
 const loading = ref(false);
 const docEl = ref(null);
 const downloadingPdf = ref(false);
+// 022-preorder-invoice-crud-overhaul (US3, FR-011) — QR pembayaran yang
+// sedang diperbesar; ImageLightbox.vue-nya sama persis dengan yang dipakai
+// ChannelPicker.vue (research.md Decision 8).
+const lightboxSrc = ref(null);
+const lightboxAlt = ref('');
 
 const heading = computed(() => {
   if (!invoice.value) return '';
@@ -104,8 +110,7 @@ async function downloadPdf() {
     const heightPt = (canvas.height * 72) / 96;
     const pdf = new jsPDF({ orientation: heightPt >= widthPt ? 'portrait' : 'landscape', unit: 'pt', format: [widthPt, heightPt] });
     pdf.addImage(imgData, 'PNG', 0, 0, widthPt, heightPt);
-    const prefix = invoice.value.document_type === 'receipt' ? 'struk' : 'invoice';
-    pdf.save(`${prefix}-${invoice.value.preorder_number}.pdf`);
+    pdf.save(`invoice-${invoice.value.preorder_number}.pdf`);
   } catch {
     toast.error(t('preorders.invoice_download_failed'));
   } finally {
@@ -115,7 +120,7 @@ async function downloadPdf() {
 </script>
 
 <template>
-  <BaseModal :open="open" :title="invoice?.preorder_number" max-width-class="max-w-[480px]" @close="emit('close')">
+  <BaseModal :open="open" :title="documentTitle" max-width-class="max-w-[720px]" @close="emit('close')">
     <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">{{ t('common.loading_data') }}</div>
     <div v-else-if="invoice" class="flex flex-col gap-4 px-6 py-5">
       <div class="flex items-center justify-between">
@@ -271,21 +276,87 @@ async function downloadPdf() {
           {{ t('preorders.document_cancelled_note') }}
         </p>
 
-        <!-- 014-sales-receipt-event-footer (US2) — hilang seluruhnya jika
-             preorder tidak terikat event sama sekali (FR-005), atau jika
-             event ada tapi tidak punya lokasi maupun tanggal (FR-006). -->
-        <div
-          v-if="invoice.event_name && (invoice.event_location || eventInfoLine)"
-          class="flex flex-col items-center gap-0.5 border-t border-dashed border-line-2 pt-3 text-center text-[11px] text-muted-3"
-        >
-          <span v-if="invoice.event_location">{{ t('events_sessions.location') }}: {{ invoice.event_location }}</span>
-          <span v-if="eventInfoLine">{{ t('events_sessions.col_dates') }}: {{ eventInfoLine }}</span>
+        <!-- 024-invoice-layout-shipping-slip (US4, FR-008/FR-009/FR-010,
+             research.md Decision 5) — HANYA untuk Mail Order
+             (fulfillment === 'courier'); sumbernya invoice.customer/
+             invoice.store_identity yang sudah ada di payload, BUKAN
+             invoice.shipment — supaya tetap bisa dicetak sebelum data
+             pengiriman sungguhan dibuat (Edge Cases spec.md). -->
+        <div v-if="showShippingSlip" class="flex flex-col gap-2.5 rounded-lg border border-dashed border-line-3 p-3.5">
+          <span class="text-center text-[11.5px] font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.shipping_slip_title') }}</span>
+          <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('events_sessions.event_name') }}</span><span class="font-semibold">{{ invoice.event_name ?? '—' }}</span></div>
+          <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.col_number') }}</span><span class="font-mono font-semibold">{{ invoice.preorder_number }}</span></div>
+          <div class="grid grid-cols-2 gap-3 border-t border-line-2 pt-2.5">
+            <div class="flex flex-col gap-0.5 text-[11.5px]">
+              <span class="font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.from_label') }}</span>
+              <span v-if="invoice.store_identity?.name" class="font-semibold">{{ invoice.store_identity.name }}</span>
+              <span v-if="invoice.store_identity?.address" class="text-muted-2">{{ invoice.store_identity.address }}</span>
+              <span v-if="invoice.store_identity?.contact_phone" class="text-muted-2">{{ invoice.store_identity.contact_phone }}</span>
+            </div>
+            <div class="flex flex-col gap-0.5 text-[11.5px]">
+              <span class="font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.to_label') }}</span>
+              <span v-if="invoice.customer?.name" class="font-semibold">{{ invoice.customer.name }}</span>
+              <span v-if="invoice.customer?.phone" class="text-muted-2">{{ invoice.customer.phone }}</span>
+              <span v-if="invoice.customer?.address" class="text-muted-2">{{ invoice.customer.address }}</span>
+            </div>
+          </div>
+          <div class="border-t border-line-2 pt-2.5 text-[12.5px]">
+            <span class="font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.item_type_label') }}</span>
+            <span class="ml-1">{{ itemTypes.join(', ') }}</span>
+          </div>
         </div>
+
+        <!-- 024-invoice-layout-shipping-slip (US3, FR-006/FR-007,
+             research.md Decision 4) — kanal pembayaran dipecah dua kolom
+             berdasarkan field `type` yang sudah ada: kolom QR (lebih besar
+             lagi, 96px -> 128px) dan kolom transfer bank. Masing-masing
+             kolom hilang sendiri-sendiri kalau kosong, tanpa penyamaran
+             nomor rekening (research.md Decision 2, tetap dari 022). -->
+        <div v-if="invoice.payment_channels?.length" class="flex flex-col gap-2.5 border-t border-dashed border-line-2 pt-3.5">
+          <span class="text-center text-[11.5px] font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.payment_terms_title') }}</span>
+          <div class="grid grid-cols-2 gap-3">
+            <div v-if="qrChannels.length" class="flex flex-col gap-2">
+              <span class="text-center text-[10.5px] font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.qr_payment_title') }}</span>
+              <div v-for="channel in qrChannels" :key="channel.id" class="flex flex-col items-center gap-2 rounded-lg border border-line-3 bg-surface-subtle px-3 py-2.5">
+                <button
+                  v-if="channel.qr_image_url"
+                  type="button"
+                  class="shrink-0"
+                  :aria-label="t('pos.enlarge_qr')"
+                  @click="lightboxSrc = channel.qr_image_url; lightboxAlt = channel.provider"
+                >
+                  <img :src="channel.qr_image_url" :alt="channel.provider" class="h-32 w-32 cursor-zoom-in rounded-md border border-line-2 object-contain" />
+                </button>
+                <div class="flex min-w-0 flex-col items-center gap-0.5 text-center">
+                  <span class="text-[12.5px] font-bold">{{ channel.provider }}</span>
+                  <span v-if="channel.account_name" class="text-[11px] text-muted-3">{{ t('pos.account_holder', { name: channel.account_name }) }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="bankChannels.length" class="flex flex-col gap-2">
+              <span class="text-center text-[10.5px] font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.bank_payment_title') }}</span>
+              <div v-for="channel in bankChannels" :key="channel.id" class="flex flex-col gap-0.5 rounded-lg border border-line-3 bg-surface-subtle px-3 py-2.5">
+                <span class="text-[12.5px] font-bold">{{ channel.provider }}</span>
+                <span v-if="channel.account_number" class="truncate font-mono text-[13px] font-semibold">{{ channel.account_number }}</span>
+                <span v-if="channel.account_name" class="text-[11px] text-muted-3">{{ t('pos.account_holder', { name: channel.account_name }) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 022-preorder-invoice-crud-overhaul (US3, FR-010) — memakai
+             receipt_footer_text yang sudah ada (Assumptions spec.md), bukan
+             field baru. Hilang seluruhnya kalau belum dikonfigurasi. -->
+        <p v-if="invoice.footer_text" class="border-t border-dashed border-line-2 pt-3 text-center text-[11.5px] leading-relaxed text-muted-3">
+          {{ invoice.footer_text }}
+        </p>
       </div>
     </div>
 
     <template #footer>
       <BaseButton variant="primary" class="w-full" @click="emit('close')">{{ t('common.close') }}</BaseButton>
     </template>
+
+    <ImageLightbox :open="!!lightboxSrc" :src="lightboxSrc" :alt="lightboxAlt" @close="lightboxSrc = null" />
   </BaseModal>
 </template>

@@ -211,7 +211,13 @@ Route::prefix('v1')->group(function () {
         // sebagai {preorder} id dan gagal route-model-binding.
         Route::get('/preorders/summary', [PreorderController::class, 'summary']);
 
-        Route::apiResource('preorders', PreorderController::class)->only(['index', 'store', 'show']);
+        // 022-preorder-invoice-crud-overhaul (US5) — rute statis 'bulk-*'
+        // WAJIB didaftarkan SEBELUM apiResource('preorders', ...)'s 'show',
+        // alasan sama seperti 'export'/'import'/'summary' di atas.
+        Route::post('/preorders/bulk-invoices', [PreorderController::class, 'bulkInvoices']);
+        Route::post('/preorders/bulk-email', [PreorderController::class, 'bulkEmailInvoices']);
+
+        Route::apiResource('preorders', PreorderController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::patch('/preorders/{preorder}/status', [PreorderController::class, 'updateStatus']);
         Route::post('/preorders/{preorder}/payments', [PreorderController::class, 'storePayment']);
         Route::post('/preorders/{preorder}/shipment', [ShipmentController::class, 'store']);

@@ -7,29 +7,38 @@ use App\Models\Customer;
 use App\Models\Event;
 use App\Models\Preorder;
 use App\Models\ProductVariant;
+use App\Support\Couriers;
+use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 
 /**
- * 007-preorder-import-export-notify (US3) — export/import pre-order lewat
- * SATU workbook terpisah (bukan sheet kelima di MasterDataSheets::ORDER —
- * pre-order adalah data transaksional, bukan master data toko, research.md
- * R3). Meniru dua konvensi MasterDataImportService yang paling penting:
- * validasi PENUH dulu baru terapkan sekaligus (all-or-nothing), dan
- * dry_run melewati jalur validasi yang identik untuk pratinjau.
+ * 022-preorder-invoice-crud-overhaul (US7, FR-017/FR-018) — layout
+ * ONE-ROW-PER-ORDER, MENGGANTIKAN SELURUHNYA format row-per-item milik
+ * feature 007 (resolved Question 3 = full replace, tidak ada dua format
+ * paralel). `event_id` diganti `event_name` (dicocokkan lewat nama, bukan
+ * ID), `customer_phone`/`customer_email` dihapus, `fulfillment` menerima
+ * kata "pickup"/"mail order" (bukan enum internal `pickup`/`courier`),
+ * `pickup_day` ditulis sebagai teks "Day N" (diselesaikan ke tanggal asli
+ * lewat rentang tanggal event yang cocok — sama seperti resolvePickupDay
+ * AndCourier() di PreorderService, hanya berbeda BENTUK inputnya di sini),
+ * dan item/qty/harga satuan pesanan ditulis sebagai TIGA kolom
+ * comma-separated yang dicocokkan berdasarkan POSISI
+ * (products[i] ↔ quantities[i] ↔ unit_prices[i]).
  *
- * Satu baris berkas = satu ITEM. Baris-baris berurutan dengan
- * `customer_name` KOSONG dianggap kelanjutan pesanan pada baris terakhir
- * yang punya `customer_name` terisi (data-model.md) — konvensi pengarsipan
- * spreadsheet yang umum, meniru pola pengelompokan baris multi-item yang
- * sama seperti banyak sheet Excel lain.
+ * Tetap meniru dua konvensi MasterDataImportService: validasi PENUH dulu
+ * baru terapkan sekaligus (all-or-nothing), dan dry_run melewati jalur
+ * validasi yang identik untuk pratinjau. export() memakai kolom yang SAMA
+ * PERSIS dengan template()/HEADINGS, supaya file hasil ekspor bisa
+ * diimpor balik apa adanya (round-trip, SC-005).
  */
 class PreorderExportImportService
 {
     private const HEADINGS = [
-        'customer_name', 'customer_phone', 'customer_email',
-        'event_id', 'fulfillment', 'sku', 'qty', 'unit_price', 'notes',
+        'customer_name', 'event_name', 'fulfillment', 'pickup_day',
+        'products', 'quantities', 'unit_prices',
+        'shipping_cost', 'courier_name', 'expected_date', 'discount', 'notes',
     ];
 
     public function __construct(private PreorderService $preorderService) {}
@@ -37,7 +46,7 @@ class PreorderExportImportService
     public function export(array $filters): array
     {
         $query = Preorder::query()
-            ->with('customer')
+            ->with(['customer', 'event', 'items'])
             ->when(! empty($filters['status']), fn ($q) => $q->where('status', $filters['status']))
             ->when(! empty($filters['event_id']), fn ($q) => $q->where('event_id', $filters['event_id']))
             ->when(! empty($filters['customer_id']), fn ($q) => $q->where('customer_id', $filters['customer_id']))
@@ -51,14 +60,36 @@ class PreorderExportImportService
             ->orderByDesc('created_at');
 
         return $query->get()->map(fn (Preorder $p) => [
-            'preorder_number' => $p->preorder_number,
             'customer_name' => $p->customer?->name,
-            'status' => $p->status,
-            'fulfillment' => $p->fulfillment,
-            'total_amount' => number_format((float) $p->total_amount, 2, '.', ''),
-            'paid_amount' => number_format((float) $p->paid_amount, 2, '.', ''),
-            'created_at' => $p->created_at?->toDateTimeString(),
+            'event_name' => $p->event?->name,
+            'fulfillment' => $p->fulfillment === 'courier' ? 'mail order' : 'pickup',
+            'pickup_day' => $this->pickupDayToLabel($p),
+            'products' => $p->items->pluck('sku_snapshot')->implode(','),
+            'quantities' => $p->items->pluck('qty')->implode(','),
+            'unit_prices' => $p->items->map(fn ($i) => number_format((float) $i->sell_price, 2, '.', ''))->implode(','),
+            'shipping_cost' => number_format((float) $p->shipping_cost, 2, '.', ''),
+            'courier_name' => $p->courier_name,
+            'expected_date' => $p->expected_date?->toDateString(),
+            'discount' => number_format((float) $p->discount, 2, '.', ''),
+            'notes' => $p->notes,
         ])->all();
+    }
+
+    /**
+     * research.md Decision 7 — arah kebalikan dari resolvePickupDayLabel():
+     * tanggal asli yang sudah tersimpan diubah kembali jadi label
+     * "Day N" relatif terhadap tanggal mulai event, supaya export bisa
+     * diimpor ulang apa adanya (round-trip).
+     */
+    private function pickupDayToLabel(Preorder $p): ?string
+    {
+        if (! $p->pickup_day || ! $p->event) {
+            return null;
+        }
+
+        $dayNumber = $p->event->start_date->diffInDays($p->pickup_day) + 1;
+
+        return "Day {$dayNumber}";
     }
 
     public function template(): array
@@ -72,68 +103,150 @@ class PreorderExportImportService
     public function import(UploadedFile $file, bool $dryRun, \App\Models\User $importedBy): array
     {
         $rows = Excel::toArray(new PreorderImport, $file)[0] ?? [];
-        $groups = $this->groupRows($rows);
 
         $rowErrors = [];
         $validated = [];
 
-        foreach ($groups as $group) {
+        foreach ($rows as $i => $row) {
+            $rowNumber = $i + 2; // +1 for 0-index, +1 for the heading row itself
             $errors = [];
-            $customerName = trim((string) ($group['customer_name'] ?? ''));
 
+            $customerName = trim((string) ($row['customer_name'] ?? ''));
             if ($customerName === '') {
                 $errors[] = __('preorders.import_customer_name_required');
             }
 
-            if (! empty($group['event_id']) && ! Event::where('id', $group['event_id'])->exists()) {
-                $errors[] = __('preorders.import_event_not_found', ['id' => $group['event_id']]);
+            $eventName = trim((string) ($row['event_name'] ?? ''));
+            $eventId = null;
+            if ($eventName !== '') {
+                $matches = Event::where('name', $eventName)->get();
+                if ($matches->count() === 0) {
+                    $errors[] = __('preorders.import_event_name_not_found', ['row' => $rowNumber, 'name' => $eventName]);
+                } elseif ($matches->count() > 1) {
+                    $errors[] = __('preorders.import_event_name_ambiguous', ['row' => $rowNumber, 'name' => $eventName]);
+                } else {
+                    $eventId = $matches->first()->id;
+                }
             }
+
+            $fulfillmentInput = strtolower(trim((string) ($row['fulfillment'] ?? '')));
+            $fulfillment = match ($fulfillmentInput) {
+                'pickup' => 'pickup',
+                'mail order' => 'courier',
+                default => null,
+            };
+            if ($fulfillment === null) {
+                $errors[] = __('preorders.import_fulfillment_invalid', ['row' => $rowNumber]);
+                $fulfillment = 'pickup'; // fallback so the rest of the row can still be validated
+            }
+
+            // FR-018 — products/quantities/unit_prices dicocokkan lewat
+            // POSISI; jumlah yang berbeda ditolak sebagai galat baris,
+            // bukan dipotong/ditebak diam-diam.
+            $products = $this->splitCsv($row['products'] ?? null);
+            $quantities = $this->splitCsv($row['quantities'] ?? null);
+            $unitPrices = $this->splitCsv($row['unit_prices'] ?? null);
 
             $items = [];
-            foreach ($group['items'] as $item) {
-                $sku = trim((string) ($item['sku'] ?? ''));
-                $qty = (int) ($item['qty'] ?? 0);
-                $unitPrice = (float) ($item['unit_price'] ?? 0);
+            if ($products === []) {
+                $errors[] = __('preorders.import_no_items', ['row' => $rowNumber]);
+            } elseif (count($products) !== count($quantities) || count($products) !== count($unitPrices)) {
+                $errors[] = __('preorders.import_products_quantities_mismatch', ['row' => $rowNumber]);
+            } else {
+                foreach ($products as $idx => $sku) {
+                    $sku = trim($sku);
+                    $qty = (int) trim($quantities[$idx]);
+                    $unitPrice = (float) trim($unitPrices[$idx]);
 
-                if ($sku === '') {
-                    $errors[] = __('preorders.import_sku_required', ['row' => $item['row']]);
+                    if ($sku === '') {
+                        $errors[] = __('preorders.import_sku_required', ['row' => $rowNumber]);
 
-                    continue;
+                        continue;
+                    }
+
+                    $variant = ProductVariant::with('product')->where('sku', $sku)->first();
+                    if (! $variant) {
+                        $errors[] = __('preorders.import_sku_not_found', ['row' => $rowNumber, 'sku' => $sku]);
+
+                        continue;
+                    }
+
+                    if ($qty < 1) {
+                        $errors[] = __('preorders.import_qty_invalid', ['row' => $rowNumber]);
+
+                        continue;
+                    }
+
+                    $items[] = ['variant' => $variant, 'qty' => $qty, 'unit_price' => $unitPrice, 'line_total' => $qty * $unitPrice];
                 }
-
-                $variant = ProductVariant::with('product')->where('sku', $sku)->first();
-                if (! $variant) {
-                    $errors[] = __('preorders.import_sku_not_found', ['row' => $item['row'], 'sku' => $sku]);
-
-                    continue;
-                }
-
-                if ($qty < 1) {
-                    $errors[] = __('preorders.import_qty_invalid', ['row' => $item['row']]);
-
-                    continue;
-                }
-
-                $items[] = ['variant' => $variant, 'qty' => $qty, 'unit_price' => $unitPrice, 'line_total' => $qty * $unitPrice];
             }
 
-            if ($items === []) {
-                $errors[] = __('preorders.import_no_items');
+            $subtotal = array_sum(array_column($items, 'line_total'));
+
+            $discountInput = $row['discount'] ?? null;
+            $discount = ($discountInput === null || $discountInput === '') ? 0.0 : (float) $discountInput;
+            if ($discount < 0 || $discount > $subtotal) {
+                $errors[] = __('preorders.import_discount_invalid', ['row' => $rowNumber]);
+            }
+
+            // research.md Decision 7 — sama persis dengan aturan cross-field
+            // PreorderService::resolvePickupDayAndCourier(), hanya bentuk
+            // input pickup_day-nya "Day N" (bukan tanggal asli).
+            $pickupDayInput = trim((string) ($row['pickup_day'] ?? ''));
+            $pickupDayInput = $pickupDayInput !== '' ? $pickupDayInput : null;
+            $courierInput = trim((string) ($row['courier_name'] ?? ''));
+            $courierInput = $courierInput !== '' ? $courierInput : null;
+            $pickupDay = null;
+            $courierName = null;
+
+            if ($fulfillment === 'courier') {
+                if ($pickupDayInput !== null) {
+                    $errors[] = __('preorders.import_pickup_day_not_applicable', ['row' => $rowNumber]);
+                }
+                if ($courierInput !== null && ! in_array($courierInput, Couriers::OPTIONS, true)) {
+                    $errors[] = __('preorders.import_courier_unknown', ['row' => $rowNumber, 'courier' => $courierInput]);
+                } else {
+                    $courierName = $courierInput ?: Couriers::DEFAULT;
+                }
+            } else { // pickup
+                if ($courierInput !== null) {
+                    $errors[] = __('preorders.import_courier_not_applicable', ['row' => $rowNumber]);
+                }
+                if ($pickupDayInput !== null) {
+                    $event = $eventId ? Event::find($eventId) : null;
+                    if (! $event) {
+                        $errors[] = __('preorders.import_pickup_day_requires_event', ['row' => $rowNumber]);
+                    } else {
+                        $dayNumber = $this->parseDayLabel($pickupDayInput);
+                        if ($dayNumber === null) {
+                            $errors[] = __('preorders.import_pickup_day_invalid_format', ['row' => $rowNumber]);
+                        } else {
+                            $pickupDay = $event->start_date->copy()->addDays($dayNumber - 1)->toDateString();
+                            if ($pickupDay > $event->end_date->toDateString()) {
+                                $errors[] = __('preorders.import_pickup_day_out_of_range', ['row' => $rowNumber]);
+                                $pickupDay = null;
+                            }
+                        }
+                    }
+                }
             }
 
             if ($errors !== []) {
-                $rowErrors[] = ['row' => $group['first_row'], 'errors' => $errors];
+                $rowErrors[] = ['row' => $rowNumber, 'errors' => $errors];
 
                 continue;
             }
 
             $validated[] = [
                 'customer_name' => $customerName,
-                'customer_phone' => trim((string) ($group['customer_phone'] ?? '')) ?: null,
-                'customer_email' => trim((string) ($group['customer_email'] ?? '')) ?: null,
-                'event_id' => $group['event_id'] ?: null,
-                'fulfillment' => in_array($group['fulfillment'] ?? '', ['pickup', 'courier'], true) ? $group['fulfillment'] : 'pickup',
-                'notes' => $group['notes'] ?? null,
+                'event_id' => $eventId,
+                'fulfillment' => $fulfillment,
+                'shipping_cost' => (float) ($row['shipping_cost'] ?? 0),
+                'discount' => $discount,
+                'pickup_day' => $pickupDay,
+                'courier_name' => $courierName,
+                'expected_date' => trim((string) ($row['expected_date'] ?? '')) ?: null,
+                'notes' => $row['notes'] ?? null,
                 'items' => $items,
             ];
         }
@@ -161,11 +274,7 @@ class PreorderExportImportService
             foreach ($validated as $order) {
                 $customer = Customer::where('name', $order['customer_name'])->first();
                 if (! $customer) {
-                    $customer = Customer::create([
-                        'name' => $order['customer_name'],
-                        'phone' => $order['customer_phone'],
-                        'email' => $order['customer_email'],
-                    ]);
+                    $customer = Customer::create(['name' => $order['customer_name']]);
                     $createdCustomerCount++;
                 }
 
@@ -189,8 +298,12 @@ class PreorderExportImportService
                     'status' => 'ordered',
                     'fulfillment' => $order['fulfillment'],
                     'subtotal' => $subtotal,
-                    'shipping_cost' => 0,
-                    'total_amount' => $subtotal,
+                    'shipping_cost' => $order['shipping_cost'],
+                    'discount' => $order['discount'],
+                    'total_amount' => $subtotal + $order['shipping_cost'] - $order['discount'],
+                    'pickup_day' => $order['pickup_day'],
+                    'courier_name' => $order['courier_name'],
+                    'expected_date' => $order['expected_date'],
                     'paid_amount' => 0,
                     'notes' => $order['notes'],
                 ]);
@@ -221,34 +334,28 @@ class PreorderExportImportService
     }
 
     /**
-     * @return array<int, array{customer_name: ?string, customer_phone: ?string, customer_email: ?string, event_id: ?int, fulfillment: ?string, notes: ?string, first_row: int, items: array}>
+     * @return string[]
      */
-    private function groupRows(array $rows): array
+    private function splitCsv(mixed $value): array
     {
-        $groups = [];
-        $currentIndex = -1;
-
-        foreach ($rows as $i => $row) {
-            $rowNumber = $i + 2; // +1 for 0-index, +1 for the heading row itself
-            $customerName = trim((string) ($row['customer_name'] ?? ''));
-
-            if ($customerName !== '' || $currentIndex === -1) {
-                $groups[] = [
-                    'customer_name' => $customerName,
-                    'customer_phone' => $row['customer_phone'] ?? null,
-                    'customer_email' => $row['customer_email'] ?? null,
-                    'event_id' => $row['event_id'] ?? null,
-                    'fulfillment' => $row['fulfillment'] ?? null,
-                    'notes' => $row['notes'] ?? null,
-                    'first_row' => $rowNumber,
-                    'items' => [],
-                ];
-                $currentIndex++;
-            }
-
-            $groups[$currentIndex]['items'][] = ['sku' => $row['sku'] ?? null, 'qty' => $row['qty'] ?? null, 'unit_price' => $row['unit_price'] ?? null, 'row' => $rowNumber];
+        $value = trim((string) ($value ?? ''));
+        if ($value === '') {
+            return [];
         }
 
-        return $groups;
+        return array_map('trim', explode(',', $value));
+    }
+
+    /**
+     * "Day 1" / "day 2" / "Day  3" → 1 / 2 / 3; null kalau bentuknya tidak
+     * dikenali (research.md Decision 7).
+     */
+    private function parseDayLabel(string $label): ?int
+    {
+        if (preg_match('/^day\s*(\d+)$/i', $label, $m) !== 1) {
+            return null;
+        }
+
+        return (int) $m[1];
     }
 }
