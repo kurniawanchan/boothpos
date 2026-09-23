@@ -68,18 +68,24 @@ const heading = computed(() => {
 const statusLabel = computed(() => (invoice.value ? t(STATUS_LABEL_KEY[invoice.value.status] ?? invoice.value.status) : ''));
 const statusVariant = computed(() => STATUS_VARIANT[invoice.value?.status] ?? 'neutral');
 
-// 014-sales-receipt-event-footer (US2, FR-005/006/007) — logika sama
-// dengan ReceiptModal.vue (research.md R3/R4), diduplikasi sengaja
-// karena tidak ada shared component untuk footer dua-baris ini.
-const eventInfoLine = computed(() => {
-  if (!invoice.value) return '';
-  const start = invoice.value.event_start_date;
-  const end = invoice.value.event_end_date;
-  if (start && end) {
-    return start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`;
-  }
-  return formatDate(start || end || null) === '—' ? '' : formatDate(start || end);
-});
+// 024-invoice-layout-shipping-slip (US2, research.md Decision 6) — judul
+// jendela dokumen, TERPISAH dari badge "Invoice" kecil di dalam badan
+// dokumen (heading di atas, document_invoice_title) — bukan reuse.
+const documentTitle = computed(() => (invoice.value ? `${t('preorders.document_title_invoice')} — ${invoice.value.preorder_number}` : ''));
+
+// 024-invoice-layout-shipping-slip (US3, research.md Decision 4) — kanal
+// pembayaran dipecah berdasarkan field `type` yang sudah ada, bukan
+// kategorisasi baru.
+const qrChannels = computed(() => invoice.value?.payment_channels?.filter((c) => c.type === 'qr_ewallet') ?? []);
+const bankChannels = computed(() => invoice.value?.payment_channels?.filter((c) => c.type === 'bank_transfer') ?? []);
+
+// 024-invoice-layout-shipping-slip (US4, research.md Decision 5) — surat
+// jalan HANYA untuk Mail Order (fulfillment === 'courier'), sumber datanya
+// sepenuhnya dari payload invoice yang sudah ada (customer/store_identity),
+// bukan Shipment — supaya tetap bisa dicetak sebelum data pengiriman
+// sungguhan dibuat.
+const showShippingSlip = computed(() => invoice.value?.fulfillment === 'courier');
+const itemTypes = computed(() => [...new Set((invoice.value?.items ?? []).map((i) => i.name_snapshot))]);
 
 async function load() {
   if (!props.preorderId) {

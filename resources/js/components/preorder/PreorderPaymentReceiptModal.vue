@@ -84,6 +84,14 @@ const paymentEventLabel = computed(() => {
   return `${purposeLabel} — ${formatDateTime(payment.value.paid_at)}`;
 });
 
+// 024-invoice-layout-shipping-slip — dicerminkan dari PreorderInvoiceModal.vue
+// (research.md Decision 4/5), dokumen ini berbagi payload yang sama lewat
+// getPreorderInvoice().
+const qrChannels = computed(() => preorder.value?.payment_channels?.filter((c) => c.type === 'qr_ewallet') ?? []);
+const bankChannels = computed(() => preorder.value?.payment_channels?.filter((c) => c.type === 'bank_transfer') ?? []);
+const showShippingSlip = computed(() => preorder.value?.fulfillment === 'courier');
+const itemTypes = computed(() => [...new Set((preorder.value?.items ?? []).map((i) => i.name_snapshot))]);
+
 async function load() {
   if (!props.preorderId) {
     preorder.value = null;

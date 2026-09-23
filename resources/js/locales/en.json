@@ -732,7 +732,15 @@
     "paid_this_time": "Paid this time",
     "store_logo_alt": "Store logo",
     "payment_terms_title": "Ways to pay",
-    "shipping_cost_label": "Shipping cost"
+    "shipping_cost_label": "Shipping cost",
+    "document_title_invoice": "Pre-order Invoice",
+    "created_at_label": "Created on",
+    "to_label": "To",
+    "qr_payment_title": "QR",
+    "bank_payment_title": "Bank transfer",
+    "shipping_slip_title": "Shipping slip",
+    "from_label": "From",
+    "item_type_label": "Item type"
   },
   "reports": {
     "all_events": "All events",

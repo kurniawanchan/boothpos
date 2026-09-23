@@ -732,7 +732,15 @@
     "paid_this_time": "Dibayar kali ini",
     "store_logo_alt": "Logo toko",
     "payment_terms_title": "Cara pembayaran",
-    "shipping_cost_label": "Ongkos kirim"
+    "shipping_cost_label": "Ongkos kirim",
+    "document_title_invoice": "Invoice Pre-order",
+    "created_at_label": "Dibuat pada",
+    "to_label": "Kepada",
+    "qr_payment_title": "QR",
+    "bank_payment_title": "Transfer bank",
+    "shipping_slip_title": "Surat jalan",
+    "from_label": "Dari",
+    "item_type_label": "Jenis barang"
   },
   "reports": {
     "all_events": "Semua event",
