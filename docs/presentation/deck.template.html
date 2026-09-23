@@ -1,0 +1,1322 @@
+<title>BoothPOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+/* ============================================================
+   BoothPOS deck — palette lifted from the product's own
+   design tokens (resources/css/app.css @theme block), not invented:
+   brand green #2f9e6e is the shipped default, accent purple #8b2f9d
+   is what this demo store themes itself at runtime.
+   ============================================================ */
+:root{
+  --ink:#14201b; --ink-2:#22332b;
+  --brand:#2f9e6e; --brand-deep:#1e6b4b; --brand-soft:#e4f3ec;
+  --accent:#8b2f9d; --accent-soft:#f3e8f6;
+  --canvas:#eef2f0; --surface:#ffffff; --surface-2:#f7f9f8;
+  --line:#dae3de; --line-soft:#e9efec;
+  --muted:#5d6f66; --muted-2:#7e8e86;
+  --warn:#8a6a1e; --warn-bg:#fbf7ec; --warn-line:#e6d3a6;
+  --danger:#a2534b; --danger-bg:#fbedec; --danger-line:#eccdc9;
+  --shadow:0 1px 2px rgba(20,32,27,.05), 0 10px 30px -12px rgba(20,32,27,.16);
+  --shadow-lift:0 2px 6px rgba(20,32,27,.07), 0 26px 60px -22px rgba(20,32,27,.3);
+  --display:'Bricolage Grotesque','Plus Jakarta Sans',system-ui,sans-serif;
+  --body:'Plus Jakarta Sans',system-ui,-apple-system,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --gut:clamp(20px,4.5vw,72px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#eaf2ee; --ink-2:#cfded7;
+    --brand:#54c894; --brand-deep:#8fe0b8; --brand-soft:#16281f;
+    --accent:#d98ce8; --accent-soft:#2a1730;
+    --canvas:#0d1512; --surface:#151f1b; --surface-2:#1a2521;
+    --line:#2a3a33; --line-soft:#223029;
+    --muted:#9db0a7; --muted-2:#7f938b;
+    --warn:#e3c07a; --warn-bg:#241f14; --warn-line:#463a20;
+    --danger:#e39b93; --danger-bg:#2a1a18; --danger-line:#4a2c28;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -12px rgba(0,0,0,.6);
+    --shadow-lift:0 2px 6px rgba(0,0,0,.5), 0 26px 60px -22px rgba(0,0,0,.75);
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#eaf2ee; --ink-2:#cfded7;
+  --brand:#54c894; --brand-deep:#8fe0b8; --brand-soft:#16281f;
+  --accent:#d98ce8; --accent-soft:#2a1730;
+  --canvas:#0d1512; --surface:#151f1b; --surface-2:#1a2521;
+  --line:#2a3a33; --line-soft:#223029;
+  --muted:#9db0a7; --muted-2:#7f938b;
+  --warn:#e3c07a; --warn-bg:#241f14; --warn-line:#463a20;
+  --danger:#e39b93; --danger-bg:#2a1a18; --danger-line:#4a2c28;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 30px -12px rgba(0,0,0,.6);
+  --shadow-lift:0 2px 6px rgba(0,0,0,.5), 0 26px 60px -22px rgba(0,0,0,.75);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto} *{animation:none!important;transition:none!important}}
+body{
+  margin:0; background:var(--canvas); color:var(--ink);
+  font-family:var(--body); font-size:16px; line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  scroll-snap-type:y proximity; overflow-x:hidden;
+}
+img{max-width:100%; display:block}
+
+/* ---------- slide frame ---------- */
+.slide{
+  min-height:100svh; scroll-snap-align:start; scroll-snap-stop:always;
+  padding-block:clamp(38px,5.4vh,64px) clamp(44px,6vh,74px);
+  padding-inline:var(--gut);
+  display:flex; flex-direction:column; justify-content:safe center;
+  scroll-margin-top:22px;
+  position:relative; border-bottom:1px solid var(--line-soft);
+}
+.slide>.inner{width:100%; max-width:1180px; margin-inline:auto}
+.slide--tight>.inner{max-width:980px}
+.slide--wide>.inner{max-width:1320px}
+
+/* eyebrow: chapter number + name. Numbered because the deck IS a
+   fixed sequence — the order carries meaning for the reader. */
+.eyebrow{
+  display:flex; align-items:center; gap:10px; margin-bottom:18px;
+  font-family:var(--mono); font-size:11px; font-weight:600;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--muted-2);
+}
+.eyebrow b{color:var(--accent); font-weight:600}
+.eyebrow .tick{flex:1; height:1px; background:repeating-linear-gradient(90deg,var(--line) 0 5px,transparent 5px 10px)}
+
+h1,h2,h3,h4{font-family:var(--display); text-wrap:balance; margin:0; line-height:1.06; letter-spacing:-.02em}
+h1{font-size:clamp(40px,6.6vw,80px); font-weight:800}
+h2{font-size:clamp(25px,3.3vw,42px); font-weight:700}
+h3{font-size:clamp(18px,1.85vw,23px); font-weight:700; line-height:1.22}
+h4{font-size:15px; font-weight:700; letter-spacing:-.01em}
+p{margin:0}
+.lede{font-size:clamp(15px,1.35vw,18px); color:var(--muted); max-width:62ch; margin-top:16px; line-height:1.6}
+.sub{font-size:14px; color:var(--muted); max-width:70ch}
+.stack{display:flex; flex-direction:column}
+.stack-6{gap:6px}.stack-10{gap:10px}.stack-14{gap:14px}.stack-18{gap:18px}
+.stack-24{gap:24px}.stack-32{gap:32px}
+
+/* receipt-tape rule — the product prints receipts with dashed
+   separators; the deck borrows that as its divider motif. */
+.tape{height:1px; background:repeating-linear-gradient(90deg,var(--line) 0 6px,transparent 6px 12px)}
+
+/* ---------- cover ---------- */
+.cover{background:var(--ink); color:#eaf2ee; border-bottom:none}
+.cover .lede,.cover .sub{color:#9db0a7}
+.cover h1{font-size:clamp(32px,5.4vw,66px); letter-spacing:-.032em}
+.cover .mark{
+  display:inline-flex; align-items:center; gap:11px; font-family:var(--mono);
+  font-size:11px; letter-spacing:.24em; text-transform:uppercase; color:#8fc9ae;
+}
+.cover .mark span{width:26px; height:26px; border-radius:7px; background:var(--brand); display:grid; place-items:center; color:#0d1512; font-weight:700; font-size:13px; font-family:var(--display); letter-spacing:0}
+.cover-grid{display:grid; grid-template-columns:1.15fr .85fr; gap:clamp(28px,5vw,72px); align-items:end}
+@media (max-width:860px){.cover-grid{grid-template-columns:1fr; align-items:start}}
+.cover-facts{display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:#22332b; border:1px solid #22332b; border-radius:12px; overflow:hidden}
+.cover-facts div{background:var(--ink); padding:15px 17px}
+.cover-facts dt{font-family:var(--mono); font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:#7f938b; margin-bottom:5px}
+.cover-facts dd{margin:0; font-family:var(--display); font-size:23px; font-weight:700; color:#eaf2ee; letter-spacing:-.02em}
+.cover-facts dd small{display:block; margin-top:4px; font-size:11.5px; font-family:var(--body); font-weight:500; line-height:1.4; color:#8fc9ae; letter-spacing:0}
+
+/* ---------- chapter divider ---------- */
+.chapter{background:var(--ink); color:#eaf2ee}
+.chapter h2{font-size:clamp(30px,5vw,62px); color:#fff}
+.chapter .lede{color:#9db0a7; max-width:56ch}
+.chapter .num{font-family:var(--mono); font-size:12px; letter-spacing:.3em; color:var(--brand); margin-bottom:22px; display:block}
+.chapter-toc{display:flex; flex-wrap:wrap; gap:7px; margin-top:34px}
+.chapter-toc span{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; padding:5px 10px; border:1px solid #2a3a33; border-radius:99px; color:#7f938b}
+.chapter-toc span.on{border-color:var(--brand); color:#0d1512; background:var(--brand); font-weight:600}
+
+/* ---------- generic cards ---------- */
+.grid{display:grid; gap:14px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+@media (max-width:980px){.g3,.g4{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:620px){.g2,.g3,.g4{grid-template-columns:1fr}}
+
+.card{background:var(--surface); border:1px solid var(--line); border-radius:13px; padding:18px 19px; box-shadow:var(--shadow)}
+.card h4{margin-bottom:7px}
+.card p{font-size:13.5px; color:var(--muted); line-height:1.55}
+.card .idx{font-family:var(--mono); font-size:10px; color:var(--accent); letter-spacing:.1em; display:block; margin-bottom:9px}
+
+/* pain/answer pair — not a card grid, a two-column ledger, because
+   the content genuinely is paired opposites */
+.ledger{display:grid; gap:0; border:1px solid var(--line); border-radius:13px; overflow:hidden; background:var(--surface)}
+.ledger .row{display:grid; grid-template-columns:1fr 1fr; gap:0; border-bottom:1px solid var(--line-soft)}
+.ledger .row:last-child{border-bottom:none}
+.ledger .row>div{padding:15px 18px}
+.ledger .row>div:first-child{border-right:1px solid var(--line-soft); background:var(--surface-2)}
+.ledger .pain{font-weight:600; font-size:14px; color:var(--ink)}
+.ledger .pain em{display:block; font-style:normal; font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--danger); margin-bottom:6px}
+.ledger .fix{font-size:13.5px; color:var(--muted); line-height:1.55}
+.ledger .fix em{display:block; font-style:normal; font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--brand); margin-bottom:6px}
+@media (max-width:760px){.ledger .row{grid-template-columns:1fr}.ledger .row>div:first-child{border-right:none;border-bottom:1px solid var(--line-soft)}}
+
+/* ---------- screenshot frame ---------- */
+figure{margin:0}
+.shot{
+  border:1px solid var(--line); border-radius:12px; overflow:hidden;
+  background:var(--surface-2); box-shadow:var(--shadow-lift);
+}
+.shot .bar{
+  display:flex; align-items:center; gap:7px; padding:8px 12px;
+  background:var(--surface); border-bottom:1px solid var(--line);
+}
+.shot .bar i{width:9px; height:9px; border-radius:50%; background:var(--line); display:block}
+.shot .bar code{
+  margin-left:8px; font-family:var(--mono); font-size:10.5px; color:var(--muted-2);
+  background:var(--surface-2); border:1px solid var(--line-soft); border-radius:5px; padding:2px 8px;
+}
+.shot img{width:100%; height:auto; max-height:min(52svh,600px); object-fit:contain; object-position:top center; background:var(--surface-2)}
+figcaption{margin-top:10px; font-size:12.5px; color:var(--muted-2); line-height:1.5}
+figcaption b{color:var(--muted); font-weight:600}
+
+.feature{display:grid; grid-template-columns:minmax(0,1.32fr) minmax(0,1fr); gap:clamp(22px,3.4vw,46px); align-items:center}
+.feature.flip{grid-template-columns:minmax(0,1fr) minmax(0,1.32fr)}
+.feature.flip .copy{order:-1}
+@media (max-width:940px){.feature,.feature.flip{grid-template-columns:1fr}.feature.flip .copy{order:0}}
+
+/* how-to steps */
+.howto{counter-reset:s; display:flex; flex-direction:column; gap:9px; margin-top:4px}
+.howto li{
+  counter-increment:s; list-style:none; position:relative;
+  padding-left:30px; font-size:13.5px; color:var(--muted); line-height:1.5;
+}
+.howto li::before{
+  content:counter(s,decimal-leading-zero); position:absolute; left:0; top:1px;
+  font-family:var(--mono); font-size:10px; font-weight:600; color:var(--accent);
+  background:var(--accent-soft); border-radius:5px; width:21px; height:18px;
+  display:grid; place-items:center;
+}
+.howto b{color:var(--ink); font-weight:600}
+
+.chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:14px}
+.chip{font-family:var(--mono); font-size:10.5px; letter-spacing:.05em; padding:4px 9px; border-radius:99px; border:1px solid var(--line); color:var(--muted); background:var(--surface)}
+.chip.b{border-color:var(--brand); color:var(--brand-deep); background:var(--brand-soft)}
+.chip.a{border-color:var(--accent); color:var(--accent); background:var(--accent-soft)}
+
+/* note strips — semantic, separate from the accent hue */
+.note{border-left:3px solid var(--brand); background:var(--brand-soft); padding:12px 15px; border-radius:0 9px 9px 0; font-size:13px; color:var(--ink-2); line-height:1.55}
+.note.warn{border-left-color:var(--warn); background:var(--warn-bg); color:var(--warn)}
+.note.stop{border-left-color:var(--danger); background:var(--danger-bg); color:var(--danger)}
+.note strong{font-weight:700}
+
+/* metric tiles — used only where the figures ARE the point */
+.metrics{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:13px; overflow:hidden}
+@media (max-width:900px){.metrics{grid-template-columns:repeat(2,1fr)}}
+.metrics div{background:var(--surface); padding:17px 18px}
+.metrics dt{font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted-2); margin-bottom:6px}
+.metrics dd{margin:0; font-family:var(--display); font-size:clamp(26px,3vw,38px); font-weight:800; letter-spacing:-.03em; font-variant-numeric:tabular-nums}
+.metrics dd small{display:block; font-family:var(--body); font-size:11.5px; font-weight:500; color:var(--muted-2); letter-spacing:0; margin-top:3px}
+
+/* data table */
+table{width:100%; border-collapse:collapse; font-size:13px}
+.tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--surface)}
+th{text-align:left; font-family:var(--mono); font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted-2); padding:11px 14px; border-bottom:1px solid var(--line); font-weight:600; white-space:nowrap}
+td{padding:11px 14px; border-bottom:1px solid var(--line-soft); color:var(--muted); vertical-align:top}
+tr:last-child td{border-bottom:none}
+td b{color:var(--ink); font-weight:600}
+td.num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap}
+
+/* flow rail */
+.flow{display:flex; flex-direction:column; gap:0; border:1px solid var(--line); border-radius:13px; overflow:hidden; background:var(--surface)}
+.flow .step{display:grid; grid-template-columns:78px 1fr 210px; gap:0; border-bottom:1px solid var(--line-soft); align-items:stretch}
+.flow .step:last-child{border-bottom:none}
+.flow .who{background:var(--surface-2); border-right:1px solid var(--line-soft); padding:12px 12px; font-family:var(--mono); font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted-2); display:flex; align-items:center}
+.flow .act{padding:12px 16px; font-size:13.5px; color:var(--ink); font-weight:500; display:flex; align-items:center}
+.flow .eff{padding:12px 16px; border-left:1px solid var(--line-soft); font-size:12px; color:var(--muted); background:var(--surface-2); display:flex; align-items:center; line-height:1.45}
+.flow .step.up .eff{color:var(--brand-deep); background:var(--brand-soft); font-weight:600}
+.flow .step.down .eff{color:var(--accent); background:var(--accent-soft); font-weight:600}
+.flow .step.block .eff{color:var(--danger); background:var(--danger-bg); font-weight:600}
+@media (max-width:840px){.flow .step{grid-template-columns:1fr}.flow .who{border-right:none;border-bottom:1px solid var(--line-soft)}.flow .eff{border-left:none;border-top:1px solid var(--line-soft)}}
+
+/* gap list */
+.gaps{display:flex; flex-direction:column; gap:9px}
+.gapitem{display:grid; grid-template-columns:118px 1fr; gap:16px; padding:13px 16px; border:1px solid var(--line); border-radius:11px; background:var(--surface); align-items:start}
+.gapitem .tag{font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; padding:3px 8px; border-radius:5px; text-align:center; font-weight:600}
+.tag.cut{background:var(--surface-2); color:var(--muted-2); border:1px solid var(--line)}
+.tag.lim{background:var(--warn-bg); color:var(--warn); border:1px solid var(--warn-line)}
+.tag.sec{background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger-line)}
+.tag.plan{background:var(--brand-soft); color:var(--brand-deep); border:1px solid var(--brand)}
+.gapitem h4{font-size:13.5px; margin-bottom:4px}
+.gapitem p{font-size:12.5px; color:var(--muted); line-height:1.5}
+@media (max-width:620px){.gapitem{grid-template-columns:1fr; gap:8px}.gapitem .tag{justify-self:start}}
+
+/* classification banner */
+.classif{
+  position:fixed; top:0; left:0; right:0; z-index:60; height:22px;
+  background:var(--ink); color:#8fc9ae; display:flex; align-items:center; justify-content:center;
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.28em; text-transform:uppercase;
+}
+body{padding-top:22px}
+
+/* progress + nav */
+.rail{position:fixed; top:22px; left:0; height:2px; background:var(--accent); z-index:59; width:0}
+.hud{
+  position:fixed; right:14px; bottom:14px; z-index:58; display:flex; align-items:center; gap:8px;
+  background:var(--surface); border:1px solid var(--line); border-radius:99px; padding:5px 7px 5px 13px; box-shadow:var(--shadow);
+}
+.hud .pos{font-family:var(--mono); font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; letter-spacing:.03em}
+.hud button{
+  border:1px solid var(--line); background:var(--surface-2); color:var(--ink); cursor:pointer;
+  width:27px; height:27px; border-radius:50%; display:grid; place-items:center; font-size:13px; line-height:1; font-family:var(--body);
+}
+.hud button:hover{background:var(--brand-soft); border-color:var(--brand); color:var(--brand-deep)}
+.hud button:focus-visible,a:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+@media (max-width:620px){.hud{right:10px; bottom:10px}}
+
+.kbd{font-family:var(--mono); font-size:10.5px; border:1px solid var(--line); border-bottom-width:2px; border-radius:5px; padding:1px 6px; color:var(--muted); background:var(--surface)}
+
+/* print → PDF: one slide per landscape page */
+@media print{
+  .classif,.hud,.rail{display:none!important}
+  body{padding-top:0; background:#fff; scroll-snap-type:none}
+  .slide{min-height:auto; page-break-after:always; break-after:page; border-bottom:none; padding:26px 30px; display:block}
+  .cover,.chapter{background:#14201b!important; -webkit-print-color-adjust:exact; print-color-adjust:exact}
+  *{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+  @page{size:A4 landscape; margin:8mm}
+}
+</style>
+
+<div class="classif">Klasifikasi · Internal</div>
+<div class="rail" id="rail"></div>
+
+<!-- ═══════════════ COVER ═══════════════ -->
+<section class="slide cover">
+  <div class="inner stack stack-32">
+    <div class="mark"><span>B</span> BoothPOS</div>
+    <div class="cover-grid">
+      <div class="stack stack-24">
+        <h1>The till keeps<br>running when the<br>venue wifi dies.</h1>
+        <p class="lede">A point-of-sale system for event merchandise booths shared by several independent artists. It runs entirely on one laptop, ties every sale to an event and to the seller who owns the item, and hands you each artist's share the moment the doors close.</p>
+        <div class="chips">
+          <span class="chip b">One-time licence</span>
+          <span class="chip b">No cloud, no subscription</span>
+          <span class="chip b">Works fully offline</span>
+          <span class="chip a">Indonesian &amp; English</span>
+        </div>
+      </div>
+      <dl class="cover-facts">
+        <div><dt>Screens</dt><dd>27<small>plus 48 components</small></dd></div>
+        <div><dt>Endpoints</dt><dd>159<small>REST API</small></dd></div>
+        <div><dt>Automated tests</dt><dd>715<small>492 back + 223 front</small></dd></div>
+        <div><dt>Built in</dt><dd>8 days<small>19 specified features</small></dd></div>
+      </dl>
+    </div>
+    <div class="sub" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <span>Press <span class="kbd">→</span> or scroll to advance</span>
+      <span style="opacity:.5">·</span>
+      <span>Every screenshot is the running application, captured {{DATE}}</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 01 · INTRODUCTION ═══════════════ -->
+<section class="slide chapter">
+  <div class="inner">
+    <span class="num">CHAPTER 01</span>
+    <h2>Introduction</h2>
+    <p class="lede">What BoothPOS is, who runs it, and the one commercial decision that shapes everything else about it.</p>
+    <div class="chapter-toc">
+      <span class="on">01 Introduction</span><span>02 Problem</span><span>03 Goals</span><span>04 Methodology</span><span>05 Features</span><span>06 End-to-end flow</span><span>07 Result</span><span>08 Gap</span>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>01</b> Introduction <span class="tick"></span> What it is</div>
+    <h2>A till built for a booth with more than one owner.</h2>
+    <p class="lede">Most point-of-sale software assumes one shop, one owner, one cash drawer, and a reliable internet connection. An event merchandise booth breaks all four assumptions at once — so BoothPOS is built around them instead.</p>
+    <div class="grid g3">
+      <div class="card"><span class="idx">PILLAR 01</span><h4>Every item knows its seller</h4><p>A single basket can mix three artists' goods. Each sold line permanently records which seller it belonged to, at the price and cost it had that day — so the payout maths is already done before you close.</p></div>
+      <div class="card"><span class="idx">PILLAR 02</span><h4>Everything hangs off the event</h4><p>Sales, shifts, floats, profit and settlements are all scoped to a named event. "Was that convention worth going to?" is a report, not a guess.</p></div>
+      <div class="card"><span class="idx">PILLAR 03</span><h4>The machine in front of you is the whole system</h4><p>Database, server and screens all run on the shop's own laptop over <code style="font-family:var(--mono);font-size:12px">localhost</code>. There is no cloud tier to fail, and no outbound call in the selling path.</p></div>
+    </div>
+    <div class="note"><strong>Commercially:</strong> BoothPOS is sold as a one-time licence installed locally, per store. There is no monthly fee, no multi-tenant service, and no vendor-side copy of your sales data.</div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>01</b> Introduction <span class="tick"></span> The product at rest</div>
+    <div class="feature">
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/dashboard</code></div>
+        {{IMG:02-dashboard}}
+      </figure>
+      <div class="copy stack stack-14">
+        <h3>The home screen answers the two questions a booth owner actually asks.</h3>
+        <p class="sub">How are we doing right now, and who is owed what. Net sales, transaction count and gross profit for the running event sit above a live per-seller split, day-by-day takings, and breakdowns by category, seller and event.</p>
+        <ul class="howto">
+          <li>Four <b>shortcut tiles</b> jump straight to a new sale, a new pre-order, a stock adjustment or a new product.</li>
+          <li><b>Results per seller</b> updates as you trade — no report to run.</li>
+          <li>Low-stock and pending pre-order counters flag what needs attention before it becomes a problem.</li>
+        </ul>
+        <div class="note warn"><strong>DEMO</strong> — the amber badge in the header means this installation is in practice mode. Everything you see here is demo data that never touches the real books.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>01</b> Introduction <span class="tick"></span> Who it is for</div>
+    <h2>Three shapes of booth, one product.</h2>
+    <div class="grid g3">
+      <div class="card"><span class="idx">AUDIENCE A</span><h4>The consignment host</h4><p>You rent the booth and carry other artists' merchandise. You need per-seller accounting you can defend, and you need it the same evening — not next week.</p><div class="chips"><span class="chip a">Master licence</span></div></div>
+      <div class="card"><span class="idx">AUDIENCE B</span><h4>The solo maker</h4><p>Everything in the booth is yours. You want a fast till, honest stock, and a profit figure per event — without paying for multi-artist features you will never open.</p><div class="chips"><span class="chip b">Pro licence</span></div></div>
+      <div class="card"><span class="idx">AUDIENCE C</span><h4>The circuit regular</h4><p>You do a dozen events a year, take pre-orders at one and hand them over at the next, and need last year's numbers when you decide which events to book again.</p><div class="chips"><span class="chip a">Master licence</span></div></div>
+    </div>
+    <div class="tape"></div>
+    <div class="grid g2">
+      <div class="stack stack-10"><h4>People who will use it on the day</h4><p class="sub">An owner or admin who sets it up; a cashier who may be a friend doing you a favour rather than a trained operator; an inventory helper who counts stock but never sees margins. Access is granted screen by screen, so the Sunday volunteer genuinely cannot open your profit report.</p></div>
+      <div class="stack stack-10"><h4>Where it runs</h4><p class="sub">A laptop on the booth table, at a venue whose wifi you should assume does not work. Optionally a second device — a helper's tablet or phone — pointed at the same laptop over the local network, with no second install and no second licence.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 02 · PROBLEM ═══════════════ -->
+<section class="slide chapter">
+  <div class="inner">
+    <span class="num">CHAPTER 02</span>
+    <h2>The problem</h2>
+    <p class="lede">Every pain below is taken from the product requirements document's own problem statement — the situations that made this software worth building rather than buying.</p>
+    <div class="chapter-toc">
+      <span>01 Introduction</span><span class="on">02 Problem</span><span>03 Goals</span><span>04 Methodology</span><span>05 Features</span><span>06 End-to-end flow</span><span>07 Result</span><span>08 Gap</span>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>02</b> Problem <span class="tick"></span> Booth-day reality</div>
+    <h2>Six ways a busy weekend goes wrong.</h2>
+    <div class="ledger">
+      <div class="row"><div class="pain"><em>Pain 01</em>The paper sales book at a packed booth</div><div class="fix"><em>What BoothPOS does</em>At the busiest hour you are scribbling every sale into a notebook, and by evening the numbers do not add up. The till writes the sale, its lines, its payments and its stock changes in one all-or-nothing step.</div></div>
+      <div class="row"><div class="pain"><em>Pain 02</em>Splitting the day's takings between artists</div><div class="fix"><em>What BoothPOS does</em>Several artists, one cash box, and days of receipt-sorting that still end in an argument. Every sold line remembers its seller, so the recap is recalculated from the actual lines whenever you open it.</div></div>
+      <div class="row"><div class="pain"><em>Pain 03</em>When an artist questions the numbers</div><div class="fix"><em>What BoothPOS does</em>All you have to defend yourself with is your own handwriting. Click any seller's row to list the individual transactions behind the total — and the detail travels into the exported file too.</div></div>
+      <div class="row"><div class="pain"><em>Pain 04</em>Venue wifi that does not work</div><div class="fix"><em>What BoothPOS does</em>The hall's signal drops exactly when the queue is longest. Nothing in the selling path makes an outbound call — you can trade all day with the wifi switched off.</div></div>
+      <div class="row"><div class="pain"><em>Pain 05</em>Stock nobody trusts, and the limited item you sold twice</div><div class="fix"><em>What BoothPOS does</em>Stock is held per variant and every change goes through one write path that locks the row first, so two simultaneous sales cannot both succeed against the last unit.</div></div>
+      <div class="row"><div class="pain"><em>Pain 06</em>One cash box, several pairs of hands</div><div class="fix"><em>What BoothPOS does</em>Three people take money from the same tin all weekend and nobody can explain the shortfall. Shifts open with a counted float and close with a counted drawer, and a difference demands a written note.</div></div>
+    </div>
+    <p class="sub">Source: <code style="font-family:var(--mono);font-size:11.5px">docs/PRD-POS-Event-Multivendor.md</code> §2 (problems P1–P5) and §12 (named risks).</p>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>02</b> Problem <span class="tick"></span> Why a generic POS does not fit</div>
+    <h2>The four assumptions ordinary till software makes.</h2>
+    <div class="grid g4">
+      <div class="card"><span class="idx">ASSUMPTION 01</span><h4>"One shop owns all the stock"</h4><p>So there is nowhere to record that the keychain belongs to Hoshizora Craft and the standee belongs to Yukishiro Works — and no way to split one basket between them.</p></div>
+      <div class="card"><span class="idx">ASSUMPTION 02</span><h4>"Trading is continuous"</h4><p>So there is no notion of an event: no per-event float, no per-event profit after the booth fee, no way to compare one convention against another.</p></div>
+      <div class="card"><span class="idx">ASSUMPTION 03</span><h4>"The internet is there"</h4><p>So the moment the hall's wifi drops, the queue stops. Cloud tills degrade exactly when a booth is busiest.</p></div>
+      <div class="card"><span class="idx">ASSUMPTION 04</span><h4>"You pay monthly, forever"</h4><p>A subscription priced for a shop open 300 days a year is poor value for a booth that trades on six weekends.</p></div>
+    </div>
+    <div class="tape"></div>
+    <div class="note stop"><strong>The cost of getting this wrong</strong> is not abstract. The requirements document names artist payout disputes as a top project risk, and permanent data loss from an un-backed-up device as another. Both are settlement-and-evidence problems, which is why the audit trail and the per-seller drill-down are core features rather than extras.</div>
+  </div>
+</section>
+
+<!-- ═══════════════ 03 · GOALS ═══════════════ -->
+<section class="slide chapter">
+  <div class="inner">
+    <span class="num">CHAPTER 03</span>
+    <h2>Goals</h2>
+    <p class="lede">What the product committed to doing — and, just as deliberately, what it committed to leaving out.</p>
+    <div class="chapter-toc">
+      <span>01 Introduction</span><span>02 Problem</span><span class="on">03 Goals</span><span>04 Methodology</span><span>05 Features</span><span>06 End-to-end flow</span><span>07 Result</span><span>08 Gap</span>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>03</b> Goals <span class="tick"></span> The promises</div>
+    <h2>Seven commitments the build was measured against.</h2>
+    <div class="grid g2">
+      <div class="card"><span class="idx">GOAL 01</span><h4>Sell without the internet</h4><p>The complete stack — database, application, screens — runs on the shop's machine. Reports, receipts and stock behave identically offline and online.</p></div>
+      <div class="card"><span class="idx">GOAL 02</span><h4>Settle with each seller the same evening</h4><p>Per-seller payout figures recalculated from live sale lines, with a transaction-level drill-down and an Excel export you can send to each artist.</p></div>
+      <div class="card"><span class="idx">GOAL 03</span><h4>Never let the till decide what it earned</h4><p>Prices, totals, discounts, cost of goods and stock deltas are computed server-side from master data. A client-supplied amount is never trusted.</p></div>
+      <div class="card"><span class="idx">GOAL 04</span><h4>Make stock trustworthy enough to sell limited runs on</h4><p>Per-variant stock, an append-only movement history recording the level before and after, and a row lock that prevents two simultaneous sales overselling the last unit.</p></div>
+      <div class="card"><span class="idx">GOAL 05</span><h4>Answer "was this event worth it?"</h4><p>Cost and sell price are frozen onto each sold line, so a price change today can never rewrite last month's profit. Event cost is subtracted to give a net figure.</p></div>
+      <div class="card"><span class="idx">GOAL 06</span><h4>Be safe in the hands of a volunteer</h4><p>Access granted screen by screen, three server-side authorization layers, and a practice mode so new staff can rehearse a whole event day without touching the real books.</p></div>
+      <div class="card" style="grid-column:1/-1"><span class="idx">GOAL 07</span><h4>Cost one payment, not a subscription</h4><p>A one-time licence, installed locally, in two tiers that run from the same single build: <b>Pro</b> for a single-seller booth and <b>Master</b> for unlimited sellers. Switching tiers is one setting — nothing already recorded is lost either way.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>03</b> Goals <span class="tick"></span> Deliberate non-goals</div>
+    <h2>What was cut on purpose, and why.</h2>
+    <p class="lede">These are documented scope decisions, not oversights. Each was argued in writing before being excluded — and two of them were later un-cut, on the record, when the product owner asked.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Cut from scope</th><th>The documented reasoning</th><th style="width:120px">Status</th></tr></thead>
+        <tbody>
+          <tr><td><b>QR / barcode scanning</b></td><td>With dozens of SKUs, searching a touchscreen grid is as fast and far cheaper to build. Scanning only earns its cost at hundreds of SKUs.</td><td>Still cut</td></tr>
+          <tr><td><b>Flash sales &amp; rule-based discounts</b></td><td>A manually entered discount at the till covers the first event's needs.</td><td>Still cut</td></tr>
+          <tr><td><b>Printed / PDF catalogue</b></td><td>Re-confirmed as cut after pre-orders were pulled into the MVP.</td><td>Still cut</td></tr>
+          <tr><td><b>Excel import of sales transactions</b></td><td>Importing historical <em>money</em> was judged too risky to reconcile; master data import was not.</td><td>Still cut</td></tr>
+          <tr><td><b>Artist self-service portal</b></td><td>Would require a network tier the product deliberately does not have.</td><td>Still cut</td></tr>
+          <tr><td><b>Cloud tier / online storefront</b></td><td>The whole value proposition is a local, one-time-licence install with no vendor-held data.</td><td>Still cut</td></tr>
+          <tr><td><b>Master-data Excel import</b></td><td>Un-cut on 2026-09-01 at the product owner's explicit request — migrating from an existing spreadsheet was blocking adoption.</td><td><span class="chip b" style="margin:0">Built</span></td></tr>
+          <tr><td><b>Vendor / material / BOM tracking</b></td><td>Added post-MVP on 2026-09-01, deliberately narrower than the original "vendor management" cut: no purchase orders at first, no production scheduling.</td><td><span class="chip b" style="margin:0">Built</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><strong>Why this table matters more than it looks.</strong> When scope reverses, the original decision stays visible and a dated note is added beside it. Nothing is quietly back-dated to look like it was always the plan — so the documentation you receive can be trusted about what it does <em>not</em> do.</div>
+  </div>
+</section>
+
+<!-- ═══════════════ 04 · METHODOLOGY ═══════════════ -->
+<section class="slide chapter">
+  <div class="inner">
+    <span class="num">CHAPTER 04</span>
+    <h2>Methodology</h2>
+    <p class="lede">Why you should trust software you have not yet run: how it was specified, how it was tested, and what it does with your money when nobody is watching.</p>
+    <div class="chapter-toc">
+      <span>01 Introduction</span><span>02 Problem</span><span>03 Goals</span><span class="on">04 Methodology</span><span>05 Features</span><span>06 End-to-end flow</span><span>07 Result</span><span>08 Gap</span>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>04</b> Methodology <span class="tick"></span> How it was built</div>
+    <h2>Specification first, every single time.</h2>
+    <div class="grid g2">
+      <div class="card"><span class="idx">PRACTICE 01</span><h4>Nothing is built without a written spec</h4><p>All 19 features live in their own numbered folder, each carrying a specification, an implementation plan, a research note and a task list — approved before any production code is written.</p></div>
+      <div class="card"><span class="idx">PRACTICE 02</span><h4>Every non-obvious decision records its rejected alternatives</h4><p>Research notes are written as numbered decisions in Decision / Rationale / Alternatives-considered form. When a report figure looks surprising, there is a documented reason rather than a shrug.</p></div>
+      <div class="card"><span class="idx">PRACTICE 03</span><h4>A ratified engineering constitution</h4><p>Five binding principles — code quality, testing, UX consistency, security, performance — with formal amendment rules. Where a feature genuinely had to bend one, the exception is written down and justified.</p></div>
+      <div class="card"><span class="idx">PRACTICE 04</span><h4>Tests run against real MySQL, never a convenient fake</h4><p>The suite runs against a real MySQL 8 database. This is enforced, not encouraged: several migrations use raw MySQL-only CHECK constraints that a lightweight substitute cannot even execute.</p></div>
+      <div class="card"><span class="idx">PRACTICE 05</span><h4>Nothing is "done" until it is driven in a real browser</h4><p>Screens must be exercised against the live API with the console checked before a task is closed. Three real reporting defects were caught this way that the automated suite had passed.</p></div>
+      <div class="card"><span class="idx">PRACTICE 06</span><h4>A published bug log, each fix proven by a failing test</h4><p>27 defects found during execution are logged with root cause and fix. Each was proven by a test that failed first and passed after — not by reading the code and declaring it fine.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>04</b> Methodology <span class="tick"></span> Where the money is decided</div>
+    <h2>The cashier's screen is never allowed to say what it earned.</h2>
+    <p class="lede">This is the single most important design rule in the product, and the reason artist settlements can be defended in an argument.</p>
+    <div class="grid g2">
+      <div class="stack stack-14">
+        <div class="note stop"><strong>What the till sends</strong><br>Only which variant, and how many. Plus an optional discount and a one-time reference code.</div>
+        <div class="note"><strong>What the server decides</strong><br>The price of each line, from master data. The line total. Whether the discount is legal. The order total. The cost of goods, frozen onto the line. The change due. The stock delta. The receipt number.</div>
+      </div>
+      <div class="stack stack-14">
+        <h4>Three consequences that matter commercially</h4>
+        <ul class="howto">
+          <li><b>Settlements cannot be manipulated from the counter.</b> A cashier account cannot inflate what a seller is owed, because the cashier's screen never supplies a number that reaches the ledger.</li>
+          <li><b>Old reports do not drift.</b> Cost and sell price are snapshotted onto each sold line, so re-pricing a product today leaves last month's profit exactly as it was.</li>
+          <li><b>A lost connection cannot double-charge.</b> Each checkout carries a one-time reference; if the same one arrives twice, the original sale is returned untouched rather than rung up again.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="tape"></div>
+    <p class="sub">The same rule governs stock: a single sanctioned write path locks the variant row, refuses a movement that would go below zero, and records the level before and after — including for the bulk spreadsheet import.</p>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>04</b> Methodology <span class="tick"></span> Practice mode</div>
+    <div class="feature flip">
+      <div class="copy stack stack-14">
+        <h3>A whole second world on the same laptop.</h3>
+        <p class="sub">One store-wide setting switches BoothPOS between <b>DEMO</b> and <b>LIVE</b>. Twenty transactional record types — orders, payments, stock movements, pre-orders, settlements and the rest — are stamped with the mode they were created in and filtered on every read.</p>
+        <ul class="howto">
+          <li>Train a new cashier on a full, realistic shop — products, sellers, customers, sales, pre-orders — on the machine you will use for real money that weekend.</li>
+          <li>Rehearse an entire event day, including closing and reconciling the drawer.</li>
+          <li>Switch back to LIVE and every practice record disappears from every list, screen and financial report.</li>
+        </ul>
+        <div class="note"><strong>Why it is more than a demo toggle:</strong> reports that use hand-written database queries filter the mode explicitly, and values with a database-wide uniqueness rule — receipt numbers, pre-order numbers, product codes — are counted across <em>both</em> modes, so a practice sale can never collide with a real one.</div>
+      </div>
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/activity-log</code></div>
+        {{IMG:17-activity-log}}
+      </figure>
+    </div>
+    <p class="sub">Pictured: the activity log — who changed what and when, written inside the same database transaction as the change it records, so a rolled-back deletion can never leave a log entry claiming it happened.</p>
+  </div>
+</section>
+
+<!-- ═══════════════ 05 · FEATURES ═══════════════ -->
+<section class="slide chapter">
+  <div class="inner">
+    <span class="num">CHAPTER 05</span>
+    <h2>Features<br>&amp; how to use them</h2>
+    <p class="lede">143 catalogued capabilities across eight areas. What follows is the working tour — every screenshot below is the real application, not a mockup.</p>
+    <div class="chapter-toc">
+      <span>01 Introduction</span><span>02 Problem</span><span>03 Goals</span><span>04 Methodology</span><span class="on">05 Features</span><span>06 End-to-end flow</span><span>07 Result</span><span>08 Gap</span>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>05</b> Features <span class="tick"></span> The map</div>
+    <h2>Eight areas, 27 screens.</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:190px">Area</th><th>What it covers</th><th class="num" style="width:100px">Features</th></tr></thead>
+        <tbody>
+          <tr><td><b>Point of sale</b></td><td>Cashier shifts, per-seller float, product grid, variant picker, cart, split payment, payment proof, receipt, sales list, drafts</td><td class="num">19</td></tr>
+          <tr><td><b>Inventory &amp; master data</b></td><td>Products and variants, generated codes, images, sellers, categories, customers, events, stock movements, adjustments, bulk Excel</td><td class="num">19</td></tr>
+          <tr><td><b>Pre-orders</b></td><td>Five-stage lifecycle, deposits and instalments, arrival, guarded handover, shipments, per-seller lines, invoices, email notification</td><td class="num">14</td></tr>
+          <tr><td><b>Reports &amp; settlement</b></td><td>Sales, cost &amp; profit, seller recap and payouts, seller cost, purchases, stock by seller, pre-order report, Excel export</td><td class="num">20</td></tr>
+          <tr><td><b>Purchasing &amp; costing</b></td><td>Suppliers, materials, multi-vendor prices, preferred supplier, per-variant recipes, cost breakdown, purchase orders</td><td class="num">19</td></tr>
+          <tr><td><b>Administration</b></td><td>Custom roles, staff accounts, profile, store branding, payment channels, activity log, backup, DEMO/LIVE, language</td><td class="num">19</td></tr>
+          <tr><td><b>Licensing</b></td><td>Offline activation bound to the machine, Pro/Master tiers, licence catalogue, company onboarding, invoices</td><td class="num">18</td></tr>
+          <tr><td><b>Deployment</b></td><td>Native install, Docker store image, offline USB delivery, backup to external drive, upgrades and rollback</td><td class="num">15</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- POS -->
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.1</b> Point of sale <span class="tick"></span> Opening the till</div>
+    <div class="feature">
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/session</code></div>
+        {{IMG:04-cashier-session}}
+      </figure>
+      <div class="copy stack stack-14">
+        <h3>A shift with a counted float, tied to a named person and a named event.</h3>
+        <p class="sub">No sale can be rung up outside an open shift, one person cannot have two shifts open at once, and a shift can only be opened against an event that is actually running.</p>
+        <ul class="howto">
+          <li>Open <b>Cashier Session</b>, pick today's event and enter the cash in the drawer.</li>
+          <li>Optionally split that float <b>by seller</b> — the rows must sum exactly to the total, and the screen keeps them in lockstep so you cannot get it wrong.</li>
+          <li>Trade. Transaction count, total sales and cash taken are visible at any moment without closing anything.</li>
+          <li>At close, count the tin and type the figure. A difference demands a written note.</li>
+        </ul>
+        <div class="note warn"><strong>Worth knowing:</strong> the live payment-method breakdown reports verified cash only. Transfer and QRIS payments are recorded but stay marked pending, so they do not appear in that particular breakdown.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.1</b> Point of sale <span class="tick"></span> Finding the item</div>
+    <div class="feature flip">
+      <div class="copy stack stack-14">
+        <h3>A touch grid, narrowed by seller and category.</h3>
+        <p class="sub">At a booth carrying three artists' ranges, the fastest path to the right item is to eliminate the other two. Filters are multi-select, and the search box matches product name or code as you type.</p>
+        <ul class="howto">
+          <li>Tap a card, or type a name or product code into the search box.</li>
+          <li>Products with several sizes, colours or characters open a <b>variant picker</b> showing each variant's own item code, price and stock.</li>
+          <li>Pick the variant — it lands in the cart at the price the server holds for it, never a price the screen supplied.</li>
+        </ul>
+        <div class="chips"><span class="chip">Per-variant stock shown live</span><span class="chip">12-character item codes</span><span class="chip">Product photos</span></div>
+      </div>
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/pos</code></div>
+        {{IMG:27-pos-variant-picker}}
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.1</b> Point of sale <span class="tick"></span> The multi-seller basket</div>
+    <div class="feature">
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/pos</code></div>
+        {{IMG:28-pos-cart-three-sellers}}
+      </figure>
+      <div class="copy stack stack-14">
+        <h3>One customer, one payment, three different artists paid correctly.</h3>
+        <p class="sub">This is the feature the whole product exists for. The basket pictured holds a keychain from Hoshizora Craft, an enamel pin from Nekoyama Studio and an acrylic standee from Yukishiro Works. The buyer pays once. Each line lands in the right seller's ledger.</p>
+        <ul class="howto">
+          <li>Add items from any sellers, in any order — nothing asks you to keep them separate.</li>
+          <li>Attach a customer, or leave it as a walk-in sale.</li>
+          <li>Enter an order-level discount if you are giving one; a discount larger than the subtotal is refused.</li>
+          <li>Park the basket with <b>Save as draft</b> if the buyer goes to find cash, and pick it up later.</li>
+        </ul>
+        <div class="note warn"><strong>Worth knowing:</strong> resuming a saved draft restores the items and discount, but not an attached customer — re-attach them before taking payment.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.1</b> Point of sale <span class="tick"></span> Taking the money</div>
+    <div class="feature flip">
+      <div class="copy stack stack-14">
+        <h3>Split one sale across cash, transfer and QRIS.</h3>
+        <p class="sub">Half in cash and the rest by QR is an ordinary request at an event, and the till treats it as ordinary. Enter the first amount, commit it, and the panel shows the remaining balance and waits for the next method.</p>
+        <ul class="howto">
+          <li>Pick a method. Cash offers tendered-amount shortcuts and computes change automatically.</li>
+          <li>Enter less than the total and the button becomes <b>Add &amp; continue</b> — commit that part and choose another method for the rest.</li>
+          <li>For transfer or QRIS, the buyer sees the account holder and QR image; <b>a photo of the proof is required before the sale can be saved.</b></li>
+          <li>Confirm. Payments totalling less than the amount due are refused by the server.</li>
+        </ul>
+        <div class="note"><strong>Pictured:</strong> Rp 50.000 already recorded in cash, Rp 72.000 remaining, QRIS selected and the confirm button held until proof is attached.</div>
+      </div>
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/pos — payment</code></div>
+        {{IMG:30-pos-split-payment}}
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.1</b> Point of sale <span class="tick"></span> The receipt</div>
+    <div class="feature">
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/sales — receipt</code></div>
+        {{IMG:36-sales-receipt-modal}}
+      </figure>
+      <div class="copy stack stack-14">
+        <h3>No thermal printer, no paper rolls, no power socket you do not have.</h3>
+        <p class="sub">The receipt is drawn on screen in large, high-contrast type intended to be photographed by the buyer from their side of the table — and it can be re-opened from the sales list weeks later.</p>
+        <ul class="howto">
+          <li>It carries your store identity, the event's name, location and dates, the transaction number and the cashier.</li>
+          <li>Split payments are itemised — the example shows Rp 20.000 by transfer and Rp 15.000 in cash.</li>
+          <li>Save it as an <b>image</b> or <b>PDF</b> if the buyer wants a copy.</li>
+          <li>Re-open any past receipt from <b>Sales → View receipt</b>.</li>
+        </ul>
+        <div class="note warn"><strong>Worth knowing:</strong> receipts are always printed in Indonesian, whatever language the interface is set to. The login and activation screens are too.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.1</b> Point of sale <span class="tick"></span> Afterwards</div>
+    <div class="feature flip">
+      <div class="copy stack stack-14">
+        <h3>Every sale, searchable, with the sellers named on the row.</h3>
+        <p class="sub">Search filters instantly as you type across transaction number, customer, cashier and seller. Note the fourth row: a single transaction listing two sellers.</p>
+        <ul class="howto">
+          <li>Click the transaction number, or <b>View items</b>, for the products sold.</li>
+          <li>Click <b>View receipt</b> to reopen the printable receipt.</li>
+          <li>Click a seller's name to filter the list down to their transactions.</li>
+          <li><b>Export .xlsx</b> downloads a spreadsheet of the event's sales grouped by product.</li>
+        </ul>
+        <div class="note warn"><strong>Read the tiles carefully:</strong> the four headline figures include money already collected on pre-orders, while the list below is counter sales only — so the two will not reconcile at an event that took pre-orders.</div>
+      </div>
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/sales</code></div>
+        {{IMG:05-sales}}
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- INVENTORY -->
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.2</b> Inventory <span class="tick"></span> Products</div>
+    <div class="feature">
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/products</code></div>
+        {{IMG:07-products}}
+      </figure>
+      <div class="copy stack stack-14">
+        <h3>One product, many variants — each with its own code, price and stock.</h3>
+        <p class="sub">A keychain design in Standard, Special Edition and Glow is one product with three variants. Price and stock live on the variant, because that is what actually sells out.</p>
+        <ul class="howto">
+          <li>Give each seller and category a short code once, then add products — codes are generated for you.</li>
+          <li>The product list shows the shared 8-character product code; each variant's 12-character item code appears on its row in the edit panel and in the Detail pop-up.</li>
+          <li>Rename the product, seller or category later — <b>the codes never move</b>, so your price lists and old receipts stay valid.</li>
+          <li>Upload product photos; they appear on the till's cards.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.2</b> Inventory <span class="tick"></span> Stock you can defend</div>
+    <div class="feature flip">
+      <div class="copy stack stack-14">
+        <h3>An append-only history, not just a number.</h3>
+        <p class="sub">Every movement records the level before and after, who did it, and what caused it. Six movement types cover the whole life of an item: initial, purchase, sale, pre-order handover, adjustment and return.</p>
+        <ul class="howto">
+          <li>Filter the history by movement type to see only sales, only adjustments, or only pre-order handovers.</li>
+          <li>Correct a physical miscount with <b>Stock adjustment</b> — a reason is mandatory, and the entry is written to the audit log.</li>
+          <li>A movement that would push stock below zero is refused, naming the item and how many are actually available.</li>
+        </ul>
+        <div class="note warn"><strong>Worth knowing:</strong> a multi-line adjustment saves line by line rather than as one batch — if line three is rejected, lines one and two are already saved. Fix the rejected line and save it again. Low-stock thresholds are set through the Excel import, not on screen.</div>
+      </div>
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/stock</code></div>
+        {{IMG:08-stock}}
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.2</b> Inventory <span class="tick"></span> Moving in from a spreadsheet</div>
+    <div class="feature">
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/products — bulk import</code></div>
+        {{IMG:40-master-data-import}}
+      </figure>
+      <div class="copy stack stack-14">
+        <h3>One workbook, ten sheets, processed in dependency order.</h3>
+        <p class="sub">"I already keep everything in a spreadsheet" is the most common reason a booth never switches systems. Sellers, categories, products, stock, suppliers, materials, prices, recipes, roles and users all arrive in one file.</p>
+        <ul class="howto">
+          <li>Download the template — it ships with a worked example that imports as-is.</li>
+          <li>Paste your rows in and upload with <b>preview</b> ticked: a dry run walks the identical validation path and reports every problem by sheet, row, column and reason, changing nothing.</li>
+          <li>Fix what it names, then upload for real.</li>
+          <li>Export any time to get the same workbook shape back — exports round-trip through import.</li>
+        </ul>
+        <div class="note"><strong>All-or-nothing by design.</strong> A 500-row file with one typo imports nothing rather than leaving you half-migrated with no clear record of which half. The dry run is what makes that safe.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>05.2</b> Inventory <span class="tick"></span> The supporting records</div>
+    <h2>Sellers, categories, customers, events.</h2>
+    <div class="grid g4">
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/artists</code></div>{{IMG:09-sellers}}</div><figcaption><b>Sellers.</b> The artists sharing your booth. On a Pro licence only one may be active; the limit is shown before you hit it.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/categories</code></div>{{IMG:10-categories}}</div><figcaption><b>Categories.</b> Including sub-categories and display order, which drives the grouping on the till's grid.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/customers</code></div>{{IMG:11-customers}}</div><figcaption><b>Customers.</b> Contact details plus a complete purchase history, counter sales and pre-orders together.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/events</code></div>{{IMG:12-events}}</div><figcaption><b>Events.</b> Name, location, dates and the event's own cost — the figure that turns gross profit into a real answer.</figcaption></figure>
+    </div>
+    <div class="note">Deleting is guarded throughout: a record still referenced by real history cannot be removed, only deactivated. Removed records are soft-deleted, so history survives and the short code becomes free again.</div>
+  </div>
+</section>
+
+<!-- PRE-ORDERS -->
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.3</b> Pre-orders <span class="tick"></span> The lifecycle</div>
+    <div class="feature flip">
+      <div class="copy stack stack-14">
+        <h3>Take money now for goods that do not exist yet.</h3>
+        <p class="sub">A pre-order runs through five guarded stages — <b>Ordered → Deposit paid → Arrived → Settled → Handed over</b> — with cancellation available along the way. Each step is checked against a strict state machine, so it cannot be skipped.</p>
+        <ul class="howto">
+          <li>Record the customer, the items, the expected date and whether it is collection or courier.</li>
+          <li>Take a deposit; the order moves itself to <b>Deposit paid</b> on the first payment.</li>
+          <li>Mark <b>Arrived</b> when the goods land from the supplier.</li>
+          <li>Take the balance, hand over, and add courier and tracking details if it is shipping.</li>
+        </ul>
+        <div class="note"><strong>The rule people get backwards:</strong> creating a pre-order does <em>not</em> touch stock — the goods do not physically exist. Stock goes <b>up</b> on arrival and <b>down</b> on handover.</div>
+      </div>
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/preorders — detail</code></div>
+        {{IMG:38-preorder-detail}}
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>05.3</b> Pre-orders <span class="tick"></span> Money and paperwork</div>
+    <h2>Deposits, instalments, and a document for every stage.</h2>
+    <div class="grid g3">
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/preorders</code></div>{{IMG:06-preorders}}</div><figcaption><b>The list.</b> Searchable by customer name, filterable by status, fulfilment and seller, with a live summary bar showing counts, per-status totals and outstanding balance.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/preorders — invoice</code></div>{{IMG:39-preorder-invoice}}</div><figcaption><b>The document.</b> Its heading switches automatically between Invoice, Receipt and Cancelled, carries a live status pill and per-line seller names, and downloads as PDF.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/preorders — settlement</code></div>{{IMG:49-preorder-record-payment}}</div><figcaption><b>The ledger.</b> Deposits and instalments accumulate on one running balance; each individual payment can produce its own receipt.</figcaption></figure>
+    </div>
+    <div class="grid g2">
+      <div class="note stop"><strong>Handover is blocked until the balance is fully paid</strong> — and blocked again if someone sold the same item over the counter after it arrived, rather than driving your stock negative.</div>
+      <div class="note warn"><strong>Email:</strong> marking a pre-order Arrived, Handed over or Cancelled emails the customer automatically. Deposit and settlement notices are sent on demand with <b>Resend notification</b>. Every attempt — sent, failed, or skipped because mail is not configured — is logged.</div>
+    </div>
+  </div>
+</section>
+
+<!-- REPORTS -->
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.4</b> Reports <span class="tick"></span> The one that settles arguments</div>
+    <div class="feature">
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/reports — seller recap</code></div>
+        {{IMG:16-reports}}
+      </figure>
+      <div class="copy stack stack-14">
+        <h3>What you owe each artist, recalculated from live sale lines.</h3>
+        <p class="sub">The stored settlement table is treated as a payment-status record and a cache — never as the source of truth for sales value. Open the report and every figure is re-derived from the actual order lines before anything is displayed.</p>
+        <ul class="howto">
+          <li>Pick the event. Every seller shows units, sales, payable, paid, outstanding and a status.</li>
+          <li>Click a row for the <b>individual transactions</b> behind the total — counter sales and pre-orders together.</li>
+          <li>Record what you have handed over; the status re-derives itself to part-paid or paid.</li>
+          <li><b>Export .xlsx</b> and send each artist their own copy, transaction detail included.</li>
+        </ul>
+        <div class="note"><strong>Every active seller is listed, even those who sold nothing</strong> — a zero row is a visible, checkable answer, where a missing row is an unanswered question.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>05.4</b> Reports <span class="tick"></span> The other five tabs</div>
+    <h2>Six report tabs, seven Excel exports.</h2>
+    <div class="grid g3">
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>Cost &amp; Profit</code></div>{{IMG:31-report-cost-profit}}</div><figcaption><b>Cost &amp; Profit.</b> Revenue, cost of goods, gross profit, the event's own cost, and net profit — the answer to "was this event worth going to?"</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>Seller Cost</code></div>{{IMG:32-report-seller-cost}}</div><figcaption><b>Seller Cost.</b> The same profit maths broken down per artist, so you can see which ranges actually carry margin.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>Stock by Seller</code></div>{{IMG:34-report-stock-by-seller}}</div><figcaption><b>Stock by Seller.</b> What each artist still has on your shelves, with a per-SKU drill-down.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>Pre-order</code></div>{{IMG:35-report-preorder}}</div><figcaption><b>Pre-order.</b> Grouped by stage against how much has actually been paid, with a per-seller breakdown and a drill-down to individual orders.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>Purchases</code></div>{{IMG:33-report-purchases}}</div><figcaption><b>Purchases.</b> Every supplier order with status, date and value. Note the total spans all statuses including draft and cancelled — filter by status for committed spend.</figcaption></figure>
+      <div class="card"><span class="idx">THE RULE UNDER ALL OF THEM</span><h4>Pre-order money counts only once it is really in the till</h4><p>Revenue is taken from actual recorded payments, never the cached paid-amount field, then spread across the order's lines in proportion to each line's share of the value. A half-paid pre-order credits each seller exactly half. Cancelled ones contribute nothing.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- PURCHASING -->
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.5</b> Purchasing <span class="tick"></span> What an item really costs</div>
+    <div class="feature flip">
+      <div class="copy stack stack-14">
+        <h3>A recipe per variant, priced from what your suppliers actually charge.</h3>
+        <p class="sub">Record which suppliers sell each raw material and at what price, then attach the materials and quantities one unit of a specific variant needs. A large and a small keychain of the same design can need different amounts — so recipes hang off the variant, not the product.</p>
+        <ul class="howto">
+          <li>Add suppliers and materials, then record a price per supplier-material pair.</li>
+          <li>Flag your usual supplier as <b>preferred</b>; flagging one automatically un-flags any other for that material.</li>
+          <li>Build the recipe on the variant. Quantities may be fractional — 0.25 of an acrylic sheet is a valid line.</li>
+          <li>Open the <b>cost breakdown</b> to see the material cost beside the cost price you typed in.</li>
+        </ul>
+        <div class="note"><strong>Deliberately read-only.</strong> The recipe cost never overwrites the cost price your profit reports and settlements already use. When several suppliers sell the same material, the preferred one's price is used — otherwise the cheapest.</div>
+      </div>
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>/products — BOM &amp; material cost</code></div>
+        {{IMG:42-variant-bom-cost}}
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>05.5</b> Purchasing <span class="tick"></span> Restocking</div>
+    <h2>Suppliers, materials and purchase orders.</h2>
+    <div class="grid g3">
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/vendors</code></div>{{IMG:14-vendors}}</div><figcaption><b>Suppliers.</b> Contact details and the materials each one sells. A supplier with registered prices cannot be deleted.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/materials</code></div>{{IMG:15-materials}}</div><figcaption><b>Materials.</b> Raw stock with its own unit and price list, separate from sellable merchandise.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/purchase-orders</code></div>{{IMG:48-purchase-order-detail}}</div><figcaption><b>Purchase orders.</b> Draft → Ordered → Received → Paid, with cancellation only while draft or ordered. Receiving tops up material stock automatically.</figcaption></figure>
+    </div>
+    <div class="grid g2">
+      <div class="note warn"><strong>Honest limits here.</strong> Material stock is tracked in the database but has no screen of its own yet. Supplier payments work in cash; the non-cash options on that form do not currently complete. Re-editing an existing draft's line items from the list is not reliable — cancel and re-create instead.</div>
+      <div class="note"><strong>Where it does pay off today:</strong> knowing your true material cost per variant before you price it, keeping supplier price lists in one place, and having a printable order document to send.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ADMIN -->
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.6</b> Administration <span class="tick"></span> Who can see what</div>
+    <div class="feature">
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/roles</code></div>
+        {{IMG:51-role-permissions}}
+      </figure>
+      <div class="copy stack stack-14">
+        <h3>Roles are a list of screens, not a fixed four-way choice.</h3>
+        <p class="sub">Four roles ship ready to use — Owner, Admin, Cashier and Inventory — but a role is just a set of menu permissions, so you can build your own.</p>
+        <ul class="howto">
+          <li>The default <b>Cashier</b> gets the till, shift, events, customers, pre-orders and sales list — and pointedly <b>not</b> the profit or settlement reports.</li>
+          <li>Tick or untick individual screens to make a role that matches how your booth actually runs.</li>
+          <li>Staff accounts carry a photo and a last-access timestamp; each person manages their own password and photo from their profile.</li>
+        </ul>
+        <div class="note"><strong>Enforced on the server, in three layers</strong> — 45 request-level gates, 15 policy classes and inline role checks. A cashier cannot reach your margins even by calling the API directly, bypassing the screen entirely.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>05.6</b> Administration <span class="tick"></span> Making it yours</div>
+    <h2>Store identity, payment channels, and the safety net.</h2>
+    <div class="grid g3">
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/settings</code></div>{{IMG:20-settings}}</div><figcaption><b>Store profile.</b> Name, address, contact, logo and receipt footer — everything that prints on a receipt. Plus the DEMO/LIVE switch and the Pro/Master tier.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/settings scrolled</code></div>{{IMG:52-settings-store-profile}}</div><figcaption><b>Brand accent.</b> This demo store runs purple (<code style="font-family:var(--mono);font-size:11px">#8b2f9d</code>); the shipped default is green. The colour is applied live, not by rebuilding the app.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/users</code></div>{{IMG:18-users}}</div><figcaption><b>Staff.</b> Accounts with photos, roles and last-access tracking, searchable and filterable.</figcaption></figure>
+    </div>
+    <div class="grid g2">
+      <div class="stack stack-10"><h4>Payment channels</h4><p class="sub">Your bank accounts and QRIS codes, with the QR image uploaded once and shown to the buyer at checkout. Account numbers are masked to the last four digits for anyone without settings access — a cashier can direct a payment without being able to read the full number.</p></div>
+      <div class="stack stack-10"><h4>Backup &amp; restore</h4><p class="sub">One command copies the database <em>and</em> the archive of payment-proof images to an external drive you nominate; a matching command brings them back. The backup is an ordinary MySQL dump — your data is never locked in a proprietary format.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- LICENSING -->
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>05.7</b> Licensing <span class="tick"></span> How the product is protected</div>
+    <div class="feature flip">
+      <div class="copy stack stack-14">
+        <h3>One licence, one installation — verified entirely offline.</h3>
+        <p class="sub">A brand-new install is locked. Every screen bounces to activation, and the server independently refuses every request — including the login endpoint itself — until a valid key is entered.</p>
+        <ul class="howto">
+          <li>The vendor generates a key signed with a private key that never ships to a customer.</li>
+          <li>You paste it in. The signature is checked against a public key baked into the app — <b>no internet required</b>.</li>
+          <li>On success the licence binds to this machine's hardware fingerprint, stored one-way hashed.</li>
+          <li>Copying an activated installation's data to a different machine fails closed.</li>
+        </ul>
+        <div class="note stop"><strong>Two disclosures.</strong> Activation reads the machine fingerprint from Linux or macOS only — <b>a Windows machine cannot currently be activated at all</b>. And a fully-offline design cannot detect the same key being activated on two independently-fresh machines; that remains a vendor business process, not a technical control.</div>
+      </div>
+      <figure class="shot">
+        <div class="bar"><i></i><i></i><i></i><code>localhost:8000/activate</code></div>
+        {{IMG:53-license-activation}}
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>05.7</b> Licensing <span class="tick"></span> Pro vs Master</div>
+    <h2>Two tiers, one build.</h2>
+    <div class="grid g2">
+      <div class="card"><span class="idx">TIER — PRO</span><h4>A single-seller booth</h4><p style="margin-bottom:10px">Everything in the product except multiple active sellers. Exactly one active seller is permitted, representing the shop itself; a second is refused.</p><div class="chips"><span class="chip b">Full till</span><span class="chip b">Pre-orders</span><span class="chip b">Profit reports</span><span class="chip b">Excel import/export</span><span class="chip b">Purchasing &amp; BOM</span></div></div>
+      <div class="card"><span class="idx">TIER — MASTER</span><h4>A booth hosting other artists</h4><p style="margin-bottom:10px">No limit on sellers, and the per-seller settlement machinery that makes a consignment booth work.</p><div class="chips"><span class="chip a">Unlimited sellers</span><span class="chip a">Per-seller recap &amp; payouts</span><span class="chip a">Per-seller float</span><span class="chip a">Seller cost report</span><span class="chip a">Stock by seller</span></div></div>
+    </div>
+    <div class="note"><strong>It is one setting, not two products.</strong> Switching tiers changes what is permitted, not what is installed, and nothing already recorded is lost in either direction. The limit is enforced on the server — including inside the Excel import, so a spreadsheet cannot be used as a free upgrade.</div>
+    <div class="tape"></div>
+    <div class="grid g3">
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/companies</code></div>{{IMG:23-companies}}</div><figcaption><b>Companies.</b> An internal onboarding tracker for the business selling BoothPOS — not a multi-tenant runtime.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/licenses</code></div>{{IMG:24-licenses}}</div><figcaption><b>Licence catalogue.</b> Each package with its tier, price and payment label. A package attached to a company cannot be deleted.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/invoices</code></div>{{IMG:45-invoice-document}}</div><figcaption><b>Invoices.</b> Generated number, frozen money totals, PDF download. Paid invoices cannot be deleted through any path.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 06 · FLOWS ═══════════════ -->
+<section class="slide chapter">
+  <div class="inner">
+    <span class="num">CHAPTER 06</span>
+    <h2>End-to-end<br>flow</h2>
+    <p class="lede">Four journeys traced from the first tap to the last database write — including, for the pre-order flow, exactly where stock moves and where it deliberately does not.</p>
+    <div class="chapter-toc">
+      <span>01 Introduction</span><span>02 Problem</span><span>03 Goals</span><span>04 Methodology</span><span>05 Features</span><span class="on">06 End-to-end flow</span><span>07 Result</span><span>08 Gap</span>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>06.1</b> Flow <span class="tick"></span> Event day</div>
+    <h2>Open the till, sell, reconcile, close.</h2>
+    <div class="flow">
+      <div class="step"><div class="who">Cashier</div><div class="act">Signs in with a username and password</div><div class="eff">Login time stamped, device token issued</div></div>
+      <div class="step"><div class="who">Cashier</div><div class="act">Opens a shift: picks the event, counts the float, optionally splits it per seller</div><div class="eff">Refused if a shift is already open, or the event is not active</div></div>
+      <div class="step up"><div class="who">System</div><div class="act">Creates the session in one all-or-nothing transaction</div><div class="eff">Session row + per-seller float rows written together</div></div>
+      <div class="step"><div class="who">Cashier</div><div class="act">Adds items from three different sellers and taps Pay</div><div class="eff">Blocked entirely if no shift is open</div></div>
+      <div class="step"><div class="who">Cashier</div><div class="act">Takes Rp 50.000 cash, then the balance by QRIS, attaching a photo of the proof</div><div class="eff">Proof stored privately under a random filename</div></div>
+      <div class="step block"><div class="who">System</div><div class="act">Checks the one-time reference before writing anything</div><div class="eff">A repeat tap returns the original sale — never charges twice</div></div>
+      <div class="step"><div class="who">System</div><div class="act">Prices the basket from master data, locking each variant row</div><div class="eff">Client-supplied prices ignored entirely</div></div>
+      <div class="step down"><div class="who">System</div><div class="act">Writes the order, its lines and its payments</div><div class="eff">Stock DECREASES — one <code style="font-family:var(--mono);font-size:11px">sale</code> movement per line</div></div>
+      <div class="step"><div class="who">Cashier</div><div class="act">Shows the on-screen receipt for the buyer to photograph</div><div class="eff">Store identity, event name, location and dates included</div></div>
+      <div class="step"><div class="who">Cashier</div><div class="act">At close, counts the drawer and enters the figure</div><div class="eff">A difference requires a written note</div></div>
+      <div class="step"><div class="who">System</div><div class="act">Independently recomputes expected cash and the variance</div><div class="eff">Session closed with opening, counted, expected and difference</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>06.2</b> Flow <span class="tick"></span> Pre-order across two events</div>
+    <h2>Where stock moves — and where it must not.</h2>
+    <div class="flow">
+      <div class="step"><div class="who">Cashier</div><div class="act">Creates the pre-order: customer, items, expected date, pickup or courier</div><div class="eff">NO stock movement — the goods do not exist yet</div></div>
+      <div class="step"><div class="who">System</div><div class="act">Writes the order and its lines, numbered PO-YYYYMMDD-0001</div><div class="eff">Number unique across DEMO and LIVE alike</div></div>
+      <div class="step"><div class="who">Customer</div><div class="act">Pays a deposit — itself splittable across methods</div><div class="eff">Status moves itself to Deposit paid. Still no stock movement</div></div>
+      <div class="step up"><div class="who">Owner</div><div class="act">Weeks later the goods arrive; marks the order <b>Arrived</b></div><div class="eff">Stock INCREASES — a <code style="font-family:var(--mono);font-size:11px">purchase</code> movement per line</div></div>
+      <div class="step"><div class="who">System</div><div class="act">Emails the customer that the goods have landed</div><div class="eff">Every send attempt logged — sent, failed or skipped</div></div>
+      <div class="step"><div class="who">Customer</div><div class="act">At the next event, pays the outstanding balance</div><div class="eff">Status re-derives to Settled once fully paid</div></div>
+      <div class="step block"><div class="who">System</div><div class="act">Handover requested</div><div class="eff">REFUSED if any balance remains, or if the item has since sold out</div></div>
+      <div class="step down"><div class="who">Cashier</div><div class="act">Hands the goods over</div><div class="eff">Stock DECREASES — a <code style="font-family:var(--mono);font-size:11px">preorder_handover</code> movement per line</div></div>
+      <div class="step"><div class="who">Cashier</div><div class="act">If shipping instead, records courier, tracking and address</div><div class="eff">Shipment moves Pending → Packed → Shipped → Delivered</div></div>
+    </div>
+    <div class="note"><strong>Net effect across the whole life of a pre-order: zero.</strong> One positive movement on arrival, one negative on handover — so pre-ordered goods pass through your stock ledger honestly instead of appearing from nowhere.</div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>06.3</b> Flow <span class="tick"></span> Settling with the sellers</div>
+    <h2>From raw sale lines to a figure you can hand over.</h2>
+    <div class="flow">
+      <div class="step block"><div class="who">System</div><div class="act">Owner opens the Seller Recap for the finished event</div><div class="eff">Refused (403) to anyone without report access</div></div>
+      <div class="step"><div class="who">System</div><div class="act">Zeroes the existing settlement rows before re-aggregating</div><div class="eff">A seller whose only order was voided cannot keep a stale figure</div></div>
+      <div class="step"><div class="who">System</div><div class="act">Sums counter sales per seller from the frozen order lines</div><div class="eff">Uses the price and cost as they were at the moment of sale</div></div>
+      <div class="step"><div class="who">System</div><div class="act">Adds pre-order money — but only cash actually collected</div><div class="eff">Read from real payment rows, never the cached paid-amount</div></div>
+      <div class="step"><div class="who">System</div><div class="act">Prorates that cash across the pre-order's lines by value share</div><div class="eff">A half-paid order credits each seller exactly half</div></div>
+      <div class="step"><div class="who">System</div><div class="act">Produces one payable figure per seller</div><div class="eff">Every active seller listed, including those who sold nothing</div></div>
+      <div class="step"><div class="who">Owner</div><div class="act">Clicks a seller to see the transactions behind the total</div><div class="eff">Counter sales and pre-orders, itemised</div></div>
+      <div class="step"><div class="who">Owner</div><div class="act">Hands over the money and records the payout</div><div class="eff">Status re-derives to Partial or Paid; export sends the artist their copy</div></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>06.4</b> Flow <span class="tick"></span> First run on a new machine</div>
+    <h2>From a locked screen to ready to trade.</h2>
+    <div class="flow">
+      <div class="step block"><div class="who">Owner</div><div class="act">Opens the app; every route bounces to activation</div><div class="eff">Server returns 423 Locked on every endpoint, login included</div></div>
+      <div class="step"><div class="who">Owner</div><div class="act">Pastes the vendor-issued licence key</div><div class="eff">Signature verified offline; bound to this machine's fingerprint</div></div>
+      <div class="step"><div class="who">Owner</div><div class="act">Signs in and fills in the store profile and logo</div><div class="eff">Each setting change written to the activity log</div></div>
+      <div class="step"><div class="who">Owner</div><div class="act">Chooses the edition (Pro or Master) and the mode (DEMO or LIVE)</div><div class="eff">Two settings rows; every later record stamped with the mode</div></div>
+      <div class="step"><div class="who">Owner</div><div class="act">Creates roles and staff accounts</div><div class="eff">Passwords hashed; menu access assigned per role</div></div>
+      <div class="step"><div class="who">Owner</div><div class="act">Downloads the master-data template and fills in the sheets</div><div class="eff">Ten sheets in dependency order, with a worked example</div></div>
+      <div class="step"><div class="who">Owner</div><div class="act">Uploads with preview ticked</div><div class="eff">Dry run reports every problem row, changing nothing</div></div>
+      <div class="step up"><div class="who">System</div><div class="act">Real import runs in one transaction</div><div class="eff">SKUs generated server-side; opening stock written as movements</div></div>
+      <div class="step"><div class="who">Owner</div><div class="act">Creates the first event and hands the laptop to the cashier</div><div class="eff">Ready to trade</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 07 · RESULT ═══════════════ -->
+<section class="slide chapter">
+  <div class="inner">
+    <span class="num">CHAPTER 07</span>
+    <h2>Result</h2>
+    <p class="lede">What actually exists today, measured rather than asserted. Every figure on the next slide was produced by running the command, not by quoting a document.</p>
+    <div class="chapter-toc">
+      <span>01 Introduction</span><span>02 Problem</span><span>03 Goals</span><span>04 Methodology</span><span>05 Features</span><span>06 End-to-end flow</span><span class="on">07 Result</span><span>08 Gap</span>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>07</b> Result <span class="tick"></span> What ships today</div>
+    <h2>The product, in numbers.</h2>
+    <dl class="metrics">
+      <div><dt>Backend tests</dt><dd>492<small>all passing · 1,670 assertions · 85s</small></dd></div>
+      <div><dt>Frontend tests</dt><dd>223<small>221 passing, 2 skipped · 45 files</small></dd></div>
+      <div><dt>API endpoints</dt><dd>159<small>70 GET · 47 POST · 21 PUT · 17 DELETE</small></dd></div>
+      <div><dt>Screens</dt><dd>27<small>plus 48 shared components</small></dd></div>
+    </dl>
+    <dl class="metrics">
+      <div><dt>Lines of first-party code</dt><dd>50,216<small>30,753 PHP · 19,463 JS &amp; Vue</small></dd></div>
+      <div><dt>Database migrations</dt><dd>46<small>38 models · 20 services</small></dd></div>
+      <div><dt>Specified features</dt><dd>19<small>each with spec, plan &amp; research note</small></dd></div>
+      <div><dt>Defects logged &amp; fixed</dt><dd>27<small>each proven by a failing-then-passing test</small></dd></div>
+    </dl>
+    <div class="grid g2">
+      <div class="note"><strong>Authorization surface:</strong> 45 request-level gates, 15 policy classes and inline role checks across three coexisting server-side layers.</div>
+      <div class="note"><strong>Delivery:</strong> 93 commits and 18 merged pull requests between 31 Aug and 8 Sep 2026, all against a real MySQL 8 database.</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-24">
+    <div class="eyebrow"><b>07</b> Result <span class="tick"></span> Ways to run it</div>
+    <h2>Three deployment paths, at three levels of maturity.</h2>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th style="width:170px">Path</th><th>What it is</th><th style="width:150px">Maturity</th></tr></thead>
+        <tbody>
+          <tr><td><b>Native install</b></td><td>PHP and MySQL 8 installed directly on the shop's laptop, the application served over <code style="font-family:var(--mono);font-size:11.5px">localhost</code>. The original and best-exercised path.</td><td><span class="chip b" style="margin:0">Shipped &amp; proven</span></td></tr>
+          <tr><td><b>Docker store image</b></td><td>A single self-contained image with the build baked in, plus a MySQL service on a named volume so an application upgrade never touches your data. Delivered by registry pull or as an offline <code style="font-family:var(--mono);font-size:11.5px">.tar</code> on a USB stick.</td><td><span class="chip" style="margin:0">Shipped, rough edges</span></td></tr>
+          <tr><td><b>Android tablet</b></td><td>A design and code scaffold for running the whole stack on-device inside a native shell. <b>Nothing has been compiled, signed or run on a device.</b></td><td><span class="chip" style="margin:0;border-color:var(--danger);color:var(--danger);background:var(--danger-bg)">Not a product yet</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="grid g2">
+      <div class="stack stack-10"><h4>What holds across all of them</h4><p class="sub">MySQL 8 is required — several migrations use raw MySQL-only CHECK constraints and setup fails outright on a lighter database. Nothing phones home. The database is not reachable from outside the machine. Backups are plain MySQL dumps that move freely between installs.</p></div>
+      <div class="stack stack-10"><h4>Upgrades</h4><p class="sub">A deliberate operator action, never automatic: load the newer image, point the version tag at it, restart. Data lives in a separate volume, so pointing the tag back at the previous version rolls the application back without touching your sales history.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ 08 · GAP ═══════════════ -->
+<section class="slide chapter">
+  <div class="inner">
+    <span class="num">CHAPTER 08</span>
+    <h2>Gap</h2>
+    <p class="lede">A customer discovering an undisclosed limitation after paying is worse than being told upfront. This chapter is the honest version — 47 gaps were catalogued; these are the ones that would change a buying decision.</p>
+    <div class="chapter-toc">
+      <span>01 Introduction</span><span>02 Problem</span><span>03 Goals</span><span>04 Methodology</span><span>05 Features</span><span>06 End-to-end flow</span><span>07 Result</span><span class="on">08 Gap</span>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>08.1</b> Gap <span class="tick"></span> Before you buy</div>
+    <h2>Five things to check against your own situation.</h2>
+    <div class="gaps">
+      <div class="gapitem"><span class="tag sec">Blocker</span><div><h4>Windows machines cannot be activated</h4><p>The licence binds to a hardware fingerprint read only from Linux or macOS. On any other platform activation throws and the installation stays permanently locked. If your booth laptop runs Windows, this must be resolved before purchase.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Operational</span><div><h4>Backup is a command, not a button</h4><p>There is no backup or restore anywhere in the interface, and nothing is scheduled or automatic. Protecting an event's takings means someone comfortable with a terminal running it — and remembering to. Restore from a real external drive has not yet been exercised end to end.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Operational</span><div><h4>MySQL 8 must exist on the machine</h4><p>There is no lightweight embedded-database option. Either you install and maintain MySQL 8 yourself, or you take the Docker path, which bundles it.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Setup</span><div><h4>Email needs configuration or it silently does nothing</h4><p>Pre-order notifications and onboarding codes only work if the mail settings are filled in at install time. Miss that step and nothing is sent — the attempt is logged as skipped rather than failing loudly. Mail is also sent synchronously, so a slow mail server makes saving a status change feel like the app has hung.</p></div></div>
+      <div class="gapitem"><span class="tag sec">Security</span><div><h4>Change the seeded passwords</h4><p>The development seeder creates five accounts sharing one publicly documented password. If it is run on a real installation and the passwords are not changed, the shop is left wide open. Independent penetration testing has not been performed; the security review to date is white-box code review only.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>08.2</b> Gap <span class="tick"></span> Rough edges in shipped features</div>
+    <h2>Things that work, but not as completely as they look.</h2>
+    <div class="gaps">
+      <div class="gapitem"><span class="tag lim">Payments</span><div><h4>Payment proofs are collected but never verified in-app</h4><p>Non-cash payments are stored as "pending" and nothing in the product ever marks them verified or rejected. The proof image is safely stored, but no screen displays it back — retrieving one means calling the API directly. As a consequence, the shift's payment-method breakdown reports cash only.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Purchasing</span><div><h4>Material stock has no screen</h4><p>Receiving a purchase order does correctly increase material stock and write its history, but there is nowhere in the interface to view either. Non-cash supplier payments do not complete, and re-editing an existing draft order's lines is unreliable.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Costing</span><div><h4>Recipe cost does not feed profit reports</h4><p>This is deliberate — overwriting the cost price that settlements already depend on would be a correctness risk. But it means building an accurate bill of materials does not, by itself, improve any profit figure. You read it and decide.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Exports</span><div><h4>Six screens have an export button; four exports have none</h4><p>Products, stock, sellers, categories, suppliers and materials export from the interface. Vendor prices, recipes, roles and users are exportable only by calling the endpoint directly. The invoice import template also ships with a dummy example row that must be deleted before the file will import.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Billing</span><div><h4>Saved bank details never reach the invoice</h4><p>Settings → Payment stores a bank name, account number and account holder, but only the free-text instructions box is copied onto an invoice. Type the account details into that box if you want them printed.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Scale</span><div><h4>Ceilings you will not hit at a booth, but should know</h4><p>Product and supplier pickers on the purchase-order form list the first 100 records. Deleting a draft purchase order and creating another the same day can collide on the generated number. There is no supported multi-terminal setup and no TLS, so a second device on the network is convenience, not a hardened deployment.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>08.3</b> Gap <span class="tick"></span> Roadmap</div>
+    <h2>What the gaps point to next.</h2>
+    <div class="grid g3">
+      <div class="card"><span class="idx">NEAR TERM</span><h4>Close the honesty gaps</h4><p>Windows fingerprint support. A backup button in the interface. Payment-proof viewing and verification. A material stock screen. The missing export buttons. These are small, well-understood pieces of work that remove the sharpest edges above.</p></div>
+      <div class="card"><span class="idx">MEDIUM TERM</span><h4>Operational hardening</h4><p>Scheduled backups, restore rehearsed against real removable media, dependency vulnerability scanning, security headers, and a continuous integration pipeline so a release never depends on someone remembering to run the tests.</p></div>
+      <div class="card"><span class="idx">LONGER TERM</span><h4>The Android tablet build</h4><p>Fully specified with two rejected alternatives documented, but the runtime binaries have not been sourced and the bundled database's licensing obligations are unresolved. Treat any delivery date as unestimated until both land.</p></div>
+    </div>
+    <div class="tape"></div>
+    <div class="note"><strong>What is deliberately not on this roadmap:</strong> a cloud tier, an online storefront, a subscription, or an artist self-service portal. Those would change what BoothPOS is — a local, one-time-licence till that holds your data on your own machine.</div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>08.4</b> Gap <span class="tick"></span> Internal only — remove before sending to a customer</div>
+    <h2>Delivery-side findings.</h2>
+    <div class="note stop"><strong>This slide is for the internal audience only.</strong> It records gaps in how the product is being delivered rather than in what it does, and it is not part of the customer-facing narrative.</div>
+    <div class="gaps">
+      <div class="gapitem"><span class="tag sec">Verification</span><div><h4>Feature 019 (billing &amp; invoicing) shipped without its manual verification steps completed</h4><p>On a codebase whose own history shows real-browser checks catching defects the automated suite passed, this is the least-verified area in the product. The fact-check in preparing this deck independently found eight inaccuracies there.</p></div></div>
+      <div class="gapitem"><span class="tag sec">Process</span><div><h4>No CI pipeline</h4><p>Every release depends on a developer remembering to run the suite locally. Feature 015 demonstrated the concrete risk when ten always-broken tests went unnoticed.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Docs</span><div><h4>Project documentation carries stale claims</h4><p><code style="font-family:var(--mono);font-size:11.5px">CLAUDE.md</code> states the suite is 214 backend and 44 frontend tests; the measured figures are 492 and 223. The schema document covers roughly half the current schema. Statements made from these documents can be wrong in both directions.</p></div></div>
+      <div class="gapitem"><span class="tag sec">Security</span><div><h4>Unscanned and unreviewed areas</h4><p>Dependency vulnerability scanning has never been run, so exposure is unknown rather than known-good. Formula injection is possible on every Excel export. Payment-proof images have no retention or deletion path.</p></div></div>
+      <div class="gapitem"><span class="tag lim">Docker</span><div><h4>Two concrete defects in the store deployment path</h4><p>The release tarball's image tag does not match the compose file's default, so the documented offline start command falls back to building from source. And <code style="font-family:var(--mono);font-size:11.5px">storage:link</code> is never run on first boot, so uploaded images and QR codes return 404 in the Docker install.</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════ APPENDIX · SCREEN GALLERY ═══════════════ -->
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>A1</b> Appendix <span class="tick"></span> Every remaining screen · 1 of 2</div>
+    <h2>Selling, stock and the day's paperwork.</h2>
+    <div class="grid g4">
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/login</code></div>{{IMG:01-login}}</div><figcaption><b>Sign in.</b> A username, not an email. Always Indonesian, whatever the interface language.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/pos</code></div>{{IMG:03-pos}}</div><figcaption><b>The till at rest.</b> Product grid, seller and category filters, empty cart, draft controls.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/pos — payment</code></div>{{IMG:29-pos-payment}}</div><figcaption><b>Payment, single method.</b> Tendered-cash shortcuts and automatic change.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/session</code></div>{{IMG:47-session-overview}}</div><figcaption><b>Shift overview.</b> Live transaction count, takings and float while trading.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/sales — items</code></div>{{IMG:37-sales-items-popup}}</div><figcaption><b>Products sold.</b> The line detail behind any past transaction.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/products — detail</code></div>{{IMG:41-product-detail}}</div><figcaption><b>Product detail.</b> Every variant with its own item code, price and stock.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/stock — adjust</code></div>{{IMG:43-stock-adjustment}}</div><figcaption><b>Stock adjustment.</b> A reason is mandatory; each line writes one movement.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/events — edit</code></div>{{IMG:50-event-detail}}</div><figcaption><b>Event.</b> Name, location, dates and the event cost used by the profit report.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="slide slide--wide">
+  <div class="inner stack stack-18">
+    <div class="eyebrow"><b>A2</b> Appendix <span class="tick"></span> Every remaining screen · 2 of 2</div>
+    <h2>Purchasing, administration and the business side.</h2>
+    <div class="grid g4">
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/purchase-orders</code></div>{{IMG:13-purchase-orders}}</div><figcaption><b>Purchase orders.</b> Supplier, status, date and value per order.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/materials — prices</code></div>{{IMG:44-material-vendor-prices}}</div><figcaption><b>Vendor prices.</b> Several suppliers per material; the preferred one sets the cost reference.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/roles</code></div>{{IMG:19-roles}}</div><figcaption><b>Roles.</b> Four ship ready; a role is just a set of screen permissions.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/profile</code></div>{{IMG:22-profile}}</div><figcaption><b>Profile.</b> Each person changes their own password and photo.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/settings/payment</code></div>{{IMG:21-settings-payment}}</div><figcaption><b>Invoice payment info.</b> The instructions box is what actually prints on a bill.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/invoices</code></div>{{IMG:25-invoices}}</div><figcaption><b>Invoice list.</b> Summary tiles above, status filter on the list.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/companies — edit</code></div>{{IMG:46-company-detail}}</div><figcaption><b>Company.</b> Business type, licence package, contact and the owner account created at onboarding.</figcaption></figure>
+      <figure><div class="shot"><div class="bar"><i></i><i></i><i></i><code>/business-types</code></div>{{IMG:26-business-types}}</div><figcaption><b>Business types.</b> The categories offered when onboarding a new company.</figcaption></figure>
+    </div>
+    <p class="sub">All 53 screenshots in this deck were captured from the running application in a real browser at 1440×900, at 2× pixel density, against the seeded demo dataset in DEMO mode. No mockups, no composites, no retouching.</p>
+  </div>
+</section>
+
+<!-- ═══════════════ CLOSE ═══════════════ -->
+<section class="slide cover">
+  <div class="inner stack stack-32">
+    <div class="mark"><span>B</span> BoothPOS</div>
+    <div class="cover-grid">
+      <div class="stack stack-24">
+        <h1>Sell all weekend.<br>Settle the same<br>evening.</h1>
+        <p class="lede">One laptop, one licence, no subscription and no cloud. Every sale tied to its event and its seller, every figure computed by the server, and an honest list of what it does not yet do.</p>
+        <div class="chips">
+          <span class="chip b">492 backend tests passing</span>
+          <span class="chip b">223 frontend tests passing</span>
+          <span class="chip a">19 specified features</span>
+          <span class="chip a">27 defects logged &amp; fixed</span>
+        </div>
+      </div>
+      <dl class="cover-facts">
+        <div style="grid-column:1/-1"><dt>Try it before you commit</dt><dd style="font-size:19px;line-height:1.35">Switch the installation to DEMO mode and rehearse a complete event day — open a shift, take split payments, run a pre-order through arrival and handover, settle every seller — on data that never touches your real books.<small style="margin-top:9px">Then switch to LIVE and start trading.</small></dd></div>
+      </dl>
+    </div>
+    <p class="sub">Deck compiled {{DATE}} from the running application at <code style="font-family:var(--mono);font-size:11.5px">localhost:8000</code>. Feature claims were checked against source: 66 confirmed, 41 corrected before publication.</p>
+  </div>
+</section>
+
+<div class="hud">
+  <span class="pos" id="pos">01 / 01</span>
+  <button id="prev" aria-label="Previous slide" title="Previous slide">↑</button>
+  <button id="next" aria-label="Next slide" title="Next slide">↓</button>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var pos = document.getElementById('pos');
+  var rail = document.getElementById('rail');
+  var cur = 0;
+  function pad(n){ return (n<10?'0':'')+n; }
+  function render(){
+    pos.textContent = pad(cur+1)+' / '+pad(slides.length);
+    rail.style.width = (((cur+1)/slides.length)*100).toFixed(2)+'%';
+  }
+  function go(i){
+    cur = Math.max(0, Math.min(slides.length-1, i));
+    slides[cur].scrollIntoView({behavior: matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth'});
+    render();
+  }
+  document.getElementById('next').addEventListener('click', function(){ go(cur+1); });
+  document.getElementById('prev').addEventListener('click', function(){ go(cur-1); });
+  document.addEventListener('keydown', function(e){
+    if(e.metaKey||e.ctrlKey||e.altKey) return;
+    var t = e.target; if(t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){ e.preventDefault(); go(cur+1); }
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){ e.preventDefault(); go(cur-1); }
+    else if(e.key==='Home'){ e.preventDefault(); go(0); }
+    else if(e.key==='End'){ e.preventDefault(); go(slides.length-1); }
+  });
+  // keep the counter honest when the reader scrolls by hand
+  if('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        if(en.isIntersecting){
+          var i = slides.indexOf(en.target);
+          if(i>-1 && i!==cur){ cur=i; render(); }
+        }
+      });
+    }, {threshold:0.55});
+    slides.forEach(function(s){ io.observe(s); });
+  }
+  render();
+})();
+</script>
