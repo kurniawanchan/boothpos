@@ -24,7 +24,7 @@ class Event extends Model
      * mulai 'draft'), dan transisi hanya lewat updateStatus() yang
      * ditegakkan EventPolicy::transitionStatus + Event::canTransitionTo().
      */
-    protected $fillable = ['name', 'location', 'start_date', 'end_date', 'status', 'event_cost', 'notes'];
+    protected $fillable = ['name', 'location', 'start_date', 'end_date', 'available_on', 'status', 'event_cost', 'notes'];
 
     protected function casts(): array
     {
@@ -33,6 +33,21 @@ class Event extends Model
             'end_date' => 'date',
             'event_cost' => 'decimal:2',
         ];
+    }
+
+    /**
+     * 023-event-availability-invoice-redesign (US1, research.md Decision 1)
+     * — SATU-SATUNYA tempat pemetaan 'day_1'/'day_2' -> tanggal asli
+     * terjadi. Semua konsumen (form event, invoice, struk) WAJIB lewat
+     * sini, tidak pernah menghitung ulang pemetaan ini sendiri.
+     */
+    public function availableOnDate(): ?\Carbon\Carbon
+    {
+        return match ($this->available_on) {
+            'day_1' => $this->start_date,
+            'day_2' => $this->end_date,
+            default => null,
+        };
     }
 
     public function cashierSessions(): HasMany

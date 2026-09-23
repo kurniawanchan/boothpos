@@ -571,7 +571,10 @@
     "import_row_error": "Row {row}: {error}",
     "import_confirm_action": "Confirm import",
     "import_customers_success": "Import successful — {created} new, {updated} updated.",
-    "import_customers_failed": "Failed to import the file."
+    "import_customers_failed": "Failed to import the file.",
+    "available_on_label": "Available on",
+    "available_on_day_1": "Day 1 ({date})",
+    "available_on_day_2": "Day 2 ({date})"
   },
   "preorders": {
     "load_failed": "Failed to load pre-order detail.",
@@ -728,7 +731,8 @@
     "bulk_email_summary": "{sent} sent, {skipped} skipped.",
     "paid_this_time": "Paid this time",
     "store_logo_alt": "Store logo",
-    "payment_terms_title": "Ways to pay"
+    "payment_terms_title": "Ways to pay",
+    "shipping_cost_label": "Shipping cost"
   },
   "reports": {
     "all_events": "All events",

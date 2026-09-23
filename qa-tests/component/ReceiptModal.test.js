@@ -34,47 +34,45 @@ function renderModal(receiptOverrides) {
   return render(ReceiptModal, { props: { open: true, orderId: 1 } });
 }
 
-describe('ReceiptModal event footer (014-sales-receipt-event-footer US2)', () => {
+/**
+ * 023-event-availability-invoice-redesign (US2, FR-004/FR-005/FR-006) —
+ * standout available-on/location block REPLACES the old small
+ * "Lokasi:/Tanggal:" footer line (research.md Decision 3).
+ */
+describe('ReceiptModal standout available-on/location block (023 US2)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('renders location and a formatted date RANGE when start/end dates differ', async () => {
+  it('renders location and the resolved available-on date prominently', async () => {
     renderModal({
       event_location: 'Jakarta Convention Center',
-      event_start_date: '2026-09-01',
-      event_end_date: '2026-09-03',
+      event_available_on_date: '2026-09-02',
     });
 
     await screen.findByText('ORD-0001');
-    expect(screen.getByText(/Jakarta Convention Center/)).toBeInTheDocument();
-
-    const expectedRange = `${formatDate('2026-09-01')} – ${formatDate('2026-09-03')}`;
-    expect(screen.getByText(new RegExp(`Tanggal:\\s*${expectedRange.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))).toBeInTheDocument();
+    expect(screen.getByText('Jakarta Convention Center')).toBeInTheDocument();
+    expect(screen.getByText('Tersedia pada')).toBeInTheDocument();
+    expect(screen.getByText(formatDate('2026-09-02'))).toBeInTheDocument();
   });
 
-  it('renders ONE date, not a redundant range, when start and end dates are the same', async () => {
+  it('renders only the location when no available-on date is set', async () => {
     renderModal({
       event_location: 'Jakarta Convention Center',
-      event_start_date: '2026-09-01',
-      event_end_date: '2026-09-01',
+      event_available_on_date: null,
     });
 
     await screen.findByText('ORD-0001');
-    const single = formatDate('2026-09-01');
-    const dateEl = screen.getByText(new RegExp(`Tanggal:\\s*${single.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-    expect(dateEl).toBeInTheDocument();
-    expect(dateEl.textContent).not.toMatch('–');
-    expect(dateEl.textContent).not.toBe(`Tanggal: ${single} – ${single}`);
+    expect(screen.getByText('Jakarta Convention Center')).toBeInTheDocument();
+    expect(screen.queryByText('Tersedia pada')).not.toBeInTheDocument();
   });
 
-  it('omits the entire event-info footer block when location and dates are all absent', async () => {
+  it('omits the entire standout block when location and available-on date are both absent', async () => {
     renderModal({
       event_location: null,
-      event_start_date: null,
-      event_end_date: null,
+      event_available_on_date: null,
     });
 
     await screen.findByText('ORD-0001');
-    expect(screen.queryByText(/Lokasi:/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Tanggal:/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Lokasi')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tersedia pada')).not.toBeInTheDocument();
   });
 });

@@ -133,6 +133,26 @@ watch(
         <span class="text-[12px] text-muted-2">{{ formatDateTime(receipt.created_at) }} · Kasir {{ receipt.cashier_name }}</span>
       </div>
 
+      <!-- 023-event-availability-invoice-redesign (US2, FR-004/FR-005/
+           FR-006, research.md Decision 3) — MENGGANTIKAN blok footer kecil
+           "Lokasi:/Tanggal:" yang dulu ada di bawah, sama seperti
+           PreorderInvoiceModal.vue. Teks tetap Bahasa Indonesia langsung
+           (bukan t()) — struk ini SELALU Indonesia untuk pembeli, terlepas
+           preferensi bahasa kasir (lihat komentar di atas file ini). -->
+      <div
+        v-if="receipt.event_available_on_date || receipt.event_location"
+        class="flex flex-col gap-1.5 rounded-lg bg-brand px-4 py-3 text-white"
+      >
+        <div v-if="receipt.event_location" class="flex items-center justify-between gap-3 text-[13px]">
+          <span class="font-semibold text-mint-100">Lokasi</span>
+          <span class="font-bold">{{ receipt.event_location }}</span>
+        </div>
+        <div v-if="receipt.event_available_on_date" class="flex items-center justify-between gap-3 text-[13px]">
+          <span class="font-semibold text-mint-100">Tersedia pada</span>
+          <span class="font-bold">{{ formatDate(receipt.event_available_on_date) }}</span>
+        </div>
+      </div>
+
       <div class="flex flex-col gap-3 border-y border-dashed border-line-2 py-4">
         <div v-for="(item, idx) in receipt.items" :key="idx" class="flex items-start gap-2.5">
           <span class="min-w-[26px] text-[15px] font-bold text-brand-active">{{ item.qty }}×</span>

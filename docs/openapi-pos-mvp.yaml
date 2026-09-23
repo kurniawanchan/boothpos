@@ -362,6 +362,10 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/Setting' }
+                  store_logo_url:
+                    type: string
+                    nullable: true
+                    description: 023-event-availability-invoice-redesign (US4, research.md Decision 8) — diselesaikan lewat ImageUploadService, konvensi yang sama dengan setiap gambar lain di produk ini; menggantikan konstruksi URL manual di frontend yang jadi akar bug logo tidak tampil.
         '403': { $ref: '#/components/responses/Forbidden' }
     put:
       tags: [Settings]
@@ -445,6 +449,9 @@ paths:
                 type: object
                 properties:
                   data: { $ref: '#/components/schemas/Setting' }
+                  store_logo_url:
+                    type: string
+                    description: 023-event-availability-invoice-redesign (US4) — dari path yang BARU SAJA diunggah, bukan dibaca ulang dari DB, supaya tampil seketika tanpa round-trip kedua.
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
@@ -4713,6 +4720,11 @@ components:
         location: { type: string, nullable: true }
         start_date: { type: string, format: date }
         end_date: { type: string, format: date }
+        available_on:
+          type: string
+          nullable: true
+          enum: [day_1, day_2]
+          description: 023-event-availability-invoice-redesign (US1) — resolved to a real date via Event::availableOnDate(); only meaningful for multi-day events, cleared automatically if the event collapses to one day.
         status: { type: string, enum: [draft, active, closed, cancelled] }
         event_cost: { $ref: '#/components/schemas/Money' }
         notes: { type: string, nullable: true }
@@ -4725,6 +4737,11 @@ components:
         location: { type: string, nullable: true }
         start_date: { type: string, format: date }
         end_date: { type: string, format: date }
+        available_on:
+          type: string
+          nullable: true
+          enum: [day_1, day_2]
+          description: Rejected (422) when start_date equals end_date (023-event-availability-invoice-redesign US1, FR-002).
         event_cost: { $ref: '#/components/schemas/Money' }
         notes: { type: string, nullable: true }
 
@@ -5005,6 +5022,11 @@ components:
         event_location: { type: string, nullable: true, description: "014-sales-receipt-event-footer." }
         event_start_date: { type: string, format: date, nullable: true }
         event_end_date: { type: string, format: date, nullable: true }
+        event_available_on_date:
+          type: string
+          format: date
+          nullable: true
+          description: 023-event-availability-invoice-redesign (US2) — resolved via Event::availableOnDate(); Order always has an event, so only null when the event itself has no available_on set.
         cashier_name: { type: string }
         created_at: { type: string, format: date-time }
         items:
