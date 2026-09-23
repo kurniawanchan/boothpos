@@ -4,11 +4,15 @@
 // diketahui (belum ada login sama sekali di titik ini) — jangan
 // tambahkan toggle bahasa di sini.
 import { reactive, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useLicenseStore } from '../stores/license';
+import { useToastStore } from '../stores/toast';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 
+const router = useRouter();
 const license = useLicenseStore();
+const toast = useToastStore();
 
 const form = reactive({ license_key: '' });
 const errors = reactive({ license_key: '' });
@@ -21,9 +25,13 @@ async function onSubmit() {
   submitting.value = true;
   try {
     await license.activate(form.license_key.trim());
-    // Tidak perlu router.push — beforeEach guard akan membaca
-    // license.activated yang sudah ter-refresh dan membiarkan navigasi
-    // berikutnya (mis. ke /login) lewat dengan sendirinya.
+    toast.success('Aktivasi berhasil. BoothPOS siap digunakan di perangkat ini.');
+    // beforeEach guard hanya jalan saat ada navigasi, dan license.activate()
+    // sendiri tidak memicu satu pun — tanpa push eksplisit ini, layar
+    // aktivasi akan diam di tempat walau statusnya sudah aktif. router.push
+    // ke '/' membiarkan guard sendiri yang memutuskan tujuan akhirnya
+    // (dashboard kalau sudah login, /login kalau belum).
+    router.push('/');
   } catch (err) {
     if (err.isValidation) {
       errors.license_key = err.errors?.license_key?.[0] ?? '';
