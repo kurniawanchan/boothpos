@@ -14,16 +14,16 @@ class Preorder extends Model
 
     protected $fillable = [
         'preorder_number', 'event_id', 'customer_id', 'user_id', 'status', 'fulfillment',
-        'subtotal', 'shipping_cost', 'total_amount', 'paid_amount', 'expected_date',
-        'cancel_reason', 'notes',
+        'subtotal', 'shipping_cost', 'discount', 'total_amount', 'paid_amount', 'expected_date',
+        'pickup_day', 'courier_name', 'cancel_reason', 'notes',
     ];
 
     protected function casts(): array
     {
         return [
-            'subtotal' => 'decimal:2', 'shipping_cost' => 'decimal:2',
+            'subtotal' => 'decimal:2', 'shipping_cost' => 'decimal:2', 'discount' => 'decimal:2',
             'total_amount' => 'decimal:2', 'paid_amount' => 'decimal:2',
-            'expected_date' => 'date',
+            'expected_date' => 'date', 'pickup_day' => 'date',
         ];
     }
 

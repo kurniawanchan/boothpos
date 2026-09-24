@@ -362,6 +362,10 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/Setting' }
+                  store_logo_url:
+                    type: string
+                    nullable: true
+                    description: 023-event-availability-invoice-redesign (US4, research.md Decision 8) — diselesaikan lewat ImageUploadService, konvensi yang sama dengan setiap gambar lain di produk ini; menggantikan konstruksi URL manual di frontend yang jadi akar bug logo tidak tampil.
         '403': { $ref: '#/components/responses/Forbidden' }
     put:
       tags: [Settings]
@@ -445,6 +449,9 @@ paths:
                 type: object
                 properties:
                   data: { $ref: '#/components/schemas/Setting' }
+                  store_logo_url:
+                    type: string
+                    description: 023-event-availability-invoice-redesign (US4) — dari path yang BARU SAJA diunggah, bukan dibaca ulang dari DB, supaya tampil seketika tanpa round-trip kedua.
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
@@ -721,7 +728,7 @@ paths:
       summary: Buat produk beserta varian
       description: |
         `code_prefix` dan `sku` dihasilkan server, tidak dikirim klien.
-        Segmen produk diturunkan dari nama bila `product_segment` kosong.
+        `code_prefix` dan `sku` dihasilkan server dari kode seller + urutan product per-seller; kode category dan `product_segment` tidak lagi dipakai.
       requestBody:
         required: true
         content:
@@ -1764,6 +1771,91 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /customers/export:
+    get:
+      tags: [Master Data]
+      summary: Ekspor daftar pelanggan ke .xlsx (020-customer-data-import-export, US1)
+      description: |
+        Digerbang canAccessAnyMenu(['artists','categories','products','stock',
+        'vendors','materials','roles','users']) — tier owner/admin/inventory,
+        sama seperti bulk master-data lain (GET /exports/{entity}), lebih
+        ketat dari GET /customers yang terbuka untuk semua peran termasuk
+        kasir. Berkas terpisah dari workbook master-data gabungan — lihat
+        research.md Decision 1 di specs/020-customer-data-import-export/.
+        Hanya mencakup pelanggan pada mode data (DEMO/LIVE) yang sedang aktif.
+      responses:
+        '200':
+          description: "Berkas .xlsx (kolom: name, phone, address, email, social_handle, notes)"
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /customers/import/template:
+    get:
+      tags: [Master Data]
+      summary: Unduh template impor pelanggan (020-customer-data-import-export, US2)
+      description: Kolom header sama persis dengan GET /customers/export, supaya berkas ekspor langsung valid diimpor ulang.
+      responses:
+        '200':
+          description: Berkas .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /customers/import:
+    post:
+      tags: [Master Data]
+      summary: Impor batch pelanggan dari .xlsx (020-customer-data-import-export, US2/US3)
+      description: |
+        Validasi PENUH dulu, baru diterapkan sekaligus dalam satu transaksi
+        (all-or-nothing, meniru MasterDataImportService/PreorderImport).
+        ATURAN BARU: baris dengan `email` yang cocok (case-insensitive,
+        exact match, dalam mode data aktif) dengan pelanggan yang sudah ada
+        meng-UPDATE pelanggan itu (sel kosong tidak mengosongkan nilai yang
+        sudah ada), bukan membuat duplikat. Baris tanpa email SELALU
+        membuat pelanggan baru. `dry_run=1` melewati jalur validasi yang
+        identik untuk pratinjau (US3), tanpa menulis apa pun.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: Berkas .xlsx, maks 10 MB. }
+                dry_run: { type: string, enum: ['1'], description: Validasi tanpa menyimpan (pratinjau). }
+      responses:
+        '200':
+          description: Pratinjau (dry_run=1) — tidak ada yang disimpan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerImportResult' }
+        '201':
+          description: Tersimpan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerImportResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Validasi gagal — tidak ada baris yang disimpan.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  row_errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        row: { type: integer }
+                        errors: { type: array, items: { type: string } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   # ------------------------------------------------------------------
   # PRE-ORDER
   # ------------------------------------------------------------------
@@ -1840,18 +1932,87 @@ paths:
                           error_message: { type: string, nullable: true }
                           sent_at: { type: string, format: date-time, nullable: true }
         '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Preorder]
+      summary: Ubah pre-order (022-preorder-invoice-crud-overhaul, US1, FR-001/FR-001a/FR-002)
+      description: |
+        Item boleh diubah (tambah/hapus/ubah qty) selama status BUKAN
+        "handed_over"/"cancelled" (409 kalau ditolak). Kalau status sudah
+        "arrived"/"settled" (stok sudah pernah ditambahkan saat transisi ke
+        "arrived"), efek stok dikoreksi lewat DELTA per variant (qty baru
+        dikurangi qty lama) — bukan membalik lalu menerapkan ulang seluruh
+        item (research.md Decision 3).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                customer_id: { type: integer }
+                event_id: { type: integer, nullable: true }
+                fulfillment: { type: string, enum: [pickup, courier] }
+                shipping_cost: { $ref: '#/components/schemas/Money' }
+                discount: { $ref: '#/components/schemas/Money' }
+                pickup_day: { type: string, format: date, nullable: true }
+                courier_name: { type: string, nullable: true }
+                expected_date: { type: string, format: date, nullable: true }
+                notes: { type: string, nullable: true }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [variant_id, qty]
+                    properties:
+                      variant_id: { type: integer }
+                      qty: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '409':
+          description: Status "handed_over"/"cancelled" (edit ditolak), atau perubahan membuat total lebih kecil dari yang sudah dibayar.
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Preorder]
+      summary: Hapus pre-order (022-preorder-invoice-crud-overhaul, US1, FR-003/FR-004)
+      description: |
+        Hanya boleh selagi status masih "ordered" DAN belum ada pembayaran
+        tercatat. Status lain (termasuk "arrived") WAJIB memakai aksi
+        "Cancel" (`PATCH /preorders/{id}/status`) — bukan endpoint ini.
+      responses:
+        '204': { description: Berhasil dihapus }
+        '409': { description: 'Status bukan "ordered", atau sudah ada pembayaran tercatat — gunakan aksi Cancel.' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /preorders/{id}/invoice:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     get:
       tags: [Preorder]
-      summary: Data invoice/struk sesuai status (007-preorder-import-export-notify, US2)
+      summary: Data invoice sesuai status (007-preorder-import-export-notify US2; label "receipt" dihapus seluruhnya di 022-preorder-invoice-crud-overhaul US3)
       description: |
+        022-preorder-invoice-crud-overhaul (US4, FR-012) — endpoint yang
+        SAMA PERSIS ini juga menjadi sumber data "Payment invoice" (dahulu
+        "Payment receipt") di frontend, karena `payments` sudah dimuat di
+        sini; tidak ada endpoint kedua untuk dokumen tersebut.
+
+        023-event-availability-invoice-redesign (US3, FR-009) — `shipping_cost`
+        (sudah ada sejak `Preorder`/`present()`) kini benar-benar dirender di
+        dokumen invoice (bukan hanya dikembalikan tanpa ditampilkan) — tidak
+        ada perubahan skema, hanya perilaku frontend.
+
         Data mentah — PDF-nya dirender di klien (html2canvas + jsPDF), sama
         seperti struk penjualan dan invoice purchase order. `document_type`
-        dihitung server dari status pre-order saat ini: `invoice` untuk
-        `ordered`/`dp_paid`/`arrived`, `receipt` untuk `settled`/
-        `handed_over`, `cancelled` untuk `cancelled`.
+        dihitung server dari status pre-order saat ini (`invoice` untuk
+        `ordered`/`dp_paid`/`arrived`, `receipt` secara internal untuk
+        `settled`/`handed_over`, `cancelled` untuk `cancelled`) — tapi label
+        yang ditampilkan ke pengguna SELALU "Invoice" (FR-007), nilai
+        `receipt` di sini hanya identifier internal, bukan lagi teks yang
+        ditampilkan.
       responses:
         '200':
           description: Berhasil
@@ -1867,7 +2028,107 @@ paths:
                       event_location: { type: string, nullable: true }
                       event_start_date: { type: string, format: date, nullable: true }
                       event_end_date: { type: string, format: date, nullable: true }
+                      event_available_on_date:
+                        type: string
+                        format: date
+                        nullable: true
+                        description: 023-event-availability-invoice-redesign (US2) — resolved via Event::availableOnDate(); null when the event has no available_on set, or no event is linked.
+                      store_identity:
+                        type: object
+                        nullable: true
+                        description: 022-preorder-invoice-crud-overhaul (US3, FR-008) — disalin dari assembly yang sama dengan GET /orders/{id}/receipt.
+                        properties:
+                          name: { type: string }
+                          logo_url: { type: string, nullable: true }
+                          contact_person: { type: string, nullable: true }
+                          contact_phone: { type: string, nullable: true }
+                          contact_email: { type: string, nullable: true }
+                          address: { type: string, nullable: true }
+                      payment_channels:
+                        type: array
+                        description: 022-preorder-invoice-crud-overhaul (US3, FR-009) — account_number TIDAK disamarkan di sini (beda dari GET /payment-channels untuk kasir non-privileged).
+                        items:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            type: { type: string, enum: [bank_transfer, qr_ewallet] }
+                            provider: { type: string }
+                            account_name: { type: string, nullable: true }
+                            account_number: { type: string, nullable: true }
+                            qr_image_url: { type: string, nullable: true }
+                      footer_text: { type: string, nullable: true, description: 022-preorder-invoice-crud-overhaul (US3, FR-010) — sama dengan receipt_footer_text yang sudah ada. }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /preorders/bulk-invoices:
+    post:
+      tags: [Preorder]
+      summary: Payload invoice untuk banyak pre-order sekaligus (022-preorder-invoice-crud-overhaul, US5, FR-013)
+      description: |
+        Mengembalikan array payload invoice LENGKAP (schema sama dengan
+        `GET /preorders/{id}/invoice`) untuk setiap id yang diminta, dalam
+        satu respons — PDF-nya tetap dirender di klien (tidak ada
+        rendering PDF sisi server, research.md Decision 5). `document`
+        `invoice` atau `payment_invoice`; untuk `payment_invoice`,
+        frontend memilih pembayaran terakhir dari `payments` pada setiap
+        payload.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preorder_ids, document]
+              properties:
+                preorder_ids: { type: array, items: { type: integer }, minItems: 1 }
+                document: { type: string, enum: [invoice, payment_invoice] }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Preorder' } }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /preorders/bulk-email:
+    post:
+      tags: [Preorder]
+      summary: Kirim invoice/payment invoice ke banyak pre-order sekaligus (022-preorder-invoice-crud-overhaul, US5, FR-014/FR-015)
+      description: |
+        Satu email per pre-order terpilih (`PreorderInvoiceMail`, badan
+        HTML tanpa lampiran PDF — research.md Decision 5), memakai jalur
+        catat-setiap-percobaan yang sama dengan `PreorderNotifier`
+        (trigger baru `bulk_invoice_email` di `preorder_notifications`).
+        SELALU 200 dengan laporan per-baris — satu pelanggan tanpa email
+        tidak menggagalkan batch (FR-015).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preorder_ids, document]
+              properties:
+                preorder_ids: { type: array, items: { type: integer }, minItems: 1 }
+                document: { type: string, enum: [invoice, payment_invoice] }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        preorder_id: { type: integer }
+                        status: { type: string, enum: [sent, skipped_no_email, skipped_not_configured, failed] }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /preorders/summary:
     get:
@@ -1912,8 +2173,19 @@ paths:
   /preorders/export:
     get:
       tags: [Preorder]
-      summary: Ekspor daftar pre-order ke .xlsx (007-preorder-import-export-notify, US3)
-      description: Hanya owner/admin. Menghormati filter yang sama dengan `GET /preorders` (`status`/`event_id`/`customer_id`/`fulfillment`/`search`/`date_from`/`date_to`).
+      summary: Ekspor daftar pre-order ke .xlsx (007-preorder-import-export-notify, US3; layout diganti seluruhnya di 022-preorder-invoice-crud-overhaul US7)
+      description: |
+        Hanya owner/admin. Menghormati filter yang sama dengan `GET /preorders`
+        (`status`/`event_id`/`customer_id`/`fulfillment`/`search`/`date_from`/`date_to`).
+
+        022-preorder-invoice-crud-overhaul (US7, FR-017): layout MENGGANTIKAN
+        SELURUHNYA format row-per-item feature 007/021 — sekarang SATU BARIS
+        PER PESANAN dengan kolom `customer_name`, `event_name` (nama, bukan
+        ID), `fulfillment` (`pickup`/`mail order`), `pickup_day` (teks
+        "Day N"), `products`/`quantities`/`unit_prices` (comma-separated,
+        dicocokkan lewat posisi), `shipping_cost`, `courier_name`,
+        `expected_date`, `discount`, `notes`. File hasil ekspor ini bisa
+        diimpor balik apa adanya (round-trip, SC-005).
       parameters:
         - { name: status, in: query, schema: { type: string } }
         - { name: event_id, in: query, schema: { type: integer } }
@@ -1961,6 +2233,18 @@ paths:
         disengaja terhadap aturan "server selalu menghitung ulang", karena
         impor mencatat transaksi historis yang sudah terjadi di luar
         sistem (research.md R4).
+
+        022-preorder-invoice-crud-overhaul (US7, FR-017/FR-018): layout
+        SATU-BARIS-PER-PESANAN menggantikan seluruhnya format row-per-item
+        lama. `event_name` dicocokkan lewat nama (bukan ID) — ambigu/tidak
+        ditemukan adalah galat baris. `fulfillment` menerima kata
+        "pickup"/"mail order". `pickup_day` ditulis "Day N" (diselesaikan
+        ke tanggal asli lewat rentang tanggal event yang cocok, sama seperti
+        `resolvePickupDayAndCourier()`). `products`/`quantities`/
+        `unit_prices` adalah TIGA kolom comma-separated yang WAJIB sama
+        panjang (jumlah berbeda = galat baris, FR-018) dan dicocokkan lewat
+        posisi. Aturan cross-field pickup_day/courier_name vs fulfillment
+        tetap sama persis dengan `POST /preorders`.
       requestBody:
         required: true
         content:
@@ -3694,7 +3978,7 @@ paths:
         |---|---|
         | `artists` | `code` |
         | `categories` | `code` |
-        | `products` | `sku` bila diisi; bila kosong, `code_prefix` (artist_code + category_code + product_segment) + `variant_name` |
+        | `products` | `sku` bila diisi; bila kosong, `code_prefix` + urutan varian |
         | `stock` | `sku` |
         | `vendors` | `code` |
         | `materials` | `code` |
@@ -3868,6 +4152,21 @@ components:
                   items: { type: string }
 
   schemas:
+
+    CustomerImportResult:
+      type: object
+      description: Bentuk respons POST /customers/import, baik dry_run maupun penerapan sungguhan (020-customer-data-import-export).
+      properties:
+        dry_run: { type: boolean }
+        created_count: { type: integer }
+        updated_count: { type: integer }
+        row_errors:
+          type: array
+          items:
+            type: object
+            properties:
+              row: { type: integer }
+              errors: { type: array, items: { type: string } }
 
     StockByArtistDetail:
       type: object
@@ -4331,7 +4630,7 @@ components:
       properties:
         id: { type: integer }
         product_id: { type: integer }
-        sku: { type: string, minLength: 12, maxLength: 12, example: RYUKYSAK0007 }
+        sku: { type: string, minLength: 12, maxLength: 16, example: RYU10001 }
         variant_name: { type: string }
         cost_price: { $ref: '#/components/schemas/Money' }
         sell_price: { $ref: '#/components/schemas/Money' }
@@ -4369,8 +4668,7 @@ components:
         artist_name: { type: string, readOnly: true }
         category_id: { type: integer }
         category_name: { type: string, readOnly: true }
-        code_prefix: { type: string, minLength: 8, maxLength: 8, readOnly: true, example: RYUKYSAK }
-        product_segment: { type: string, minLength: 3, maxLength: 3 }
+        code_prefix: { type: string, minLength: 4, maxLength: 64, readOnly: true, example: RYU1 }
         name: { type: string }
         description: { type: string, nullable: true }
         image_path: { type: string, nullable: true, description: "Diisi via POST /products/{id}/image atau impor massal (Task 6)." }
@@ -4388,12 +4686,6 @@ components:
       properties:
         artist_id: { type: integer }
         category_id: { type: integer }
-        product_segment:
-          type: string
-          minLength: 3
-          maxLength: 3
-          nullable: true
-          description: Diturunkan dari nama produk bila dikosongkan.
         name: { type: string, maxLength: 150 }
         description: { type: string, nullable: true }
         is_preorder: { type: boolean, default: false }
@@ -4428,6 +4720,11 @@ components:
         location: { type: string, nullable: true }
         start_date: { type: string, format: date }
         end_date: { type: string, format: date }
+        available_on:
+          type: string
+          nullable: true
+          enum: [day_1, day_2]
+          description: 023-event-availability-invoice-redesign (US1) — resolved to a real date via Event::availableOnDate(); only meaningful for multi-day events, cleared automatically if the event collapses to one day.
         status: { type: string, enum: [draft, active, closed, cancelled] }
         event_cost: { $ref: '#/components/schemas/Money' }
         notes: { type: string, nullable: true }
@@ -4440,6 +4737,11 @@ components:
         location: { type: string, nullable: true }
         start_date: { type: string, format: date }
         end_date: { type: string, format: date }
+        available_on:
+          type: string
+          nullable: true
+          enum: [day_1, day_2]
+          description: Rejected (422) when start_date equals end_date (023-event-availability-invoice-redesign US1, FR-002).
         event_cost: { $ref: '#/components/schemas/Money' }
         notes: { type: string, nullable: true }
 
@@ -4483,6 +4785,7 @@ components:
         email: { type: string, nullable: true }
         social_handle: { type: string, nullable: true }
         notes: { type: string, nullable: true }
+        address: { type: string, nullable: true }
 
     CustomerInput:
       type: object
@@ -4493,6 +4796,7 @@ components:
         email: { type: string, nullable: true }
         social_handle: { type: string, nullable: true }
         notes: { type: string, nullable: true }
+        address: { type: string, nullable: true }
 
     PaymentChannel:
       type: object
@@ -4718,6 +5022,11 @@ components:
         event_location: { type: string, nullable: true, description: "014-sales-receipt-event-footer." }
         event_start_date: { type: string, format: date, nullable: true }
         event_end_date: { type: string, format: date, nullable: true }
+        event_available_on_date:
+          type: string
+          format: date
+          nullable: true
+          description: 023-event-availability-invoice-redesign (US2) — resolved via Event::availableOnDate(); Order always has an event, so only null when the event itself has no available_on set.
         cashier_name: { type: string }
         created_at: { type: string, format: date-time }
         items:
@@ -4754,8 +5063,11 @@ components:
       properties:
         event_id: { type: integer, nullable: true }
         customer_id: { type: integer }
-        fulfillment: { type: string, enum: [pickup, courier] }
+        fulfillment: { type: string, enum: [pickup, courier], description: "021-preorder-form-updates — label ditampilkan sebagai 'Mail Order' untuk nilai 'courier' (perubahan label saja, lihat research.md Decision 4)." }
         shipping_cost: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money', description: "021-preorder-form-updates (US2) — nominal Rupiah tetap, opsional, default 0. 422 bila melebihi subtotal+shipping_cost." }
+        pickup_day: { type: string, format: date, nullable: true, description: "021-preorder-form-updates (US3) — hanya berlaku saat fulfillment=pickup DAN event_id terisi; harus berada dalam rentang tanggal event tersebut (422 bila tidak)." }
+        courier_name: { type: string, nullable: true, description: "021-preorder-form-updates (US3) — hanya berlaku saat fulfillment=courier; default 'JNE' bila kosong; harus salah satu dari daftar App\\Support\\Couriers." }
         expected_date: { type: string, format: date, nullable: true }
         notes: { type: string, nullable: true }
         items:
@@ -4793,12 +5105,16 @@ components:
         customer: { $ref: '#/components/schemas/Customer' }
         status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
         fulfillment: { type: string, enum: [pickup, courier] }
+        created_at: { type: string, format: date-time, description: "024-invoice-layout-shipping-slip — ditambahkan ke present() (sebelumnya hanya ada di PreorderSummary/index())." }
         subtotal: { $ref: '#/components/schemas/Money' }
         shipping_cost: { $ref: '#/components/schemas/Money' }
+        discount: { $ref: '#/components/schemas/Money', description: "021-preorder-form-updates (US2) — 0.00 untuk pre-order dari sebelum fitur ini." }
         total_amount: { $ref: '#/components/schemas/Money' }
         paid_amount: { $ref: '#/components/schemas/Money' }
         outstanding: { $ref: '#/components/schemas/Money' }
         expected_date: { type: string, format: date, nullable: true }
+        pickup_day: { type: string, format: date, nullable: true, description: "021-preorder-form-updates (US3) — tanggal ASLI (bukan label 'Day 1'), diturunkan dari rentang tanggal event saat dibuat." }
+        courier_name: { type: string, nullable: true, description: "021-preorder-form-updates (US3) — nilai DEFAULT/preferensi yang dipilih saat preorder dibuat; BUKAN Shipment.courier_name (kolom terpisah, diisi ulang saat shipment sungguhan dibuat)." }
         cancel_reason: { type: string, nullable: true }
         sellers:
           type: array
@@ -4832,17 +5148,17 @@ components:
 
     ShipmentInput:
       type: object
-      required: [courier_name, recipient_name, recipient_phone, address_line, city]
+      required: [courier_name, recipient_name, recipient_phone, address_line]
       properties:
         courier_name: { type: string, maxLength: 50 }
         tracking_number: { type: string, nullable: true }
         shipping_cost: { $ref: '#/components/schemas/Money' }
         recipient_name: { type: string, maxLength: 100 }
         recipient_phone: { type: string, maxLength: 30 }
+        # 022-preorder-invoice-crud-overhaul (US2, FR-006) — city/postal_code
+        # dihapus; alamat cukup satu field, sama seperti Customer.address.
         address_line: { type: string, maxLength: 255 }
-        city: { type: string, maxLength: 100 }
         province: { type: string, nullable: true }
-        postal_code: { type: string, nullable: true }
         notes: { type: string, nullable: true }
 
     Shipment:
@@ -4856,9 +5172,7 @@ components:
         recipient_name: { type: string }
         recipient_phone: { type: string }
         address_line: { type: string }
-        city: { type: string }
         province: { type: string, nullable: true }
-        postal_code: { type: string, nullable: true }
         status: { type: string, enum: [pending, packed, shipped, delivered] }
         shipped_at: { type: string, format: date-time, nullable: true }
         delivered_at: { type: string, format: date-time, nullable: true }

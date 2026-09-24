@@ -11,4 +11,10 @@ return [
     'session_already_closed' => 'This session is already closed.',
     'not_authorized_view_summary' => 'You are not authorized to view this session\'s summary.',
     'event_delete_has_transactions' => 'This event still has transactions (orders/pre-orders) and cannot be deleted.',
+
+    // 023-event-availability-invoice-redesign (US1)
+    'available_on_requires_multi_day' => 'Available day only applies to events spanning more than one day.',
+    'available_on_label' => 'Available on',
+    'available_on_day_1' => 'Day 1 ({date})',
+    'available_on_day_2' => 'Day 2 ({date})',
 ];

@@ -33,6 +33,9 @@ class ShipmentController extends Controller
             return response()->json(['message' => __('preorders.shipment_already_exists')], 409);
         }
 
+        // 022-preorder-invoice-crud-overhaul (US2, FR-006) — city/postal_code
+        // dihapus; alamat cukup satu field (address_line), sama seperti
+        // Customer.address (fitur 020).
         $validated = $request->validate([
             'courier_name' => ['required', 'string', 'max:50'],
             'tracking_number' => ['nullable', 'string', 'max:50'],
@@ -40,9 +43,7 @@ class ShipmentController extends Controller
             'recipient_name' => ['required', 'string', 'max:100'],
             'recipient_phone' => ['required', 'string', 'max:30'],
             'address_line' => ['required', 'string', 'max:255'],
-            'city' => ['required', 'string', 'max:100'],
             'province' => ['nullable', 'string', 'max:100'],
-            'postal_code' => ['nullable', 'string', 'max:10'],
             'notes' => ['nullable', 'string'],
         ]);
 

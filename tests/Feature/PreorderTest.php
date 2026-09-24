@@ -204,7 +204,7 @@ class PreorderTest extends TestCase
 
         $this->postJson("/api/v1/preorders/{$courierPreorder['id']}/shipment", [
             'courier_name' => 'JNE', 'recipient_name' => 'Budi', 'recipient_phone' => '08123',
-            'address_line' => 'Jl. Test', 'city' => 'Jakarta',
+            'address_line' => 'Jl. Test, Jakarta',
         ])->assertCreated();
 
         $show = $this->getJson("/api/v1/preorders/{$courierPreorder['id']}")->json();
@@ -217,7 +217,7 @@ class PreorderTest extends TestCase
 
         $response = $this->postJson("/api/v1/preorders/{$preorder['id']}/shipment", [
             'courier_name' => 'JNE', 'recipient_name' => 'Budi', 'recipient_phone' => '08123',
-            'address_line' => 'Jl. Test', 'city' => 'Jakarta',
+            'address_line' => 'Jl. Test, Jakarta',
         ]);
 
         $response->assertStatus(409);

@@ -19,6 +19,7 @@ class StoreCustomerRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:100'],
             'social_handle' => ['nullable', 'string', 'max:100'],
             'notes' => ['nullable', 'string'],
+            'address' => ['nullable', 'string'],
         ];
     }
 }

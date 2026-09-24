@@ -12,8 +12,8 @@ class Shipment extends Model
 
     protected $fillable = [
         'preorder_id', 'courier_name', 'tracking_number', 'shipping_cost',
-        'recipient_name', 'recipient_phone', 'address_line', 'city',
-        'province', 'postal_code', 'status', 'shipped_at', 'delivered_at', 'notes',
+        'recipient_name', 'recipient_phone', 'address_line',
+        'province', 'status', 'shipped_at', 'delivered_at', 'notes',
     ];
 
     protected function casts(): array

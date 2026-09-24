@@ -146,6 +146,11 @@ class OrderController extends Controller
             'event_location' => $order->event->location,
             'event_start_date' => $order->event->start_date?->toDateString(),
             'event_end_date' => $order->event->end_date?->toDateString(),
+            // 023-event-availability-invoice-redesign (US2) — sama persis
+            // dengan PreorderController::invoicePayload(); Order SELALU
+            // punya event (beda dari Preorder yang opsional), jadi tidak
+            // perlu null-safe di sisi event-nya sendiri.
+            'event_available_on_date' => $order->event->availableOnDate()?->toDateString(),
             'cashier_name' => $order->cashier->name,
             'created_at' => $order->created_at,
             'items' => $order->items->map(fn ($i) => [

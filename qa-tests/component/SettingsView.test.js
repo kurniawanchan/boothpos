@@ -45,6 +45,10 @@ describe('SettingsView — profil toko (US3)', () => {
         { key: 'store_contact_email', value: 'toko@contoh.com', type: 'string', group: 'receipt' },
         { key: 'store_logo_path', value: 'store-logo/existing.png', type: 'string', group: 'receipt' },
       ],
+      // 023-event-availability-invoice-redesign (US4, research.md Decision
+      // 8) — URL sekarang diselesaikan BACKEND, bukan ditebak dari
+      // store_logo_path di frontend.
+      store_logo_url: 'http://localhost/storage/store-logo/existing.png',
     });
   });
 
@@ -55,7 +59,7 @@ describe('SettingsView — profil toko (US3)', () => {
     expect(screen.getByDisplayValue('Budi')).toBeInTheDocument();
     expect(screen.getByDisplayValue('0812-3456-7890')).toBeInTheDocument();
     expect(screen.getByDisplayValue('toko@contoh.com')).toBeInTheDocument();
-    expect(screen.getByAltText(/logo toko saat ini/i)).toHaveAttribute('src', '/storage/store-logo/existing.png');
+    expect(screen.getByAltText(/logo toko saat ini/i)).toHaveAttribute('src', 'http://localhost/storage/store-logo/existing.png');
   });
 
   it('saves the extended store-profile fields via the bulk PUT /settings call', async () => {
@@ -90,7 +94,10 @@ describe('SettingsView — profil toko (US3)', () => {
   it('uploads a valid logo file via POST /settings/store-logo', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    uploadStoreLogo.mockResolvedValue({ data: { key: 'store_logo_path', value: 'store-logo/new.png' } });
+    uploadStoreLogo.mockResolvedValue({
+      data: { key: 'store_logo_path', value: 'store-logo/new.png' },
+      store_logo_url: 'http://localhost/storage/store-logo/new.png',
+    });
     renderSettings();
     await screen.findByDisplayValue('Jl. Merdeka No. 1');
 

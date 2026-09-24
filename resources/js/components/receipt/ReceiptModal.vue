@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed } from 'vue';
+import { ref, watch } from 'vue';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import { getReceipt } from '../../api/orders';
@@ -41,20 +41,6 @@ const downloadingImage = ref(false);
 const downloadingPdf = ref(false);
 
 const METHOD_LABELS = { cash: 'Tunai', bank_transfer: 'Transfer bank', qr_ewallet: 'QRIS / e-wallet' };
-
-// 014-sales-receipt-event-footer (US2, FR-005/006/007) — tanggal event
-// diformat di sisi frontend (research.md R3), bukan backend, agar tetap
-// konsisten dengan konvensi "komponen memformat sendiri" yang sudah
-// dipakai untuk uang/tanggal lain di struk ini.
-const eventInfoLine = computed(() => {
-  if (!receipt.value) return '';
-  const start = receipt.value.event_start_date;
-  const end = receipt.value.event_end_date;
-  if (start && end) {
-    return start === end ? formatDate(start) : `${formatDate(start)} – ${formatDate(end)}`;
-  }
-  return formatDate(start || end || null) === '—' ? '' : formatDate(start || end);
-});
 
 async function captureCanvas() {
   const { default: html2canvas } = await import('html2canvas');
@@ -147,6 +133,26 @@ watch(
         <span class="text-[12px] text-muted-2">{{ formatDateTime(receipt.created_at) }} · Kasir {{ receipt.cashier_name }}</span>
       </div>
 
+      <!-- 023-event-availability-invoice-redesign (US2, FR-004/FR-005/
+           FR-006, research.md Decision 3) — MENGGANTIKAN blok footer kecil
+           "Lokasi:/Tanggal:" yang dulu ada di bawah, sama seperti
+           PreorderInvoiceModal.vue. Teks tetap Bahasa Indonesia langsung
+           (bukan t()) — struk ini SELALU Indonesia untuk pembeli, terlepas
+           preferensi bahasa kasir (lihat komentar di atas file ini). -->
+      <div
+        v-if="receipt.event_available_on_date || receipt.event_location"
+        class="flex flex-col gap-1.5 rounded-lg bg-brand px-4 py-3 text-white"
+      >
+        <div v-if="receipt.event_location" class="flex items-center justify-between gap-3 text-[13px]">
+          <span class="font-semibold text-mint-100">Lokasi</span>
+          <span class="font-bold">{{ receipt.event_location }}</span>
+        </div>
+        <div v-if="receipt.event_available_on_date" class="flex items-center justify-between gap-3 text-[13px]">
+          <span class="font-semibold text-mint-100">Tersedia pada</span>
+          <span class="font-bold">{{ formatDate(receipt.event_available_on_date) }}</span>
+        </div>
+      </div>
+
       <div class="flex flex-col gap-3 border-y border-dashed border-line-2 py-4">
         <div v-for="(item, idx) in receipt.items" :key="idx" class="flex items-start gap-2.5">
           <span class="min-w-[26px] text-[15px] font-bold text-brand-active">{{ item.qty }}×</span>
@@ -193,16 +199,6 @@ watch(
         {{ receipt.receipt_footer_text }}
       </p>
 
-      <!-- 014-sales-receipt-event-footer (US2) — info event di footer,
-           dihilangkan seluruhnya jika tidak ada lokasi maupun tanggal
-           (FR-006), bukan blok kosong. -->
-      <div
-        v-if="receipt.event_location || eventInfoLine"
-        class="flex flex-col items-center gap-0.5 border-t border-dashed border-line-2 pt-3 text-center text-[11px] text-muted-3"
-      >
-        <span v-if="receipt.event_location">Lokasi: {{ receipt.event_location }}</span>
-        <span v-if="eventInfoLine">Tanggal: {{ eventInfoLine }}</span>
-      </div>
     </div>
 
     <template #footer>

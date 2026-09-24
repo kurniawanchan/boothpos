@@ -59,6 +59,22 @@ export default defineConfig({
     // was never a problem there, and `cors: true` is a strict widening,
     // never a narrowing, of what's already allowed.
     cors: true,
+    // BUG YANG DITEMUKAN & DIPERBAIKI (020-customer-data-import-export,
+    // ditemukan lewat verifikasi browser sungguhan Constitution II, bukan
+    // dari membaca dokumentasi) — di dalam Docker Desktop pada macOS,
+    // bind-mount `.:/var/www/html` (docker-compose.yml) tidak selalu
+    // meneruskan event inotify native saat file diedit dari HOST ke
+    // watcher chokidar Vite yang jalan DI DALAM container Linux. Efeknya
+    // sunyi dan berbahaya: HMR berhenti bekerja untuk beberapa file tanpa
+    // error apa pun di konsol — browser terus menyajikan bundle lama
+    // walau kode sumbernya sudah berubah. `usePolling` memaksa Vite
+    // mengecek mtime berkas secara berkala alih-alih menunggu event OS
+    // yang tidak bisa diandalkan lewat bind mount. Sama seperti
+    // `VITE_DEV_SERVER_ORIGIN` di atas, ini digerbang oleh env var yang
+    // sama (hanya ada nilainya di docker-compose.yml service `node`),
+    // supaya `npm run dev` native TIDAK terkena overhead polling — di
+    // native, inotify biasa sudah bekerja andal.
+    watch: process.env.VITE_DEV_SERVER_ORIGIN ? { usePolling: true, interval: 300 } : undefined,
   },
   test: {
     environment: 'jsdom',

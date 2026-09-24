@@ -19,3 +19,19 @@ export function deleteCustomer(id) {
 export function customerTransactions(id) {
   return client.get(`/customers/${id}/transactions`).then((r) => r.data);
 }
+
+// 020-customer-data-import-export — owner/admin/inventory only server-side.
+export function exportCustomers() {
+  return client.get('/customers/export', { responseType: 'blob' }).then((r) => r.data);
+}
+
+export function downloadCustomerImportTemplate() {
+  return client.get('/customers/import/template', { responseType: 'blob' }).then((r) => r.data);
+}
+
+export function importCustomers(file, dryRun = false) {
+  const form = new FormData();
+  form.append('file', file);
+  if (dryRun) form.append('dry_run', '1');
+  return client.post('/customers/import', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+}

@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listEvents, createEvent, updateEvent, updateEventStatus, deleteEvent } from '../api/events';
@@ -49,13 +49,25 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editingEvent = ref(null);
-const form = reactive({ name: '', location: '', start_date: '', end_date: '', event_cost: '0', notes: '' });
+const form = reactive({ name: '', location: '', start_date: '', end_date: '', available_on: '', event_cost: '0', notes: '' });
 const formErrors = reactive({});
 const saving = ref(false);
 
+// 023-event-availability-invoice-redesign (US1, FR-002) — hanya
+// ditawarkan untuk event lebih dari satu hari; mencerminkan aturan yang
+// sama yang ditegakkan server (StoreEventRequest/UpdateEventRequest).
+const isMultiDay = computed(() => !!form.start_date && !!form.end_date && form.start_date !== form.end_date);
+const availableOnOptions = computed(() => [
+  { value: 'day_1', label: t('events_sessions.available_on_day_1', { date: formatDate(form.start_date) }) },
+  { value: 'day_2', label: t('events_sessions.available_on_day_2', { date: formatDate(form.end_date) }) },
+]);
+watch(isMultiDay, (multiDay) => {
+  if (!multiDay) form.available_on = '';
+});
+
 function openCreate() {
   editingEvent.value = null;
-  Object.assign(form, { name: '', location: '', start_date: '', end_date: '', event_cost: '0', notes: '' });
+  Object.assign(form, { name: '', location: '', start_date: '', end_date: '', available_on: '', event_cost: '0', notes: '' });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -67,6 +79,7 @@ function openEdit(event) {
     location: event.location ?? '',
     start_date: toDateInputValue(event.start_date),
     end_date: toDateInputValue(event.end_date),
+    available_on: event.available_on ?? '',
     event_cost: event.event_cost,
     notes: event.notes ?? '',
   });
@@ -82,6 +95,7 @@ async function saveEvent() {
     location: form.location || null,
     start_date: form.start_date,
     end_date: form.end_date,
+    available_on: isMultiDay.value ? (form.available_on || null) : null,
     event_cost: toMoneyString(form.event_cost || 0),
     notes: form.notes || null,
   };
@@ -189,6 +203,16 @@ async function performDelete() {
           <BaseInput v-model="form.start_date" type="date" :label="t('events_sessions.start_date')" required :error="formErrors.start_date" />
           <BaseInput v-model="form.end_date" type="date" :label="t('events_sessions.end_date')" required :error="formErrors.end_date" />
         </div>
+        <!-- 023-event-availability-invoice-redesign (US1, FR-002) — hanya
+             muncul untuk event lebih dari satu hari; pilihan menunjukkan
+             tanggal aslinya, bukan sekadar "Day 1"/"Day 2" generik. -->
+        <BaseSelect
+          v-if="isMultiDay"
+          v-model="form.available_on"
+          :label="t('events_sessions.available_on_label')"
+          :options="availableOnOptions"
+          :error="formErrors.available_on"
+        />
         <BaseInput v-model="form.event_cost" type="number" min="0" :label="t('events_sessions.event_cost_rp')" :error="formErrors.event_cost" />
         <BaseTextarea v-model="form.notes" :label="t('events_sessions.notes')" :rows="3" :error="formErrors.notes" />
       </form>

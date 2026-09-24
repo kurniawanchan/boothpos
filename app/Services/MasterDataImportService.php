@@ -13,6 +13,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorMaterialPrice;
+use App\Models\Concerns\DataModeScope;
 use App\Support\LicenseGate;
 use App\Support\MasterDataSheets;
 use App\Support\MenuKeys;
@@ -354,8 +355,12 @@ class MasterDataImportService
 
             $existing = Artist::where('code', $code)->first();
 
-            if ($existing === null && Artist::withTrashed()->where('code', $code)->exists()) {
-                $this->addError($sheet, $row, 'code', "Kode artist '{$code}' masih dipakai artist yang sudah dihapus. Pakai kode lain.");
+            // withoutGlobalScope: 'code' UNIQUE lintas DEMO/LIVE di DB (bukan
+            // per-mode), jadi row di mode lain (mis. seed demo) juga harus
+            // ikut dicek — kalau tidak, INSERT lolos validasi tapi gagal di
+            // constraint DB saat apply() (mirrors ProductCodeGenerator R-nya).
+            if ($existing === null && Artist::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code', $code)->exists()) {
+                $this->addError($sheet, $row, 'code', "Kode artist '{$code}' sudah dipakai (di mode data lain, atau oleh artist yang sudah dihapus). Pakai kode lain.");
 
                 continue;
             }
@@ -500,8 +505,12 @@ class MasterDataImportService
 
             $existing = Category::where('code', $code)->first();
 
-            if ($existing === null && Category::withTrashed()->where('code', $code)->exists()) {
-                $this->addError($sheet, $row, 'code', "Kode kategori '{$code}' masih dipakai kategori yang sudah dihapus. Pakai kode lain.");
+            // withoutGlobalScope: 'code' UNIQUE lintas DEMO/LIVE di DB (bukan
+            // per-mode), jadi row di mode lain (mis. seed demo) juga harus
+            // ikut dicek — kalau tidak, INSERT lolos validasi tapi gagal di
+            // constraint DB saat apply() (mirrors ProductCodeGenerator R-nya).
+            if ($existing === null && Category::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code', $code)->exists()) {
+                $this->addError($sheet, $row, 'code', "Kode kategori '{$code}' sudah dipakai (di mode data lain, atau oleh kategori yang sudah dihapus). Pakai kode lain.");
 
                 continue;
             }
@@ -1265,8 +1274,12 @@ class MasterDataImportService
 
             $existing = Vendor::where('code', $code)->first();
 
-            if ($existing === null && Vendor::withTrashed()->where('code', $code)->exists()) {
-                $this->addError($sheet, $row, 'code', "Kode vendor '{$code}' masih dipakai vendor yang sudah dihapus. Pakai kode lain.");
+            // withoutGlobalScope: 'code' UNIQUE lintas DEMO/LIVE di DB (bukan
+            // per-mode), jadi row di mode lain (mis. seed demo) juga harus
+            // ikut dicek — kalau tidak, INSERT lolos validasi tapi gagal di
+            // constraint DB saat apply() (mirrors ProductCodeGenerator R-nya).
+            if ($existing === null && Vendor::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code', $code)->exists()) {
+                $this->addError($sheet, $row, 'code', "Kode vendor '{$code}' sudah dipakai (di mode data lain, atau oleh vendor yang sudah dihapus). Pakai kode lain.");
 
                 continue;
             }
@@ -1359,8 +1372,12 @@ class MasterDataImportService
 
             $existing = Material::where('code', $code)->first();
 
-            if ($existing === null && Material::withTrashed()->where('code', $code)->exists()) {
-                $this->addError($sheet, $row, 'code', "Kode bahan '{$code}' masih dipakai bahan yang sudah dihapus. Pakai kode lain.");
+            // withoutGlobalScope: 'code' UNIQUE lintas DEMO/LIVE di DB (bukan
+            // per-mode), jadi row di mode lain (mis. seed demo) juga harus
+            // ikut dicek — kalau tidak, INSERT lolos validasi tapi gagal di
+            // constraint DB saat apply() (mirrors ProductCodeGenerator R-nya).
+            if ($existing === null && Material::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code', $code)->exists()) {
+                $this->addError($sheet, $row, 'code', "Kode bahan '{$code}' sudah dipakai (di mode data lain, atau oleh bahan yang sudah dihapus). Pakai kode lain.");
 
                 continue;
             }

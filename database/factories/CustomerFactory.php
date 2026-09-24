@@ -13,7 +13,10 @@ class CustomerFactory extends Factory
         return [
             'name' => fake()->name(),
             'phone' => fake()->phoneNumber(),
+            'email' => fake()->email(),
             'social_handle' => '@'.fake()->userName(),
+            'notes' => fake()->sentence(),
+            'address' => fake()->address(),
         ];
     }
 }

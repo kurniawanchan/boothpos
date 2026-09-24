@@ -32,10 +32,10 @@ SET FOREIGN_KEY_CHECKS = 0;
 --    menjadi sumber kebenaran. Setiap perubahan stok WAJIB menulis
 --    stock_movements di dalam transaksi database yang sama.
 --
--- 4. Kode 12 karakter adalah kode VARIAN, bukan kode produk. Produk
---    memegang prefix 8 karakter (artist 3 + kategori 2 + produk 3),
---    varian menambahkan 4 digit urutan. Ini menyelesaikan benturan
---    antara batas 12 karakter dan kebutuhan kode unik per varian.
+-- 4. Kode VARIAN (SKU) = code_prefix + urutan 4 digit nol-padded.
+--    code_prefix = artist.code(3) + urutan product per-artist (tanpa nol
+--    di awal). Contoh: RYU1 (produk pertama), variannya RYU10001.
+--    Panjang dinamis (VARCHAR) karena urutan tak terbatas pada 4 digit.
 --
 -- 5. order_items menyimpan snapshot: artist_id, sku, nama, cost_price,
 --    dan sell_price pada saat transaksi. Perubahan master data di
@@ -194,8 +194,7 @@ CREATE TABLE products (
   id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   artist_id         BIGINT UNSIGNED NOT NULL,
   category_id       BIGINT UNSIGNED NOT NULL,
-  code_prefix       CHAR(8)         NOT NULL COMMENT 'artist.code(3) + category.code(2) + product_segment(3). Permanen.',
-  product_segment   CHAR(3)         NOT NULL COMMENT 'Singkatan nama produk. Dapat disunting sebelum ada transaksi.',
+  code_prefix       VARCHAR(64)     NOT NULL COMMENT 'artist.code(3) + urutan product per-artist (tanpa nol di awal). Contoh: RYU1. Server-generated, permanen.',
   name              VARCHAR(150)    NOT NULL,
   description       TEXT            NULL,
   image_path        VARCHAR(255)    NULL,
@@ -219,7 +218,7 @@ CREATE TABLE products (
 CREATE TABLE product_variants (
   id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   product_id        BIGINT UNSIGNED NOT NULL,
-  sku               CHAR(12)        NOT NULL COMMENT 'code_prefix(8) + urutan 4 digit. Contoh: RYUKYSAK0007. Permanen.',
+  sku               VARCHAR(64)     NOT NULL COMMENT 'code_prefix + urutan 4 digit nol-padded. Contoh: RYU10001. Permanen.',
   variant_name      VARCHAR(100)    NOT NULL DEFAULT 'Standard' COMMENT 'Contoh: Sakura, Ukuran L, Warna Biru',
   cost_price        DECIMAL(14,2)   NOT NULL DEFAULT 0.00 COMMENT 'Harga modal per unit',
   sell_price        DECIMAL(14,2)   NOT NULL COMMENT 'Harga jual final, bukan formula markup',
@@ -355,7 +354,7 @@ CREATE TABLE order_items (
   order_id          BIGINT UNSIGNED NOT NULL,
   variant_id        BIGINT UNSIGNED NOT NULL,
   artist_id         BIGINT UNSIGNED NOT NULL COMMENT 'Snapshot pemilik barang. Menjadi dasar rekap hasil artist.',
-  sku_snapshot      CHAR(12)        NOT NULL,
+  sku_snapshot      VARCHAR(64)     NOT NULL,
   name_snapshot     VARCHAR(255)    NOT NULL COMMENT 'Nama produk dan varian saat transaksi',
   qty               INT             NOT NULL,
   cost_price        DECIMAL(14,2)   NOT NULL COMMENT 'Snapshot modal saat transaksi',
@@ -419,13 +418,7 @@ CREATE TABLE preorder_items (
   preorder_id       BIGINT UNSIGNED NOT NULL,
   variant_id        BIGINT UNSIGNED NOT NULL,
   artist_id         BIGINT UNSIGNED NOT NULL COMMENT 'Snapshot, sejalan dengan order_items',
-  sku_snapshot      CHAR(12)        NOT NULL,
-  name_snapshot     VARCHAR(255)    NOT NULL,
-  qty               INT             NOT NULL,
-  cost_price        DECIMAL(14,2)   NOT NULL,
-  sell_price        DECIMAL(14,2)   NOT NULL,
-  line_total        DECIMAL(14,2)   NOT NULL,
-  data_mode         ENUM('demo','live') NOT NULL DEFAULT 'live' COMMENT 'Selalu sama dengan data_mode preorder induknya',
+  sku_snapshot      VARCHAR(64)     NOT NULL,
   created_at        TIMESTAMP       NULL,
   updated_at        TIMESTAMP       NULL,
   PRIMARY KEY (id),
@@ -447,10 +440,8 @@ CREATE TABLE shipments (
   shipping_cost     DECIMAL(14,2)   NOT NULL DEFAULT 0.00,
   recipient_name    VARCHAR(100)    NOT NULL,
   recipient_phone   VARCHAR(30)     NOT NULL,
-  address_line      VARCHAR(255)    NOT NULL,
-  city              VARCHAR(100)    NOT NULL,
+  address_line      VARCHAR(255)    NOT NULL COMMENT '022-preorder-invoice-crud-overhaul: satu field alamat lengkap; city/postal_code dihapus',
   province          VARCHAR(100)    NULL,
-  postal_code       VARCHAR(10)     NULL,
   status            ENUM('pending','packed','shipped','delivered') NOT NULL DEFAULT 'pending',
   shipped_at        TIMESTAMP       NULL,
   delivered_at      TIMESTAMP       NULL,

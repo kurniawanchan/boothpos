@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PreorderNotification extends Model
 {
     protected $fillable = [
-        'preorder_id', 'trigger', 'triggered_by_status', 'recipient_email',
+        'preorder_id', 'trigger', 'triggered_by_status', 'document_type', 'recipient_email',
         'status', 'error_message', 'sent_at',
     ];
 

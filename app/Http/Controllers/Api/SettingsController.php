@@ -68,7 +68,16 @@ class SettingsController extends Controller
 
         $settings = Setting::query()->orderBy('group')->orderBy('key')->get();
 
-        return response()->json(['data' => SettingResource::collection($settings)]);
+        return response()->json([
+            'data' => SettingResource::collection($settings),
+            // 023-event-availability-invoice-redesign (US4, research.md
+            // Decision 8) — URL DISELESAIKAN DI SINI lewat ImageUploadService,
+            // konvensi yang sama persis dengan setiap gambar lain di produk
+            // ini (OrderController::receipt(), BuildsInvoiceDocument,
+            // PaymentChannelController, dst) — bukan ditebak ulang di
+            // frontend dari path mentah.
+            'store_logo_url' => $this->imageUploadService->url(Setting::get('store_logo_path')),
+        ]);
     }
 
     /**
@@ -179,7 +188,14 @@ class SettingsController extends Controller
         // (mis. gagal menulis log), berkas lama masih ada untuk dirujuk.
         $this->imageUploadService->delete($oldPath);
 
-        return response()->json(['data' => new SettingResource($setting)]);
+        return response()->json([
+            'data' => new SettingResource($setting),
+            // 023-event-availability-invoice-redesign (US4) — dari $newPath
+            // langsung, bukan membaca ulang $setting->value, supaya logo
+            // yang baru saja diunggah bisa tampil seketika tanpa round-trip
+            // kedua.
+            'store_logo_url' => $this->imageUploadService->url($newPath),
+        ]);
     }
 
     /**

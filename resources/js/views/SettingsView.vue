@@ -103,13 +103,15 @@ const storeForm = reactive({
 });
 const storeErrors = reactive({});
 const savingStore = ref(false);
-const storeLogoPath = ref(null);
-// value mentah dari `settings` (mis. 'store-logo/uuid.png') bukan URL —
-// SettingResource tidak menyertakan *_url turunan seperti CategoryResource,
-// jadi URL dibangun di sini mengikuti konvensi disk 'public' ImageUploadService
-// (storage:link -> /storage/...), sama seperti bagaimana ProductResource/
-// CategoryResource sendiri pada akhirnya membangunnya via Storage::url().
-const storeLogoUrl = computed(() => (storeLogoPath.value ? `/storage/${storeLogoPath.value}` : null));
+// 023-event-availability-invoice-redesign (US4, research.md Decision 8) —
+// SEBELUMNYA dibangun manual di sini (`/storage/${path}`), satu-satunya
+// tempat di seluruh produk ini yang menebak URL gambar publik sendiri
+// alih-alih memakai ImageUploadService::url() seperti gambar lain
+// (produk, kategori, QR kanal pembayaran, dokumen invoice). Sekarang
+// backend yang mengembalikan URL final lewat GET /settings /
+// POST /settings/store-logo — dihapus, bukan diperbaiki, supaya tidak
+// ada dua jalur pembangunan URL yang bisa berbeda.
+const storeLogoUrl = ref(null);
 const logoFile = ref(null);
 const logoError = ref('');
 const uploadingLogo = ref(false);
@@ -132,7 +134,7 @@ async function loadStoreIdentity() {
   storeForm.store_contact_person = byKey.store_contact_person ?? '';
   storeForm.store_contact_phone = byKey.store_contact_phone ?? '';
   storeForm.store_contact_email = byKey.store_contact_email ?? '';
-  storeLogoPath.value = byKey.store_logo_path ?? null;
+  storeLogoUrl.value = res.store_logo_url ?? null;
 }
 
 async function saveStoreIdentity() {
@@ -190,7 +192,7 @@ async function saveLogo() {
   uploadingLogo.value = true;
   try {
     const res = await uploadStoreLogo(logoFile.value);
-    storeLogoPath.value = res.data.value;
+    storeLogoUrl.value = res.store_logo_url;
     logoFile.value = null;
     if (logoInputEl.value) logoInputEl.value.value = '';
     toast.success(t('settings.store_logo_updated'));

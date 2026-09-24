@@ -209,7 +209,171 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/019-billing-system/plan.md`
+Active feature plan: `specs/024-invoice-layout-shipping-slip/plan.md`
+(branch `024-invoice-layout-shipping-slip`, branched from
+`023-event-availability-invoice-redesign`'s tip) — five refinements to the
+pre-order invoice (and, where it shares the shell, the payment invoice):
+(1) the header becomes two columns — event name/location/available-on
+(centered) on the left, pre-order number/status/a new "To:" recipient
+block (customer name/email/phone/social handle/address) on the right;
+(2) the document's own title now reads as a pre-order invoice (a new
+dedicated locale key, not a reuse of the existing in-body "Invoice" badge
+key) and the pre-order's creation date is shown; (3) payment channels
+split into two columns by their existing `type` field (`qr_ewallet` vs
+`bank_transfer` — already exactly the grouping requested, no new field),
+with the QR growing again (96px → 128px, on top of feature 023's own
+enlargement); (4) a new shipping-slip section appears ONLY for Mail Order
+(`fulfillment === 'courier'`) pre-orders, showing event name/order
+number/From (store identity)/To (customer)/item type — deliberately
+sourced from data the invoice payload already has rather than the
+separately-created `Shipment` record, so it works even before a shipment
+has been logged (research.md Decision 5); (5) the existing footer message
+is unaffected. The only backend change in this entire feature is adding
+`created_at` to `PreorderController::present()` (confirmed missing by
+reading the method directly) — every other field was already returned by
+the existing invoice payload built up across features 007/014/022/023.
+See research.md Decisions 1–6 for the full reasoning.
+
+Previous feature: `specs/023-event-availability-invoice-redesign/plan.md`
+(branch `023-event-availability-invoice-redesign`, branched from
+`022-preorder-invoice-crud-overhaul`'s tip) — six changes: (1) Event gains
+a nullable `available_on` field (`day_1`/`day_2`, resolved live to the
+event's own start/end date via `Event::availableOnDate()` — never
+snapshotted, so editing an event's dates never leaves it stale), offered
+only for multi-day events and auto-cleared in the same transaction that
+already clears stale pre-order pickup days (feature 021) when an event
+collapses to a single day; (2) that resolved date, together with the
+event's location, is rendered as one visually standout block — not small
+footer text — on the pre-order invoice, the payment invoice (which
+already shares that shell per feature 022), and the POS sale receipt,
+**replacing** the previous tiny "Location:/Dates:" footer line rather
+than duplicating it (research.md Decision 3, to avoid showing two
+different, confusable date concepts — the full event range vs. the one
+day the booth is open — on the same document); (3) the pre-order invoice
+is restructured into a real header → itemized `<table>` → footer
+document and widened (`max-w-[480px]` → `max-w-[720px]`) — scoped
+deliberately to that document only, since the sales receipt has no
+shipping-cost concept and never showed an on-document QR to begin with
+(research.md Decision 4); (4) the payment QR on that invoice grows from a
+56px to a 96px thumbnail, still click-to-enlarge via the existing
+`ImageLightbox.vue` (feature 022); (5) a "Shipping cost" line is added to
+the invoice's totals — the data (`Preorder.shipping_cost`) was already
+being returned by the existing invoice payload since feature 022, just
+never rendered, so this is a frontend-only change; (6) the reported
+store-logo bug — the root cause found was that `SettingsView.vue` is the
+one place in this codebase that hand-constructs a public-disk image URL
+instead of reusing `ImageUploadService::url()`, the convention every
+other image (products, categories, payment-channel QR codes, the invoice
+documents themselves) already goes through — fixed by having
+`GET /settings`/`POST /settings/store-logo` return the resolved URL
+directly and deleting the frontend's guess. See research.md Decisions
+1–8 for the full reasoning, and data-model.md for the exact
+`available_on` resolution rule and response-shape additions.
+
+Previous feature: `specs/022-preorder-invoice-crud-overhaul/plan.md`
+(branch `022-preorder-invoice-crud-overhaul`, branched from
+`021-preorder-form-updates`'s tip) — seven changes to the Pre-order screen
+and its documents: (1) edit/delete a pre-order (edit allowed for any
+status except "Handed over"/"Cancelled," with stock corrected via a
+per-variant delta through `StockService::applyMovement()` once past
+"Goods arrived" rather than a blanket reverse-and-reapply; delete allowed
+only while still "Ordered" and with no recorded payment — every later
+status must use the existing "Cancel" action instead); (2) the shipment
+form auto-fills recipient name/phone/address from the linked customer and
+drops the separate `city`/`postal_code` columns in favor of one address
+field (mirrors `Customer.address` from feature 020); (3) "Receipt" →
+"Invoice" everywhere, with the document gaining the store's logo, name,
+contact person/phone/email, and full address, plus payment channels
+(payment terms) and footer text — **all reused from the exact assembly
+`OrderController::receipt()`/`ReceiptModal.vue` already built for the POS
+sale receipt**, not redesigned from scratch, and the payment channels are
+shown **unmasked** on this document specifically (a deliberate, narrow
+exception to `PaymentChannelController::index()`'s internal-staff masking
+rule, since a customer needs the real number to actually pay); (4)
+"Payment receipt" → "Payment invoice," restyled to the same document
+shell as (3) with payment-event-specific fields layered in; (5) bulk
+download (client-side only — one `html2canvas`+`jsPDF` render per
+selected order, bundled into a `.zip` via a new `jszip` dependency) and
+bulk email (a rich-HTML email body via a new `PreorderInvoiceMail`, **no
+PDF attachment** — deliberately avoiding a second, server-side document
+template, since this codebase has never rendered a receipt/invoice
+document server-side) for both invoice and payment-invoice documents; (6)
+the customer picker (`CustomerSearchDropdown.vue`, from feature 021) shows
+a scrollable default list of customers on open, not only after typing a
+search term — reusing the same paginated `GET /customers` call already
+made for search, just triggered earlier; (7) the pre-order import/export
+workbook is redesigned from row-per-item to **one row per order**
+(`event_name`, `fulfillment` as "pickup"/"mail order", `pickup_day` as
+"Day N" text resolved against the matched event's real date range,
+comma-separated `products`/`quantities`/`unit_prices` positionally
+matched, `shipping_cost`, `courier_name`, `expected_date`, `discount`,
+`notes`), **replacing** the existing format entirely (no second, parallel
+template) — export produces the identical column layout so an exported
+file round-trips back through import. The QR-enlarge-and-click-to-popup
+change (also requested) lands in the one shared `ChannelPicker.vue`
+component already used by both POS checkout and pre-order settlement,
+not duplicated per screen. See research.md for the full reasoning behind
+each decision (Decisions 1–8), and data-model.md for the exact stock-delta
+algorithm and the new import/export column shape.
+
+Previous feature: `specs/021-preorder-form-updates/plan.md`
+(branch `021-preorder-form-updates`, branched from `020-customer-data-import-export`'s
+tip) — six additive changes to the Pre-order create form: the customer
+picker collapses from a button-opens-a-second-modal flow into one inline
+searchable dropdown (`CustomerSearchDropdown.vue`, reusing
+`BaseMultiSelect.vue`'s Teleport/positioning mechanics with a remote
+debounced search instead of a local option list); a new order-level
+`discount` (fixed Rupiah amount, matching every other money field in this
+product — never a percentage); item quantity gains direct numeric entry
+alongside the existing +/- stepper (frontend-only, `qty`'s backend
+validation already accepts any value ≥ 1 however collected); "Courier" is
+relabeled "Mail Order" everywhere it's shown (label-only — the stored
+`fulfillment` enum value stays `courier`, no data migration); a
+`pickup_day` for "Self Pickup" stored as a real `date` **derived from the
+linked event's actual start/end date range** (not a fixed "Day 1"/"Day 2"
+— a 1-day event offers one choice, a 3-day event offers three, no linked
+event means no pickup-day field at all), shown on the invoice as that real
+date and cleared automatically if the event's dates change to exclude it;
+and a courier-name dropdown (default "JNE", shared list in the new
+`App\Support\Couriers`) captured on `Preorder` itself as a *default/
+preference* value — the existing, separately-created `Shipment` record
+(with its own required recipient/address fields, still filled in later,
+unchanged in shape) is untouched, just pre-filled from this default and
+upgraded from free text to the same shared dropdown. Import/export
+(`PreorderExportImportService`) gains matching `discount`/`pickup_day`/
+`courier_name` columns, with a fulfillment-mismatched value (e.g. a
+courier on a pickup row) reported as a row-level error rather than
+silently accepted or dropped. See research.md for the full reasoning
+behind each decision, especially why the courier default deliberately
+does NOT touch `shipments`' schema.
+
+Previous feature: `specs/020-customer-data-import-export/plan.md`
+(branch `020-customer-data-import-export`, branched from `main`) — bulk
+Excel export/import for `Customer`, as a **standalone** flow (its own
+template file, its own endpoints/buttons on the Customers screen) —
+deliberately NOT folded into the existing combined master-data workbook
+(`MasterDataSheets::ORDER`), mirroring feature 007's
+`PreorderExportImportService` shape (one sheet, full-validate-then-one-
+transaction, `dry_run` preview) rather than `MasterDataImportService`'s
+multi-sheet dependency-ordering machinery, since Customer has no FK
+dependency on any other sheet. The one genuinely new rule (no precedent
+elsewhere in this codebase): an imported row whose `email` matches an
+existing customer's `email` (case-insensitive exact match, scoped to the
+currently active DEMO/LIVE mode) UPDATES that customer instead of creating
+a duplicate — blank cells on such a row leave the existing value
+unchanged, matching the master-data importer's own "blank means
+unchanged" convention. A row with no email always creates a new customer,
+even if name/phone happen to match an existing one. Matching is
+implemented as a single batched `whereIn('email', ...)` pre-fetch, not a
+per-row query (Constitution V — avoid N+1 on a list sized up to ~1,000
+rows). Gated to `canManageMasterData()` (owner/admin/inventory) — the same
+tier as the rest of bulk master-data export/import, deliberately stricter
+than the per-customer CRUD endpoints every role already uses, since
+`Customer` itself is documented as holding personal data (phone/email/
+social_handle) that must stay internal-only. See research.md for the full
+reasoning behind each of these decisions.
+
+Previous feature: `specs/019-billing-system/plan.md`
 (branch `019-billing-system`, branched from `main`) — scope expanded
 2026-09-06 (dated note): the smaller pass below (Invoice as a modal under
 Companies, `Package` reused as-is) shipped first and is this update's
