@@ -103,6 +103,20 @@ class CustomerController extends Controller
         ]);
     }
 
+    /**
+     * Added for the pre-orders list — clicking a customer's name there
+     * needs their full contact/address info, which the list response
+     * deliberately keeps thin (`customer_name` only, for pagination
+     * payload size). Same `view` gate as everywhere else in this
+     * controller (any logged-in role).
+     */
+    public function show(Customer $customer): JsonResponse
+    {
+        $this->authorize('view', $customer);
+
+        return response()->json(new CustomerResource($customer));
+    }
+
     public function store(StoreCustomerRequest $request): JsonResponse
     {
         return response()->json(new CustomerResource(Customer::create($request->validated())), 201);

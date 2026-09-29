@@ -4,6 +4,12 @@ export function listCustomers(params = {}) {
   return client.get('/customers', { params }).then((r) => r.data);
 }
 
+// Added for the pre-orders list's "click customer name -> show customer
+// info" feature — the list response only carries customer_name/customer_id.
+export function getCustomer(id) {
+  return client.get(`/customers/${id}`).then((r) => r.data);
+}
+
 export function createCustomer(payload) {
   return client.post('/customers', payload).then((r) => r.data);
 }

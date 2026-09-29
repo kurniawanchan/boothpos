@@ -92,7 +92,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/customers/export', [CustomerController::class, 'export']);
         Route::get('/customers/import/template', [CustomerController::class, 'importTemplate']);
         Route::post('/customers/import', [CustomerController::class, 'import']);
-        Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'update', 'destroy']);
+        Route::apiResource('customers', CustomerController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::get('/customers/{customer}/transactions', [CustomerController::class, 'transactions']);
 
         Route::apiResource('products', ProductController::class);
