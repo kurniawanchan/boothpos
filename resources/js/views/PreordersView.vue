@@ -10,6 +10,7 @@ import {
   updatePreorder,
   deletePreorder,
   updatePreorderStatus,
+  updatePreorderDispatchStatus,
   exportPreorders,
   downloadPreorderImportTemplate,
   importPreorders,
@@ -19,17 +20,21 @@ import {
   bulkEmailPreorderInvoices,
 } from '../api/preorders';
 import { createShipment, updateShipment } from '../api/shipments';
+import { getPaymentProofBlobUrl } from '../api/payments';
 import { lookupVariants } from '../api/products';
+import { getCustomer } from '../api/customers';
 import { listArtists } from '../api/artists';
 import { listEvents } from '../api/events';
 import { useToastStore } from '../stores/toast';
 import { useAuthStore } from '../stores/auth';
 import PreorderInvoiceModal from '../components/preorder/PreorderInvoiceModal.vue';
+import ImageLightbox from '../components/ui/ImageLightbox.vue';
 import PreorderPaymentReceiptModal from '../components/preorder/PreorderPaymentReceiptModal.vue';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDate, formatDateTime } from '../utils/date';
-import { buildInvoiceHtml } from '../utils/invoiceDocument';
+import { downloadElementAsPdf, captureElementCanvas } from '../utils/pdfCapture';
+import { buildInvoiceHtml, buildShippingSlipHtml } from '../utils/invoiceDocument';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -38,12 +43,15 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseDrawer from '../components/ui/BaseDrawer.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
+import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import CustomerSearchDropdown from '../components/preorder/CustomerSearchDropdown.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import RecordPaymentModal from '../components/payment/RecordPaymentModal.vue';
 import PreorderStatusStepper from '../components/preorder/PreorderStatusStepper.vue';
+import PreorderPrintMenu from '../components/preorder/PreorderPrintMenu.vue';
+import PreorderRowActions from '../components/preorder/PreorderRowActions.vue';
 
 const toast = useToastStore();
 const auth = useAuthStore();
@@ -63,6 +71,24 @@ const STATUS_LABEL = computed(() => ({
   cancelled: t('events_sessions.status_cancelled'),
 }));
 const STATUS_VARIANT = { ordered: 'neutral', dp_paid: 'warn', arrived: 'mint', settled: 'mint', handed_over: 'dark', cancelled: 'danger' };
+// Penanda manual invoice-terkirim / pengiriman-berjalan. Urutan objek =
+// urutan tombol di panel detail. HARUS sinkron dengan
+// Preorder::DISPATCH_STATUSES di backend (validasi tetap di sana).
+const DISPATCH_LABEL = computed(() => ({
+  pending: t('preorders.dispatch_status_pending'),
+  invoice_sent: t('preorders.dispatch_status_invoice_sent'),
+  shipping: t('preorders.dispatch_status_shipping'),
+}));
+const DISPATCH_VARIANT = { pending: 'neutral', invoice_sent: 'warn', shipping: 'mint' };
+// "Shipping in progress" hanya berlaku untuk Mail Order (fulfillment=courier)
+// — pesanan pickup diambil di booth. Backend menegakkan ini (409); ini cermin
+// UX supaya opsinya tidak ditawarkan sama sekali. Filter list tetap memuat
+// semua opsi.
+const detailDispatchOptions = computed(() =>
+  Object.entries(DISPATCH_LABEL.value)
+    .filter(([value]) => value !== 'shipping' || detail.value?.fulfillment === 'courier')
+    .map(([value, label]) => ({ value, label }))
+);
 // 021-preorder-form-updates (US3, research.md Decision 5) — HARUS tetap
 // sinkron dengan App\Support\Couriers::OPTIONS/DEFAULT di backend (satu
 // sumber definisi konseptual, disalin ke sini karena tidak ada mekanisme
@@ -139,17 +165,109 @@ onMounted(async () => {
 const customerSearch = ref('');
 const debouncedCustomerSearch = useDebouncedFn(() => applyFilter({ search: customerSearch.value || undefined }), 300);
 
+// BUG YANG DITEMUKAN & DIPERBAIKI — ketiga filter status/fulfillment/
+// penjual sebelumnya memakai BaseSelect TANPA `v-model`/`:model-value`
+// (hanya mendengarkan @update:model-value), jadi label yang tertampil di
+// tombolnya SELALU menampilkan placeholder ("All statuses"/dst.) meski
+// filter sudah benar-benar aktif di baliknya — ditemukan lewat verifikasi
+// browser sungguhan (memilih satu penjual memang menyaring daftar, tapi
+// dropdown-nya tetap terlihat menunjukkan "All sellers"). Diganti ke
+// BaseMultiSelect (pola yang sama seperti artist_id[]/category_id[] di
+// ProductsView, 005-ux-enhancements-dashboard) sekaligus memenuhi
+// permintaan "bisa filter semua dan lebih dari satu" — array kosong
+// berarti "Semua", dan ketiga filter ini + pencarian tetap DI-AND-kan satu
+// sama lain di backend (PreorderController::applyFilters()), sementara
+// beberapa nilai dalam satu filter yang sama di-OR-kan (whereIn).
+const statusFilter = ref([]);
+const fulfillmentFilter = ref([]);
+const artistFilter = ref([]);
+const dispatchFilter = ref([]);
+const statusOptions = computed(() => Object.entries(STATUS_LABEL.value).map(([value, label]) => ({ value, label })));
+const dispatchOptions = computed(() => Object.entries(DISPATCH_LABEL.value).map(([value, label]) => ({ value, label })));
+const fulfillmentOptions = computed(() => Object.entries(FULFILLMENT_LABEL.value).map(([value, label]) => ({ value, label })));
+const sellerOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+
+function applyPreorderFilters() {
+  applyFilter({
+    status: statusFilter.value.length ? statusFilter.value : undefined,
+    fulfillment: fulfillmentFilter.value.length ? fulfillmentFilter.value : undefined,
+    artist_id: artistFilter.value.length ? artistFilter.value : undefined,
+    dispatch_status: dispatchFilter.value.length ? dispatchFilter.value : undefined,
+  });
+}
+
+// Requested: clicking a customer's name in the list opens their full
+// contact/address info — the list row itself only carries customer_name
+// (kept thin for pagination payload size), so this fetches the one
+// customer on demand via the new GET /customers/{id}.
+const showCustomerInfo = ref(false);
+const customerInfoLoading = ref(false);
+const customerInfo = ref(null);
+async function openCustomerInfo(customerId) {
+  if (!customerId) return;
+  showCustomerInfo.value = true;
+  customerInfoLoading.value = true;
+  customerInfo.value = null;
+  try {
+    customerInfo.value = await getCustomer(customerId);
+  } catch (err) {
+    toast.error(err.message || t('preorders.load_failed'));
+    showCustomerInfo.value = false;
+  } finally {
+    customerInfoLoading.value = false;
+  }
+}
+
 const columns = computed(() => [
   { key: 'select', label: '' },
-  { key: 'preorder_number', label: t('preorders.col_number') },
-  { key: 'customer_name', label: t('preorders.col_customer') },
+  { key: 'preorder_number', label: t('preorders.col_number'), sortable: true },
+  { key: 'customer_name', label: t('preorders.col_customer'), sortable: true },
+  // 'sellers' has no single sortable value (a preorder can have several
+  // sellers) — left without `sortable` on purpose, see
+  // PreorderController::applySort()'s docblock.
   { key: 'sellers', label: t('preorders.col_seller') },
-  { key: 'status', label: t('preorders.col_status') },
-  { key: 'fulfillment', label: t('preorders.col_fulfillment') },
-  { key: 'total_amount', label: t('preorders.col_total') },
-  { key: 'outstanding', label: t('preorders.col_outstanding') },
-  { key: 'actions', label: '' },
+  { key: 'status', label: t('preorders.col_status'), sortable: true },
+  { key: 'dispatch_status', label: t('preorders.col_dispatch_status') },
+  { key: 'fulfillment', label: t('preorders.col_fulfillment'), sortable: true },
+  { key: 'total_amount', label: t('preorders.col_total'), sortable: true },
+  { key: 'outstanding', label: t('preorders.col_outstanding'), sortable: true },
+  { key: 'created_at', label: t('preorders.col_created'), sortable: true },
+  { key: 'updated_at', label: t('preorders.col_updated'), sortable: true },
+  { key: 'actions', label: t('preorders.col_actions') },
 ]);
+
+// Column sort state — mirrored into the same `sort_by`/`sort_dir` query
+// params the backend's applySort() whitelist reads (PreorderController).
+const sortBy = ref(null);
+const sortDir = ref('asc');
+function handleSort({ key, dir }) {
+  sortBy.value = key;
+  sortDir.value = dir;
+  applyFilter({ sort_by: key, sort_dir: dir });
+}
+
+// Requested: automatically flag a Mail Order pre-order that's missing its
+// shipping cost or the customer's address — both matter only once
+// fulfillment is 'courier' (Self pickup never needs either), and both are
+// realistic gaps: shipping_cost defaults to 0 unless set explicitly, and
+// a customer created as a walk-in may have no address on file at all.
+function needsShippingAttention(row) {
+  return row.fulfillment === 'courier' && (parseMoney(row.shipping_cost) <= 0 || !row.customer_has_address);
+}
+function preorderRowClass(row) {
+  return needsShippingAttention(row) ? 'bg-warn-bg' : '';
+}
+
+// Requested: clicking the flag shows the shipping cost + notes right
+// there, instead of forcing a trip into the full detail drawer just to
+// see whether the gap is real or already explained (e.g. staff sometimes
+// write the actual address into notes as a workaround).
+const showShippingFlagInfo = ref(false);
+const shippingFlagInfoRow = ref(null);
+function openShippingFlagInfo(row) {
+  shippingFlagInfoRow.value = row;
+  showShippingFlagInfo.value = true;
+}
 
 // --- Create form (no mockup reference — designed fresh) ----------------
 const showCreate = ref(false);
@@ -172,13 +290,19 @@ const createResults = ref([]);
 const creating = ref(false);
 const createErrors = reactive({});
 
+// 024-invoice-layout-shipping-slip — "Add item" sekarang berperilaku sama
+// dengan CustomerSearchDropdown.vue: klik/fokus lapangan langsung
+// menampilkan daftar produk yang bisa dijelajahi (lookupVariants('') kini
+// mengembalikan halaman default, bukan kosong), lalu mengetik menyaring.
 const runCreateSearch = useDebouncedFn(async () => {
-  if (!createSearch.value.trim()) {
-    createResults.value = [];
-    return;
-  }
   createResults.value = (await lookupVariants(createSearch.value.trim(), 8)).data;
 }, 300);
+// `setTimeout` bukan bagian dari daftar global yang diizinkan compiler
+// template Vue (beda dari Math/Date/dst.) — dipanggil dari method di sini,
+// bukan langsung sebagai ekspresi inline di template.
+function closeCreateResultsSoon() {
+  setTimeout(() => { createResults.value = []; }, 150);
+}
 
 function openCreate() {
   editingPreorderId.value = null;
@@ -216,7 +340,13 @@ async function openEdit(row) {
   createExpectedDate.value = full.expected_date ?? '';
   createNotes.value = full.notes ?? '';
   createItems.value = (full.items ?? []).map((i) => ({
-    variant_id: i.variant_id, sku: i.sku_snapshot, label: i.name_snapshot, sell_price: i.sell_price, qty: i.qty,
+    // `id` marks this as a genuinely EXISTING preorder_items row — the
+    // backend preserves its locked-in price snapshot when it sees this id
+    // come back unchanged. Deleting the row and re-adding the same variant
+    // via "Add item" (below) produces a row with NO id, so the backend
+    // re-snapshots the variant's CURRENT price instead — this is the fix
+    // for a stale/wrong line price that couldn't otherwise be refreshed.
+    id: i.id, variant_id: i.variant_id, sku: i.sku_snapshot, label: i.name_snapshot, sell_price: i.sell_price, qty: i.qty, image_url: i.image_url ?? null, category_name: i.category_name ?? null,
   }));
   createSearch.value = '';
   createResults.value = [];
@@ -227,7 +357,10 @@ async function openEdit(row) {
 function addCreateItem(variant) {
   const existing = createItems.value.find((i) => i.variant_id === variant.variant_id);
   if (existing) existing.qty += 1;
-  else createItems.value.push({ variant_id: variant.variant_id, sku: variant.sku, label: variant.label, sell_price: variant.sell_price, qty: 1 });
+  // No `id` here on purpose — this is what tells the backend "re-snapshot
+  // this variant's current price", even if it's the same variant as a row
+  // just deleted from this same form (see the mapping above).
+  else createItems.value.push({ id: null, variant_id: variant.variant_id, sku: variant.sku, label: variant.label, sell_price: variant.sell_price, qty: 1, image_url: variant.image_url ?? null, category_name: variant.category_name ?? null });
   createSearch.value = '';
   createResults.value = [];
 }
@@ -305,7 +438,7 @@ async function submitCreate() {
     courier_name: createFulfillment.value === 'courier' ? createCourierName.value : null,
     expected_date: createExpectedDate.value || null,
     notes: createNotes.value || null,
-    items: createItems.value.map((i) => ({ variant_id: i.variant_id, qty: i.qty })),
+    items: createItems.value.map((i) => ({ id: i.id ?? null, variant_id: i.variant_id, qty: i.qty })),
   };
   try {
     if (editingPreorderId.value) {
@@ -385,10 +518,45 @@ const invoicePreorderId = ref(null);
 const showPaymentReceiptModal = ref(false);
 const receiptPreorderId = ref(null);
 const receiptPaymentId = ref(null);
+// 024-invoice-layout-shipping-slip (US7) — template tersembunyi untuk
+// rendering surat jalan sebagai PDF via html2canvas + jsPDF.
+const shippingSlipEl = ref(null);
 
-function openPaymentReceipt(paymentId) {
-  if (!detail.value) return;
-  receiptPreorderId.value = detail.value.id;
+// 024-invoice-layout-shipping-slip — bukti pembayaran (jika ada) dibuka di
+// lightbox yang sama dengan yang dipakai QR pembayaran di tempat lain.
+const proofLightboxSrc = ref(null);
+const loadingProofId = ref(null);
+async function viewPaymentProof(proofId) {
+  loadingProofId.value = proofId;
+  try {
+    proofLightboxSrc.value = await getPaymentProofBlobUrl(proofId);
+  } catch (err) {
+    toast.error(err.message || t('preorders.proof_load_failed'));
+  } finally {
+    loadingProofId.value = null;
+  }
+}
+function closeProofLightbox() {
+  if (proofLightboxSrc.value) URL.revokeObjectURL(proofLightboxSrc.value);
+  proofLightboxSrc.value = null;
+}
+
+// Variant thumbnails (add-item search results, added-item rows, and the
+// detail drawer's ordered-items list) — a separate lightbox instance from
+// proofLightboxSrc above since that one owns an object URL it must revoke.
+const itemLightboxSrc = ref(null);
+const itemLightboxAlt = ref('');
+function openItemLightbox(item) {
+  if (!item.image_url) return;
+  itemLightboxSrc.value = item.image_url;
+  itemLightboxAlt.value = item.label ?? item.name_snapshot;
+}
+
+// `preorderId` default ke detail yang sedang terbuka; baris list memberi
+// id-nya sendiri (dan paymentId = null → modal memakai pembayaran terakhir).
+function openPaymentReceipt(paymentId, preorderId = detail.value?.id) {
+  if (!preorderId) return;
+  receiptPreorderId.value = preorderId;
   receiptPaymentId.value = paymentId;
   showPaymentReceiptModal.value = true;
 }
@@ -396,6 +564,60 @@ function openPaymentReceipt(paymentId) {
 function openInvoice(row) {
   invoicePreorderId.value = row.id;
   showInvoiceModal.value = true;
+}
+
+// Aksi per baris list (dirender PreorderRowActions.vue). Edit/Delete
+// disembunyikan — bukan dinonaktifkan — saat pasti ditolak server (aturan
+// 022 FR-001a/FR-003/FR-004, lihat komentar di handler masing-masing);
+// Invoice pembayaran dinonaktifkan selama belum ada pembayaran.
+function rowActions(row) {
+  const noPayment = parseMoney(row.paid_amount) <= 0;
+  const actions = [
+    { key: 'invoice', label: t('preorders.print_action') },
+    {
+      key: 'payment_invoice',
+      label: t('preorders.print_payment_receipt'),
+      disabled: noPayment,
+      title: noPayment ? t('preorders.print_payment_invoice_disabled') : '',
+    },
+  ];
+  if (!['handed_over', 'cancelled'].includes(row.status)) actions.push({ key: 'edit', label: t('common.edit') });
+  if (['ordered', 'cancelled'].includes(row.status)) actions.push({ key: 'delete', label: t('common.delete'), danger: true });
+  actions.push({ key: 'detail', label: t('preorders.detail') });
+  return actions;
+}
+
+function onRowAction(row, key) {
+  if (key === 'invoice') openInvoice(row);
+  else if (key === 'payment_invoice') openPaymentReceipt(null, row.id);
+  else if (key === 'edit') openEdit(row);
+  else if (key === 'delete') confirmDeletePreorder(row);
+  else if (key === 'detail') openDetail(row);
+}
+
+// Dropdown "Cetak" di panel detail. Invoice pembayaran menunjuk pembayaran
+// TERAKHIR (modalnya sendiri juga jatuh ke pembayaran terakhir bila id tak
+// ada); tiap pembayaran lama tetap punya tombol cetaknya di riwayat pembayaran.
+const lastPaymentId = computed(() => {
+  const payments = detail.value?.payments ?? [];
+  return payments.length ? payments[payments.length - 1].id : null;
+});
+
+// Penanda manual invoice-terkirim / pengiriman-berjalan (panel detail).
+const savingDispatch = ref(false);
+async function setDispatchStatus(next) {
+  if (!detail.value || savingDispatch.value || detail.value.dispatch_status === next) return;
+  savingDispatch.value = true;
+  try {
+    const updated = await updatePreorderDispatchStatus(detail.value.id, next);
+    detail.value = { ...detail.value, dispatch_status: updated.dispatch_status };
+    toast.success(t('preorders.dispatch_status_updated'));
+    await load(); // kolom & filter di list ikut segar
+  } catch (err) {
+    toast.error(err.message || t('preorders.dispatch_status_update_failed'));
+  } finally {
+    savingDispatch.value = false;
+  }
 }
 
 // --- Bulk download/email (022-preorder-invoice-crud-overhaul US5) ---------
@@ -417,8 +639,8 @@ async function doBulkDownload() {
   bulkDownloading.value = true;
   try {
     const { data: invoices } = await bulkPreorderInvoices(ids, bulkDocumentType.value);
-    const [{ default: JSZip }, { default: html2canvas }, { jsPDF }] = await Promise.all([
-      import('jszip'), import('html2canvas'), import('jspdf'),
+    const [{ default: JSZip }, { jsPDF }] = await Promise.all([
+      import('jszip'), import('jspdf'),
     ]);
     const zip = new JSZip();
 
@@ -430,7 +652,7 @@ async function doBulkDownload() {
       container.style.left = '-9999px';
       container.innerHTML = buildInvoiceHtml(invoice, bulkDocumentType.value);
       document.body.appendChild(container);
-      const canvas = await html2canvas(container, { backgroundColor: '#ffffff', scale: 2 });
+      const canvas = await captureElementCanvas(container);
       document.body.removeChild(container);
 
       const imgData = canvas.toDataURL('image/png');
@@ -470,6 +692,50 @@ async function doBulkEmail() {
     toast.error(err.message || t('preorders.bulk_email_failed'));
   } finally {
     bulkEmailing.value = false;
+  }
+}
+
+// 024-invoice-layout-shipping-slip (US7) — bulk unduh surat jalan (ZIP).
+async function doBulkShippingSlips() {
+  const ids = [...selectedIds.value];
+  if (!ids.length) return;
+  bulkDownloading.value = true;
+  try {
+    const { data: invoices } = await bulkPreorderInvoices(ids, 'invoice');
+    const [{ default: JSZip }, { jsPDF }] = await Promise.all([
+      import('jszip'), import('jspdf'),
+    ]);
+    const zip = new JSZip();
+    for (const invoice of invoices) {
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '-9999px';
+      container.innerHTML = buildShippingSlipHtml(invoice);
+      document.body.appendChild(container);
+      const canvas = await captureElementCanvas(container);
+      document.body.removeChild(container);
+
+      const imgData = canvas.toDataURL('image/png');
+      const widthPt = (canvas.width * 72) / 96;
+      const heightPt = (canvas.height * 72) / 96;
+      const pdf = new jsPDF({ orientation: heightPt >= widthPt ? 'portrait' : 'landscape', unit: 'pt', format: [widthPt, heightPt] });
+      pdf.addImage(imgData, 'PNG', 0, 0, widthPt, heightPt);
+      zip.file(`surat-jalan-${invoice.preorder_number}.pdf`, pdf.output('blob'));
+    }
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'surat-jalan.zip';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    toast.error(err.message || t('preorders.bulk_download_failed'));
+  } finally {
+    bulkDownloading.value = false;
   }
 }
 
@@ -565,10 +831,16 @@ async function openDetail(row) {
   showShipmentForm.value = false;
   try {
     const full = await getPreorder(row.id);
-    // GET /preorders/{id} does not return customer/payments/shipment (see
-    // report) — customer_name is carried over from the already-loaded
-    // list row instead of being re-fetched.
+    // customer_name masih dibawa dari baris list yang sudah dimuat, bukan
+    // dari respons ini (lihat openDetailById di bawah untuk yang itu).
     detail.value = { ...full, customer_name: row.customer_name, fulfillment: full.fulfillment ?? row.fulfillment };
+    // BUG YANG DITEMUKAN & DIPERBAIKI — `shipment` di atas selalu
+    // dipaksa null dan TIDAK PERNAH diisi dari `full.shipment` (yang
+    // present() sudah kembalikan sejak lama), jadi data pengiriman yang
+    // sudah tersimpan tidak pernah tampil, layar selalu menunjukkan
+    // "Belum ada data pengiriman" walau shipment sungguhan sudah ada di
+    // database — ditemukan lewat verifikasi browser sungguhan.
+    shipment.value = full.shipment ?? null;
   } finally {
     detailLoading.value = false;
   }
@@ -588,6 +860,7 @@ async function openDetailById(id) {
   try {
     const full = await getPreorder(id);
     detail.value = { ...full, customer_name: full.customer?.name ?? '', fulfillment: full.fulfillment };
+    shipment.value = full.shipment ?? null;
   } catch (err) {
     showDetail.value = false;
     toast.error(err.message || t('preorders.load_failed'));
@@ -715,6 +988,40 @@ async function markDelivered() {
   shipment.value = await updateShipment(shipment.value.id, { status: 'delivered' });
   toast.success(t('preorders.marked_delivered'));
 }
+
+// 024-invoice-layout-shipping-slip (US7) — unduh surat jalan (PDF)
+// menggunakan html2canvas + jsPDF, format sama dengan dokumen lain.
+async function downloadShippingSlip() {
+  if (!detail.value || !shipment.value) return;
+  try {
+    await downloadElementAsPdf(shippingSlipEl.value, `surat-jalan-${detail.value.preorder_number}.pdf`);
+    toast.success(t('preorders.shipping_slip_downloaded'));
+  } catch {
+    toast.error(t('preorders.shipping_slip_download_failed'));
+  }
+}
+
+// 024-invoice-layout-shipping-slip (US6) — simpan perubahan shipment yang
+// diedit langsung (courier_name, recipient, address, dll).
+async function saveShipmentChanges() {
+  if (!shipment.value) return;
+  savingShipment.value = true;
+  try {
+    shipment.value = await updateShipment(shipment.value.id, {
+      courier_name: shipment.value.courier_name,
+      tracking_number: shipment.value.tracking_number,
+      recipient_name: shipment.value.recipient_name,
+      recipient_phone: shipment.value.recipient_phone,
+      address_line: shipment.value.address_line,
+      notes: shipment.value.notes,
+    });
+    toast.success(t('preorders.shipment_saved'));
+  } catch (err) {
+    toast.error(err.message || t('preorders.shipment_update_failed'));
+  } finally {
+    savingShipment.value = false;
+  }
+}
 </script>
 
 <template>
@@ -755,23 +1062,33 @@ async function markDelivered() {
           @input="debouncedCustomerSearch"
         />
       </div>
-      <BaseSelect
+      <BaseMultiSelect
+        v-model="statusFilter"
         class="w-48"
-        :placeholder="t('preorders.all_status')"
-        :options="Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label }))"
-        @update:model-value="(v) => applyFilter({ status: v || undefined })"
+        :options="statusOptions"
+        :all-label="t('preorders.all_status')"
+        @update:model-value="applyPreorderFilters"
       />
-      <BaseSelect
-        class="w-44"
-        :placeholder="t('preorders.all_fulfillment')"
-        :options="[{ value: 'pickup', label: t('preorders.fulfillment_pickup') }, { value: 'courier', label: t('preorders.fulfillment_mail_order') }]"
-        @update:model-value="(v) => applyFilter({ fulfillment: v || undefined })"
+      <BaseMultiSelect
+        v-model="dispatchFilter"
+        class="w-52"
+        :options="dispatchOptions"
+        :all-label="t('preorders.all_dispatch_status')"
+        @update:model-value="applyPreorderFilters"
       />
-      <BaseSelect
+      <BaseMultiSelect
+        v-model="fulfillmentFilter"
         class="w-48"
-        :placeholder="t('preorders.all_sellers')"
-        :options="[{ value: '', label: t('preorders.all_sellers') }, ...artists.map((a) => ({ value: a.id, label: a.name }))]"
-        @update:model-value="(v) => applyFilter({ artist_id: v || undefined })"
+        :options="fulfillmentOptions"
+        :all-label="t('preorders.all_fulfillment')"
+        @update:model-value="applyPreorderFilters"
+      />
+      <BaseMultiSelect
+        v-model="artistFilter"
+        class="w-48"
+        :options="sellerOptions"
+        :all-label="t('preorders.all_sellers')"
+        @update:model-value="applyPreorderFilters"
       />
       <span class="flex-1"></span>
       <template v-if="isOwnerOrAdmin">
@@ -809,6 +1126,10 @@ async function markDelivered() {
         <i class="ph-duotone ph-file-zip text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.bulk_download_action') }}
       </BaseButton>
+      <BaseButton variant="secondary" size="sm" :loading="bulkDownloading" @click="doBulkShippingSlips">
+        <i class="ph-duotone ph-truck text-[15px]" aria-hidden="true"></i>
+        {{ t('preorders.bulk_download_shipping_slip') }}
+      </BaseButton>
       <BaseButton variant="secondary" size="sm" :loading="bulkEmailing" @click="doBulkEmail">
         <i class="ph-duotone ph-envelope-simple text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.bulk_email_action') }}
@@ -816,7 +1137,16 @@ async function markDelivered() {
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('preorders.no_preorders')">
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :empty-message="t('preorders.no_preorders')"
+        :sort-key="sortBy"
+        :sort-dir="sortDir"
+        :row-class="preorderRowClass"
+        @sort="handleSort"
+      >
         <template #cell-select="{ row }">
           <input
             type="checkbox"
@@ -830,34 +1160,46 @@ async function markDelivered() {
           <!-- 013-preorder-list-filters-receipt (US2, T019) — reuses the
                existing openDetail(row) handler (research.md R7), a second
                entry point into the row's already-existing "Detail" action. -->
-          <button type="button" class="font-mono text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openDetail(row)">{{ row.preorder_number }}</button>
+          <span class="inline-flex items-center gap-1.5">
+            <button
+              v-if="needsShippingAttention(row)"
+              type="button"
+              class="flex h-5 w-5 items-center justify-center rounded hover:bg-warn-border"
+              :title="t('preorders.missing_shipping_info_flag')"
+              :aria-label="t('preorders.missing_shipping_info_flag')"
+              @click="openShippingFlagInfo(row)"
+            >
+              <i class="ph-duotone ph-flag text-[14px] text-warn-text" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="font-mono text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openDetail(row)">{{ row.preorder_number }}</button>
+          </span>
+        </template>
+        <template #cell-customer_name="{ row }">
+          <!-- Requested: clicking the customer's name opens their full
+               contact/address info (name/phone/email/social/address/notes),
+               fetched on demand since the list row only carries the name. -->
+          <button type="button" class="text-left text-[13.5px] font-semibold text-muted-4 hover:text-brand-active hover:underline" @click="openCustomerInfo(row.customer_id)">{{ row.customer_name }}</button>
         </template>
         <template #cell-status="{ row }"><StatusPill :variant="STATUS_VARIANT[row.status]">{{ STATUS_LABEL[row.status] }}</StatusPill></template>
+        <template #cell-dispatch_status="{ row }">
+          <div class="flex flex-col items-start gap-1">
+            <StatusPill :variant="DISPATCH_VARIANT[row.dispatch_status ?? 'pending']">{{ DISPATCH_LABEL[row.dispatch_status ?? 'pending'] }}</StatusPill>
+            <!-- Tanggal ditandai, di kolom yang sama (bukan kolom baru). -->
+            <span v-if="row.invoice_sent_at" class="text-[11px] leading-tight text-muted-3">{{ t('preorders.dispatch_invoice_sent_on', { date: formatDateTime(row.invoice_sent_at) }) }}</span>
+            <span v-if="row.shipping_at" class="text-[11px] leading-tight text-muted-3">{{ t('preorders.dispatch_shipping_on', { date: formatDateTime(row.shipping_at) }) }}</span>
+          </div>
+        </template>
         <template #cell-fulfillment="{ row }">{{ FULFILLMENT_LABEL[row.fulfillment] }}</template>
         <template #cell-sellers="{ row }">{{ row.sellers?.length ? row.sellers.map((s) => s.name).join(', ') : '—' }}</template>
         <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
         <template #cell-outstanding="{ row }">{{ formatIDR(row.outstanding) }}</template>
+        <template #cell-created_at="{ row }"><span class="whitespace-nowrap text-[12.5px] text-muted-4">{{ formatDateTime(row.created_at) }}</span></template>
+        <template #cell-updated_at="{ row }"><span class="whitespace-nowrap text-[12.5px] text-muted-4">{{ formatDateTime(row.updated_at) }}</span></template>
         <template #cell-actions="{ row }">
-          <div class="flex items-center justify-end gap-3">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openInvoice(row)">{{ t('preorders.print_action') }}</button>
-            <!-- 022-preorder-invoice-crud-overhaul (US1, FR-001a) — disembunyikan
-                 (bukan cuma dinonaktifkan) untuk transaksi yang sudah tertutup,
-                 supaya tidak ada tombol yang mengarah ke aksi yang pasti ditolak. -->
-            <button
-              v-if="!['handed_over', 'cancelled'].includes(row.status)"
-              type="button"
-              class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active"
-              @click="openEdit(row)"
-            >{{ t('common.edit') }}</button>
-            <!-- FR-003/FR-004 — hanya bisa dihapus selagi "Ordered". -->
-            <button
-              v-if="row.status === 'ordered'"
-              type="button"
-              class="text-[12.5px] font-semibold text-danger-text"
-              @click="confirmDeletePreorder(row)"
-            >{{ t('common.delete') }}</button>
-            <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openDetail(row)">{{ t('preorders.detail') }}</button>
-          </div>
+          <!-- Sampai 3 aksi tampil sebagai tautan; lebih dari itu, Detail tetap
+               terlihat dan sisanya masuk dropdown "Lainnya" (lihat
+               PreorderRowActions.vue). Daftar aksi per baris: rowActions(). -->
+          <PreorderRowActions :actions="rowActions(row)" @select="(key) => onRowAction(row, key)" />
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
@@ -921,8 +1263,32 @@ async function markDelivered() {
         <BaseInput v-model="createDiscount" type="number" min="0" :label="t('preorders.discount_rp')" :error="createErrors.discount" />
         <BaseInput v-model="createExpectedDate" type="date" :label="t('preorders.eta_optional')" />
 
+        <!-- Requested: a clear section label above the item rows, separate
+             from the "Add item" search field below it. -->
+        <span class="text-[13px] font-bold text-muted-5">{{ t('preorders.item_list_section') }}</span>
         <div v-for="(item, idx) in createItems" :key="item.variant_id" class="flex items-center gap-3 rounded-lg border border-line-3 bg-surface-subtle p-3">
-          <div class="flex min-w-0 flex-1 flex-col gap-0.5"><span class="text-[13px] font-semibold">{{ item.label }}</span><span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span></div>
+          <button
+            v-if="item.image_url"
+            type="button"
+            class="h-10 w-10 flex-none cursor-zoom-in"
+            :aria-label="t('master_data.enlarge_variant_image', { name: item.label })"
+            @click="openItemLightbox(item)"
+          >
+            <img :src="item.image_url" :alt="item.label" class="h-10 w-10 rounded-md border border-line-2 object-cover" />
+          </button>
+          <!-- Requested: always show a thumbnail slot, not just when a real
+               image exists — matches the "Add item" dropdown's own
+               image-or-placeholder convention just below. -->
+          <div v-else class="flex h-10 w-10 flex-none items-center justify-center rounded-md border border-line-2 bg-white text-muted-3">
+            <i class="ph-duotone ph-image text-[16px]" aria-hidden="true"></i>
+          </div>
+          <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span class="text-[13px] font-semibold">{{ item.label }}<span v-if="item.category_name" class="font-normal text-muted-3"> · {{ item.category_name }}</span></span>
+            <span class="flex items-baseline gap-1.5">
+              <span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span>
+              <span class="text-[13px] font-bold">{{ formatIDR(item.sell_price) }}</span>
+            </span>
+          </div>
           <div class="flex items-center gap-0.5 overflow-hidden rounded-lg border border-line bg-white">
             <button type="button" class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7" :aria-label="t('preorders.decrease')" @click="bumpCreateItem(item, -1)"><i class="ph-duotone ph-minus text-[13px]" aria-hidden="true"></i></button>
             <input
@@ -938,14 +1304,50 @@ async function markDelivered() {
           <button type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('preorders.delete_item', { name: item.label })" @click="removeCreateItem(idx)"><i class="ph-duotone ph-trash text-[13px]" aria-hidden="true"></i></button>
         </div>
 
+        <!-- 024-invoice-layout-shipping-slip — "Add item" sekarang berperilaku
+             sama dengan CustomerSearchDropdown.vue: fokus lapangan langsung
+             menampilkan daftar produk yang bisa dijelajahi (bukan hanya
+             setelah mengetik), lalu mengetik menyaring daftar itu. Ditutup
+             lewat @blur (delay singkat supaya klik pada baris hasil sempat
+             terdaftar sebelum panel hilang), meniru mekanisme click-outside
+             CustomerSearchDropdown.vue tanpa perlu Teleport terpisah untuk
+             penggunaan lokal ini. -->
         <div class="relative">
-          <BaseInput v-model="createSearch" :label="t('preorders.add_item')" :placeholder="t('preorders.search_product_or_sku_placeholder')" @input="runCreateSearch" />
-          <div v-if="createResults.length" class="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-line-2 bg-white shadow-lg">
-            <button v-for="v in createResults" :key="v.variant_id" type="button" class="flex w-full flex-col gap-0.5 px-3.5 py-2.5 text-left hover:bg-line-7" @click="addCreateItem(v)">
-              <span class="text-[13px] font-semibold">{{ v.label }}</span>
-              <span class="font-mono text-[11px] text-muted-3">{{ v.sku }} · {{ formatIDR(v.sell_price) }}</span>
+          <BaseInput
+            v-model="createSearch"
+            :label="t('preorders.add_item')"
+            :placeholder="t('preorders.search_product_or_sku_placeholder')"
+            @input="runCreateSearch"
+            @focus="runCreateSearch"
+            @blur="closeCreateResultsSoon"
+          />
+          <div v-if="createResults.length" class="absolute z-10 mt-1 max-h-[280px] w-full overflow-y-auto rounded-lg border border-line bg-white shadow-lg">
+            <button v-for="v in createResults" :key="v.variant_id" type="button" class="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-line-7" @mousedown.prevent="addCreateItem(v)">
+              <img v-if="v.image_url" :src="v.image_url" :alt="v.label" class="h-9 w-9 flex-none rounded-md border border-line-2 object-cover" />
+              <div v-else class="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
+                <i class="ph-duotone ph-image text-[14px]" aria-hidden="true"></i>
+              </div>
+              <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span class="text-[13px] font-semibold">{{ v.label }}<span v-if="v.category_name" class="font-normal text-muted-3"> · {{ v.category_name }}</span></span>
+                <span class="flex items-baseline gap-1.5">
+                  <span class="font-mono text-[11px] text-muted-3">{{ v.sku }}</span>
+                  <span class="text-[13px] font-bold">{{ formatIDR(v.sell_price) }}</span>
+                </span>
+              </div>
             </button>
           </div>
+        </div>
+
+        <!-- Requested: when Mail Order is selected, show the customer's
+             own stored address info right here so staff can see at a
+             glance whether it's usable before even opening the shipment
+             form later — pulled straight from the already-selected
+             customer (CustomerSearchDropdown returns full CustomerResource
+             fields), no extra request. -->
+        <div v-if="createFulfillment === 'courier' && createCustomer" class="flex flex-col gap-1 rounded-lg border border-line-3 bg-surface-subtle p-3">
+          <span class="text-[12px] font-bold text-muted-5">{{ t('preorders.customer_address_info') }}</span>
+          <span class="text-[13px]">{{ createCustomer.address || t('preorders.address_not_filled') }}</span>
+          <span v-if="createCustomer.phone" class="text-[12px] text-muted-3">{{ createCustomer.phone }}</span>
         </div>
 
         <BaseTextarea v-model="createNotes" :label="t('preorders.notes')" :rows="2" />
@@ -973,8 +1375,19 @@ async function markDelivered() {
       <div v-if="detailLoading" class="py-14 text-center text-[13px] text-muted-3">{{ t('preorders.loading') }}</div>
       <div v-else-if="detail" class="flex flex-col gap-[18px]">
         <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
-          <span class="text-[14.5px] font-bold">{{ t('preorders.preorder_status') }}</span>
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-[14.5px] font-bold">{{ t('preorders.preorder_status') }}</span>
+            <PreorderPrintMenu
+              :has-payment="lastPaymentId != null"
+              @print-invoice="openInvoice(detail)"
+              @print-payment="openPaymentReceipt(lastPaymentId)"
+            />
+          </div>
           <PreorderStatusStepper :status="detail.status" />
+          <div class="flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-muted-3">
+            <span>{{ t('preorders.detail_created_label') }}: <span class="font-semibold text-muted-4">{{ formatDateTime(detail.created_at) }}</span></span>
+            <span>{{ t('preorders.detail_updated_label') }}: <span class="font-semibold text-muted-4">{{ formatDateTime(detail.updated_at) }}</span></span>
+          </div>
           <div v-if="!['handed_over', 'cancelled'].includes(detail.status)" class="flex flex-wrap items-center gap-2.5 pt-1.5">
             <BaseButton v-if="detail.status === 'dp_paid'" size="sm" :loading="transitioning" @click="markArrived">{{ t('preorders.mark_arrived') }}</BaseButton>
             <BaseButton v-if="detail.status === 'settled'" size="sm" :loading="transitioning" @click="markHandedOver">{{ t('preorders.mark_handed_over') }}</BaseButton>
@@ -983,13 +1396,51 @@ async function markDelivered() {
           </div>
         </div>
 
+        <!-- Penanda manual invoice-terkirim / pengiriman-berjalan. Sengaja
+             kartu terpisah dari stepper di atas: ini bukan bagian state
+             machine stok/pembayaran, dan bisa diubah maju-mundur bebas. -->
+        <div class="flex flex-col gap-3 rounded-card border border-line-2 bg-white p-5">
+          <span class="text-[14.5px] font-bold">{{ t('preorders.dispatch_status_title') }}</span>
+          <div role="group" :aria-label="t('preorders.dispatch_status_title')" class="flex flex-wrap gap-2">
+            <button
+              v-for="opt in detailDispatchOptions"
+              :key="opt.value"
+              type="button"
+              :disabled="savingDispatch || detail.status === 'cancelled'"
+              :aria-pressed="detail.dispatch_status === opt.value"
+              class="h-9 rounded-lg border px-3.5 text-[12.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              :class="detail.dispatch_status === opt.value
+                ? 'border-transparent bg-brand text-white'
+                : 'border-line bg-white text-muted-5 hover:border-brand hover:text-brand-active'"
+              @click="setDispatchStatus(opt.value)"
+            >{{ opt.label }}</button>
+          </div>
+          <div v-if="detail.invoice_sent_at || detail.shipping_at" class="flex flex-col gap-0.5 text-[12px] text-muted-4">
+            <span v-if="detail.invoice_sent_at">{{ t('preorders.dispatch_invoice_sent_on', { date: formatDateTime(detail.invoice_sent_at) }) }}</span>
+            <span v-if="detail.shipping_at">{{ t('preorders.dispatch_shipping_on', { date: formatDateTime(detail.shipping_at) }) }}</span>
+          </div>
+          <p class="text-[11.5px] leading-relaxed text-muted-3">{{ t('preorders.dispatch_status_note') }}</p>
+        </div>
+
         <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr]">
           <div class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
             <span class="text-[14.5px] font-bold">{{ t('preorders.ordered_items') }}</span>
             <div v-for="line in detailLines" :key="line.id" class="flex items-start gap-3 border-b border-line-6 pb-3 last:border-b-0">
+              <button
+                v-if="line.image_url"
+                type="button"
+                class="h-9 w-9 flex-none cursor-zoom-in"
+                :aria-label="t('master_data.enlarge_variant_image', { name: line.name_snapshot })"
+                @click="openItemLightbox({ image_url: line.image_url, label: line.name_snapshot })"
+              >
+                <img :src="line.image_url" :alt="line.name_snapshot" class="h-9 w-9 rounded-md border border-line-2 object-cover" />
+              </button>
+              <div v-else class="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
+                <i class="ph-duotone ph-image text-[14px]" aria-hidden="true"></i>
+              </div>
               <span class="min-w-[28px] text-[14px] font-bold text-brand-active">{{ line.qty }}×</span>
               <div class="flex flex-1 flex-col gap-0.5">
-                <span class="text-[13.5px] font-semibold">{{ line.name_snapshot }}</span>
+                <span class="text-[13.5px] font-semibold">{{ line.name_snapshot }}<span v-if="line.category_name" class="font-normal text-muted-3"> · {{ line.category_name }}</span></span>
                 <span class="font-mono text-[11px] text-muted-3">{{ line.sku_snapshot }} · {{ formatIDR(line.sell_price) }}</span>
                 <span v-if="line.artist_name" class="text-[10.5px] text-muted-3">{{ line.artist_name }}</span>
               </div>
@@ -1030,13 +1481,24 @@ async function markDelivered() {
                   </span>
                   <span class="text-[11px] text-muted-3">{{ formatDateTime(p.paid_at) }}</span>
                 </div>
-                <button
-                  type="button"
-                  class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active"
-                  @click="openPaymentReceipt(p.id)"
-                >
-                  {{ t('preorders.print_payment_receipt') }}
-                </button>
+                <div class="flex items-center gap-3">
+                  <button
+                    v-if="p.proof_id"
+                    type="button"
+                    class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active disabled:opacity-50"
+                    :disabled="loadingProofId === p.proof_id"
+                    @click="viewPaymentProof(p.proof_id)"
+                  >
+                    {{ t('preorders.view_proof') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active"
+                    @click="openPaymentReceipt(p.id)"
+                  >
+                    {{ t('preorders.print_payment_receipt') }}
+                  </button>
+                </div>
               </div>
             </div>
             <p v-else class="text-[12px] text-muted-3">{{ t('preorders.payment_history_empty') }}</p>
@@ -1093,20 +1555,50 @@ async function markDelivered() {
 
           <div v-else class="flex flex-col gap-3.5">
             <div class="grid grid-cols-2 gap-3.5 text-[13px]">
-              <div><span class="text-muted-3">{{ t('preorders.courier') }}</span><div class="font-semibold">{{ shipment.courier_name }}</div></div>
-              <div><span class="text-muted-3">{{ t('preorders.recipient') }}</span><div class="font-semibold">{{ shipment.recipient_name }} · {{ shipment.recipient_phone }}</div></div>
-              <div class="col-span-2"><span class="text-muted-3">{{ t('preorders.address') }}</span><div class="font-semibold">{{ shipment.address_line }}</div></div>
+              <BaseInput v-model="shipment.courier_name" :label="t('preorders.courier')" class="col-span-2" />
+              <BaseInput v-model="shipment.recipient_name" :label="t('preorders.recipient_name')" />
+              <BaseInput v-model="shipment.recipient_phone" :label="t('preorders.recipient_phone')" />
+              <BaseInput v-model="shipment.address_line" :label="t('preorders.address')" class="col-span-2" />
             </div>
             <BaseInput v-model="shipment.tracking_number" :label="t('preorders.tracking_number')" :placeholder="t('preorders.not_filled_yet')" />
             <div class="flex justify-end gap-2.5">
               <BaseButton v-if="shipment.status === 'pending'" variant="secondary" size="sm" @click="markPacked">{{ t('preorders.mark_packed') }}</BaseButton>
               <BaseButton v-if="['pending', 'packed'].includes(shipment.status)" size="sm" @click="saveTrackingAndShip">{{ t('preorders.save_tracking_and_ship') }}</BaseButton>
               <BaseButton v-if="shipment.status === 'shipped'" size="sm" @click="markDelivered">{{ t('preorders.mark_delivered') }}</BaseButton>
+              <BaseButton variant="secondary" size="sm" :loading="savingShipment" @click="saveShipmentChanges"><i class="ph-duotone ph-check text-[14px]" aria-hidden="true"></i>{{ t('preorders.save_shipment_changes') }}</BaseButton>
+              <BaseButton variant="secondary" size="sm" @click="downloadShippingSlip"><i class="ph-duotone ph-file-pdf text-[14px]" aria-hidden="true"></i>{{ t('preorders.download_shipping_slip') }}</BaseButton>
             </div>
           </div>
         </div>
       </div>
     </BaseDrawer>
+
+    <!-- 024-invoice-layout-shipping-slip (US7) — template untuk rendering
+         surat jalan sebagai PDF via html2canvas + jsPDF. Posisi FIXED
+         di luar viewport (bukan `hidden`/display:none) — html2canvas
+         TIDAK BISA merender elemen dengan display:none (kanvas kosong
+         berukuran nol, ditangkap try/catch sebagai "Failed to download"
+         — ditemukan lewat verifikasi browser sungguhan). Store identity
+         (logo) dan "Jenis barang" sengaja dihapus dari dokumen ini —
+         surat jalan hanya butuh info pengiriman, bukan katalog barang. -->
+    <div ref="shippingSlipEl" class="pointer-events-none fixed left-[-9999px] top-0 w-[420px] overflow-hidden bg-white p-6 font-[Arial,sans-serif]">
+      <div class="py-3 text-center text-[13px] font-bold">{{ t('preorders.shipping_info_title') }}</div>
+      <div class="grid grid-cols-2 gap-3 border-t border-dashed border-line-2 py-2.5 text-[12px]">
+        <div>
+          <span class="font-bold uppercase text-muted-3">{{ t('preorders.from_label') }}</span>
+          <div>{{ detail?.store_identity?.name }}</div>
+          <div v-if="detail?.store_identity?.address">{{ detail.store_identity.address }}</div>
+          <div v-if="detail?.store_identity?.contact_phone">{{ detail.store_identity.contact_phone }}</div>
+          <div v-if="detail?.store_identity?.contact_person">{{ detail.store_identity.contact_person }}</div>
+        </div>
+        <div>
+          <span class="font-bold uppercase text-muted-3">{{ t('preorders.to_label') }}</span>
+          <div>{{ shipment?.recipient_name }}</div>
+          <div>{{ shipment?.recipient_phone }}</div>
+          <div>{{ shipment?.address_line }}</div>
+        </div>
+      </div>
+    </div>
 
     <BaseModal :open="showCancelForm" :title="t('preorders.cancel_preorder')" max-width-class="max-w-[420px]" @close="showCancelForm = false">
       <div class="flex flex-col gap-3.5 px-6 py-5">
@@ -1153,5 +1645,40 @@ async function markDelivered() {
       @close="showDeleteConfirm = false"
       @confirm="performDeletePreorder"
     />
+
+    <ImageLightbox :open="!!proofLightboxSrc" :src="proofLightboxSrc" :alt="t('preorders.view_proof')" @close="closeProofLightbox" />
+    <ImageLightbox :open="!!itemLightboxSrc" :src="itemLightboxSrc" :alt="itemLightboxAlt" @close="itemLightboxSrc = null" />
+
+    <!-- Requested: clicking a customer's name in the list shows their full
+         info (name/phone/email/social handle/address/notes) — a read-only
+         summary, reusing CustomerResource's exact field set. -->
+    <BaseModal :open="showCustomerInfo" :title="t('preorders.customer_info_title')" max-width-class="max-w-[420px]" @close="showCustomerInfo = false">
+      <div class="flex flex-col gap-3 px-6 py-5">
+        <div v-if="customerInfoLoading" class="py-8 text-center text-[13px] text-muted-3">{{ t('preorders.loading') }}</div>
+        <div v-else-if="customerInfo" class="flex flex-col gap-3">
+          <span class="text-[15px] font-bold">{{ customerInfo.name }}</span>
+          <div class="flex flex-col gap-2 text-[13px]">
+            <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('events_sessions.phone') }}</span><span class="font-medium">{{ customerInfo.phone || '—' }}</span></div>
+            <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('events_sessions.email') }}</span><span class="font-medium">{{ customerInfo.email || '—' }}</span></div>
+            <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('events_sessions.social_handle') }}</span><span class="font-medium">{{ customerInfo.social_handle || '—' }}</span></div>
+            <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('events_sessions.address') }}</span><span class="text-right font-medium">{{ customerInfo.address || '—' }}</span></div>
+            <div v-if="customerInfo.notes" class="flex flex-col gap-1 border-t border-dashed border-line-2 pt-2.5"><span class="text-muted-3">{{ t('events_sessions.notes') }}</span><span class="font-medium">{{ customerInfo.notes }}</span></div>
+          </div>
+        </div>
+      </div>
+    </BaseModal>
+
+    <!-- Requested: clicking the missing-shipping-info flag shows shipping
+         cost + notes right away, instead of a trip into the full detail
+         drawer. -->
+    <BaseModal :open="showShippingFlagInfo" :title="t('preorders.missing_shipping_info_flag')" max-width-class="max-w-[420px]" @close="showShippingFlagInfo = false">
+      <div v-if="shippingFlagInfoRow" class="flex flex-col gap-3 px-6 py-5 text-[13px]">
+        <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('preorders.shipping_cost') }}</span><span class="font-semibold">{{ formatIDR(shippingFlagInfoRow.shipping_cost) }}</span></div>
+        <div class="flex flex-col gap-1 border-t border-dashed border-line-2 pt-2.5">
+          <span class="text-muted-3">{{ t('preorders.notes') }}</span>
+          <span class="font-medium">{{ shippingFlagInfoRow.notes || '—' }}</span>
+        </div>
+      </div>
+    </BaseModal>
   </div>
 </template>

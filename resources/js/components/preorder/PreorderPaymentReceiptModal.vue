@@ -7,7 +7,8 @@ import StatusPill from '../ui/StatusPill.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
 import { getPreorderInvoice } from '../../api/preorders';
 import { formatIDR, parseMoney } from '../../utils/money';
-import { formatDate, formatDateTime } from '../../utils/date';
+import { formatDate, formatDateTime, formatDateRange } from '../../utils/date';
+import { downloadElementAsPdf } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
 
 /**
@@ -52,6 +53,15 @@ const lightboxAlt = ref('');
 
 const METHOD_LABELS = { cash: 'Tunai', bank_transfer: 'Transfer bank', qr_ewallet: 'QRIS / e-wallet' };
 
+// event_available_on_date is null both when no restriction was chosen AND
+// when it's 'both' days — the raw event_available_on tells them apart, so
+// 'both' renders the event's own date range instead of a single date.
+const availableOnDisplay = computed(() => {
+  if (!preorder.value) return null;
+  if (preorder.value.event_available_on === 'both') return formatDateRange(preorder.value.event_start_date, preorder.value.event_end_date);
+  return preorder.value.event_available_on_date ? formatDate(preorder.value.event_available_on_date) : null;
+});
+
 const STATUS_LABEL_KEY = {
   ordered: 'preorders.step_ordered',
   dp_paid: 'preorders.step_dp_paid',
@@ -80,7 +90,9 @@ const payment = computed(() => {
 
 const paymentEventLabel = computed(() => {
   if (!payment.value) return '';
-  const purposeLabel = payment.value.purpose === 'settlement' ? t('preorders.payment_event_settlement') : t('preorders.payment_event_down_payment');
+  const purposeLabel = payment.value.purpose === 'settlement'
+    ? t('preorders.payment_event_settlement')
+    : (payment.value.purpose === 'full' ? t('preorders.full_payment') : t('preorders.payment_event_down_payment'));
   return `${purposeLabel} — ${formatDateTime(payment.value.paid_at)}`;
 });
 
@@ -89,8 +101,6 @@ const paymentEventLabel = computed(() => {
 // getPreorderInvoice().
 const qrChannels = computed(() => preorder.value?.payment_channels?.filter((c) => c.type === 'qr_ewallet') ?? []);
 const bankChannels = computed(() => preorder.value?.payment_channels?.filter((c) => c.type === 'bank_transfer') ?? []);
-const showShippingSlip = computed(() => preorder.value?.fulfillment === 'courier');
-const itemTypes = computed(() => [...new Set((preorder.value?.items ?? []).map((i) => i.name_snapshot))]);
 
 async function load() {
   if (!props.preorderId) {
@@ -109,23 +119,11 @@ async function load() {
 
 watch(() => [props.open, props.preorderId], ([open]) => { if (open) load(); }, { immediate: true });
 
-async function captureCanvas() {
-  const { default: html2canvas } = await import('html2canvas');
-  return html2canvas(receiptEl.value, { backgroundColor: '#ffffff', scale: 2 });
-}
-
 async function downloadAsPdf() {
   if (!receiptEl.value) return;
   downloadingPdf.value = true;
   try {
-    const canvas = await captureCanvas();
-    const { jsPDF } = await import('jspdf');
-    const imgData = canvas.toDataURL('image/png');
-    const widthPt = (canvas.width * 72) / 96;
-    const heightPt = (canvas.height * 72) / 96;
-    const pdf = new jsPDF({ orientation: heightPt >= widthPt ? 'portrait' : 'landscape', unit: 'pt', format: [widthPt, heightPt] });
-    pdf.addImage(imgData, 'PNG', 0, 0, widthPt, heightPt);
-    pdf.save(`invoice-pembayaran-${preorder.value?.preorder_number ?? 'preorder'}.pdf`);
+    await downloadElementAsPdf(receiptEl.value, `invoice-pembayaran-${preorder.value?.preorder_number ?? 'preorder'}.pdf`);
   } catch {
     toast.error(t('preorders.receipt_download_failed'));
   } finally {
@@ -153,36 +151,36 @@ async function downloadAsPdf() {
           v-if="preorder.store_identity.logo_url"
           :src="preorder.store_identity.logo_url"
           :alt="t('preorders.store_logo_alt')"
-          class="mb-1 h-12 w-12 rounded-md object-contain"
+          class="mb-1 h-24 w-auto max-w-[260px] rounded-md object-contain"
         />
         <span class="text-[17px] font-extrabold tracking-tight">{{ preorder.store_identity.name }}</span>
         <span v-if="preorder.store_identity.address" class="max-w-[300px] text-[11.5px] leading-snug text-muted-3">{{ preorder.store_identity.address }}</span>
       </div>
 
       <!-- 024-invoice-layout-shipping-slip (US1, dicerminkan dari
-           PreorderInvoiceModal.vue, research.md Decision 2) — header dua
-           kolom, identik strukturnya dengan invoice utama. -->
+           PreorderInvoiceModal.vue, research.md Decision 2) — judul
+           "Pre-Order Invoice" setelah garis putus, sebelum grid. -->
+      <span class="block text-center text-[14px] font-bold">{{ t('preorders.invoice_doc_title') }}</span>
       <div class="grid grid-cols-2 gap-4">
+        <!-- 023-event-availability-invoice-redesign (US2) — bg-brand diganti
+             border rounded, teks putih diganti default. -->
         <div
-          v-if="preorder.event_name || preorder.event_available_on_date || preorder.event_location"
-          class="flex flex-col items-center gap-1.5 rounded-lg bg-brand px-4 py-3 text-center text-white"
+          v-if="preorder.event_name || availableOnDisplay || preorder.event_location"
+          class="flex flex-col items-center gap-1.5 rounded-lg border border-line-3 px-4 py-3 text-center"
         >
           <span v-if="preorder.event_name" class="text-[13.5px] font-extrabold">{{ preorder.event_name }}</span>
           <div v-if="preorder.event_location" class="flex flex-col gap-0.5 text-[13px]">
-            <span class="font-semibold text-mint-100">{{ t('events_sessions.location') }}</span>
+            <span class="font-semibold text-muted-3">{{ t('events_sessions.location') }}</span>
             <span class="font-bold">{{ preorder.event_location }}</span>
           </div>
-          <div v-if="preorder.event_available_on_date" class="flex flex-col gap-0.5 text-[13px]">
-            <span class="font-semibold text-mint-100">{{ t('events_sessions.available_on_label') }}</span>
-            <span class="font-bold">{{ formatDate(preorder.event_available_on_date) }}</span>
+          <div v-if="availableOnDisplay" class="flex flex-col gap-0.5 text-[13px]">
+            <span class="font-semibold text-muted-3">{{ t('events_sessions.available_on_label') }}</span>
+            <span class="font-bold">{{ availableOnDisplay }}</span>
           </div>
         </div>
         <div v-else></div>
 
         <div class="flex flex-col items-center gap-1.5 text-center">
-          <span
-            class="rounded-full bg-warn-bg px-3 py-1 text-[11.5px] font-extrabold uppercase tracking-wide text-warn-text"
-          >{{ t('preorders.preorder_marking_label') }}</span>
           <span class="mt-1 font-mono text-[15px] font-bold">{{ preorder.preorder_number }}</span>
           <StatusPill :variant="statusVariant">{{ statusLabel }}</StatusPill>
           <span v-if="preorder.created_at" class="text-[11px] text-muted-3">{{ t('preorders.created_at_label') }}: {{ formatDateTime(preorder.created_at) }}</span>
@@ -245,32 +243,6 @@ async function downloadAsPdf() {
         <div class="flex justify-between text-[13.5px]"><span class="text-muted">{{ t('preorders.outstanding') }}</span><span class="font-semibold">{{ formatIDR(preorder.outstanding) }}</span></div>
       </div>
 
-      <!-- 024-invoice-layout-shipping-slip (US4, dicerminkan dari
-           PreorderInvoiceModal.vue) — surat jalan hanya Mail Order. -->
-      <div v-if="showShippingSlip" class="flex flex-col gap-2.5 rounded-lg border border-dashed border-line-3 p-3.5">
-        <span class="text-center text-[11.5px] font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.shipping_slip_title') }}</span>
-        <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('events_sessions.event_name') }}</span><span class="font-semibold">{{ preorder.event_name ?? '—' }}</span></div>
-        <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('preorders.col_number') }}</span><span class="font-mono font-semibold">{{ preorder.preorder_number }}</span></div>
-        <div class="grid grid-cols-2 gap-3 border-t border-line-2 pt-2.5">
-          <div class="flex flex-col gap-0.5 text-[11.5px]">
-            <span class="font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.from_label') }}</span>
-            <span v-if="preorder.store_identity?.name" class="font-semibold">{{ preorder.store_identity.name }}</span>
-            <span v-if="preorder.store_identity?.address" class="text-muted-2">{{ preorder.store_identity.address }}</span>
-            <span v-if="preorder.store_identity?.contact_phone" class="text-muted-2">{{ preorder.store_identity.contact_phone }}</span>
-          </div>
-          <div class="flex flex-col gap-0.5 text-[11.5px]">
-            <span class="font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.to_label') }}</span>
-            <span v-if="preorder.customer?.name" class="font-semibold">{{ preorder.customer.name }}</span>
-            <span v-if="preorder.customer?.phone" class="text-muted-2">{{ preorder.customer.phone }}</span>
-            <span v-if="preorder.customer?.address" class="text-muted-2">{{ preorder.customer.address }}</span>
-          </div>
-        </div>
-        <div class="border-t border-line-2 pt-2.5 text-[12.5px]">
-          <span class="font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.item_type_label') }}</span>
-          <span class="ml-1">{{ itemTypes.join(', ') }}</span>
-        </div>
-      </div>
-
       <!-- 024-invoice-layout-shipping-slip (US3, dicerminkan dari
            PreorderInvoiceModal.vue) — dua kolom QR/transfer bank. -->
       <div v-if="preorder.payment_channels?.length" class="flex flex-col gap-2.5 border-t border-dashed border-line-2 pt-3.5">
@@ -286,7 +258,7 @@ async function downloadAsPdf() {
                 :aria-label="t('pos.enlarge_qr')"
                 @click="lightboxSrc = channel.qr_image_url; lightboxAlt = channel.provider"
               >
-                <img :src="channel.qr_image_url" :alt="channel.provider" class="h-32 w-32 cursor-zoom-in rounded-md border border-line-2 object-contain" />
+                <img :src="channel.qr_image_url" :alt="channel.provider" class="h-32 max-w-full cursor-zoom-in rounded-md border border-line-2 object-contain" />
               </button>
               <div class="flex min-w-0 flex-col items-center gap-0.5 text-center">
                 <span class="text-[12.5px] font-bold">{{ channel.provider }}</span>
@@ -298,19 +270,20 @@ async function downloadAsPdf() {
             <span class="text-center text-[10.5px] font-bold uppercase tracking-wide text-muted-3">{{ t('preorders.bank_payment_title') }}</span>
             <div v-for="channel in bankChannels" :key="channel.id" class="flex flex-col gap-0.5 rounded-lg border border-line-3 bg-surface-subtle px-3 py-2.5">
               <span class="text-[12.5px] font-bold">{{ channel.provider }}</span>
-              <span v-if="channel.account_number" class="truncate font-mono text-[13px] font-semibold">{{ channel.account_number }}</span>
+              <span v-if="channel.account_number" class="break-all font-mono text-[13px] font-semibold">{{ channel.account_number }}</span>
               <span v-if="channel.account_name" class="text-[11px] text-muted-3">{{ t('pos.account_holder', { name: channel.account_name }) }}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <p class="border-t border-dashed border-line-2 pt-3 text-center text-[11px] leading-relaxed text-muted-3">
+      <!-- 024-invoice-layout-shipping-slip (US5) — footer selalu tampil,
+           fallback ke teks default bila belum dikonfigurasi. -->
+      <p class="border-t border-dashed border-line-2 pt-3 text-center text-[11.5px] leading-relaxed text-muted-3">
         {{ t('preorders.payment_receipt_footer_note') }}
       </p>
-
-      <p v-if="preorder.footer_text" class="border-t border-dashed border-line-2 pt-3 text-center text-[11.5px] leading-relaxed text-muted-3">
-        {{ preorder.footer_text }}
+      <p class="border-t border-dashed border-line-2 pt-3 text-center text-[11.5px] leading-relaxed text-muted-3">
+        {{ preorder.footer_text || t('preorders.invoice_footer_default') }}
       </p>
     </div>
 

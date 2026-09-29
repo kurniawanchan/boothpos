@@ -16,4 +16,5 @@ return [
     'customer_not_found' => 'Customer tidak ditemukan.',
     'discount_exceeds_line_value' => 'Diskon untuk varian :sku melebihi nilai baris itu sendiri.',
     'discount_exceeds_subtotal' => 'Diskon transaksi melebihi subtotal.',
+    'channel_in_use' => 'Kanal ini sedang dipakai dan tidak dapat dihapus.',
 ];

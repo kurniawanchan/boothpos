@@ -12,7 +12,7 @@ import { parseMoney } from './money';
  * product management screens keep seeing the full set), but nothing
  * inactive should ever be sellable at the register.
  */
-export function buildProductCards(products, categoryCodeById = {}) {
+export function buildProductCards(products, categoryCodeById = {}, categoryNameById = {}) {
   return (products || []).map((p) => {
     const variants = (p.variants || []).filter((v) => v.is_active);
     const prices = variants.map((v) => parseMoney(v.sell_price));
@@ -22,6 +22,7 @@ export function buildProductCards(products, categoryCodeById = {}) {
       name: p.name,
       artist_name: p.artist_name,
       category_code: categoryCodeById[p.category_id] ?? null,
+      category_name: categoryNameById[p.category_id] ?? null,
       variant_count: variants.length,
       min_price: variants.length ? Math.min(...prices) : 0,
       max_price: variants.length ? Math.max(...prices) : 0,
@@ -53,5 +54,8 @@ export function toCartItem(card, variant) {
     artist_name: card.artist_name,
     sell_price: variant.sell_price,
     current_stock: variant.current_stock,
+    // Falls back to the product's own image when this variant has none of
+    // its own — mirrors the same fallback used by GET /variants/lookup.
+    image_url: variant.image_url ?? card.image_url ?? null,
   };
 }

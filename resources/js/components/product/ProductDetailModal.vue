@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import StatusPill from '../ui/StatusPill.vue';
+import ImageLightbox from '../ui/ImageLightbox.vue';
 import VariantBomModal from './VariantBomModal.vue';
 import { getProduct } from '../../api/products';
 import { formatIDR } from '../../utils/money';
@@ -55,19 +56,36 @@ watch(
 );
 
 const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v) => sum + Number(v.current_stock ?? 0), 0));
+
+const lightboxOpen = ref(false);
+const lightboxSrc = ref(null);
+const lightboxAlt = ref('');
+function openImageLightbox(src, alt) {
+  if (!src) return;
+  lightboxSrc.value = src;
+  lightboxAlt.value = alt;
+  lightboxOpen.value = true;
+}
 </script>
 
 <template>
-  <BaseModal :open="open" :title="product?.name ?? t('master_data.product_detail')" max-width-class="max-w-[560px]" @close="emit('close')">
+  <BaseModal :open="open" :title="product?.name ?? t('master_data.product_detail')" max-width-class="max-w-[860px]" @close="emit('close')">
     <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">{{ t('master_data.loading_product_detail') }}</div>
     <div v-else-if="product" class="flex flex-col gap-4 px-6 py-5">
       <div class="flex items-start gap-3.5">
-        <img
+        <button
           v-if="product.image_url"
-          :src="product.image_url"
-          :alt="product.name"
-          class="h-20 w-20 flex-none rounded-lg border border-line-2 object-cover"
-        />
+          type="button"
+          class="h-20 w-20 flex-none cursor-zoom-in"
+          :aria-label="t('master_data.enlarge_product_image', { name: product.name })"
+          @click="openImageLightbox(product.image_url, product.name)"
+        >
+          <img
+            :src="product.image_url"
+            :alt="product.name"
+            class="h-20 w-20 rounded-lg border border-line-2 object-cover"
+          />
+        </button>
         <div v-else class="flex h-20 w-20 flex-none items-center justify-center rounded-lg border border-dashed border-disabled-2 text-muted-3">
           <i class="ph-duotone ph-image text-[26px]" aria-hidden="true"></i>
         </div>
@@ -95,6 +113,7 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
           <table class="w-full border-collapse text-[13px]">
             <thead>
               <tr class="bg-surface-subtle text-left">
+                <th class="px-3 py-2"></th>
                 <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_sku') }}</th>
                 <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_name') }}</th>
                 <th class="px-3 py-2 text-right font-bold text-muted-2">{{ t('master_data.col_sell_price') }}</th>
@@ -105,6 +124,20 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
             </thead>
             <tbody>
               <tr v-for="v in product.variants" :key="v.id" class="border-t border-line-5 transition-colors hover:bg-line-7">
+                <td class="px-3 py-2">
+                  <button
+                    v-if="v.image_url"
+                    type="button"
+                    class="h-8 w-8 cursor-zoom-in"
+                    :aria-label="t('master_data.enlarge_variant_image', { name: v.variant_name })"
+                    @click="openImageLightbox(v.image_url, v.variant_name)"
+                  >
+                    <img :src="v.image_url" :alt="v.variant_name" class="h-8 w-8 rounded-md border border-line-2 object-cover" />
+                  </button>
+                  <div v-else class="flex h-8 w-8 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
+                    <i class="ph-duotone ph-image text-[13px]" aria-hidden="true"></i>
+                  </div>
+                </td>
                 <td class="px-3 py-2 font-mono text-[12px]">{{ v.sku }}</td>
                 <td class="px-3 py-2">{{ v.variant_name }}</td>
                 <td class="px-3 py-2 text-right">{{ formatIDR(v.sell_price) }}</td>
@@ -130,4 +163,6 @@ const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v
     :variant-name="bomVariant?.variant_name"
     @close="showBom = false"
   />
+
+  <ImageLightbox :open="lightboxOpen" :src="lightboxSrc" :alt="lightboxAlt" @close="lightboxOpen = false" />
 </template>

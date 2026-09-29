@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { markInvoicePaid, cancelInvoice, deleteInvoice } from '../../api/invoices';
 import { formatIDR } from '../../utils/money';
 import { formatDate } from '../../utils/date';
+import { downloadElementAsPdf, downloadElementAsPng } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
@@ -47,22 +48,11 @@ const isUnpaid = computed(() => props.invoice?.status === 'unpaid');
 // (research.md R13, T098).
 const isEditable = computed(() => props.invoice?.status !== 'paid');
 
-async function captureCanvas() {
-  const { default: html2canvas } = await import('html2canvas');
-  return html2canvas(detailEl.value, { backgroundColor: '#ffffff', scale: 2 });
-}
-
 async function downloadAsImage() {
   if (!detailEl.value) return;
   downloadingImage.value = true;
   try {
-    const canvas = await captureCanvas();
-    const link = document.createElement('a');
-    link.href = canvas.toDataURL('image/png');
-    link.download = `invoice-${props.invoice?.invoice_number ?? 'invoice'}.png`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    await downloadElementAsPng(detailEl.value, `invoice-${props.invoice?.invoice_number ?? 'invoice'}.png`);
   } catch {
     toast.error(t('invoices.download_image_failed'));
   } finally {
@@ -74,14 +64,7 @@ async function downloadAsPdf() {
   if (!detailEl.value) return;
   downloadingPdf.value = true;
   try {
-    const canvas = await captureCanvas();
-    const { jsPDF } = await import('jspdf');
-    const imgData = canvas.toDataURL('image/png');
-    const widthPt = (canvas.width * 72) / 96;
-    const heightPt = (canvas.height * 72) / 96;
-    const pdf = new jsPDF({ orientation: heightPt >= widthPt ? 'portrait' : 'landscape', unit: 'pt', format: [widthPt, heightPt] });
-    pdf.addImage(imgData, 'PNG', 0, 0, widthPt, heightPt);
-    pdf.save(`invoice-${props.invoice?.invoice_number ?? 'invoice'}.pdf`);
+    await downloadElementAsPdf(detailEl.value, `invoice-${props.invoice?.invoice_number ?? 'invoice'}.pdf`);
   } catch {
     toast.error(t('invoices.download_pdf_failed'));
   } finally {

@@ -151,4 +151,81 @@ class PaymentChannelTest extends TestCase
         $this->assertNull($channel->fresh()->qr_image_path);
         Storage::disk('public')->assertMissing($path);
     }
+
+    // 024-invoice-layout-shipping-slip (US6) — soft-delete kanal pembayaran.
+    public function test_owner_can_delete_a_channel_without_payments(): void
+    {
+        $this->actingAsRole('owner');
+
+        $channel = PaymentChannel::factory()->create([
+            'type' => 'bank_transfer',
+            'provider' => 'BCA',
+            'account_number' => '1234567890',
+        ]);
+
+        $response = $this->deleteJson("/api/v1/payment-channels/{$channel->id}");
+
+        $response->assertNoContent();
+        $this->assertNotNull($channel->fresh()->deleted_at);
+    }
+
+    public function test_cashier_cannot_delete_a_channel(): void
+    {
+        $this->actingAsRole('cashier');
+
+        $channel = PaymentChannel::factory()->create([
+            'type' => 'bank_transfer',
+            'provider' => 'BCA',
+        ]);
+
+        $response = $this->deleteJson("/api/v1/payment-channels/{$channel->id}");
+
+        $response->assertForbidden();
+        $this->assertNull($channel->fresh()->deleted_at);
+    }
+
+    public function test_cannot_delete_a_channel_that_has_payments(): void
+    {
+        $this->actingAsRole('owner');
+
+        $channel = PaymentChannel::factory()->create([
+            'type' => 'bank_transfer',
+            'provider' => 'BCA',
+        ]);
+
+        // Buat preorder + payment yang merujuk channel ini — cukup channel_id
+        // terpakai pada tabel payments agar delete diblokir (409). Tidak ada
+        // PaymentFactory, jadi masukkan lewat DB::table() langsung.
+        $user = User::factory()->create(['role' => 'cashier']);
+        $event = \App\Models\Event::factory()->create();
+        $customer = \App\Models\Customer::factory()->create();
+        $preorder = \App\Models\Preorder::create([
+            'event_id' => $event->id,
+            'customer_id' => $customer->id,
+            'user_id' => $user->id,
+            'preorder_number' => 'PO-TEST-001',
+            'fulfillment' => 'pickup',
+            'total_amount' => 100000,
+            'paid_amount' => 100000,
+            'status' => 'handed_over',
+        ]);
+
+        \Illuminate\Support\Facades\DB::table('payments')->insert([
+            'order_id' => null,
+            'preorder_id' => $preorder->id,
+            'channel_id' => $channel->id,
+            'method' => 'bank_transfer',
+            'purpose' => 'full',
+            'amount' => 100000,
+            'verification' => 'verified',
+            'paid_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $response = $this->deleteJson("/api/v1/payment-channels/{$channel->id}");
+
+        $response->assertConflict();
+        $this->assertNull($channel->fresh()->deleted_at);
+    }
 }

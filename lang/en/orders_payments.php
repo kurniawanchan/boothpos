@@ -16,4 +16,5 @@ return [
     'customer_not_found' => 'Customer not found.',
     'discount_exceeds_line_value' => 'The discount for variant :sku exceeds that line\'s value.',
     'discount_exceeds_subtotal' => 'The order discount exceeds the subtotal.',
+    'channel_in_use' => 'This payment channel is in use and cannot be deleted.',
 ];

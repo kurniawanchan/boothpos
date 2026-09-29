@@ -49,4 +49,27 @@ describe('PosCartPanel', () => {
     renderPanel({ canCheckout: false, checkoutBlockedReason: 'Buka sesi kasir terlebih dahulu.' });
     expect(screen.getByText('Buka sesi kasir terlebih dahulu.')).toBeInTheDocument();
   });
+
+  it('shows the seller name on a cart item when present', async () => {
+    const { pinia } = renderPanel();
+    const cart = usePosCartStore(pinia);
+    cart.add({ variant_id: 1, sku: 'SKU1', name: 'Produk A', sell_price: '10000.00', current_stock: 5, artist_name: 'Ryu Illustration' });
+    await Promise.resolve();
+    expect(screen.getByText('Ryu Illustration')).toBeInTheDocument();
+  });
+
+  it('shows and enlarges a cart item image when one is present', async () => {
+    const user = userEvent.setup();
+    const { pinia } = renderPanel();
+    const cart = usePosCartStore(pinia);
+    cart.add({ variant_id: 1, sku: 'SKU1', name: 'Produk A', sell_price: '10000.00', current_stock: 5, image_url: 'https://example.test/a.png' });
+    await Promise.resolve();
+
+    const thumb = screen.getByAltText('Produk A');
+    expect(thumb).toHaveAttribute('src', 'https://example.test/a.png');
+
+    await user.click(screen.getByRole('button', { name: 'Perbesar gambar Produk A' }));
+    const enlarged = await screen.findAllByAltText('Produk A');
+    expect(enlarged.length).toBeGreaterThan(1);
+  });
 });

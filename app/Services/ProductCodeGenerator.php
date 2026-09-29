@@ -8,13 +8,18 @@ use App\Models\ProductVariant;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Menghasilkan code_prefix (8 karakter) dan SKU varian (12 karakter)
- * sesuai keputusan desain di PRD 7.19 dan schema-pos-mvp.sql:
- *   code_prefix = artist.code(3) + category.code(2) + product_segment(3)
- *   sku         = code_prefix(8) + urutan 4 digit
+ * Menghasilkan code_prefix (10 karakter) dan SKU varian (14 karakter),
+ * format dipisah tanda hubung atas permintaan pengguna (sebelumnya
+ * digabung tanpa pemisah — lihat migration
+ * 2026_10_25_000001_widen_product_code_and_sku_columns_for_dashed_format
+ * untuk riwayat perubahan lebar kolom):
+ *   code_prefix = artist.code(3) + "-" + category.code(2) + "-" + product_segment(3)
+ *   sku         = code_prefix(10) + "-" + urutan 3 digit
  *
  * Kode bersifat PERMANEN setelah dibuat (F19.4) — service ini hanya
  * dipanggil sekali saat entitas dibuat, tidak pernah untuk regenerasi.
+ * Kode/SKU yang sudah ada dari SEBELUM perubahan format ini tetap dalam
+ * bentuk lama (tanpa tanda hubung) — tidak pernah diregenerasi ulang.
  */
 class ProductCodeGenerator
 {
@@ -32,17 +37,18 @@ class ProductCodeGenerator
     }
 
     /**
-     * Menyusun code_prefix. TIDAK mencoba "pintar" menghindari tabrakan
-     * dengan mengubah-ubah segmen secara otomatis — bila tabrakan terjadi,
-     * lempar exception agar admin diminta menyunting product_segment
-     * secara manual (F19.5), sesuai KISS: jangan menebak niat pengguna.
+     * Menyusun code_prefix (format "ART-CA-SEG", dipisah tanda hubung).
+     * TIDAK mencoba "pintar" menghindari tabrakan dengan mengubah-ubah
+     * segmen secara otomatis — bila tabrakan terjadi, lempar exception
+     * agar admin diminta menyunting product_segment secara manual
+     * (F19.5), sesuai KISS: jangan menebak niat pengguna.
      */
     public function buildCodePrefix(string $artistCode, string $categoryCode, string $productSegment): string
     {
-        $prefix = strtoupper($artistCode).strtoupper($categoryCode).strtoupper($productSegment);
+        $prefix = strtoupper($artistCode).'-'.strtoupper($categoryCode).'-'.strtoupper($productSegment);
 
-        if (strlen($prefix) !== 8) {
-            throw new \InvalidArgumentException('Kombinasi kode artist, kategori, dan segmen produk harus menghasilkan 8 karakter.');
+        if (strlen($prefix) !== 10) {
+            throw new \InvalidArgumentException('Kombinasi kode artist, kategori, dan segmen produk harus menghasilkan 10 karakter (format ART-CA-SEG).');
         }
 
         // 003-seed-demo-live — withoutGlobalScope: code_prefix UNIQUE lintas
@@ -59,9 +65,10 @@ class ProductCodeGenerator
     }
 
     /**
-     * SKU varian berikutnya untuk satu produk. Urutan dihitung dari jumlah
-     * varian (termasuk yang sudah dihapus/soft-deleted) agar nomor urut
-     * tidak pernah dipakai ulang meski ada varian yang dihapus.
+     * SKU varian berikutnya untuk satu produk (format "ART-CA-SEG-001",
+     * urutan 3 digit). Urutan dihitung dari jumlah varian (termasuk yang
+     * sudah dihapus/soft-deleted) agar nomor urut tidak pernah dipakai
+     * ulang meski ada varian yang dihapus.
      */
     public function nextVariantSku(Product $product): string
     {
@@ -72,7 +79,7 @@ class ProductCodeGenerator
         $sequence = $existingCount + 1;
 
         for ($attempt = 0; $attempt < 20; $attempt++) {
-            $candidate = $product->code_prefix.str_pad((string) ($sequence + $attempt), 4, '0', STR_PAD_LEFT);
+            $candidate = $product->code_prefix.'-'.str_pad((string) ($sequence + $attempt), 3, '0', STR_PAD_LEFT);
 
             if (! ProductVariant::withTrashed()->where('sku', $candidate)->exists()) {
                 return $candidate;

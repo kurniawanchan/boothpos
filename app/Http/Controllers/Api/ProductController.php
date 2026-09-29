@@ -55,7 +55,8 @@ class ProductController extends Controller
                 $term = $request->string('search');
                 $q->where(function ($q2) use ($term) {
                     $q2->where('name', 'like', "%{$term}%")
-                       ->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', "%{$term}%"));
+                       ->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', "%{$term}%")
+                           ->orWhere('variant_name', 'like', "%{$term}%"));
                 });
             })
             // 005-ux-enhancements-dashboard (US1) — artist_id/category_id
@@ -257,22 +258,59 @@ class ProductController extends Controller
         return response()->json(new ProductResource($product->fresh(['artist', 'category', 'variants'])));
     }
 
+    /**
+     * Per-variant image — added at the product owner's explicit request so
+     * different variants of the same product (e.g. different designs/motifs)
+     * can each show their own picture, instead of all sharing the parent
+     * product's single image_path. Mirrors uploadImage() exactly; authorize
+     * against the variant's PARENT product, same as UpdateVariantRequest
+     * does, since ProductVariant has no policy of its own.
+     */
+    public function uploadVariantImage(Request $request, ProductVariant $variant): JsonResponse
+    {
+        $this->authorize('update', $variant->product);
+
+        $validated = $request->validate([
+            'image' => [
+                'required',
+                'file',
+                Rule::file()->max(ImageUploadService::MAX_KILOBYTES)->rules(['mimes:jpeg,png']),
+            ],
+        ]);
+
+        $oldPath = $variant->image_path;
+
+        $variant->image_path = $this->imageUploadService->store($validated['image'], 'variants');
+        $variant->save();
+
+        $this->imageUploadService->delete($oldPath);
+
+        return response()->json(new ProductVariantResource($variant->fresh()));
+    }
+
+    /**
+     * 024-invoice-layout-shipping-slip — `q` kosong SEKARANG mengembalikan
+     * halaman default (bukan array kosong), meniru pola GET /customers
+     * yang sudah ada (CustomerSearchDropdown.vue menampilkan daftar
+     * default saat dibuka, bukan hanya setelah mengetik) — dipakai
+     * PreordersView.vue supaya "Add item" berperilaku sama dengan field
+     * pelanggan: klik untuk lihat daftar yang bisa dijelajahi, lalu
+     * mengetik untuk menyaring.
+     */
     public function lookupVariants(Request $request): JsonResponse
     {
         $term = (string) $request->query('q', '');
         $limit = min((int) $request->integer('limit', 20), 50);
 
-        if ($term === '') {
-            return response()->json(['data' => []]);
-        }
-
         $variants = ProductVariant::query()
-            ->with(['product.artist'])
+            ->with(['product.artist', 'product.category'])
             ->where('is_active', true)
-            ->where(function ($q) use ($term) {
+            ->when($term !== '', fn ($q) => $q->where(function ($q) use ($term) {
                 $q->where('sku', 'like', "%{$term}%")
+                  ->orWhere('variant_name', 'like', "%{$term}%")
                   ->orWhereHas('product', fn ($p) => $p->where('name', 'like', "%{$term}%"));
-            })
+            }))
+            ->orderBy('sku')
             ->limit($limit)
             ->get();
 
@@ -281,9 +319,18 @@ class ProductController extends Controller
             'sku' => $v->sku,
             'label' => $v->product->name.' — '.$v->variant_name,
             'artist_name' => $v->product->artist->name,
+            // Requested for the preorder "Add item" dropdown/item list, so
+            // staff can tell apart same-named products across categories
+            // without opening each one.
+            'category_name' => $v->product->category?->name,
             'sell_price' => number_format((float) $v->sell_price, 2, '.', ''),
             'current_stock' => $v->current_stock,
             'is_preorder' => (bool) $v->product->is_preorder,
+            // Falls back to the PRODUCT's own image when this variant has
+            // none of its own — same accessor ProductVariant::image_url now
+            // exposes to every caller (see its docblock), not duplicated
+            // here anymore.
+            'image_url' => $v->image_url,
         ]);
 
         return response()->json(['data' => $data]);

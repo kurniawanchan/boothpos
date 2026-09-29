@@ -1,6 +1,16 @@
 <script setup>
 import { computed, useId } from 'vue';
 
+// 024-invoice-layout-shipping-slip — BUG YANG DITEMUKAN: root komponen ini
+// adalah <label>, jadi listener non-bubbling seperti @focus/@blur yang
+// dipasang pemanggil (mis. PreordersView.vue) sebelumnya jatuh ke <label>
+// lewat fallthrough attrs bawaan Vue dan TIDAK PERNAH terpicu (focus/blur
+// tidak bubble, beda dari @input yang bubble sehingga terlihat "berfungsi").
+// inheritAttrs: false + v-bind="$attrs" eksplisit di <input> memindahkan
+// SEMUA attrs/listener yang tidak dikenal (termasuk @focus/@blur) ke
+// elemen <input> yang sesungguhnya.
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps({
   modelValue: { type: [String, Number], default: '' },
   label: { type: String, default: '' },
@@ -30,6 +40,7 @@ const hintId = computed(() => `${id}-hint`);
       {{ label }}<span v-if="required" class="text-danger-text" aria-hidden="true"> *</span>
     </span>
     <input
+      v-bind="$attrs"
       :id="id"
       :type="type"
       :value="modelValue"

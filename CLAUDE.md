@@ -12,7 +12,7 @@ Docs in `docs/` are the spec source of truth: `PRD-POS-Event-Multivendor.md`, `o
 
 ```bash
 # Backend
-php artisan test                          # full suite (214 tests)
+php artisan test                          # full suite (native/host only — see warning below)
 php artisan test --filter=PreorderTest    # one file
 php artisan test --filter=test_arrived_status_increases_stock   # one test
 php artisan migrate && php artisan db:seed
@@ -33,7 +33,12 @@ php artisan app:restore <path/database.sql> [--force]
 
 - **MySQL 8 is required; SQLite hard-fails.** `create_orders_and_payments_tables` and `create_preorders_tables` use raw `DB::statement('ALTER TABLE ... ADD CONSTRAINT ... CHECK (...)')`, which SQLite cannot execute. `phpunit.xml` deliberately does *not* pin `DB_CONNECTION` so that `.env.testing` decides — don't "helpfully" add a sqlite default to it.
 - **`.env.testing` must exist and point at a separate database** (`boothpos_test`). It is gitignored. The suite runs `RefreshDatabase`, so pointing it at the app DB destroys real data.
-- On this dev machine MySQL lives only in the `laradock-mysql-1` Docker container (`127.0.0.1:3306`). **Do not `brew install mysql-client`** — that was done once and deliberately reverted. If a CLI tool like `mysqldump` is needed, proxy through `docker exec`, and keep that shim out of committed code.
+- **Running `php artisan test` INSIDE the `app` Docker container is destructive unless you pass explicit `-e` overrides — this has actually wiped the dev database twice (020-customer-data-import-export, and again 2026-09-27).** `docker-compose.yml`'s `app` service uses `env_file: .env`, which injects `DB_DATABASE=boothpos` (the real dev DB) as a real OS-level environment variable inside the container. phpdotenv never overwrites an environment variable that's already set, so `.env.testing` — and even `-e APP_ENV=testing` alone — silently do **nothing**; `RefreshDatabase` then drops and rebuilds `boothpos` itself. The ONLY safe way to run tests inside the container:
+  ```bash
+  docker compose exec -e APP_ENV=testing -e DB_DATABASE=boothpos_test app php artisan test
+  ```
+  `tests/TestCase.php::guardAgainstWrongDatabase()` is a hard technical backstop that refuses to run any test at all unless the resolved database name contains `test` — but treat that as a last-resort safety net, not permission to skip the `-e` flags above. If data does go missing, recover with `php artisan db:seed` + `php artisan db:seed --class=SakanaFridgeDemoSeeder` (docs/RUNBOOK.md §Mode C has the full recovery note).
+- On this dev machine MySQL runs in the `boothpos-mysql-1` Docker container, exposed to the host at `127.0.0.1:3307` (container-internal port stays `3306` — that's what `mysql`/`DB_HOST=mysql` inside the `app` container resolves to). **Do not `brew install mysql-client`** — that was done once and deliberately reverted. If a CLI tool like `mysqldump` is needed, proxy through `docker exec`, and keep that shim out of committed code.
 - **Migration filename date prefixes are load-bearing** for FK order. Never rename or reorder them. `payments.preorder_id` is intentionally created *without* a constraint in `orders_and_payments`, then constrained later in `preorders_tables` via `Schema::table()`, because `preorders` doesn't exist yet at that point.
 
 ## Architecture
@@ -209,7 +214,40 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/024-invoice-layout-shipping-slip/plan.md`
+Active feature plan: `specs/025-preorder-dispatch-status-list-refinements/plan.md`
+(branch `025-preorder-dispatch-status-list-refinements` — not yet created; the
+work sits uncommitted on `develop` on top of feature 024's tip) — a manual,
+three-value marker on pre-orders (`preorders.dispatch_status`: `pending` /
+`invoice_sent` / `shipping`), deliberately a **separate column from `status`**
+(which is the stock/payment state machine — the marker never touches stock,
+payments, notifications, or `status`) and from `shipments.status` (which only
+exists once a courier record does, and never for Self Pickup). Changed from
+the detail drawer via `PATCH /preorders/{id}/dispatch-status` (both directions;
+409 for a cancelled pre-order), filterable in the list (`dispatch_status[]`,
+honoured by `/preorders/summary` and `/preorders/export` too). **`shipping` is
+Mail Order (`fulfillment=courier`) only** — refused with 409 otherwise, and
+`PreorderService::update()` downgrades it to `invoice_sent` if an edit moves
+the order to pickup. `invoice_sent_at` / `shipping_at` are derived by the
+server from the *target state* (re-marking keeps the date; leaving `shipping`
+clears `shipping_at`; `pending` clears both; a client-supplied date is never
+read) and shown inside the existing status cell of the list. Also delivered:
+a "Print" dropdown in the detail (invoice / payment invoice), left-aligned
+customer names, an "Actions" column whose row actions overflow into a
+teleported "More" menu past three (`PreorderRowActions.vue`), a fix for the
+list row's dead "Payment invoice" link (a signature mismatch in
+`openPaymentReceipt`), sortable created/updated columns, and Excel
+export/import of the marker and its dates — `created_at`/`updated_at` are
+**export-only** (ignored on import so an imported order is stamped at import
+time), dates are ISO 8601 with offset and **must be normalised to the app
+timezone on import** (Eloquent writes a Carbon in its own timezone without
+converting), and the export now accepts array-shaped `status`/`fulfillment`
+filters (it used to throw). Two traps worth remembering: a database
+`DEFAULT` isn't visible on a model returned by `create()` (mirrored in
+`Preorder::$attributes`), and a JSON locale key repeated within one section
+silently overrides the earlier one (hit with `created_at_label`). Real-browser
+verification (quickstart.md) is still open. See research.md Decisions 1–8.
+
+Previous feature: `specs/024-invoice-layout-shipping-slip/plan.md`
 (branch `024-invoice-layout-shipping-slip`, branched from
 `023-event-availability-invoice-redesign`'s tip) — five refinements to the
 pre-order invoice (and, where it shares the shell, the payment invoice):

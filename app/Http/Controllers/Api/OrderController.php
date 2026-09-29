@@ -151,6 +151,12 @@ class OrderController extends Controller
             // punya event (beda dari Preorder yang opsional), jadi tidak
             // perlu null-safe di sisi event-nya sendiri.
             'event_available_on_date' => $order->event->availableOnDate()?->toDateString(),
+            // Pilihan mentah dikirim juga (bukan cuma tanggal yang sudah
+            // diselesaikan) supaya frontend bisa membedakan 'both' (tampil
+            // sebagai rentang event_start_date..event_end_date) dari tidak
+            // ada batasan sama sekali (available_on null) — dua-duanya
+            // sama-sama membuat availableOnDate() null.
+            'event_available_on' => $order->event->available_on,
             'cashier_name' => $order->cashier->name,
             'created_at' => $order->created_at,
             'items' => $order->items->map(fn ($i) => [

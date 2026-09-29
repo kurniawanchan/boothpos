@@ -57,4 +57,24 @@ describe('DataTable', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).not.toHaveClass('hover:bg-line-7');
   });
+
+  // Added for the pre-orders list's "flag rows missing shipping info"
+  // feature — an optional per-row class callback, since DataTable owns
+  // the <tr> element and a caller can't otherwise style the row itself
+  // (only its cells via cell-* slots, per the tests above).
+  it('applies the caller-provided rowClass function per row, alongside the shared hover class', () => {
+    render(DataTable, {
+      props: {
+        columns: COLUMNS,
+        rows: ROWS,
+        rowClass: (row) => (row.status === 'inactive' ? 'bg-warn-bg' : ''),
+      },
+    });
+
+    const dataRows = screen.getAllByRole('row').slice(1);
+    expect(dataRows[0]).not.toHaveClass('bg-warn-bg');
+    expect(dataRows[0]).toHaveClass('hover:bg-line-7');
+    expect(dataRows[1]).toHaveClass('bg-warn-bg');
+    expect(dataRows[1]).toHaveClass('hover:bg-line-7');
+  });
 });

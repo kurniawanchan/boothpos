@@ -83,6 +83,35 @@ class PreorderDeleteTest extends TestCase
         $this->assertDatabaseHas('preorders', ['id' => $preorder['id']]);
     }
 
+    // 024-invoice-layout-shipping-slip lanjutan — "Cancelled" ditambah ke
+    // status yang boleh dihapus (sebelumnya cuma "Ordered"); guard
+    // pembayaran tetap berlaku untuk status ini juga.
+    public function test_delete_succeeds_at_cancelled_status_with_no_payment(): void
+    {
+        $preorder = $this->createPreorder();
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'cancelled'])->assertOk();
+
+        $response = $this->deleteJson("/api/v1/preorders/{$preorder['id']}");
+
+        $response->assertStatus(204);
+        $this->assertDatabaseMissing('preorders', ['id' => $preorder['id']]);
+        $this->assertDatabaseMissing('preorder_items', ['preorder_id' => $preorder['id']]);
+    }
+
+    public function test_delete_is_refused_at_cancelled_status_when_a_payment_was_recorded_before_cancelling(): void
+    {
+        $preorder = $this->createPreorder();
+        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
+            'method' => 'cash', 'amount' => 50000, 'purpose' => 'down_payment',
+        ])->assertCreated();
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'cancelled'])->assertOk();
+
+        $response = $this->deleteJson("/api/v1/preorders/{$preorder['id']}");
+
+        $response->assertStatus(409);
+        $this->assertDatabaseHas('preorders', ['id' => $preorder['id']]);
+    }
+
     public function test_delete_is_refused_when_a_payment_exists_even_at_ordered_looking_state(): void
     {
         // A payment can never actually exist while status is still literally

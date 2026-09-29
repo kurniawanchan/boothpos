@@ -2,7 +2,8 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listProducts, getProduct, createProduct, updateProduct, deleteProduct, addVariant, updateVariant, uploadProductImage } from '../api/products';
+import { listProducts, getProduct, createProduct, updateProduct, deleteProduct, addVariant, updateVariant, uploadProductImage, uploadVariantImage } from '../api/products';
+import { createAdjustment } from '../api/stock';
 import { listArtists } from '../api/artists';
 import { listCategories } from '../api/categories';
 import { exportMasterData } from '../api/masterData';
@@ -22,12 +23,20 @@ import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
+import VariantDetailModal from '../components/product/VariantDetailModal.vue';
+import ImageLightbox from '../components/ui/ImageLightbox.vue';
 
 const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listProducts);
+// 024-invoice-layout-shipping-slip — `with_variants=1` diminta sekarang
+// khusus untuk kolom SKU baru di tabel ini (CLAUDE.md: endpoint ini
+// SENGAJA tidak menyertakan variants secara default karena layar produk
+// tadinya tidak menampilkannya — permintaan pengguna membalik keputusan
+// itu untuk layar INI, `?with_variants=1` sudah ada dan dipakai POS,
+// bukan endpoint baru).
+const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listProducts, { with_variants: 1 });
 const search = ref('');
 // 005-ux-enhancements-dashboard (US1) — filter artist/category sekarang
 // array (multi-select dropdown dengan pencarian), bukan lagi satu nilai
@@ -92,6 +101,34 @@ function onProductImageChange(e) {
   productImageFile.value = file;
 }
 
+// Per-variant image (added at the product owner's explicit request —
+// different variants of the same product, e.g. different designs/motifs,
+// can each have their own picture instead of all sharing the product's
+// single image). Same client-side guard as onProductImageChange.
+function onVariantImageChange(row, e) {
+  const file = e.target.files?.[0] ?? null;
+  row.image_error = '';
+  row.image_file = null;
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    row.image_error = t('master_data.image_must_be_image_generic');
+    e.target.value = '';
+    return;
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    row.image_error = t('master_data.image_max_size_generic');
+    e.target.value = '';
+    return;
+  }
+  row.image_file = file;
+}
+
+function openVariantImageLightbox(row) {
+  if (!row.image_url) return;
+  lightboxSrc.value = row.image_url;
+  lightboxAlt.value = row.variant_name;
+}
+
 async function doExport() {
   exporting.value = true;
   try {
@@ -120,6 +157,7 @@ async function afterImport() {
 const columns = computed(() => [
   { key: 'image_url', label: '' },
   { key: 'code_prefix', label: t('master_data.col_code') },
+  { key: 'sku', label: t('master_data.col_sku') },
   { key: 'name', label: t('master_data.col_product_name') },
   { key: 'artist_name', label: t('master_data.col_artist') },
   { key: 'category_name', label: t('master_data.col_category') },
@@ -128,7 +166,7 @@ const columns = computed(() => [
   { key: 'actions', label: '' },
 ]);
 
-const emptyVariant = () => ({ id: null, variant_name: 'Standard', cost_price: '0', sell_price: '0', low_stock_alert: '', is_active: true });
+const emptyVariant = () => ({ id: null, variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, image_file: null, image_error: '' });
 
 const showDrawer = ref(false);
 const editingProduct = ref(null);
@@ -147,6 +185,14 @@ const productForm = reactive({
 const variantRows = ref([emptyVariant()]);
 const formErrors = reactive({});
 
+// Stock is edited per row above (row.current_stock vs. its original_stock
+// snapshot), but written through POST /stock/adjustments as one batch with
+// one shared reason, matching StockAdjustmentRequest's contract.
+const stockAdjustmentReason = ref('');
+const hasStockChanges = computed(() =>
+  variantRows.value.some((row) => Number(row.current_stock) !== Number(row.original_stock ?? 0))
+);
+
 function deriveSegment(name) {
   const letters = (name || '').replace(/[^A-Za-z]/g, '').toUpperCase();
   return letters.slice(0, 3).padEnd(3, 'X');
@@ -154,7 +200,47 @@ function deriveSegment(name) {
 const effectiveSegment = computed(() => (productForm.product_segment || deriveSegment(productForm.name)).toUpperCase().slice(0, 3).padEnd(3, 'X'));
 const artistCode = computed(() => artists.value.find((a) => a.id === Number(productForm.artist_id))?.code ?? '···');
 const categoryCode = computed(() => categories.value.find((c) => c.id === Number(productForm.category_id))?.code ?? '··');
-const codePreview = computed(() => `${artistCode.value}${categoryCode.value}${effectiveSegment.value}0001`);
+const codePreview = computed(() => `${artistCode.value}-${categoryCode.value}-${effectiveSegment.value}-001`);
+
+// SKU cell — hanya 3 SKU pertama ditampilkan per baris, sisanya di balik
+// tautan "+N lainnya" yang bisa dibuka/tutup per baris (bukan sekaligus
+// semua baris), supaya produk dengan banyak varian tidak membuat baris
+// tabel menjadi sangat tinggi secara default.
+const SKU_PREVIEW_COUNT = 3;
+const expandedSkuRowIds = ref(new Set());
+function toggleSkuExpand(rowId) {
+  const next = new Set(expandedSkuRowIds.value);
+  if (next.has(rowId)) next.delete(rowId);
+  else next.add(rowId);
+  expandedSkuRowIds.value = next;
+}
+
+// Clicking an individual SKU opens its own variant detail — separate from
+// "Detail" (whole-product, every variant at once).
+const showVariantDetail = ref(false);
+const detailVariant = ref(null);
+const detailVariantProduct = ref(null);
+function openVariantDetail(row, variant) {
+  detailVariant.value = variant;
+  detailVariantProduct.value = row;
+  showVariantDetail.value = true;
+}
+
+// Klik thumbnail produk membuka ImageLightbox yang sama dengan yang sudah
+// dipakai di layar lain (invoice, QR pembayaran) — bukan lightbox baru.
+const lightboxSrc = ref(null);
+const lightboxAlt = ref('');
+function openImageLightbox(row) {
+  if (!row.image_url) return;
+  lightboxSrc.value = row.image_url;
+  lightboxAlt.value = row.name;
+}
+
+function openEditingImageLightbox() {
+  if (!editingProduct.value?.image_url) return;
+  lightboxSrc.value = editingProduct.value.image_url;
+  lightboxAlt.value = editingProduct.value.name;
+}
 
 function openCreate() {
   editingProduct.value = null;
@@ -172,6 +258,7 @@ function openCreate() {
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   productImageFile.value = null;
   productImageError.value = '';
+  stockAdjustmentReason.value = '';
   if (productImageInputEl.value) productImageInputEl.value.value = '';
   showDrawer.value = true;
 }
@@ -181,6 +268,7 @@ async function openEdit(product) {
   editingProduct.value = full;
   productImageFile.value = null;
   productImageError.value = '';
+  stockAdjustmentReason.value = '';
   if (productImageInputEl.value) productImageInputEl.value.value = '';
   Object.assign(productForm, {
     artist_id: full.artist_id,
@@ -193,7 +281,7 @@ async function openEdit(product) {
     is_active: full.is_active,
   });
   variantRows.value = full.variants.length
-    ? full.variants.map((v) => ({ ...v, low_stock_alert: v.low_stock_alert ?? '' }))
+    ? full.variants.map((v) => ({ ...v, low_stock_alert: v.low_stock_alert ?? '', original_stock: v.current_stock, image_file: null, image_error: '' }))
     : [emptyVariant()];
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showDrawer.value = true;
@@ -226,10 +314,42 @@ function marginFor(row) {
   return Math.round(((sell - cost) / sell) * 100);
 }
 
+// Markup (profit ÷ cost) and margin (profit ÷ sell price) are different
+// metrics by definition — e.g. a 50% markup is always exactly a 33%
+// margin, regardless of the actual cost value. Both badges are shown side
+// by side so that relationship is never mistaken for a bug.
+function markupFor(row) {
+  const cost = parseMoney(row.cost_price);
+  const sell = parseMoney(row.sell_price);
+  if (cost <= 0) return null;
+  return Math.round(((sell - cost) / cost) * 100);
+}
+
 async function saveProduct() {
+  // Stock is never written directly (mirrors the master-data import
+  // path) — a real stock_movements row is required via the same
+  // POST /stock/adjustments (StockService::applyMovement) every other
+  // manual adjustment already goes through, so the reason it asks for is
+  // mandatory here too, checked up front before any save call fires.
+  if (hasStockChanges.value && !stockAdjustmentReason.value.trim()) {
+    formErrors.stock_adjustment_reason = t('master_data.stock_adjustment_reason_required');
+    return;
+  }
+
   saving.value = true;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   let productId = editingProduct.value?.id ?? null;
+  // { variantId, file } pairs collected as variants are created/updated,
+  // uploaded only after every variant has a real id (a brand-new row has
+  // none until its create call returns).
+  const pendingVariantImages = [];
+  // { variant_id, qty_change } pairs for POST /stock/adjustments, same
+  // deferred-until-real-id reasoning as pendingVariantImages above.
+  const pendingStockAdjustments = [];
+  function queueStockAdjustment(row, variantId) {
+    const delta = Number(row.current_stock) - Number(row.original_stock ?? 0);
+    if (delta !== 0) pendingStockAdjustments.push({ variant_id: variantId, qty_change: delta });
+  }
   try {
     if (editingProduct.value) {
       await updateProduct(editingProduct.value.id, {
@@ -249,8 +369,9 @@ async function saveProduct() {
           low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
           is_active: row.is_active,
         };
-        if (row.id) await updateVariant(row.id, payload);
-        else await addVariant(editingProduct.value.id, payload);
+        const variantId = row.id ? (await updateVariant(row.id, payload)).id : (await addVariant(editingProduct.value.id, payload)).id;
+        if (row.image_file) pendingVariantImages.push({ variantId, file: row.image_file });
+        queueStockAdjustment(row, variantId);
       }
       toast.success(t('master_data.product_updated'));
     } else {
@@ -271,6 +392,15 @@ async function saveProduct() {
         })),
       });
       productId = created.id;
+      // POST /products creates variants inline (no per-row response), so
+      // the returned product's own variants — always in creation order —
+      // are matched back to variantRows by index to know each new id.
+      variantRows.value.forEach((row, idx) => {
+        const variantId = created.variants?.[idx]?.id;
+        if (!variantId) return;
+        if (row.image_file) pendingVariantImages.push({ variantId, file: row.image_file });
+        queueStockAdjustment(row, variantId);
+      });
       toast.success(t('master_data.product_created'));
     }
     if (productImageFile.value && productId) {
@@ -281,6 +411,20 @@ async function saveProduct() {
         toast.error(t('master_data.product_saved_image_failed'));
       } finally {
         uploadingProductImage.value = false;
+      }
+    }
+    for (const { variantId, file } of pendingVariantImages) {
+      try {
+        await uploadVariantImage(variantId, file);
+      } catch {
+        toast.error(t('master_data.product_saved_image_failed'));
+      }
+    }
+    if (pendingStockAdjustments.length) {
+      try {
+        await createAdjustment({ reason: stockAdjustmentReason.value.trim(), items: pendingStockAdjustments });
+      } catch {
+        toast.error(t('master_data.stock_adjustment_failed'));
       }
     }
     showDrawer.value = false;
@@ -369,12 +513,50 @@ async function performDelete() {
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
       <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_products')">
         <template #cell-image_url="{ row }">
-          <img v-if="row.image_url" :src="row.image_url" :alt="row.name" class="h-9 w-9 rounded-md border border-line-2 object-cover" />
+          <button
+            v-if="row.image_url"
+            type="button"
+            class="cursor-zoom-in"
+            :aria-label="t('master_data.enlarge_product_image', { name: row.name })"
+            @click="openImageLightbox(row)"
+          >
+            <img :src="row.image_url" :alt="row.name" class="h-9 w-9 rounded-md border border-line-2 object-cover" />
+          </button>
           <div v-else class="flex h-9 w-9 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
             <i class="ph-duotone ph-image text-[16px]" aria-hidden="true"></i>
           </div>
         </template>
         <template #cell-code_prefix="{ row }"><span class="font-mono text-[12px] font-bold text-brand-active">{{ row.code_prefix }}</span></template>
+        <!-- 024-invoice-layout-shipping-slip — SKU sungguhan per varian
+             (bukan sekadar code_prefix bersama); satu produk = satu atau
+             lebih varian. Hanya SKU_PREVIEW_COUNT pertama ditampilkan
+             default, sisanya di balik tautan "+N lainnya" per baris. -->
+        <template #cell-sku="{ row }">
+          <span v-if="!row.variants?.length" class="text-[11.5px] text-muted-3">—</span>
+          <div v-else class="flex flex-wrap items-center gap-x-1 gap-y-1.5">
+            <template
+              v-for="(v, i) in (expandedSkuRowIds.has(row.id) ? row.variants : row.variants.slice(0, SKU_PREVIEW_COUNT))"
+              :key="v.id"
+            >
+              <button
+                type="button"
+                class="font-mono text-[11.5px] text-muted-3 underline decoration-dotted hover:text-brand-active"
+                @click="openVariantDetail(row, v)"
+              >{{ v.sku }}</button><span
+                v-if="i < (expandedSkuRowIds.has(row.id) ? row.variants.length : Math.min(row.variants.length, SKU_PREVIEW_COUNT)) - 1"
+                class="text-[11.5px] text-muted-3"
+              >,</span>
+            </template>
+            <button
+              v-if="row.variants.length > SKU_PREVIEW_COUNT"
+              type="button"
+              class="whitespace-nowrap text-[11px] font-semibold text-brand-active underline decoration-dotted"
+              @click="toggleSkuExpand(row.id)"
+            >
+              {{ expandedSkuRowIds.has(row.id) ? t('master_data.show_less') : t('master_data.show_more_count', { count: row.variants.length - SKU_PREVIEW_COUNT }) }}
+            </button>
+          </div>
+        </template>
         <template #cell-is_preorder="{ row }">
           <StatusPill :variant="row.is_preorder ? 'warn' : 'neutral'">{{ row.is_preorder ? t('master_data.preorder') : t('master_data.ready_stock') }}</StatusPill>
         </template>
@@ -397,7 +579,7 @@ async function performDelete() {
     <BaseDrawer
       :open="showDrawer"
       :title="editingProduct ? editingProduct.name : t('master_data.new_product')"
-      :subtitle="t('master_data.code_generated_by_server')"
+      :subtitle="editingProduct ? editingProduct.code_prefix : t('master_data.code_generated_by_server')"
       @close="showDrawer = false"
     >
       <div class="flex flex-col gap-[18px]">
@@ -422,12 +604,19 @@ async function performDelete() {
           <div class="flex flex-col gap-1.5">
             <label class="text-[12.5px] font-semibold text-muted-4" for="product-image">{{ t('master_data.product_image') }}</label>
             <div class="flex items-center gap-3">
-              <img
+              <button
                 v-if="editingProduct?.image_url && !productImageFile"
-                :src="editingProduct.image_url"
-                :alt="t('master_data.current_product_image')"
-                class="h-16 w-16 flex-none rounded-lg border border-line-2 object-cover"
-              />
+                type="button"
+                class="h-16 w-16 flex-none cursor-zoom-in"
+                :aria-label="t('master_data.enlarge_product_image', { name: editingProduct.name })"
+                @click="openEditingImageLightbox"
+              >
+                <img
+                  :src="editingProduct.image_url"
+                  :alt="t('master_data.current_product_image')"
+                  class="h-16 w-16 rounded-lg border border-line-2 object-cover"
+                />
+              </button>
               <input
                 id="product-image"
                 ref="productImageInputEl"
@@ -467,6 +656,9 @@ async function performDelete() {
           <div v-for="(row, idx) in variantRows" :key="idx" class="flex flex-col gap-3 rounded-lg border border-line-3 bg-surface-subtle p-3.5" :class="{ 'opacity-50': row.id && !row.is_active }">
             <div class="flex items-center gap-2.5">
               <span v-if="row.sku" class="rounded-md bg-mint-100 px-2.5 py-1 font-mono text-[12px] font-semibold text-brand-active">{{ row.sku }}</span>
+              <span v-if="markupFor(row) !== null" class="rounded-md px-2 py-1 text-[11px] font-bold" :class="markupFor(row) >= 0 ? 'bg-mint-100 text-brand-active' : 'bg-danger-bg text-danger-text'">
+                {{ t('master_data.markup_value', { value: markupFor(row) }) }}
+              </span>
               <span v-if="marginFor(row) !== null" class="rounded-md px-2 py-1 text-[11px] font-bold" :class="marginFor(row) >= 0 ? 'bg-mint-100 text-brand-active' : 'bg-danger-bg text-danger-text'">
                 {{ t('master_data.margin', { value: marginFor(row) }) }}
               </span>
@@ -475,17 +667,53 @@ async function performDelete() {
                 <i class="ph-duotone ph-trash text-[14px]" aria-hidden="true"></i>
               </button>
             </div>
-            <div class="grid grid-cols-[1.4fr_1fr_1fr_auto] items-end gap-2.5">
+            <div class="grid grid-cols-[1.4fr_1fr_1fr] items-end gap-2.5">
               <BaseInput v-model="row.variant_name" :label="t('master_data.variant_name')" />
               <BaseInput v-model="row.cost_price" type="number" min="0" :label="t('master_data.cost_price')" />
               <BaseInput v-model="row.sell_price" type="number" min="0" :label="t('master_data.sell_price')" />
+            </div>
+            <div class="grid grid-cols-[1fr_auto] items-end gap-2.5">
+              <BaseInput v-model="row.current_stock" type="number" min="0" :label="t('master_data.col_stock')" />
               <BaseButton variant="secondary" size="sm" @click="applyMarkup(row)">{{ t('master_data.apply_markup') }}</BaseButton>
             </div>
+            <!-- Per-variant image, added at the product owner's explicit
+                 request — each variant (e.g. a different design/motif) can
+                 show its own picture, independent of the product's own
+                 image above. -->
+            <div class="flex items-center gap-3">
+              <button
+                v-if="row.image_url && !row.image_file"
+                type="button"
+                class="h-11 w-11 flex-none cursor-zoom-in"
+                :aria-label="t('master_data.enlarge_variant_image', { name: row.variant_name })"
+                @click="openVariantImageLightbox(row)"
+              >
+                <img :src="row.image_url" :alt="t('master_data.current_variant_image')" class="h-11 w-11 rounded-md border border-line-2 object-cover" />
+              </button>
+              <input
+                type="file"
+                accept="image/*"
+                class="flex-1 rounded-lg border border-line bg-white px-3 py-2 text-[12px] file:mr-2.5 file:rounded-md file:border-0 file:bg-mint-100 file:px-2.5 file:py-1 file:text-[11.5px] file:font-bold file:text-brand-active"
+                @change="onVariantImageChange(row, $event)"
+              />
+            </div>
+            <p v-if="row.image_error" class="text-[12px] font-semibold text-danger-text">{{ row.image_error }}</p>
           </div>
           <button type="button" class="flex h-11 items-center justify-center gap-2 rounded-lg border border-dashed border-disabled-2 text-[13.5px] font-bold text-muted-5 hover:border-brand hover:text-brand-active" @click="addVariantRow">
             <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
             {{ t('master_data.add_variant') }}
           </button>
+          <!-- Stock is never written directly — a change here becomes a
+               real stock_movements row via POST /stock/adjustments (the
+               same StockService::applyMovement path the master-data import
+               uses), so a shared reason is required for the whole batch. -->
+          <BaseInput
+            v-if="hasStockChanges"
+            v-model="stockAdjustmentReason"
+            :label="t('master_data.stock_adjustment_reason')"
+            required
+            :error="formErrors.stock_adjustment_reason"
+          />
         </div>
       </div>
 
@@ -507,5 +735,14 @@ async function performDelete() {
 
     <MasterDataImportModal :open="showImportModal" @close="showImportModal = false" @imported="afterImport" />
     <ProductDetailModal :open="showDetail" :product-id="detailProductId" @close="showDetail = false" />
+    <VariantDetailModal
+      :open="showVariantDetail"
+      :variant="detailVariant"
+      :product-name="detailVariantProduct?.name"
+      :artist-name="detailVariantProduct?.artist_name"
+      :category-name="detailVariantProduct?.category_name"
+      @close="showVariantDetail = false"
+    />
+    <ImageLightbox :open="!!lightboxSrc" :src="lightboxSrc" :alt="lightboxAlt" @close="lightboxSrc = null" />
   </div>
 </template>

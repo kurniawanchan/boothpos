@@ -10,6 +10,51 @@ use Illuminate\Support\Facades\Hash;
 
 abstract class TestCase extends BaseTestCase
 {
+    /**
+     * BUG YANG DITEMUKAN & DIPERBAIKI (insiden nyata, 2026-09-27) —
+     * menjalankan `php artisan test` di dalam kontainer Docker TANPA
+     * `-e APP_ENV=testing -e DB_DATABASE=boothpos_test` menghapus SELURUH
+     * isi database dev sungguhan (`boothpos`): 32 pre-order, semua user,
+     * dan seluruh setting hilang lewat RefreshDatabase. Root cause-nya
+     * BUKAN sekadar lupa memberi flag — docker-compose.yml menyuntikkan
+     * DB_HOST/DB_DATABASE lewat `env_file: .env` sebagai environment
+     * variable ASLI proses kontainer, dan phpdotenv (dipakai Laravel
+     * untuk memuat `.env.testing` saat APP_ENV=testing) TIDAK PERNAH
+     * menimpa environment variable yang sudah ada di proses — jadi nilai
+     * `.env.testing` diam-diam tidak pernah berlaku sama sekali, bahkan
+     * dengan `-e APP_ENV=testing` sendirian. Guard ini adalah jaring
+     * pengaman TERAKHIR yang tidak bergantung pada siapa pun mengingat
+     * flag yang benar: kalau nama database yang akan dipakai
+     * RefreshDatabase bukan database test, seluruh suite dihentikan
+     * sebelum satu migrasi/RefreshDatabase pun sempat berjalan.
+     *
+     * Ditempatkan di sini (override `refreshApplication()`), BUKAN di
+     * `setUp()` biasa — `config()`/container baru tersedia setelah
+     * `refreshApplication()` membuat `$this->app`, tapi
+     * `RefreshDatabase::refreshDatabase()` (yang menjalankan
+     * `migrate:fresh`, bagian yang sungguhan merusak) baru dipanggil
+     * SESUDAHNYA lewat `setUpTraits()` di dalam
+     * `setUpTheTestEnvironment()` milik Laravel. Ini satu-satunya titik
+     * yang app-nya sudah siap (`config()` bisa dipanggil) TAPI
+     * migrasi/RefreshDatabase belum sempat jalan.
+     */
+    protected function refreshApplication()
+    {
+        parent::refreshApplication();
+
+        $database = config('database.connections.mysql.database');
+
+        if (! str_contains((string) $database, 'test')) {
+            throw new \RuntimeException(
+                "\n\nREFUSING TO RUN TESTS: resolved database is '{$database}', not a *_test database.\n" .
+                "Running tests now would let RefreshDatabase WIPE this database.\n" .
+                "Run tests with the required overrides, e.g. from the host:\n" .
+                "  docker compose exec -e APP_ENV=testing -e DB_DATABASE=boothpos_test app php artisan test\n" .
+                "or simply: composer test\n\n"
+            );
+        }
+    }
+
     // BUG YANG DITEMUKAN & DIPERBAIKI (015-dockerize-dev-environment) —
     // ditemukan lewat `php artisan test` di dalam container Docker: 10
     // test gagal di sana padahal 424/424 selalu hijau secara native di

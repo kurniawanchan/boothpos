@@ -9,6 +9,7 @@ import StatusPill from '../ui/StatusPill.vue';
 import { getPurchaseOrder, recordPurchaseOrderPayment } from '../../api/purchaseOrders';
 import { formatIDR } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
+import { downloadElementAsPdf } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
 
 /**
@@ -53,15 +54,7 @@ async function downloadInvoicePdf() {
   if (!invoiceEl.value) return;
   downloadingPdf.value = true;
   try {
-    const { default: html2canvas } = await import('html2canvas');
-    const canvas = await html2canvas(invoiceEl.value, { backgroundColor: '#ffffff', scale: 2 });
-    const { jsPDF } = await import('jspdf');
-    const imgData = canvas.toDataURL('image/png');
-    const widthPt = (canvas.width * 72) / 96;
-    const heightPt = (canvas.height * 72) / 96;
-    const pdf = new jsPDF({ orientation: heightPt >= widthPt ? 'portrait' : 'landscape', unit: 'pt', format: [widthPt, heightPt] });
-    pdf.addImage(imgData, 'PNG', 0, 0, widthPt, heightPt);
-    pdf.save(`${po.value?.po_number ?? 'purchase-order'}.pdf`);
+    await downloadElementAsPdf(invoiceEl.value, `${po.value?.po_number ?? 'purchase-order'}.pdf`);
   } catch {
     toast.error(t('purchase_orders.invoice_download_failed'));
   } finally {

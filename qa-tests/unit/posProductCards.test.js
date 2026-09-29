@@ -84,6 +84,12 @@ describe('buildProductCards', () => {
     expect(cards[0].category_code).toBe('KY');
     expect(buildProductCards([product({ category_id: 99 })])[0].category_code).toBeNull();
   });
+
+  it('resolves category_name from the lookup map, defaulting to null', () => {
+    const cards = buildProductCards([product({ category_id: 2 })], { 2: 'KY' }, { 2: 'Keychain' });
+    expect(cards[0].category_name).toBe('Keychain');
+    expect(buildProductCards([product({ category_id: 99 })])[0].category_name).toBeNull();
+  });
 });
 
 describe('toCartItem', () => {
@@ -106,5 +112,17 @@ describe('toCartItem', () => {
     expect(item.sku).toBe('RYUKYSAK0009');
     expect(item.sell_price).toBe('99000.00');
     expect(item.current_stock).toBe(3);
+  });
+
+  it("uses the variant's own image when it has one", () => {
+    const card = { name: 'Poster A2', artist_name: 'Ryu', variant_count: 1, image_url: 'https://example.test/product.png' };
+    const item = toCartItem(card, variant({ image_url: 'https://example.test/variant.png' }));
+    expect(item.image_url).toBe('https://example.test/variant.png');
+  });
+
+  it("falls back to the product's image when the variant has none", () => {
+    const card = { name: 'Poster A2', artist_name: 'Ryu', variant_count: 1, image_url: 'https://example.test/product.png' };
+    const item = toCartItem(card, variant({ image_url: null }));
+    expect(item.image_url).toBe('https://example.test/product.png');
   });
 });

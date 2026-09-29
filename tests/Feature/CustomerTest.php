@@ -49,4 +49,21 @@ class CustomerTest extends TestCase
         $this->assertCount(1, $response->json('data'));
         $this->assertSame('Ani', $response->json('data.0.name'));
     }
+
+    // Added for the pre-orders list's "click customer name -> show
+    // customer info" feature — the list response only carries
+    // customer_name, so the frontend needs a single-customer fetch.
+    public function test_can_fetch_a_single_customer_by_id(): void
+    {
+        $user = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($user, 'sanctum');
+        $customer = Customer::factory()->create(['name' => 'Ani', 'address' => 'Jl. Merdeka No. 1']);
+
+        $response = $this->getJson("/api/v1/customers/{$customer->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('id', $customer->id)
+            ->assertJsonPath('name', 'Ani')
+            ->assertJsonPath('address', 'Jl. Merdeka No. 1');
+    }
 }

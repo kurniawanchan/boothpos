@@ -47,11 +47,11 @@ describe('PreorderPaymentReceiptModal', () => {
     expect(screen.getAllByText('Rp 100.000').length).toBeGreaterThan(0);
   });
 
-  it('shows the "Pre-order" marking and current status prominently', async () => {
+  it('shows the "Pre-Order Invoice" title and current status prominently', async () => {
     renderModal({ open: true, preorderId: 7, paymentId: 102 });
 
     await screen.findByText('PO-0007');
-    expect(screen.getByText('Pre-order')).toBeInTheDocument();
+    expect(screen.getByText(id.preorders.invoice_doc_title)).toBeInTheDocument();
     expect(screen.getByText('Lunas')).toBeInTheDocument();
   });
 
@@ -68,7 +68,7 @@ describe('PreorderPaymentReceiptModal', () => {
     renderModal({ open: true, preorderId: 7, paymentId: 101 });
 
     await screen.findByText('PO-0007');
-    expect(screen.getAllByText(/Uang muka \(DP\) — /).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Pembayaran penuh — /).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Rp 200.000').length).toBeGreaterThan(0);
     expect(screen.queryByText('Rp 300.000')).not.toBeInTheDocument();
   });
@@ -152,7 +152,9 @@ describe('PreorderPaymentReceiptModal', () => {
     expect(screen.getAllByText(id.preorders.bank_payment_title).length).toBeGreaterThan(0);
   });
 
-  it('renders the shipping slip for a Mail Order preorder', async () => {
+  // 024-invoice-layout-shipping-slip (US4) — shipping slip removed from
+  // the payment receipt document entirely; it's now a standalone download.
+  it('does NOT render the shipping slip even for a Mail Order preorder', async () => {
     const { getPreorderInvoice } = await import('../../resources/js/api/preorders');
     getPreorderInvoice.mockResolvedValueOnce({
       ...mockPreorder,
@@ -163,7 +165,7 @@ describe('PreorderPaymentReceiptModal', () => {
     renderModal({ open: true, preorderId: 7, paymentId: 102 });
 
     await screen.findAllByText('PO-0007');
-    expect(screen.getByText(id.preorders.shipping_slip_title)).toBeInTheDocument();
+    expect(screen.queryByText(id.preorders.shipping_slip_title)).not.toBeInTheDocument();
   });
 
   it('omits the shipping slip for a Self Pickup preorder', async () => {

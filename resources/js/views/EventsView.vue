@@ -60,6 +60,7 @@ const isMultiDay = computed(() => !!form.start_date && !!form.end_date && form.s
 const availableOnOptions = computed(() => [
   { value: 'day_1', label: t('events_sessions.available_on_day_1', { date: formatDate(form.start_date) }) },
   { value: 'day_2', label: t('events_sessions.available_on_day_2', { date: formatDate(form.end_date) }) },
+  { value: 'both', label: t('events_sessions.available_on_both') },
 ]);
 watch(isMultiDay, (multiDay) => {
   if (!multiDay) form.available_on = '';

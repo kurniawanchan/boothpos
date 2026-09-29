@@ -25,7 +25,7 @@ class StoreEventRequest extends FormRequest
             // yang dicek di sini; aturan lintas-field (tidak boleh diisi
             // untuk event satu hari) ada di withValidator() di bawah,
             // karena butuh start_date/end_date sekaligus.
-            'available_on' => ['nullable', Rule::in(['day_1', 'day_2'])],
+            'available_on' => ['nullable', Rule::in(['day_1', 'day_2', 'both'])],
             'event_cost' => ['sometimes', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ];

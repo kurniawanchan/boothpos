@@ -683,7 +683,7 @@ paths:
         sedangkan layar kasir memakainya — memuatnya selalu hanya
         memperbesar payload untuk konsumen yang tidak butuh.
       parameters:
-        - { name: search, in: query, description: "Cocokkan nama produk atau SKU", schema: { type: string } }
+        - { name: search, in: query, description: "Cocokkan nama produk, atau SKU/nama varian pada salah satu variannya", schema: { type: string } }
         - name: artist_id
           in: query
           description: |
@@ -728,7 +728,9 @@ paths:
       summary: Buat produk beserta varian
       description: |
         `code_prefix` dan `sku` dihasilkan server, tidak dikirim klien.
-        `code_prefix` dan `sku` dihasilkan server dari kode seller + urutan product per-seller; kode category dan `product_segment` tidak lagi dipakai.
+        `code_prefix` = artist.code + "-" + category.code + "-" + product_segment
+        (format "ART-CA-SEG", 10 karakter). `sku` = code_prefix + "-" + urutan
+        varian 3 digit (format "ART-CA-SEG-001", 14 karakter).
       requestBody:
         required: true
         content:
@@ -849,7 +851,7 @@ paths:
       summary: Cari varian untuk kasir
       description: Endpoint ringan khusus layar kasir. Hanya mengembalikan varian aktif dengan kolom seperlunya.
       parameters:
-        - { name: q, in: query, required: true, description: "SKU atau potongan nama", schema: { type: string } }
+        - { name: q, in: query, required: true, description: "SKU, nama varian, atau nama produk induknya", schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 50 } }
       responses:
         '200':
@@ -1250,6 +1252,18 @@ paths:
               schema: { $ref: '#/components/schemas/PaymentChannel' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Payment]
+      summary: Hapus kanal pembayaran (soft delete) (owner/admin)
+      description: |
+        024-invoice-layout-shipping-slip — soft-delete kanal pembayaran.
+        Mengembalikan 409 jika kanal sedang digunakan oleh payment yang
+        sudah ada (FK constraint).
+      responses:
+        '204':
+          description: Berhasil dihapus
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /payment-proofs:
     post:
@@ -1868,6 +1882,7 @@ paths:
         - { name: event_id, in: query, schema: { type: integer } }
         - { name: customer_id, in: query, schema: { type: integer } }
         - { name: fulfillment, in: query, schema: { type: string, enum: [pickup, courier] } }
+        - { name: dispatch_status, in: query, description: "Penanda manual invoice-terkirim/pengiriman-berjalan. Boleh diulang (`dispatch_status[]=a&dispatch_status[]=b`); nilai berbeda di-OR-kan. Berlaku juga untuk `/preorders/summary` dan `/preorders/export`.", schema: { type: array, items: { type: string, enum: [pending, invoice_sent, shipping] } } }
         - { name: search, in: query, description: "007-preorder-import-export-notify (US1) — cocok parsial, tidak peka huruf besar/kecil, terhadap nama pelanggan.", schema: { type: string } }
         - { name: artist_id, in: query, description: "013-preorder-list-filters-receipt (US1) — hanya pre-order yang punya minimal satu item milik penjual ini (via `whereHas`, tidak menduplikasi baris pre-order yang punya beberapa item dari penjual yang sama).", schema: { type: integer } }
         - $ref: '#/components/parameters/Page'
@@ -2167,8 +2182,8 @@ paths:
                         status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
                         count: { type: integer, description: "Jumlah (qty) pre-order berstatus ini dalam himpunan terfilter." }
                         total_amount: { $ref: '#/components/schemas/Money' }
-                  grand_total: { $ref: '#/components/schemas/Money' }
-                  total_outstanding: { $ref: '#/components/schemas/Money' }
+                  grand_total: { $ref: '#/components/schemas/Money', description: "BUG YANG DITEMUKAN & DIPERBAIKI — mengecualikan preorder berstatus 'cancelled' (sebelumnya ikut terjumlah). by_status['cancelled'] tetap menampilkan total uangnya sendiri secara terpisah." }
+                  total_outstanding: { $ref: '#/components/schemas/Money', description: "Sama seperti grand_total — mengecualikan preorder 'cancelled'." }
 
   /preorders/export:
     get:
@@ -2184,13 +2199,25 @@ paths:
         ID), `fulfillment` (`pickup`/`mail order`), `pickup_day` (teks
         "Day N"), `products`/`quantities`/`unit_prices` (comma-separated,
         dicocokkan lewat posisi), `shipping_cost`, `courier_name`,
-        `expected_date`, `discount`, `notes`. File hasil ekspor ini bisa
+        `expected_date`, `discount`, `notes`, `dispatch_status`,
+        `invoice_sent_at`, `shipping_at`. File hasil ekspor ini bisa
         diimpor balik apa adanya (round-trip, SC-005).
+
+        Penanda invoice-terkirim/pengiriman-berjalan: `dispatch_status` bernilai
+        `pending`/`invoice_sent`/`shipping`; tanggalnya ISO 8601 dengan offset
+        (mis. `2026-09-27T03:00:00+00:00`). Dua kolom tambahan **hanya-baca**,
+        `created_at` dan `updated_at`, ikut diekspor SESUDAH kolom di atas —
+        untuk dibaca; importer membiarkannya dan tidak pernah menulisnya.
+
+        Filter `status`, `fulfillment`, dan `dispatch_status` boleh berupa nilai
+        tunggal ATAU diulang sebagai array (`status[]=a&status[]=b`, di-OR-kan) —
+        sama seperti `GET /preorders`, karena tombol Export meneruskan filter list.
       parameters:
-        - { name: status, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: array, items: { type: string } } }
         - { name: event_id, in: query, schema: { type: integer } }
         - { name: customer_id, in: query, schema: { type: integer } }
-        - { name: fulfillment, in: query, schema: { type: string } }
+        - { name: fulfillment, in: query, schema: { type: array, items: { type: string } } }
+        - { name: dispatch_status, in: query, schema: { type: array, items: { type: string, enum: [pending, invoice_sent, shipping] } } }
         - { name: search, in: query, schema: { type: string } }
         - { name: date_from, in: query, schema: { type: string, format: date } }
         - { name: date_to, in: query, schema: { type: string, format: date } }
@@ -2245,6 +2272,16 @@ paths:
         panjang (jumlah berbeda = galat baris, FR-018) dan dicocokkan lewat
         posisi. Aturan cross-field pickup_day/courier_name vs fulfillment
         tetap sama persis dengan `POST /preorders`.
+
+        **Kolom `dispatch_status` / `invoice_sent_at` / `shipping_at`** (opsional;
+        kosong = `pending` tanpa tanggal). Aturannya sama dengan
+        `PATCH /preorders/{id}/dispatch-status`: `shipping` hanya untuk
+        `mail order`; `pending` tidak boleh bertanggal; `invoice_sent` tidak boleh
+        punya `shipping_at`; tanggal kosong pada status aktif diisi waktu impor.
+        Tanggal diterima sebagai teks ISO 8601 (offset dihormati) atau sel tanggal
+        Excel. Baris yang melanggar dilaporkan sebagai galat baris (409), dan
+        seluruh berkas ditolak (all-or-nothing). `created_at`/`updated_at` di
+        berkas diabaikan — pesanan hasil impor tercatat dibuat saat impor.
       requestBody:
         required: true
         content:
@@ -2338,6 +2375,53 @@ paths:
               schema: { $ref: '#/components/schemas/Preorder' }
         '409':
           description: Perpindahan status tidak valid atau belum lunas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /preorders/{id}/dispatch-status:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Preorder]
+      summary: Ubah penanda invoice terkirim / pengiriman berjalan
+      description: |
+        Penanda manual, terpisah dari `status` utama — TIDAK menyentuh stok,
+        pembayaran, maupun notifikasi email. Bisa maju dan mundur (koreksi salah
+        klik). Nilai: `pending` (belum), `invoice_sent`, `shipping`.
+        Pre-order berstatus `cancelled` ditolak dengan 409. Nilai `shipping`
+        hanya berlaku untuk Mail Order (`fulfillment=courier`); untuk pickup
+        ditolak dengan 409. Mengedit pre-order dari Mail Order ke pickup
+        menurunkan `shipping` otomatis menjadi `invoice_sent`.
+
+        **Tanggal (diisi server, tak bisa dikirim klien):** respons pre-order
+        membawa `invoice_sent_at` dan `shipping_at` (ISO 8601, `null` bila tak
+        aktif), selain `created_at`/`updated_at`. Menandai ulang nilai yang
+        sudah aktif tidak menggeser tanggalnya; mundur dari `shipping` menghapus
+        `shipping_at` tapi mempertahankan `invoice_sent_at`; kembali ke
+        `pending` menghapus keduanya. `GET /preorders` juga bisa diurutkan
+        dengan `sort_by=created_at|updated_at`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dispatch_status]
+              properties:
+                dispatch_status: { type: string, enum: [pending, invoice_sent, shipping] }
+      responses:
+        '200':
+          description: Diperbarui
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '409':
+          description: Pre-order sudah dibatalkan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Nilai tidak valid
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -4002,25 +4086,31 @@ paths:
         stok awal varian BARU adalah kolom `initial_stock` di sheet
         `products`, karena SKU dibuat server. Sheet `stock` tetap boleh
         menunjuk SKU yang baru akan dibuat oleh berkas yang sama — SKU-nya
-        deterministik (`code_prefix` + urutan 4 digit) — dan
-        penyelesaiannya ditunda sampai sheet `products` diterapkan. SKU
-        yang tetap tidak ditemukan setelah itu membatalkan seluruh impor
-        dengan galat per-baris biasa.
+        deterministik (`code_prefix` + `-` + urutan 3 digit, mis.
+        `RYU-KY-SAK-001`) — dan penyelesaiannya ditunda sampai sheet
+        `products` diterapkan. SKU yang tetap tidak ditemukan setelah itu
+        membatalkan seluruh impor dengan galat per-baris biasa.
 
         **Sel kosong berarti "jangan diubah"**, bukan "kosongkan nilainya".
 
         **Task 6 — gambar via impor massal.** Sheet `products` dan
-        `categories` punya kolom `image_filename`. Bila diisi, nilainya
-        harus PERSIS SAMA dengan nama asli salah satu berkas yang
-        diunggah bersamaan lewat field `images[]` pada request yang sama.
-        Berkas yang cocok disalin ke penyimpanan publik (lokasi yang sama
-        dengan `POST /products/{id}/image` / `POST /categories/{id}/image`,
-        Task 5) dan `image_path` entitas diisi. Nama berkas yang
-        direferensikan TAPI TIDAK ADA padanannya di `images[]` adalah
-        GALAT PER BARIS (`column: image_filename`), bukan dilewati diam-diam
-        — konsisten dengan strategi semua-atau-tidak-sama-sekali impor ini.
-        Kolom kosong berarti "tidak ada gambar diikutsertakan" (gambar yang
-        sudah ada, bila ada, tidak diubah).
+        `categories` punya kolom `image_filename`, dan sheet `products`
+        SENDIRI juga punya kolom kedua `variant_image_filename` — yang
+        pertama gambar PRODUK (dipakai bersama semua variannya), yang
+        kedua gambar VARIAN baris itu sendiri secara spesifik (mis. desain/
+        motif berbeda per varian). Bila diisi, nilainya harus PERSIS SAMA
+        dengan nama asli salah satu berkas yang diunggah bersamaan lewat
+        field `images[]` pada request yang sama. Berkas yang cocok disalin
+        ke penyimpanan publik (lokasi yang sama dengan
+        `POST /products/{id}/image` / `POST /categories/{id}/image` /
+        `POST /variants/{id}/image`, Task 5) dan `image_path` entitas yang
+        bersangkutan diisi. Nama berkas yang direferensikan TAPI TIDAK ADA
+        padanannya di `images[]` adalah GALAT PER BARIS
+        (`column: image_filename` atau `column: variant_image_filename`),
+        bukan dilewati diam-diam — konsisten dengan strategi
+        semua-atau-tidak-sama-sekali impor ini. Kolom kosong berarti
+        "tidak ada gambar diikutsertakan" (gambar yang sudah ada, bila ada,
+        tidak diubah).
 
         **Vendor/bahan/BOM (pasca-MVP, 2026-09-01).** Sheet `vendor_prices`
         dan `bom` mereferensikan vendor/bahan/varian lewat `vendor_code`/
@@ -4072,8 +4162,9 @@ paths:
                   description: |
                     Task 6 — batch gambar JPEG/PNG (maks 5 MB masing-masing,
                     maks 200 berkas) yang direferensikan lewat kolom
-                    image_filename pada sheet products/categories,
-                    dicocokkan berdasarkan nama berkas ASLI.
+                    image_filename (sheet products/categories) atau
+                    variant_image_filename (sheet products), dicocokkan
+                    berdasarkan nama berkas ASLI.
       responses:
         '200':
           description: Impor berhasil, atau pratinjau tanpa galat
@@ -4630,7 +4721,7 @@ components:
       properties:
         id: { type: integer }
         product_id: { type: integer }
-        sku: { type: string, minLength: 12, maxLength: 16, example: RYU10001 }
+        sku: { type: string, minLength: 14, maxLength: 14, example: RYU-KY-SAK-001 }
         variant_name: { type: string }
         cost_price: { $ref: '#/components/schemas/Money' }
         sell_price: { $ref: '#/components/schemas/Money' }
@@ -4668,7 +4759,7 @@ components:
         artist_name: { type: string, readOnly: true }
         category_id: { type: integer }
         category_name: { type: string, readOnly: true }
-        code_prefix: { type: string, minLength: 4, maxLength: 64, readOnly: true, example: RYU1 }
+        code_prefix: { type: string, minLength: 10, maxLength: 10, readOnly: true, example: RYU-KY-SAK }
         name: { type: string }
         description: { type: string, nullable: true }
         image_path: { type: string, nullable: true, description: "Diisi via POST /products/{id}/image atau impor massal (Task 6)." }
@@ -4919,6 +5010,7 @@ components:
         amount: { $ref: '#/components/schemas/Money' }
         verification: { type: string, enum: [pending, verified, rejected] }
         paid_at: { type: string, format: date-time }
+        proof_id: { type: integer, nullable: true, description: "024-invoice-layout-shipping-slip — id PaymentProof yang ditautkan (jika ada), dipakai frontend untuk GET /payment-proofs/{id}/file." }
         proofs:
           type: array
           items:
@@ -5106,6 +5198,17 @@ components:
         status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
         fulfillment: { type: string, enum: [pickup, courier] }
         created_at: { type: string, format: date-time, description: "024-invoice-layout-shipping-slip — ditambahkan ke present() (sebelumnya hanya ada di PreorderSummary/index())." }
+        store_identity:
+          type: object
+          nullable: true
+          description: "024-invoice-layout-shipping-slip — BUG YANG DITEMUKAN & DIPERBAIKI: sebelumnya hanya ada di invoicePayload(), sehingga blok 'Dari' di surat jalan panel detail (yang memuat lewat show()/present()) selalu kosong."
+          properties:
+            name: { type: string }
+            logo_url: { type: string, nullable: true }
+            contact_person: { type: string, nullable: true }
+            contact_phone: { type: string, nullable: true }
+            contact_email: { type: string, nullable: true }
+            address: { type: string, nullable: true }
         subtotal: { $ref: '#/components/schemas/Money' }
         shipping_cost: { $ref: '#/components/schemas/Money' }
         discount: { $ref: '#/components/schemas/Money', description: "021-preorder-form-updates (US2) — 0.00 untuk pre-order dari sebelum fitur ini." }

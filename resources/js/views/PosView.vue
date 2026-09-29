@@ -63,6 +63,7 @@ onMounted(async () => {
 });
 
 const categoryCodeById = computed(() => Object.fromEntries(categories.value.map((c) => [c.id, c.code])));
+const categoryNameById = computed(() => Object.fromEntries(categories.value.map((c) => [c.id, c.name])));
 
 async function loadBrowse() {
   loadingGrid.value = true;
@@ -109,7 +110,7 @@ watch(search, runSearch);
 // One card per product (grouped) — picking a product with more than one
 // active variant opens the variant picker; a single-variant product is
 // added to the cart directly (see selectProductCard below).
-const browseCards = computed(() => buildProductCards(browsedProducts.value, categoryCodeById.value));
+const browseCards = computed(() => buildProductCards(browsedProducts.value, categoryCodeById.value, categoryNameById.value));
 
 const searchCards = computed(() =>
   (searchResults.value ?? []).map((v) => ({
@@ -120,6 +121,7 @@ const searchCards = computed(() =>
     sell_price: v.sell_price,
     current_stock: v.current_stock,
     category_code: null,
+    category_name: null,
   }))
 );
 
@@ -322,6 +324,7 @@ async function resumeDraft(draftId) {
             </div>
             <div class="flex flex-col gap-1 px-3 py-2.5">
               <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
+              <span v-if="card.category_name" class="text-[10.5px] font-semibold uppercase tracking-wide text-muted-4">{{ card.category_name }}</span>
               <span class="text-[11px] text-muted-3">{{ card.artist_name }}</span>
               <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
                 <span class="text-[14.5px] font-bold text-brand-active">{{ formatIDR(card.sell_price) }}</span>
@@ -352,6 +355,7 @@ async function resumeDraft(draftId) {
             </div>
             <div class="flex flex-col gap-1 px-3 py-2.5">
               <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
+              <span v-if="card.category_name" class="text-[10.5px] font-semibold uppercase tracking-wide text-muted-4">{{ card.category_name }}</span>
               <span class="text-[11px] text-muted-3">{{ card.artist_name }}</span>
               <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
                 <span class="text-[14.5px] font-bold text-brand-active">

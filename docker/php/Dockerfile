@@ -52,6 +52,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # curl|bash-installed, matching the well-known multi-stage pattern.
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
+# Raises PHP's stock upload limits (post_max_size=8M/upload_max_filesize=2M/
+# max_file_uploads=20) to match what ImportMasterDataRequest itself already
+# declares supporting (10 MB xlsx + up to 200 images @ 5 MB each) — see
+# uploads.ini's own comment for the real bug this closes.
+COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/zz-uploads.ini
+
 WORKDIR /var/www/html
 
 COPY docker/php/entrypoint.sh /var/www/html/docker/php/entrypoint.sh

@@ -31,6 +31,11 @@ export function updatePaymentChannel(id, payload, opts = {}) {
     .then((r) => r.data);
 }
 
+/** DELETE /payment-channels/{id} — soft-delete a payment channel. */
+export function deletePaymentChannel(id) {
+  return client.delete(`/payment-channels/${id}`).then((r) => r.data);
+}
+
 /** Multipart upload — returns { proof_token, file_size }. */
 export function uploadPaymentProof(file, capturedVia) {
   const form = new FormData();
@@ -39,4 +44,17 @@ export function uploadPaymentProof(file, capturedVia) {
   return client
     .post('/payment-proofs', form, { headers: { 'Content-Type': 'multipart/form-data' } })
     .then((r) => r.data);
+}
+
+/**
+ * 024-invoice-layout-shipping-slip — bukti pembayaran disimpan di disk
+ * privat dan disajikan lewat endpoint berotorisasi (GET /payment-proofs/
+ * {id}/file), BUKAN URL publik seperti logo/QR — jadi tidak bisa dipakai
+ * langsung sebagai <img src>, karena tag <img> tidak mengirim header
+ * Authorization axios. Diambil sebagai blob lalu dibuatkan object URL
+ * sementara; pemanggil bertanggung jawab me-revoke saat sudah tidak
+ * dipakai (mis. saat lightbox ditutup).
+ */
+export function getPaymentProofBlobUrl(proofId) {
+  return client.get(`/payment-proofs/${proofId}/file`, { responseType: 'blob' }).then((r) => URL.createObjectURL(r.data));
 }

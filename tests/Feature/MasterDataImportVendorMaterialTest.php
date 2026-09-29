@@ -145,7 +145,7 @@ class MasterDataImportVendorMaterialTest extends TestCase
                 'sell_price' => 25000, 'initial_stock' => 10,
             ]]],
             'bom' => ['rows' => [
-                ['sku' => 'RYUKYSAK0001', 'material_code' => 'AC3', 'qty_needed' => 1],
+                ['sku' => 'RYU-KY-SAK-001', 'material_code' => 'AC3', 'qty_needed' => 1],
             ]],
         ]);
 

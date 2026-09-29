@@ -42,20 +42,37 @@ class PreorderController extends Controller
         // dipaginasi (risiko N+1).
         $query = Preorder::query()->with(['customer', 'items.artist']);
         $query = $this->applyFilters($query, $request);
+        $query = $this->applySort($query, $request);
 
-        $preorders = $query
-            ->orderByDesc('created_at')
-            ->paginate($perPage);
+        $preorders = $query->paginate($perPage);
 
         $data = collect($preorders->items())->map(fn (Preorder $p) => [
             'id' => $p->id, 'preorder_number' => $p->preorder_number,
-            'customer_name' => $p->customer->name, 'status' => $p->status,
+            'customer_id' => $p->customer_id, 'customer_name' => $p->customer->name, 'status' => $p->status,
+            'dispatch_status' => $p->dispatch_status,
+            'invoice_sent_at' => $p->invoice_sent_at?->toIso8601String(),
+            'shipping_at' => $p->shipping_at?->toIso8601String(),
+            'updated_at' => $p->updated_at,
             'fulfillment' => $p->fulfillment,
             'total_amount' => number_format((float) $p->total_amount, 2, '.', ''),
             'paid_amount' => number_format((float) $p->paid_amount, 2, '.', ''),
             'outstanding' => number_format($p->outstanding(), 2, '.', ''),
             'created_at' => $p->created_at,
             'sellers' => $this->sellersFor($p),
+            // Requested: flag a Mail Order pre-order in the list that's
+            // missing shipping cost or a customer address — both are only
+            // meaningful for fulfillment=courier, so the frontend gates the
+            // flag on that itself rather than this being computed here
+            // (keeps the same field usable regardless of fulfillment).
+            'shipping_cost' => number_format((float) $p->shipping_cost, 2, '.', ''),
+            'customer_has_address' => filled($p->customer->address),
+            // Requested: clicking the flag above shows shipping cost +
+            // notes — staff sometimes write the customer's actual address
+            // into free-text notes as a workaround when it was never
+            // captured on the Customer record itself, so this is the
+            // fastest way to check "is the info really missing, or just
+            // not on the customer record".
+            'notes' => $p->notes,
         ]);
 
         return response()->json([
@@ -73,7 +90,7 @@ class PreorderController extends Controller
 
     public function show(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items', 'payments', 'shipment', 'customer', 'notifications']);
+        $preorder->load(['items.variant.product.category', 'payments.proofs', 'shipment', 'customer', 'notifications']);
 
         return response()->json([
             ...$this->present($preorder),
@@ -128,7 +145,7 @@ class PreorderController extends Controller
      */
     public function invoice(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items', 'payments', 'customer', 'event']);
+        $preorder->load(['items', 'payments.proofs', 'customer', 'event']);
 
         return response()->json($this->invoicePayload($preorder));
     }
@@ -148,7 +165,7 @@ class PreorderController extends Controller
             'document' => ['required', 'in:invoice,payment_invoice'],
         ]);
 
-        $preorders = Preorder::with(['items', 'payments', 'customer', 'event'])
+        $preorders = Preorder::with(['items', 'payments.proofs', 'customer', 'event'])
             ->whereIn('id', $validated['preorder_ids'])
             ->get();
 
@@ -174,7 +191,7 @@ class PreorderController extends Controller
             'document' => ['required', 'in:invoice,payment_invoice'],
         ]);
 
-        $preorders = Preorder::with(['items', 'customer', 'payments'])
+        $preorders = Preorder::with(['items', 'customer', 'payments.proofs'])
             ->whereIn('id', $validated['preorder_ids'])
             ->get();
 
@@ -233,6 +250,11 @@ class PreorderController extends Controller
             // ke tanggal asli lewat Event::availableOnDate(), satu-satunya
             // tempat pemetaan 'day_1'/'day_2' -> tanggal terjadi.
             'event_available_on_date' => $preorder->event?->availableOnDate()?->toDateString(),
+            // Sama seperti OrderController::receipt() — pilihan mentah
+            // dikirim juga supaya frontend bisa membedakan 'both' (tampil
+            // sebagai rentang) dari tidak ada batasan (keduanya membuat
+            // availableOnDate() null).
+            'event_available_on' => $preorder->event?->available_on,
             // 022-preorder-invoice-crud-overhaul (US3, research.md Decision 1/2)
             ...$this->buildInvoiceDocumentFields($this->imageUploadService),
         ];
@@ -249,7 +271,7 @@ class PreorderController extends Controller
         abort_unless($request->user()->isOwnerOrAdmin(), 403, __('preorders.not_authorized'));
 
         $rows = $this->exportImportService->export($request->only([
-            'status', 'event_id', 'customer_id', 'fulfillment', 'search', 'date_from', 'date_to',
+            'status', 'event_id', 'customer_id', 'fulfillment', 'dispatch_status', 'search', 'date_from', 'date_to',
         ]));
 
         return Excel::download(new GenericArrayExport($rows), 'preorders.xlsx');
@@ -339,8 +361,20 @@ class PreorderController extends Controller
             'total_amount' => number_format((float) ($groupedByStatus[$status]->total ?? 0), 2, '.', ''),
         ], $statuses);
 
-        $grandTotal = (float) (clone $query)->sum('total_amount');
-        $totalPaid = (float) (clone $query)->sum('paid_amount');
+        // BUG YANG DITEMUKAN & DIPERBAIKI — sebelumnya menjumlahkan SEMUA
+        // preorder termasuk yang sudah "Cancelled", jadi Grand Total/Sisa
+        // tagihan tetap menghitung uang preorder yang batal seolah masih
+        // berlaku. `by_status` di atas TETAP menampilkan baris Cancelled-
+        // nya sendiri (diagnostik per status, disengaja), tapi angka
+        // ringkasan uang keseluruhan harus mengecualikannya — sama seperti
+        // precedent yang sudah ada di breakdown per-seller
+        // (preordersByArtist(): "preorder cancelled tidak masuk total
+        // uang", 012-seller-preorder-report-detail-export).
+        // transaction_count TETAP menghitung semua status (termasuk
+        // Cancelled) karena itu jumlah baris yang tampil di tabel, bukan
+        // angka uang.
+        $grandTotal = (float) (clone $query)->where('status', '!=', 'cancelled')->sum('total_amount');
+        $totalPaid = (float) (clone $query)->where('status', '!=', 'cancelled')->sum('paid_amount');
 
         return response()->json([
             'transaction_count' => $transactionCount,
@@ -360,20 +394,101 @@ class PreorderController extends Controller
     private function applyFilters(Builder $query, Request $request): Builder
     {
         return $query
-            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
+            // Array-capable, same convention as ProductController::index()'s
+            // artist_id/category_id (005-ux-enhancements-dashboard US1):
+            // $request->array() normalizes both the new `status[]=a&status[]=b`
+            // (multi-select filter, "can filter multiple / combine
+            // conditions") and the old scalar `status=a` into an array, so
+            // this is backward compatible with any existing caller.
+            // array_filter drops empty strings so an empty-but-present param
+            // doesn't turn whereIn([]) into "match nothing".
+            ->when(count(array_filter($request->array('status'))) > 0, fn ($q) => $q->whereIn('status', array_filter($request->array('status'))))
+            // Penanda manual invoice-terkirim/pengiriman-berjalan — pola
+            // array yang sama dengan status/fulfillment di atas, sehingga
+            // list, summary, dan export ikut terfilter tanpa kode tambahan.
+            ->when(count(array_filter($request->array('dispatch_status'))) > 0, fn ($q) => $q->whereIn('dispatch_status', array_filter($request->array('dispatch_status'))))
             ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
             ->when($request->filled('customer_id'), fn ($q) => $q->where('customer_id', $request->integer('customer_id')))
-            ->when($request->filled('fulfillment'), fn ($q) => $q->where('fulfillment', $request->string('fulfillment')))
+            ->when(count(array_filter($request->array('fulfillment'))) > 0, fn ($q) => $q->whereIn('fulfillment', array_filter($request->array('fulfillment'))))
             // 007-preorder-import-export-notify (US1) — parsial, tidak peka
             // huruf besar/kecil, terhadap nama pelanggan (research.md R1).
-            ->when($request->filled('search'), fn ($q) => $q->whereHas(
-                'customer',
-                fn ($cq) => $cq->where('name', 'like', '%' . $request->string('search')->value() . '%')
-            ))
-            ->when($request->filled('artist_id'), fn ($q) => $q->whereHas(
+            // Diperluas (permintaan produk owner berikutnya) supaya juga
+            // cocok terhadap nomor pre-order itu sendiri dan nama/SKU item
+            // DI DALAM pre-order tsb — satu kotak pencarian, tiga sumber,
+            // bukan tiga kotak terpisah.
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $term = $request->string('search')->value();
+                // Requested: also match the outstanding balance — a cashier
+                // often only remembers "the one still owing around 135rb",
+                // not the PO number or customer name. `outstanding` isn't a
+                // real column (Preorder::outstanding() computes it in PHP),
+                // so it's matched here via the same total_amount-minus-
+                // paid_amount expression, cast to text so a LIKE substring
+                // search works the same way it does for the other fields.
+                // Digits-only, so typing with Rupiah punctuation ("135.000",
+                // "Rp 135.000") still matches — the stored amount itself
+                // never contains separators once cast to text.
+                $digitsOnly = preg_replace('/\D+/', '', $term);
+                $q->where(function ($qq) use ($term, $digitsOnly) {
+                    $qq->where('preorder_number', 'like', "%{$term}%")
+                        ->orWhereHas('customer', fn ($cq) => $cq->where('name', 'like', "%{$term}%"))
+                        ->orWhereHas('items', fn ($iq) => $iq->where('name_snapshot', 'like', "%{$term}%")
+                            ->orWhere('sku_snapshot', 'like', "%{$term}%"));
+
+                    if ($digitsOnly !== '') {
+                        $qq->orWhereRaw('CAST((total_amount - paid_amount) AS CHAR) LIKE ?', ["%{$digitsOnly}%"]);
+                    }
+                });
+            })
+            ->when(count(array_filter($request->array('artist_id'))) > 0, fn ($q) => $q->whereHas(
                 'items',
-                fn ($iq) => $iq->where('artist_id', $request->integer('artist_id'))
+                fn ($iq) => $iq->whereIn('artist_id', array_filter($request->array('artist_id')))
             ));
+    }
+
+    /**
+     * Sortable columns for the list screen — a fixed whitelist, never the
+     * raw `sort_by` string, so a request can't order by an arbitrary
+     * column/expression. `customer_name` needs a real JOIN (not
+     * whereHas/subquery) to be orderable; `preorders.*` is selected
+     * explicitly in that branch so the join's own `customers.id` never
+     * collides with `preorders.id` in the paginated result. `outstanding`
+     * isn't a real column (Preorder::outstanding() computes it in PHP), so
+     * it's sorted via the same total_amount-minus-paid_amount expression
+     * that method uses. `sellers` has no single sortable value (a preorder
+     * can have several) and is deliberately left out — its column header
+     * simply renders without a sort affordance.
+     */
+    private function applySort(Builder $query, Request $request): Builder
+    {
+        $sortBy = $request->string('sort_by')->value();
+        $sortDir = strtolower($request->string('sort_dir', 'desc')->value()) === 'asc' ? 'asc' : 'desc';
+
+        $columns = [
+            'preorder_number' => 'preorders.preorder_number',
+            'customer_name' => 'customers.name',
+            'status' => 'preorders.status',
+            'fulfillment' => 'preorders.fulfillment',
+            'total_amount' => 'preorders.total_amount',
+            'created_at' => 'preorders.created_at',
+            'updated_at' => 'preorders.updated_at',
+        ];
+
+        if ($sortBy === 'customer_name') {
+            return $query->join('customers', 'customers.id', '=', 'preorders.customer_id')
+                ->select('preorders.*')
+                ->orderBy($columns['customer_name'], $sortDir);
+        }
+
+        if ($sortBy === 'outstanding') {
+            return $query->orderByRaw("(preorders.total_amount - preorders.paid_amount) {$sortDir}");
+        }
+
+        if (isset($columns[$sortBy])) {
+            return $query->orderBy($columns[$sortBy], $sortDir);
+        }
+
+        return $query->orderByDesc('preorders.created_at');
     }
 
     /**
@@ -435,6 +550,54 @@ class PreorderController extends Controller
         return response()->json($this->present($preorder));
     }
 
+    /**
+     * Ubah manual penanda "invoice terkirim" / "pengiriman berjalan".
+     *
+     * Bisa maju MAUPUN mundur (salah klik harus bisa dikoreksi), dan tidak
+     * terikat urutan `status` utama — tidak menyentuh stok, pembayaran, atau
+     * notifikasi email. Satu-satunya guard: pre-order yang sudah dibatalkan
+     * tidak lagi punya invoice/pengiriman aktif (409, konvensi konflik bisnis).
+     */
+    public function updateDispatchStatus(Request $request, Preorder $preorder): JsonResponse
+    {
+        $validated = $request->validate([
+            'dispatch_status' => ['required', 'in:'.implode(',', Preorder::DISPATCH_STATUSES)],
+        ]);
+
+        if ($preorder->status === 'cancelled') {
+            return response()->json([
+                'message' => __('preorders.dispatch_status_cancelled'),
+                'errors' => ['dispatch_status' => [__('preorders.dispatch_status_cancelled')]],
+            ], 409);
+        }
+
+        // Pengiriman kurir hanya ada untuk Mail Order (fulfillment=courier);
+        // pesanan pickup diambil di booth, jadi "shipping" tak pernah berlaku.
+        if ($validated['dispatch_status'] === 'shipping' && $preorder->fulfillment !== 'courier') {
+            return response()->json([
+                'message' => __('preorders.dispatch_status_shipping_mail_order_only'),
+                'errors' => ['dispatch_status' => [__('preorders.dispatch_status_shipping_mail_order_only')]],
+            ], 409);
+        }
+
+        // Tanggal mengikuti nilai TUJUAN, bukan riwayat klik: menandai ulang
+        // yang sudah aktif tidak menggeser tanggalnya (`?? now()`), mundur
+        // dari "shipping" menghapus tanggal pengiriman tapi menyimpan tanggal
+        // invoice, dan kembali ke "pending" menghapus keduanya.
+        $target = $validated['dispatch_status'];
+        $preorder->update([
+            'dispatch_status' => $target,
+            'invoice_sent_at' => $target === 'pending' ? null : ($preorder->invoice_sent_at ?? ($target === 'invoice_sent' ? now() : null)),
+            'shipping_at' => $target === 'shipping' ? ($preorder->shipping_at ?? now()) : null,
+        ]);
+
+        return response()->json($this->present(
+            // Eager-load sama persis dengan show() — present() menyembunyikan
+            // relasi yang tak dimuat secara diam-diam (lihat CLAUDE.md).
+            $preorder->fresh(['items.variant.product.category', 'payments.proofs', 'shipment', 'customer'])
+        ));
+    }
+
     public function storePayment(Request $request, Preorder $preorder): JsonResponse
     {
         $validated = $request->validate([
@@ -460,11 +623,25 @@ class PreorderController extends Controller
         return [
             'id' => $preorder->id, 'preorder_number' => $preorder->preorder_number,
             'event_id' => $preorder->event_id, 'status' => $preorder->status,
+            'dispatch_status' => $preorder->dispatch_status,
+            'invoice_sent_at' => $preorder->invoice_sent_at?->toIso8601String(),
+            'shipping_at' => $preorder->shipping_at?->toIso8601String(),
+            'updated_at' => $preorder->updated_at?->toIso8601String(),
             'fulfillment' => $preorder->fulfillment,
             // 024-invoice-layout-shipping-slip — sebelumnya hanya ada di
             // index(), tak pernah ikut present() padahal invoicePayload()
             // meng-spread present() (research.md Decision 1).
             'created_at' => $preorder->created_at?->toIso8601String(),
+            // BUG YANG DITEMUKAN & DIPERBAIKI — surat jalan di panel detail
+            // (PreordersView.vue, dimuat lewat show()/present(), BUKAN
+            // invoice()/invoicePayload()) menampilkan blok "Dari" kosong
+            // karena store_identity sebelumnya hanya ditambahkan oleh
+            // invoicePayload() lewat BuildsInvoiceDocument, tidak pernah
+            // ikut present(). Sekarang jadi field bersama di present()
+            // (Constitution I) — invoicePayload() masih memanggil
+            // buildInvoiceDocumentFields() sesudahnya juga, nilainya sama
+            // persis, jadi tidak ada perbedaan perilaku di sana.
+            'store_identity' => $this->buildStoreIdentity($this->imageUploadService),
             'subtotal' => number_format((float) $preorder->subtotal, 2, '.', ''),
             'shipping_cost' => number_format((float) $preorder->shipping_cost, 2, '.', ''),
             // 021-preorder-form-updates — nominal Rupiah tetap, sudah
@@ -496,6 +673,17 @@ class PreorderController extends Controller
                 'sell_price' => number_format((float) $i->sell_price, 2, '.', ''),
                 'line_total' => number_format((float) $i->line_total, 2, '.', ''),
                 'artist_id' => $i->artist_id, 'artist_name' => $i->artist?->name,
+                // Added at the product owner's explicit request — the
+                // variant this line snapshot came from may since have been
+                // updated with its own image; falls back to null (not the
+                // product's own image) since a deleted/changed variant has
+                // no product to fall back to here, unlike lookupVariants().
+                'image_url' => $i->relationLoaded('variant') ? $i->variant?->image_url : null,
+                // Added at the product owner's explicit request, same
+                // relation-guard convention as image_url just above — a
+                // variant/product referenced here may since have been
+                // deleted or reassigned to a different category.
+                'category_name' => $i->relationLoaded('variant') ? $i->variant?->product?->category?->name : null,
             ]) : [],
             // Sebelumnya hilang total dari present() meski show() sudah
             // meng-eager-load ketiganya (dan openapi-pos-mvp.yaml sudah lama
@@ -509,6 +697,14 @@ class PreorderController extends Controller
                 'id' => $p->id, 'method' => $p->method, 'purpose' => $p->purpose,
                 'amount' => number_format((float) $p->amount, 2, '.', ''),
                 'verification' => $p->verification, 'paid_at' => $p->paid_at,
+                // 024-invoice-layout-shipping-slip (US-payment-proof) —
+                // bukti pembayaran diunggah SEBELUM payment dibuat lalu
+                // ditautkan lewat proof_token (PaymentRecorder); satu
+                // payment paling banyak punya satu proof. File-nya sendiri
+                // TIDAK pernah dikirim langsung di sini (disk privat) —
+                // frontend mengambilnya lewat endpoint otorisasi
+                // /payment-proofs/{id}/file yang sudah ada.
+                'proof_id' => $p->relationLoaded('proofs') ? $p->proofs->first()?->id : null,
             ]) : [],
             'shipment' => $preorder->relationLoaded('shipment') && $preorder->shipment ? [
                 'id' => $preorder->shipment->id,

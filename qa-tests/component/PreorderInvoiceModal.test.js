@@ -205,7 +205,8 @@ describe('PreorderInvoiceModal', () => {
     await screen.findAllByText('PO-0001');
     const img = screen.getByAltText('Gopay');
     expect(img.className).toContain('h-32');
-    expect(img.className).toContain('w-32');
+    expect(img.className).toContain('max-w-full');
+    expect(img.className).not.toContain('w-32');
   });
 
   // 024-invoice-layout-shipping-slip (US1, FR-001/FR-002/FR-003) —
@@ -293,10 +294,9 @@ describe('PreorderInvoiceModal', () => {
     expect(screen.queryByText(id.preorders.bank_payment_title)).not.toBeInTheDocument();
   });
 
-  // 024-invoice-layout-shipping-slip (US4, FR-008/FR-009/FR-010) —
-  // shipping slip renders ONLY for Mail Order, sourced from data already
-  // on the payload (no Shipment record required).
-  it('renders the shipping slip for a Mail Order preorder with no Shipment record', async () => {
+  // 024-invoice-layout-shipping-slip (US4) — shipping slip removed from
+  // the invoice document entirely; it's now a standalone download.
+  it('does NOT render the shipping slip even for a Mail Order preorder', async () => {
     getPreorderInvoiceMock.mockResolvedValue({
       ...arrivedInvoice,
       fulfillment: 'courier',
@@ -307,9 +307,7 @@ describe('PreorderInvoiceModal', () => {
     renderModal({ open: true, preorderId: 1 });
 
     await screen.findAllByText('PO-0001');
-    expect(screen.getByText(id.preorders.shipping_slip_title)).toBeInTheDocument();
-    expect(screen.getByText(id.preorders.from_label)).toBeInTheDocument();
-    expect(screen.getByText('Keychain Akatsuki, Poster Naruto')).toBeInTheDocument();
+    expect(screen.queryByText(id.preorders.shipping_slip_title)).not.toBeInTheDocument();
   });
 
   it('omits the shipping slip for a Self Pickup preorder', async () => {

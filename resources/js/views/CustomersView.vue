@@ -184,21 +184,29 @@ async function doDownloadCustomerImportTemplate() {
 }
 
 const showImport = ref(false);
+const importFileInputEl = ref(null);
 const importFile = ref(null);
 const previewing = ref(false);
 const importing = ref(false);
-const previewResult = ref(null); // { created_count, updated_count, row_errors }
+// { dry_run, applied, created_count, updated_count, row_errors } — mirrors
+// MasterDataImportModal.vue's single `result` shape (and its preview-card
+// + row-error-table presentation), not a customer-specific structure.
+const previewResult = ref(null);
 
-function openImport() {
+function resetImportState() {
   importFile.value = null;
   previewResult.value = null;
+  if (importFileInputEl.value) importFileInputEl.value.value = '';
+}
+
+function openImport() {
+  resetImportState();
   showImport.value = true;
 }
 
 function closeImport() {
   showImport.value = false;
-  importFile.value = null;
-  previewResult.value = null;
+  resetImportState();
 }
 
 function onImportFileChosen(e) {
@@ -220,11 +228,17 @@ async function doPreviewImport() {
   previewResult.value = null;
   try {
     const result = await importCustomers(importFile.value, true);
-    previewResult.value = { created_count: result.created_count, updated_count: result.updated_count, row_errors: [] };
+    // BUG YANG DITEMUKAN & DIPERBAIKI — dry_run dengan baris tidak valid
+    // dibalas 200 (bukan 409, lihat CustomerController::import()), tapi
+    // cabang sukses di sini dulu selalu mengeset row_errors: [] tanpa
+    // pernah membaca result.row_errors — baris yang gagal validasi diam-
+    // diam hilang dan pratinjau menampilkan "0 akan dibuat, 0 diperbarui"
+    // tanpa petunjuk apa pun kenapa.
+    previewResult.value = { dry_run: true, applied: false, created_count: result.created_count, updated_count: result.updated_count, row_errors: result.row_errors ?? [] };
   } catch (err) {
     const rowErrors = importErrorToRowErrors(err);
     if (rowErrors) {
-      previewResult.value = { created_count: 0, updated_count: 0, row_errors: rowErrors };
+      previewResult.value = { dry_run: true, applied: false, created_count: 0, updated_count: 0, row_errors: rowErrors };
     } else {
       toast.error(err.message || t('events_sessions.import_customers_failed'));
     }
@@ -238,13 +252,13 @@ async function doConfirmImport() {
   importing.value = true;
   try {
     const result = await importCustomers(importFile.value, false);
+    previewResult.value = { dry_run: false, applied: true, created_count: result.created_count, updated_count: result.updated_count, row_errors: [] };
     toast.success(t('events_sessions.import_customers_success', { created: result.created_count, updated: result.updated_count }));
-    closeImport();
     await load();
   } catch (err) {
     const rowErrors = importErrorToRowErrors(err);
     if (rowErrors) {
-      previewResult.value = { created_count: 0, updated_count: 0, row_errors: rowErrors };
+      previewResult.value = { dry_run: false, applied: false, created_count: 0, updated_count: 0, row_errors: rowErrors };
     } else {
       toast.error(err.message || t('events_sessions.import_customers_failed'));
     }
@@ -252,6 +266,10 @@ async function doConfirmImport() {
     importing.value = false;
   }
 }
+
+const canPreview = computed(() => !!importFile.value && !previewing.value);
+const canApply = computed(() => !!previewResult.value && previewResult.value.dry_run && previewResult.value.row_errors.length === 0);
+const isImportDone = computed(() => !!previewResult.value?.applied);
 </script>
 
 <template>
@@ -319,48 +337,77 @@ async function doConfirmImport() {
 
     <CustomerTransactionsModal :open="showTransactions" :customer-id="transactionsCustomerId" @close="showTransactions = false" />
 
-    <BaseModal :open="showImport" :title="t('events_sessions.import_customers_action')" max-width-class="max-w-[480px]" @close="closeImport">
+    <BaseModal :open="showImport" :title="t('events_sessions.import_customers_action')" max-width-class="max-w-[560px]" @close="closeImport">
       <div class="flex flex-col gap-4 px-6 py-5">
-        <p class="text-[13px] text-muted-4">{{ t('events_sessions.import_customers_help') }}</p>
-        <button type="button" class="self-start text-[12.5px] font-semibold text-brand-active underline" @click="doDownloadCustomerImportTemplate">
-          {{ t('events_sessions.download_customer_template_action') }}
-        </button>
-
-        <div class="flex flex-col gap-1.5">
-          <label class="text-[13px] font-semibold" for="customer-import-file">{{ t('events_sessions.import_file_label') }}</label>
-          <input id="customer-import-file" type="file" accept=".xlsx" class="text-[13px]" @change="onImportFileChosen" />
+        <div class="flex items-start gap-3 rounded-lg border border-mint-border bg-mint-50 px-3.5 py-3.5">
+          <i class="ph-duotone ph-file-arrow-down text-[19px] text-brand-active" aria-hidden="true"></i>
+          <div class="flex flex-1 flex-col gap-1">
+            <span class="text-[12px] leading-relaxed text-muted-4">{{ t('events_sessions.import_customers_help') }}</span>
+            <button type="button" class="mt-1 self-start text-[12.5px] font-bold text-brand-active underline decoration-dotted" @click="doDownloadCustomerImportTemplate">
+              {{ t('events_sessions.download_customer_template_action') }}
+            </button>
+          </div>
         </div>
 
-        <BaseButton variant="secondary" :disabled="!importFile" :loading="previewing" @click="doPreviewImport">
-          {{ t('events_sessions.import_preview_action') }}
-        </BaseButton>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[12.5px] font-semibold text-muted-4" for="customer-import-file">{{ t('events_sessions.import_file_label') }}</label>
+          <input
+            id="customer-import-file"
+            ref="importFileInputEl"
+            type="file"
+            accept=".xlsx"
+            class="rounded-lg border border-line bg-white px-3.5 py-2.5 text-[13px] file:mr-3 file:rounded-md file:border-0 file:bg-mint-100 file:px-3 file:py-1.5 file:text-[12.5px] file:font-bold file:text-brand-active"
+            @change="onImportFileChosen"
+          />
+        </div>
 
-        <div v-if="previewResult" class="flex flex-col gap-2 rounded-lg border border-line-2 bg-mint-50 p-3.5">
-          <template v-if="previewResult.row_errors.length === 0">
-            <p class="text-[13px] font-semibold text-brand-active">
-              {{ t('events_sessions.import_preview_summary', { created: previewResult.created_count, updated: previewResult.updated_count }) }}
-            </p>
-          </template>
-          <template v-else>
-            <p class="text-[13px] font-semibold text-danger-text">{{ t('events_sessions.import_preview_has_errors') }}</p>
-            <ul class="flex flex-col gap-1 text-[12.5px] text-danger-text">
-              <li v-for="rowError in previewResult.row_errors" :key="rowError.row">
-                {{ t('events_sessions.import_row_error', { row: rowError.row, error: rowError.errors[0] }) }}
-              </li>
-            </ul>
-          </template>
+        <!-- Preview-then-apply, same reasoning and presentation as
+             MasterDataImportModal.vue: a clean status card for a valid
+             preview/applied result, or a distinct red rejected-card with a
+             row-level error table when validation fails — not a bare
+             summary sentence either way. -->
+        <div v-if="previewResult && previewResult.row_errors.length" class="flex flex-col gap-3 rounded-lg border border-danger-border bg-danger-bg px-4 py-3.5">
+          <div class="flex items-center gap-2">
+            <i class="ph-duotone ph-x-circle text-[18px] text-danger-text" aria-hidden="true"></i>
+            <span class="text-[13px] font-bold text-danger-text">{{ t('events_sessions.import_preview_has_errors') }}</span>
+          </div>
+          <p class="text-[12px] font-semibold text-danger-text">{{ t('master_data.no_data_changed_fix_rows') }}</p>
+          <div class="max-h-[220px] overflow-auto rounded-md border border-danger-border-hover bg-white">
+            <table class="w-full border-collapse text-[12px]">
+              <thead>
+                <tr class="bg-surface-subtle text-left">
+                  <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_row') }}</th>
+                  <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_problem') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="rowError in previewResult.row_errors" :key="rowError.row" class="border-t border-line-5 align-top transition-colors hover:bg-line-7">
+                  <td class="px-3 py-2 font-mono">{{ rowError.row }}</td>
+                  <td class="px-3 py-2">{{ rowError.errors.join('; ') }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div v-else-if="previewResult" class="flex flex-col gap-2 rounded-lg border px-4 py-3.5" :class="previewResult.applied ? 'border-mint-border bg-mint-50' : 'border-line-2 bg-surface-subtle'">
+          <div class="flex items-center gap-2">
+            <i class="ph-duotone text-[18px]" :class="previewResult.applied ? 'ph-check-circle text-brand-active' : 'ph-eye text-muted-4'" aria-hidden="true"></i>
+            <span class="text-[13px] font-bold" :class="previewResult.applied ? 'text-brand-active' : 'text-muted-5'">
+              {{ previewResult.applied ? t('master_data.import_applied') : t('master_data.preview_not_applied') }}
+            </span>
+          </div>
+          <p class="text-[13px] font-semibold text-brand-active">
+            {{ t('events_sessions.import_preview_summary', { created: previewResult.created_count, updated: previewResult.updated_count }) }}
+          </p>
         </div>
       </div>
       <template #footer>
         <div class="flex justify-end gap-2.5">
           <BaseButton variant="secondary" @click="closeImport">{{ t('common.cancel') }}</BaseButton>
-          <BaseButton
-            :disabled="!previewResult || previewResult.row_errors.length > 0"
-            :loading="importing"
-            @click="doConfirmImport"
-          >
-            {{ t('events_sessions.import_confirm_action') }}
-          </BaseButton>
+          <BaseButton v-if="isImportDone" variant="secondary" @click="resetImportState">{{ t('master_data.import_another_file') }}</BaseButton>
+          <BaseButton v-else-if="canApply" :loading="importing" @click="doConfirmImport">{{ t('events_sessions.import_confirm_action') }}</BaseButton>
+          <BaseButton v-else :disabled="!canPreview" :loading="previewing" @click="doPreviewImport">{{ t('events_sessions.import_preview_action') }}</BaseButton>
         </div>
       </template>
     </BaseModal>

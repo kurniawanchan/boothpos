@@ -1,0 +1,25 @@
+# Reverse proxy + SSL otomatis (Let's Encrypt) untuk BoothPOS di Oracle
+# Cloud VM. Caddy menerima trafik publik di 80/443 dan meneruskannya ke
+# container `app` yang listen di localhost:8000 (lihat
+# docker-compose.store.yml) — port 8000 sendiri TIDAK dibuka ke publik
+# di security list Oracle Cloud, hanya 80/443.
+#
+# Pasang: sudo cp deploy/oracle-cloud/Caddyfile /etc/caddy/Caddyfile
+# Ganti domain di bawah, lalu: sudo systemctl restart caddy
+
+GANTI-INI.duckdns.org {
+	reverse_proxy localhost:8000
+
+	# Ukuran unggahan (foto produk/variant/bukti pembayaran) — Laravel
+	# sendiri sudah membatasi 5MB per berkas (ImageUploadService), ini
+	# cuma jaga-jaga supaya Caddy tidak menolak lebih dulu di depannya.
+	request_body {
+		max_size 10MB
+	}
+
+	encode gzip
+
+	log {
+		output file /var/log/caddy/boothpos.log
+	}
+}
