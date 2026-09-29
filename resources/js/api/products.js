@@ -35,8 +35,20 @@ export function uploadProductImage(id, file) {
   return client.post(`/products/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
 }
 
-/** Lightweight cashier-facing search — GET /variants/lookup?q=&limit= */
+/** POST /variants/{id}/image — per-variant image, gated on the parent product's update ability. */
+export function uploadVariantImage(id, file) {
+  const form = new FormData();
+  form.append('image', file);
+  return client.post(`/variants/${id}/image`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
+}
+
+/**
+ * Lightweight cashier-facing search — GET /variants/lookup?q=&limit=.
+ * 024-invoice-layout-shipping-slip — `q` empty now returns a default
+ * browsable page from the backend (no longer short-circuited here), so
+ * callers like PreordersView.vue's "Add item" field can show a list on
+ * open, matching CustomerSearchDropdown.vue's UX.
+ */
 export function lookupVariants(q, limit = 20) {
-  if (!q) return Promise.resolve({ data: [] });
   return client.get('/variants/lookup', { params: { q, limit } }).then((r) => r.data);
 }

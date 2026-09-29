@@ -1,10 +1,11 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePosCartStore } from '../../stores/posCart';
 import { formatIDR, parseMoney, toMoneyString } from '../../utils/money';
 import EmptyState from '../ui/EmptyState.vue';
 import BaseButton from '../ui/BaseButton.vue';
+import ImageLightbox from '../ui/ImageLightbox.vue';
 
 const props = defineProps({
   discount: { type: Number, default: 0 },
@@ -19,6 +20,14 @@ const { t } = useI18n();
 
 const subtotalNum = computed(() => parseMoney(cart.subtotal));
 const total = computed(() => Math.max(subtotalNum.value - (props.discount || 0), 0));
+
+const lightboxSrc = ref(null);
+const lightboxAlt = ref('');
+function openImageLightbox(item) {
+  if (!item.image_url) return;
+  lightboxSrc.value = item.image_url;
+  lightboxAlt.value = item.name;
+}
 </script>
 
 <template>
@@ -41,9 +50,19 @@ const total = computed(() => Math.max(subtotalNum.value - (props.discount || 0),
     <div class="flex-1 overflow-auto px-3 py-2">
       <EmptyState v-if="cart.isEmpty" icon="ph-shopping-cart-simple" :message="t('pos.empty_cart_message')" />
       <div v-for="item in cart.items" :key="item.variant_id" class="flex gap-2.5 border-b border-line-6 py-2.5 last:border-b-0">
+        <button
+          v-if="item.image_url"
+          type="button"
+          class="h-11 w-11 flex-none cursor-zoom-in"
+          :aria-label="t('master_data.enlarge_variant_image', { name: item.name })"
+          @click="openImageLightbox(item)"
+        >
+          <img :src="item.image_url" :alt="item.name" class="h-11 w-11 rounded-md border border-line-2 object-cover" />
+        </button>
         <div class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-[13.5px] font-semibold leading-tight">{{ item.name }}</span>
           <span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span>
+          <span v-if="item.artist_name" class="text-[10.5px] text-muted-3">{{ item.artist_name }}</span>
           <span class="text-[12px] text-muted">{{ formatIDR(item.sell_price) }}</span>
         </div>
         <div class="flex flex-col items-end gap-1.5">
@@ -99,4 +118,6 @@ const total = computed(() => Math.max(subtotalNum.value - (props.discount || 0),
       <p v-if="!canCheckout && checkoutBlockedReason" class="text-center text-[11.5px] text-danger-text">{{ checkoutBlockedReason }}</p>
     </div>
   </aside>
+
+  <ImageLightbox :open="!!lightboxSrc" :src="lightboxSrc" :alt="lightboxAlt" @close="lightboxSrc = null" />
 </template>

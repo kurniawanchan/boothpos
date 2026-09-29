@@ -99,6 +99,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/products/{product}/image', [ProductController::class, 'uploadImage']);
         Route::post('/products/{product}/variants', [ProductController::class, 'storeVariant']);
         Route::put('/variants/{variant}', [ProductController::class, 'updateVariant']);
+        Route::post('/variants/{variant}/image', [ProductController::class, 'uploadVariantImage']);
         Route::get('/variants/lookup', [ProductController::class, 'lookupVariants']);
 
         Route::get('/stock/movements', [StockController::class, 'movements']);

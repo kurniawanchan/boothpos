@@ -88,6 +88,12 @@ final class MasterDataSheets
                 'description', 'is_preorder', 'preorder_eta', 'product_is_active',
                 'variant_name', 'cost_price', 'sell_price', 'low_stock_alert',
                 'variant_is_active', 'initial_stock', 'image_filename',
+                // Ditambahkan atas permintaan eksplisit pemilik toko — gambar
+                // per VARIAN (mis. tiap desain/motif dalam satu produk), di
+                // samping image_filename (gambar PRODUK, dipakai bersama
+                // semua variannya). Baris manapun boleh membawanya; menunjuk
+                // varian baris itu sendiri, bukan seluruh produk.
+                'variant_image_filename',
             ],
             self::STOCK => [
                 'sku', 'current_stock', 'reason',
@@ -140,7 +146,7 @@ final class MasterDataSheets
      * MasterDataImportTest::test_the_shipped_template_imports_as_is.
      * Itu bukan kebetulan: SKU pada contoh sheet 'stock' adalah SKU yang
      * PASTI dihasilkan server untuk baris contoh sheet 'products'
-     * (RYU + KY + SAK -> RYUKYSAK, varian pertama -> 0001). Kalau contoh
+     * (RYU + KY + SAK -> RYU-KY-SAK, varian pertama -> 001). Kalau contoh
      * di sini diubah, jalankan lagi test itu.
      */
     public static function exampleRow(string $sheet): array
@@ -183,9 +189,14 @@ final class MasterDataSheets
                 // bersamaan lewat field 'images[]' pada POST
                 // /imports/master-data.
                 'image_filename' => '',
+                // Gambar VARIAN ini secara spesifik (mis. desain/motif
+                // berbeda) — beda dari image_filename di atas, yang gambar
+                // PRODUKnya (dipakai bersama semua varian). Sama-sama
+                // kosong = tidak ada gambar diikutsertakan.
+                'variant_image_filename' => '',
             ],
             self::STOCK => [
-                'sku' => 'RYUKYSAK0001',
+                'sku' => 'RYU-KY-SAK-001',
                 'current_stock' => 20,
                 'reason' => 'Isi jumlah AKHIR yang diinginkan, bukan selisih. Contoh alasan: stok opname 1 Oktober.',
             ],
@@ -214,7 +225,7 @@ final class MasterDataSheets
             self::BOM => [
                 // SKU sama seperti pada sheet 'stock' — varian ini memang
                 // dibuat oleh baris contoh sheet 'products' di atas.
-                'sku' => 'RYUKYSAK0001',
+                'sku' => 'RYU-KY-SAK-001',
                 'material_code' => 'AC3',
                 'qty_needed' => '1.0000',
                 'notes' => '',

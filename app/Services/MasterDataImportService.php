@@ -62,8 +62,9 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
  *      - artists    : kolom unik `code`
  *      - categories : kolom unik `code`
  *      - products   : `sku` bila diisi; bila kosong, produk dicocokkan
- *                     lewat `code_prefix` (= artist_code + category_code +
- *                     product_segment, kolom unik di tabel products) dan
+ *                     lewat `code_prefix` (= artist_code + "-" +
+ *                     category_code + "-" + product_segment, format
+ *                     "ART-CA-SEG", kolom unik di tabel products) dan
  *                     variannya lewat `variant_name` di bawah produk itu
  *      - stock      : kolom unik `sku`
  *
@@ -114,9 +115,13 @@ class MasterDataImportService
      *                                  dengan .xlsx pada satu request yang
      *                                  sama (Task 6) — dicocokkan ke baris
      *                                  products/categories lewat kolom
-     *                                  image_filename berdasarkan nama asli
-     *                                  berkas (getClientOriginalName()),
-     *                                  bukan urutan atau index array.
+     *                                  image_filename (gambar PRODUK, dan
+     *                                  juga dipakai categories) DAN
+     *                                  variant_image_filename (gambar VARIAN
+     *                                  spesifik, sheet products saja)
+     *                                  berdasarkan nama asli berkas
+     *                                  (getClientOriginalName()), bukan
+     *                                  urutan atau index array.
      * @return array{applied: bool, dry_run: bool, sheets: array, ignored_sheets: array, errors: array}
      */
     public function import(string $absolutePath, User $user, bool $dryRun, string $originalName, array $images = []): array
@@ -664,10 +669,12 @@ class MasterDataImportService
                     'sku' => $sku,
                     'product_attributes' => $productAttributes,
                     'variant_attributes' => $variantAttributes,
-                    // Task 6 — gambar melekat pada PRODUK, bukan varian;
-                    // baris manapun dari varian produk yang sama boleh
-                    // membawanya.
+                    // Task 6 — image_filename melekat pada PRODUK (semua
+                    // variannya berbagi satu gambar produk). variant_image_filename
+                    // (ditambahkan kemudian) melekat pada VARIAN spesifik
+                    // baris ini menunjuk, sejajar bukan pengganti.
                     'image_filename' => $this->resolveImageFilename($sheet, $row, $values),
+                    'variant_image_filename' => $this->resolveImageFilename($sheet, $row, $values, 'variant_image_filename'),
                 ];
 
                 continue;
@@ -725,7 +732,13 @@ class MasterDataImportService
                 continue;
             }
 
-            $codePrefix = $artistCode.$categoryCode.$segment;
+            // Format harus persis sama dengan ProductCodeGenerator::buildCodePrefix()
+            // (ART-CA-SEG) — dulu ini penggabungan polos tanpa strip, dan sejak
+            // format kode berubah jadi berstrip, versi lama membuat lookup di
+            // bawah tidak pernah menemukan produk yang sudah ada (dibuat lewat
+            // buildCodePrefix() pada tahap apply), sehingga baris upsert malah
+            // dikira baris produk baru dan menabrak keunikan code_prefix.
+            $codePrefix = $artistCode.'-'.$categoryCode.'-'.$segment;
             $variantKey = $codePrefix.'|'.mb_strtolower($variantName);
 
             if (isset($seenVariantKey[$variantKey])) {
@@ -805,6 +818,7 @@ class MasterDataImportService
                 'initial_stock' => $initialStock,
                 'product_exists' => $product !== null,
                 'image_filename' => $this->resolveImageFilename($sheet, $row, $values),
+                'variant_image_filename' => $this->resolveImageFilename($sheet, $row, $values, 'variant_image_filename'),
             ];
         }
 
@@ -1094,8 +1108,14 @@ class MasterDataImportService
                     $variant->product->save();
                 }
 
-                if ($entry['variant_attributes'] !== []) {
-                    $variant->fill($entry['variant_attributes'])->save();
+                if ($entry['variant_attributes'] !== [] || $entry['variant_image_filename'] !== null) {
+                    $variant->fill($entry['variant_attributes']);
+
+                    if ($entry['variant_image_filename'] !== null) {
+                        $this->applyImageFilename($variant, 'variants', $entry['variant_image_filename']);
+                    }
+
+                    $variant->save();
                 }
 
                 continue;
@@ -1146,6 +1166,11 @@ class MasterDataImportService
                     'cost_price' => 0,
                 ], $entry['variant_attributes']));
 
+                if ($entry['variant_image_filename'] !== null) {
+                    $this->applyImageFilename($variant, 'variants', $entry['variant_image_filename']);
+                    $variant->save();
+                }
+
                 if (($entry['initial_stock'] ?? 0) > 0) {
                     // Stok awal pun lewat applyMovement, bukan menulis
                     // current_stock langsung — supaya stock_movements tetap
@@ -1163,8 +1188,14 @@ class MasterDataImportService
                 continue;
             }
 
-            if ($entry['variant_attributes'] !== []) {
-                $variant->fill($entry['variant_attributes'])->save();
+            if ($entry['variant_attributes'] !== [] || $entry['variant_image_filename'] !== null) {
+                $variant->fill($entry['variant_attributes']);
+
+                if ($entry['variant_image_filename'] !== null) {
+                    $this->applyImageFilename($variant, 'variants', $entry['variant_image_filename']);
+                }
+
+                $variant->save();
             }
         }
     }
@@ -1183,7 +1214,7 @@ class MasterDataImportService
      * unggahan berkas ditangani di seluruh kodebase ini (lihat juga
      * PaymentProofController).
      */
-    private function applyImageFilename(Product|Category $model, string $directory, string $filename): void
+    private function applyImageFilename(Product|Category|ProductVariant $model, string $directory, string $filename): void
     {
         $file = $this->imagesByFilename[$filename] ?? null;
 
@@ -1998,19 +2029,19 @@ class MasterDataImportService
      * suatu produk tapi gambarnya lupa diikutsertakan lebih baik ditolak
      * seluruhnya daripada diam-diam menyimpan produk tanpa gambar.
      */
-    private function resolveImageFilename(string $sheet, int $row, array $values): ?string
+    private function resolveImageFilename(string $sheet, int $row, array $values, string $column = 'image_filename'): ?string
     {
-        if (! $this->filled($values, 'image_filename')) {
+        if (! $this->filled($values, $column)) {
             return null;
         }
 
-        $filename = $this->stringValue($values, 'image_filename');
+        $filename = $this->stringValue($values, $column);
 
         if (! array_key_exists($filename, $this->imagesByFilename)) {
             $this->addError(
                 $sheet,
                 $row,
-                'image_filename',
+                $column,
                 "Berkas gambar '{$filename}' tidak ditemukan pada berkas yang diunggah bersamaan (field images[])."
             );
 

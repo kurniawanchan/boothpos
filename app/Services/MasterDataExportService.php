@@ -229,6 +229,7 @@ class MasterDataExportService
                 // sudah ada diubah lewat sheet 'stock'.
                 'initial_stock' => null,
                 'image_filename' => null, // lihat catatan di categoryRows().
+                'variant_image_filename' => null, // sama alasannya seperti image_filename di atas.
             ])->all();
     }
 

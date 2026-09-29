@@ -167,7 +167,7 @@ class MasterDataImportTest extends TestCase
 
         $this->assertDatabaseHas('artists', ['code' => 'RYU']);
         $this->assertDatabaseHas('categories', ['code' => 'KY']);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'RYUKYSAK0001', 'current_stock' => 20]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'RYU-KY-SAK-001', 'current_stock' => 20]);
 
         // T054 (User Story 4) — sheet 'roles'/'users' ikut diperluas ke
         // template ini; baris contohnya harus saling konsisten seperti
@@ -265,9 +265,9 @@ class MasterDataImportTest extends TestCase
         $this->assertDatabaseHas('categories', ['code' => 'KY', 'name' => 'Keychain']);
 
         // Kode produk & SKU dihasilkan SERVER lewat ProductCodeGenerator.
-        $this->assertDatabaseHas('products', ['code_prefix' => 'RYUKYSAK', 'name' => 'Keychain Sakura']);
+        $this->assertDatabaseHas('products', ['code_prefix' => 'RYU-KY-SAK', 'name' => 'Keychain Sakura']);
         $this->assertDatabaseHas('product_variants', [
-            'sku' => 'RYUKYSAK0001',
+            'sku' => 'RYU-KY-SAK-001',
             'variant_name' => 'Standard',
             'current_stock' => 20,
         ]);
@@ -285,7 +285,7 @@ class MasterDataImportTest extends TestCase
             ]],
         ]))->assertOk();
 
-        $this->assertDatabaseHas('products', ['code_prefix' => 'RYUKYPOS']);
+        $this->assertDatabaseHas('products', ['code_prefix' => 'RYU-KY-POS']);
     }
 
     public function test_sheets_are_processed_in_dependency_order_regardless_of_physical_order(): void
@@ -305,7 +305,7 @@ class MasterDataImportTest extends TestCase
 
         $this->postImport($file)->assertOk()->assertJsonPath('applied', true);
 
-        $this->assertDatabaseHas('products', ['code_prefix' => 'ZZZZZAAA']);
+        $this->assertDatabaseHas('products', ['code_prefix' => 'ZZZ-ZZ-AAA']);
     }
 
     public function test_sheet_names_are_matched_case_insensitively_and_extras_are_ignored(): void
@@ -381,7 +381,7 @@ class MasterDataImportTest extends TestCase
 
         $this->assertSame(1, Product::count());
         $this->assertSame(
-            ['RYUKYSAK0001', 'RYUKYSAK0002'],
+            ['RYU-KY-SAK-001', 'RYU-KY-SAK-002'],
             ProductVariant::orderBy('sku')->pluck('sku')->all(),
         );
     }
@@ -486,7 +486,7 @@ class MasterDataImportTest extends TestCase
 
         $this->postImport($this->fullCatalogWorkbook())->assertOk();
 
-        $variant = ProductVariant::where('sku', 'RYUKYSAK0001')->firstOrFail();
+        $variant = ProductVariant::where('sku', 'RYU-KY-SAK-001')->firstOrFail();
 
         $movement = StockMovement::where('variant_id', $variant->id)->firstOrFail();
         $this->assertSame('adjustment', $movement->type);
@@ -529,7 +529,7 @@ class MasterDataImportTest extends TestCase
     }
 
     // SKU varian baru dihasilkan server dan bisa ditebak dari kodenya
-    // (RYU + KY + SAK -> RYUKYSAK0001). Kalau sheet products memang membuat
+    // (RYU + KY + SAK -> RYU-KY-SAK-001). Kalau sheet products memang membuat
     // varian baru, sheet stock boleh menunjuk SKU itu — penyelesaiannya
     // ditunda sampai sheet products diterapkan.
     public function test_a_stock_row_may_reference_a_sku_created_by_the_products_sheet(): void
@@ -543,11 +543,11 @@ class MasterDataImportTest extends TestCase
                 ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
             ]],
             'stock' => ['rows' => [
-                ['sku' => 'RYUKYSAK0001', 'current_stock' => 7],
+                ['sku' => 'RYU-KY-SAK-001', 'current_stock' => 7],
             ]],
         ]))->assertOk()->assertJsonPath('applied', true);
 
-        $this->assertSame(7, ProductVariant::where('sku', 'RYUKYSAK0001')->value('current_stock'));
+        $this->assertSame(7, ProductVariant::where('sku', 'RYU-KY-SAK-001')->value('current_stock'));
         $this->assertEquals(7, StockMovement::sum('qty_change'));
     }
 
@@ -564,7 +564,7 @@ class MasterDataImportTest extends TestCase
                 ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
             ]],
             'stock' => ['rows' => [
-                ['sku' => 'RYUKYSAK9999', 'current_stock' => 7],
+                ['sku' => 'RYU-KY-SAK-999', 'current_stock' => 7],
             ]],
         ]))->assertStatus(422)
             ->assertJsonPath('applied', false)
@@ -786,12 +786,57 @@ class MasterDataImportTest extends TestCase
         $response->assertOk()->assertJsonPath('applied', true)->assertJsonPath('errors', []);
 
         $category = Category::where('code', 'KY')->firstOrFail();
-        $product = Product::where('code_prefix', 'RYUKYSAK')->firstOrFail();
+        $product = Product::where('code_prefix', 'RYU-KY-SAK')->firstOrFail();
 
         $this->assertNotNull($category->image_path);
         $this->assertNotNull($product->image_path);
         \Illuminate\Support\Facades\Storage::disk('public')->assertExists($category->image_path);
         \Illuminate\Support\Facades\Storage::disk('public')->assertExists($product->image_path);
+    }
+
+    /**
+     * variant_image_filename attaches to the VARIANT the row creates —
+     * distinct from image_filename, which attaches to the shared PRODUCT.
+     * Both columns on the same row, both must resolve independently.
+     */
+    public function test_products_sheet_variant_image_filename_attaches_to_the_variant_not_the_product(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+
+        $workbook = $this->workbook([
+            'artists' => ['rows' => [
+                ['code' => 'RYU', 'name' => 'Ryu Illustration', 'is_active' => 1],
+            ]],
+            'categories' => ['rows' => [
+                ['code' => 'KY', 'name' => 'Keychain', 'is_active' => 1],
+            ]],
+            'products' => ['rows' => [
+                [
+                    'artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
+                    'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard',
+                    'sell_price' => 25000,
+                    'image_filename' => 'produk-sakura.jpg',
+                    'variant_image_filename' => 'varian-standard.png',
+                ],
+            ]],
+        ]);
+
+        $productImage = UploadedFile::fake()->image('produk-sakura.jpg');
+        $variantImage = UploadedFile::fake()->image('varian-standard.png');
+
+        $response = $this->postImport($workbook, ['images' => [$productImage, $variantImage]]);
+
+        $response->assertOk()->assertJsonPath('applied', true)->assertJsonPath('errors', []);
+
+        $product = Product::where('code_prefix', 'RYU-KY-SAK')->firstOrFail();
+        $variant = ProductVariant::where('product_id', $product->id)->firstOrFail();
+
+        $this->assertNotNull($product->image_path);
+        $this->assertNotNull($variant->image_path);
+        $this->assertNotSame($product->image_path, $variant->image_path);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($product->image_path);
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($variant->image_path);
     }
 
     public function test_a_referenced_image_filename_with_no_matching_upload_is_a_row_level_error(): void

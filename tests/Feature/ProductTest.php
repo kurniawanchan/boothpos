@@ -44,8 +44,8 @@ class ProductTest extends TestCase
         ]);
 
         $response->assertCreated()
-            ->assertJsonPath('code_prefix', 'RYUKYSAK')
-            ->assertJsonPath('variants.0.sku', 'RYUKYSAK0001');
+            ->assertJsonPath('code_prefix', 'RYU-KY-SAK')
+            ->assertJsonPath('variants.0.sku', 'RYU-KY-SAK-001');
     }
 
     public function test_segment_is_derived_from_name_when_not_provided(): void
@@ -60,7 +60,7 @@ class ProductTest extends TestCase
             'variants' => [['variant_name' => 'Standard', 'sell_price' => 15000]],
         ]);
 
-        $response->assertCreated()->assertJsonPath('code_prefix', 'RYUKYPOS');
+        $response->assertCreated()->assertJsonPath('code_prefix', 'RYU-KY-POS');
     }
 
     public function test_second_variant_gets_sequential_sku(): void
@@ -78,7 +78,7 @@ class ProductTest extends TestCase
             'variant_name' => 'B', 'sell_price' => 22000,
         ]);
 
-        $response->assertCreated()->assertJsonPath('sku', 'RYUKYSAK0002');
+        $response->assertCreated()->assertJsonPath('sku', 'RYU-KY-SAK-002');
     }
 
     public function test_duplicate_code_prefix_is_rejected(): void
@@ -179,6 +179,51 @@ class ProductTest extends TestCase
             ->assertJsonPath('data.0.variants.0.current_stock', 7);
     }
 
+    // ?search matches product name OR a variant's own sku/variant_name —
+    // a cashier searching for one specific SKU or variant design name (not
+    // just the parent product's name) must still find the right product.
+    public function test_product_list_search_matches_product_name(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Sakura']);
+        $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 25000]);
+        Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Poster Yuki']);
+
+        $response = $this->getJson('/api/v1/products?search=Sakura');
+
+        $response->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'Keychain Sakura');
+    }
+
+    public function test_product_list_search_matches_variant_sku(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Sakura']);
+        $product->variants()->create(['sku' => 'RYU-KY-SAK-001', 'sell_price' => 25000]);
+        Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Poster Yuki']);
+
+        $response = $this->getJson('/api/v1/products?search=SAK-001');
+
+        $response->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'Keychain Sakura');
+    }
+
+    // The follow-up fix — searching by a variant's own name (e.g. a design
+    // or motif) must find the product even when neither the product name
+    // nor the SKU contains the search term at all.
+    public function test_product_list_search_matches_variant_name(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Love Bullet']);
+        $product->variants()->create(['sku' => 'RYUKYAAA0001', 'variant_name' => 'Koharu', 'sell_price' => 40000]);
+        Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Poster Yuki']);
+
+        $response = $this->getJson('/api/v1/products?search=Koharu');
+
+        $response->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'Love Bullet');
+    }
+
     // Varian dimuat lewat eager-load, bukan lazy-load per baris di resource.
     public function test_product_list_with_variants_does_not_run_a_query_per_product(): void
     {
@@ -209,13 +254,45 @@ class ProductTest extends TestCase
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
         $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Sakura']);
-        $product->variants()->create(['sku' => 'RYUKYSAK0001', 'sell_price' => 25000, 'current_stock' => 10]);
+        $product->variants()->create(['sku' => 'RYU-KY-SAK-001', 'sell_price' => 25000, 'current_stock' => 10]);
 
-        $response = $this->getJson('/api/v1/variants/lookup?q=SAK0001');
+        $response = $this->getJson('/api/v1/variants/lookup?q=SAK-001');
 
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
-        $this->assertSame('RYUKYSAK0001', $response->json('data.0.sku'));
+        $this->assertSame('RYU-KY-SAK-001', $response->json('data.0.sku'));
+    }
+
+    // Same follow-up as the products list search — a cashier at POS or a
+    // pre-order search may only know a variant's own name (e.g. a design),
+    // not its SKU or the parent product's name.
+    public function test_variant_lookup_finds_by_variant_name(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Love Bullet']);
+        $product->variants()->create(['sku' => 'RYUKYAAA0001', 'variant_name' => 'Koharu', 'sell_price' => 40000, 'current_stock' => 10]);
+
+        $response = $this->getJson('/api/v1/variants/lookup?q=Koharu');
+
+        $response->assertOk();
+        $this->assertCount(1, $response->json('data'));
+        $this->assertSame('RYUKYAAA0001', $response->json('data.0.sku'));
+    }
+
+    // Requested for the preorder "Add item" dropdown/item list, so staff
+    // can tell apart same-named products across categories.
+    public function test_variant_lookup_includes_category_name(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Love Bullet']);
+        $product->variants()->create(['sku' => 'RYUKYAAA0002', 'sell_price' => 40000, 'current_stock' => 10]);
+
+        $response = $this->getJson('/api/v1/variants/lookup?q=RYUKYAAA0002');
+
+        $response->assertOk();
+        $this->assertSame($category->name, $response->json('data.0.category_name'));
     }
 
     public function test_variant_lookup_only_returns_active_variants(): void
@@ -276,5 +353,72 @@ class ProductTest extends TestCase
         ]);
 
         $response->assertStatus(403);
+    }
+
+    // =====================================================================
+    // Per-variant image — added at the product owner's explicit request so
+    // different variants of the same product can each have their own
+    // picture, mirroring the Task 5 product-image tests above.
+    // =====================================================================
+
+    public function test_owner_can_upload_a_variant_image(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000]);
+
+        $response = $this->post("/api/v1/variants/{$variant->id}/image", [
+            'image' => \Illuminate\Http\UploadedFile::fake()->image('varian.jpg'),
+        ]);
+
+        $response->assertOk();
+        $this->assertNotNull($response->json('image_url'));
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($variant->fresh()->image_path);
+    }
+
+    public function test_uploading_a_disguised_non_image_file_as_variant_image_is_rejected(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000]);
+
+        $response = $this->post("/api/v1/variants/{$variant->id}/image", [
+            'image' => \Illuminate\Http\UploadedFile::fake()->create('varian.jpg', 10, 'application/pdf'),
+        ]);
+
+        $response->assertStatus(422);
+    }
+
+    public function test_cashier_cannot_upload_a_variant_image(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000]);
+
+        $response = $this->post("/api/v1/variants/{$variant->id}/image", [
+            'image' => \Illuminate\Http\UploadedFile::fake()->image('varian.jpg'),
+        ]);
+
+        $response->assertStatus(403);
+    }
+
+    public function test_a_variants_own_image_is_independent_of_its_products_image(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('public');
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000]);
+
+        $this->post("/api/v1/products/{$product->id}/image", ['image' => \Illuminate\Http\UploadedFile::fake()->image('produk.jpg')])->assertOk();
+        $this->post("/api/v1/variants/{$variant->id}/image", ['image' => \Illuminate\Http\UploadedFile::fake()->image('varian.jpg')])->assertOk();
+
+        $this->assertNotSame($product->fresh()->image_path, $variant->fresh()->image_path);
     }
 }

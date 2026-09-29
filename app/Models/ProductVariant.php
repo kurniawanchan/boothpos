@@ -30,6 +30,7 @@ class ProductVariant extends Model
      */
     protected $fillable = [
         'sku',
+        'image_path',
         'variant_name',
         'cost_price',
         'sell_price',
@@ -61,5 +62,25 @@ class ProductVariant extends Model
     public function isLowStock(): bool
     {
         return $this->low_stock_alert !== null && $this->current_stock <= $this->low_stock_alert;
+    }
+
+    /**
+     * BUG YANG DITEMUKAN & DIPERBAIKI — accessor ini TIDAK PERNAH ada
+     * sebelumnya; `PreorderController::present()` sudah lama membaca
+     * `$variant?->image_url` seolah-olah itu accessor sungguhan, padahal
+     * Eloquent hanya mengembalikan null diam-diam untuk atribut yang tidak
+     * ada (bukan error) — jadi gambar varian di form Edit Pre-order selalu
+     * kosong (placeholder), ditemukan lewat verifikasi browser sungguhan.
+     * `ProductController::lookupVariants()` sudah lama menghitung URL yang
+     * SAMA secara manual (fallback ke gambar produk kalau varian sendiri
+     * tidak punya) — dipindah ke sini sebagai accessor SUNGGUHAN supaya
+     * setiap pemanggil `->image_url` di masa depan otomatis benar, bukan
+     * menduplikasi logika fallback yang sama lagi di tempat lain.
+     */
+    public function getImageUrlAttribute(): ?string
+    {
+        $service = app(\App\Services\ImageUploadService::class);
+
+        return $service->url($this->image_path) ?? $service->url($this->product?->image_path);
     }
 }
