@@ -17,7 +17,7 @@ return [
     // 022-preorder-invoice-crud-overhaul (US1)
     'edit_not_allowed_status' => 'A "Handed over" or "Cancelled" preorder can no longer be changed — this transaction is closed.',
     'edit_total_below_paid_amount' => 'This change would make the order total less than what the customer has already paid. Adjust the items or use the Cancel action instead.',
-    'delete_not_allowed_status' => 'A preorder can only be deleted while its status is "Ordered". Use the Cancel action for any other status.',
+    'delete_not_allowed_status' => 'A preorder can only be deleted while its status is "Ordered" or "Cancelled". Use the Cancel action first for any other status.',
     'delete_not_allowed_has_payment' => 'This preorder already has a recorded payment and cannot be deleted. Use the Cancel action instead.',
 
     // 022-preorder-invoice-crud-overhaul (US5)
@@ -48,4 +48,10 @@ return [
     'import_fulfillment_invalid' => "Row :row: the receive method column must be 'pickup' or 'mail order'.",
     'import_products_quantities_mismatch' => 'Row :row: products, quantities, and unit prices must have the same count.',
     'import_pickup_day_invalid_format' => "Row :row: pickup day must be written as 'Day 1', 'Day 2', etc.",
+    'import_dispatch_status_invalid' => "Row :row: dispatch_status must be blank, 'pending', 'invoice_sent', or 'shipping'.",
+    'import_dispatch_shipping_mail_order_only' => "Row :row: dispatch_status 'shipping' only applies to mail order preorders.",
+    'import_dispatch_date_invalid' => "Row :row: :column is not a valid date/time — use e.g. 2026-09-27T10:00:00+07:00.",
+    'import_dispatch_date_not_applicable' => "Row :row: :column does not apply when dispatch_status is ':status'.",
+    'dispatch_status_shipping_mail_order_only' => "'Shipping in progress' only applies to Mail Order preorders.",
+    'dispatch_status_cancelled' => 'A cancelled preorder no longer has an active invoice or shipment to track.',
 ];

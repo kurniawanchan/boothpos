@@ -221,6 +221,7 @@ Route::prefix('v1')->group(function () {
 
         Route::apiResource('preorders', PreorderController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::patch('/preorders/{preorder}/status', [PreorderController::class, 'updateStatus']);
+        Route::patch('/preorders/{preorder}/dispatch-status', [PreorderController::class, 'updateDispatchStatus']);
         Route::post('/preorders/{preorder}/payments', [PreorderController::class, 'storePayment']);
         Route::post('/preorders/{preorder}/shipment', [ShipmentController::class, 'store']);
         Route::get('/preorders/{preorder}/invoice', [PreorderController::class, 'invoice']);

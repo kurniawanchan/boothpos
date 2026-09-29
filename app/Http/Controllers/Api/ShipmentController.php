@@ -58,9 +58,13 @@ class ShipmentController extends Controller
         // konsisten dengan seluruh alur preorder yang terbuka untuk semua
         // peran terautentikasi.
         $validated = $request->validate([
+            'courier_name' => ['sometimes', 'string', 'max:100'],
             'tracking_number' => ['nullable', 'string', 'max:50'],
-            'status' => ['sometimes', 'in:pending,packed,shipped,delivered'],
+            'recipient_name' => ['sometimes', 'string', 'max:100'],
+            'recipient_phone' => ['sometimes', 'string', 'max:20'],
+            'address_line' => ['sometimes', 'string'],
             'notes' => ['nullable', 'string'],
+            'status' => ['sometimes', 'in:pending,packed,shipped,delivered'],
         ]);
 
         if (isset($validated['status'])) {

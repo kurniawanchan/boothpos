@@ -31,6 +31,12 @@ class UpdatePreorderRequest extends FormRequest
             'expected_date' => ['sometimes', 'nullable', 'date'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'items' => ['required', 'array', 'min:1'],
+            // 'id' identifies an EXISTING preorder_items row so the service
+            // can tell "still the same line, just a new qty" (price snapshot
+            // preserved) apart from "a genuinely new line" (price re-snapshot
+            // from the variant's current price) — see PreorderService::
+            // update()'s docblock. Omitted/null for a freshly added row.
+            'items.*.id' => ['sometimes', 'nullable', 'integer'],
             'items.*.variant_id' => ['required', 'integer', 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'integer', 'min:1'],
         ];

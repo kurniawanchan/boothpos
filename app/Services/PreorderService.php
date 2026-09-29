@@ -195,18 +195,39 @@ class PreorderService
 
         return DB::transaction(function () use ($preorder, $data, $user) {
             $preorder->loadMissing('items');
-            $oldItemsByVariant = $preorder->items->keyBy('variant_id');
+            $oldItemsById = $preorder->items->keyBy('id');
 
             $subtotal = 0;
             $newItemsData = [];
             $newQtyByVariant = [];
+            $matchedOldIds = [];
 
             foreach ($data['items'] as $itemInput) {
                 $variantId = (int) $itemInput['variant_id'];
                 $qty = (int) $itemInput['qty'];
-                $existing = $oldItemsByVariant->get($variantId);
+                $itemId = isset($itemInput['id']) ? (int) $itemInput['id'] : null;
+                $existing = $itemId !== null ? $oldItemsById->get($itemId) : null;
 
-                if ($existing) {
+                // BUG YANG DITEMUKAN & DIPERBAIKI — pencocokan "baris ini
+                // masih baris yang sama" dulu memakai variant_id, bukan id
+                // baris preorder_items itu sendiri. Akibatnya, MENGHAPUS
+                // baris lalu MENAMBAH KEMBALI varian yang sama (mis. untuk
+                // memperbaiki harga yang salah/basi) tidak bisa dibedakan
+                // dari sekadar mengubah qty baris lama — harga lama yang
+                // salah selalu dipertahankan, tidak pernah diambil ulang
+                // dari harga varian saat ini. Dicocokkan lewat id di sini:
+                // id yang dikenal (dan variant_id-nya tetap cocok) berarti
+                // benar-benar baris lama (qty baru, harga snapshot lama
+                // dipertahankan); id kosong/tidak dikenal/variant_id tidak
+                // cocok berarti baris BARU (harga diambil ulang dari
+                // variant->sell_price saat ini), meski varian yang dipilih
+                // kebetulan sama dengan salah satu baris lama.
+                $identityMatches = $existing !== null
+                    && (int) $existing->variant_id === $variantId
+                    && ! in_array($itemId, $matchedOldIds, true);
+
+                if ($identityMatches) {
+                    $matchedOldIds[] = $itemId;
                     // Baris YANG TIDAK BERUBAH secara identitas — pertahankan
                     // snapshot harga lama, cuma qty/line_total yang baru.
                     $sellPrice = (float) $existing->sell_price;
@@ -230,7 +251,7 @@ class PreorderService
                 }
 
                 $subtotal += $lineTotal;
-                $newQtyByVariant[$variantId] = $qty;
+                $newQtyByVariant[$variantId] = ($newQtyByVariant[$variantId] ?? 0) + $qty;
             }
 
             $shippingCost = array_key_exists('shipping_cost', $data)
@@ -269,10 +290,15 @@ class PreorderService
             // transisi ke 'arrived'); di ordered/dp_paid belum ada efek stok
             // sama sekali, jadi tidak ada yang perlu dikoreksi.
             if (in_array($preorder->status, ['arrived', 'settled'], true)) {
-                $allVariantIds = array_unique([...$oldItemsByVariant->keys()->all(), ...array_keys($newQtyByVariant)]);
+                // Stok peduli pada TOTAL qty per varian, bukan identitas
+                // baris mana pun — dijumlah ulang di sini terlepas dari
+                // pencocokan by-id di atas (satu varian bisa saja muncul
+                // di lebih dari satu baris lama dalam skenario yang jarang).
+                $oldQtyByVariant = $preorder->items->groupBy('variant_id')->map(fn ($items) => (int) $items->sum('qty'));
+                $allVariantIds = array_unique([...$oldQtyByVariant->keys()->all(), ...array_keys($newQtyByVariant)]);
 
                 foreach ($allVariantIds as $variantId) {
-                    $oldQty = (int) ($oldItemsByVariant->get($variantId)?->qty ?? 0);
+                    $oldQty = (int) ($oldQtyByVariant->get($variantId) ?? 0);
                     $newQty = (int) ($newQtyByVariant[$variantId] ?? 0);
                     $delta = $newQty - $oldQty;
 
@@ -305,9 +331,19 @@ class PreorderService
                 'pickup_day' => $pickupDay,
                 'courier_name' => $courierName,
                 'notes' => array_key_exists('notes', $data) ? $data['notes'] : $preorder->notes,
+                // "Shipping in progress" hanya berlaku untuk Mail Order. Bila
+                // edit memindahkan pesanan ke pickup, turunkan ke
+                // 'invoice_sent' (invoice-nya memang sudah terkirim) alih-alih
+                // membiarkan penanda pengiriman yang mustahil tertinggal.
+                'dispatch_status' => ($resolveInput['fulfillment'] !== 'courier' && $preorder->dispatch_status === 'shipping')
+                    ? 'invoice_sent'
+                    : $preorder->dispatch_status,
+                'shipping_at' => ($resolveInput['fulfillment'] !== 'courier' && $preorder->dispatch_status === 'shipping')
+                    ? null
+                    : $preorder->shipping_at,
             ]);
 
-            return $preorder->fresh(['items', 'payments', 'customer', 'shipment']);
+            return $preorder->fresh(['items', 'payments.proofs', 'customer', 'shipment']);
         });
     }
 
@@ -319,7 +355,15 @@ class PreorderService
      */
     public function delete(Preorder $preorder): void
     {
-        if ($preorder->status !== 'ordered') {
+        // 024-invoice-layout-shipping-slip lanjutan — "Cancelled" ditambah
+        // ke status yang boleh dihapus (sebelumnya cuma "Ordered"). Sebuah
+        // preorder yang sudah dibatalkan adalah status akhir tanpa dampak
+        // bisnis aktif lagi, jadi tidak ada alasan menahannya selamanya di
+        // daftar. Guard pembayaran di bawah TETAP berlaku untuk status ini
+        // juga — preorder dibatalkan SETELAH sempat menerima pembayaran
+        // (DP lalu batal) tetap tidak boleh dihapus, supaya jejak transaksi
+        // uang yang pernah masuk tidak pernah hilang begitu saja.
+        if (! in_array($preorder->status, ['ordered', 'cancelled'], true)) {
             throw ValidationException::withMessages([
                 'status' => __('preorders.delete_not_allowed_status'),
             ]);
@@ -354,7 +398,7 @@ class PreorderService
                 $preorder->update(['status' => 'settled']);
             }
 
-            return $preorder->fresh(['items', 'payments', 'customer', 'shipment']);
+            return $preorder->fresh(['items', 'payments.proofs', 'customer', 'shipment']);
         });
     }
 
@@ -398,7 +442,7 @@ class PreorderService
                 'cancel_reason' => $newStatus === 'cancelled' ? $cancelReason : $preorder->cancel_reason,
             ]);
 
-            return $preorder->fresh(['items', 'payments', 'shipment', 'customer']);
+            return $preorder->fresh(['items', 'payments.proofs', 'shipment', 'customer']);
         });
     }
 

@@ -34,6 +34,14 @@ export function updatePreorderStatus(id, status, cancelReason = null) {
     .then((r) => r.data);
 }
 
+// Penanda manual invoice-terkirim / pengiriman-berjalan — terpisah dari
+// updatePreorderStatus() (tidak menyentuh stok/pembayaran).
+export function updatePreorderDispatchStatus(id, dispatchStatus) {
+  return client
+    .patch(`/preorders/${id}/dispatch-status`, { dispatch_status: dispatchStatus })
+    .then((r) => r.data);
+}
+
 export function createPreorderPayment(id, payload) {
   return client.post(`/preorders/${id}/payments`, payload).then((r) => r.data);
 }
