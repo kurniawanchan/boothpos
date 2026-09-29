@@ -4,7 +4,8 @@ import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import { getReceipt } from '../../api/orders';
 import { formatIDR } from '../../utils/money';
-import { formatDate, formatDateTime } from '../../utils/date';
+import { formatDate, formatDateTime, formatDateRange } from '../../utils/date';
+import { downloadElementAsPdf, downloadElementAsPng } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
 
 /**
@@ -42,22 +43,19 @@ const downloadingPdf = ref(false);
 
 const METHOD_LABELS = { cash: 'Tunai', bank_transfer: 'Transfer bank', qr_ewallet: 'QRIS / e-wallet' };
 
-async function captureCanvas() {
-  const { default: html2canvas } = await import('html2canvas');
-  return html2canvas(receiptEl.value, { backgroundColor: '#ffffff', scale: 2 });
+// event_available_on_date is null both when no restriction was chosen AND
+// when it's 'both' days — the raw event_available_on tells them apart, so
+// 'both' renders the event's own date range instead of a single date.
+function availableOnDisplay(r) {
+  if (r.event_available_on === 'both') return formatDateRange(r.event_start_date, r.event_end_date);
+  return r.event_available_on_date ? formatDate(r.event_available_on_date) : null;
 }
 
 async function downloadAsImage() {
   if (!receiptEl.value) return;
   downloadingImage.value = true;
   try {
-    const canvas = await captureCanvas();
-    const link = document.createElement('a');
-    link.href = canvas.toDataURL('image/png');
-    link.download = `struk-${receipt.value?.order_number ?? 'transaksi'}.png`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+    await downloadElementAsPng(receiptEl.value, `struk-${receipt.value?.order_number ?? 'transaksi'}.png`);
   } catch {
     toast.error('Gagal mengunduh struk sebagai gambar.');
   } finally {
@@ -69,16 +67,7 @@ async function downloadAsPdf() {
   if (!receiptEl.value) return;
   downloadingPdf.value = true;
   try {
-    const canvas = await captureCanvas();
-    const { jsPDF } = await import('jspdf');
-    const imgData = canvas.toDataURL('image/png');
-    // Single-page PDF sized to the raster — a receipt is a strip, not an
-    // A4 page, so we fit the page to the content instead of the reverse.
-    const widthPt = (canvas.width * 72) / 96;
-    const heightPt = (canvas.height * 72) / 96;
-    const pdf = new jsPDF({ orientation: heightPt >= widthPt ? 'portrait' : 'landscape', unit: 'pt', format: [widthPt, heightPt] });
-    pdf.addImage(imgData, 'PNG', 0, 0, widthPt, heightPt);
-    pdf.save(`struk-${receipt.value?.order_number ?? 'transaksi'}.pdf`);
+    await downloadElementAsPdf(receiptEl.value, `struk-${receipt.value?.order_number ?? 'transaksi'}.pdf`);
   } catch {
     toast.error('Gagal mengunduh struk sebagai PDF.');
   } finally {
@@ -124,7 +113,7 @@ watch(
           v-if="receipt.store_logo_url"
           :src="receipt.store_logo_url"
           alt="Logo toko"
-          class="mb-1 h-12 w-12 rounded-md object-contain"
+          class="mb-1 h-24 w-auto max-w-[260px] rounded-md object-contain"
         />
         <span class="text-[17px] font-extrabold tracking-tight">{{ receipt.store_name }}</span>
         <span v-if="receipt.store_address" class="max-w-[300px] text-[11.5px] leading-snug text-muted-3">{{ receipt.store_address }}</span>
@@ -140,16 +129,16 @@ watch(
            (bukan t()) — struk ini SELALU Indonesia untuk pembeli, terlepas
            preferensi bahasa kasir (lihat komentar di atas file ini). -->
       <div
-        v-if="receipt.event_available_on_date || receipt.event_location"
+        v-if="availableOnDisplay(receipt) || receipt.event_location"
         class="flex flex-col gap-1.5 rounded-lg bg-brand px-4 py-3 text-white"
       >
         <div v-if="receipt.event_location" class="flex items-center justify-between gap-3 text-[13px]">
           <span class="font-semibold text-mint-100">Lokasi</span>
           <span class="font-bold">{{ receipt.event_location }}</span>
         </div>
-        <div v-if="receipt.event_available_on_date" class="flex items-center justify-between gap-3 text-[13px]">
+        <div v-if="availableOnDisplay(receipt)" class="flex items-center justify-between gap-3 text-[13px]">
           <span class="font-semibold text-mint-100">Tersedia pada</span>
-          <span class="font-bold">{{ formatDate(receipt.event_available_on_date) }}</span>
+          <span class="font-bold">{{ availableOnDisplay(receipt) }}</span>
         </div>
       </div>
 
