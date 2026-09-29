@@ -25,7 +25,7 @@ class UpdateEventRequest extends FormRequest
             // StoreEventRequest; auto-clear saat event MENJADI satu hari
             // lewat edit ada di EventController::update(), bukan di sini
             // (itu bukan galat request, melainkan efek samping yang sah).
-            'available_on' => ['nullable', Rule::in(['day_1', 'day_2'])],
+            'available_on' => ['nullable', Rule::in(['day_1', 'day_2', 'both'])],
             'event_cost' => ['sometimes', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
         ];

@@ -50,6 +50,19 @@ class Event extends Model
         };
     }
 
+    /**
+     * 'both' tidak punya satu tanggal tunggal seperti 'day_1'/'day_2' —
+     * konsumen yang perlu menampilkan "tersedia pada" untuk kasus ini
+     * memakai rentang start_date..end_date lewat method ini, bukan
+     * availableOnDate() (yang sengaja tetap null untuk 'both').
+     */
+    public function availableOnRange(): ?array
+    {
+        return $this->available_on === 'both'
+            ? ['start' => $this->start_date, 'end' => $this->end_date]
+            : null;
+    }
+
     public function cashierSessions(): HasMany
     {
         return $this->hasMany(CashierSession::class);

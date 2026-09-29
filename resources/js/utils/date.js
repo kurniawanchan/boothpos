@@ -15,6 +15,12 @@ export function formatDateTime(value) {
   return dateTimeFmt.format(d);
 }
 
+/** "31 Okt 2026 – 1 Nov 2026" for an Event marked available_on: 'both'. */
+export function formatDateRange(start, end) {
+  if (!start || !end) return '—';
+  return `${formatDate(start)} – ${formatDate(end)}`;
+}
+
 /** yyyy-mm-dd for <input type="date"> binding. */
 export function toDateInputValue(value) {
   if (!value) return '';

@@ -574,7 +574,8 @@
     "import_customers_failed": "Failed to import the file.",
     "available_on_label": "Available on",
     "available_on_day_1": "Day 1 ({date})",
-    "available_on_day_2": "Day 2 ({date})"
+    "available_on_day_2": "Day 2 ({date})",
+    "available_on_both": "Both days"
   },
   "preorders": {
     "load_failed": "Failed to load pre-order detail.",

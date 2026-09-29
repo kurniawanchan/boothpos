@@ -574,7 +574,8 @@
     "import_customers_failed": "Gagal mengimpor berkas.",
     "available_on_label": "Hari tersedia",
     "available_on_day_1": "Hari 1 ({date})",
-    "available_on_day_2": "Hari 2 ({date})"
+    "available_on_day_2": "Hari 2 ({date})",
+    "available_on_both": "Kedua hari"
   },
   "preorders": {
     "load_failed": "Gagal memuat detail pre-order.",
