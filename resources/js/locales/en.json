@@ -868,8 +868,7 @@
     "preorder_detail_col_collected": "Collected",
     "preorder_detail_col_outstanding": "Outstanding",
     "all_sellers": "All sellers",
-    "grand_total": "Grand Total",
-    "preorder_subtotal_per_seller_note": "The per-seller subtotals above sum every status/payment-completeness row belonging to the same seller; the overall total is still the Grand Total row on the table above."
+    "grand_total": "Grand Total"
   },
   "settings": {
     "switched_to": "Switched to {tier}.",

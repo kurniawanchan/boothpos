@@ -868,8 +868,7 @@
     "preorder_detail_col_collected": "Terkumpul",
     "preorder_detail_col_outstanding": "Sisa tagihan",
     "all_sellers": "Semua penjual",
-    "grand_total": "Grand Total",
-    "preorder_subtotal_per_seller_note": "Subtotal per penjual di atas menjumlahkan seluruh baris status/kelengkapan pembayaran milik penjual yang sama; total keseluruhan tetap ada di baris Grand Total tabel di atas."
+    "grand_total": "Grand Total"
   },
   "settings": {
     "switched_to": "Beralih ke {tier}.",

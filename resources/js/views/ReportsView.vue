@@ -237,26 +237,6 @@ const filteredPreorderByArtist = computed(() =>
 );
 const preorderByArtistTotals = computed(() => sumRows(filteredPreorderByArtist.value, ['total_order_value', 'total_collected', 'total_outstanding'], ['preorder_count']));
 
-// Subtotal per penjual untuk tab Pre-order "Per Penjual" — hanya berguna saat
-// filter = "Semua penjual" (kalau sudah difilter ke satu penjual, baris
-// footer Grand Total DI ATAS sudah persis jadi subtotal penjual itu).
-// Ditampilkan sebagai ringkasan terpisah di atas tabel, bukan menyisipkan
-// baris ke tengah DataTable, supaya tidak perlu mengubah DataTable.vue lagi
-// jadi tahu soal grouping.
-const preorderArtistSubtotals = computed(() => {
-  const map = new Map();
-  for (const row of filteredPreorderByArtist.value) {
-    const key = row.artist_id;
-    if (!map.has(key)) map.set(key, { artist_id: key, artist_name: row.artist_name, preorder_count: 0, total_order_value: 0, total_collected: 0, total_outstanding: 0 });
-    const entry = map.get(key);
-    entry.preorder_count += Number(row.preorder_count) || 0;
-    entry.total_order_value += parseMoney(row.total_order_value);
-    entry.total_collected += parseMoney(row.total_collected);
-    entry.total_outstanding += parseMoney(row.total_outstanding);
-  }
-  return [...map.values()];
-});
-
 async function doExport(report) {
   try {
     await exportReport(report, { event_id: eventId.value || undefined });
@@ -690,32 +670,6 @@ function openPreorderDetail(row) {
             </tr>
           </template>
         </DataTable>
-      </div>
-
-      <!-- Subtotal per penjual — hanya tampil saat filter = "semua penjual"
-           DAN datanya mencakup lebih dari satu penjual (kalau sudah difilter
-           ke satu penjual, baris Grand Total di footer tabel di atas SUDAH
-           jadi subtotal penjual itu, jadi blok ini jadi berlebihan). -->
-      <div
-        v-if="preorderView === 'artist' && !artistFilter && preorderArtistSubtotals.length > 1"
-        class="overflow-hidden rounded-card border border-line-2 bg-white"
-      >
-        <DataTable
-          :columns="[
-            { key: 'artist_name', label: t('reports.col_artist') },
-            { key: 'preorder_count', label: t('reports.preorder_col_count') },
-            { key: 'total_order_value', label: t('reports.preorder_col_order_value') },
-            { key: 'total_collected', label: t('reports.preorder_col_collected') },
-            { key: 'total_outstanding', label: t('reports.preorder_col_outstanding') },
-          ]"
-          :rows="preorderArtistSubtotals"
-          row-key="artist_id"
-        >
-          <template #cell-total_order_value="{ row }">{{ formatIDR(row.total_order_value) }}</template>
-          <template #cell-total_collected="{ row }">{{ formatIDR(row.total_collected) }}</template>
-          <template #cell-total_outstanding="{ row }">{{ formatIDR(row.total_outstanding) }}</template>
-        </DataTable>
-        <p class="border-t border-line-2 px-4 py-2 text-[11px] text-muted-3">{{ t('reports.preorder_subtotal_per_seller_note') }}</p>
       </div>
     </template>
 
