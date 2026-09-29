@@ -959,6 +959,8 @@
     "photo": "Foto",
     "user_updated": "Pengguna diperbarui.",
     "user_created": "Pengguna dibuat.",
+    "photo_upload_failed": "Gagal mengunggah foto pengguna.",
+    "save_failed": "Gagal menyimpan pengguna.",
     "user_deleted": "Pengguna dihapus.",
     "delete_user": "Hapus pengguna",
     "delete_user_confirm": "Hapus {name}?"

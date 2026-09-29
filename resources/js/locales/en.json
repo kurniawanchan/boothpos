@@ -959,6 +959,8 @@
     "photo": "Photo",
     "user_updated": "User updated.",
     "user_created": "User created.",
+    "photo_upload_failed": "Failed to upload the user's photo.",
+    "save_failed": "Failed to save the user.",
     "user_deleted": "User deleted.",
     "delete_user": "Delete user",
     "delete_user_confirm": "Delete {name}?"

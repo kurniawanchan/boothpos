@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import UsersView from '../../resources/js/views/UsersView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listUsers, createUser, deleteUser } from '../../resources/js/api/users';
+import { listUsers, createUser, updateUser, deleteUser, uploadUserPhoto } from '../../resources/js/api/users';
 import { listRoles } from '../../resources/js/api/roles';
 
 vi.mock('../../resources/js/api/users', () => ({
@@ -138,6 +138,42 @@ describe('UsersView', () => {
     await user.click(screen.getByRole('button', { name: /ya, hapus/i }));
 
     await waitFor(() => expect(deleteUser).toHaveBeenCalledWith(2));
+  });
+
+  // BUG YANG DITEMUKAN & DIPERBAIKI — sebelumnya uploadUserPhoto() gagal
+  // (validasi/500/apa pun) menahan modal edit tetap terbuka tanpa pesan
+  // apa pun terlihat, walau updateUser() sendiri sudah berhasil (lihat
+  // komentar di saveUser()). Test ini SENGAJA memicu edit lewat tombol
+  // "Edit" (form terisi otomatis dari baris yang sudah ada), bukan
+  // mengetik ke field wajib dari kosong — pola userEvent.type() ke field
+  // required itulah sumber flake yang mendokumentasikan skip
+  // 'creates a user via the form' di atas; edit tidak mengetik apa pun ke
+  // field wajib sama sekali, jadi tidak mewarisi race yang sama.
+  it('closes the edit modal and refreshes the list even when the photo upload fails', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    updateUser.mockResolvedValue({ id: 2, name: 'Kasir Satu', username: 'kasir01' });
+    uploadUserPhoto.mockRejectedValue(new Error('Tipe berkas tidak didukung.'));
+    renderUsers();
+
+    await screen.findByText('Kasir Satu');
+    const rows = screen.getAllByRole('row');
+    const kasirRow = rows.find((r) => r.textContent.includes('kasir01'));
+    await user.click(within(kasirRow).getByText(/^edit$/i));
+
+    const dialog = await screen.findByRole('dialog');
+    const fileInput = dialog.querySelector('input[type="file"]');
+    const file = new File(['x'], 'photo.png', { type: 'image/png' });
+    await userEvent.upload(fileInput, file);
+
+    await user.click(within(dialog).getByRole('button', { name: /^simpan$/i }));
+
+    await waitFor(() => expect(updateUser).toHaveBeenCalledWith(2, expect.objectContaining({ name: 'Kasir Satu', username: 'kasir01' })));
+    await waitFor(() => expect(uploadUserPhoto).toHaveBeenCalledWith(2, file));
+    // The modal must close (list refetched) despite the photo failure —
+    // this is exactly the reported bug: previously it stayed open.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(listUsers).toHaveBeenCalledTimes(2); // initial load + refresh after save
   });
 
   it('rejects a non-image photo client-side', async () => {

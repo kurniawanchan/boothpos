@@ -139,14 +139,35 @@ async function saveUser() {
       toast.success(t('users.user_created'));
     }
 
+    // BUG YANG DITEMUKAN & DIPERBAIKI — sebelumnya uploadUserPhoto() ada
+    // di DALAM try/catch yang sama dengan updateUser()/createUser(),
+    // padahal keduanya sudah BERHASIL tersimpan di titik ini. Kalau
+    // upload foto gagal (mis. tipe berkas ditolak ImageUploadService),
+    // exception itu ditangkap catch di bawah yang HANYA menangani
+    // err.isValidation — untuk error lain (dan bahkan untuk error
+    // validasi, karena field `image` tidak pernah dirender di form ini)
+    // pengguna tidak melihat pesan apa pun, dan `showForm.value = false`
+    // tidak pernah tercapai — modal terlihat "macet" padahal perubahan
+    // nama/peran/status sebenarnya sudah tersimpan. Sekarang foto
+    // ditangani terpisah: kegagalannya tidak lagi menahan modal tetap
+    // terbuka, hanya menampilkan toast tersendiri.
     if (photoFile.value && saved?.id) {
-      await uploadUserPhoto(saved.id, photoFile.value);
+      try {
+        await uploadUserPhoto(saved.id, photoFile.value);
+      } catch (photoErr) {
+        if (photoErr.isValidation) toast.error(photoErr.errors?.image?.[0] || t('users.photo_upload_failed'));
+        else toast.error(photoErr.message || t('users.photo_upload_failed'));
+      }
     }
 
     showForm.value = false;
     await load();
   } catch (err) {
-    if (err.isValidation) Object.assign(formErrors, Object.fromEntries(Object.entries(err.errors).map(([k, v]) => [k, v[0]])));
+    if (err.isValidation) {
+      Object.assign(formErrors, Object.fromEntries(Object.entries(err.errors).map(([k, v]) => [k, v[0]])));
+    } else {
+      toast.error(err.message || t('users.save_failed'));
+    }
   } finally {
     saving.value = false;
   }
