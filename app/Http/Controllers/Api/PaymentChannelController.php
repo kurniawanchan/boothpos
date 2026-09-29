@@ -7,6 +7,7 @@ use App\Models\PaymentChannel;
 use App\Services\ImageUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class PaymentChannelController extends Controller
@@ -149,6 +150,28 @@ class PaymentChannelController extends Controller
         $channel->save();
 
         return response()->json($this->present($channel->fresh(), $request));
+    }
+
+    /**
+     * 024-invoice-layout-shipping-slip — hapus kanal pembayaran (soft delete).
+     * 409 bila channel masih direferensi oleh payment manapun (FK
+     * fk_payments_channel RESTRICT — channel yang pernah dipakai transaksi
+     * tidak boleh hilang, mencegah paper-trail payment record mengacu ke
+     * data yang sudah tidak ada).
+     */
+    public function destroy(Request $request, PaymentChannel $channel): JsonResponse
+    {
+        if (! $request->user()->canAccessMenu('settings')) {
+            return response()->json(['message' => __('orders_payments.not_authorized')], 403);
+        }
+
+        if (DB::table('payments')->where('channel_id', $channel->id)->exists()) {
+            return response()->json(['message' => __('orders_payments.channel_in_use')], 409);
+        }
+
+        $channel->delete();
+
+        return response()->json(null, 204);
     }
 
     private function storeQrImage(Request $request): string

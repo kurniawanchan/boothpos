@@ -927,7 +927,11 @@
     "receipt_show_logo_label": "Tampilkan logo pada struk",
     "receipt_display_saved": "Tampilan struk berhasil disimpan.",
     "save_theme": "Simpan warna",
-    "save_receipt_display": "Simpan tampilan struk"
+    "save_receipt_display": "Simpan tampilan struk",
+    "delete_channel": "Hapus kanal pembayaran",
+    "delete_channel_confirm": "Hapus {provider}? Tindakan ini tidak dapat dibatalkan.",
+    "channel_deleted": "Kanal pembayaran dihapus.",
+    "channel_delete_failed": "Gagal menghapus kanal pembayaran ini."
   },
   "users": {
     "all_roles": "Semua peran",

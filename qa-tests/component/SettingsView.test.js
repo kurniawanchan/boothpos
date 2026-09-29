@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
+import { createI18n } from 'vue-i18n';
 import SettingsView from '../../resources/js/views/SettingsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listSettings, updateSettings, uploadStoreLogo, featureFlags } from '../../resources/js/api/settings';
-import { listPaymentChannels } from '../../resources/js/api/payments';
+import { listPaymentChannels, deletePaymentChannel } from '../../resources/js/api/payments';
+import id from '../../resources/js/locales/id.json';
+import en from '../../resources/js/locales/en.json';
 
 vi.mock('../../resources/js/api/settings', () => ({
   featureFlags: vi.fn(),
@@ -16,6 +19,7 @@ vi.mock('../../resources/js/api/payments', () => ({
   listPaymentChannels: vi.fn(),
   createPaymentChannel: vi.fn(),
   updatePaymentChannel: vi.fn(),
+  deletePaymentChannel: vi.fn(),
 }));
 
 function imageFile(name = 'logo.png', type = 'image/png') {
@@ -27,7 +31,8 @@ function renderSettings() {
   setActivePinia(pinia);
   const auth = useAuthStore();
   auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'settings'] };
-  return render(SettingsView, { global: { plugins: [pinia] } });
+  const i18n = createI18n({ legacy: false, locale: 'id', messages: { id, en } });
+  return render(SettingsView, { global: { plugins: [pinia, i18n] } });
 }
 
 describe('SettingsView — profil toko (US3)', () => {
@@ -157,5 +162,53 @@ describe('SettingsView — mode DEMO/LIVE (003-seed-demo-live US2)', () => {
     await user.click(screen.getByRole('button', { name: 'LIVE' }));
 
     expect(screen.queryByText(/Pindah ke mode/)).not.toBeInTheDocument();
+  });
+});
+
+describe('SettingsView — payment channel deletion (024 US6)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listPaymentChannels.mockResolvedValue({
+      data: [{ id: 1, type: 'bank_transfer', provider: 'BCA', account_name: 'Toko', account_number: '1234567890', qr_image_url: null, is_active: true }],
+    });
+    listSettings.mockResolvedValue({
+      data: [],
+      store_logo_url: null,
+    });
+    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false });
+  });
+
+  it('renders existing channels and allows deleting one with confirmation', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    deletePaymentChannel.mockResolvedValue({});
+    renderSettings();
+
+    await screen.findByText('BCA');
+    await user.click(screen.getByText('Hapus'));
+
+    expect(await screen.findByText(/Hapus BCA/)).toBeInTheDocument();
+    const confirmButtons = screen.getAllByRole('button', { name: 'Hapus' });
+    await user.click(confirmButtons[confirmButtons.length - 1]);
+
+    await waitFor(() => expect(deletePaymentChannel).toHaveBeenCalledWith(1));
+  });
+
+  it('shows an error toast when deletion fails', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const { useToastStore } = await import('../../resources/js/stores/toast');
+    const user = userEvent.setup();
+    deletePaymentChannel.mockRejectedValue(new Error('Cannot delete'));
+    renderSettings();
+
+    await screen.findByText('BCA');
+    await user.click(screen.getByText('Hapus'));
+    await screen.findByText(/Hapus BCA/);
+    const confirmButtons2 = screen.getAllByRole('button', { name: 'Hapus' });
+    await user.click(confirmButtons2[confirmButtons2.length - 1]);
+
+    await waitFor(() => {
+      expect(useToastStore().items.some((i) => i.message === 'Cannot delete')).toBe(true);
+    });
   });
 });

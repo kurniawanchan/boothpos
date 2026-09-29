@@ -182,6 +182,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/payment-channels', [PaymentChannelController::class, 'index']);
         Route::post('/payment-channels', [PaymentChannelController::class, 'store']);
         Route::post('/payment-channels/{channel}', [PaymentChannelController::class, 'update']);
+        Route::delete('/payment-channels/{channel}', [PaymentChannelController::class, 'destroy']);
         Route::post('/payment-proofs', [PaymentProofController::class, 'store']);
         Route::get('/payment-proofs/{proof}/file', [PaymentProofController::class, 'show'])->name('payment-proofs.file');
 

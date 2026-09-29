@@ -927,7 +927,11 @@
     "receipt_show_logo_label": "Show logo on receipts",
     "receipt_display_saved": "Receipt display saved successfully.",
     "save_theme": "Save color",
-    "save_receipt_display": "Save receipt display"
+    "save_receipt_display": "Save receipt display",
+    "delete_channel": "Delete payment channel",
+    "delete_channel_confirm": "Delete {provider}? This cannot be undone.",
+    "channel_deleted": "Payment channel deleted.",
+    "channel_delete_failed": "Failed to delete this payment channel."
   },
   "users": {
     "all_roles": "All roles",

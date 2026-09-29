@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
 import { listSettings, updateSettings, uploadStoreLogo } from '../api/settings';
-import { listPaymentChannels, createPaymentChannel, updatePaymentChannel } from '../api/payments';
+import { listPaymentChannels, createPaymentChannel, updatePaymentChannel, deletePaymentChannel } from '../api/payments';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
@@ -206,7 +206,9 @@ async function saveLogo() {
 // --- Payment channels ------------------------------------------------------
 const channels = ref([]);
 const showChannelForm = ref(false);
-const editingChannel = ref(null); // null = create, otherwise the channel being edited
+const editingChannel = ref(null);
+const deleteChannelId = ref(null);
+const deletingChannel = ref(false); // null = create, otherwise the channel being edited
 const channelForm = reactive({ type: 'bank_transfer', provider: '', account_name: '', account_number: '', display_order: 0 });
 const savingChannel = ref(false);
 const channelErrors = reactive({});
@@ -290,6 +292,25 @@ async function saveChannel() {
     if (err.isValidation) Object.assign(channelErrors, Object.fromEntries(Object.entries(err.errors).map(([k, v]) => [k, v[0]])));
   } finally {
     savingChannel.value = false;
+  }
+}
+
+// 024-invoice-layout-shipping-slip (US6) — hapus kanal pembayaran (soft delete).
+function askDeleteChannel(channel) {
+  deleteChannelId.value = channel.id;
+}
+async function confirmDeleteChannel() {
+  if (!deleteChannelId.value) return;
+  deletingChannel.value = true;
+  try {
+    await deletePaymentChannel(deleteChannelId.value);
+    toast.success(t('settings.channel_deleted'));
+    await loadChannels();
+  } catch (err) {
+    toast.error(err.message || t('settings.channel_delete_failed'));
+  } finally {
+    deletingChannel.value = false;
+    deleteChannelId.value = null;
   }
 }
 
@@ -394,6 +415,7 @@ onMounted(async () => {
           <span class="font-mono text-[12px] text-muted-2">{{ t('settings.channel_account_number', { number: c.account_number || '—', name: c.account_name }) }}</span>
         </div>
         <StatusPill :variant="c.is_active ? 'mint' : 'neutral'">{{ c.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
+        <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-danger-text" @click="askDeleteChannel(c)">{{ t('common.delete') }}</button>
         <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openChannelEdit(c)">{{ t('common.edit') }}</button>
       </div>
       <p class="border-t border-line-3 pt-3.5 text-[11.5px] leading-relaxed text-muted-3">
@@ -493,5 +515,15 @@ onMounted(async () => {
         </div>
       </template>
     </BaseModal>
+
+    <ConfirmDialog
+      :open="deleteChannelId !== null"
+      :title="t('settings.delete_channel')"
+      :message="t('settings.delete_channel_confirm', { provider: channels.find((c) => c.id === deleteChannelId)?.provider ?? '' })"
+      :confirm-label="t('common.delete')"
+      :loading="deletingChannel"
+      @confirm="confirmDeleteChannel"
+      @close="deleteChannelId = null"
+    />
   </div>
 </template>
