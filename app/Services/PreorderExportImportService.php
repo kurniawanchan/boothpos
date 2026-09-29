@@ -10,6 +10,7 @@ use App\Models\ProductVariant;
 use App\Support\Couriers;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -32,6 +33,20 @@ use Maatwebsite\Excel\Facades\Excel;
  * validasi yang identik untuk pratinjau. export() memakai kolom yang SAMA
  * PERSIS dengan template()/HEADINGS, supaya file hasil ekspor bisa
  * diimpor balik apa adanya (round-trip, SC-005).
+ *
+ * Penanda manual `dispatch_status` (+ `invoice_sent_at`/`shipping_at`) ikut
+ * diekspor DAN diimpor — impor ini mencatat pesanan historis, jadi status &
+ * tanggalnya boleh dibawa apa adanya (pengecualian yang sama dengan harga
+ * baris, lihat komentar di import()). Aturannya SAMA dengan endpoint
+ * PATCH /preorders/{id}/dispatch-status: `shipping` hanya untuk mail order,
+ * tanggal harus konsisten dengan statusnya, dan tanggal yang kosong untuk
+ * status aktif diisi "sekarang".
+ *
+ * `created_at`/`updated_at` HANYA diekspor (EXPORT_ONLY), untuk dibaca.
+ * Mengimpor tidak pernah menulisnya — waktu pembuatan pesanan hasil impor
+ * adalah waktu impor itu sendiri, supaya jejak audit tidak bisa dipalsukan
+ * lewat spreadsheet. Kolom ini ada di berkas hasil ekspor, jadi importer
+ * membiarkannya (bukan galat) dan template() tidak memuatnya.
  */
 class PreorderExportImportService
 {
@@ -39,18 +54,32 @@ class PreorderExportImportService
         'customer_name', 'event_name', 'fulfillment', 'pickup_day',
         'products', 'quantities', 'unit_prices',
         'shipping_cost', 'courier_name', 'expected_date', 'discount', 'notes',
+        'dispatch_status', 'invoice_sent_at', 'shipping_at',
     ];
+
+    /** Hanya ada di berkas ekspor; tidak pernah dibaca saat impor. */
+    private const EXPORT_ONLY = ['created_at', 'updated_at'];
 
     public function __construct(private PreorderService $preorderService) {}
 
     public function export(array $filters): array
     {
+        // Tombol "Export .xlsx" meneruskan filter list apa adanya, dan filter
+        // status/fulfillment/dispatch_status di list berbentuk ARRAY
+        // (status[]=a&status[]=b, di-OR-kan) — sama seperti
+        // PreorderController::applyFilters(). Nilai tunggal lama tetap diterima.
+        $listOf = fn (string $key) => array_values(array_filter(
+            Arr::wrap($filters[$key] ?? []),
+            fn ($v) => $v !== null && $v !== '',
+        ));
+
         $query = Preorder::query()
             ->with(['customer', 'event', 'items'])
-            ->when(! empty($filters['status']), fn ($q) => $q->where('status', $filters['status']))
+            ->when($listOf('status') !== [], fn ($q) => $q->whereIn('status', $listOf('status')))
             ->when(! empty($filters['event_id']), fn ($q) => $q->where('event_id', $filters['event_id']))
             ->when(! empty($filters['customer_id']), fn ($q) => $q->where('customer_id', $filters['customer_id']))
-            ->when(! empty($filters['fulfillment']), fn ($q) => $q->where('fulfillment', $filters['fulfillment']))
+            ->when($listOf('fulfillment') !== [], fn ($q) => $q->whereIn('fulfillment', $listOf('fulfillment')))
+            ->when($listOf('dispatch_status') !== [], fn ($q) => $q->whereIn('dispatch_status', $listOf('dispatch_status')))
             ->when(! empty($filters['search']), fn ($q) => $q->whereHas(
                 'customer',
                 fn ($cq) => $cq->where('name', 'like', '%'.$filters['search'].'%')
@@ -72,6 +101,14 @@ class PreorderExportImportService
             'expected_date' => $p->expected_date?->toDateString(),
             'discount' => number_format((float) $p->discount, 2, '.', ''),
             'notes' => $p->notes,
+            'dispatch_status' => $p->dispatch_status,
+            // ISO 8601 + offset: tak ambigu (zona waktu aplikasi = UTC, sedangkan
+            // layar menampilkan waktu lokal) dan dibaca balik persis oleh impor.
+            'invoice_sent_at' => $p->invoice_sent_at?->toIso8601String(),
+            'shipping_at' => $p->shipping_at?->toIso8601String(),
+            // Hanya-baca (EXPORT_ONLY) — sengaja SESUDAH semua kolom HEADINGS.
+            'created_at' => $p->created_at?->toIso8601String(),
+            'updated_at' => $p->updated_at?->toIso8601String(),
         ])->all();
     }
 
@@ -94,7 +131,51 @@ class PreorderExportImportService
 
     public function template(): array
     {
-        return [array_combine(self::HEADINGS, self::HEADINGS)];
+        // BUG YANG DITEMUKAN & DIPERBAIKI (024-invoice-layout-shipping-slip
+        // lanjutan) — baris pertama SEBELUMNYA adalah
+        // `array_combine(self::HEADINGS, self::HEADINGS)`, dimaksudkan
+        // hanya untuk menyumbang KEYS-nya ke GenericArrayExport::headings().
+        // Tapi GenericArrayExport::array() menulis SEMUA baris (termasuk
+        // baris pertama) sebagai baris DATA juga — jadi baris ini muncul
+        // sebagai baris data nyata di spreadsheet, dengan setiap sel
+        // literal berisi NAMA KOLOMNYA SENDIRI (mis. sel event_name berisi
+        // teks "event_name"). Mengimpor kembali file yang baru diunduh
+        // apa adanya SELALU gagal di baris itu ("event 'event_name' tidak
+        // ditemukan") — ditemukan lewat laporan pengguna sungguhan, bukan
+        // test yang sudah ada (belum ada test round-trip untuk importer
+        // ini, tidak seperti test_the_shipped_template_imports_as_is milik
+        // MasterDataImportService). Diperbaiki dengan HANYA mengembalikan
+        // baris contoh sungguhan; GenericArrayExport::headings() tetap
+        // benar karena membaca KEYS baris contoh itu sendiri.
+        //
+        // `event_name` sengaja dikosongkan (bukan nama event tertentu) —
+        // event pada preorder opsional, dan sebuah instalasi baru belum
+        // tentu punya event bernama apa pun. SKU contoh memakai kode
+        // produk sungguhan dari SakanaFridgeDemoSeeder (variant pertama
+        // tiap produk, `code_prefix` + '-001' — lihat catatan SKU
+        // deterministik CLAUDE.md); pada instalasi tanpa seeder demo ini
+        // tetap perlu diganti dengan SKU toko sendiri, karena impor
+        // pre-order (beda dari impor master-data) tidak pernah membuat
+        // produk baru — ia hanya mereferensikan yang sudah ada.
+        return [
+            [
+                'customer_name' => 'Satomi Mito',
+                'event_name' => '',
+                'fulfillment' => 'mail order',
+                'pickup_day' => null,
+                'products' => 'NEK-KY-MIK-001, HOS-KY-RGR-001',
+                'quantities' => '3, 1',
+                'unit_prices' => '15000.00, 85000.00',
+                'shipping_cost' => '15000.00',
+                'courier_name' => 'JNE',
+                'expected_date' => '2026-09-10',
+                'discount' => '0.00',
+                'notes' => 'Ringkas juga, mohon.',
+                'dispatch_status' => 'pending',
+                'invoice_sent_at' => null,
+                'shipping_at' => null,
+            ],
+        ];
     }
 
     /**
@@ -231,6 +312,42 @@ class PreorderExportImportService
                 }
             }
 
+            // Penanda invoice-terkirim / pengiriman-berjalan — aturan yang sama
+            // dengan PATCH /preorders/{id}/dispatch-status (lihat docblock kelas).
+            $dispatchInput = strtolower(trim((string) ($row['dispatch_status'] ?? '')));
+            $dispatch = $dispatchInput === '' ? 'pending' : $dispatchInput;
+            $invoiceSentAt = $this->parseDispatchDate($row['invoice_sent_at'] ?? null);
+            $shippingAt = $this->parseDispatchDate($row['shipping_at'] ?? null);
+
+            if (! in_array($dispatch, Preorder::DISPATCH_STATUSES, true)) {
+                $errors[] = __('preorders.import_dispatch_status_invalid', ['row' => $rowNumber]);
+                $dispatch = 'pending';
+            } elseif ($dispatch === 'shipping' && $fulfillment !== 'courier') {
+                $errors[] = __('preorders.import_dispatch_shipping_mail_order_only', ['row' => $rowNumber]);
+            }
+            foreach (['invoice_sent_at' => $invoiceSentAt, 'shipping_at' => $shippingAt] as $column => $parsed) {
+                if ($parsed === false) {
+                    $errors[] = __('preorders.import_dispatch_date_invalid', ['row' => $rowNumber, 'column' => $column]);
+                }
+            }
+            if ($invoiceSentAt !== false && $shippingAt !== false) {
+                // Tanggal hanya berlaku untuk status yang aktif: pending tak punya
+                // tanggal apa pun; invoice_sent tak punya tanggal pengiriman.
+                if ($dispatch === 'pending' && $invoiceSentAt !== null) {
+                    $errors[] = __('preorders.import_dispatch_date_not_applicable', ['row' => $rowNumber, 'column' => 'invoice_sent_at', 'status' => 'pending']);
+                }
+                if ($dispatch !== 'shipping' && $shippingAt !== null) {
+                    $errors[] = __('preorders.import_dispatch_date_not_applicable', ['row' => $rowNumber, 'column' => 'shipping_at', 'status' => $dispatch]);
+                }
+                // Tanggal kosong untuk status aktif = "sekarang" (seperti klik manual).
+                // Lompat langsung ke shipping tidak mengarang tanggal invoice.
+                if ($dispatch === 'invoice_sent') {
+                    $invoiceSentAt ??= now();
+                } elseif ($dispatch === 'shipping') {
+                    $shippingAt ??= now();
+                }
+            }
+
             if ($errors !== []) {
                 $rowErrors[] = ['row' => $rowNumber, 'errors' => $errors];
 
@@ -247,6 +364,9 @@ class PreorderExportImportService
                 'courier_name' => $courierName,
                 'expected_date' => trim((string) ($row['expected_date'] ?? '')) ?: null,
                 'notes' => $row['notes'] ?? null,
+                'dispatch_status' => $dispatch,
+                'invoice_sent_at' => $invoiceSentAt ?: null,
+                'shipping_at' => $shippingAt ?: null,
                 'items' => $items,
             ];
         }
@@ -306,6 +426,9 @@ class PreorderExportImportService
                     'expected_date' => $order['expected_date'],
                     'paid_amount' => 0,
                     'notes' => $order['notes'],
+                    'dispatch_status' => $order['dispatch_status'],
+                    'invoice_sent_at' => $order['invoice_sent_at'],
+                    'shipping_at' => $order['shipping_at'],
                 ]);
 
                 foreach ($order['items'] as $item) {
@@ -344,6 +467,32 @@ class PreorderExportImportService
         }
 
         return array_map('trim', explode(',', $value));
+    }
+
+    /**
+     * Sel tanggal/waktu dari spreadsheet → Carbon; null bila kosong; false bila
+     * tak terbaca (dilaporkan sebagai galat baris, tidak ditebak diam-diam).
+     * Menerima teks ISO 8601 (bentuk ekspor) DAN angka serial Excel — sel yang
+     * diformat sebagai tanggal oleh Excel dibaca sebagai angka.
+     */
+    private function parseDispatchDate(mixed $value): Carbon|false|null
+    {
+        if ($value === null || trim((string) $value) === '') {
+            return null;
+        }
+
+        try {
+            $parsed = is_numeric($value)
+                ? Carbon::instance(\PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $value))
+                : Carbon::parse(trim((string) $value));
+
+            // WAJIB dinormalkan ke zona waktu aplikasi: Eloquent menulis Carbon
+            // dengan format() di zonanya SENDIRI tanpa konversi, jadi
+            // "10:00+07:00" tanpa ini tersimpan sebagai 10:00 UTC (bukan 03:00).
+            return $parsed->setTimezone(config('app.timezone'));
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**
