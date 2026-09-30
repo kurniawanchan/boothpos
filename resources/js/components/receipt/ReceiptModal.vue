@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import { getReceipt } from '../../api/orders';
 import { formatIDR } from '../../utils/money';
+import { resolveAppName } from '../../utils/appName';
 import { formatDate, formatDateTime, formatDateRange } from '../../utils/date';
 import { downloadElementAsPdf, downloadElementAsPng } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
@@ -36,6 +37,7 @@ const emit = defineEmits(['close']);
 
 const toast = useToastStore();
 const receipt = ref(null);
+const appName = computed(() => resolveAppName(receipt.value?.app_name));
 const loading = ref(false);
 const receiptEl = ref(null);
 const downloadingImage = ref(false);
@@ -187,6 +189,8 @@ watch(
       <p v-if="receipt.receipt_footer_text" class="border-t border-dashed border-line-2 pt-3 text-center text-[11.5px] leading-relaxed text-muted-3">
         {{ receipt.receipt_footer_text }}
       </p>
+
+      <p class="text-center text-[10.5px] text-muted-3">Powered by {{ appName }}</p>
 
     </div>
 

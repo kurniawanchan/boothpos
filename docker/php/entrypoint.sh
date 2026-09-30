@@ -5,6 +5,20 @@ set -euo pipefail
 
 cd /var/www/html
 
+# 0. Stable machine identity for the licence gate (feature 018). The gate binds
+#    an activation to a fingerprint derived from /etc/machine-id, and a fresh
+#    container has none — so after ANY container recreate (image rebuild,
+#    `docker compose up --force-recreate`) the app answered 423 "belum
+#    diaktivasi" although the activation row was still in the database. Writing
+#    the same well-known dev value that `php artisan license:dev-activate`
+#    itself tells you to use makes the dev activation survive recreates. Only
+#    written when missing/empty, so a value provided another way is never
+#    overwritten. Dev image only — the store image bind-mounts the HOST's
+#    /etc/machine-id instead (feature 016), which is what a real install needs.
+if [ ! -s /etc/machine-id ]; then
+    echo "1a2b3c4d5e6f789012345678901234567890" > /etc/machine-id
+fi
+
 # 1. Install PHP dependencies if the anonymous volume over vendor/ is
 #    empty (fresh container, or a host with nothing but Docker installed —
 #    see research.md R5 on why vendor/ is an anonymous volume, not part of

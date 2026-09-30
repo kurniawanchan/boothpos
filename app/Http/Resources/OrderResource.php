@@ -22,7 +22,13 @@ class OrderResource extends JsonResource
             'change_amount' => number_format((float) $this->change_amount, 2, '.', ''),
             'status' => $this->status,
             'void_reason' => $this->void_reason,
+            'notes' => $this->notes,
+            'channel' => $this->channel,
             'created_at' => $this->created_at,
+            // null (kunci tetap ada) untuk pembeli walk-in; hilang bila relasi tak dimuat.
+            'customer' => $this->whenLoaded('customer', fn ($c) => ['id' => $c->id, 'name' => $c->name, 'phone' => $c->phone, 'email' => $c->email]),
+            'cashier' => $this->whenLoaded('cashier', fn ($u) => ['id' => $u->id, 'name' => $u->name]),
+            'event' => $this->whenLoaded('event', fn ($e) => ['id' => $e->id, 'name' => $e->name]),
             'items' => $this->whenLoaded('items', fn () => $this->items->map(fn ($i) => [
                 'id' => $i->id, 'variant_id' => $i->variant_id, 'artist_id' => $i->artist_id,
                 // product_id hanya terisi bila relasi variant dimuat (lihat
@@ -33,10 +39,21 @@ class OrderResource extends JsonResource
                 'sku_snapshot' => $i->sku_snapshot, 'name_snapshot' => $i->name_snapshot,
                 'qty' => $i->qty, 'sell_price' => number_format((float) $i->sell_price, 2, '.', ''),
                 'line_total' => number_format((float) $i->line_total, 2, '.', ''),
+                'discount_amount' => number_format((float) $i->discount_amount, 2, '.', ''),
+                // Field tampilan — semuanya null-safe: varian/produk bisa saja sudah
+                // dihapus/dipindah kategori sejak transaksi terjadi. cost_price
+                // SENGAJA tidak disertakan (halaman ini terbuka untuk kasir).
+                'artist_name' => $i->relationLoaded('artist') ? $i->artist?->name : null,
+                'category_name' => $i->relationLoaded('variant') ? $i->variant?->product?->category?->name : null,
+                'variant_name' => $i->relationLoaded('variant') ? $i->variant?->variant_name : null,
+                'image_url' => $i->relationLoaded('variant') ? $i->variant?->image_url : null,
             ])),
             'payments' => $this->whenLoaded('payments', fn () => $this->payments->map(fn ($p) => [
                 'id' => $p->id, 'method' => $p->method, 'amount' => number_format((float) $p->amount, 2, '.', ''),
                 'verification' => $p->verification,
+                'paid_at' => $p->paid_at,
+                // Nama kanal (bank/e-wallet) bila ada; null untuk tunai.
+                'provider' => $p->relationLoaded('channel') ? $p->channel?->provider : null,
             ])),
         ];
     }

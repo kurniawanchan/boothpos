@@ -33,9 +33,8 @@ RUN composer install --no-interaction --prefer-dist --no-dev --optimize-autoload
 # --- Stage 2: runtime ------------------------------------------------
 # Same PHP extension set as the builder (and as docker/php/Dockerfile's
 # dev image), PLUS the MySQL client tools app:backup/app:restore shell
-# out to (research.md R5) — the dev image doesn't need these because
-# the native dev machine already has its own mysqldump path documented
-# in RUNBOOK.md §7.
+# out to (research.md R5). The dev image (docker/php/Dockerfile) now carries
+# the same client + ssl=0 config, so the Settings backup screen works there too.
 FROM php:8.4-cli
 
 RUN apt-get update && apt-get install -y --no-install-recommends \

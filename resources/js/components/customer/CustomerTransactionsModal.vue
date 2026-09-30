@@ -49,25 +49,23 @@ const STATUS_LABEL = {
 };
 const STATUS_VARIANT = { ordered: 'neutral', dp_paid: 'warn', arrived: 'mint', settled: 'mint', handed_over: 'dark', cancelled: 'danger' };
 
-watch(
-  () => [props.open, props.customerId],
-  async ([open, customerId]) => {
-    if (!open || !customerId) {
-      rows.value = [];
-      return;
-    }
-    loading.value = true;
-    try {
-      const result = await customerTransactions(customerId);
-      rows.value = result.data ?? [];
-    } catch (err) {
-      toast.error(err.message || t('events_sessions.no_transactions'));
-    } finally {
-      loading.value = false;
-    }
-  },
-  { immediate: true }
-);
+async function load() {
+  if (!props.open || !props.customerId) {
+    rows.value = [];
+    return;
+  }
+  loading.value = true;
+  try {
+    const result = await customerTransactions(props.customerId);
+    rows.value = result.data ?? [];
+  } catch (err) {
+    toast.error(err.message || t('events_sessions.no_transactions'));
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch(() => [props.open, props.customerId], load, { immediate: true });
 
 const columns = [
   { key: 'number', label: t('events_sessions.col_transaction_number') },
@@ -117,5 +115,6 @@ function openRow(row) {
     </div>
   </BaseModal>
 
-  <TransactionItemsModal :open="showOrderDetail" :order-id="detailOrderId" @close="showOrderDetail = false" />
+  <!-- @changed: detail transaksi bisa membatalkan transaksi; daftar ini harus ikut segar. -->
+  <TransactionItemsModal :open="showOrderDetail" :order-id="detailOrderId" @close="showOrderDetail = false" @changed="load" />
 </template>

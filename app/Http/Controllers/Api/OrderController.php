@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\Setting;
 use App\Services\ImageUploadService;
 use App\Services\OrderService;
+use App\Support\AppName;
 use App\Support\ModeGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -64,7 +65,14 @@ class OrderController extends Controller
         // per item — dibutuhkan oleh popup "Produk Terjual" di halaman Sales
         // (009-ui-ux-refinements US2) supaya klik nama produk bisa membuka
         // ProductDetailModal tanpa endpoint baru.
-        return response()->json(new OrderResource($order->load(['items.variant', 'payments'])));
+        // Relasi tambahan untuk tampilan detail transaksi di halaman Sales
+        // (siapa, di mana, produk apa dari penjual mana, dibayar bagaimana).
+        // Semuanya opt-in lewat whenLoaded() di OrderResource, jadi endpoint
+        // lain yang memakai resource ini tidak berubah bentuk.
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist',
+            'payments.channel', 'customer', 'cashier', 'event',
+        ])));
     }
 
     public function void(Request $request, Order $order): JsonResponse
@@ -127,6 +135,7 @@ class OrderController extends Controller
             'store_contact_phone' => Setting::get('store_contact_phone'),
             'store_contact_email' => Setting::get('store_contact_email'),
             'receipt_footer_text' => Setting::get('receipt_footer_text'),
+            'app_name' => AppName::current(),
             // 003-seed-demo-live follow-up 2 (FR-024) — BUG YANG DITEMUKAN
             // & DIPERBAIKI: footer struk sebelumnya HANYA menampilkan
             // store_contact_person/phone/email (kontak TOKO, bukan

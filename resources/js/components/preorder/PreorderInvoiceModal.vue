@@ -6,6 +6,7 @@ import BaseButton from '../ui/BaseButton.vue';
 import StatusPill from '../ui/StatusPill.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
 import { getPreorderInvoice } from '../../api/preorders';
+import { resolveAppName } from '../../utils/appName';
 import { formatIDR, parseMoney } from '../../utils/money';
 import { formatDate, formatDateTime, formatDateRange } from '../../utils/date';
 import { downloadElementAsPdf } from '../../utils/pdfCapture';
@@ -50,6 +51,8 @@ const { t } = useI18n();
 const toast = useToastStore();
 
 const invoice = ref(null);
+// Teks "Powered by …": nama aplikasi datang dari payload (bisa diubah di Pengaturan).
+const appName = computed(() => resolveAppName(invoice.value?.app_name));
 const loading = ref(false);
 const docEl = ref(null);
 const downloadingPdf = ref(false);
@@ -317,6 +320,7 @@ async function downloadPdf() {
         <p class="border-t border-dashed border-line-2 pt-3 text-center text-[11.5px] leading-relaxed text-muted-3">
           {{ invoice.footer_text || t('preorders.invoice_footer_default') }}
         </p>
+        <p class="text-center text-[10.5px] text-muted-3">{{ t('common.powered_by', { name: appName }) }}</p>
       </div>
     </div>
 

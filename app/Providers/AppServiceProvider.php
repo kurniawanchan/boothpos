@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Models\License;
 use App\Policies\LicenseCatalogPolicy;
+use App\Services\Backup\DatabaseDumper;
+use App\Services\Backup\MysqlCliDumper;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\URL;
@@ -15,7 +17,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Pembungkus mysqldump/mysql untuk cadangan & pemulihan; test mengganti
+        // binding ini dengan fake (lihat DatabaseDumper untuk alasannya).
+        $this->app->bind(DatabaseDumper::class, fn () => MysqlCliDumper::fromConfig());
     }
 
     /**

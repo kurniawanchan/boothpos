@@ -297,6 +297,17 @@ class OrderTest extends TestCase
         $this->assertStringContainsString('store-logo/logo-test.png', $response->json('store_logo_url'));
     }
 
+    public function test_receipt_carries_the_app_name_defaulting_to_boothpos_and_following_the_setting(): void
+    {
+        $order = $this->postJson('/api/v1/orders', $this->basePayload())->json();
+
+        $this->getJson("/api/v1/orders/{$order['id']}/receipt")->assertOk()->assertJsonPath('app_name', 'BoothPOS');
+
+        Setting::updateOrCreate(['key' => 'app_name'], ['value' => 'Kasir Sakana', 'type' => 'string', 'group' => 'general']);
+
+        $this->getJson("/api/v1/orders/{$order['id']}/receipt")->assertJsonPath('app_name', 'Kasir Sakana');
+    }
+
     public function test_receipt_omits_store_profile_fields_gracefully_when_unconfigured(): void
     {
         $order = $this->postJson('/api/v1/orders', $this->basePayload())->json();

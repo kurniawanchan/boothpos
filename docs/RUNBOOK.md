@@ -279,11 +279,26 @@ php artisan app:restore <path> --force   # lewati konfirmasi interaktif, untuk a
 **MENIMPA seluruh isi database tujuan** — jangan jalankan ke database
 `boothpos` produksi tanpa yakin.
 
+**Lewat layar (Pengaturan → Cadangan & pemulihan database)**, owner/admin
+bisa membuat cadangan, mengunduhnya, memulihkan dari daftar, atau memulihkan
+dari berkas `.sql` yang diunggah (mis. dari laptop lain). Layar memakai logika
+yang SAMA dengan `app:backup` (satu `BackupService`), jadi butuh `mysqldump`/
+`mysql` di server yang sama seperti perintahnya. Bedanya dengan CLI: pemulihan
+lewat layar SELALU membuat cadangan pengaman dari kondisi saat ini lebih dulu,
+meminta mengetik `RESTORE`, dan dibatalkan (tanpa mengubah apa pun) bila cadangan
+pengaman itu gagal. Untuk pemulihan bencana (database rusak sampai `mysqldump`
+pun gagal) tetap gunakan `app:restore` — sengaja tanpa langkah pengaman itu.
+Setiap cadangan juga bisa dihapus dari daftar (hanya salinan lokal; salinan di
+`BACKUP_EXTERNAL_PATH` tidak ikut terhapus). Folder cadangan lokal bisa diatur lewat `BACKUP_PATH` (default
+`storage/app/backups`).
+
 Kedua perintah butuh `mysqldump`/`mysql` tersedia di `PATH` proses PHP
 yang menjalankan `artisan` — ini asumsi yang BENAR untuk instalasi toko
-sungguhan (server lokal dengan MySQL terpasang normal). Di mesin dev ini
-yang hanya punya MySQL di dalam container Docker, `mysqldump` TIDAK ada
-di host secara langsung. **Jangan pasang `mysql-client` lewat Homebrew
+sungguhan (server lokal dengan MySQL terpasang normal) DAN untuk container
+`app` dev (image `docker/php/Dockerfile` kini memasang `default-mysql-client`
++ konfigurasi `ssl=0`; kalau Anda baru menarik perubahan ini, jalankan
+`docker compose up -d --build app` sekali). Di host macOS dev, `mysqldump`
+TIDAK ada secara langsung. **Jangan pasang `mysql-client` lewat Homebrew
 untuk mengakalinya** — itu sempat terjadi di sesi sebelumnya dan sudah
 di-uninstall lagi atas permintaan eksplisit. Kalau perlu menguji
 `app:backup`/`app:restore` di mesin seperti ini, proxy sementara ke
