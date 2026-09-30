@@ -8,6 +8,7 @@ use App\Http\Resources\SettingResource;
 use App\Models\Setting;
 use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
+use App\Support\AppName;
 use App\Support\LicenseGate;
 use App\Support\ModeGate;
 use Illuminate\Http\JsonResponse;
@@ -40,6 +41,8 @@ class SettingsController extends Controller
             'artist_count' => LicenseGate::activeArtistCount(),
             'artist_limit_reached' => LicenseGate::artistLimitReached(),
             'system_mode' => ModeGate::current(),
+            // Merek produk yang bisa diganti owner/admin (sidebar, "Powered by").
+            'app_name' => AppName::current(),
             // 006-purchase-order-and-ops (US6/US7) — disurfacekan di sini
             // (bukan hanya lewat GET /settings) supaya bisa diterapkan
             // SEBELUM layar Pengaturan penuh dimuat, sama seperti

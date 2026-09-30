@@ -4,6 +4,17 @@ export function salesReport(params = {}) {
   return client.get('/reports/sales', { params }).then((r) => r.data);
 }
 
+/**
+ * Ekspor transaksi halaman Sales. `keys` = kunci baris yang ingin diekspor ("order:12",
+ * "preorder:3"); server membangun ulang isinya (nominal tak pernah dikirim dari klien).
+ * Tanpa `keys` = seluruh transaksi sesuai `params`. Balasan: berkas .xlsx (Blob).
+ */
+export function exportSalesTransactions(params = {}, keys = null) {
+  return client
+    .post('/reports/sales/transactions/export', { ...params, keys: keys ?? undefined }, { responseType: 'blob' })
+    .then((r) => r.data);
+}
+
 export function profitReport(eventId) {
   return client.get('/reports/profit', { params: { event_id: eventId } }).then((r) => r.data);
 }

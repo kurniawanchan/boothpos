@@ -37,8 +37,14 @@ export function useFocusTrap(containerRef, isActiveRef) {
       if (active) {
         previouslyFocused = document.activeElement;
         requestAnimationFrame(() => {
-          const focusable = getFocusable();
-          (focusable[0] || containerRef.value)?.focus();
+          const container = containerRef.value;
+          if (!container) return;
+          // Fokus yang SUDAH ada di dalam dialog (mis. pengguna keburu mengklik
+          // sebuah kolom) tidak boleh direbut — kalau tidak, ketikan pertamanya hilang.
+          const active = document.activeElement;
+          if (active !== container && container.contains(active)) return;
+          // Kolom yang paling berguna lebih dulu (data-autofocus), baru kontrol pertama.
+          (container.querySelector('[data-autofocus]') || getFocusable()[0] || container).focus();
         });
         document.addEventListener('keydown', handleKeydown);
       } else {

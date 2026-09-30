@@ -243,64 +243,29 @@ class ReportController extends Controller
         // di-number_format) — hanya kolom uang yang wajib string 2-desimal
         // per konvensi "Money is returned as a string" di seluruh laporan
         // ini (lihat gross_sales/net_sales di bawah dan amount per baris).
+        // Angka POS-SAJA untuk halaman Sales, yang hanya menampilkan transaksi dari POS. Diambil
+        // SEBELUM pendapatan pre-order digabung di bawah; `unit_count`/`gross_sales`/`net_sales`
+        // tetap memuat pre-order karena Dashboard & Laporan memang sengaja begitu (fitur 010).
+        $totals->pos_unit_count = (float) ($totals->unit_count ?? 0);
+        $totals->pos_gross_sales = number_format((float) ($totals->gross_sales ?? 0), 2, '.', '');
+        $totals->pos_net_sales = number_format((float) ($totals->net_sales ?? 0), 2, '.', '');
+
         $totals->unit_count = (float) ($totals->unit_count ?? 0) + (float) ($preorderTotals->unit_count ?? 0);
         $totals->gross_sales = number_format((float) ($totals->gross_sales ?? 0) + (float) ($preorderTotals->amount ?? 0), 2, '.', '');
         $totals->net_sales = number_format((float) ($totals->net_sales ?? 0) + (float) ($preorderTotals->amount ?? 0), 2, '.', '');
 
         $event = $request->filled('event_id') ? Event::find($request->integer('event_id')) : null;
 
-        // Task 1 — daftar TRANSAKSI (satu baris = satu order 'completed'),
-        // terpisah dari tabel agregat per-produk/kategori/artist/hari di
-        // atas. Ini yang sebelumnya hilang: KPI "Transaksi: 3" dihitung
-        // dari COUNT(DISTINCT orders.id) di atas, tapi tidak ada satu pun
-        // endpoint yang mengembalikan baris per-order — jadi kalau dua
-        // dari tiga order kebetulan membeli produk yang sama, tabel
-        // agregat produk (2 baris) terlihat "berkontradiksi" dengan KPI
-        // (3 transaksi), padahal keduanya sama-sama benar, cuma menjawab
-        // pertanyaan berbeda. `id` disertakan di setiap baris supaya
-        // frontend bisa memanggil GET /orders/{id}/receipt untuk struk
-        // transaksi mana pun di daftar ini (Task 3), bukan cuma yang baru
-        // saja dibuat.
-        $transactions = Order::query()
-            // F10.6 — eager-load 'customer' di samping 'cashier' yang sudah
-            // ada, supaya frontend punya nama pelanggan untuk disaring saat
-            // mengetik kata kunci. Pencarian sendiri sengaja TIDAK dibangun
-            // di sini: kriteria penerimaan F10.6 eksplisit menyebut "tanpa
-            // perlu memuat ulang seluruh laporan", yang berarti penyaringan
-            // dilakukan di frontend atas array transactions[] yang sudah
-            // diambil, bukan lewat parameter query baru di endpoint ini.
-            // 003-seed-demo-live follow-up (FR-018) — 'items.artist' juga
-            // di-eager-load supaya frontend punya nama artist per transaksi
-            // untuk disaring, sejalan dengan 'customer' di atas (F10.6).
-            ->with(['cashier', 'customer', 'items.artist'])
-            ->withCount('items')
-            ->where('status', 'completed')
-            ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
-            ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
-            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('created_at', '<=', $request->date('date_to')))
-            ->orderByDesc('created_at')
-            ->get()
-            ->map(fn (Order $order) => [
-                'id' => $order->id,
-                'order_number' => $order->order_number,
-                'created_at' => $order->created_at?->toIso8601String(),
-                'cashier_name' => $order->cashier?->name,
-                // customer_id nullable (pembeli walk-in tidak wajib punya
-                // data pelanggan) — null di sini apa adanya, bukan galat.
-                'customer_id' => $order->customer_id,
-                'customer_name' => $order->customer?->name,
-                // Follow-up 2 (FR-022) — dipakai popover detail customer di
-                // Sales tanpa perlu endpoint GET /customers/{id} baru
-                // (CustomerController hanya expose index/store/update).
-                'customer_phone' => $order->customer?->phone,
-                'customer_email' => $order->customer?->email,
-                'item_count' => $order->items_count,
-                'total_amount' => number_format((float) $order->total_amount, 2, '.', ''),
-                // FR-018/FR-019 — nama-nama artist unik yang punya barang di
-                // transaksi ini, dipakai frontend untuk pencarian per
-                // artist DAN untuk ditampilkan di baris tabel.
-                'artist_names' => $order->items->pluck('artist.name')->filter()->unique()->values(),
-            ]);
+        // Daftar TRANSAKSI (order POS + pre-order yang sudah ada uangnya) dibangun oleh
+        // SalesTransactionsService — sumber yang SAMA dengan ekspor, supaya berkas ekspor
+        // tidak pernah berbeda dari layar. Lihat docblock service untuk aturan barisnya.
+        $built = app(\App\Services\SalesTransactionsService::class)->build([
+            'event_id' => $request->input('event_id'),
+            'date_from' => $request->input('date_from'),
+            'date_to' => $request->input('date_to'),
+            'include_voided' => $request->input('include_voided'),
+        ], $request->user());
+        $transactions = $built['transactions'];
 
         return response()->json([
             'event' => $event,
@@ -309,7 +274,60 @@ class ReportController extends Controller
             'totals' => $totals,
             'rows' => $rows,
             'transactions' => $transactions,
+            'sessions' => $built['sessions'],
         ]);
+    }
+
+    /**
+     * Ekspor transaksi halaman Sales: PERSIS baris yang tampil di layar (hanya order POS).
+     * Klien hanya mengirim KUNCI baris ("order:12") — nominalnya tidak pernah dipercaya;
+     * seluruh isi berkas dibangun ulang dari database lewat SalesTransactionsService (sumber
+     * yang sama dengan daftar). Kunci yang tak ada / di luar filter event diabaikan, bukan
+     * dibuatkan baris. Tanpa `keys` = seluruh transaksi sesuai filter.
+     *
+     * Kontak pelanggan (telepon/email) SENGAJA tidak ikut (lihat catatan GenericArrayExport);
+     * modal & margin hanya untuk yang boleh melihat laporan (ditentukan service).
+     */
+    public function exportSalesTransactions(Request $request)
+    {
+        $validated = $request->validate([
+            'event_id' => ['nullable', 'integer'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+            'include_voided' => ['nullable', 'boolean'],
+            'keys' => ['nullable', 'array', 'max:5000'],
+            'keys.*' => ['string', 'regex:/^order:\d+$/'],
+        ]);
+
+        $rows = app(\App\Services\SalesTransactionsService::class)
+            ->build($validated, $request->user(), detail: true)['transactions']
+            ->map(function (array $r) {
+                $row = [
+                    'transaction_no' => $r['order_number'],
+                    'status' => $r['status'],
+                    'time' => $r['created_at'],
+                    'customer' => $r['customer_name'],
+                    'sellers' => implode(', ', $r['artist_names']->all()),
+                    'cashier' => $r['cashier_name'],
+                    'items' => $r['items_text'],
+                    'units' => $r['unit_count'],
+                    // Angka (bukan string) supaya bisa dijumlah langsung di Excel.
+                    'discount' => (float) $r['discount_amount'],
+                    'payment_methods' => implode(', ', $r['payment_methods']->all()),
+                    'payment_status' => $r['payment_state'],
+                    'cash' => (float) $r['cash_amount'],
+                    'non_cash' => (float) $r['noncash_amount'],
+                    'total' => (float) $r['total_amount'],
+                ];
+                if (array_key_exists('cost_total', $r)) {
+                    $row['cost'] = (float) $r['cost_total'];
+                    $row['margin'] = (float) $r['margin_amount'];
+                }
+
+                return $row;
+            })->all();
+
+        return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\GenericArrayExport($rows), 'transaksi-penjualan.xlsx');
     }
 
     /**

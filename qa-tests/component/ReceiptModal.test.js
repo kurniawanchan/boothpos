@@ -76,3 +76,19 @@ describe('ReceiptModal standout available-on/location block (023 US2)', () => {
     expect(screen.queryByText('Tersedia pada')).not.toBeInTheDocument();
   });
 });
+
+describe('ReceiptModal powered-by line', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('shows "Powered by" with the configured app name', async () => {
+    renderModal({ app_name: 'Kasir Sakana' });
+
+    expect(await screen.findByText('Powered by Kasir Sakana')).toBeInTheDocument();
+  });
+
+  it('falls back to "Powered by BoothPOS" when the payload has no app name', async () => {
+    renderModal({});
+
+    expect(await screen.findByText('Powered by BoothPOS')).toBeInTheDocument();
+  });
+});

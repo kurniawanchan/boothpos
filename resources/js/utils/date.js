@@ -28,3 +28,15 @@ export function toDateInputValue(value) {
   if (Number.isNaN(d.getTime())) return '';
   return d.toISOString().slice(0, 10);
 }
+
+/**
+ * yyyy-mm-dd menurut hari LOKAL pengguna (bukan UTC, beda dari toDateInputValue).
+ * Dipakai untuk membandingkan waktu transaksi dengan kolom tanggal filter: transaksi
+ * pukul 00.30 WIB harus jatuh ke hari itu, bukan ke hari sebelumnya di UTC.
+ */
+export function toLocalDateKey(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}

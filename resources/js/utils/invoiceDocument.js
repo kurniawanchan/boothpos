@@ -1,5 +1,6 @@
 import { formatIDR } from './money';
 import { formatDate, formatDateRange } from './date';
+import { resolveAppName } from './appName';
 
 /**
  * 022-preorder-invoice-crud-overhaul (US5, FR-013, research.md Decision 5)
@@ -131,6 +132,7 @@ export function buildInvoiceHtml(invoice, documentType = 'invoice') {
       <div style="margin-top:14px;border-top:1px dashed #ccc;padding-top:10px;text-align:center;font-size:11px;color:#888;">
         ${escapeHtml(footerText)}
       </div>
+      <div style="margin-top:6px;text-align:center;font-size:10px;color:#aaa;">Powered by ${escapeHtml(resolveAppName(invoice.app_name))}</div>
     </div>
   `;
 }

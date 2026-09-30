@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\ArtistController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BackupController;
 use App\Http\Controllers\Api\BusinessTypeController;
 use App\Http\Controllers\Api\CashierSessionController;
 use App\Http\Controllers\Api\CategoryController;
@@ -32,6 +33,7 @@ use App\Http\Controllers\Api\PosDraftController;
 use App\Http\Controllers\Api\PurchaseOrderController;
 use App\Http\Controllers\Api\VendorController;
 use App\Http\Middleware\SetLocaleFromUser;
+use App\Services\BackupService;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -64,6 +66,16 @@ Route::prefix('v1')->group(function () {
         Route::post('/settings/store-logo', [SettingsController::class, 'uploadStoreLogo']);
         Route::get('/settings/payment', [InvoicePaymentSettingController::class, 'show']);
         Route::put('/settings/payment', [InvoicePaymentSettingController::class, 'update']);
+
+        // Cadangan & pemulihan database (Pengaturan) — owner/admin, dicek di
+        // BackupController. 'restore-upload' didaftarkan sebelum rute ber-{id}
+        // dan {id} dibatasi polanya, jadi id sembarang (mis. '../x') 404 di rute.
+        Route::get('/backups', [BackupController::class, 'index']);
+        Route::post('/backups', [BackupController::class, 'store']);
+        Route::post('/backups/restore-upload', [BackupController::class, 'restoreUpload']);
+        Route::get('/backups/{id}/download', [BackupController::class, 'download'])->where('id', BackupService::ID_PATTERN);
+        Route::post('/backups/{id}/restore', [BackupController::class, 'restore'])->where('id', BackupService::ID_PATTERN);
+        Route::delete('/backups/{id}', [BackupController::class, 'destroy'])->where('id', BackupService::ID_PATTERN);
 
         Route::get('/activity-logs', [ActivityLogController::class, 'index']);
 
@@ -238,6 +250,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/imports/master-data', [MasterDataImportController::class, 'store']);
 
         Route::get('/reports/sales', [ReportController::class, 'sales']);
+        Route::post('/reports/sales/transactions/export', [ReportController::class, 'exportSalesTransactions']);
         Route::get('/reports/profit', [ReportController::class, 'profit']);
         Route::get('/reports/purchases', [ReportController::class, 'purchases']);
         Route::get('/reports/stock-by-artist', [ReportController::class, 'stockByArtist']);

@@ -335,4 +335,18 @@ describe('PreorderInvoiceModal', () => {
     const images = screen.getAllByAltText('Gopay');
     expect(images.length).toBeGreaterThan(1); // thumbnail + lightbox
   });
+
+  it('shows "Powered by" with the configured app name', async () => {
+    getPreorderInvoiceMock.mockResolvedValue({ ...arrivedInvoice, app_name: 'Kasir Sakana' });
+    renderModal({ open: true, preorderId: 1 });
+
+    expect(await screen.findByText('Powered by Kasir Sakana')).toBeInTheDocument();
+  });
+
+  it('falls back to "Powered by BoothPOS" when the payload has no app name', async () => {
+    getPreorderInvoiceMock.mockResolvedValue(arrivedInvoice);
+    renderModal({ open: true, preorderId: 1 });
+
+    expect(await screen.findByText('Powered by BoothPOS')).toBeInTheDocument();
+  });
 });

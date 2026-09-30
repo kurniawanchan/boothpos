@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { featureFlags, updateSettings } from '../api/settings';
 import { applyThemeAccentColor } from '../utils/theme';
+import { DEFAULT_APP_NAME, resolveAppName } from '../utils/appName';
 
 /**
  * Cosmetic license-tier state only (tier label in the sidebar, the
@@ -24,6 +25,7 @@ export const useSettingsStore = defineStore('settings', {
     receiptFooterText: '',
     receiptShowLogo: true,
     storeName: '',
+    appName: DEFAULT_APP_NAME,
     loaded: false,
   }),
   getters: {
@@ -42,6 +44,7 @@ export const useSettingsStore = defineStore('settings', {
         this.receiptFooterText = data.receipt_footer_text ?? '';
         this.receiptShowLogo = data.receipt_show_logo ?? true;
         this.storeName = data.store_name ?? '';
+        this.appName = resolveAppName(data.app_name);
         applyThemeAccentColor(this.themeAccentColor);
       } finally {
         this.loaded = true;
@@ -59,6 +62,17 @@ export const useSettingsStore = defineStore('settings', {
       await updateSettings([{ key: 'theme_accent_color', value: hex, type: 'string', group: 'appearance' }]);
       this.themeAccentColor = hex;
       applyThemeAccentColor(hex);
+    },
+
+    /**
+     * Merek produk (sidebar, "Powered by …" di dokumen). Nama kosong berarti
+     * "kembali ke default" — dikirim sebagai null, sama seperti server
+     * memperlakukannya. State baru berubah SETELAH server menerima.
+     */
+    async setAppName(name) {
+      const trimmed = (name ?? '').trim();
+      await updateSettings([{ key: 'app_name', value: trimmed || null, type: 'string', group: 'general' }]);
+      this.appName = resolveAppName(trimmed);
     },
 
     /** US7 */

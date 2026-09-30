@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libfreetype6-dev \
         libxml2-dev \
         libonig-dev \
+        default-mysql-client \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         bcmath \
@@ -47,6 +48,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xml \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# MySQL client tools (mysqldump / mysql) — needed by app:backup, app:restore and
+# the Settings "Database backup & restore" screen (App\Services\Backup\
+# MysqlCliDumper shells out to them). Without them the screen fails with
+# "sh: 1: mysqldump: not found". The `ssl=0` client config is the same fix
+# docker/store/Dockerfile already carries: Debian's default-mysql-client (a
+# MariaDB client) enables SSL by default and rejects MySQL 8's self-signed
+# certificate ("TLS/SSL error: self-signed certificate in certificate chain").
+# Safe here: the compose network is local and not exposed. This is INSIDE the
+# container — do not `brew install mysql-client` on the host (see RUNBOOK §7).
+RUN printf '[client]\nssl=0\n' > /etc/mysql/conf.d/disable-ssl.cnf
 
 # Composer, copied straight from the official image rather than
 # curl|bash-installed, matching the well-known multi-stage pattern.

@@ -292,6 +292,15 @@ paths:
                       'live' bila baris settings `system_mode` belum
                       pernah dibuat (instalasi baru TIDAK PERNAH diam-diam
                       mulai dalam mode DEMO).
+                  app_name:
+                    type: string
+                    maxLength: 50
+                    description: |
+                      Nama aplikasi/merek produk (default `BoothPOS`), tampil di
+                      sidebar dan sebagai "Powered by …" pada dokumen. Bukan nama
+                      toko (`store_name`). Diubah owner/admin lewat `PUT /settings`
+                      (key `app_name`, maks. 50 karakter — lebih panjang ditolak
+                      422); kosong/spasi saja berarti kembali ke default.
 
   /settings/payment:
     get:
@@ -458,6 +467,161 @@ paths:
   # ------------------------------------------------------------------
   # LOG AKTIVITAS (F13.4)
   # ------------------------------------------------------------------
+  # ------------------------------------------------------------------
+  # CADANGAN & PEMULIHAN DATABASE (Pengaturan)
+  # ------------------------------------------------------------------
+  /backups:
+    get:
+      tags: [Settings]
+      summary: Daftar cadangan database
+      description: |
+        Owner/admin saja (403 untuk peran lain) — cadangan memuat SELURUH data,
+        termasuk hash kata sandi dan data pelanggan. Terbaru dulu. Setiap
+        cadangan = satu folder di `BACKUP_PATH` (default `storage/app/backups`)
+        berisi `database.sql` dan, bila ada, `payment-proofs.tar.gz`.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Backup' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Settings]
+      summary: Buat cadangan sekarang
+      description: |
+        Sama dengan `php artisan app:backup` (dump MySQL + arsip bukti pembayaran
+        + salinan ke `BACKUP_EXTERNAL_PATH` bila diset). Butuh `mysqldump` di
+        server (image toko membawanya; image dev tidak). Gagal di tengah jalan
+        → folder setengah jadi dihapus dan 500 dengan `message`.
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Backup' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500':
+          description: mysqldump gagal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /backups/{id}:
+    parameters:
+      - { name: id, in: path, required: true, description: "Id cadangan (`Y-m-d_His`); pola lain → 404.", schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}_\d{6}(-\d+)?$' } }
+    delete:
+      tags: [Settings]
+      summary: Hapus satu cadangan
+      description: |
+        Menghapus folder cadangan beserta isinya (`database.sql` dan
+        `payment-proofs.tar.gz`). Tidak menyentuh database, bukti pembayaran ASLI,
+        maupun salinan di `BACKUP_EXTERNAL_PATH`. Tidak bisa dibatalkan. Owner/admin
+        saja; tercatat di log aplikasi (siapa & cadangan mana).
+      responses:
+        '204': { description: Dihapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /backups/{id}/download:
+    parameters:
+      - { name: id, in: path, required: true, description: "Id cadangan (`Y-m-d_His`, mis. `2026-09-30_100000`); pola lain → 404.", schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}_\d{6}(-\d+)?$' } }
+    get:
+      tags: [Settings]
+      summary: Unduh berkas database.sql sebuah cadangan
+      responses:
+        '200':
+          description: Berkas SQL
+          content:
+            application/sql:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /backups/{id}/restore:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}_\d{6}(-\d+)?$' } }
+    post:
+      tags: [Settings]
+      summary: Pulihkan database dari sebuah cadangan
+      description: |
+        MENIMPA SELURUH database. Wajib `confirm: "RESTORE"` (persis, huruf besar;
+        selain itu 422 dan tidak ada yang disentuh). Urutannya SELALU: (1) buat
+        cadangan pengaman dari kondisi saat ini, (2) baru timpa. Bila cadangan
+        pengaman gagal, pemulihan TIDAK dijalankan (500 dengan pesan yang
+        menyebut pemulihan dibatalkan). Berkas bukti pembayaran hanya dicadangkan,
+        tidak dipulihkan. Sesi/token ikut tertimpa isi cadangan, jadi klien
+        sebaiknya memuat ulang dan siap diarahkan ke login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm: { type: string, enum: [RESTORE] }
+      responses:
+        '200':
+          description: Dipulihkan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRestoreResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: Kata konfirmasi salah/hilang
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Cadangan pengaman atau pemulihan gagal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /backups/restore-upload:
+    post:
+      tags: [Settings]
+      summary: Pulihkan database dari berkas .sql yang diunggah
+      description: |
+        Aturan sama dengan `POST /backups/{id}/restore` (kata konfirmasi,
+        cadangan pengaman dulu). Berkas harus berekstensi `.sql`, maks. 50 MB,
+        dan tampak seperti dump aplikasi ini — memuat tabel `settings` DAN
+        `users` — kalau tidak 422 pada `file` sebelum apa pun disentuh.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, confirm]
+              properties:
+                file: { type: string, format: binary }
+                confirm: { type: string, enum: [RESTORE] }
+      responses:
+        '200':
+          description: Dipulihkan (`source` = "upload")
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRestoreResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: Berkas/konfirmasi tidak valid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Cadangan pengaman atau pemulihan gagal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /activity-logs:
     get:
       tags: [Settings]
@@ -1430,7 +1594,7 @@ paths:
     get:
       tags: [Sales]
       summary: Data struk
-      description: Mengembalikan data siap tampil untuk struk di layar, termasuk identitas toko dari pengaturan.
+      description: Mengembalikan data siap tampil untuk struk di layar, termasuk identitas toko dari pengaturan dan `app_name` (nama aplikasi untuk teks "Powered by …").
       responses:
         '200':
           description: Berhasil
@@ -2072,6 +2236,7 @@ paths:
                             account_number: { type: string, nullable: true }
                             qr_image_url: { type: string, nullable: true }
                       footer_text: { type: string, nullable: true, description: 022-preorder-invoice-crud-overhaul (US3, FR-010) — sama dengan receipt_footer_text yang sudah ada. }
+                      app_name: { type: string, description: "Nama aplikasi untuk teks 'Powered by …' (default BoothPOS) — ikut payload supaya dokumen unduhan massal sama dengan yang di layar." }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /preorders/bulk-invoices:
@@ -2511,12 +2676,57 @@ paths:
         - { name: date_from, in: query, schema: { type: string, format: date } }
         - { name: date_to, in: query, schema: { type: string, format: date } }
         - { name: group_by, in: query, schema: { type: string, enum: [product, category, artist, day, event, customer], default: product } }
+        - { name: include_voided, in: query, description: "1 = sertakan order berstatus `voided` di `transactions[]` (untuk audit). Transaksi batal TIDAK PERNAH ikut `totals`/`rows`.", schema: { type: integer, enum: [0, 1] } }
       responses:
         '200':
           description: Berhasil
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SalesReport' }
+
+  /reports/sales/transactions/export:
+    post:
+      tags: [Report]
+      summary: Ekspor daftar transaksi Sales (.xlsx)
+      description: |
+        Berkas berisi PERSIS baris yang tampil di halaman Sales (hanya transaksi dari POS; pre-order
+        tidak ada di halaman itu, jadi kunci `preorder:*` ditolak 422). Klien hanya mengirim KUNCI baris
+        (`keys`: "order:12"); seluruh isi dibangun ulang di server lewat service yang sama
+        dengan `GET /reports/sales`, jadi nominal tak bisa dipalsukan dan berkas tak pernah berbeda
+        dari layar. Kunci yang tak ada atau di luar filter `event_id`/tanggal DIABAIKAN. Tanpa `keys`
+        = seluruh transaksi sesuai filter. Maks. 5000 kunci.
+
+        Kolom: `transaction_no, status, time, customer, sellers, cashier, items` (SEMUA baris
+        item, "Nama ×qty; …"), `units, discount, payment_methods, payment_status, cash, non_cash, total`;
+        pengguna yang boleh melihat laporan juga mendapat `cost, margin`. Kontak pelanggan
+        (telepon/email) SENGAJA tidak ikut. Nominal berupa angka agar bisa dijumlah di Excel.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event_id: { type: integer, nullable: true }
+                date_from: { type: string, format: date, nullable: true }
+                date_to: { type: string, format: date, nullable: true }
+                include_voided: { type: boolean, nullable: true }
+                keys:
+                  type: array
+                  maxItems: 5000
+                  items: { type: string, pattern: '^order:\d+$' }
+      responses:
+        '200':
+          description: Berkas .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422':
+          description: Kunci tidak valid / lebih dari 5000
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /reports/profit:
     get:
@@ -5007,6 +5217,7 @@ components:
         method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
         purpose: { type: string, enum: [full, down_payment, settlement] }
         channel_provider: { type: string, nullable: true, readOnly: true }
+        provider: { type: string, nullable: true, readOnly: true, description: "Nama kanal (bank/e-wallet) pembayaran ini pada GET /orders/{id}; null untuk tunai." }
         amount: { $ref: '#/components/schemas/Money' }
         verification: { type: string, enum: [pending, verified, rejected] }
         paid_at: { type: string, format: date-time }
@@ -5051,11 +5262,14 @@ components:
         id: { type: integer }
         variant_id: { type: integer }
         artist_id: { type: integer }
-        artist_name: { type: string, readOnly: true }
+        artist_name: { type: string, nullable: true, readOnly: true }
+        category_name: { type: string, nullable: true, readOnly: true, description: "Hanya di GET /orders/{id}." }
+        variant_name: { type: string, nullable: true, readOnly: true, description: "Hanya di GET /orders/{id}." }
+        image_url: { type: string, nullable: true, readOnly: true, description: "Foto varian (bila ada). Hanya di GET /orders/{id}." }
         sku_snapshot: { type: string }
         name_snapshot: { type: string }
         qty: { type: integer }
-        cost_price: { $ref: '#/components/schemas/Money' }
+        cost_price: { $ref: '#/components/schemas/Money', description: "TIDAK dikembalikan oleh GET /orders/{id} (terbuka untuk kasir); hanya laporan owner/admin." }
         sell_price: { $ref: '#/components/schemas/Money' }
         discount_amount: { $ref: '#/components/schemas/Money' }
         line_total: { $ref: '#/components/schemas/Money' }
@@ -5086,7 +5300,26 @@ components:
         change_amount: { $ref: '#/components/schemas/Money' }
         status: { type: string, enum: [completed, voided] }
         void_reason: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        channel: { type: string }
         created_at: { type: string, format: date-time }
+        customer:
+          type: object
+          nullable: true
+          description: "Hanya di GET /orders/{id}. `null` (kunci tetap ada) untuk pembeli walk-in."
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            phone: { type: string, nullable: true }
+            email: { type: string, nullable: true }
+        cashier:
+          type: object
+          description: "Hanya di GET /orders/{id}."
+          properties: { id: { type: integer }, name: { type: string } }
+        event:
+          type: object
+          description: "Hanya di GET /orders/{id}."
+          properties: { id: { type: integer }, name: { type: string } }
         items:
           type: array
           items: { $ref: '#/components/schemas/OrderItem' }
@@ -5094,9 +5327,23 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Payment' }
 
+    Backup:
+      type: object
+      properties:
+        id: { type: string, description: "Nama folder cadangan, `Y-m-d_His` (+ `-N` bila dua dalam detik yang sama)." }
+        created_at: { type: string, format: date-time }
+        size_bytes: { type: integer, description: Ukuran database.sql }
+        has_payment_proofs: { type: boolean, description: Ada payment-proofs.tar.gz di cadangan ini }
+        external_copied: { type: boolean, nullable: true, description: "Hanya di respons POST /backups. true = disalin ke BACKUP_EXTERNAL_PATH, false = path diset tapi tak ditemukan/gagal, null = tak dikonfigurasi." }
+    BackupRestoreResult:
+      type: object
+      properties:
+        source: { type: string, description: "Id cadangan sumber, atau 'upload'." }
+        safety_backup: { $ref: '#/components/schemas/Backup' }
     Receipt:
       type: object
       properties:
+        app_name: { type: string, description: "Nama aplikasi untuk teks 'Powered by …' (default BoothPOS)." }
         store_name: { type: string }
         store_contact: { type: string, nullable: true }
         # 001-user-store-settings User Story 3 / SC-004 — field ini
@@ -5301,6 +5548,20 @@ components:
         `null` untuk order walk-in (tanpa pelanggan tercatat).
       properties:
         event: { $ref: '#/components/schemas/Event' }
+        sessions:
+          type: array
+          description: "Shift kasir dari order yang tercantum di `transactions[]`, terbaru dulu (untuk filter shift & ringkasan kas)."
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              cashier_name: { type: string, nullable: true }
+              opened_at: { type: string, format: date-time }
+              closed_at: { type: string, format: date-time, nullable: true }
+              status: { type: string }
+              opening_cash: { $ref: '#/components/schemas/Money' }
+              closing_cash: { $ref: '#/components/schemas/Money', nullable: true }
+              expected_cash: { $ref: '#/components/schemas/Money', nullable: true }
         group_by: { type: string, enum: [product, category, artist, day, event, customer] }
         group_label:
           type: string
@@ -5316,7 +5577,10 @@ components:
             unit_count: { type: integer }
             gross_sales: { $ref: '#/components/schemas/Money' }
             discount_total: { $ref: '#/components/schemas/Money' }
-            net_sales: { $ref: '#/components/schemas/Money' }
+            net_sales: { $ref: '#/components/schemas/Money', description: "Order POS + pendapatan pre-order yang diakui (dipakai Dashboard & Laporan)." }
+            pos_unit_count: { type: number, description: "Unit terjual dari order POS SAJA. Halaman Sales memakai `pos_*` karena hanya menampilkan transaksi POS." }
+            pos_gross_sales: { $ref: '#/components/schemas/Money', description: Penjualan kotor order POS saja. }
+            pos_net_sales: { $ref: '#/components/schemas/Money', description: Penjualan bersih order POS saja. }
         rows:
           type: array
           description: |
@@ -5361,8 +5625,37 @@ components:
                   frontend atas array `transactions[]` yang sudah
                   diambil (nomor transaksi/nama pelanggan/nama kasir);
                   tidak ada parameter pencarian sisi server yang baru.
-              item_count: { type: integer }
-              total_amount: { $ref: '#/components/schemas/Money' }
+              customer_id: { type: integer, nullable: true }
+              customer_phone: { type: string, nullable: true }
+              customer_email: { type: string, nullable: true }
+              item_count: { type: integer, description: "Jumlah BARIS item (bukan jumlah unit)." }
+              unit_count: { type: number, description: "Jumlah unit (SUM qty) semua item di transaksi ini." }
+              cashier_id: { type: integer, nullable: true }
+              discount_amount: { $ref: '#/components/schemas/Money', description: "Total diskon yang diterima pembeli = diskon per item + diskon tingkat order (tidak dobel: orders.subtotal sudah pasca-diskon-item)." }
+              payment_methods:
+                type: array
+                items: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+                description: Metode pembayaran unik yang dipakai transaksi ini (bisa lebih dari satu untuk pembayaran terpisah).
+              channel: { type: string, description: "Saluran transaksi (mis. 'offline')." }
+              artist_names: { type: array, items: { type: string }, description: Nama penjual unik yang barangnya ada di transaksi ini. }
+              total_amount: { $ref: '#/components/schemas/Money', description: Total transaksi. }
+              key: { type: string, description: "Kunci baris `order:{id}` — dipakai untuk memilih baris dan mengekspornya." }
+              status: { type: string, enum: [completed, voided] }
+              void_reason: { type: string, nullable: true }
+              payment_state: { type: string, enum: [verified, pending, rejected, none], description: "Verifikasi TERBURUK di antara pembayaran (rejected > pending > verified); `none` bila belum ada pembayaran." }
+              cash_amount: { $ref: '#/components/schemas/Money', description: "Tunai BERSIH: tunai diterima dikurangi kembalian (pembayaran rejected tidak dihitung)." }
+              noncash_amount: { $ref: '#/components/schemas/Money' }
+              session_id: { type: integer, nullable: true, description: Shift kasir tempat order dibuat. }
+              items_preview: { type: array, description: "Dua baris item terbesar.", items: { type: object, properties: { name: { type: string }, qty: { type: number } } } }
+              items_more: { type: integer, description: "Jumlah baris item di luar pratinjau." }
+              cost_total: { $ref: '#/components/schemas/Money', description: "HANYA untuk pengguna yang boleh melihat laporan (`canAccessMenu('reports')`); tidak dikirim ke kasir." }
+              margin_amount: { $ref: '#/components/schemas/Money', description: "Sama: hanya pengguna yang boleh melihat laporan." }
+              margin_percent: { type: number, description: "Sama: hanya pengguna yang boleh melihat laporan." }
+            description: |
+              Halaman Sales menyaring dan mengurutkan daftar ini di frontend (kasir, penjual,
+              metode bayar, jenis pelanggan, rentang tanggal & total), tanpa memuat ulang —
+              karena itu setiap baris membawa field-field di atas. SENGAJA tanpa modal/untung:
+              halaman ini terbuka untuk semua peran termasuk kasir.
 
     SalesReportCustomerRow:
       type: object
