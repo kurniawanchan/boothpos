@@ -54,8 +54,13 @@ class MysqlCliDumper implements DatabaseDumper
             throw new BackupException("Berkas tidak ditemukan: {$fromFile}");
         }
 
+        // --binary-mode: berkas pulihan bisa DIUNGGAH (owner/admin), dan tanpa
+        // opsi ini klien mysql tetap menjalankan perintah klien dari stdin
+        // (`\! <perintah shell>`, `system`, `source`) — isi berkas bisa menjalankan
+        // perintah OS sebagai pengguna PHP. Dengan opsi ini hanya `\C` dan
+        // `DELIMITER` yang tersisa, dan dump mysqldump tetap terbaca utuh.
         $this->run(sprintf(
-            '%s --host=%s --user=%s %s < %s',
+            '%s --binary-mode --host=%s --user=%s %s < %s',
             escapeshellarg($this->restoreBinary),
             escapeshellarg((string) ($this->connection['host'] ?? '')),
             escapeshellarg((string) ($this->connection['username'] ?? '')),

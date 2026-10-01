@@ -105,6 +105,21 @@ class MysqlCliDumperTest extends TestCase
         $this->assertStringNotContainsString('ARGS: '.self::PASSWORD, $out);
     }
 
+    public function test_restore_runs_mysql_in_binary_mode_so_a_file_cannot_run_client_commands(): void
+    {
+        // Berkas pulihan bisa diunggah owner/admin. Tanpa --binary-mode, klien
+        // mysql tetap menjalankan perintah klien seperti `\! <perintah shell>`
+        // dari stdin — jadi isi berkas bisa menjalankan perintah OS.
+        $captured = "{$this->dir}/captured.txt";
+        $bin = $this->script('fake-mysql', "echo \"ARGS: \$*\" > '{$captured}'; cat > /dev/null");
+        $sqlFile = "{$this->dir}/in.sql";
+        file_put_contents($sqlFile, "\\! touch /tmp/pwned\n");
+
+        $this->dumper('mysqldump', $bin)->restore($sqlFile);
+
+        $this->assertStringContainsString('--binary-mode', file_get_contents($captured));
+    }
+
     public function test_restore_failure_surfaces_the_tools_error_message(): void
     {
         $bin = $this->script('failing-mysql', 'echo "ERROR 1045: bad credentials" >&2; exit 1');
