@@ -229,6 +229,17 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - **Not built, on purpose: return/refund of part of a sale.** `OrderService::void()` reverses a whole order (stock `return` movements). A partial return moves money, stock and artist settlements and needs business rules first (refund channel, effect on settlements/reports, per-item limits).
 - **`TransactionItemsModal`** is reused by the customer history modal, so its receipt button opens `ReceiptModal` from inside itself. `OrderResource` additions are `whenLoaded`/null-safe.
 
+## Pre-order duplicate and split (added post-MVP, 2026-10-01)
+
+`POST /preorders/duplicate` (one or many ids) and `POST /preorders/{id}/split` (manual `items` or `by_seller`). Non-obvious rules, all in `PreorderService`:
+
+- **Duplicate wraps `create()`** (`duplicate()`), it does not `replicate()`: the copy is re-priced at the variant's CURRENT price (product-owner decision), starts `ordered` with no payments/shipment/dispatch marker, and inherits create()'s numbering, discount cap, pickup-day/courier rules and DEMO/LIVE stamping. Stale input degrades (deleted event → no event, out-of-range pickup day dropped); a deleted/inactive variant or product FAILS that order. The endpoint always answers `200` with a per-order report (`bulk-email` pattern) — a failure is `status: failed`, not an HTTP error.
+- **Split is refused (409) while the pre-order has ANY payment row** (product-owner decision: no payment-allocation logic), and for `handed_over`/`cancelled`. It also 409s if the original's discount would exceed its remaining subtotal + shipping. Discount, shipping, notes, shipment and the dispatch marker stay on the original. `ValidationException::status(409)` is how the service marks conflicts vs. plain 422s; the controller just returns `$e->status`.
+- **Split never touches stock** — no `StockService` call. A whole line moves by re-parenting the same `preorder_items` row (stock movements reference its id); a partial line is shrunk and its snapshot cloned. The new order inherits `status`.
+- Origin lives in `preorders.source_preorder_id` (nullOnDelete) / `source_type` / `source_preorder_number` (snapshot). `present()` returns `source` always and `split_children` only when `splitChildren` is eager-loaded (`show()` and the split response) — the usual relationLoaded trap.
+- List rows carry `has_payments` (one `withExists('payments')` subquery) so the UI can disable Split without N+1. Activity-log actions: `duplicated`, `split` (written inside the transaction).
+- Row actions: Split is hidden for closed statuses but DISABLED with a tooltip when paid; Duplicate exists for every status — which is why a handed-over row now has a "More" menu.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -236,7 +247,30 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/025-preorder-dispatch-status-list-refinements/plan.md`
+Active feature plan: `specs/027-preorder-duplicate-split/plan.md`
+(branch `027-preorder-duplicate-split`, branched from `develop` after feature
+026's tip) — two new pre-order actions. **Duplicate** (one row or the
+checkbox selection, `POST /preorders/duplicate`) is built ON TOP of
+`PreorderService::create()`, not `replicate()`, so every copy is re-priced at
+today's variant price (product-owner answer), starts `ordered` with no
+payments/shipment/dispatch marker, and reuses create()'s numbering, discount
+cap, pickup-day rules and DEMO/LIVE stamping; stale inputs degrade (missing
+event → no event, out-of-range pickup day dropped) while a deleted/inactive
+item fails THAT order only — bulk is always `200` with a per-order report, like
+`bulk-email`. **Split** (`POST /preorders/{id}/split`, manual units or
+`by_seller`) is refused with 409 for `handed_over`/`cancelled` AND for any
+order that has a recorded payment (product-owner answer: no payment
+allocation logic), moves whole lines by re-parenting the `preorder_items` row
+(keeps the id stock movements reference) and partial lines by shrinking +
+cloning the snapshot, keeps discount/shipping/shipment/notes on the original
+(409 if the discount would then exceed the original's total), and NEVER calls
+`StockService` — total qty per variant is unchanged. Origin is three nullable
+columns on `preorders` (`source_preorder_id` nullOnDelete, `source_type`,
+`source_preorder_number` snapshot); `present()` hides `split_children` unless
+`show()`/the split response eager-load it. Neither action sends email. See
+research.md Decisions 1–8.
+
+Previous feature: `specs/025-preorder-dispatch-status-list-refinements/plan.md`
 (branch `025-preorder-dispatch-status-list-refinements` — not yet created; the
 work sits uncommitted on `develop` on top of feature 024's tip) — a manual,
 three-value marker on pre-orders (`preorders.dispatch_status`: `pending` /

@@ -226,6 +226,15 @@ Prioritas menggunakan MoSCoW: **M** (Must have, wajib ada di v1), **S** (Should 
 
 **Kriteria penerimaan F2.3** — Setiap perubahan status tercatat beserta waktu dan pengguna yang mengubahnya, dan pre-order tidak dapat berpindah ke status "diserahkan" sebelum berstatus "lunas".
 
+**Catatan penambahan pasca-MVP — 2026-10-01 (duplikat dan pisah pre-order)**
+
+Atas permintaan pemilik produk, layar Pre-order mendapat dua aksi baru, tanpa nomor F- karena tidak mengubah state machine di F2.3 maupun cakupan yang pernah dicoret di 10.2:
+
+- **Duplikat** (satu atau banyak pre-order terpilih): membuat satu salinan baru per pre-order — status "dipesan", tanpa pembayaran, bukti bayar, atau pengiriman — dengan harga barang dihitung dari harga varian SAAT INI (bukan harga tercatat di pesanan asal). Satu salinan yang gagal (mis. barang sudah dihapus) tidak menggagalkan yang lain.
+- **Pisah**: memindahkan sebagian unit ke pre-order baru, atau satu klik "pisah per penjual". Hanya untuk pre-order yang belum diserahkan/dibatalkan DAN **belum punya pembayaran apa pun** (keputusan pemilik produk: tidak ada logika pembagian pembayaran). Ongkir, diskon, catatan, dan data pengiriman tetap di pesanan asal. Pemisahan tidak menyentuh stok dan tidak mengubah total uang.
+
+Kedua pre-order hasilnya mencatat asalnya ("Duplikat dari" / "Dipisah dari"). Lihat `specs/027-preorder-duplicate-split/`.
+
 ### 7.3 Artist management
 
 **Model lisensi (v1.6):** BoothPOS dijual dalam dua tingkat harga. **Pro** — satu artist saja (toko itu sendiri), tanpa konsinyasi. **Master** — multi-artist dengan rekap hasil dan bagi hasil per artist. Perbedaan ini ditegakkan lewat satu pengaturan (`multi_artist_enabled`), bukan build kode terpisah — satu basis kode untuk kedua tingkat harga.

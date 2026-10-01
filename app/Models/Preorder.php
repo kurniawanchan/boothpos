@@ -16,6 +16,7 @@ class Preorder extends Model
         'preorder_number', 'event_id', 'customer_id', 'user_id', 'status', 'dispatch_status', 'invoice_sent_at', 'shipping_at', 'fulfillment',
         'subtotal', 'shipping_cost', 'discount', 'total_amount', 'paid_amount', 'expected_date',
         'pickup_day', 'courier_name', 'cancel_reason', 'notes',
+        'source_preorder_id', 'source_type', 'source_preorder_number',
     ];
 
     /**
@@ -41,6 +42,15 @@ class Preorder extends Model
     public function customer(): BelongsTo { return $this->belongsTo(Customer::class); }
     public function shipment(): HasOne { return $this->hasOne(Shipment::class); }
     public function notifications(): HasMany { return $this->hasMany(PreorderNotification::class); }
+
+    /** 027 — pre-order asal untuk salinan/hasil pisah (null bila sumbernya sudah dihapus). */
+    public function sourcePreorder(): BelongsTo { return $this->belongsTo(self::class, 'source_preorder_id'); }
+
+    /** 027 — pre-order baru yang dipisahkan DARI pre-order ini. */
+    public function splitChildren(): HasMany
+    {
+        return $this->hasMany(self::class, 'source_preorder_id')->where('source_type', 'split')->orderBy('id');
+    }
 
     /**
      * 007-preorder-import-export-notify (US4) — dipakai PreorderController
