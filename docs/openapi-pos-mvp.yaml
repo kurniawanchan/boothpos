@@ -1287,8 +1287,10 @@ paths:
       tags: [Event & Session]
       summary: Tutup sesi kasir
       description: |
-        Server menghitung `expected_cash` dari kas awal ditambah seluruh
-        pembayaran tunai pada sesi, lalu menghitung selisih terhadap
+        Server menghitung `expected_cash` dari kas awal ditambah pembayaran
+        tunai terverifikasi pada sesi DIKURANGI kembalian (`orders.change_amount`),
+        tanpa order yang dibatalkan (`voided`) — rumus yang sama dengan panel
+        shift di halaman Sales — lalu menghitung selisih terhadap
         `closing_cash` yang dilaporkan kasir.
       requestBody:
         required: true

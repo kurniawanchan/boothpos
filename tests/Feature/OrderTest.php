@@ -63,6 +63,30 @@ class OrderTest extends TestCase
         $this->assertDatabaseHas('stock_movements', ['variant_id' => $this->variant->id, 'type' => 'sale', 'qty_change' => -2]);
     }
 
+    public function test_closing_a_shift_expects_cash_net_of_change_and_without_voided_orders(): void
+    {
+        $this->session->update(['opening_cash' => 100000]);
+
+        // Bayar 30.000 tunai untuk 25.000 -> kembalian 5.000; laci bertambah 25.000.
+        $this->postJson('/api/v1/orders', $this->basePayload([
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 30000]],
+        ]))->assertCreated();
+
+        // Order tunai kedua yang lalu dibatalkan — uangnya dikembalikan, tak ada di laci.
+        $voidedId = $this->postJson('/api/v1/orders', $this->basePayload([
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 25000]],
+        ]))->assertCreated()->json('id');
+        app(\App\Services\OrderService::class)->void(\App\Models\Order::findOrFail($voidedId), 'salah input', $this->cashier);
+
+        $response = $this->postJson("/api/v1/sessions/{$this->session->id}/close", ['closing_cash' => 125000]);
+
+        $response->assertOk();
+        $this->assertEquals(125000, $response->json('expected_cash'));
+        $this->assertEquals(0, $response->json('cash_difference'));
+    }
+
     public function test_order_price_uses_server_master_data_not_client_input(): void
     {
         // Klien mencoba mengirim variant_id yang benar tapi tidak ada
