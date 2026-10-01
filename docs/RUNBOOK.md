@@ -288,6 +288,14 @@ lewat layar SELALU membuat cadangan pengaman dari kondisi saat ini lebih dulu,
 meminta mengetik `RESTORE`, dan dibatalkan (tanpa mengubah apa pun) bila cadangan
 pengaman itu gagal. Untuk pemulihan bencana (database rusak sampai `mysqldump`
 pun gagal) tetap gunakan `app:restore` — sengaja tanpa langkah pengaman itu.
+**Lisensi ikut dipulihkan.** Pemulihan mengganti SELURUH database, termasuk
+`license_activations` yang terikat ke sidik jari mesin. Memulihkan cadangan dari
+perangkat lain (atau yang dibuat sebelum aplikasi diaktivasi) membuat aplikasi
+terkunci (423) sampai diaktivasi ulang dengan kunci lisensi — siapkan kuncinya
+atau minta kunci baru ke vendor. Ini disengaja (keputusan product owner, 026);
+dialog pemulihan memperingatkannya. Berkas unggahan dibatasi 50 MB; kedua image
+Docker memasang `docker/php/uploads.ini` (`upload_max_filesize = 64M`) supaya
+PHP tidak menolaknya lebih dulu.
 Setiap cadangan juga bisa dihapus dari daftar (hanya salinan lokal; salinan di
 `BACKUP_EXTERNAL_PATH` tidak ikut terhapus). Folder cadangan lokal bisa diatur lewat `BACKUP_PATH` (default
 `storage/app/backups`).
