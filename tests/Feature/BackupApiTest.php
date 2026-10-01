@@ -292,6 +292,43 @@ class BackupApiTest extends TestCase
         $this->assertSame([], $this->dumper->calls);
     }
 
+    public function test_an_upload_php_refused_as_too_large_gets_a_clear_message_not_a_generic_one(): void
+    {
+        $this->actingAsRole('owner');
+        $tmp = tempnam(sys_get_temp_dir(), 'dump');
+        file_put_contents($tmp, FakeDatabaseDumper::VALID_DUMP);
+
+        // Yang dikirim PHP bila berkas melewati upload_max_filesize.
+        $tooLarge = new UploadedFile($tmp, 'besar.sql', 'application/sql', UPLOAD_ERR_INI_SIZE, true);
+
+        $this->postJson('/api/v1/backups/restore-upload', ['file' => $tooLarge, 'confirm' => 'RESTORE'])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.file.0', __('backups.upload_failed'));
+
+        $this->assertSame([], $this->dumper->calls);
+        @unlink($tmp);
+    }
+
+    public function test_both_docker_images_let_php_accept_the_50_mb_upload_the_screen_promises(): void
+    {
+        // max:51200 (KB) di BackupController tak berarti apa-apa bila PHP sendiri
+        // menolak berkas lebih dulu — image store dulu tak punya ini sama sekali
+        // (default PHP 2M) dan image dev membatasi 10M.
+        $ini = parse_ini_file(base_path('docker/php/uploads.ini'));
+        $toBytes = fn (string $v) => (int) $v * ['K' => 1024, 'M' => 1024 ** 2, 'G' => 1024 ** 3][strtoupper(substr($v, -1))];
+
+        $this->assertGreaterThanOrEqual(50 * 1024 ** 2, $toBytes($ini['upload_max_filesize']));
+        $this->assertGreaterThanOrEqual(50 * 1024 ** 2, $toBytes($ini['post_max_size']));
+
+        foreach (['docker/php/Dockerfile', 'docker/store/Dockerfile'] as $dockerfile) {
+            $this->assertStringContainsString(
+                'docker/php/uploads.ini /usr/local/etc/php/conf.d/',
+                file_get_contents(base_path($dockerfile)),
+                "{$dockerfile} harus memasang uploads.ini",
+            );
+        }
+    }
+
     // --- hapus ---------------------------------------------------------------
 
     public function test_owner_can_delete_a_backup_and_only_that_one_disappears(): void

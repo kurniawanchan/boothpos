@@ -77,6 +77,11 @@ class BackupController extends Controller
         $request->validate([
             'file' => ['required', 'file', 'extensions:sql', 'max:51200'],
             'confirm' => ['required', Rule::in([self::CONFIRM_WORD])],
+        ], [
+            // Berkas yang ditolak PHP sendiri (melewati upload_max_filesize,
+            // unggahan terputus) tiba sebagai UploadedFile tidak valid; pesan
+            // bawaan Laravel ("failed to upload") tak memberi tahu apa-apa.
+            'file.uploaded' => __('backups.upload_failed'),
         ]);
 
         $path = $request->file('file')->getRealPath();
