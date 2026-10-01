@@ -133,6 +133,17 @@ describe('BackupRestoreSection', () => {
     expect(within(dialog).getByText(/2026-09-30_100000/)).toBeInTheDocument(); // sumber yang dipilih
   });
 
+  it('warns that the licence activation is restored too and the key may be needed again', async () => {
+    // Pulihan mengganti SELURUH database, termasuk license_activations yang terikat
+    // ke sidik jari mesin — cadangan dari perangkat lain mengunci aplikasi (423).
+    const user = await setup();
+    const dialog = await openRestoreDialog(user);
+
+    const warning = within(dialog).getByTestId('restore-license-warning');
+    expect(warning).toHaveTextContent(/perangkat lain/);
+    expect(warning).toHaveTextContent(/kunci lisensi/);
+  });
+
   it('cancelling closes the dialog and restores nothing', async () => {
     const user = await setup();
     const dialog = await openRestoreDialog(user);

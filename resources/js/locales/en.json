@@ -24,6 +24,7 @@
     "restore_title": "Restore the database?",
     "restore_warning_overwrite": "This OVERWRITES ALL current data with the backup's contents and cannot be undone.",
     "restore_warning_safety": "An automatic backup of the current state is taken first, so you can go back if needed.",
+    "restore_warning_license": "The licence activation is restored from the backup too. If the backup comes from another device (or was made before this app was activated), the app will be locked after the restore and must be activated again with a licence key — have one ready, or request a new one from the vendor.",
     "restore_source_backup": "Source: backup {id}",
     "restore_source_file": "Source: file {name}",
     "restore_type_word": "Type {word} to continue",

@@ -24,6 +24,7 @@
     "restore_title": "Pulihkan database?",
     "restore_warning_overwrite": "Ini MENIMPA SELURUH data saat ini dengan isi cadangan dan tidak bisa dibatalkan.",
     "restore_warning_safety": "Cadangan otomatis dari kondisi saat ini dibuat lebih dulu, sehingga Anda bisa kembali bila perlu.",
+    "restore_warning_license": "Aktivasi lisensi ikut dipulihkan dari cadangan. Bila cadangan berasal dari perangkat lain (atau dibuat sebelum aplikasi ini diaktivasi), aplikasi akan terkunci setelah pemulihan dan harus diaktivasi ulang dengan kunci lisensi — siapkan kuncinya, atau minta kunci baru ke vendor.",
     "restore_source_backup": "Sumber: cadangan {id}",
     "restore_source_file": "Sumber: berkas {name}",
     "restore_type_word": "Ketik {word} untuk melanjutkan",

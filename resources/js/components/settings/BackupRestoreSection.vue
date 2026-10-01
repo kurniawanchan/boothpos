@@ -217,6 +217,13 @@ async function performRestore() {
           <strong>{{ t('backup.restore_warning_overwrite') }}</strong>
           {{ t('backup.restore_warning_safety') }}
         </p>
+        <!-- Pulihan mengganti SELURUH database, termasuk license_activations yang
+             terikat ke sidik jari mesin ini (018). Keputusan product owner (026):
+             semua data tetap ikut dipulihkan apa adanya, lisensi diaktivasi ulang —
+             jadi cukup diperingatkan di sini, bukan diam-diam dipertahankan. -->
+        <p data-testid="restore-license-warning" class="rounded-lg border border-warn-border bg-warn-bg px-3 py-2 text-[12.5px] leading-relaxed text-warn-text">
+          {{ t('backup.restore_warning_license') }}
+        </p>
         <p class="rounded-lg bg-line-7 px-3 py-2 font-mono text-[12px]">{{ targetLabel }}</p>
         <BaseInput v-model="confirmText" :label="t('backup.restore_type_word', { word: CONFIRM_WORD })" autocomplete="off" data-autofocus />
         <p v-if="restoreError" role="alert" class="rounded-lg bg-danger-bg px-3 py-2 text-[12.5px] font-semibold text-danger-text">{{ restoreError }}</p>
