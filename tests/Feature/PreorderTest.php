@@ -525,9 +525,28 @@ class PreorderTest extends TestCase
         $this->assertSame('0.00', $row['shipping_cost']);
         $this->assertFalse($row['customer_has_address']);
 
+        $this->assertNull($row['customer_address']);
+
         $this->customer->update(['address' => 'Jl. Merdeka No. 1']);
         $row = collect($this->getJson('/api/v1/preorders')->json('data'))->firstWhere('id', $preorder['id']);
         $this->assertTrue($row['customer_has_address']);
+        // popup bendera menampilkan alamatnya langsung dari baris list
+        $this->assertSame('Jl. Merdeka No. 1', $row['customer_address']);
+    }
+
+    public function test_show_payload_carries_the_order_notes_and_customer_contact_for_the_detail_panel(): void
+    {
+        $this->customer->update(['phone' => '0811000111', 'address' => 'Jl. Merdeka No. 1']);
+        $preorder = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id, 'fulfillment' => 'pickup', 'notes' => 'Ambil hari kedua',
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
+        ])->assertCreated()->json();
+
+        $this->getJson("/api/v1/preorders/{$preorder['id']}")
+            ->assertOk()
+            ->assertJsonPath('notes', 'Ambil hari kedua')
+            ->assertJsonPath('customer.phone', '0811000111')
+            ->assertJsonPath('customer.address', 'Jl. Merdeka No. 1');
     }
 
     // Requested: clicking the missing-shipping-info flag shows shipping

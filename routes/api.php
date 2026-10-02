@@ -231,10 +231,16 @@ Route::prefix('v1')->group(function () {
         Route::post('/preorders/bulk-invoices', [PreorderController::class, 'bulkInvoices']);
         Route::post('/preorders/bulk-email', [PreorderController::class, 'bulkEmailInvoices']);
 
+        // 027-preorder-duplicate-split — rute statis, WAJIB sebelum
+        // apiResource('preorders', ...) (alasan sama dengan 'bulk-*' di atas).
+        Route::post('/preorders/duplicate', [PreorderController::class, 'duplicate']);
+
         Route::apiResource('preorders', PreorderController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::patch('/preorders/{preorder}/status', [PreorderController::class, 'updateStatus']);
         Route::patch('/preorders/{preorder}/dispatch-status', [PreorderController::class, 'updateDispatchStatus']);
         Route::post('/preorders/{preorder}/payments', [PreorderController::class, 'storePayment']);
+        Route::delete('/preorders/{preorder}/payments/{payment}', [PreorderController::class, 'destroyPayment']);
+        Route::post('/preorders/{preorder}/split', [PreorderController::class, 'split']);
         Route::post('/preorders/{preorder}/shipment', [ShipmentController::class, 'store']);
         Route::get('/preorders/{preorder}/invoice', [PreorderController::class, 'invoice']);
         Route::post('/preorders/{preorder}/notifications/resend', [PreorderController::class, 'resendNotification']);

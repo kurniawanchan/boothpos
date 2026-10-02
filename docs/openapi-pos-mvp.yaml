@@ -2312,6 +2312,57 @@ paths:
                         status: { type: string, enum: [sent, skipped_no_email, skipped_not_configured, failed] }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /preorders/duplicate:
+    post:
+      tags: [Preorder]
+      summary: Duplikat satu atau banyak pre-order (027-preorder-duplicate-split, US1/US2)
+      description: |
+        Membuat SATU salinan baru per id yang dikirim (tidak pernah digabung).
+        Salinan dibangun lewat jalur `create()` yang sama dengan pre-order baru:
+        harga tiap barang diambil dari harga varian SAAT INI (bukan harga yang
+        tercatat di pesanan asal), status `ordered`, tanpa pembayaran, bukti
+        bayar, atau pengiriman, `dispatch_status` `pending`, nomor baru. Yang
+        disalin: pelanggan, event, fulfillment, hari jemput/kurir, expected_date,
+        ongkir, diskon, catatan, dan barang+qty. Event yang sudah dihapus →
+        salinan tanpa event (dan tanpa hari jemput); hari jemput di luar rentang
+        event dibuang. Semua status sumber boleh diduplikasi. Sumber tidak
+        berubah dan stok tidak disentuh. Tidak ada email yang dikirim; satu
+        baris `activity_logs` (`duplicated`) ditulis per salinan.
+
+        SELALU 200 dengan laporan per-pre-order (pola `/preorders/bulk-email`):
+        tiap salinan memakai transaksinya sendiri, jadi satu yang gagal tidak
+        menggagalkan yang lain. Penyebab gagal: barang/produk dihapus atau
+        nonaktif, diskon melebihi total hasil harga baru, atau id bukan milik
+        mode data (DEMO/LIVE) yang aktif ("tidak ditemukan").
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preorder_ids]
+              properties:
+                preorder_ids: { type: array, items: { type: integer }, minItems: 1, maxItems: 100 }
+      responses:
+        '200':
+          description: Laporan per-pre-order, urutan sama dengan permintaan (id ganda dibuang)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        source_id: { type: integer }
+                        source_number: { type: string, nullable: true }
+                        status: { type: string, enum: [created, failed] }
+                        preorder: { $ref: '#/components/schemas/Preorder', description: "Hanya bila status = created" }
+                        error: { type: string, description: "Hanya bila status = failed" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /preorders/summary:
     get:
       tags: [Preorder]
@@ -2592,6 +2643,98 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  /preorders/{id}/split:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Preorder]
+      summary: Pisahkan sebagian unit pre-order ke pre-order baru (027-preorder-duplicate-split, US3/US4)
+      description: |
+        Dua mode. `items`: pengguna menyebut `item_id` + `qty` yang pindah ke SATU
+        pre-order baru (baris yang sama boleh disebut dua kali — dijumlahkan dulu).
+        `by_seller`: penjual dari baris dengan id terkecil tetap di pesanan asal,
+        setiap penjual lain menjadi satu pre-order baru berisi baris utuhnya.
+
+        Aturan (semua ditegakkan server di dalam satu transaksi dengan baris asal
+        terkunci — gagal di mana pun berarti tidak ada yang berubah):
+        - Ditolak `409` bila status `handed_over`/`cancelled`, bila pre-order
+          punya pembayaran APA PUN (tidak ada pembagian pembayaran), atau bila
+          diskon asal akan melebihi sisa subtotal + ongkir.
+        - Ditolak `422` bila item bukan milik pre-order ini, qty melebihi baris,
+          tidak ada unit yang pindah / tidak ada yang tersisa, atau `by_seller`
+          pada pre-order dengan satu penjual.
+        - Baris yang pindah seluruhnya memakai baris `preorder_items` yang SAMA
+          (id tetap, supaya rujukan pergerakan stok tetap benar); baris yang pindah
+          sebagian dikecilkan dan snapshot harga/modal/penjualnya disalin ke baris
+          baru. Harga TIDAK dihitung ulang.
+        - Pesanan baru: pelanggan/event/fulfillment/hari jemput/kurir/expected_date
+          disalin, `status` mewarisi pesanan asal, `shipping_cost` 0, `discount` 0,
+          tanpa catatan, `dispatch_status` `pending`, `user_id` = pengguna yang
+          memisahkan, `source.type` = `split`. Ongkir, diskon, catatan, data
+          pengiriman, dan penanda invoice tetap di pesanan asal.
+        - Stok TIDAK disentuh dan tidak ada pergerakan stok ditulis; tidak ada
+          email; satu baris `activity_logs` (`split`) ditulis pada pesanan asal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: { type: string, enum: [items, by_seller] }
+                items:
+                  type: array
+                  description: Wajib bila `mode` = `items`
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [item_id, qty]
+                    properties:
+                      item_id: { type: integer }
+                      qty: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Berhasil dipisah
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  original: { $ref: '#/components/schemas/Preorder', description: "Termasuk split_children" }
+                  created:
+                    type: array
+                    items: { $ref: '#/components/schemas/Preorder' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Status tertutup, sudah ada pembayaran, atau diskon melebihi sisa tagihan" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /preorders/{id}/payments/{payment_id}:
+    delete:
+      tags: [Preorder]
+      summary: Hapus satu pembayaran pre-order beserta bukti bayarnya
+      description: |
+        Hanya owner/admin (403 untuk peran lain). Menghapus baris pembayaran dan
+        bukti bayarnya (baris `payment_proofs` + file di disk privat, file dihapus
+        setelah commit), lalu menghitung ULANG `paid_amount` dari pembayaran yang
+        tersisa dan memundurkan status sejauh yang ditimbulkan pembayaran itu:
+        `settled` yang tak lagi lunas → `arrived`; `dp_paid` tanpa sisa pembayaran
+        → `ordered`; `arrived` tidak pernah mundur (stok sudah masuk). Ditolak
+        `409` untuk pre-order `handed_over`/`cancelled`; `404` bila pembayaran
+        bukan milik pre-order ini. Satu baris `activity_logs` (`payment_deleted`,
+        berisi status dan jumlah lama/baru) ditulis di transaksi yang sama.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Pre-order sesudah dihitung ulang
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Pre-order sudah diserahkan atau dibatalkan" }
 
   /preorders/{id}/payments:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -5426,6 +5569,8 @@ components:
         fulfillment: { type: string, enum: [pickup, courier] }
         total_amount: { $ref: '#/components/schemas/Money' }
         paid_amount: { $ref: '#/components/schemas/Money' }
+        customer_address: { type: string, nullable: true, description: "Alamat pelanggan (Customer.address) — dipakai popup bendera Mail Order 'ongkir/alamat belum diisi'; sudah tersedia tanpa query tambahan karena pelanggan dimuat untuk tiap baris." }
+        has_payments: { type: boolean, description: "027-preorder-duplicate-split — true bila ADA baris pembayaran apa pun (bahkan bernilai kecil). Dipakai UI untuk menonaktifkan aksi Split; satu subquery EXISTS untuk seluruh halaman." }
         outstanding: { $ref: '#/components/schemas/Money' }
         created_at: { type: string, format: date-time }
         sellers:
@@ -5447,6 +5592,23 @@ components:
         status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
         fulfillment: { type: string, enum: [pickup, courier] }
         created_at: { type: string, format: date-time, description: "024-invoice-layout-shipping-slip — ditambahkan ke present() (sebelumnya hanya ada di PreorderSummary/index())." }
+        notes: { type: string, nullable: true, description: "Catatan pesanan. Sebelumnya hanya ada di PreorderSummary (list); kini juga di payload detail agar panel detail bisa menampilkannya." }
+        source:
+          type: object
+          nullable: true
+          description: "027-preorder-duplicate-split — asal pre-order ini; null untuk pre-order biasa. `preorder_id` null bila sumbernya sudah dihapus (nomor tetap ada sebagai snapshot)."
+          properties:
+            type: { type: string, enum: [duplicate, split] }
+            preorder_id: { type: integer, nullable: true }
+            preorder_number: { type: string }
+        split_children:
+          type: array
+          description: "027 — pre-order yang dipisahkan DARI pre-order ini. Hanya terisi di GET /preorders/{id} dan respons split; kosong di tempat lain."
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              preorder_number: { type: string }
         store_identity:
           type: object
           nullable: true

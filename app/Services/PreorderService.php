@@ -5,20 +5,29 @@ namespace App\Services;
 use App\Models\Concerns\DataModeScope;
 use App\Models\Customer;
 use App\Models\Event;
+use App\Models\Payment;
 use App\Models\Preorder;
 use App\Models\ProductVariant;
 use App\Models\User;
 use App\Support\Couriers;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class PreorderService
 {
+    /** Relasi yang dibaca PreorderController::present() — dimuat ulang agar field tak hilang diam-diam. */
+    public const PAYLOAD_RELATIONS = [
+        'items.artist', 'items.variant.product.category', 'payments.proofs', 'shipment', 'customer', 'splitChildren',
+    ];
+
     public function __construct(
         private StockService $stockService,
         private PaymentRecorder $paymentRecorder,
+        private ActivityLogger $activityLogger,
     ) {}
 
     /**
@@ -98,6 +107,279 @@ class PreorderService
             }
 
             return $preorder->load(['items', 'customer']);
+        });
+    }
+
+    /**
+     * 027-preorder-duplicate-split (US1, research.md Decisions 1–2) —
+     * membuat salinan segar dari satu pre-order.
+     *
+     * Sengaja MEMBUNGKUS create(), bukan replicate(): harga diambil dari
+     * varian SAAT INI (jawaban product owner), dan aturan batas diskon,
+     * hari jemput/kurir, penomoran, serta stempel DEMO/LIVE tetap punya SATU
+     * implementasi (Constitution I). replicate() akan ikut menyalin status,
+     * pembayaran, dan snapshot harga lama yang justru harus dibuang.
+     *
+     * Input yang bisa basi dibersihkan dulu alih-alih membuat salinan gagal
+     * (event dihapus → tanpa event; hari jemput di luar rentang → dibuang),
+     * sedangkan barang yang tak lagi bisa dijual MENGGAGALKAN salinan ini —
+     * diam-diam membuang baris akan mengubah isi pesanan tanpa sepengetahuan
+     * pengguna.
+     */
+    public function duplicate(Preorder $source, User $user): Preorder
+    {
+        $source->loadMissing('items');
+
+        $variants = ProductVariant::with('product')
+            ->whereIn('id', $source->items->pluck('variant_id')->unique())
+            ->get()->keyBy('id');
+
+        foreach ($source->items as $item) {
+            $variant = $variants->get($item->variant_id);
+
+            // Varian/produk yang di-soft-delete (atau milik mode lain) tak
+            // ikut terambil oleh query di atas; yang nonaktif diperiksa di sini.
+            if (! $variant || ! $variant->is_active || ! $variant->product || ! $variant->product->is_active) {
+                throw ValidationException::withMessages([
+                    'items' => __('preorders.duplicate_item_unavailable', ['item' => $item->name_snapshot]),
+                ]);
+            }
+        }
+
+        $event = $source->event_id ? Event::find($source->event_id) : null;
+
+        $pickupDay = null;
+        if ($source->fulfillment === 'pickup' && $source->pickup_day && $event) {
+            $day = $source->pickup_day->toDateString();
+            if ($day >= $event->start_date->toDateString() && $day <= $event->end_date->toDateString()) {
+                $pickupDay = $day;
+            }
+        }
+
+        $data = [
+            'customer_id' => $source->customer_id,
+            'event_id' => $event?->id,
+            'fulfillment' => $source->fulfillment,
+            'shipping_cost' => $source->shipping_cost,
+            'discount' => $source->discount,
+            'expected_date' => $source->expected_date?->toDateString(),
+            'pickup_day' => $pickupDay,
+            'courier_name' => $source->fulfillment === 'courier' ? $source->courier_name : null,
+            'notes' => $source->notes,
+            'items' => $source->items
+                ->map(fn ($item) => ['variant_id' => $item->variant_id, 'qty' => $item->qty])->all(),
+        ];
+
+        return DB::transaction(function () use ($data, $source, $user) {
+            $copy = $this->create($data, $user);
+
+            $copy->update([
+                'source_preorder_id' => $source->id,
+                'source_type' => 'duplicate',
+                'source_preorder_number' => $source->preorder_number,
+            ]);
+
+            // Di dalam transaksi yang sama — salinan yang di-rollback tak
+            // boleh meninggalkan log yang mengklaimnya ada.
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'duplicated',
+                entityType: 'Preorder',
+                entityId: $copy->id,
+                description: "Menduplikasi {$source->preorder_number} menjadi {$copy->preorder_number}",
+                newValues: ['source_preorder_id' => $source->id, 'source_preorder_number' => $source->preorder_number],
+            );
+
+            return $copy->fresh(self::PAYLOAD_RELATIONS);
+        });
+    }
+
+    /**
+     * 027-preorder-duplicate-split (US3, research.md Decision 4) — memindahkan
+     * sebagian UNIT dari satu pre-order ke pre-order baru.
+     *
+     * $moves: [['item_id' => int, 'qty' => int], ...]. Baris yang sama yang
+     * disebut dua kali dijumlahkan dulu sebelum divalidasi.
+     *
+     * @return array{original: Preorder, created: list<Preorder>}
+     */
+    public function split(Preorder $source, array $moves, User $user): array
+    {
+        return $this->performSplit($source, $user, function (Collection $items) use ($moves) {
+            $wanted = [];
+            foreach ($moves as $move) {
+                $itemId = (int) $move['item_id'];
+                $wanted[$itemId] = ($wanted[$itemId] ?? 0) + (int) $move['qty'];
+            }
+
+            foreach ($wanted as $itemId => $qty) {
+                $item = $items->get($itemId);
+
+                if (! $item) {
+                    throw ValidationException::withMessages(['items' => __('preorders.split_item_not_in_order')]);
+                }
+                if ($qty > $item->qty) {
+                    throw ValidationException::withMessages([
+                        'items' => __('preorders.split_qty_exceeds_line', ['item' => $item->name_snapshot, 'qty' => $item->qty]),
+                    ]);
+                }
+            }
+
+            return [$wanted]; // satu pre-order baru berisi semua yang dipindah
+        });
+    }
+
+    /**
+     * 027-preorder-duplicate-split (US4, research.md Decision 5) — satu klik:
+     * penjual dari baris berid terkecil TETAP di pesanan asal, tiap penjual
+     * lain menjadi satu pre-order baru berisi baris-barisnya yang utuh.
+     * Lewat performSplit() yang sama dengan split() manual, jadi semua
+     * penjagaan (status, pembayaran, batas diskon, atomik) tidak digandakan.
+     *
+     * @return array{original: Preorder, created: list<Preorder>}
+     */
+    public function splitBySeller(Preorder $source, User $user): array
+    {
+        return $this->performSplit($source, $user, function (Collection $items) {
+            // $items sudah terurut menurut id; groupBy mempertahankan urutan kemunculan pertama.
+            $bySeller = $items->groupBy('artist_id');
+
+            if ($bySeller->count() < 2) {
+                throw ValidationException::withMessages(['mode' => __('preorders.split_single_seller')]);
+            }
+
+            return $bySeller->skip(1)
+                ->map(fn (Collection $lines) => $lines->mapWithKeys(fn ($item) => [$item->id => (int) $item->qty])->all())
+                ->values()->all();
+        });
+    }
+
+    /**
+     * Badan bersama untuk semua mode split. $plan menerima baris-baris pesanan
+     * asal (keyed by id, TERKUNCI) dan mengembalikan daftar kelompok; tiap
+     * kelompok ([item_id => qty]) menjadi SATU pre-order baru.
+     *
+     * Semua pemeriksaan status/pembayaran dilakukan SETELAH baris dikunci —
+     * dua permintaan bersamaan (atau pembayaran yang baru masuk) tidak boleh
+     * lolos hanya karena pemeriksaan pertama dilakukan sebelum kunci.
+     *
+     * TIDAK memanggil StockService sama sekali: total qty per varian tak
+     * berubah oleh pemisahan, jadi stok juga tak berubah. Pergerakan stok
+     * baru ditulis nanti oleh transisi status masing-masing pre-order.
+     */
+    private function performSplit(Preorder $source, User $user, \Closure $plan): array
+    {
+        return DB::transaction(function () use ($source, $user, $plan) {
+            $locked = Preorder::lockForUpdate()->findOrFail($source->id);
+
+            // 409 (bukan 422): ini konflik aturan bisnis, bukan salah bentuk input.
+            if (in_array($locked->status, ['handed_over', 'cancelled'], true)) {
+                throw ValidationException::withMessages(['status' => __('preorders.split_not_allowed_status')])->status(409);
+            }
+            if ($locked->payments()->exists()) {
+                throw ValidationException::withMessages(['status' => __('preorders.split_not_allowed_has_payment')])->status(409);
+            }
+
+            $items = $locked->items()->orderBy('id')->get()->keyBy('id');
+            $groups = $plan($items);
+
+            $movedByItem = [];
+            foreach ($groups as $group) {
+                foreach ($group as $itemId => $qty) {
+                    $movedByItem[$itemId] = ($movedByItem[$itemId] ?? 0) + $qty;
+                }
+            }
+            $totalUnits = (int) $items->sum('qty');
+            $movedUnits = (int) array_sum($movedByItem);
+            if ($movedUnits < 1 || $movedUnits >= $totalUnits) {
+                throw ValidationException::withMessages(['items' => __('preorders.split_must_move_and_keep')]);
+            }
+            foreach ($movedByItem as $itemId => $qty) {
+                if ($qty > $items[$itemId]->qty) {
+                    throw ValidationException::withMessages(['items' => __('preorders.split_qty_exceeds_line', [
+                        'item' => $items[$itemId]->name_snapshot, 'qty' => $items[$itemId]->qty,
+                    ])]);
+                }
+            }
+
+            $created = [];
+            $movedLog = [];
+            foreach ($groups as $group) {
+                $new = Preorder::create([
+                    'preorder_number' => $this->generateNumber(),
+                    'event_id' => $locked->event_id,
+                    'customer_id' => $locked->customer_id,
+                    'user_id' => $user->id,
+                    // Pesanan baru mewarisi status asal: barang yang sudah "arrived"
+                    // tidak diterima ulang, dan tanpa pembayaran status lain pun valid.
+                    'status' => $locked->status,
+                    'fulfillment' => $locked->fulfillment,
+                    'expected_date' => $locked->expected_date,
+                    'pickup_day' => $locked->pickup_day,
+                    'courier_name' => $locked->courier_name,
+                    // Ongkir, diskon, catatan, pengiriman, dan penanda invoice
+                    // SENGAJA tetap di pesanan asal (spec FR-015).
+                    'shipping_cost' => 0, 'discount' => 0, 'subtotal' => 0, 'total_amount' => 0, 'paid_amount' => 0,
+                    'source_preorder_id' => $locked->id,
+                    'source_type' => 'split',
+                    'source_preorder_number' => $locked->preorder_number,
+                ]);
+
+                foreach ($group as $itemId => $qty) {
+                    $item = $items[$itemId];
+
+                    if ($qty === (int) $item->qty) {
+                        // Seluruh baris pindah: pakai baris yang sama supaya id yang
+                        // dirujuk stock_movements (saat "arrived") tetap benar.
+                        $item->update(['preorder_id' => $new->id]);
+                    } else {
+                        $remaining = (int) $item->qty - $qty;
+                        $item->update([
+                            'qty' => $remaining,
+                            'line_total' => round((float) $item->sell_price * $remaining, 2),
+                        ]);
+                        $new->items()->create([
+                            'variant_id' => $item->variant_id, 'artist_id' => $item->artist_id,
+                            'sku_snapshot' => $item->sku_snapshot, 'name_snapshot' => $item->name_snapshot,
+                            'qty' => $qty, 'cost_price' => $item->cost_price, 'sell_price' => $item->sell_price,
+                            'line_total' => round((float) $item->sell_price * $qty, 2),
+                        ]);
+                    }
+
+                    $movedLog[] = ['item_id' => $itemId, 'qty' => $qty, 'to' => $new->preorder_number];
+                }
+
+                $subtotal = (float) $new->items()->sum('line_total');
+                $new->update(['subtotal' => $subtotal, 'total_amount' => $subtotal]);
+                $created[] = $new;
+            }
+
+            $subtotal = (float) $locked->items()->sum('line_total');
+            // Diskon tetap di pesanan asal; bila sisanya kini lebih kecil dari
+            // diskon, tolak daripada diam-diam membuat total negatif atau
+            // mengubah diskon yang sudah disepakati pelanggan.
+            if ((float) $locked->discount > $subtotal + (float) $locked->shipping_cost) {
+                throw ValidationException::withMessages(['discount' => __('preorders.split_discount_exceeds_remaining')])->status(409);
+            }
+            $locked->update([
+                'subtotal' => $subtotal,
+                'total_amount' => $subtotal + (float) $locked->shipping_cost - (float) $locked->discount,
+            ]);
+
+            $numbers = collect($created)->pluck('preorder_number')->all();
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'split',
+                entityType: 'Preorder',
+                entityId: $locked->id,
+                description: "Memisahkan {$locked->preorder_number} menjadi ".implode(', ', $numbers),
+                newValues: ['created' => $numbers, 'moved' => $movedLog],
+            );
+
+            return [
+                'original' => $locked->fresh(self::PAYLOAD_RELATIONS),
+                'created' => array_map(fn (Preorder $p) => $p->fresh(self::PAYLOAD_RELATIONS), $created),
+            ];
         });
     }
 
@@ -400,6 +682,76 @@ class PreorderService
 
             return $preorder->fresh(['items', 'payments.proofs', 'customer', 'shipment']);
         });
+    }
+
+    /**
+     * Menghapus SATU pembayaran (beserta bukti bayarnya) dan menghitung ulang
+     * paid_amount + status dari pembayaran yang tersisa — kebalikan dari
+     * recordPayment(). Untuk pembayaran yang salah catat / ganda.
+     *
+     * Status mundur HANYA sejauh yang ditimbulkan pembayaran itu sendiri:
+     *  - settled yang tak lagi lunas      → arrived  (barang tetap sudah tiba)
+     *  - dp_paid tanpa pembayaran tersisa → ordered
+     *  - arrived tak pernah mundur ke ordered: stok "purchase" sudah masuk.
+     * handed_over/cancelled ditolak (409) — transaksinya sudah tertutup, dan
+     * handed_over mensyaratkan lunas.
+     *
+     * paid_amount dihitung ULANG dari jumlah pembayaran yang tersisa (bukan
+     * dikurangi), sehingga cache yang pernah menyimpang ikut terkoreksi.
+     */
+    public function deletePayment(Preorder $preorder, Payment $payment, User $user): Preorder
+    {
+        $filesToDelete = [];
+
+        $result = DB::transaction(function () use ($preorder, $payment, $user, &$filesToDelete) {
+            $locked = Preorder::lockForUpdate()->findOrFail($preorder->id);
+
+            if (in_array($locked->status, ['handed_over', 'cancelled'], true)) {
+                throw ValidationException::withMessages(['status' => __('preorders.payment_delete_not_allowed_status')])->status(409);
+            }
+
+            // Pembayaran milik pre-order lain → 404, bukan dihapus diam-diam.
+            $target = $locked->payments()->whereKey($payment->id)->firstOrFail();
+
+            $oldStatus = $locked->status;
+            $oldPaid = (float) $locked->paid_amount;
+
+            $proofs = $target->proofs()->get();
+            $filesToDelete = $proofs->pluck('file_path')->all();
+            $target->proofs()->delete(); // payment_proofs.payment_id restrictOnDelete → baris bukti dulu
+            $target->delete();
+
+            $newPaid = round((float) $locked->payments()->sum('amount'), 2);
+            $newStatus = $oldStatus;
+            if ($oldStatus === 'settled' && (float) $locked->total_amount - $newPaid > 0.01) {
+                $newStatus = 'arrived';
+            } elseif ($oldStatus === 'dp_paid' && $newPaid <= 0) {
+                $newStatus = 'ordered';
+            }
+
+            $locked->update(['paid_amount' => $newPaid, 'status' => $newStatus]);
+
+            // Di dalam transaksi yang sama: menghapus catatan uang adalah tindakan sensitif.
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'payment_deleted',
+                entityType: 'Preorder',
+                entityId: $locked->id,
+                description: "Menghapus pembayaran {$target->purpose} Rp ".number_format((float) $target->amount, 0, ',', '.')." dari {$locked->preorder_number}",
+                oldValues: ['payment_id' => $target->id, 'amount' => (float) $target->amount, 'method' => $target->method, 'status' => $oldStatus, 'paid_amount' => $oldPaid],
+                newValues: ['status' => $newStatus, 'paid_amount' => $newPaid],
+            );
+
+            return $locked->fresh(self::PAYLOAD_RELATIONS);
+        });
+
+        // File bukti dihapus SETELAH commit: transaksi yang gagal/rollback tidak
+        // boleh meninggalkan baris bukti yang filenya sudah hilang.
+        foreach ($filesToDelete as $path) {
+            Storage::disk('local')->delete($path);
+        }
+
+        return $result;
     }
 
     public function transitionStatus(Preorder $preorder, string $newStatus, ?string $cancelReason, User $user): Preorder

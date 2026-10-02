@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Exports\GenericArrayExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\DuplicatePreordersRequest;
+use App\Http\Requests\SplitPreorderRequest;
 use App\Http\Requests\StorePreorderRequest;
 use App\Http\Requests\UpdatePreorderRequest;
 use App\Http\Resources\CustomerResource;
 use App\Mail\PreorderInvoiceMail;
+use App\Models\Payment;
 use App\Models\Preorder;
 use App\Models\PreorderNotification;
 use App\Services\ImageUploadService;
@@ -16,6 +19,7 @@ use App\Services\PreorderNotifier;
 use App\Services\PreorderService;
 use App\Support\BuildsInvoiceDocument;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -40,7 +44,11 @@ class PreorderController extends Controller
         // 013-preorder-list-filters-receipt (T005) — eager-load items.artist
         // supaya sellersFor() tidak lazy-load per baris di list yang
         // dipaginasi (risiko N+1).
-        $query = Preorder::query()->with(['customer', 'items.artist']);
+        // 027-preorder-duplicate-split — withExists: satu subquery EXISTS untuk
+        // seluruh halaman, bukan satu query payments per baris (N+1). Dipakai
+        // frontend untuk menonaktifkan aksi Split, karena pembayaran apa pun
+        // (bahkan yang bernilai kecil) menghalangi pemisahan.
+        $query = Preorder::query()->with(['customer', 'items.artist'])->withExists('payments');
         $query = $this->applyFilters($query, $request);
         $query = $this->applySort($query, $request);
 
@@ -56,6 +64,7 @@ class PreorderController extends Controller
             'fulfillment' => $p->fulfillment,
             'total_amount' => number_format((float) $p->total_amount, 2, '.', ''),
             'paid_amount' => number_format((float) $p->paid_amount, 2, '.', ''),
+            'has_payments' => (bool) $p->payments_exists,
             'outstanding' => number_format($p->outstanding(), 2, '.', ''),
             'created_at' => $p->created_at,
             'sellers' => $this->sellersFor($p),
@@ -66,6 +75,10 @@ class PreorderController extends Controller
             // (keeps the same field usable regardless of fulfillment).
             'shipping_cost' => number_format((float) $p->shipping_cost, 2, '.', ''),
             'customer_has_address' => filled($p->customer->address),
+            // Alamat pelanggan sendiri (bukan hanya ada/tidaknya) supaya popup
+            // bendera "ongkir/alamat belum diisi" bisa langsung menampilkannya —
+            // pelanggan sudah dimuat untuk baris ini, jadi tanpa query tambahan.
+            'customer_address' => $p->customer->address,
             // Requested: clicking the flag above shows shipping cost +
             // notes — staff sometimes write the customer's actual address
             // into free-text notes as a workaround when it was never
@@ -88,9 +101,80 @@ class PreorderController extends Controller
         return response()->json($this->present($preorder), 201);
     }
 
+    /**
+     * 027-preorder-duplicate-split (US1/US2, research.md Decision 3) —
+     * SELALU 200 dengan laporan per-pre-order, mengikuti bulkEmailInvoices():
+     * tiap salinan memakai transaksinya sendiri, jadi satu pre-order yang
+     * gagal (barang sudah dihapus, diskon melebihi total baru, id milik mode
+     * lain) tidak menggagalkan sisanya. Tidak ada email yang dikirim.
+     */
+    public function duplicate(DuplicatePreordersRequest $request): JsonResponse
+    {
+        $ids = array_values(array_unique(array_map('intval', $request->validated()['preorder_ids'])));
+
+        // Query ber-scope mode: id milik mode lain tak ikut terambil dan
+        // dilaporkan "tidak ditemukan" di bawah, bukan diduplikasi.
+        $sources = Preorder::with('items')->whereIn('id', $ids)->get()->keyBy('id');
+
+        $results = [];
+        foreach ($ids as $id) {
+            $source = $sources->get($id);
+
+            if (! $source) {
+                $results[] = ['source_id' => $id, 'source_number' => null, 'status' => 'failed', 'error' => __('preorders.duplicate_not_found')];
+                continue;
+            }
+
+            try {
+                $copy = $this->preorderService->duplicate($source, $request->user());
+                $results[] = [
+                    'source_id' => $source->id, 'source_number' => $source->preorder_number,
+                    'status' => 'created', 'preorder' => $this->present($copy),
+                ];
+            } catch (ValidationException $e) {
+                $results[] = [
+                    'source_id' => $source->id, 'source_number' => $source->preorder_number,
+                    'status' => 'failed', 'error' => (string) collect($e->errors())->flatten()->first(),
+                ];
+            } catch (ModelNotFoundException) {
+                // Pelanggan/varian terhapus di sela-sela pengecekan dan penyimpanan.
+                $results[] = [
+                    'source_id' => $source->id, 'source_number' => $source->preorder_number,
+                    'status' => 'failed', 'error' => __('preorders.duplicate_not_found'),
+                ];
+            }
+        }
+
+        return response()->json(['data' => $results]);
+    }
+
+    /**
+     * 027-preorder-duplicate-split (US3/US4, research.md Decisions 4–5) —
+     * semua aturan ada di PreorderService; di sini hanya memetakan
+     * ValidationException ke kode statusnya. Service sendiri yang menandai
+     * konflik bisnis dengan ->status(409) (status/pembayaran/diskon), sisanya
+     * tetap 422 (salah bentuk/nilai) sesuai konvensi API di CLAUDE.md.
+     */
+    public function split(SplitPreorderRequest $request, Preorder $preorder): JsonResponse
+    {
+        try {
+            $validated = $request->validated();
+            $result = $validated['mode'] === 'by_seller'
+                ? $this->preorderService->splitBySeller($preorder, $request->user())
+                : $this->preorderService->split($preorder, $validated['items'], $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json([
+            'original' => $this->present($result['original']),
+            'created' => array_map(fn (Preorder $p) => $this->present($p), $result['created']),
+        ], 201);
+    }
+
     public function show(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items.variant.product.category', 'payments.proofs', 'shipment', 'customer', 'notifications']);
+        $preorder->load(['items.variant.product.category', 'payments.proofs', 'shipment', 'customer', 'notifications', 'splitChildren']);
 
         return response()->json([
             ...$this->present($preorder),
@@ -598,6 +682,24 @@ class PreorderController extends Controller
         ));
     }
 
+    /**
+     * Hapus satu pembayaran pre-order (+ bukti bayarnya) dan hitung ulang
+     * status. Hanya owner/admin: ini menghapus catatan uang, jadi kasir tidak
+     * boleh menyembunyikan pemasukan lewat sini. Konflik status → 409.
+     */
+    public function destroyPayment(Request $request, Preorder $preorder, Payment $payment): JsonResponse
+    {
+        abort_unless($request->user()->isOwnerOrAdmin(), 403, __('preorders.not_authorized'));
+
+        try {
+            $preorder = $this->preorderService->deletePayment($preorder, $payment, $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json($this->present($preorder));
+    }
+
     public function storePayment(Request $request, Preorder $preorder): JsonResponse
     {
         $validated = $request->validate([
@@ -663,6 +765,24 @@ class PreorderController extends Controller
             // sungguhan dibuat — research.md Decision 1).
             'courier_name' => $preorder->courier_name,
             'cancel_reason' => $preorder->cancel_reason,
+            // Catatan pesanan — sebelumnya hanya ada di baris list (index()),
+            // padahal panel detail memuat dari show()/present() sehingga
+            // `notes` selalu kosong di sana.
+            'notes' => $preorder->notes,
+            // 027-preorder-duplicate-split — asal pre-order (null untuk yang
+            // dibuat biasa). Nomor diambil dari snapshot, jadi tetap tampil
+            // meski pre-order sumbernya sudah dihapus (preorder_id jadi null).
+            'source' => $preorder->source_type ? [
+                'type' => $preorder->source_type,
+                'preorder_id' => $preorder->source_preorder_id,
+                'preorder_number' => $preorder->source_preorder_number,
+            ] : null,
+            // Hanya terisi bila relasinya di-eager-load (show() dan respons
+            // split) — present() menyembunyikan relasi yang tak dimuat secara
+            // diam-diam, lihat CLAUDE.md.
+            'split_children' => $preorder->relationLoaded('splitChildren')
+                ? $preorder->splitChildren->map(fn ($c) => ['id' => $c->id, 'preorder_number' => $c->preorder_number])->all()
+                : [],
             // 013-preorder-list-filters-receipt (T004) — daftar penjual unik
             // yang muncul di preorder ini, dipakai frontend untuk kolom
             // seller di list & tampilan invoice per-item.
