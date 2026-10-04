@@ -161,6 +161,7 @@ function openImageLightbox(src, alt) {
     :variant-id="bomVariant?.id"
     :variant-sku="bomVariant?.sku"
     :variant-name="bomVariant?.variant_name"
+    :siblings="product?.variants ?? []"
     @close="showBom = false"
   />
 

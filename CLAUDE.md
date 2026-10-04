@@ -134,11 +134,18 @@ All gated on `canManageMasterData()`, same tier as Products/Categories/Stock.
   unique on `(vendor_id, material_id)`). One vendor per material may be
   flagged `is_preferred`; flagging one automatically unflags any other for
   the same material (enforced in `MaterialController`, not a DB constraint).
-- **`bom_cost` is a separate, read-only figure — it never writes to
-  `cost_price`.** `cost_price` already feeds the profit report and artist
-  settlements throughout this codebase; silently overwriting it from BOM
-  data would be a correctness risk to code that's already tested elsewhere.
-  See `App\Services\BomCostCalculator`'s docblock for the full rationale.
+- **`bom_cost` is a separate, read-only figure — it does not write to
+  `cost_price`, EXCEPT for a variant whose BOM was explicitly marked
+  COMPLETE (feature 034, see "BOM from purchase orders" below).** `cost_price`
+  already feeds the profit report and artist settlements throughout this
+  codebase; silently overwriting it from BOM data would be a correctness risk
+  to code that's already tested elsewhere, so only the explicit "complete"
+  action (via `VariantBomService`, never `BomCostCalculator`) syncs it. See
+  `App\Services\BomCostCalculator`'s docblock for the full rationale.
+- **Since 034 a BOM row normally references a PURCHASE ORDER LINE** (price =
+  the recorded purchase price, vendor/PO traceable). The rows described here
+  — material + quantity priced from the vendor price list — are now the
+  **legacy** rows (kept, flagged, still costed this way).
 - **Price selection when a material has >1 vendor**: the vendor flagged
   `is_preferred`, else the *cheapest* price (a defensive/optimistic default
   for a cost estimate, not a purchasing recommendation) — documented in
@@ -208,6 +215,21 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
   bypasses Eloquent scopes same as the uniqueness checks above) —
   `OrderService`/`PreorderService::create()` now re-fetch the customer via
   `Customer::findOrFail()` before writing, specifically to close this gap.
+
+## BOM from purchase orders (feature 034, 2026-10-05)
+
+A variant's BOM is the traceable list of PURCHASE-ORDER LINES that produce it (seller → variant → BOM row → PO line → vendor → purchase cost). Rules (all in `VariantBomService` / `PurchaseOrderItem::eligibleForSeller()` / `BomCostCalculator`):
+
+- **`VariantBomService` is the ONLY BOM writer** (add PO lines, qty, remove, replace-source, copy, complete, reopen, and the legacy create). Each call locks the variant row and, in ONE transaction, writes the rows, syncs `cost_price` if the BOM is complete, and writes the `activity_logs` row. Never write `product_variant_bom_lines` or a complete variant's `cost_price` anywhere else (the Excel `bom` sheet is the one bulk exception and only touches LEGACY rows of non-complete variants).
+- **Seller rule:** a PO has ONE seller (`purchase_orders.artist_id`, required on create, NULL = legacy and never offered). A BOM row may only use a line of a PO whose seller = the variant's product's seller AND whose status is ordered/received/paid (drafts are excluded because their lines are deleted and recreated on every edit; cancelled POs aren't real purchases). The selector AND add/replace-source both use the single scope `PurchaseOrderItem::eligibleForSeller()` — the UI filter is not the boundary. A PO whose lines feed a BOM cannot change seller (409).
+- **Rows store a SNAPSHOT** (item name, line type, PO number, vendor, `unit_cost`); a recorded cost never changes by itself — not on a PO price edit, a cancelled PO, or a vendor rename. Only the explicit `replace-source` action re-snapshots. "Newer price" and "source cancelled" are READ-TIME cues (one batched query, `sourceCues()`), never stored.
+- **Row identity:** unique `(variant, purchase_order_item_id)` — the same PO line twice is refused (409) but two lines of the SAME material at different prices may coexist. `qty_needed` is per ONE finished unit (> 0, ≤ 4 decimals); the PO's purchased qty is shown for reference only (no consumption tracking yet).
+- **Legacy rows** (`purchase_order_item_id` NULL) are derived, not flagged: kept, costed from the vendor price list live, counted as material cost, block "complete", replaceable one by one. The Excel `bom` sheet and `POST /variants/{v}/bom` still create/update them (one per material; a PO row of the same material does not conflict) and are refused for a complete variant.
+- **Complete = cost price follows the BOM** (`product_variants.bom_complete`): needs ≥1 row, no legacy row, every row valid (qty > 0, source still the seller's); a cancelled source does NOT block. While complete `cost_price` = BOM cost, re-synced on every change (logged `cost_price_synced`) and locked: `PUT /variants/{id}` with a different value → 409 `cost_price_locked_by_bom` (the SPA sends the whole variant, so an unchanged value is accepted); the products Excel sheet likewise. Removing the last row auto-reopens (value kept); a copy onto a complete variant reopens it. Recorded `order_items`/`preorder_items` keep their own `cost_price` snapshot, so past reports never change.
+- **Copy** (`/bom/copy`, `/bom/copy-out`, or `copy_bom_from_variant_id` on variant create): same product only, all-or-nothing, target with rows needs `confirm_replace`, never completes the target, independent afterwards (no shared template).
+- **Authorization:** reading a BOM needs the `products` menu; EVERY other BOM action (incl. the selector, which exposes PO prices/vendors) needs `products` AND `purchase_orders` — one helper, `VariantBomController::authorizeBom()`. Typed business errors use `BomRuleException` (409 + machine-readable `code`).
+- **`ProductVariantResource`** always carries `bom_complete`; `has_bom`/`bom_cost` appear only when `bomLines` was eager-loaded (`ProductController::variantRelations()`, products-menu users on show/update) — the `relationLoaded()` trap again.
+- "Linked Product" is gone from the PO form but `purchase_order_items.product_id` stays (API still accepts it; the form carries an existing value through when a draft is edited).
 
 ## App name ("Powered by") and the backup/restore screen (added post-MVP, 2026-09-30)
 
@@ -287,7 +309,23 @@ The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **PO
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/033-seller-recap-pos-preorder-split/plan.md`
+Active feature plan: `specs/034-seller-po-bom/plan.md`
+(branch `034-seller-po-bom`, branched from `develop` after PR #28) — a variant's
+BOM becomes the traceable list of PURCHASE-ORDER LINES that produce it. A PO gets a
+seller (`purchase_orders.artist_id`, one per PO, required on create, NULL = legacy and
+never offered as a source); BOM rows (`product_variant_bom_lines`, EXTENDED, not
+replaced) gain `purchase_order_item_id` plus a SNAPSHOT of item/type/PO number/vendor/
+unit cost, so a row that has no PO line is a flagged "legacy" row (kept, costed from the
+vendor price list as before, blocks completion). `VariantBomService` is the only BOM
+writer (add several PO lines, qty, remove, replace-source, copy from/next/all, complete,
+reopen) and does cost-price sync + audit in the same transaction. When a variant's BOM is
+COMPLETE its `cost_price` = BOM cost, auto-synced and locked against hand edits (409,
+also through the Excel import); past sales keep their recorded cost. Eligible sources: the
+variant's seller's POs in ordered/received/paid status only (never draft/cancelled).
+Nothing reprices by itself — "newer price" and "source cancelled" are read-time cues.
+"Linked Product" leaves the PO form (stored values stay). See research.md.
+
+Previous feature: `specs/033-seller-recap-pos-preorder-split/plan.md`
 (branch `033-seller-recap-pos-preorder-split`, branched from `develop` after PR #27) —
 the Seller Recap's Unit/Sales, Cost & Profit's revenue/cost/gross profit blend POS
 sales with the paid portion of pre-orders but only show the sum. No new storage:

@@ -23,6 +23,7 @@ import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
+import VariantBomModal from '../components/product/VariantBomModal.vue';
 import VariantDetailModal from '../components/product/VariantDetailModal.vue';
 import ImageLightbox from '../components/ui/ImageLightbox.vue';
 
@@ -166,7 +167,7 @@ const columns = computed(() => [
   { key: 'actions', label: '' },
 ]);
 
-const emptyVariant = () => ({ id: null, variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, image_file: null, image_error: '' });
+const emptyVariant = () => ({ id: null, copy_bom_from: '', variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, image_file: null, image_error: '' });
 
 const showDrawer = ref(false);
 const editingProduct = ref(null);
@@ -287,6 +288,43 @@ async function openEdit(product) {
   showDrawer.value = true;
 }
 
+// --- 034-seller-po-bom: BOM varian dari drawer edit ---------------------------
+// Varian yang BOM-nya SELESAI: harga modal mengikuti biaya BOM dan dikunci
+// (server menolak edit manual dengan 409). BOM dibuka lewat modal yang sama
+// dengan Detail Produk; setelah berubah, hanya field turunan BOM baris yang
+// disegarkan — isian lain yang sedang diedit tidak ditimpa.
+const showBom = ref(false);
+const bomRow = ref(null);
+
+// Pilihan "salin BOM dari" untuk varian BARU pada produk yang sudah ada:
+// hanya varian tersimpan yang sudah punya BOM, dan hanya untuk pengguna yang
+// boleh mengelola BOM (butuh menu purchase_orders juga — server menegakkan).
+// "Mulai dengan BOM kosong" adalah placeholder select (nilai kosong), bukan opsi kedua.
+const copySourceOptions = computed(() =>
+  variantRows.value.filter((v) => v.id && v.has_bom).map((v) => ({ value: v.id, label: t('master_data.bom_copy_from_new', { name: `${v.sku} — ${v.variant_name}` }) })),
+);
+const canCopyBomOnCreate = computed(() => !!editingProduct.value && auth.canAccessMenu('purchase_orders') && copySourceOptions.value.length > 0);
+
+function openBomFor(row) {
+  bomRow.value = row;
+  showBom.value = true;
+}
+
+async function refreshBomState() {
+  if (!editingProduct.value) return;
+  const fresh = await getProduct(editingProduct.value.id);
+  for (const row of variantRows.value) {
+    const updated = fresh.variants.find((v) => v.id === row.id);
+    if (!updated) continue;
+    Object.assign(row, {
+      cost_price: updated.cost_price,
+      bom_complete: updated.bom_complete,
+      has_bom: updated.has_bom,
+      bom_cost: updated.bom_cost,
+    });
+  }
+}
+
 function addVariantRow() {
   variantRows.value.push(emptyVariant());
 }
@@ -369,7 +407,8 @@ async function saveProduct() {
           low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
           is_active: row.is_active,
         };
-        const variantId = row.id ? (await updateVariant(row.id, payload)).id : (await addVariant(editingProduct.value.id, payload)).id;
+        const newVariantPayload = row.copy_bom_from ? { ...payload, copy_bom_from_variant_id: Number(row.copy_bom_from) } : payload;
+        const variantId = row.id ? (await updateVariant(row.id, payload)).id : (await addVariant(editingProduct.value.id, newVariantPayload)).id;
         if (row.image_file) pendingVariantImages.push({ variantId, file: row.image_file });
         queueStockAdjustment(row, variantId);
       }
@@ -656,6 +695,7 @@ async function performDelete() {
           <div v-for="(row, idx) in variantRows" :key="idx" class="flex flex-col gap-3 rounded-lg border border-line-3 bg-surface-subtle p-3.5" :class="{ 'opacity-50': row.id && !row.is_active }">
             <div class="flex items-center gap-2.5">
               <span v-if="row.sku" class="rounded-md bg-mint-100 px-2.5 py-1 font-mono text-[12px] font-semibold text-brand-active">{{ row.sku }}</span>
+              <span v-if="row.bom_complete" class="rounded-md bg-mint-100 px-2 py-1 text-[11px] font-bold text-brand-active">{{ t('master_data.bom_from_bom') }}</span>
               <span v-if="markupFor(row) !== null" class="rounded-md px-2 py-1 text-[11px] font-bold" :class="markupFor(row) >= 0 ? 'bg-mint-100 text-brand-active' : 'bg-danger-bg text-danger-text'">
                 {{ t('master_data.markup_value', { value: markupFor(row) }) }}
               </span>
@@ -669,8 +709,26 @@ async function performDelete() {
             </div>
             <div class="grid grid-cols-[1.4fr_1fr_1fr] items-end gap-2.5">
               <BaseInput v-model="row.variant_name" :label="t('master_data.variant_name')" />
-              <BaseInput v-model="row.cost_price" type="number" min="0" :label="t('master_data.cost_price')" />
+              <BaseInput
+                v-model="row.cost_price"
+                type="number"
+                min="0"
+                :label="t('master_data.cost_price')"
+                :disabled="!!row.bom_complete"
+                :hint="row.bom_complete ? t('master_data.bom_cost_price_locked_hint') : ''"
+              />
               <BaseInput v-model="row.sell_price" type="number" min="0" :label="t('master_data.sell_price')" />
+            </div>
+            <BaseSelect
+              v-if="!row.id && canCopyBomOnCreate"
+              v-model="row.copy_bom_from"
+              :label="t('master_data.bom_new_variant_label')"
+              :options="copySourceOptions"
+              :placeholder="t('master_data.bom_start_empty')"
+            />
+            <div v-if="row.id" class="flex items-center gap-3 text-[12.5px]">
+              <span v-if="row.has_bom" class="text-muted-4">{{ t('master_data.bom_cost_label', { cost: formatIDR(row.bom_cost) }) }}</span>
+              <button type="button" class="font-semibold text-brand-active hover:underline" @click="openBomFor(row)">{{ t('master_data.bom_open') }}</button>
             </div>
             <div class="grid grid-cols-[1fr_auto] items-end gap-2.5">
               <BaseInput v-model="row.current_stock" type="number" min="0" :label="t('master_data.col_stock')" />
@@ -742,6 +800,15 @@ async function performDelete() {
       :artist-name="detailVariantProduct?.artist_name"
       :category-name="detailVariantProduct?.category_name"
       @close="showVariantDetail = false"
+    />
+    <VariantBomModal
+      :open="showBom"
+      :variant-id="bomRow?.id"
+      :variant-sku="bomRow?.sku"
+      :variant-name="bomRow?.variant_name"
+      :siblings="variantRows.filter((v) => v.id)"
+      @close="showBom = false"
+      @changed="refreshBomState"
     />
     <ImageLightbox :open="!!lightboxSrc" :src="lightboxSrc" :alt="lightboxAlt" @close="lightboxSrc = null" />
   </div>

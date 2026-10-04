@@ -3,12 +3,12 @@ import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import {
-  listPurchaseOrders, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
+  listPurchaseOrders, getPurchaseOrder, createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder,
   updatePurchaseOrderStatus,
 } from '../api/purchaseOrders';
 import { listVendors } from '../api/vendors';
 import { listMaterials } from '../api/materials';
-import { listProducts } from '../api/products';
+import { listArtists } from '../api/artists';
 import { useToastStore } from '../stores/toast';
 import { formatIDR } from '../utils/money';
 import DataTable from '../components/ui/DataTable.vue';
@@ -28,8 +28,9 @@ const toast = useToastStore();
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listPurchaseOrders);
 const vendors = ref([]);
 const materials = ref([]);
-const products = ref([]);
+const artists = ref([]);
 const statusFilter = ref('');
+const artistFilter = ref('');
 
 const STATUSES = ['draft', 'ordered', 'received', 'paid', 'cancelled'];
 const STATUS_VARIANT = { draft: 'neutral', ordered: 'warn', received: 'mint', paid: 'dark', cancelled: 'danger' };
@@ -43,7 +44,7 @@ onMounted(async () => {
   await load();
   vendors.value = (await listVendors({ per_page: 100 })).data;
   materials.value = (await listMaterials({ per_page: 100 })).data;
-  products.value = (await listProducts({ per_page: 100 })).data;
+  artists.value = (await listArtists({ per_page: 100 })).data;
 });
 
 function applyStatusFilter(status) {
@@ -53,11 +54,18 @@ function applyStatusFilter(status) {
 
 const vendorOptions = computed(() => vendors.value.map((v) => ({ value: v.id, label: v.name })));
 const materialOptions = computed(() => materials.value.map((m) => ({ value: m.id, label: m.name })));
-const productOptions = computed(() => products.value.map((p) => ({ value: p.id, label: p.name })));
+const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+const artistFilterOptions = computed(() => [{ value: '', label: t('purchase_orders.all_sellers') }, ...artistOptions.value]);
+
+function applyArtistFilter(value) {
+  artistFilter.value = value;
+  setFilter({ artist_id: value || undefined });
+}
 
 const columns = computed(() => [
   { key: 'po_number', label: t('purchase_orders.col_number') },
   { key: 'vendor_name', label: t('purchase_orders.col_vendor') },
+  { key: 'artist_name', label: t('purchase_orders.col_seller') },
   { key: 'status', label: t('purchase_orders.col_status') },
   { key: 'total_amount', label: t('purchase_orders.col_total') },
   { key: 'actions', label: '' },
@@ -66,7 +74,7 @@ const columns = computed(() => [
 // --- Create/edit drawer -----------------------------------------------
 const showForm = ref(false);
 const editingPo = ref(null);
-const form = reactive({ vendor_id: '', notes: '' });
+const form = reactive({ vendor_id: '', artist_id: '', notes: '' });
 const itemRows = ref([]);
 const formErrors = reactive({});
 const saving = ref(false);
@@ -77,15 +85,28 @@ function blankRow() {
 
 function openCreate() {
   editingPo.value = null;
-  Object.assign(form, { vendor_id: '', notes: '' });
+  Object.assign(form, { vendor_id: '', artist_id: '', notes: '' });
   itemRows.value = [blankRow()];
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
 
-function openEdit(po) {
+// BUG YANG DITEMUKAN & DIPERBAIKI (verifikasi browser 034) — GET /purchase-orders
+// (daftar) TIDAK memuat `items`, tetapi form edit dulu membaca po.items dari
+// baris daftar itu: drawer edit draft selalu terbuka TANPA baris item (Total
+// Rp 0) dan menyimpannya mengirim items kosong (422). Kini detail lengkap
+// dimuat dulu — pola yang sama dengan ProductsView.openEdit() — sehingga
+// baris (termasuk product_id lama yang sudah tidak ditampilkan) ikut terbawa.
+async function openEdit(row) {
+  let po;
+  try {
+    po = await getPurchaseOrder(row.id);
+  } catch (err) {
+    toast.error(err.message);
+    return;
+  }
   editingPo.value = po;
-  Object.assign(form, { vendor_id: po.vendor_id, notes: po.notes ?? '' });
+  Object.assign(form, { vendor_id: po.vendor_id, artist_id: po.artist_id ?? '', notes: po.notes ?? '' });
   itemRows.value = po.items.map((i) => ({
     line_type: i.line_type, material_id: i.material_id ?? '', product_id: i.product_id ?? '',
     description: i.description ?? '', qty: Number(i.qty), unit_price: Number(i.unit_price),
@@ -112,6 +133,9 @@ async function savePo() {
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   const payload = {
     vendor_id: Number(form.vendor_id),
+    // 034 — seller wajib (server menolak bila kosong); PO lama tanpa seller
+    // boleh disimpan tanpa mengirimnya sampai pengguna menetapkannya.
+    ...(form.artist_id ? { artist_id: Number(form.artist_id) } : {}),
     notes: form.notes || null,
     ...(rowsLocked.value ? {} : {
       items: itemRows.value.map((r) => ({
@@ -223,6 +247,9 @@ function openDetail(po) {
           {{ t(`purchase_orders.status_${s}`) }}
         </button>
       </div>
+      <div class="w-[190px]">
+        <BaseSelect :model-value="artistFilter" :options="artistFilterOptions" :aria-label="t('purchase_orders.col_seller')" @update:model-value="applyArtistFilter" />
+      </div>
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('purchase_orders.new_po') }}
@@ -233,6 +260,10 @@ function openDetail(po) {
       <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('purchase_orders.no_purchase_orders')">
         <template #cell-po_number="{ row }">
           <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active hover:underline" @click="openDetail(row)">{{ row.po_number }}</button>
+        </template>
+        <template #cell-artist_name="{ row }">
+          <span v-if="row.artist_name">{{ row.artist_name }}</span>
+          <span v-else class="text-[12px] italic text-muted-3">{{ t('purchase_orders.no_seller') }}</span>
         </template>
         <template #cell-status="{ row }">
           <StatusPill :variant="STATUS_VARIANT[row.status]">{{ t(`purchase_orders.status_${row.status}`) }}</StatusPill>
@@ -261,6 +292,7 @@ function openDetail(po) {
     <BaseDrawer :open="showForm" :title="editingPo ? t('purchase_orders.edit_po') : t('purchase_orders.new_po')" @close="showForm = false">
       <form class="flex flex-col gap-4 px-6 py-5" @submit.prevent="savePo">
         <BaseSelect v-model="form.vendor_id" :label="t('purchase_orders.vendor')" required :options="vendorOptions" :error="formErrors.vendor_id" />
+        <BaseSelect v-model="form.artist_id" :label="t('purchase_orders.seller')" required :options="artistOptions" :placeholder="t('purchase_orders.seller_placeholder')" :hint="t('purchase_orders.seller_hint')" :error="formErrors.artist_id" />
         <BaseTextarea v-model="form.notes" :label="t('master_data.notes')" :rows="2" :error="formErrors.notes" />
 
         <div class="flex items-center justify-between">
@@ -298,7 +330,10 @@ function openDetail(po) {
           <BaseSelect v-if="row.line_type === 'material'" v-model="row.material_id" :label="t('purchase_orders.material')" required :disabled="rowsLocked" :options="materialOptions" :error="formErrors[`items.${idx}.material_id`]" />
           <BaseInput v-else v-model="row.description" :label="t('purchase_orders.description')" required :disabled="rowsLocked" :error="formErrors[`items.${idx}.description`]" />
 
-          <BaseSelect v-model="row.product_id" :label="t('purchase_orders.linked_product')" :disabled="rowsLocked" :options="productOptions" :placeholder="t('purchase_orders.no_product_link')" />
+          <!-- 034 — "Linked Product" tidak lagi ditampilkan (hubungan produk
+               kini dinyatakan lewat BOM). product_id tetap dibawa di state
+               baris dan dikirim ulang supaya mengedit draft tidak
+               menghapus nilai lama diam-diam. -->
 
           <div class="grid grid-cols-2 gap-3">
             <BaseInput v-model.number="row.qty" type="number" step="0.001" min="0.001" :label="t('purchase_orders.qty')" required :disabled="rowsLocked" />

@@ -127,10 +127,16 @@ class BomCostTest extends TestCase
         $material = Material::factory()->create();
         $line = $variant->bomLines()->create(['material_id' => $material->id, 'qty_needed' => 1]);
 
+        // 034-seller-po-bom — KONTRAK SENGAJA BERUBAH: PUT/DELETE kini dilayani
+        // VariantBomController dan mengembalikan BOM yang dimuat ulang
+        // ({data, summary}) supaya layar tidak perlu satu request tambahan
+        // (dan bisa membawa flag `reopened`); dulu PUT mengembalikan satu
+        // baris datar dan DELETE 204. Perilaku yang diuji (jumlah berubah,
+        // baris legacy bisa dihapus) tetap sama.
         $this->putJson("/api/v1/bom/{$line->id}", ['qty_needed' => 4])
-            ->assertOk()->assertJsonPath('qty_needed', '4.0000');
+            ->assertOk()->assertJsonPath('data.0.qty_needed', '4.0000')->assertJsonPath('data.0.is_legacy', true);
 
-        $this->deleteJson("/api/v1/bom/{$line->id}")->assertStatus(204);
+        $this->deleteJson("/api/v1/bom/{$line->id}")->assertOk()->assertJsonPath('data', []);
         $this->assertDatabaseMissing('product_variant_bom_lines', ['id' => $line->id]);
     }
 }

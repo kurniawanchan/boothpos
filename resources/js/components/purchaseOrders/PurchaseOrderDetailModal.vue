@@ -1,12 +1,13 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseInput from '../ui/BaseInput.vue';
 import BaseSelect from '../ui/BaseSelect.vue';
 import StatusPill from '../ui/StatusPill.vue';
-import { getPurchaseOrder, recordPurchaseOrderPayment } from '../../api/purchaseOrders';
+import { getPurchaseOrder, recordPurchaseOrderPayment, updatePurchaseOrder } from '../../api/purchaseOrders';
+import { listArtists } from '../../api/artists';
 import { formatIDR } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { downloadElementAsPdf } from '../../utils/pdfCapture';
@@ -49,6 +50,41 @@ async function load() {
 }
 
 watch(() => [props.open, props.purchaseOrderId], ([open]) => { if (open) load(); }, { immediate: true });
+
+// --- 034-seller-po-bom: PO lama tanpa seller bisa ditetapkan di sini -------
+// Tanpa seller, PO tidak pernah ditawarkan sebagai sumber BOM. Penetapan
+// pertama selalu diizinkan server; MENGUBAH seller yang sudah ada tidak
+// ditawarkan di sini (ditolak server bila sudah dipakai BOM).
+const artists = ref([]);
+const assignArtistId = ref('');
+const assigningSeller = ref(false);
+const canAssignSeller = computed(() => po.value && po.value.artist_id === null && po.value.status !== 'cancelled');
+const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+
+watch(canAssignSeller, async (can) => {
+  if (can && !artists.value.length) {
+    try {
+      artists.value = (await listArtists({ per_page: 100 })).data;
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+}, { immediate: true });
+
+async function assignSeller() {
+  if (!assignArtistId.value) return;
+  assigningSeller.value = true;
+  try {
+    po.value = await updatePurchaseOrder(props.purchaseOrderId, { artist_id: Number(assignArtistId.value) });
+    toast.success(t('purchase_orders.seller_assigned'));
+    assignArtistId.value = '';
+    emit('changed');
+  } catch (err) {
+    toast.error(err.message);
+  } finally {
+    assigningSeller.value = false;
+  }
+}
 
 async function downloadInvoicePdf() {
   if (!invoiceEl.value) return;
@@ -104,6 +140,21 @@ async function submitPayment() {
         </BaseButton>
       </div>
 
+      <!-- Di luar invoiceEl: seller tidak ikut tercetak pada faktur PDF. -->
+      <div class="flex flex-col gap-2 rounded-lg border border-line-3 bg-surface-subtle px-3.5 py-3">
+        <div class="flex items-center justify-between gap-3 text-[13px]">
+          <span class="text-muted">{{ t('purchase_orders.seller') }}</span>
+          <span v-if="po.artist_name" class="font-semibold">{{ po.artist_name }}</span>
+          <span v-else class="text-[12.5px] italic text-muted-3">{{ t('purchase_orders.no_seller') }}</span>
+        </div>
+        <form v-if="canAssignSeller" class="flex items-end gap-2" @submit.prevent="assignSeller">
+          <div class="flex-1">
+            <BaseSelect v-model="assignArtistId" :options="artistOptions" :placeholder="t('purchase_orders.seller_placeholder')" />
+          </div>
+          <BaseButton size="sm" :loading="assigningSeller" :disabled="!assignArtistId" @click="assignSeller">{{ t('purchase_orders.assign_seller') }}</BaseButton>
+        </form>
+      </div>
+
       <div ref="invoiceEl" class="flex flex-col gap-4 bg-white p-4">
         <div class="flex flex-col gap-0.5">
           <span class="text-[17px] font-extrabold tracking-tight">{{ po.po_number }}</span>
@@ -117,6 +168,7 @@ async function submitPayment() {
             <div class="flex flex-1 flex-col gap-0.5">
               <span class="text-[13.5px] font-semibold leading-snug">{{ item.line_type === 'material' ? item.material_name : item.description }}</span>
               <span v-if="item.product_name" class="text-[11.5px] text-muted-3">{{ t('purchase_orders.linked_product') }}: {{ item.product_name }}</span>
+              <span v-if="item.used_in_bom_count" data-html2canvas-ignore="true" class="text-[11.5px] text-muted-3">{{ t('purchase_orders.used_in_bom', { count: item.used_in_bom_count }) }}</span>
             </div>
             <span class="text-[13.5px] font-bold">{{ formatIDR(item.line_total) }}</span>
           </div>

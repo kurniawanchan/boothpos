@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreBomLineRequest;
 use App\Http\Requests\StoreMaterialRequest;
 use App\Http\Requests\StoreVendorMaterialPriceRequest;
-use App\Http\Requests\UpdateBomLineRequest;
 use App\Http\Requests\UpdateMaterialRequest;
 use App\Http\Requests\UpdateVendorMaterialPriceRequest;
 use App\Http\Resources\BomLineResource;
@@ -17,14 +16,16 @@ use App\Models\ProductVariant;
 use App\Models\ProductVariantBomLine;
 use App\Models\VendorMaterialPrice;
 use App\Services\ActivityLogger;
+use App\Exceptions\BomRuleException;
 use App\Services\BomCostCalculator;
+use App\Services\VariantBomService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class MaterialController extends Controller
 {
-    public function __construct(private ActivityLogger $activityLogger) {}
+    public function __construct(private ActivityLogger $activityLogger, private VariantBomService $bomService) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -168,72 +169,32 @@ class MaterialController extends Controller
     }
 
     // =====================================================================
-    // BOM per varian produk (materialnya sama, endpoint digantung di sini
-    // karena bahannya adalah aggregate root — lihat routes/api.php untuk
-    // alasan path /variants/{variant}/bom)
+    // BOM per varian produk — jalur LEGACY (bahan + jumlah, tanpa baris PO).
+    // Baca/ubah/hapus baris kini ada di VariantBomController (034-seller-po-bom);
+    // yang tersisa di sini hanya pembuatan baris legacy dan rincian biaya.
     // =====================================================================
 
     public function storeBomLine(StoreBomLineRequest $request, ProductVariant $variant): JsonResponse
     {
-        $line = DB::transaction(function () use ($request, $variant) {
-            $line = $variant->bomLines()->create($request->validated());
-
-            $this->activityLogger->log(
-                userId: $request->user()?->id,
-                action: 'created',
-                entityType: 'ProductVariantBomLine',
-                entityId: $line->id,
-                description: "Menambah baris BOM varian {$variant->sku}: bahan #{$line->material_id} x {$line->qty_needed}.",
-                newValues: $line->only($line->getFillable()),
+        // 034-seller-po-bom — jalur LEGACY tetap ada, tetapi lewat
+        // VariantBomService (audit + larangan pada BOM yang sudah selesai).
+        try {
+            $line = $this->bomService->addLegacyLine(
+                $variant,
+                (int) $request->validated('material_id'),
+                $request->validated('qty_needed'),
+                $request->validated('notes'),
+                $request->user(),
             );
-
-            return $line;
-        });
+        } catch (BomRuleException $e) {
+            return response()->json(['message' => $e->getMessage(), 'code' => $e->reason], $e->status);
+        }
 
         return response()->json(new BomLineResource($line->load('material')), 201);
     }
 
-    public function updateBomLine(UpdateBomLineRequest $request, ProductVariantBomLine $bomLine): JsonResponse
-    {
-        $bomLine->update($request->validated());
 
-        return response()->json(new BomLineResource($bomLine->fresh()->load('material')));
-    }
 
-    public function destroyBomLine(Request $request, ProductVariantBomLine $bomLine): JsonResponse
-    {
-        if (! $request->user()->canAccessMenu('products')) {
-            return response()->json(['message' => __('vendors_materials.not_authorized_bom_manage')], 403);
-        }
-
-        DB::transaction(function () use ($bomLine, $request) {
-            $snapshot = $bomLine->only($bomLine->getFillable());
-
-            $bomLine->delete();
-
-            $this->activityLogger->log(
-                userId: $request->user()?->id,
-                action: 'deleted',
-                entityType: 'ProductVariantBomLine',
-                entityId: $bomLine->id,
-                description: "Menghapus baris BOM varian #{$bomLine->product_variant_id}: bahan #{$bomLine->material_id}.",
-                oldValues: $snapshot,
-            );
-        });
-
-        return response()->json(null, 204);
-    }
-
-    public function bomIndex(Request $request, ProductVariant $variant): JsonResponse
-    {
-        if (! $request->user()->canAccessMenu('products')) {
-            return response()->json(['message' => __('vendors_materials.not_authorized_bom_view')], 403);
-        }
-
-        return response()->json([
-            'data' => BomLineResource::collection($variant->bomLines()->with('material')->get()),
-        ]);
-    }
 
     /**
      * F-baru: rincian modal bahan per varian (BOM lines + harga satuan +
@@ -253,6 +214,9 @@ class MaterialController extends Controller
             'sku' => $variant->sku,
             'cost_price' => number_format((float) $variant->cost_price, 2, '.', ''),
             'bom_cost' => $breakdown['bom_cost'],
+            'material_cost' => $breakdown['material_cost'],
+            'service_cost' => $breakdown['service_cost'],
+            'has_legacy' => $breakdown['has_legacy'],
             'lines' => $breakdown['lines'],
         ]);
     }
