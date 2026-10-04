@@ -262,6 +262,14 @@ Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService
 - **Viewing**: `GET /payment-proofs/{id}/file` stays owner/admin or uploader (BOLA protection) **plus the payment's recorder for the current proof** (`Payment::proofViewableBy()`); superseded proofs only owner/admin/uploader. Payment payloads (`OrderResource`, `PreorderController::present()`) carry server-computed `notes`, `proof_id`, `has_proof`, `can_view_proof`, `can_edit_confirmation` — the SPA never derives permission from the role. The proof-dependent fields appear only when `payments.proofs` is eager-loaded (omitted, not "no proof", otherwise — the usual `relationLoaded` trap), so every endpoint that returns payments must load it.
 - UI: `PaymentHistoryList` shows "No proof yet", notes, and the add/edit action; `PaymentConfirmationModal` (reuses `ProofCapture`) is shared by the Sales detail (`TransactionItemsModal`) and the Pre-order detail.
 
+### Payment verification: mark verified (feature 032, 2026-10-04)
+
+- **Every non-cash payment is stored `verification = 'pending'`** (cash is `verified` when recorded) and shows "Not verified" until the shop checks it against the bank/e-wallet statement. The action is `POST /orders|preorders/{id}/payments/{payment}/verify` → `PaymentService::markVerified()` (row-locked, activity log `payment_verified` in the same transaction); bulk `POST /orders/verify-payments` (`PaymentService::verifyOrderPayments()`, the Sales list selection) is a LOOP over that single path that skips (with per-reason counts: `already_verified`, `own_payment`, `voided`, `rejected`) instead of failing; cash is ignored.
+- **One-way and FINAL (product-owner decision):** only `pending → verified`; there is no un-verify route, service method or UI, and the guard makes a repeat/stale request a harmless 409 (no second log row). `rejected` is an existing state this feature never enters or leaves (rejecting is out of scope).
+- **Who may verify** — `Payment::mayVerify()` (the single definition; `isVerifiable()` is "non-cash and pending"): owner/admin always (even payments they recorded), anyone else EXCEPT the payment's recorder (separation of duties); a payment with `recorded_by` NULL can be verified by anyone. Payloads carry server-computed `can_verify` plus `verified_by_name` (only when `payments.verifier` is eager-loaded — the relationLoaded trap again) and `verified_at`; the SPA never derives permission from the role.
+- **Money is untouched** (amount, status, totals, expected shift cash, reports). One intended visible effect: `CashierSessionController::summary()` has always counted only VERIFIED payments in its per-method breakdown, so a verified QRIS payment now appears there; expected cash is cash-only and unaffected.
+- UI: `PaymentHistoryList` shows "Not verified"/"Verified" + "Verified by X · date" and the "Mark verified" action (always behind a "cannot be undone" `ConfirmDialog`), in the Sales detail and the Pre-order payment history; the Sales list has "Mark verified (N)" next to Export, meant to be used with the existing "Needs verification" (`pstate=pending`) filter + Select all.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -269,7 +277,21 @@ Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/031-optional-payment-proof/plan.md`
+Active feature plan: `specs/032-mark-payment-verified/plan.md`
+(branch `032-mark-payment-verified`, branched from `develop` after PR #26) — the
+"Not verified" badge on non-cash sales never cleared because nothing could change
+`payments.verification`. Adds the missing, **one-way** action (no schema change: the
+columns `verified_by`/`verified_at` already exist): `POST /orders|preorders/{id}/
+payments/{payment}/verify` → `PaymentService::markVerified()` (row-locked,
+`pending → verified` only, non-cash only, not for voided/cancelled targets, audit
+`payment_verified` in the same transaction) and a bulk `POST /orders/verify-payments`
+for the Sales list selection (loop over the single path; skips own/already-verified/
+voided/rejected with a per-reason summary). Allowed for owner/admin or any user EXCEPT
+the payment's recorder (`Payment::mayVerify`); there is deliberately NO undo (product-
+owner decision). Verification never touches amounts, status, totals, shift cash or
+reports. Payloads gain `verified_by_name`, `verified_at`, `can_verify`. See research.md.
+
+Previous feature: `specs/031-optional-payment-proof/plan.md`
 (branch `031-optional-payment-proof`, branched from `develop` after PR #25) — the
 payment proof (photo/file) becomes OPTIONAL for non-cash sales and pre-order
 payments (reference and notes already were): `PaymentRecorder` no longer demands

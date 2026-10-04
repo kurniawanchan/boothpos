@@ -6,11 +6,21 @@ import SalesView from '../../resources/js/views/SalesView.vue';
 import { listEvents } from '../../resources/js/api/events';
 import { salesReport, exportSalesTransactions } from '../../resources/js/api/reports';
 import { toLocalDateKey } from '../../resources/js/utils/date';
+import { verifyOrderPayments } from '../../resources/js/api/payments';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), exportReport: vi.fn(), exportSalesTransactions: vi.fn() }));
 vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn(), getReceipt: vi.fn(), voidOrder: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ getProduct: vi.fn() }));
+// 032 — aksi massal "Tandai terverifikasi" (dan api pembayaran yang dipakai detail transaksi).
+vi.mock('../../resources/js/api/payments', () => ({
+  listPaymentChannels: vi.fn().mockResolvedValue({ data: [] }),
+  uploadPaymentProof: vi.fn(),
+  updatePaymentConfirmation: vi.fn(),
+  getPaymentProofBlobUrl: vi.fn(),
+  verifyPayment: vi.fn(),
+  verifyOrderPayments: vi.fn(),
+}));
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock('../../resources/js/stores/toast', () => ({ useToastStore: () => toast }));
@@ -478,3 +488,86 @@ describe('SalesView — partially paid sales (028 US5)', () => {
     expect(shiftLine('Perkiraan kas di laci')).toHaveTextContent('390.000');
   });
 });
+
+/**
+ * 032-mark-payment-verified (US3) — dari daftar Sales: pilih transaksi, "Tandai terverifikasi (N)",
+ * konfirmasi (final, tak bisa dibatalkan), lalu ringkasan: berapa pembayaran terverifikasi dan
+ * apa yang dilewati. Server yang memutuskan mana yang boleh; layar hanya mengirim id transaksi.
+ */
+describe('SalesView — bulk mark verified (032 US3)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
+    verifyOrderPayments.mockResolvedValue({ verified: 2, verified_orders: 2, skipped: { already_verified: 0, own_payment: 0, voided: 0, rejected: 0 }, skipped_total: 0 });
+  });
+
+  const bulkButton = (n) => screen.getByRole('button', { name: `Tandai terverifikasi (${n})` });
+
+  it('offers the bulk action only when rows are selected', async () => {
+    const user = await setup();
+    expect(screen.queryByTestId('bulk-verify')).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText('Pilih ORD-302'));
+
+    expect(bulkButton(1)).toBeInTheDocument();
+  });
+
+  it('asks for confirmation saying it cannot be undone, and verifies nothing when cancelled', async () => {
+    const user = await setup();
+    await user.click(screen.getByLabelText('Pilih ORD-302'));
+
+    await user.click(bulkButton(1));
+    const dialog = await screen.findByRole('dialog', { name: /tandai pembayaran terverifikasi/i });
+    expect(dialog).toHaveTextContent(/tidak bisa dibatalkan/i);
+    await user.click(within(dialog).getByRole('button', { name: /batal/i }));
+
+    expect(verifyOrderPayments).not.toHaveBeenCalled();
+  });
+
+  it('sends only the numeric ids of the selected rows, reloads the list and reports the summary', async () => {
+    const user = await setup();
+    await user.click(screen.getByLabelText('Pilih ORD-301'));
+    await user.click(screen.getByLabelText('Pilih ORD-302'));
+    const loadsBefore = salesReport.mock.calls.length;
+
+    await user.click(bulkButton(2));
+    const dialog = await screen.findByRole('dialog', { name: /tandai pembayaran terverifikasi/i });
+    await user.click(within(dialog).getByRole('button', { name: /ya, tandai/i }));
+
+    await waitFor(() => expect(verifyOrderPayments).toHaveBeenCalledWith([302, 301]));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('2 pembayaran terverifikasi pada 2 transaksi.'));
+    await waitFor(() => expect(salesReport.mock.calls.length).toBeGreaterThan(loadsBefore));
+  });
+
+  it('adds what was skipped, by reason, only when something was skipped', async () => {
+    verifyOrderPayments.mockResolvedValue({ verified: 1, verified_orders: 1, skipped: { already_verified: 1, own_payment: 2, voided: 1, rejected: 0 }, skipped_total: 4 });
+    const user = await setup();
+    await user.click(screen.getByLabelText('Pilih ORD-302'));
+
+    await user.click(bulkButton(1));
+    await user.click(within(await screen.findByRole('dialog', { name: /tandai pembayaran terverifikasi/i })).getByRole('button', { name: /ya, tandai/i }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    const message = toast.success.mock.calls[0][0];
+    expect(message).toContain('1 pembayaran terverifikasi pada 1 transaksi.');
+    expect(message).toContain('Dilewati 4');
+    expect(message).toContain('2 dicatat oleh Anda');
+    expect(message).toContain('1 sudah terverifikasi');
+    expect(message).toContain('1 transaksi batal');
+    expect(message).not.toContain('ditolak');
+  });
+
+  it('says so when nothing could be verified', async () => {
+    verifyOrderPayments.mockResolvedValue({ verified: 0, verified_orders: 0, skipped: { already_verified: 0, own_payment: 1, voided: 0, rejected: 0 }, skipped_total: 1 });
+    const user = await setup();
+    await user.click(screen.getByLabelText('Pilih ORD-302'));
+
+    await user.click(bulkButton(1));
+    await user.click(within(await screen.findByRole('dialog', { name: /tandai pembayaran terverifikasi/i })).getByRole('button', { name: /ya, tandai/i }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(toast.error.mock.calls[0][0]).toContain('Tidak ada pembayaran yang bisa diverifikasi.');
+    expect(toast.error.mock.calls[0][0]).toContain('1 dicatat oleh Anda');
+  });
+});
+

@@ -1668,6 +1668,81 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: "Order batal, atau tunai milik shift yang sudah ditutup" }
 
+  /orders/{id}/payments/{payment_id}/verify:
+    post:
+      tags: [Sales]
+      summary: Tandai satu pembayaran non-tunai penjualan POS terverifikasi (032-mark-payment-verified)
+      description: |
+        032-mark-payment-verified — menandai SATU pembayaran non-tunai yang masih `pending` sebagai
+        `verified` (sudah dicocokkan dengan mutasi bank/e-wallet). Tanpa body. **Satu arah dan FINAL:**
+        tidak ada route untuk membatalkan verifikasi (keputusan produk); jejaknya ada di activity log.
+
+        **Otorisasi:** owner/admin, atau pengguna mana pun KECUALI pencatat pembayaran itu
+        (`payments.recorded_by`) — pencatat → 403. Pembayaran lama tanpa pencatat boleh diverifikasi siapa pun.
+
+        **Aturan** (setelah baris transaksi dikunci, jadi dua klik serentak berlaku berurutan): pembayaran
+        milik transaksi ini (404 bila bukan); penjualan `voided` → 409; tunai → 422 (`errors.method`; tunai sudah
+        terverifikasi sejak dicatat); sudah `verified` → 409; `rejected` → 409.
+
+        Menulis `verified_by`/`verified_at` dan baris `activity_logs` `payment_verified` (nilai lama/baru) di
+        transaksi yang sama. Tidak mengubah jumlah, metode, kanal, status, total, kas yang diharapkan, atau
+        laporan; pembayaran itu kini muncul di rincian per-metode `GET /sessions/{id}/summary` (rincian itu
+        sejak awal hanya menghitung pembayaran terverifikasi).
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Penjualan sesudah diverifikasi (payments[] memuat verification, verified_by_name, verified_at, can_verify)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Penjualan batal, atau pembayaran sudah terverifikasi / ditolak" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/verify-payments:
+    post:
+      tags: [Sales]
+      summary: Verifikasi massal pembayaran non-tunai dari beberapa penjualan (032-mark-payment-verified, US3)
+      description: |
+        Untuk tiap penjualan terpilih (id dari daftar Sales), memverifikasi setiap pembayaran NON-TUNAI yang
+        masih `pending` lewat jalur satu-pembayaran yang sama (satu transaksi dan satu baris audit
+        `payment_verified` per pembayaran). Yang tak bisa diverifikasi pemanggil DILEWATI dan dihitung per
+        alasan, tidak menggagalkan sisanya: `voided` (penjualan batal), `rejected`, `already_verified`,
+        `own_payment` (dicatat pemanggil, kecuali owner/admin). Pembayaran tunai diabaikan (tidak dihitung).
+        Id yang tak ditemukan / milik mode DEMO-LIVE lain diabaikan. Satu arah dan final seperti verifikasi
+        tunggal. Hitungan adalah jumlah PEMBAYARAN, kecuali `verified_orders`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_ids]
+              properties:
+                order_ids: { type: array, minItems: 1, maxItems: 200, uniqueItems: true, items: { type: integer } }
+      responses:
+        '200':
+          description: Ringkasan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified: { type: integer }
+                  verified_orders: { type: integer }
+                  skipped:
+                    type: object
+                    properties:
+                      already_verified: { type: integer }
+                      own_payment: { type: integer }
+                      voided: { type: integer }
+                      rejected: { type: integer }
+                  skipped_total: { type: integer }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /orders/{id}/payments/{payment_id}/confirmation:
     patch:
       tags: [Sales]
@@ -2853,6 +2928,40 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: "Pre-order sudah diserahkan atau dibatalkan" }
+
+  /preorders/{id}/payments/{payment_id}/verify:
+    post:
+      tags: [Preorder]
+      summary: Tandai satu pembayaran non-tunai pre-order terverifikasi (032-mark-payment-verified)
+      description: |
+        032-mark-payment-verified — menandai SATU pembayaran non-tunai yang masih `pending` sebagai
+        `verified` (sudah dicocokkan dengan mutasi bank/e-wallet). Tanpa body. **Satu arah dan FINAL:**
+        tidak ada route untuk membatalkan verifikasi (keputusan produk); jejaknya ada di activity log.
+
+        **Otorisasi:** owner/admin, atau pengguna mana pun KECUALI pencatat pembayaran itu
+        (`payments.recorded_by`) — pencatat → 403. Pembayaran lama tanpa pencatat boleh diverifikasi siapa pun.
+
+        **Aturan** (setelah baris transaksi dikunci, jadi dua klik serentak berlaku berurutan): pembayaran
+        milik transaksi ini (404 bila bukan); pre-order `cancelled` → 409 (pre-order `handed_over` tetap boleh: tak ada uang yang bergerak); tunai → 422 (`errors.method`; tunai sudah
+        terverifikasi sejak dicatat); sudah `verified` → 409; `rejected` → 409.
+
+        Menulis `verified_by`/`verified_at` dan baris `activity_logs` `payment_verified` (nilai lama/baru) di
+        transaksi yang sama. Tidak mengubah jumlah, metode, kanal, status, total, kas yang diharapkan, atau
+        laporan; pembayaran itu kini muncul di rincian per-metode `GET /sessions/{id}/summary` (rincian itu
+        sejak awal hanya menghitung pembayaran terverifikasi).
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Pre-order sesudah diverifikasi (payments[] memuat verification, verified_by_name, verified_at, can_verify)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Pre-order batal, atau pembayaran sudah terverifikasi / ditolak" }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /preorders/{id}/payments/{payment_id}/confirmation:
     patch:
@@ -5582,6 +5691,9 @@ components:
         notes: { type: string, nullable: true, description: "031 — catatan pembayaran (sebelumnya tersimpan tetapi tak dikirim)." }
         has_proof: { type: boolean, description: "031 — apakah pembayaran ini punya bukti yang berlaku. Dihilangkan bila relasi bukti tak dimuat (bukan 'tidak ada bukti')." }
         can_view_proof: { type: boolean, description: "031 — dihitung server untuk pengguna yang meminta: boleh membuka berkas bukti (owner/admin, pengunggah, atau pencatat pembayaran untuk bukti yang berlaku)." }
+        verified_by_name: { type: string, nullable: true, description: "032 — nama pengguna yang memverifikasi; null untuk tunai/pending/verifier yang sudah dihapus. Dihilangkan bila relasi `payments.verifier` tak dimuat." }
+        verified_at: { type: string, format: date-time, nullable: true, description: "032 — kapan diverifikasi (null untuk tunai dan yang masih pending)." }
+        can_verify: { type: boolean, description: "032 — dihitung server untuk pengguna yang meminta: pembayaran non-tunai masih pending, transaksi tidak batal, dan pengguna boleh (owner/admin, atau bukan pencatat pembayaran itu)." }
         can_edit_confirmation: { type: boolean, description: "031 — dihitung server: pengguna boleh menambah/mengubah/mengganti konfirmasi (non-tunai; owner/admin atau pencatat pembayaran; transaksi tidak batal)." }
         proofs:
           type: array

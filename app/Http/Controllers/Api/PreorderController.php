@@ -176,7 +176,7 @@ class PreorderController extends Controller
 
     public function show(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items.variant.product.category', 'payments.proofs', 'payments.recorder', 'shipment', 'customer', 'notifications', 'splitChildren']);
+        $preorder->load(['items.variant.product.category', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer', 'notifications', 'splitChildren']);
 
         return response()->json([
             ...$this->present($preorder),
@@ -231,7 +231,7 @@ class PreorderController extends Controller
      */
     public function invoice(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items', 'payments.proofs', 'payments.recorder', 'customer', 'event']);
+        $preorder->load(['items', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'customer', 'event']);
 
         return response()->json($this->invoicePayload($preorder));
     }
@@ -251,7 +251,7 @@ class PreorderController extends Controller
             'document' => ['required', 'in:invoice,payment_invoice'],
         ]);
 
-        $preorders = Preorder::with(['items', 'payments.proofs', 'payments.recorder', 'customer', 'event'])
+        $preorders = Preorder::with(['items', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'customer', 'event'])
             ->whereIn('id', $validated['preorder_ids'])
             ->get();
 
@@ -277,7 +277,7 @@ class PreorderController extends Controller
             'document' => ['required', 'in:invoice,payment_invoice'],
         ]);
 
-        $preorders = Preorder::with(['items', 'customer', 'payments.proofs', 'payments.recorder'])
+        $preorders = Preorder::with(['items', 'customer', 'payments.proofs', 'payments.recorder', 'payments.verifier'])
             ->whereIn('id', $validated['preorder_ids'])
             ->get();
 
@@ -680,7 +680,7 @@ class PreorderController extends Controller
         return response()->json($this->present(
             // Eager-load sama persis dengan show() — present() menyembunyikan
             // relasi yang tak dimuat secara diam-diam (lihat CLAUDE.md).
-            $preorder->fresh(['items.variant.product.category', 'payments.proofs', 'payments.recorder', 'shipment', 'customer'])
+            $preorder->fresh(['items.variant.product.category', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer'])
         ));
     }
 
@@ -695,6 +695,25 @@ class PreorderController extends Controller
 
         try {
             $preorder = $this->preorderService->deletePayment($preorder, $payment, $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json($this->present($preorder));
+    }
+
+    /**
+     * 032-mark-payment-verified — tandai SATU pembayaran non-tunai pre-order terverifikasi; kembaran
+     * OrderController::verifyPayment(). Boleh: owner/admin atau pengguna mana pun KECUALI pencatat
+     * pembayaran itu (403). Satu arah dan final. Pre-order `handed_over` tetap boleh (tak ada uang
+     * bergerak); `cancelled` → 409.
+     */
+    public function verifyPayment(Request $request, Preorder $preorder, Payment $payment): JsonResponse
+    {
+        abort_unless($payment->mayVerify($request->user()), 403, __('orders_payments.payment_verify_not_allowed'));
+
+        try {
+            $preorder = $this->preorderService->markPaymentVerified($preorder, $payment, $request->user());
         } catch (ValidationException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
         }
@@ -851,7 +870,16 @@ class PreorderController extends Controller
                     // 031 — dihitung SERVER per pembayaran (SPA tak menebak dari peran);
                     // pre-order batal tak bisa diubah, yang sudah diserahkan tetap boleh.
                     'can_edit_confirmation' => $user !== null && $preorder->status !== 'cancelled' && $p->confirmationEditableBy($user),
+                    // 032 — boleh diverifikasi oleh pengguna yang meminta (dihitung SERVER): non-tunai, masih pending, pre-order tidak batal, bukan pencatatnya.
+                    'can_verify' => $user !== null && $preorder->status !== 'cancelled' && $p->isVerifiable() && $p->mayVerify($user),
+                    // 032 — kapan diverifikasi (NULL untuk tunai/pending); nama verifier hanya bila relasinya dimuat.
+                    'verified_at' => $p->verified_at,
                 ];
+
+                // 032 — siapa yang memverifikasi; dihilangkan (bukan diisi null) bila `payments.verifier` tak dimuat.
+                if ($p->relationLoaded('verifier')) {
+                    $row['verified_by_name'] = $p->verifier?->name;
+                }
 
                 // 024-invoice-layout-shipping-slip (US-payment-proof) — bukti pembayaran
                 // diunggah SEBELUM payment dibuat lalu ditautkan lewat proof_token

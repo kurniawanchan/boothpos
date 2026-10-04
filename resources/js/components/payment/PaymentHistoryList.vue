@@ -20,8 +20,13 @@ import { paymentMethodLabel } from '../../utils/paymentMethods';
  * mengikuti flag yang dihitung SERVER per entri (`can_edit_confirmation`,
  * `can_view_proof`) — komponen ini tak menebak izin dari peran. Entri dari endpoint
  * yang tak memuat bukti (tanpa `has_proof`) tampil persis seperti sebelumnya.
+ *
+ * 032-mark-payment-verified — pembayaran NON-TUNAI menampilkan status verifikasinya ("Belum
+ * terverifikasi" sampai dicocokkan dengan mutasi bank/e-wallet) dan, bila SERVER menyatakan
+ * `can_verify` (pencatat pembayaran tidak boleh memverifikasi miliknya sendiri), aksi "Tandai
+ * terverifikasi". Verifikasi satu arah dan FINAL: sengaja tak ada aksi untuk membatalkannya.
  * Komponen ini hanya menampilkan dan memancarkan event; pemanggil yang membuka
- * bukti, membuka dialog konfirmasi, mencetak invoice, dan mengonfirmasi hapus.
+ * bukti, membuka dialog konfirmasi, memverifikasi, mencetak invoice, dan mengonfirmasi hapus.
  */
 defineProps({
   payments: { type: Array, default: () => [] },
@@ -31,10 +36,23 @@ defineProps({
   showProof: { type: Boolean, default: true },
   showPrint: { type: Boolean, default: true },
 });
-const emit = defineEmits(['view-proof', 'print', 'delete', 'edit-confirmation']);
+const emit = defineEmits(['view-proof', 'print', 'delete', 'edit-confirmation', 'verify']);
 
 // "Belum ada bukti" hanya bila server MENYATAKAN has_proof === false (non-tunai).
 const lacksProof = (p) => p.method !== 'cash' && p.has_proof === false;
+// 032 — penanda verifikasi hanya untuk non-tunai yang statusnya diketahui (pending/verified).
+const verificationOf = (p) => (p.method !== 'cash' && ['pending', 'verified'].includes(p.verification) ? p.verification : null);
+// Aksi verifikasi hanya untuk entri yang MASIH pending, apa pun flag server (pertahanan berlapis: final, tanpa jalan kembali).
+const canVerify = (p) => !!p.can_verify && verificationOf(p) === 'pending';
+// 032 — baris "Diverifikasi oleh … · waktu"; hanya untuk entri non-tunai yang sudah terverifikasi.
+function verifiedLine(p) {
+  if (verificationOf(p) !== 'verified') return '';
+  const when = p.verified_at ? formatDateTime(p.verified_at) : '';
+  if (p.verified_by_name && when) return t('payment_ledger.verified_by_at', { name: p.verified_by_name, when });
+  if (p.verified_by_name) return t('payment_ledger.verified_by_only', { name: p.verified_by_name });
+  if (when) return t('payment_ledger.verified_at_only', { when });
+  return '';
+}
 const hasAnyConfirmation = (p) => !!(p.has_proof || p.proof_id || p.reference || p.notes);
 const canViewProof = (p) => p.proof_id && p.can_view_proof !== false;
 
@@ -59,6 +77,7 @@ const { t } = useI18n();
           <span v-if="p.notes" class="whitespace-pre-line break-words text-[11px] text-muted-4" data-testid="payment-notes">
             {{ t('payment_ledger.notes_short') }}: {{ p.notes }}
           </span>
+          <span v-if="verifiedLine(p)" class="text-[11px] text-muted-3" data-testid="verified-by">{{ verifiedLine(p) }}</span>
           <span v-if="p.recorded_by_name" class="text-[11px] text-muted-3" data-testid="payment-recorder">
             {{ t('payment_ledger.recorded_by', { name: p.recorded_by_name }) }}
           </span>
@@ -69,15 +88,25 @@ const { t } = useI18n();
             {{ p.status === 'rejected' ? t('payment_ledger.entry_rejected') : t('payment_ledger.entry_paid') }}
           </StatusPill>
           <StatusPill v-if="lacksProof(p)" variant="warn" data-testid="no-proof">{{ t('payment_ledger.no_proof') }}</StatusPill>
+          <StatusPill v-if="verificationOf(p)" :variant="verificationOf(p) === 'verified' ? 'mint' : 'warn'" data-testid="verification-state">
+            {{ verificationOf(p) === 'verified' ? t('payment_ledger.verification_verified') : t('payment_ledger.verification_pending') }}
+          </StatusPill>
         </div>
       </div>
-      <div v-if="(showProof && canViewProof(p)) || p.can_edit_confirmation || showPrint || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
+      <div v-if="(showProof && canViewProof(p)) || p.can_edit_confirmation || canVerify(p) || showPrint || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
         <button
           v-if="showProof && canViewProof(p)"
           type="button"
           class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active"
           @click="emit('view-proof', p)"
         >{{ t('preorders.view_proof') }}</button>
+        <button
+          v-if="canVerify(p)"
+          type="button"
+          class="whitespace-nowrap text-[12px] font-semibold text-brand-active hover:underline"
+          data-testid="verify-payment"
+          @click="emit('verify', p)"
+        >{{ t('payment_ledger.mark_verified') }}</button>
         <button
           v-if="p.can_edit_confirmation"
           type="button"

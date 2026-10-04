@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreOrderRequest;
 use App\Http\Requests\StorePaymentRequest;
 use App\Http\Requests\UpdatePaymentConfirmationRequest;
+use App\Http\Requests\VerifyOrderPaymentsRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use App\Models\Payment;
@@ -77,7 +78,7 @@ class OrderController extends Controller
         // lain yang memakai resource ini tidak berubah bentuk.
         return response()->json(new OrderResource($order->load([
             'items.variant.product.category', 'items.artist',
-            'payments.channel', 'payments.recorder', 'payments.proofs', 'customer', 'cashier', 'event',
+            'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
         ])));
     }
 
@@ -97,7 +98,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'customer', 'cashier', 'event',
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
         ])), $replayed ? 200 : 201);
     }
 
@@ -117,7 +118,40 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'customer', 'cashier', 'event',
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+        ])));
+    }
+
+    /**
+     * 032-mark-payment-verified (US3) — verifikasi massal dari daftar Sales. Hanya id penjualan yang
+     * dikirim klien; semua aturan per pembayaran ada di PaymentService::verifyOrderPayments() (yang
+     * tak bisa diverifikasi pemanggil dilewati dan dihitung per alasan, bukan 4xx). 422 hanya untuk
+     * bentuk permintaan yang salah.
+     */
+    public function verifyPayments(VerifyOrderPaymentsRequest $request): JsonResponse
+    {
+        return response()->json($this->paymentService->verifyOrderPayments($request->validated('order_ids'), $request->user()));
+    }
+
+    /**
+     * 032-mark-payment-verified — tandai SATU pembayaran non-tunai terverifikasi. Boleh: owner/admin
+     * atau pengguna mana pun KECUALI pencatat pembayaran itu (403) — dijaga di sini DAN diulang di
+     * PaymentService. Satu arah dan final: tidak ada route pembatalan. Aturan lain (batal 409, tunai
+     * 422, sudah terverifikasi/ditolak 409) ada di service; di sini hanya memetakan ValidationException
+     * ke kode statusnya, sama seperti destroyPayment().
+     */
+    public function verifyPayment(Request $request, Order $order, Payment $payment): JsonResponse
+    {
+        abort_unless($payment->mayVerify($request->user()), 403, __('orders_payments.payment_verify_not_allowed'));
+
+        try {
+            $order = $this->paymentService->markVerified($order, $payment, $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
         ])));
     }
 
@@ -140,7 +174,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'customer', 'cashier', 'event',
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
         ])));
     }
 

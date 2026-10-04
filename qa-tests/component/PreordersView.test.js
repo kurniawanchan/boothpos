@@ -10,7 +10,7 @@ import { listArtists } from '../../resources/js/api/artists';
 import { listCustomers, getCustomer } from '../../resources/js/api/customers';
 import { lookupVariants } from '../../resources/js/api/products';
 import { listEvents } from '../../resources/js/api/events';
-import { updatePaymentConfirmation, getPaymentProofBlobUrl } from '../../resources/js/api/payments';
+import { updatePaymentConfirmation, getPaymentProofBlobUrl, verifyPayment } from '../../resources/js/api/payments';
 import id from '../../resources/js/locales/id.json';
 import en from '../../resources/js/locales/en.json';
 
@@ -75,6 +75,7 @@ vi.mock('../../resources/js/api/payments', () => ({
   uploadPaymentProof: vi.fn(),
   updatePaymentConfirmation: vi.fn(),
   getPaymentProofBlobUrl: vi.fn(),
+  verifyPayment: vi.fn(),
 }));
 
 const ARTISTS = [
@@ -1510,5 +1511,66 @@ describe('PreordersView — payment confirmation (031 US3)', () => {
     await user.click(save);
 
     await waitFor(() => expect(createPreorderPayment).toHaveBeenCalledWith(80, expect.objectContaining({ method: 'qr_ewallet', channel_id: 1, proof_token: null })));
+  });
+});
+
+/**
+ * 032-mark-payment-verified (US1) — riwayat pembayaran pre-order memakai daftar yang sama dengan
+ * detail Sales: penanda verifikasi dan aksi "Tandai terverifikasi" menurut flag server.
+ */
+describe('PreordersView — mark payment verified (032)', () => {
+  const ROW = { id: 80, preorder_number: 'PO-0080', customer_name: 'Dewi', status: 'dp_paid', fulfillment: 'pickup', total_amount: '200000.00', paid_amount: '50000.00', outstanding: '150000.00', sellers: [] };
+  const entry = (overrides = {}) => ({
+    id: 5, method: 'bank_transfer', purpose: 'down_payment', amount: '50000.00', paid_at: '2026-10-02T01:00:00Z',
+    status: 'paid', reference: null, notes: null, recorded_by_name: 'Kasir Satu',
+    verification: 'pending', can_verify: true, can_edit_confirmation: false,
+    ...overrides,
+  });
+  const detail = (payment) => ({
+    id: 80, preorder_number: 'PO-0080', status: 'dp_paid', dispatch_status: 'pending', fulfillment: 'pickup',
+    total_amount: '200000.00', paid_amount: '50000.00', outstanding: '150000.00', items: [], customer: { name: 'Dewi' },
+    payments: [payment],
+    payment_summary: { grand_total: '200000.00', total_paid: '50000.00', remaining: '150000.00', status: 'partially_paid', payment_count: 1 },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: [ROW], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
+    getPreorderSummary.mockResolvedValue({ transaction_count: 1 });
+  });
+
+  async function openDetail(user) {
+    await renderPreorders();
+    await screen.findByText('PO-0080');
+    await user.click(screen.getByRole('button', { name: 'PO-0080' }));
+  }
+
+  it('shows the pending marker and the action only when the server allows it', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue(detail(entry({ can_verify: false })));
+    await openDetail(user);
+
+    const row = await screen.findByTestId('payment-entry');
+    expect(within(row).getByText('Belum terverifikasi')).toBeInTheDocument();
+    expect(within(row).queryByRole('button', { name: 'Tandai terverifikasi' })).not.toBeInTheDocument();
+  });
+
+  it('confirms, verifies through the preorders path, refreshes the entry from the response and reloads the list', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue(detail(entry()));
+    verifyPayment.mockResolvedValue(detail(entry({ verification: 'verified', can_verify: false })));
+    await openDetail(user);
+
+    await user.click(within(await screen.findByTestId('payment-entry')).getByRole('button', { name: 'Tandai terverifikasi' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tandai pembayaran terverifikasi?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Ya, tandai terverifikasi' }));
+
+    await waitFor(() => expect(verifyPayment).toHaveBeenCalledWith('preorders', 80, 5));
+    await waitFor(() => expect(within(screen.getByTestId('payment-entry')).getByText('Terverifikasi')).toBeInTheDocument());
+    await waitFor(() => expect(listPreorders.mock.calls.length).toBeGreaterThan(1));
   });
 });

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { listEvents } from '../api/events';
 import { salesReport, exportSalesTransactions } from '../api/reports';
+import { verifyOrderPayments } from '../api/payments';
 import { useToastStore } from '../stores/toast';
 import { useSalesFilters } from '../composables/useSalesFilters';
 import { formatIDR } from '../utils/money';
@@ -14,6 +15,7 @@ import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
+import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
@@ -216,6 +218,55 @@ async function doExport() {
   }
 }
 
+// --- verifikasi massal (032-mark-payment-verified, US3) -------------------------------------
+// Pilih transaksi → "Tandai terverifikasi (N)" → konfirmasi (FINAL, tak bisa dibatalkan) → ringkasan.
+// Klien hanya mengirim ID penjualan yang dipilih; server memutuskan pembayaran mana yang boleh dan
+// MELEWATI sisanya (milik pemanggil sendiri, sudah terverifikasi, batal, ditolak) dengan hitungan per
+// alasan. Dipakai bersama filter status pembayaran "Perlu verifikasi" + "Pilih semua" untuk
+// memverifikasi satu hari sekaligus.
+const showBulkVerify = ref(false);
+const bulkVerifying = ref(false);
+const chosenOrderIds = computed(() =>
+  chosenKeys.value.filter((k) => k.startsWith('order:')).map((k) => Number(k.slice('order:'.length))).filter(Number.isInteger)
+);
+
+function bulkVerifySummary(result) {
+  const skipped = result.skipped ?? {};
+  const reasons = [
+    ['own_payment', 'payment_ledger.verify_skip_own'],
+    ['already_verified', 'payment_ledger.verify_skip_already'],
+    ['voided', 'payment_ledger.verify_skip_voided'],
+    ['rejected', 'payment_ledger.verify_skip_rejected'],
+  ].filter(([key]) => (skipped[key] ?? 0) > 0).map(([key, msg]) => t(msg, { count: skipped[key] }));
+  const skippedText = result.skipped_total > 0
+    ? t('payment_ledger.verify_bulk_skipped', { total: result.skipped_total, reasons: reasons.join(', ') })
+    : '';
+  const head = result.verified > 0
+    ? t('payment_ledger.verify_bulk_result', { verified: result.verified, orders: result.verified_orders })
+    : t('payment_ledger.verify_bulk_nothing');
+  return { ok: result.verified > 0, text: [head, skippedText].filter(Boolean).join(' ') };
+}
+
+async function doBulkVerify() {
+  if (bulkVerifying.value || chosenOrderIds.value.length === 0) return;
+  bulkVerifying.value = true;
+  try {
+    const result = await verifyOrderPayments(chosenOrderIds.value);
+    const summary = bulkVerifySummary(result);
+    if (summary.ok) toast.success(summary.text);
+    else toast.error(summary.text);
+    await load();
+    // Pilihan hanya dipertahankan untuk baris yang MASIH belum terverifikasi.
+    const stillPending = new Set(transactions.value.filter((tx) => tx.payment_state === 'pending').map((tx) => tx.key));
+    selected.value = new Set([...selected.value].filter((k) => stillPending.has(k)));
+  } catch {
+    // 403/422 sudah di-toast interceptor global.
+  } finally {
+    showBulkVerify.value = false;
+    bulkVerifying.value = false;
+  }
+}
+
 // --- aksi baris --------------------------------------------------------------------------
 // Klik nomor transaksi membuka detail transaksi (dan dari sana struk / pembatalan).
 const showItems = ref(false);
@@ -251,6 +302,10 @@ function showCustomerDetail(row) {
     <div class="flex flex-wrap items-center gap-2.5">
       <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
       <span class="flex-1"></span>
+      <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
+        <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
+        {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
+      </BaseButton>
       <BaseButton variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         {{ exportLabel }}
@@ -422,12 +477,26 @@ function showCustomerDetail(row) {
             {{ formatIDR(row.total_amount) }}
           </template>
           <template #cell-actions="{ row }">
-            <button type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openDetail(row)">{{ t('reports.view_items') }}</button>
-            <button type="button" class="ml-3 text-[12.5px] font-semibold text-brand-active" @click="openReceipt(row)">{{ t('reports.view_receipt') }}</button>
+            <!-- Dua tautan ditumpuk rata kiri dan tak boleh terbelah baris: dulu berdampingan dengan
+                 margin, sehingga di kolom sempit tiap tautan terbungkus dan keduanya tak sejajar. -->
+            <div class="flex flex-col items-start gap-1.5">
+              <button type="button" class="whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" @click="openDetail(row)">{{ t('reports.view_items') }}</button>
+              <button type="button" class="whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" @click="openReceipt(row)">{{ t('reports.view_receipt') }}</button>
+            </div>
           </template>
         </DataTable>
       </div>
     </div>
+
+    <ConfirmDialog
+      :open="showBulkVerify"
+      :title="t('payment_ledger.verify_confirm_title')"
+      :message="t('payment_ledger.verify_bulk_confirm_message', { count: chosenOrderIds.length })"
+      :confirm-label="t('payment_ledger.verify_confirm_label')"
+      :loading="bulkVerifying"
+      @close="showBulkVerify = false"
+      @confirm="doBulkVerify"
+    />
 
     <TransactionItemsModal :open="showItems" :order-id="itemsOrderId" @close="showItems = false" @changed="load" />
     <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" @close="showReceipt = false" />

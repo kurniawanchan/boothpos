@@ -33,4 +33,11 @@ return [
     'payment_confirmation_empty' => 'Provide at least a proof, a reference or notes; a confirmation cannot be left empty.',
     'payment_confirmation_cash' => 'Cash payments have no confirmation to add.',
     'payment_confirmation_target_closed' => 'This transaction is voided or cancelled; its confirmation can no longer be changed.',
+
+    // 032-mark-payment-verified
+    'payment_verify_not_allowed' => 'You recorded this payment, so someone else must verify it.',
+    'payment_verify_cash' => 'Cash payments are verified when they are recorded.',
+    'payment_already_verified' => 'This payment is already verified.',
+    'payment_rejected_cannot_verify' => 'A rejected payment cannot be verified.',
+    'payment_verify_target_closed' => 'This transaction is voided or cancelled; its payments can no longer be verified.',
 ];

@@ -177,3 +177,108 @@ describe('PaymentHistoryList — confirmation (031)', () => {
     expect(within(rows()[1]).getByRole('button', { name: /lihat bukti/i })).toBeInTheDocument(); // proof_id sudah ada, tanpa flag => tetap tampil
   });
 });
+
+/**
+ * 032-mark-payment-verified (US1, FR-001/FR-002/FR-003) — pembayaran non-tunai ditandai
+ * "Belum terverifikasi" sampai diverifikasi; aksi "Tandai terverifikasi" hanya muncul bila
+ * SERVER menyatakan `can_verify` (pencatat pembayaran tidak boleh memverifikasi miliknya).
+ */
+describe('PaymentHistoryList — verification (032)', () => {
+  const entry = (overrides = {}) => ({
+    id: 10, method: 'qr_ewallet', amount: '50000.00', paid_at: '2026-10-04T05:00:00Z', provider: 'Shopee',
+    reference: null, notes: null, recorded_by_name: 'Kasir Satu', status: 'paid',
+    verification: 'pending', can_verify: false,
+    ...overrides,
+  });
+
+  it('marks a pending non-cash payment "Belum terverifikasi" and a verified one "Terverifikasi"', () => {
+    render(PaymentHistoryList, { props: { payments: [entry({ id: 1 }), entry({ id: 2, verification: 'verified' })] } });
+
+    expect(within(rows()[0]).getByText('Belum terverifikasi')).toBeInTheDocument();
+    expect(within(rows()[1]).getByText('Terverifikasi')).toBeInTheDocument();
+    expect(within(rows()[1]).queryByText('Belum terverifikasi')).not.toBeInTheDocument();
+  });
+
+  it('shows no verification marker for cash, rejected entries, or entries from before this feature', () => {
+    render(PaymentHistoryList, {
+      props: {
+        payments: [
+          entry({ id: 1, method: 'cash', provider: null, verification: 'verified' }),
+          entry({ id: 2, verification: 'rejected', status: 'rejected' }),
+          { id: 3, method: 'bank_transfer', amount: '1000.00', paid_at: '2026-10-04T05:00:00Z', status: 'paid' },
+        ],
+      },
+    });
+
+    for (const row of rows()) {
+      expect(within(row).queryByText('Belum terverifikasi')).not.toBeInTheDocument();
+      expect(within(row).queryByText('Terverifikasi')).not.toBeInTheDocument();
+    }
+  });
+
+  it('offers "Tandai terverifikasi" only on a pending entry the server says may be verified, and emits verify with the entry', async () => {
+    const user = userEvent.setup();
+    const target = entry({ id: 1, can_verify: true });
+    const { emitted } = render(PaymentHistoryList, {
+      props: { payments: [target, entry({ id: 2, can_verify: false }), entry({ id: 3, verification: 'verified', can_verify: true })] },
+    });
+
+    expect(within(rows()[0]).getByRole('button', { name: 'Tandai terverifikasi' })).toBeInTheDocument();
+    expect(within(rows()[1]).queryByRole('button', { name: 'Tandai terverifikasi' })).not.toBeInTheDocument();
+    expect(within(rows()[2]).queryByRole('button', { name: 'Tandai terverifikasi' })).not.toBeInTheDocument();
+
+    await user.click(within(rows()[0]).getByRole('button', { name: 'Tandai terverifikasi' }));
+    expect(emitted().verify[0]).toEqual([target]);
+  });
+
+  it('never offers any way to undo a verification', () => {
+    render(PaymentHistoryList, { props: { payments: [entry({ verification: 'verified', can_verify: true })] } });
+
+    expect(screen.queryByRole('button', { name: /batal.*verifikasi|belum terverifikasi|unverify|undo/i })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 032-mark-payment-verified (US2, FR-004) — pembayaran yang sudah diverifikasi menampilkan
+ * siapa dan kapan; entri lama (tunai, atau sebelum fitur ini) tampil seperti biasa.
+ */
+describe('PaymentHistoryList — who verified and when (032 US2)', () => {
+  const entry = (overrides = {}) => ({
+    id: 10, method: 'qr_ewallet', amount: '50000.00', paid_at: '2026-10-04T05:00:00Z', provider: 'Shopee',
+    reference: null, notes: null, recorded_by_name: 'Kasir Satu', status: 'paid',
+    verification: 'verified', can_verify: false, verified_by_name: 'Pemeriksa Satu', verified_at: '2026-10-04T08:30:00Z',
+    ...overrides,
+  });
+
+  it('shows "Diverifikasi oleh {nama} · {tanggal/waktu}" for a verified non-cash entry', () => {
+    render(PaymentHistoryList, { props: { payments: [entry()] } });
+
+    const line = within(rows()[0]).getByTestId('verified-by');
+    expect(line).toHaveTextContent('Diverifikasi oleh Pemeriksa Satu');
+    expect(line).toHaveTextContent(/2026/);
+  });
+
+  it('falls back to "Diverifikasi · {tanggal/waktu}" when the verifier is unknown, never printing null/undefined', () => {
+    render(PaymentHistoryList, { props: { payments: [entry({ verified_by_name: null })] } });
+
+    const line = within(rows()[0]).getByTestId('verified-by');
+    expect(line).toHaveTextContent(/^Diverifikasi · /);
+    expect(line).not.toHaveTextContent(/null|undefined/);
+  });
+
+  it('shows just the pill when neither the verifier nor the time is known', () => {
+    render(PaymentHistoryList, { props: { payments: [entry({ verified_by_name: null, verified_at: null })] } });
+
+    expect(within(rows()[0]).getByText('Terverifikasi')).toBeInTheDocument();
+    expect(within(rows()[0]).queryByTestId('verified-by')).not.toBeInTheDocument();
+  });
+
+  it('never shows a verifier line for cash or for a pending entry', () => {
+    render(PaymentHistoryList, {
+      props: { payments: [entry({ id: 1, method: 'cash', provider: null }), entry({ id: 2, verification: 'pending', verified_by_name: null, verified_at: null })] },
+    });
+
+    for (const row of rows()) expect(within(row).queryByTestId('verified-by')).not.toBeInTheDocument();
+  });
+});
+
