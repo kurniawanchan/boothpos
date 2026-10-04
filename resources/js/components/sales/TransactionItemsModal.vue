@@ -14,7 +14,7 @@ import AddPaymentModal from '../payment/AddPaymentModal.vue';
 import PaymentConfirmationModal from '../payment/PaymentConfirmationModal.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
 import { getOrder, voidOrder, addOrderPayment, deleteOrderPayment } from '../../api/orders';
-import { getPaymentProofBlobUrl } from '../../api/payments';
+import { getPaymentProofBlobUrl, verifyPayment } from '../../api/payments';
 import { formatIDR, parseMoney } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
@@ -155,6 +155,34 @@ function closeProofLightbox() {
   proofLightboxSrc.value = null;
 }
 
+// --- Verifikasi pembayaran (032-mark-payment-verified) ------------------------------------
+// Pembayaran non-tunai "Belum terverifikasi" ditandai terverifikasi setelah dicocokkan dengan mutasi
+// bank/e-wallet. Satu arah dan FINAL (tak ada pembatalan), maka selalu lewat konfirmasi. Siapa yang
+// boleh dihitung SERVER per pembayaran (`can_verify`; pencatat pembayaran tak boleh memverifikasi
+// miliknya); modal ini hanya menampilkan aksinya.
+const verifyTarget = ref(null);
+const verifying = ref(false);
+
+async function performVerify() {
+  if (!verifyTarget.value || verifying.value) return;
+  verifying.value = true;
+  try {
+    order.value = await verifyPayment('orders', order.value.id, verifyTarget.value.id);
+    toast.success(t('payment_ledger.verify_done'));
+    emit('changed'); // badge "Belum terverifikasi" di daftar perlu dimuat ulang
+  } catch (err) {
+    // 403/409/422 sudah di-toast interceptor global. 409 = layar basi (sudah terverifikasi oleh orang
+    // lain, atau transaksi batal): ambil ulang supaya entri menampilkan keadaan sebenarnya.
+    if (err?.isConflict) {
+      try { order.value = await getOrder(order.value.id); } catch { /* biarkan tampilan lama */ }
+      emit('changed');
+    }
+  } finally {
+    verifyTarget.value = null;
+    verifying.value = false;
+  }
+}
+
 // --- Batalkan transaksi -------------------------------------------------------------------
 // Digerbang menu 'settings' — persis aturan server (OrderController::void() memetakan aksi
 // ini ke canAccessMenu('settings')); ini hanya cermin tampilan, server tetap yang menolak (403).
@@ -289,6 +317,7 @@ async function performVoid() {
             :can-delete="canDeletePayments"
             @delete="(p) => (paymentDeleteTarget = p)"
             @view-proof="viewPaymentProof"
+            @verify="(p) => (verifyTarget = p)"
             @edit-confirmation="(p) => (confirmationTarget = p)"
           />
           <div v-if="changeAmount > 0" class="flex justify-between text-[12.5px]">
@@ -344,6 +373,15 @@ async function performVoid() {
     @confirm="performDeletePayment"
   />
 
+  <ConfirmDialog
+    :open="verifyTarget !== null"
+    :title="t('payment_ledger.verify_confirm_title')"
+    :message="t('payment_ledger.verify_confirm_message', { amount: formatIDR(verifyTarget?.amount ?? 0) })"
+    :confirm-label="t('payment_ledger.verify_confirm_label')"
+    :loading="verifying"
+    @close="verifyTarget = null"
+    @confirm="performVerify"
+  />
   <PaymentConfirmationModal
     v-if="order"
     :open="confirmationTarget !== null"

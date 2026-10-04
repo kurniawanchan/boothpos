@@ -5,7 +5,7 @@ import TransactionItemsModal from '../../resources/js/components/sales/Transacti
 import { getOrder, getReceipt, voidOrder, addOrderPayment, deleteOrderPayment } from '../../resources/js/api/orders';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { getProduct } from '../../resources/js/api/products';
-import { updatePaymentConfirmation, getPaymentProofBlobUrl, uploadPaymentProof } from '../../resources/js/api/payments';
+import { updatePaymentConfirmation, getPaymentProofBlobUrl, uploadPaymentProof, verifyPayment } from '../../resources/js/api/payments';
 
 vi.mock('../../resources/js/api/orders', () => ({
   getOrder: vi.fn(), getReceipt: vi.fn(), voidOrder: vi.fn(), addOrderPayment: vi.fn(), deleteOrderPayment: vi.fn(),
@@ -15,6 +15,7 @@ vi.mock('../../resources/js/api/payments', () => ({
   uploadPaymentProof: vi.fn(),
   updatePaymentConfirmation: vi.fn(),
   getPaymentProofBlobUrl: vi.fn(),
+  verifyPayment: vi.fn(),
 }));
 vi.mock('../../resources/js/api/products', () => ({ getProduct: vi.fn() }));
 
@@ -528,5 +529,91 @@ describe('TransactionItemsModal — payment confirmation (031)', () => {
     const entry = screen.getByTestId('payment-entry');
     expect(within(entry).queryByRole('button', { name: /konfirmasi/i })).not.toBeInTheDocument();
     expect(within(entry).getByRole('button', { name: /lihat bukti/i })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 032-mark-payment-verified (US1) — dari detail Sales: pembayaran non-tunai "Belum terverifikasi"
+ * bisa ditandai terverifikasi oleh pihak yang boleh (server menghitung `can_verify`), setelah
+ * konfirmasi karena tindakan ini final (tak ada pembatalan).
+ */
+describe('TransactionItemsModal — mark payment verified (032)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const qrisEntry = (overrides = {}) => ({
+    id: 2, method: 'qr_ewallet', amount: '85000.00', verification: 'pending', status: 'paid',
+    paid_at: '2026-09-27T11:25:00Z', provider: 'Shopee', reference: null, notes: null, recorded_by_name: 'Kasir Satu',
+    proof_id: null, has_proof: false, can_view_proof: false, can_edit_confirmation: false, can_verify: true,
+    ...overrides,
+  });
+  const orderWith = (entry, extra = {}) => ({
+    ...FULL_ORDER,
+    paid_amount: '85000.00', change_amount: '0.00',
+    payment_summary: { grand_total: '85000.00', total_paid: '85000.00', remaining: '0.00', status: 'fully_paid', payment_count: 1 },
+    payments: [entry],
+    ...extra,
+  });
+
+  it('shows "Belum terverifikasi" and offers the action when the server allows it', async () => {
+    await open(orderWith(qrisEntry()));
+
+    const entry = screen.getByTestId('payment-entry');
+    expect(within(entry).getByText('Belum terverifikasi')).toBeInTheDocument();
+    expect(within(entry).getByRole('button', { name: 'Tandai terverifikasi' })).toBeInTheDocument();
+  });
+
+  it('offers no action to a user the server did not allow (e.g. the cashier who recorded it)', async () => {
+    await open(orderWith(qrisEntry({ can_verify: false })));
+
+    const entry = screen.getByTestId('payment-entry');
+    expect(within(entry).getByText('Belum terverifikasi')).toBeInTheDocument();
+    expect(within(entry).queryByRole('button', { name: 'Tandai terverifikasi' })).not.toBeInTheDocument();
+  });
+
+  it('asks for confirmation that says it cannot be undone, then verifies and re-renders the entry from the response', async () => {
+    const user = await open(orderWith(qrisEntry()));
+    verifyPayment.mockResolvedValue(orderWith(qrisEntry({ verification: 'verified', can_verify: false })));
+
+    await user.click(within(screen.getByTestId('payment-entry')).getByRole('button', { name: 'Tandai terverifikasi' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tandai pembayaran terverifikasi?' });
+    expect(dialog).toHaveTextContent(/tidak bisa dibatalkan/i);
+    expect(verifyPayment).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole('button', { name: 'Ya, tandai terverifikasi' }));
+
+    await waitFor(() => expect(verifyPayment).toHaveBeenCalledWith('orders', 101, 2));
+    await waitFor(() => expect(within(screen.getByTestId('payment-entry')).getByText('Terverifikasi')).toBeInTheDocument());
+    expect(within(screen.getByTestId('payment-entry')).queryByRole('button', { name: 'Tandai terverifikasi' })).not.toBeInTheDocument();
+    expect(toast.success).toHaveBeenCalled();
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('verifies nothing when the confirmation is cancelled', async () => {
+    const user = await open(orderWith(qrisEntry()));
+
+    await user.click(within(screen.getByTestId('payment-entry')).getByRole('button', { name: 'Tandai terverifikasi' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tandai pembayaran terverifikasi?' });
+    await user.click(within(dialog).getByRole('button', { name: /batal/i }));
+
+    expect(verifyPayment).not.toHaveBeenCalled();
+    expect(within(screen.getByTestId('payment-entry')).getByText('Belum terverifikasi')).toBeInTheDocument();
+  });
+
+  it('reloads the order when the server says it was already verified (stale screen), so the entry shows the real state', async () => {
+    const user = await open(orderWith(qrisEntry()));
+    verifyPayment.mockRejectedValue(Object.assign(new Error('Pembayaran ini sudah terverifikasi.'), { status: 409, isConflict: true }));
+    getOrder.mockResolvedValue(orderWith(qrisEntry({ verification: 'verified', can_verify: false })));
+
+    await user.click(within(screen.getByTestId('payment-entry')).getByRole('button', { name: 'Tandai terverifikasi' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tandai pembayaran terverifikasi?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Ya, tandai terverifikasi' }));
+
+    await waitFor(() => expect(getOrder.mock.calls.length).toBeGreaterThan(1));
+    await waitFor(() => expect(within(screen.getByTestId('payment-entry')).getByText('Terverifikasi')).toBeInTheDocument());
+  });
+
+  it('offers no action on a voided sale (the server sends can_verify false)', async () => {
+    await open(orderWith(qrisEntry({ can_verify: false }), { status: 'voided', void_reason: 'Salah input' }));
+
+    expect(within(screen.getByTestId('payment-entry')).queryByRole('button', { name: 'Tandai terverifikasi' })).not.toBeInTheDocument();
   });
 });

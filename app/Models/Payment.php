@@ -95,4 +95,34 @@ class Payment extends Model
             && $this->recorded_by !== null
             && (int) $this->recorded_by === (int) $user->id;
     }
+
+    /** 032 — siapa yang memverifikasi pembayaran ini (NULL bila belum, tunai, atau penggunanya sudah dihapus). */
+    public function verifier(): BelongsTo { return $this->belongsTo(User::class, 'verified_by'); }
+
+    /**
+     * 032-mark-payment-verified (spec FR-002/FR-006) — apakah pembayaran ini BISA diverifikasi:
+     * hanya pembayaran NON-TUNAI yang masih `pending`. Tunai sudah `verified` sejak dicatat;
+     * `verified` tak bisa diverifikasi lagi (aksi ini satu arah dan final, tak ada jalan
+     * kembali); `rejected` adalah keadaan lain yang tidak disentuh fitur ini. SATU-SATUNYA
+     * definisi aturan ini: dipakai service, guard controller, aksi massal, dan flag presenter.
+     */
+    public function isVerifiable(): bool
+    {
+        return $this->method !== 'cash' && $this->verification === 'pending';
+    }
+
+    /**
+     * 032 (spec FR-007, jawaban klarifikasi Q1=C) — siapa BOLEH memverifikasi: owner/admin
+     * (termasuk pembayaran yang mereka catat sendiri), atau pengguna mana pun KECUALI pencatat
+     * pembayaran itu (pemisahan tugas: yang menerima uang tak menyatakannya sudah dicocokkan).
+     * Pembayaran lama tanpa pencatat (`recorded_by` NULL) tak punya pihak yang perlu dikecualikan,
+     * jadi boleh diverifikasi siapa pun. Hanya soal "siapa" — apakah pembayarannya sendiri bisa
+     * diverifikasi dinilai isVerifiable().
+     */
+    public function mayVerify(User $user): bool
+    {
+        return $user->isOwnerOrAdmin()
+            || $this->recorded_by === null
+            || (int) $this->recorded_by !== (int) $user->id;
+    }
 }

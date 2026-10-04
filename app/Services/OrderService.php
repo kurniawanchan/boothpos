@@ -219,7 +219,7 @@ class OrderService
                 );
             }
 
-            return $order->load(['items', 'payments.proofs', 'payments.recorder']);
+            return $order->load(['items', 'payments.proofs', 'payments.recorder', 'payments.verifier']);
         });
     }
 

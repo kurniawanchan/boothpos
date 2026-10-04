@@ -33,4 +33,11 @@ return [
     'payment_confirmation_empty' => 'Isi minimal satu: bukti, referensi, atau catatan; konfirmasi tidak boleh dikosongkan.',
     'payment_confirmation_cash' => 'Pembayaran tunai tidak punya konfirmasi untuk ditambahkan.',
     'payment_confirmation_target_closed' => 'Transaksi ini sudah dibatalkan; konfirmasinya tidak bisa diubah lagi.',
+
+    // 032-mark-payment-verified
+    'payment_verify_not_allowed' => 'Anda yang mencatat pembayaran ini, jadi orang lain yang harus memverifikasinya.',
+    'payment_verify_cash' => 'Pembayaran tunai sudah terverifikasi saat dicatat.',
+    'payment_already_verified' => 'Pembayaran ini sudah terverifikasi.',
+    'payment_rejected_cannot_verify' => 'Pembayaran yang ditolak tidak bisa diverifikasi.',
+    'payment_verify_target_closed' => 'Transaksi ini sudah dibatalkan; pembayarannya tidak bisa diverifikasi lagi.',
 ];

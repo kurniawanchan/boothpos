@@ -319,6 +319,127 @@ class PaymentService
     }
 
     /**
+     * 032-mark-payment-verified — menandai SATU pembayaran non-tunai sebagai terverifikasi
+     * (sudah dicocokkan dengan mutasi bank/e-wallet). Satu arah dan FINAL: `pending → verified`
+     * saja, TANPA jalur pembatalan di mana pun (service, route, maupun UI) — keputusan produk;
+     * tick yang salah permanen dan jejaknya ada di activity log. Yang ditulis hanya
+     * `verification`/`verified_by`/`verified_at`: jumlah, metode, kanal, status, total, dan kas
+     * shift tidak pernah tersentuh (laporan/ringkasan hanya mengecualikan `rejected`, dan kas
+     * shift hanya menghitung TUNAI, yang sejak dicatat sudah `verified`).
+     *
+     * Urutan pemeriksaan (semuanya SETELAH baris target dikunci, seperti mutasi buku besar lain,
+     * sehingga dua klik/dua orang serentak berlaku berurutan: yang kedua mendapat 409):
+     *  1. pembayaran milik transaksi ini (404 bila bukan);
+     *  2. transaksi tidak batal: penjualan `voided` / pre-order `cancelled` → 409 (pre-order
+     *     `handed_over` boleh — tak ada uang yang bergerak);
+     *  3. bukan tunai (422);   4. masih `pending` (409: sudah terverifikasi / ditolak);
+     *  5. pelaku boleh (403): owner/admin, atau siapa pun KECUALI pencatat pembayaran itu.
+     */
+    public function markVerified(Preorder|Order $target, Payment $payment, User $user): Preorder|Order
+    {
+        return DB::transaction(function () use ($target, $payment, $user) {
+            $locked = $this->lock($target);
+
+            // Pembayaran milik transaksi lain → 404, bukan diverifikasi diam-diam.
+            $entry = $locked->payments()->whereKey($payment->id)->firstOrFail();
+
+            $closed = $locked instanceof Preorder ? $locked->status === 'cancelled' : $locked->status === 'voided';
+            if ($closed) {
+                throw ValidationException::withMessages(['status' => __('orders_payments.payment_verify_target_closed')])->status(409);
+            }
+            if ($entry->method === 'cash') {
+                throw ValidationException::withMessages(['method' => __('orders_payments.payment_verify_cash')]);
+            }
+            if ($entry->verification === 'verified') {
+                throw ValidationException::withMessages(['verification' => __('orders_payments.payment_already_verified')])->status(409);
+            }
+            if (! $entry->isVerifiable()) { // `rejected` — keadaan lain yang tak disentuh fitur ini
+                throw ValidationException::withMessages(['verification' => __('orders_payments.payment_rejected_cannot_verify')])->status(409);
+            }
+            // Pertahanan berlapis: controller sudah menjaga ini, tetapi aturan bisnis tidak boleh
+            // bergantung pada pemanggil yang ingat memanggilnya.
+            if (! $entry->mayVerify($user)) {
+                throw ValidationException::withMessages(['verification' => __('orders_payments.payment_verify_not_allowed')])->status(403);
+            }
+
+            $verifiedAt = now();
+            $entry->update(['verification' => 'verified', 'verified_by' => $user->id, 'verified_at' => $verifiedAt]);
+
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'payment_verified',
+                entityType: $locked instanceof Order ? 'Order' : 'Preorder',
+                entityId: $locked->id,
+                description: sprintf(
+                    'Memverifikasi pembayaran %s Rp %s pada %s',
+                    $entry->method, number_format((float) $entry->amount, 0, ',', '.'), $this->numberOf($locked),
+                ),
+                oldValues: ['payment_id' => $entry->id, 'verification' => 'pending'],
+                newValues: ['payment_id' => $entry->id, 'verification' => 'verified', 'verified_by' => $user->id, 'verified_at' => $verifiedAt->toIso8601String()],
+            );
+
+            return $this->reload($locked);
+        });
+    }
+
+    /**
+     * 032-mark-payment-verified (US3, research Decision 3) — verifikasi massal untuk daftar Sales:
+     * untuk tiap penjualan terpilih, tiap pembayaran NON-TUNAI yang masih pending diverifikasi lewat
+     * markVerified() (jalur SATU-pembayaran yang sama: satu transaksi + satu baris audit per
+     * pembayaran, jadi tak ada implementasi kedua dan tak ada penguncian panjang). Yang tak bisa
+     * diverifikasi pemanggil DILEWATI dan dihitung per alasan — tak pernah menggagalkan sisanya:
+     * `voided` (penjualan batal), `rejected`, `already_verified`, `own_payment` (pembayaran yang
+     * dicatat pemanggil sendiri, kecuali owner/admin). Pembayaran tunai diabaikan diam-diam (sudah
+     * terverifikasi sejak dicatat; menghitungnya sebagai "dilewati" hanya menyesatkan). Id yang tak
+     * ditemukan lewat lookup ber-scope (terhapus / mode DEMO-LIVE lain) tak pernah sampai ke loop.
+     *
+     * @param  array<int,int>  $orderIds
+     * @return array{verified:int, verified_orders:int, skipped:array<string,int>, skipped_total:int}
+     */
+    public function verifyOrderPayments(array $orderIds, User $user): array
+    {
+        $skipped = ['already_verified' => 0, 'own_payment' => 0, 'voided' => 0, 'rejected' => 0];
+        $verified = 0;
+        $verifiedOrders = [];
+
+        $orders = Order::with('payments')->whereIn('id', array_values(array_unique($orderIds)))->get();
+
+        foreach ($orders as $order) {
+            foreach ($order->payments as $payment) {
+                if ($payment->method === 'cash') {
+                    continue;
+                }
+                if ($order->status === 'voided') {
+                    $skipped['voided']++;
+                } elseif ($payment->verification === 'rejected') {
+                    $skipped['rejected']++;
+                } elseif ($payment->verification === 'verified') {
+                    $skipped['already_verified']++;
+                } elseif (! $payment->mayVerify($user)) {
+                    $skipped['own_payment']++;
+                } else {
+                    try {
+                        $this->markVerified($order, $payment, $user);
+                        $verified++;
+                        $verifiedOrders[$order->id] = true;
+                    } catch (ValidationException $e) {
+                        // Balapan di tengah perulangan (orang lain memverifikasi lebih dulu): hitung sebagai
+                        // sudah terverifikasi, jangan batalkan sisanya.
+                        $skipped[$e->status === 403 ? 'own_payment' : 'already_verified']++;
+                    }
+                }
+            }
+        }
+
+        return [
+            'verified' => $verified,
+            'verified_orders' => count($verifiedOrders),
+            'skipped' => $skipped,
+            'skipped_total' => array_sum($skipped),
+        ];
+    }
+
+    /**
      * Shift tempat uang ini DITERIMA (research Decision 7). Hanya untuk penjualan
      * POS: tunai wajib punya shift terbuka milik pencatat (409 bila tidak ada),
      * non-tunai mencatatnya bila ada. Pembayaran pre-order tak punya shift (null),
@@ -394,7 +515,7 @@ class PaymentService
         return $target->fresh(
             $target instanceof Preorder
                 ? PreorderService::PAYLOAD_RELATIONS
-                : ['items', 'payments.channel', 'payments.recorder', 'payments.proofs', 'customer'],
+                : ['items', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer'],
         );
     }
 

@@ -67,7 +67,16 @@ class OrderResource extends JsonResource
                     // 031 — siapa boleh mengubah konfirmasi dihitung SERVER (SPA tak pernah menebak
                     // dari peran); transaksi batal tak bisa diubah (FR-012).
                     'can_edit_confirmation' => $user !== null && $this->status !== 'voided' && $p->confirmationEditableBy($user),
+                    // 032 — boleh diverifikasi oleh pengguna yang meminta (dihitung SERVER): non-tunai, masih pending, penjualan tidak batal, bukan pencatatnya.
+                    'can_verify' => $user !== null && $this->status !== 'voided' && $p->isVerifiable() && $p->mayVerify($user),
+                    // 032 — kapan diverifikasi (NULL untuk tunai/pending); nama verifier hanya bila relasinya dimuat.
+                    'verified_at' => $p->verified_at,
                 ];
+
+                // 032 — siapa yang memverifikasi; dihilangkan (bukan diisi null) bila `payments.verifier` tak dimuat.
+                if ($p->relationLoaded('verifier')) {
+                    $row['verified_by_name'] = $p->verifier?->name;
+                }
 
                 // Hanya bila bukti dimuat: tanpa `payments.proofs` kolom-kolom ini DIHILANGKAN,
                 // bukan diisi "tak ada bukti" (jebakan relationLoaded yang sama seperti present()).

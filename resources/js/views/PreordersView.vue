@@ -23,7 +23,7 @@ import {
   createPreorderPayment,
 } from '../api/preorders';
 import { createShipment, updateShipment } from '../api/shipments';
-import { getPaymentProofBlobUrl } from '../api/payments';
+import { getPaymentProofBlobUrl, verifyPayment } from '../api/payments';
 import { lookupVariants } from '../api/products';
 import { getCustomer } from '../api/customers';
 import { listArtists } from '../api/artists';
@@ -1104,6 +1104,33 @@ async function handleConfirmationSaved(result) {
   await load();
 }
 
+// 032-mark-payment-verified — pembayaran non-tunai "Belum terverifikasi" ditandai terverifikasi
+// setelah dicocokkan dengan mutasi bank/e-wallet. Satu arah dan FINAL, jadi lewat konfirmasi; siapa
+// yang boleh dihitung SERVER per pembayaran (`can_verify`; pencatat tak boleh memverifikasi miliknya).
+const verifyTarget = ref(null);
+const verifying = ref(false);
+
+async function performVerify() {
+  if (!detail.value || !verifyTarget.value || verifying.value) return;
+  verifying.value = true;
+  try {
+    const result = await verifyPayment('preorders', detail.value.id, verifyTarget.value.id);
+    detail.value = { ...detail.value, ...result };
+    toast.success(t('payment_ledger.verify_done'));
+    await load();
+    loadSummary();
+  } catch (err) {
+    // 403/409/422 sudah di-toast interceptor global; 409 = layar basi → ambil ulang keadaan sebenarnya.
+    if (err?.isConflict) {
+      try { await refreshDetail(); } catch { /* biarkan tampilan lama */ }
+      await load();
+    }
+  } finally {
+    verifyTarget.value = null;
+    verifying.value = false;
+  }
+}
+
 // Tombol Tambah pembayaran: hanya selama masih ada sisa tagihan DAN pre-order
 // belum ditutup (server menolak dengan 409 untuk handed_over/cancelled).
 const canAddPayment = computed(
@@ -1736,6 +1763,7 @@ async function saveShipmentChanges() {
               :can-delete="canDeletePayments"
               @view-proof="(p) => viewPaymentProof(p.proof_id)"
               @edit-confirmation="(p) => (confirmationTarget = p)"
+              @verify="(p) => (verifyTarget = p)"
               @print="(p) => openPaymentReceipt(p.id)"
               @delete="confirmDeletePayment"
             />
@@ -1858,6 +1886,16 @@ async function saveShipmentChanges() {
       :submit-fn="submitPreorderPayment"
       @close="showRecordPayment = false"
       @saved="handlePaymentSaved"
+    />
+
+    <ConfirmDialog
+      :open="verifyTarget !== null"
+      :title="t('payment_ledger.verify_confirm_title')"
+      :message="t('payment_ledger.verify_confirm_message', { amount: formatIDR(verifyTarget?.amount ?? 0) })"
+      :confirm-label="t('payment_ledger.verify_confirm_label')"
+      :loading="verifying"
+      @close="verifyTarget = null"
+      @confirm="performVerify"
     />
 
     <PaymentConfirmationModal

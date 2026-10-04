@@ -21,7 +21,7 @@ class PreorderService
 {
     /** Relasi yang dibaca PreorderController::present() — dimuat ulang agar field tak hilang diam-diam. */
     public const PAYLOAD_RELATIONS = [
-        'items.artist', 'items.variant.product.category', 'payments.proofs', 'payments.recorder', 'shipment', 'customer', 'splitChildren',
+        'items.artist', 'items.variant.product.category', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer', 'splitChildren',
     ];
 
     public function __construct(
@@ -625,7 +625,7 @@ class PreorderService
                     : $preorder->shipping_at,
             ]);
 
-            return $preorder->fresh(['items', 'payments.proofs', 'payments.recorder', 'customer', 'shipment']);
+            return $preorder->fresh(['items', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'customer', 'shipment']);
         });
     }
 
@@ -692,6 +692,15 @@ class PreorderService
         return app(PaymentService::class)->updateConfirmation($preorder, $payment, $input, $user);
     }
 
+    /**
+     * 032-mark-payment-verified — delegasi ke PaymentService (aturan siapa boleh, tunai, status
+     * pembayaran, transaksi batal, satu arah/final, dan audit ada di sana).
+     */
+    public function markPaymentVerified(Preorder $preorder, Payment $payment, User $user): Preorder
+    {
+        return app(PaymentService::class)->markVerified($preorder, $payment, $user);
+    }
+
     public function transitionStatus(Preorder $preorder, string $newStatus, ?string $cancelReason, User $user): Preorder
     {
         if (! $preorder->canTransitionTo($newStatus)) {
@@ -732,7 +741,7 @@ class PreorderService
                 'cancel_reason' => $newStatus === 'cancelled' ? $cancelReason : $preorder->cancel_reason,
             ]);
 
-            return $preorder->fresh(['items', 'payments.proofs', 'payments.recorder', 'shipment', 'customer']);
+            return $preorder->fresh(['items', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer']);
         });
     }
 

@@ -212,6 +212,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/orders/{order}/payments', [OrderController::class, 'storePayment']);
         Route::delete('/orders/{order}/payments/{payment}', [OrderController::class, 'destroyPayment']);
         Route::patch('/orders/{order}/payments/{payment}/confirmation', [OrderController::class, 'updatePaymentConfirmation']);
+        Route::post('/orders/{order}/payments/{payment}/verify', [OrderController::class, 'verifyPayment']);
+        Route::post('/orders/verify-payments', [OrderController::class, 'verifyPayments']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
 
         // 007-preorder-import-export-notify — rute statis ('export',
@@ -246,6 +248,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/preorders/{preorder}/payments', [PreorderController::class, 'storePayment']);
         Route::delete('/preorders/{preorder}/payments/{payment}', [PreorderController::class, 'destroyPayment']);
         Route::patch('/preorders/{preorder}/payments/{payment}/confirmation', [PreorderController::class, 'updatePaymentConfirmation']);
+        Route::post('/preorders/{preorder}/payments/{payment}/verify', [PreorderController::class, 'verifyPayment']);
         Route::post('/preorders/{preorder}/split', [PreorderController::class, 'split']);
         Route::post('/preorders/{preorder}/shipment', [ShipmentController::class, 'store']);
         Route::get('/preorders/{preorder}/invoice', [PreorderController::class, 'invoice']);
