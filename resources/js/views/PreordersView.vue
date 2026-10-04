@@ -37,8 +37,9 @@ import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDate, formatDateTime } from '../utils/date';
 import { downloadElementAsPdf, captureElementCanvas } from '../utils/pdfCapture';
-import { buildInvoiceHtml, buildShippingSlipHtml } from '../utils/invoiceDocument';
+import { buildShippingSlipHtml } from '../utils/invoiceDocument';
 import PreorderInvoiceDocument from '../components/preorder/PreorderInvoiceDocument.vue';
+import PreorderPaymentDocument from '../components/preorder/PreorderPaymentDocument.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -763,28 +764,28 @@ function toggleSelected(id) {
   selectedIds.value = next;
 }
 
-// 029-fix-bulk-invoice-logo — unduh massal invoice merender KOMPONEN yang sama
-// dengan modal (PreorderInvoiceDocument.vue), jadi PDF-nya identik dengan
-// invoice di layar (logo/identitas toko, header dua kolom, kartu "Cara
-// pembayaran"). appContext diteruskan agar vue-i18n tersedia di render
-// terpisah ini. Lebar 672px = lebar isi modal 720px dikurangi padding px-6.
-// Payment invoice masih memakai pembuat HTML lama (utils/invoiceDocument.js).
+// 029-fix-bulk-invoice-logo — unduh massal merender KOMPONEN yang sama dengan
+// modalnya (PreorderInvoiceDocument / PreorderPaymentDocument), jadi PDF-nya
+// identik dengan dokumen di layar (logo/identitas toko, header dua kolom,
+// kartu "Cara pembayaran"). appContext diteruskan agar vue-i18n tersedia di
+// render terpisah ini. Lebar = lebar dokumen di modal 720px: invoice berada
+// di dalam padding px-6 (672px), payment invoice membawa paddingnya sendiri.
 const appContext = getCurrentInstance().appContext;
+const BULK_DOCUMENTS = {
+  invoice: { component: PreorderInvoiceDocument, width: 672 },
+  payment_invoice: { component: PreorderPaymentDocument, width: 720 },
+};
 function mountBulkDocument(invoice, documentType) {
+  const { component, width } = BULK_DOCUMENTS[documentType];
   const container = document.createElement('div');
   container.style.position = 'fixed';
   container.style.left = '-9999px';
-  if (documentType === 'invoice') {
-    container.style.width = '672px';
-    document.body.appendChild(container);
-    const vnode = h(PreorderInvoiceDocument, { invoice });
-    vnode.appContext = appContext;
-    render(vnode, container);
-    return { container, dispose: () => { render(null, container); container.remove(); } };
-  }
-  container.innerHTML = buildInvoiceHtml(invoice, documentType);
+  container.style.width = `${width}px`;
   document.body.appendChild(container);
-  return { container, dispose: () => container.remove() };
+  const vnode = h(component, { invoice });
+  vnode.appContext = appContext;
+  render(vnode, container);
+  return { container, dispose: () => { render(null, container); container.remove(); } };
 }
 
 async function doBulkDownload() {

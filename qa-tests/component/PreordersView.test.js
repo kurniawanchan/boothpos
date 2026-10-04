@@ -1363,4 +1363,29 @@ describe('PreordersView — bulk invoice download renders each invoice with its 
 
     decoy.remove();
   });
+
+  it('renders the payment invoice document (same component as its modal) for each selected pre-order', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    bulkPreorderInvoices.mockResolvedValue({
+      data: [{ ...invoiceFor(10, 'PO-0010'), payments: [{ id: 7, method: 'cash', purpose: 'down_payment', amount: '500000.00', paid_at: '2026-09-01T10:00:00Z' }] }],
+    });
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    await user.click(within(screen.getByText('PO-0010').closest('tr')).getByRole('checkbox'));
+    // pilih jenis dokumen: Payment invoice
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: 'Invoice pembayaran' }));
+    await user.click(await screen.findByRole('button', { name: 'Unduh invoice' }));
+
+    await waitFor(() => expect(bulk.captures).toHaveLength(1));
+    expect(bulkPreorderInvoices).toHaveBeenCalledWith([10], 'payment_invoice');
+    const [capture] = bulk.captures;
+    const srcs = [...capture.html.matchAll(/<img[^>]*\ssrc="([^"]*)"/g)].map((m) => m[1]);
+    expect(srcs).toEqual([LOGO, QR]);
+    expect(capture.html).toContain('Sakana Fridge');
+    expect(capture.html).toContain('Rp 500.000');
+    await waitFor(() => expect(bulk.zipFiles).toEqual(['payment_invoice-PO-0010.pdf']));
+  });
 });
