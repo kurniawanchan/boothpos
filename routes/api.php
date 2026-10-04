@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\VariantBomController;
 use App\Http\Controllers\Api\PosDraftController;
 use App\Http\Controllers\Api\PurchaseOrderController;
 use App\Http\Controllers\Api\VendorController;
@@ -177,10 +178,21 @@ Route::prefix('v1')->group(function () {
         Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel']);
         Route::apiResource('invoices', InvoiceController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
 
-        Route::get('/variants/{variant}/bom', [MaterialController::class, 'bomIndex']);
+        // 034-seller-po-bom — BOM bersumber baris purchase order. Rute statis
+        // 'bom/eligible-lines' & 'bom/items' sengaja di atas rute lain yang
+        // berparameter. POST /variants/{variant}/bom (bahan + jumlah) tetap
+        // ada sebagai jalur LEGACY dan membuat baris legacy.
+        Route::get('/variants/{variant}/bom/eligible-lines', [VariantBomController::class, 'eligibleLines']);
+        Route::post('/variants/{variant}/bom/items', [VariantBomController::class, 'storeItems']);
+        Route::post('/variants/{variant}/bom/copy', [VariantBomController::class, 'copyFrom']);
+        Route::post('/variants/{variant}/bom/copy-out', [VariantBomController::class, 'copyOut']);
+        Route::post('/variants/{variant}/bom/complete', [VariantBomController::class, 'complete']);
+        Route::post('/variants/{variant}/bom/reopen', [VariantBomController::class, 'reopen']);
+        Route::get('/variants/{variant}/bom', [VariantBomController::class, 'index']);
         Route::post('/variants/{variant}/bom', [MaterialController::class, 'storeBomLine']);
-        Route::put('/bom/{bomLine}', [MaterialController::class, 'updateBomLine']);
-        Route::delete('/bom/{bomLine}', [MaterialController::class, 'destroyBomLine']);
+        Route::put('/bom/{bomLine}', [VariantBomController::class, 'update']);
+        Route::post('/bom/{bomLine}/replace-source', [VariantBomController::class, 'replaceSource']);
+        Route::delete('/bom/{bomLine}', [VariantBomController::class, 'destroy']);
         Route::get('/variants/{variant}/cost-breakdown', [MaterialController::class, 'costBreakdown']);
 
         Route::apiResource('events', EventController::class);

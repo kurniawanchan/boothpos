@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Concerns\DataModeScope;
 use App\Models\Material;
+use App\Models\ProductVariantBomLine;
 use App\Models\PurchaseOrder;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +42,7 @@ class PurchaseOrderService
             $po = PurchaseOrder::create([
                 'po_number' => $this->generatePoNumber(),
                 'vendor_id' => $data['vendor_id'],
+                'artist_id' => $data['artist_id'],
                 'status' => 'draft',
                 'subtotal' => $subtotal,
                 'total_amount' => $subtotal,
@@ -69,11 +71,11 @@ class PurchaseOrderService
                 newValues: $po->only($po->getFillable()),
             );
 
-            return $po->fresh(['items', 'vendor']);
+            return $this->reload($po);
         });
     }
 
-    public function update(PurchaseOrder $po, array $data): PurchaseOrder
+    public function update(PurchaseOrder $po, array $data, ?User $user = null): PurchaseOrder
     {
         if (array_key_exists('items', $data) && $po->status !== 'draft') {
             throw ValidationException::withMessages([
@@ -81,7 +83,9 @@ class PurchaseOrderService
             ]);
         }
 
-        return DB::transaction(function () use ($po, $data) {
+        return DB::transaction(function () use ($po, $data, $user) {
+            $this->applySellerChange($po, $data, $user);
+
             if (array_key_exists('items', $data)) {
                 $po->items()->delete();
                 $subtotal = 0;
@@ -106,10 +110,66 @@ class PurchaseOrderService
                 $po->update(['subtotal' => $subtotal, 'total_amount' => $subtotal]);
             }
 
-            $po->update(array_intersect_key($data, array_flip(['vendor_id', 'notes'])));
+            $po->update(array_intersect_key($data, array_flip(['vendor_id', 'notes', 'artist_id'])));
 
-            return $po->fresh(['items', 'vendor']);
+            return $this->reload($po);
         });
+    }
+
+    /**
+     * Muat ulang PO dengan SEMUA relasi yang dibaca PurchaseOrderController::
+     * present() (seller, jumlah pemakaian BOM per baris, pembayaran) —
+     * present() memakai relationLoaded(), jadi relasi yang lupa dimuat
+     * menghilang diam-diam dari respons, bukan galat.
+     */
+    private function reload(PurchaseOrder $po, bool $withPayments = false): PurchaseOrder
+    {
+        return $po->fresh(array_filter([
+            'items' => fn ($q) => $q->withCount('bomLines'),
+            'vendor',
+            'artist',
+            $withPayments ? 'payments' : null,
+        ]));
+    }
+
+    /**
+     * 034-seller-po-bom — menetapkan seller PO lama (tanpa seller) selalu
+     * boleh; MENGUBAH seller ditolak (409 lewat controller) bila ada baris
+     * BOM yang sudah memakai salah satu baris PO ini, karena BOM itu akan
+     * melanggar aturan "hanya PO milik seller varian". Pengecekan tidak
+     * bergantung mode DEMO/LIVE aktif (withoutGlobalScopes): kuncinya harus
+     * berlaku di mana pun baris BOM itu berada. Log ditulis di transaksi
+     * yang sama dengan perubahannya.
+     */
+    private function applySellerChange(PurchaseOrder $po, array $data, ?User $user): void
+    {
+        if (! array_key_exists('artist_id', $data) || (int) $data['artist_id'] === (int) $po->artist_id) {
+            return;
+        }
+
+        $oldArtistId = $po->artist_id;
+
+        if ($oldArtistId !== null) {
+            $inUse = ProductVariantBomLine::withoutGlobalScopes()
+                ->whereIn('purchase_order_item_id', $po->items()->select('id'))
+                ->exists();
+
+            if ($inUse) {
+                throw ValidationException::withMessages([
+                    'artist_id' => __('bom.purchase_order_seller_in_use'),
+                ]);
+            }
+        }
+
+        $this->activityLogger->log(
+            userId: $user?->id,
+            action: $oldArtistId === null ? 'purchase_order_seller_assigned' : 'purchase_order_seller_changed',
+            entityType: 'PurchaseOrder',
+            entityId: $po->id,
+            description: "Seller purchase order {$po->po_number}: ".($oldArtistId ?? 'kosong')." -> {$data['artist_id']}.",
+            oldValues: ['artist_id' => $oldArtistId],
+            newValues: ['artist_id' => (int) $data['artist_id']],
+        );
     }
 
     public function delete(PurchaseOrder $po, User $user): void
@@ -188,7 +248,7 @@ class PurchaseOrderService
                 newValues: ['status' => $newStatus],
             );
 
-            return $po->fresh(['items', 'vendor', 'payments']);
+            return $this->reload($po, withPayments: true);
         });
     }
 
@@ -209,7 +269,7 @@ class PurchaseOrderService
                 $po->update(['status' => 'paid', 'paid_at' => now()]);
             }
 
-            return $po->fresh(['items', 'vendor', 'payments']);
+            return $this->reload($po, withPayments: true);
         });
     }
 

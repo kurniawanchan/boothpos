@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import ProductsView from '../../resources/js/views/ProductsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listProducts, getProduct, updateProduct, updateVariant, uploadVariantImage } from '../../resources/js/api/products';
+import { listProducts, getProduct, updateProduct, updateVariant, addVariant, uploadVariantImage } from '../../resources/js/api/products';
 import { listArtists } from '../../resources/js/api/artists';
 import { listCategories } from '../../resources/js/api/categories';
 
@@ -27,11 +27,11 @@ const PRODUCTS = [
   { id: 2, code_prefix: 'ARTKY002', name: 'Keychain B', artist_name: 'Artist A', category_name: 'Kategori A', is_preorder: false, is_active: true, image_url: null },
 ];
 
-function renderProducts() {
+function renderProducts({ extraMenus = [] } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
-  auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'products'] };
+  auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'products', ...extraMenus] };
   return render(ProductsView, { global: { plugins: [pinia] } });
 }
 
@@ -226,3 +226,95 @@ describe('ProductsView — product images & clickable filters', () => {
     await waitFor(() => expect(uploadVariantImage).toHaveBeenCalledWith(10, file));
   });
 });
+
+// 034-seller-po-bom (US4) — varian dengan BOM selesai: harga modal mengikuti BOM.
+describe('ProductsView — variants with a completed BOM (034)', () => {
+  const PRODUCT = (variant) => ({
+    id: 1, artist_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
+    description: '', is_preorder: false, preorder_eta: null, is_active: true, image_url: null,
+    variants: [{ id: 10, sku: 'ART-KY-001-001', variant_name: 'Standard', sell_price: '30000.00', current_stock: 5, low_stock_alert: null, is_active: true, image_url: null, ...variant }],
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProducts.mockResolvedValue({ data: PRODUCTS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+  });
+
+  async function openEditDrawer() {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderProducts();
+    await screen.findByText('Keychain A');
+    await user.click(screen.getAllByText('Edit')[0]);
+    await screen.findByDisplayValue('Standard');
+  }
+
+  it('locks the cost price and shows a "From BOM" badge when the BOM is complete', async () => {
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '1800.00', bom_complete: true, has_bom: true, bom_cost: '1800.00' }));
+    await openEditDrawer();
+
+    const cost = screen.getByDisplayValue('1800.00');
+    expect(cost).toBeDisabled();
+    expect(screen.getByText('Dari BOM')).toBeInTheDocument();
+    expect(screen.getByText(/mengikuti bom yang sudah selesai/i)).toBeInTheDocument();
+  });
+
+  it('keeps the cost price editable and shows the BOM cost beside it when the BOM is not complete', async () => {
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '1000.00', bom_complete: false, has_bom: true, bom_cost: '1800.00' }));
+    await openEditDrawer();
+
+    expect(screen.getByDisplayValue('1000.00')).not.toBeDisabled();
+    expect(screen.queryByText('Dari BOM')).not.toBeInTheDocument();
+    expect(screen.getByText('Biaya BOM: Rp 1.800')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buka BOM' })).toBeInTheDocument();
+  });
+
+  it('offers "Open BOM" for a saved variant but not for a variant that has no id yet', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '0.00', bom_complete: false, has_bom: false, bom_cost: null }));
+    await openEditDrawer();
+    expect(screen.getAllByRole('button', { name: 'Buka BOM' })).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: /tambah varian/i }));
+    expect(screen.getAllByRole('button', { name: 'Buka BOM' })).toHaveLength(1);
+  });
+
+  it('lets a new variant start empty or copy the BOM of a saved variant, and sends the choice on save', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '1800.00', bom_complete: false, has_bom: true, bom_cost: '1800.00' }));
+    addVariant.mockResolvedValue({ id: 11 });
+    updateProduct.mockResolvedValue({});
+    updateVariant.mockResolvedValue({ id: 10 });
+    renderProducts({ extraMenus: ['purchase_orders'] });
+    await screen.findByText('Keychain A');
+    await user.click(screen.getAllByText('Edit')[0]);
+    await screen.findByDisplayValue('Standard');
+
+    await user.click(screen.getByRole('button', { name: /tambah varian/i }));
+    await user.click(await screen.findByRole('combobox', { name: /bom untuk varian baru ini/i }));
+    await user.click(await screen.findByRole('option', { name: /salin bom dari ART-KY-001-001/i }));
+    await user.click(screen.getByText('Simpan produk'));
+
+    await waitFor(() => expect(addVariant).toHaveBeenCalled());
+    expect(addVariant.mock.calls[0][1]).toMatchObject({ copy_bom_from_variant_id: 10 });
+  });
+
+  it('does not offer the BOM choice for a new variant when no saved variant has a BOM', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '0.00', bom_complete: false, has_bom: false, bom_cost: null }));
+    renderProducts({ extraMenus: ['purchase_orders'] });
+    await screen.findByText('Keychain A');
+    await user.click(screen.getAllByText('Edit')[0]);
+    await screen.findByDisplayValue('Standard');
+
+    await user.click(screen.getByRole('button', { name: /tambah varian/i }));
+
+    expect(screen.queryByText('BOM untuk varian baru ini')).not.toBeInTheDocument();
+  });
+});
+

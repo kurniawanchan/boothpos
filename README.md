@@ -703,3 +703,45 @@ Semua empat ditemukan lewat eksekusi sungguhan (`docker compose up`/
 `docker compose exec ... test`), sesuai Constitution Principle II — bug
 #4 khususnya adalah pengingat bahwa "selalu hijau di satu mesin" tidak
 membuktikan test itu benar-benar terisolasi satu sama lain.
+
+## Bug yang ditemukan saat eksekusi fitur 034-seller-po-bom (2026-10-05)
+
+Tiga ditemukan lewat verifikasi browser sungguhan (server terisolasi + DB
+tes, alur nyata PO → BOM → selesai → salin → isyarat harga) atau lewat tes
+yang sengaja ditulis untuk aturan baru — bukan sekadar membaca kode:
+
+1. **`resources/js/views/PurchaseOrdersView.vue` — drawer "Edit" draft
+   purchase order selalu terbuka TANPA baris item (Total Rp 0), dan
+   menyimpannya mengirim `items: []` (422).** `GET /purchase-orders`
+   (daftar) tidak memuat `items`, tetapi `openEdit()` membaca `po.items`
+   dari baris daftar itu. Bug ini SUDAH ADA sebelum fitur 034 (tidak
+   tertangkap karena tidak ada tes tampilan PO); ketahuan karena fitur ini
+   menjanjikan `product_id` ("Linked Product") lama tetap terbawa saat
+   draft diedit. Diperbaiki: `openEdit()` memuat detail lengkap lewat
+   `GET /purchase-orders/{id}` dulu (pola `ProductsView.openEdit()`). Tes
+   `PurchaseOrderForm.test.js` kini memakai baris daftar TANPA items —
+   seperti API sungguhan — sebab versi pertamanya memakai baris daftar yang
+   sudah berisi items sehingga bug ini lolos.
+2. **`VariantBomModal.vue` — sebelum BOM ditandai selesai, teks bantuan
+   berbunyi "Harga modal mengikuti biaya BOM. Buka kembali BOM…"** padahal
+   harga modal baru mengikuti BOM SETELAH ditandai selesai (menyesatkan).
+   Diperbaiki dengan teks terpisah ("Tandai BOM selesai agar harga modal
+   mengikuti biaya BOM") + tes regresi untuk kedua keadaan.
+3. **`MasterDataImportService` — sheet `bom` mencocokkan baris yang ada
+   hanya per bahan.** Sejak baris BOM bisa bersumber PO (yang juga punya
+   `material_id`), impor akan menimpa jumlah baris PO diam-diam, melewati
+   `VariantBomService` (tanpa audit, tanpa sinkron harga modal). Diperbaiki:
+   pencocokan dibatasi pada baris LEGACY (`purchase_order_item_id` null);
+   dipaku tes `test_the_bom_sheet_cannot_touch_a_complete_variant_and_never_
+   overwrites_a_po_row`.
+
+Jebakan skema yang tercatat: MySQL menolak menghapus
+`UNIQUE(product_variant_id, material_id)` selama tidak ada index lain yang
+bisa dipakai FK `product_variant_id`, dan menolak menghapus index komposit
+`(artist_id, status)` sebelum FK-nya dilepas — urutan langkah di migrasi
+`2026_11_02_000001/2` dan `down()`-nya sengaja begitu.
+
+**Dicatat, BUKAN diperbaiki (di luar cakupan):** panggilan API tanpa token
+DAN tanpa header `Accept: application/json` menjawab 500 (bukan 401) —
+ASSUMPTION: redirect ke route `login` yang tidak terdaftar; tidak
+diverifikasi penyebabnya. Aplikasi sendiri selalu mengirim kedua header itu.

@@ -37,6 +37,9 @@ class ProductVariant extends Model
         'current_stock',
         'low_stock_alert',
         'is_active',
+        'bom_complete',
+        'bom_completed_at',
+        'bom_completed_by',
     ];
 
     protected function casts(): array
@@ -46,6 +49,8 @@ class ProductVariant extends Model
             'sell_price' => 'decimal:2',
             'current_stock' => 'integer',
             'is_active' => 'boolean',
+            'bom_complete' => 'boolean',
+            'bom_completed_at' => 'datetime',
         ];
     }
 

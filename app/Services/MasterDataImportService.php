@@ -16,6 +16,7 @@ use App\Models\VendorMaterialPrice;
 use App\Models\Concerns\DataModeScope;
 use App\Support\LicenseGate;
 use App\Support\MasterDataSheets;
+use App\Support\ReportSplit;
 use App\Support\MenuKeys;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
@@ -660,6 +661,8 @@ class MasterDataImportService
                     $this->addError($sheet, $row, 'initial_stock', "initial_stock hanya untuk varian BARU. Ubah stok SKU '{$sku}' lewat sheet 'stock'.");
                 }
 
+                $this->guardCompleteBomCostPrice($sheet, $row, $variant, $variantAttributes);
+
                 $updated++;
 
                 $plan[] = [
@@ -773,6 +776,10 @@ class MasterDataImportService
             }
 
             $isNewVariant = $variant === null;
+
+            if (! $isNewVariant) {
+                $this->guardCompleteBomCostPrice($sheet, $row, $variant, $variantAttributes);
+            }
 
             if ($isNewVariant && ! array_key_exists('sell_price', $variantAttributes)) {
                 $this->addError($sheet, $row, 'sell_price', 'Harga jual wajib diisi untuk varian baru.');
@@ -1622,6 +1629,16 @@ class MasterDataImportService
                 continue;
             }
 
+            // 034-seller-po-bom — sheet ini hanya menulis baris LEGACY (bahan +
+            // jumlah). Varian yang BOM-nya sudah SELESAI tidak boleh disentuh:
+            // baris legacy baru akan membatalkan syarat "selesai" dan
+            // cost_price-nya mengikuti BOM.
+            if ($variant?->bom_complete) {
+                $this->addError($sheet, $row, 'sku', "BOM varian '{$sku}' sudah ditandai selesai. Buka kembali BOM di layar produk sebelum mengimpor baris BOM.");
+
+                continue;
+            }
+
             $key = $sku.'|'.$materialCode;
             if (isset($seen[$key])) {
                 $this->addError($sheet, $row, 'material_code', "Pasangan SKU '{$sku}' + bahan '{$materialCode}' muncul dua kali di sheet ini (baris {$seen[$key]}).");
@@ -1636,7 +1653,7 @@ class MasterDataImportService
             }
 
             $existing = $variant !== null
-                ? $variant->bomLines()->whereHas('material', fn ($q) => $q->where('code', $materialCode))->first()
+                ? $variant->bomLines()->whereNull('purchase_order_item_id')->whereHas('material', fn ($q) => $q->where('code', $materialCode))->first()
                 : null;
 
             $existing === null ? $created++ : $updated++;
@@ -1705,6 +1722,20 @@ class MasterDataImportService
         }
     }
 
+    /**
+     * 034-seller-po-bom — cost_price varian yang BOM-nya SELESAI mengikuti
+     * biaya BOM dan dikunci: sel cost_price yang BERBEDA dilaporkan sebagai
+     * galat baris (sel kosong = "tidak diubah", nilai sama = diterima).
+     */
+    private function guardCompleteBomCostPrice(string $sheet, int $row, ProductVariant $variant, array $variantAttributes): void
+    {
+        if ($variant->bom_complete
+            && array_key_exists('cost_price', $variantAttributes)
+            && ReportSplit::cents($variantAttributes['cost_price']) !== ReportSplit::cents($variant->cost_price)) {
+            $this->addError($sheet, $row, 'cost_price', "Harga modal varian '{$variant->sku}' mengikuti BOM yang sudah selesai dan tidak bisa diubah lewat impor. Buka kembali BOM untuk mengubahnya manual.");
+        }
+    }
+
     private function applyBom(array $plan): void
     {
         foreach ($plan as $entry) {
@@ -1721,7 +1752,11 @@ class MasterDataImportService
 
             $material = Material::where('code', $entry['material_code'])->firstOrFail();
 
-            $line = $variant->bomLines()->firstOrNew(['material_id' => $material->id]);
+            // Hanya baris LEGACY yang dicocokkan per bahan: baris bersumber PO
+            // (yang juga punya material_id) tidak boleh ditimpa diam-diam oleh
+            // impor — mengubah jumlahnya lewat sini melewati VariantBomService
+            // (audit + sinkron harga modal).
+            $line = $variant->bomLines()->whereNull('purchase_order_item_id')->firstOrNew(['material_id' => $material->id]);
             $line->qty_needed = $entry['qty_needed'];
             $line->notes = $entry['notes'];
             $line->material_id = $material->id;

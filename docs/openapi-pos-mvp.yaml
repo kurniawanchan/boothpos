@@ -976,6 +976,11 @@ paths:
     post:
       tags: [Master Data]
       summary: Tambah varian pada produk
+      description: |
+        034-seller-po-bom — `copy_bom_from_variant_id` (opsional): salin BOM
+        dari varian lain PRODUK YANG SAMA ke varian baru dalam satu transaksi
+        (422 bila bukan produk yang sama / sumber kosong; 403 tanpa menu
+        `purchase_orders`).
       requestBody:
         required: true
         content:
@@ -997,6 +1002,10 @@ paths:
         Perubahan `sell_price` atau `cost_price` tidak memengaruhi transaksi
         yang sudah tercatat, karena harga disimpan sebagai snapshot.
         `current_stock` tidak dapat diubah lewat endpoint ini.
+
+        034-seller-po-bom — selama BOM varian ditandai SELESAI, `cost_price`
+        mengikuti biaya BOM dan dikunci: nilai yang BERBEDA ditolak 409
+        `{code: cost_price_locked_by_bom}`; nilai yang sama diterima.
       requestBody:
         required: true
         content:
@@ -1008,6 +1017,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Variant' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /variants/lookup:
     get:
@@ -1886,6 +1896,7 @@ paths:
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [draft, ordered, received, paid, cancelled] } }
         - { name: vendor_id, in: query, schema: { type: integer } }
+        - { name: artist_id, in: query, description: 034-seller-po-bom — saring menurut seller yang dibelikan., schema: { type: integer } }
         - { name: date_from, in: query, schema: { type: string, format: date } }
         - { name: date_to, in: query, schema: { type: string, format: date } }
         - $ref: '#/components/parameters/Page'
@@ -1912,6 +1923,11 @@ paths:
         wajib untuk baris `line_type=service` (FR-001). `product_id` selalu
         opsional apa pun `line_type`-nya (tautan bahan baku ke produk
         tertentu). `po_number` dibuat server, unik lintas mode DEMO/LIVE.
+
+        034-seller-po-bom — `artist_id` (seller yang dibelikan) WAJIB: satu
+        seller per purchase order. Seller inilah dasar filter selector BOM.
+        `product_id` ("Linked Product") tidak lagi ditawarkan UI, tetapi
+        tetap diterima dan disimpan.
       requestBody:
         required: true
         content:
@@ -1942,7 +1958,14 @@ paths:
     put:
       tags: [Purchase Order]
       summary: Perbarui purchase order
-      description: Baris item hanya boleh diubah selama status masih `draft` — 409 bila tidak.
+      description: |
+        Baris item hanya boleh diubah selama status masih `draft` — 409 bila tidak.
+
+        034-seller-po-bom — `artist_id`: menetapkan seller pada PO lama
+        (tanpa seller, `artist_id: null`) selalu boleh; MENGUBAH seller
+        ditolak 409 bila salah satu baris PO ini sudah dipakai baris BOM.
+        Setiap penetapan/perubahan ditulis ke activity log
+        (`purchase_order_seller_assigned` / `purchase_order_seller_changed`).
       requestBody:
         required: true
         content:
@@ -4557,29 +4580,45 @@ paths:
       responses:
         '204': { description: Berhasil }
 
+  # ------------------------------------------------------------------
+  # 034-seller-po-bom — BOM bersumber BARIS PURCHASE ORDER.
+  #
+  # Baris BOM menunjuk satu baris PO milik SELLER varian itu (PO berstatus
+  # ordered/received/paid) dan menyimpan SNAPSHOT item/tipe/nomor PO/vendor/
+  # biaya satuan. Biaya tidak pernah mengikuti PO yang berubah; hanya
+  # replace-source (eksplisit) yang mengubahnya. Baris tanpa baris PO adalah
+  # baris LEGACY (is_legacy: true). Membaca BOM butuh menu `products`;
+  # SEMUA aksi lain butuh menu `products` DAN `purchase_orders` (403 bila
+  # tidak). Respons baca/mutasi berbentuk VariantBom { data, summary }.
+  # ------------------------------------------------------------------
+
   /variants/{variant}/bom:
     parameters:
       - { name: variant, in: path, required: true, schema: { type: integer } }
     get:
       tags: [Vendor & Bahan Baku]
-      summary: Daftar baris BOM suatu varian
+      summary: BOM suatu varian (baris + ringkasan biaya)
+      description: |
+        `summary` memisahkan biaya bahan dan jasa. Baris LEGACY dihitung
+        dengan harga acuan vendor hidup (perilaku lama); baris bersumber PO
+        memakai snapshot `unit_cost`. `newer_price` dan `source_cancelled`
+        adalah ISYARAT yang dihitung saat dibaca (tidak mengubah baris).
       responses:
         '200':
           description: Berhasil
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items: { $ref: '#/components/schemas/BomLine' }
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       tags: [Vendor & Bahan Baku]
-      summary: Tambah baris BOM (bahan + jumlah per unit) ke suatu varian
+      deprecated: true
+      summary: "[LEGACY] Tambah baris BOM lama (bahan + jumlah per unit)"
       description: |
-        BOM diikat ke VARIAN, bukan produk induk — varian ukuran/warna
-        berbeda dari produk yang sama bisa butuh jumlah bahan berbeda.
+        Jalur lama; membuat baris LEGACY (tanpa baris PO) dan tercatat di
+        activity log (`bom_item_added`). Satu baris legacy per bahan. 409
+        bila BOM varian sudah SELESAI. UI tidak lagi menawarkannya — pakai
+        `POST /variants/{variant}/bom/items`.
       requestBody:
         required: true
         content:
@@ -4591,6 +4630,213 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BomLine' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /variants/{variant}/bom/eligible-lines:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Baris PO yang boleh dipilih untuk BOM varian ini
+      description: |
+        HANYA baris PO milik seller varian ini dengan status ordered,
+        received, atau paid (bukan draft/cancelled/PO tanpa seller/seller
+        lain/mode lain). `in_bom` menandai baris yang sudah dipakai BOM
+        varian ini.
+      parameters:
+        - { name: q, in: query, description: Teks item/bahan/deskripsi jasa., schema: { type: string } }
+        - { name: purchase_order, in: query, description: Sebagian nomor PO., schema: { type: string } }
+        - { name: vendor_id, in: query, schema: { type: integer } }
+        - { name: line_type, in: query, schema: { type: string, enum: [material, service] } }
+        - { name: date_from, in: query, description: Tanggal PO (ordered_at, kalau belum ada created_at)., schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: per_page, in: query, description: Maksimal 100., schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/EligibleBomLine' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /variants/{variant}/bom/items:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Tambah satu atau banyak baris PO ke BOM
+      description: |
+        Biaya satuan, vendor, nomor PO, dan nama item DISALIN SERVER dari
+        baris PO (snapshot) — `unit_cost` dari klien diabaikan. `qty` =
+        jumlah per SATU unit produk jadi (default 1; > 0; maks. 4 desimal).
+        Semua-atau-tidak-sama-sekali: satu baris yang ditolak membatalkan
+        seluruh permintaan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [purchase_order_item_id]
+                    properties:
+                      purchase_order_item_id: { type: integer }
+                      qty: { type: number, exclusiveMinimum: 0, nullable: true }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Baris PO itu sudah ada di BOM varian ini.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Bukan milik seller varian ini, PO belum/tidak ordered-received-paid, baris tidak dikenal, qty tidak valid, atau duplikat dalam permintaan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /variants/{variant}/bom/complete:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Tandai BOM selesai (harga modal mengikuti BOM)
+      description: |
+        Sejak itu `cost_price` varian = biaya BOM, disinkronkan otomatis pada
+        setiap perubahan BOM, dan dikunci terhadap edit manual (PUT /variants
+        → 409). Transaksi yang sudah tercatat tidak berubah. Idempoten.
+        409 dengan `code`: `empty` (BOM kosong), `has_legacy` (masih ada
+        baris legacy; `rows` menyebut baris itu), `invalid_row` (jumlah ≤ 0
+        atau sumber PO bukan milik seller varian ini). PO sumber yang
+        DIBATALKAN tidak menghalangi.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Belum memenuhi syarat (lihat `code`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  code: { type: string, enum: [empty, has_legacy, invalid_row] }
+                  rows:
+                    type: array
+                    items: { type: object, properties: { id: { type: integer }, item_name: { type: string, nullable: true } } }
+
+  /variants/{variant}/bom/reopen:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Buka kembali BOM
+      description: Melepas kunci `cost_price`; nilainya TETAP pada angka terakhir. Idempoten.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /variants/{variant}/bom/copy:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Salin BOM varian lain KE varian ini
+      description: |
+        Hanya antar varian PRODUK YANG SAMA (422 bila beda produk, varian
+        sama, atau BOM sumber kosong). Baris digandakan lengkap dengan
+        snapshot; sesudahnya tiap varian berdiri sendiri. Target yang sudah
+        punya baris butuh `confirm_replace: true` (409
+        `{code: requires_confirmation, variants: [...]}`). Salinan tidak
+        pernah menandai target selesai dan MEMBUKA KEMBALI target yang
+        selesai (harga modal tetap).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode, source_variant_id]
+              properties:
+                mode: { type: string, enum: [from] }
+                source_variant_id: { type: integer }
+                confirm_replace: { type: boolean }
+      responses:
+        '200':
+          description: Berhasil — VariantBom varian ini ditambah `results`.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/VariantBom'
+                  - type: object
+                    properties:
+                      results: { type: array, items: { $ref: '#/components/schemas/BomCopyResult' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /variants/{variant}/bom/copy-out:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Salin BOM varian ini ke varian berikutnya / semua varian lain
+      description: |
+        `next` = varian berikutnya (id lebih besar) pada produk yang sama;
+        `all` = semua varian lain. Semua-atau-tidak-sama-sekali dalam satu
+        transaksi; aturan konfirmasi dan pembukaan kembali sama dengan
+        `/bom/copy`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: { type: string, enum: [next, all] }
+                confirm_replace: { type: boolean }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results: { type: array, items: { $ref: '#/components/schemas/BomCopyResult' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /bom/{bomLine}:
@@ -4598,23 +4844,73 @@ paths:
       - { name: bomLine, in: path, required: true, schema: { type: integer } }
     put:
       tags: [Vendor & Bahan Baku]
-      summary: Perbarui jumlah/notes satu baris BOM
+      summary: Ubah jumlah/catatan satu baris BOM
+      description: |
+        Hanya `qty_needed` dan `notes`; biaya/vendor/sumber tidak pernah
+        berubah di sini. KONTRAK BERUBAH (034): respons kini BOM yang dimuat
+        ulang (VariantBom), bukan satu baris datar.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/BomLineInput' }
+            schema:
+              type: object
+              properties:
+                qty_needed: { type: number, exclusiveMinimum: 0 }
+                notes: { type: string, nullable: true }
       responses:
         '200':
           description: Diperbarui
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/BomLine' }
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Vendor & Bahan Baku]
       summary: Hapus baris BOM
+      description: |
+        KONTRAK BERUBAH (034): 200 dengan BOM yang dimuat ulang (dulu 204).
+        BOM SELESAI yang menjadi kosong dibuka kembali otomatis
+        (`summary.reopened: true`; harga modal tetap pada nilai terakhir).
       responses:
-        '204': { description: Berhasil }
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /bom/{bomLine}/replace-source:
+    parameters:
+      - { name: bomLine, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Ganti sumber (baris PO) sebuah baris BOM — tindakan eksplisit
+      description: |
+        Satu-satunya cara biaya/vendor/PO sebuah baris berubah (mis. "pakai
+        harga terbaru", atau mengganti baris LEGACY dengan baris PO).
+        Jumlah per unit tetap. Aturan seller + status sama dengan menambah
+        baris; baris PO yang sudah dipakai baris lain BOM ini → 409; sumber
+        yang sama → tanpa perubahan. Tercatat (`bom_source_replaced`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purchase_order_item_id]
+              properties:
+                purchase_order_item_id: { type: integer }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /variants/{variant}/cost-breakdown:
     parameters:
@@ -4630,9 +4926,12 @@ paths:
         tanpa harga vendor sama sekali dihitung sebagai biaya nol dan
         ditandai `has_price: false`.
 
-        **`bom_cost` TIDAK PERNAH menimpa `cost_price`** — keduanya
-        disajikan berdampingan di response ini supaya pemilik toko bisa
-        membandingkan dan merekonsiliasi manual.
+        **`bom_cost` TIDAK menimpa `cost_price` saat BOM belum selesai** —
+        keduanya disajikan berdampingan. 034-seller-po-bom: begitu BOM
+        ditandai SELESAI (`POST /variants/{variant}/bom/complete`),
+        `cost_price` mengikuti `bom_cost` otomatis. Baris bersumber PO memakai
+        SNAPSHOT `unit_cost`; baris LEGACY tetap memakai harga vendor acuan.
+        `material_cost` + `service_cost` = `bom_cost`.
       responses:
         '200':
           description: Berhasil
@@ -5339,6 +5638,89 @@ components:
         material_unit: { type: string, readOnly: true }
         qty_needed: { type: string, example: "2.5000", description: Per satu unit produk jadi; boleh pecahan. }
         notes: { type: string, nullable: true }
+        is_legacy: { type: boolean, description: 034 — tanpa baris PO. }
+        line_type: { type: string, enum: [material, service] }
+        item_name: { type: string, nullable: true }
+        purchase_order_item_id: { type: integer, nullable: true }
+        po_number: { type: string, nullable: true }
+        vendor_id: { type: integer, nullable: true }
+        vendor_name: { type: string, nullable: true }
+        unit_cost: { type: string, nullable: true, description: Snapshot biaya satuan baris PO. }
+
+    VariantBom:
+      type: object
+      description: BOM varian — baris + ringkasan biaya (034-seller-po-bom).
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/VariantBomRow' }
+        summary: { $ref: '#/components/schemas/VariantBomSummary' }
+
+    VariantBomRow:
+      type: object
+      properties:
+        id: { type: integer }
+        product_variant_id: { type: integer }
+        line_type: { type: string, enum: [material, service] }
+        item_name: { type: string, nullable: true }
+        is_legacy: { type: boolean }
+        material_id: { type: integer, nullable: true }
+        material_unit: { type: string, nullable: true }
+        purchase_order_item_id: { type: integer, nullable: true }
+        po_number: { type: string, nullable: true }
+        vendor_id: { type: integer, nullable: true }
+        vendor_name: { type: string, nullable: true }
+        unit_cost: { type: string, example: "500.00", description: SNAPSHOT baris PO (baris LEGACY — harga vendor acuan hidup). }
+        qty_needed: { type: string, example: "1.0000", description: Per SATU unit produk jadi. }
+        item_cost: { type: string, example: "500.00", description: unit_cost x qty_needed (dibulatkan ke sen). }
+        po_qty: { type: number, nullable: true, description: Jumlah yang dibeli di baris PO — hanya rujukan, tidak membatasi. }
+        notes: { type: string, nullable: true }
+        source_cancelled: { type: boolean, description: PO sumber dibatalkan; biaya tercatat tetap dipakai. }
+        newer_price:
+          type: object
+          nullable: true
+          description: Baris PO TERBARU (seller sama, bahan/jasa sama) dengan harga berbeda; hanya isyarat.
+          properties:
+            purchase_order_item_id: { type: integer }
+            po_number: { type: string }
+            unit_price: { type: string }
+
+    VariantBomSummary:
+      type: object
+      properties:
+        material_cost: { type: string, example: "800.00" }
+        service_cost: { type: string, example: "1000.00" }
+        bom_cost: { type: string, example: "1800.00" }
+        has_legacy: { type: boolean }
+        bom_complete: { type: boolean }
+        cost_price: { type: string, example: "1800.00" }
+        reopened: { type: boolean, description: true bila BOM selesai dibuka kembali otomatis oleh permintaan ini (menjadi kosong). }
+
+    EligibleBomLine:
+      type: object
+      properties:
+        purchase_order_item_id: { type: integer }
+        purchase_order_id: { type: integer }
+        po_number: { type: string }
+        po_status: { type: string, enum: [ordered, received, paid] }
+        po_date: { type: string, format: date-time, nullable: true }
+        vendor_id: { type: integer }
+        vendor_name: { type: string, nullable: true }
+        line_type: { type: string, enum: [material, service] }
+        item_name: { type: string, nullable: true }
+        material_id: { type: integer, nullable: true }
+        unit_price: { type: string, example: "500.00" }
+        po_qty: { type: number }
+        in_bom: { type: boolean }
+
+    BomCopyResult:
+      type: object
+      properties:
+        variant_id: { type: integer }
+        sku: { type: string }
+        status: { type: string, enum: [copied] }
+        rows: { type: integer }
+        reopened: { type: boolean }
 
     BomLineInput:
       type: object
@@ -5360,15 +5742,23 @@ components:
         sku: { type: string }
         cost_price: { type: string, example: "12345.00", description: Modal manual yang sudah ada, tidak diubah oleh endpoint ini. }
         bom_cost: { type: string, example: "16000.00", description: "Jumlah qty_needed * unit_cost seluruh baris BOM." }
+        material_cost: { type: string, example: "16000.00" }
+        service_cost: { type: string, example: "0.00" }
+        has_legacy: { type: boolean, description: Ada baris tanpa baris PO (legacy). }
         lines:
           type: array
           items:
             type: object
             properties:
               bom_line_id: { type: integer }
-              material_id: { type: integer }
-              material_name: { type: string }
-              unit: { type: string }
+              line_type: { type: string, enum: [material, service] }
+              is_legacy: { type: boolean }
+              purchase_order_item_id: { type: integer, nullable: true }
+              po_number: { type: string, nullable: true }
+              item_name: { type: string, nullable: true }
+              material_id: { type: integer, nullable: true }
+              material_name: { type: string, nullable: true }
+              unit: { type: string, nullable: true }
               qty_needed: { type: string }
               unit_cost: { type: string, description: Harga vendor acuan (preferred, atau termurah bila tidak ada yang preferred). }
               line_cost: { type: string }
@@ -5411,6 +5801,9 @@ components:
         current_stock: { type: integer, readOnly: true }
         low_stock_alert: { type: integer, nullable: true }
         is_active: { type: boolean }
+        bom_complete: { type: boolean, description: "034 — BOM ditandai selesai; cost_price mengikuti biaya BOM dan dikunci." }
+        has_bom: { type: boolean, description: "034 — hanya ada pada GET/PUT produk untuk pengguna menu products (baris BOM dimuat)." }
+        bom_cost: { type: string, nullable: true, example: "1800.00", description: "034 — biaya BOM; null bila belum ada baris. Hanya bila has_bom ikut dikirim." }
 
     VariantInput:
       type: object
@@ -5421,6 +5814,7 @@ components:
         sell_price: { $ref: '#/components/schemas/Money' }
         low_stock_alert: { type: integer, nullable: true }
         is_active: { type: boolean, default: true }
+        copy_bom_from_variant_id: { type: integer, nullable: true, description: "034 — hanya pada POST /products/{id}/variants." }
 
     VariantLookup:
       type: object
@@ -5601,9 +5995,10 @@ components:
 
     PurchaseOrderInput:
       type: object
-      required: [vendor_id, items]
+      required: [vendor_id, artist_id, items]
       properties:
         vendor_id: { type: integer }
+        artist_id: { type: integer, description: 034 — seller yang dibelikan (wajib saat membuat; pada PUT boleh dikirim untuk menetapkan/mengubah seller). }
         notes: { type: string, nullable: true }
         items:
           type: array
@@ -5626,6 +6021,8 @@ components:
         po_number: { type: string, example: PO-20261012-0001 }
         vendor_id: { type: integer }
         vendor_name: { type: string }
+        artist_id: { type: integer, nullable: true, description: "034 — seller yang dibelikan; null = PO lama tanpa seller (tidak pernah ditawarkan sebagai sumber BOM)." }
+        artist_name: { type: string, nullable: true }
         status: { type: string, enum: [draft, ordered, received, paid, cancelled] }
         ordered_at: { type: string, format: date-time, nullable: true }
         received_at: { type: string, format: date-time, nullable: true }
@@ -5647,6 +6044,7 @@ components:
               material_name: { type: string, nullable: true }
               product_id: { type: integer, nullable: true }
               product_name: { type: string, nullable: true }
+              used_in_bom_count: { type: integer, description: 034 — jumlah baris BOM yang memakai baris PO ini. }
               description: { type: string, nullable: true }
               qty: { type: string }
               unit_price: { $ref: '#/components/schemas/Money' }
