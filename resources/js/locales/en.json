@@ -49,6 +49,8 @@
     "prev_page": "Previous page",
     "next_page": "Next page",
     "save": "Save",
+    "detail": "Detail",
+    "retry": "Retry",
     "edit": "Edit",
     "delete": "Delete",
     "active": "Active",
@@ -1322,6 +1324,7 @@
     "description": "Description",
     "linked_product": "Linked Product",
     "no_product_link": "Not linked",
+    "delete_draft_only": "Only draft purchase orders can be deleted. Cancel it instead.",
     "seller": "Seller",
     "seller_placeholder": "Select the seller this purchase is for",
     "col_seller": "Seller",
@@ -1551,5 +1554,10 @@
     "delete_confirm_order": "Delete the {amount} payment from {number}? The paid amount and remaining balance are recalculated from the remaining payments. This cannot be undone.",
     "filter_all": "All payment statuses",
     "summary_outstanding": "outstanding {amount}"
+  },
+  "schema": {
+    "update_title": "The database needs an update",
+    "update_body": "Some screens may fail until the pending updates are applied. Ask whoever maintains this installation to apply them (restarting the app does it), then reload.",
+    "load_failed": "Could not load this data. Please try again."
   }
 }

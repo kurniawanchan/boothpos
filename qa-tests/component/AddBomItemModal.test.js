@@ -128,3 +128,36 @@ describe('AddBomItemModal — replace mode (034)', () => {
   });
 });
 
+// 035-po-row-actions (US4) — galat memuat BUKAN "tidak ada baris yang layak".
+describe('AddBomItemModal — load failure (035)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listVendors.mockResolvedValue({ data: [] });
+  });
+
+  it('shows the error with Retry and never claims there are no eligible lines', async () => {
+    const { ApiError } = await import('../../resources/js/utils/errors');
+    eligibleBomLines.mockRejectedValueOnce(new ApiError('Database perlu diperbarui.', { status: 503, code: 'schema_outdated' }));
+    renderModal();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Database perlu diperbarui');
+    expect(screen.queryByText('Tidak ada baris purchase order yang memenuhi syarat untuk seller ini.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Coba lagi' })).toBeInTheDocument();
+  });
+
+  it('lists the lines after Retry succeeds', async () => {
+    const { ApiError } = await import('../../resources/js/utils/errors');
+    eligibleBomLines
+      .mockRejectedValueOnce(new ApiError('Database perlu diperbarui.', { status: 503, code: 'schema_outdated' }))
+      .mockResolvedValueOnce({ data: [LINE(1, 'Ball Chain')], meta: META });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole('button', { name: 'Coba lagi' }));
+
+    expect(await screen.findByText('Ball Chain')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+

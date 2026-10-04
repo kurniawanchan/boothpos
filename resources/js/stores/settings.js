@@ -26,6 +26,8 @@ export const useSettingsStore = defineStore('settings', {
     receiptShowLogo: true,
     storeName: '',
     appName: DEFAULT_APP_NAME,
+    // 035-po-row-actions — hanya true untuk owner/admin saat database tertinggal; server yang menentukan.
+    schemaUpdateRequired: false,
     loaded: false,
   }),
   getters: {
@@ -45,6 +47,7 @@ export const useSettingsStore = defineStore('settings', {
         this.receiptShowLogo = data.receipt_show_logo ?? true;
         this.storeName = data.store_name ?? '';
         this.appName = resolveAppName(data.app_name);
+        this.schemaUpdateRequired = data.schema_update_required === true;
         applyThemeAccentColor(this.themeAccentColor);
       } finally {
         this.loaded = true;

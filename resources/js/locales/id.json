@@ -49,6 +49,8 @@
     "prev_page": "Halaman sebelumnya",
     "next_page": "Halaman berikutnya",
     "save": "Simpan",
+    "detail": "Detail",
+    "retry": "Coba lagi",
     "edit": "Edit",
     "delete": "Hapus",
     "active": "Aktif",
@@ -1322,6 +1324,7 @@
     "description": "Deskripsi",
     "linked_product": "Produk Terkait",
     "no_product_link": "Tidak ditautkan",
+    "delete_draft_only": "Hanya purchase order draft yang bisa dihapus. Batalkan saja.",
     "seller": "Penjual",
     "seller_placeholder": "Pilih penjual yang dibelikan",
     "col_seller": "Penjual",
@@ -1551,5 +1554,10 @@
     "delete_confirm_order": "Hapus pembayaran {amount} dari {number}? Jumlah terbayar dan sisa tagihan dihitung ulang dari pembayaran yang tersisa. Tindakan ini tidak bisa dibatalkan.",
     "filter_all": "Semua status pembayaran",
     "summary_outstanding": "sisa tagihan {amount}"
+  },
+  "schema": {
+    "update_title": "Database perlu diperbarui",
+    "update_body": "Beberapa layar bisa gagal sampai pembaruan yang tertunda diterapkan. Minta pihak yang merawat instalasi ini menerapkannya (menjalankan ulang aplikasi sudah cukup), lalu muat ulang.",
+    "load_failed": "Gagal memuat data ini. Silakan coba lagi."
   }
 }

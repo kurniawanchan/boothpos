@@ -84,6 +84,14 @@ class PurchaseOrderService
         }
 
         return DB::transaction(function () use ($po, $data, $user) {
+            // 035-po-row-actions (FR-008) — keadaan SEBELUM perubahan untuk log
+            // `purchase_order_updated` (vendor dan baris; seller punya log sendiri).
+            $before = [
+                'vendor_id' => $po->vendor_id,
+                'total_amount' => (float) $po->total_amount,
+                'lines' => $po->items()->count(),
+            ];
+
             $this->applySellerChange($po, $data, $user);
 
             if (array_key_exists('items', $data)) {
@@ -111,6 +119,29 @@ class PurchaseOrderService
             }
 
             $po->update(array_intersect_key($data, array_flip(['vendor_id', 'notes', 'artist_id'])));
+
+            $vendorChanged = array_key_exists('vendor_id', $data) && (int) $data['vendor_id'] !== (int) $before['vendor_id'];
+
+            // Hanya perubahan bermakna finansial yang dicatat: vendor berganti atau
+            // baris ditulis ulang. Hanya-catatan tidak (tanpa dampak uang); seller
+            // sudah dicatat applySellerChange() — tidak digandakan di sini.
+            if ($vendorChanged || array_key_exists('items', $data)) {
+                $po->refresh();
+
+                $this->activityLogger->log(
+                    userId: $user?->id,
+                    action: 'purchase_order_updated',
+                    entityType: 'PurchaseOrder',
+                    entityId: $po->id,
+                    description: "Mengubah purchase order {$po->po_number}.",
+                    oldValues: $before,
+                    newValues: [
+                        'vendor_id' => $po->vendor_id,
+                        'total_amount' => (float) $po->total_amount,
+                        'lines' => $po->items()->count(),
+                    ],
+                );
+            }
 
             return $this->reload($po);
         });
@@ -178,6 +209,20 @@ class PurchaseOrderService
             throw ValidationException::withMessages([
                 'status' => __('purchase_orders.only_draft_deletable'),
             ]);
+        }
+
+        // 035-po-row-actions (FR-011) — penjagaan eksplisit, TIDAK bergantung pada
+        // aturan transisi status: draft normalnya belum punya pembayaran dan belum
+        // bisa jadi sumber BOM, tetapi "tidak boleh dihapus apa pun keadaannya"
+        // harus berlaku walau datanya dibuat lewat jalur lain. Pengecekan BOM tidak
+        // bergantung mode DEMO/LIVE aktif (withoutGlobalScopes), sama seperti
+        // applySellerChange().
+        if ($po->payments()->exists()) {
+            throw ValidationException::withMessages(['payments' => __('purchase_orders.payment_blocks_delete')]);
+        }
+
+        if (ProductVariantBomLine::withoutGlobalScopes()->whereIn('purchase_order_item_id', $po->items()->select('id'))->exists()) {
+            throw ValidationException::withMessages(['items' => __('purchase_orders.bom_blocks_delete')]);
         }
 
         DB::transaction(function () use ($po, $user) {
