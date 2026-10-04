@@ -88,6 +88,7 @@ Vue 3 SPA (`resources/js/`: `api/`, `stores/` (Pinia), `router/`, `composables/`
 - **Frontend tests live in `qa-tests/`; backend tests in `tests/Feature/`.**
 - One central error handler maps the 422/409/403/401 convention above; `usePaginatedList` handles the pagination envelope. Reuse them rather than re-implementing per screen.
 - Login posts a **`username`**, not an email.
+- **Bentuk kartu POS dan item keranjang (`buildProductCards`, `buildSearchCards`, `toCartItem`) hidup di `utils/posProductCards.js`.** Jangan membuat kartu dengan `map` inline di view: kartu hasil pencarian pernah dibuat begitu, memilih sebagian field saja, dan `image_url` yang sudah dikirim `GET /variants/lookup` terbuang sehingga kartu dan baris keranjang tanpa foto (feature 030).
 - **Semua unduhan dokumen (invoice, payment invoice, surat jalan, struk, PO, invoice billing) lewat `utils/pdfCapture.js`.** Gambar ditukar ke data URL di klon html2canvas berdasarkan `src`-nya sendiri, **JANGAN PERNAH berdasarkan indeks**: argumen pertama `onclone` adalah klon SELURUH halaman, jadi gambar lain di halaman (avatar, thumbnail) menggeser indeks dan QR pembayaran tampil di slot logo (feature 029). Tes regresinya memakai gambar umpan (`qa-tests/unit/pdfCapture.test.js`). Dokumen invoice dan payment invoice pre-order didefinisikan SEKALI di `components/preorder/PreorderInvoiceDocument.vue` / `PreorderPaymentDocument.vue` — dipakai modalnya DAN unduh massal (`PreordersView.vue::mountBulkDocument`); jangan buat tata letak kedua (`utils/invoiceDocument.js` kini hanya berisi surat jalan).
 
 ## Scope discipline
@@ -260,7 +261,21 @@ Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/029-fix-bulk-invoice-logo/plan.md`
+Active feature plan: `specs/030-fix-pos-search-product-image/plan.md`
+(branch `030-fix-pos-search-product-image`, branched from `develop` after PR #24) —
+a frontend fix: POS search result cards showed the placeholder icon and the cart
+line had no photo for items added from a search. `GET /variants/lookup` already
+returns `image_url` (variant's own, else the product's, via
+`ProductVariant::image_url`), but `PosView.vue`'s inline `searchCards` map copied
+only a subset of fields and dropped it (the cart inherits the gap because the
+card is pushed into `posCart`). The fix builds the search card in
+`utils/posProductCards.js` (`buildSearchCards`, beside `buildProductCards` /
+`toCartItem`, where every card/cart shape lives) and ignores responses of
+superseded searches. Search cards also show the category name (follow-up
+request, FR-009), the same label browse cards have. OpenAPI `VariantLookup`
+gains the already-returned `image_url`/`category_name`. See research.md.
+
+Previous feature: `specs/029-fix-bulk-invoice-logo/plan.md`
 (branch `029-fix-bulk-invoice-logo`, branched from `develop` after PR #23) — a
 frontend-only defect fix: bulk-downloaded invoice PDFs showed the payment QR
 image in the store-logo slot. Root cause is in the shared
