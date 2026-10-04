@@ -374,19 +374,20 @@ class PreorderTest extends TestCase
     }
 
     /**
-     * BUG-CHECK (bukan bug baru) — dibaca dari PreorderService::recordPayment()
-     * dan PaymentRecorder::record(): tidak ada guard "tolak jika amount >
-     * outstanding" untuk preorder sama sekali (berbeda dari cash-overpay
-     * guard di alur POS/orders). Ini perilaku existing yang tidak diubah
-     * oleh fitur 010 — jadi panggilan ketiga setelah lunas TETAP diterima
-     * (201) dan menambah paid_amount melebihi total_amount, sama seperti
-     * satu panggilan over-payment tunggal hari ini juga akan diterima.
-     * Test ini mengunci perilaku itu supaya regresi (guard baru yang tidak
-     * disengaja, atau guard yang hilang) ketahuan.
+     * 028-partial-split-payment (US4) — SENGAJA MEMBALIK perilaku lama. Dulu test
+     * ini mengunci bahwa pre-order TIDAK punya guard kelebihan bayar (panggilan
+     * ketiga setelah lunas tetap 201 dan paid_amount melebihi total). Spesifikasi
+     * 028 (FR-008) mewajibkan sebaliknya: jumlah > sisa tagihan ditolak, dan
+     * transaksi yang sudah lunas menolak pembayaran baru.
      */
-    public function test_third_sequential_call_after_fully_paid_is_still_accepted_no_overpay_guard_exists(): void
+    public function test_a_payment_after_fully_paid_or_above_the_balance_is_refused(): void
     {
         $preorder = $this->createPreorder(); // total 300000
+
+        // lebih dari sisa → 422
+        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
+            'method' => 'cash', 'amount' => 300001, 'purpose' => 'down_payment',
+        ])->assertStatus(422)->assertJsonValidationErrors('amount');
 
         $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
             'method' => 'cash', 'amount' => 100000, 'purpose' => 'down_payment',
@@ -398,16 +399,13 @@ class PreorderTest extends TestCase
             'method' => 'cash', 'amount' => 200000, 'purpose' => 'settlement',
         ])->assertCreated()->assertJsonPath('status', 'settled');
 
-        // Panggilan ketiga: preorder sudah lunas (paid_amount == total_amount),
-        // tapi karena tidak ada guard over-payment untuk preorder, panggilan
-        // ini tetap sukses (201), bukan ditolak.
-        $third = $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
+        // Panggilan ketiga: sudah lunas → 409, tidak ada baris ketiga, paid_amount tetap = total.
+        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
             'method' => 'cash', 'amount' => 50000, 'purpose' => 'settlement',
-        ]);
+        ])->assertStatus(409);
 
-        $third->assertCreated();
-        $this->assertEquals('350000.00', $third->json('paid_amount'));
-        $this->assertDatabaseCount('payments', 3);
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertEquals('300000.00', $this->getJson("/api/v1/preorders/{$preorder['id']}")->json('paid_amount'));
     }
 
     /**

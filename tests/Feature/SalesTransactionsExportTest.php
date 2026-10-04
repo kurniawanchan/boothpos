@@ -106,7 +106,7 @@ class SalesTransactionsExportTest extends TestCase
         $row = $this->exported(['keys' => ["order:{$order->id}"]])[0];
 
         $this->assertSame(
-            ['transaction_no', 'status', 'time', 'customer', 'sellers', 'cashier', 'items', 'units', 'discount', 'payment_methods', 'payment_status', 'cash', 'non_cash', 'total'],
+            ['transaction_no', 'status', 'time', 'customer', 'sellers', 'cashier', 'items', 'units', 'discount', 'payment_methods', 'payment_status', 'cash', 'non_cash', 'total', 'paid', 'balance'],
             array_keys($row),
         );
         $this->assertSame('Budi', $row['customer']);
@@ -116,6 +116,21 @@ class SalesTransactionsExportTest extends TestCase
         $this->assertSame(3.0, (float) $row['units']);
         $this->assertSame(30000.0, $row['total']);   // angka, bukan string — bisa dijumlah di Excel
         $this->assertSame(30000.0, $row['cash']);
+        // 028 — status pembayaran kini Unpaid/Partially Paid/Fully Paid + dibayar/sisa (angka)
+        $this->assertSame('fully_paid', $row['payment_status']);
+        $this->assertSame(30000.0, $row['paid']);
+        $this->assertSame(0.0, $row['balance']);
+    }
+
+    public function test_a_partially_paid_sale_exports_its_paid_and_balance(): void
+    {
+        $order = $this->makeOrder(['payments' => [['method' => 'cash', 'amount' => 10000]]]);
+
+        $row = $this->exported(['keys' => ["order:{$order->id}"]])[0];
+
+        $this->assertSame('partially_paid', $row['payment_status']);
+        $this->assertSame(10000.0, $row['paid']);
+        $this->assertSame(20000.0, $row['balance']);
     }
 
     public function test_every_line_is_listed_not_just_the_two_shown_in_the_preview(): void

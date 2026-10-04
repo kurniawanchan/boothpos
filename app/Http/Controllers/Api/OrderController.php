@@ -4,13 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreOrderRequest;
+use App\Http\Requests\StorePaymentRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Setting;
 use App\Services\ImageUploadService;
 use App\Services\OrderService;
+use App\Services\PaymentService;
 use App\Support\AppName;
 use App\Support\ModeGate;
+use App\Support\PaymentSummary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -20,6 +24,7 @@ class OrderController extends Controller
     public function __construct(
         private OrderService $orderService,
         private ImageUploadService $imageUploadService,
+        private PaymentService $paymentService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -71,7 +76,47 @@ class OrderController extends Controller
         // lain yang memakai resource ini tidak berubah bentuk.
         return response()->json(new OrderResource($order->load([
             'items.variant.product.category', 'items.artist',
-            'payments.channel', 'customer', 'cashier', 'event',
+            'payments.channel', 'payments.recorder', 'customer', 'cashier', 'event',
+        ])));
+    }
+
+    /**
+     * 028-partial-split-payment (US5) — pembayaran SUSULAN atas penjualan POS yang
+     * baru dibayar sebagian. Semua aturan (sisa tagihan, idempotensi `client_ref`,
+     * shift kasir untuk tunai, order batal = tertutup) ada di PaymentService;
+     * di sini hanya memetakan ValidationException ke kode statusnya. 201 = baru,
+     * 200 = replay `client_ref`.
+     */
+    public function storePayment(StorePaymentRequest $request, Order $order): JsonResponse
+    {
+        try {
+            $order = $this->paymentService->addPayment($order, $request->validated(), $request->user(), $replayed);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'customer', 'cashier', 'event',
+        ])), $replayed ? 200 : 201);
+    }
+
+    /**
+     * Hapus satu pembayaran penjualan POS — hanya owner/admin (menghapus catatan
+     * uang). 409 untuk order batal dan untuk uang tunai milik shift yang sudah
+     * ditutup (sudah direkonsiliasi); 404 bila bukan pembayaran order ini.
+     */
+    public function destroyPayment(Request $request, Order $order, Payment $payment): JsonResponse
+    {
+        abort_unless($request->user()->isOwnerOrAdmin(), 403, __('orders_payments.not_authorized_void'));
+
+        try {
+            $order = $this->paymentService->deletePayment($order, $payment, $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'customer', 'cashier', 'event',
         ])));
     }
 
@@ -106,6 +151,7 @@ class OrderController extends Controller
     public function receipt(Order $order): JsonResponse
     {
         $order->load(['items.artist', 'payments', 'cashier', 'event', 'customer']);
+        $summary = PaymentSummary::for($order);
 
         return response()->json([
             // 003-seed-demo-live follow-up — nama toko DEMO dan LIVE
@@ -186,8 +232,14 @@ class OrderController extends Controller
             'total_amount' => number_format((float) $order->total_amount, 2, '.', ''),
             'payment_summary' => $order->payments->map(fn ($p) => [
                 'method' => $p->method, 'amount' => number_format((float) $p->amount, 2, '.', ''),
+                // 028 — struk yang dicetak ulang setelah pembayaran susulan memuat entri baru.
+                'reference' => $p->reference, 'paid_at' => $p->paid_at,
             ]),
             'change_amount' => number_format((float) $order->change_amount, 2, '.', ''),
+            // 028 — jumlah terbayar, sisa tagihan, dan status untuk struk penjualan sebagian.
+            'paid_amount' => $summary['total_paid'],
+            'balance_amount' => $summary['remaining'],
+            'payment_status' => $summary['status'],
         ]);
     }
 }

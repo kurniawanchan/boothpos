@@ -2,11 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within, cleanup } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import TransactionItemsModal from '../../resources/js/components/sales/TransactionItemsModal.vue';
-import { getOrder, getReceipt, voidOrder } from '../../resources/js/api/orders';
+import { getOrder, getReceipt, voidOrder, addOrderPayment, deleteOrderPayment } from '../../resources/js/api/orders';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { getProduct } from '../../resources/js/api/products';
 
-vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn(), getReceipt: vi.fn(), voidOrder: vi.fn() }));
+vi.mock('../../resources/js/api/orders', () => ({
+  getOrder: vi.fn(), getReceipt: vi.fn(), voidOrder: vi.fn(), addOrderPayment: vi.fn(), deleteOrderPayment: vi.fn(),
+}));
+vi.mock('../../resources/js/api/payments', () => ({
+  listPaymentChannels: vi.fn().mockResolvedValue({ data: [] }),
+  uploadPaymentProof: vi.fn(),
+}));
 vi.mock('../../resources/js/api/products', () => ({ getProduct: vi.fn() }));
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -37,9 +43,11 @@ const FULL_ORDER = {
     { id: 1, product_id: 10, sku_snapshot: 'NEKKYAKT0001', name_snapshot: 'Akatsuki Keychain', variant_name: 'Blue', artist_name: 'Nekoyama Studio', category_name: 'Keychain', qty: 3, sell_price: '10000.00', discount_amount: '0.00', line_total: '30000.00', image_url: 'http://localhost/storage/variant.png' },
     { id: 2, product_id: 11, sku_snapshot: 'YUKSTSAK0001', name_snapshot: 'Sakura Sticker', variant_name: 'Pink', artist_name: 'Yukishiro Works', category_name: 'Sticker', qty: 3, sell_price: '20000.00', discount_amount: '2000.00', line_total: '58000.00', image_url: null },
   ],
+  // 028 — ringkasan turunan: dibayar 100.000 tunai/QRIS − kembalian 15.000 = 85.000 = lunas.
+  payment_summary: { grand_total: '85000.00', total_paid: '85000.00', remaining: '0.00', status: 'fully_paid', payment_count: 2 },
   payments: [
-    { id: 1, method: 'cash', amount: '50000.00', verification: 'verified', paid_at: '2026-09-27T11:24:00Z', provider: null },
-    { id: 2, method: 'qr_ewallet', amount: '50000.00', verification: 'verified', paid_at: '2026-09-27T11:25:00Z', provider: 'GoPay' },
+    { id: 1, method: 'cash', amount: '50000.00', verification: 'verified', status: 'paid', paid_at: '2026-09-27T11:24:00Z', provider: null },
+    { id: 2, method: 'qr_ewallet', amount: '50000.00', verification: 'verified', status: 'paid', paid_at: '2026-09-27T11:25:00Z', provider: 'GoPay' },
   ],
 };
 
@@ -208,9 +216,10 @@ describe('TransactionItemsModal — totals and payments', () => {
     expect(payments).toHaveTextContent(/50\.000/);
   });
 
-  it('shows the amount paid and the change, and hides the change when it is zero', async () => {
+  it('shows the payment summary (paid net of change) and the change, and hides the change when it is zero', async () => {
     await open();
-    expect(screen.getByTestId('order-payments')).toHaveTextContent(/Dibayar.*100\.000/);
+    expect(screen.getByTestId('summary-total-paid')).toHaveTextContent(/85\.000/);
+    expect(screen.getByTestId('summary-status')).toHaveTextContent('Lunas');
     expect(screen.getByTestId('order-payments')).toHaveTextContent(/Kembalian.*15\.000/);
 
     // dirender ulang tanpa kembalian
@@ -248,23 +257,102 @@ describe('TransactionItemsModal — actions and states', () => {
   });
 });
 
-describe('TransactionItemsModal — payment verification', () => {
+describe('TransactionItemsModal — payment entry status', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('marks payments that are not verified, and leaves verified ones unmarked', async () => {
+  it('labels every counted entry "Dibayar" (no verification workflow) and marks rejected ones', async () => {
     await open({
       ...FULL_ORDER,
       payments: [
-        { id: 1, method: 'cash', amount: '50000.00', verification: 'verified', paid_at: '2026-09-27T11:24:00Z', provider: null },
-        { id: 2, method: 'bank_transfer', amount: '20000.00', verification: 'pending', paid_at: '2026-09-27T11:25:00Z', provider: 'BCA' },
-        { id: 3, method: 'qr_ewallet', amount: '15000.00', verification: 'rejected', paid_at: '2026-09-27T11:26:00Z', provider: 'GoPay' },
+        { id: 1, method: 'cash', amount: '50000.00', verification: 'verified', status: 'paid', paid_at: '2026-09-27T11:24:00Z', provider: null },
+        { id: 2, method: 'bank_transfer', amount: '20000.00', verification: 'pending', status: 'paid', paid_at: '2026-09-27T11:25:00Z', provider: 'BCA' },
+        { id: 3, method: 'qr_ewallet', amount: '15000.00', verification: 'rejected', status: 'rejected', paid_at: '2026-09-27T11:26:00Z', provider: 'GoPay' },
       ],
     });
     const payments = screen.getByTestId('order-payments');
 
-    expect(within(payments).getByText('Belum diverifikasi')).toBeInTheDocument();
+    expect(within(payments).getAllByText('Dibayar')).toHaveLength(2);
     expect(within(payments).getByText('Ditolak')).toBeInTheDocument();
-    expect(within(payments).getAllByText(/Belum diverifikasi|Ditolak/)).toHaveLength(2); // cash 'verified' tanpa penanda
+    expect(within(payments).queryByText('Belum diverifikasi')).not.toBeInTheDocument();
+  });
+});
+
+// 028-partial-split-payment (US5) — penjualan POS yang dibayar sebagian.
+describe('TransactionItemsModal — partially paid sale (028 US5)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const PARTIAL = {
+    ...FULL_ORDER, paid_amount: '40000.00', change_amount: '0.00',
+    payment_summary: { grand_total: '85000.00', total_paid: '40000.00', remaining: '45000.00', status: 'partially_paid', payment_count: 1 },
+    payments: [{ id: 1, method: 'cash', amount: '40000.00', verification: 'verified', status: 'paid', paid_at: '2026-09-27T11:24:00Z', provider: null, recorded_by_name: 'Owner Dummy' }],
+  };
+
+  it('shows the partial status with the remaining balance and an Add Payment button', async () => {
+    await open(PARTIAL);
+
+    expect(screen.getByTestId('summary-status')).toHaveTextContent('Dibayar sebagian');
+    expect(screen.getByTestId('summary-remaining')).toHaveTextContent('45.000');
+    expect(screen.getByTestId('add-payment')).toBeInTheDocument();
+  });
+
+  it('hides Add Payment when fully paid and when the sale is voided', async () => {
+    await open(FULL_ORDER);
+    expect(screen.queryByTestId('add-payment')).not.toBeInTheDocument();
+
+    cleanup();
+    vi.clearAllMocks();
+    await open({ ...PARTIAL, status: 'voided', void_reason: 'salah' });
+    expect(screen.queryByTestId('add-payment')).not.toBeInTheDocument();
+  });
+
+  it('records the remaining payment from the dialog and tells the list to reload', async () => {
+    const user = await open(PARTIAL);
+    const paid = {
+      ...PARTIAL, paid_amount: '85000.00',
+      payment_summary: { grand_total: '85000.00', total_paid: '85000.00', remaining: '0.00', status: 'fully_paid', payment_count: 2 },
+      payments: [...PARTIAL.payments, { id: 2, method: 'cash', amount: '45000.00', verification: 'verified', status: 'paid', paid_at: '2026-09-27T12:00:00Z', provider: null }],
+    };
+    addOrderPayment.mockResolvedValue(paid);
+
+    await user.click(screen.getByTestId('add-payment'));
+    const amount = await screen.findByLabelText(/jumlah dibayar/i);
+    await waitFor(() => expect(amount).toHaveValue(45000));
+    await user.click(screen.getByRole('button', { name: /simpan pembayaran/i }));
+
+    await waitFor(() => expect(addOrderPayment).toHaveBeenCalledWith(101, expect.objectContaining({ method: 'cash', amount: '45000.00', purpose: 'full' })));
+    await waitFor(() => expect(screen.getByTestId('summary-status')).toHaveTextContent('Lunas'));
+    expect(onChanged).toHaveBeenCalled();
+    expect(screen.queryByTestId('add-payment')).not.toBeInTheDocument();
+  });
+
+  it('offers Delete on a payment to the owner only, behind a confirmation', async () => {
+    const user = await open(PARTIAL);
+    deleteOrderPayment.mockResolvedValue({
+      ...PARTIAL, paid_amount: '0.00',
+      payment_summary: { grand_total: '85000.00', total_paid: '0.00', remaining: '85000.00', status: 'unpaid', payment_count: 0 },
+      payments: [],
+    });
+
+    await user.click(screen.getByTestId('delete-payment'));
+    const dialog = await screen.findByRole('dialog', { name: 'Hapus pembayaran' });
+    expect(dialog).toHaveTextContent('40.000');
+    await user.click(within(dialog).getByRole('button', { name: 'Hapus' }));
+
+    await waitFor(() => expect(deleteOrderPayment).toHaveBeenCalledWith(101, 1));
+    await waitFor(() => expect(screen.getByTestId('summary-status')).toHaveTextContent('Belum dibayar'));
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it('shows no Delete for a cashier', async () => {
+    getOrder.mockResolvedValue(PARTIAL);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useAuthStore().user = { id: 2, role: 'Cashier', name: 'Kasir', menu_keys: [] };
+    render(TransactionItemsModal, { props: { open: true, orderId: PARTIAL.id }, global: { plugins: [pinia] } });
+    await screen.findByText(PARTIAL.order_number);
+
+    expect(screen.queryByTestId('delete-payment')).not.toBeInTheDocument();
+    expect(screen.getByTestId('add-payment')).toBeInTheDocument();
   });
 });
 

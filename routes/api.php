@@ -207,6 +207,10 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('pos-drafts', PosDraftController::class)->only(['index', 'store', 'show', 'destroy']);
         Route::get('/orders/{order}', [OrderController::class, 'show']);
         Route::post('/orders/{order}/void', [OrderController::class, 'void']);
+        // 028-partial-split-payment — pembayaran susulan / koreksi untuk penjualan POS
+        // yang dibayar sebagian (hapus = owner/admin, dijaga di controller).
+        Route::post('/orders/{order}/payments', [OrderController::class, 'storePayment']);
+        Route::delete('/orders/{order}/payments/{payment}', [OrderController::class, 'destroyPayment']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
 
         // 007-preorder-import-export-notify — rute statis ('export',

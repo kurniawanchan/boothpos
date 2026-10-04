@@ -140,9 +140,15 @@ class OrderService
             $totalAmount = $subtotal - $orderDiscount;
 
             $paidAmount = collect($data['payments'])->sum('amount');
-            if (round($paidAmount, 2) < round($totalAmount, 2)) {
+            // 028-partial-split-payment (research Decision 8) — penjualan boleh
+            // selesai dengan pembayaran KURANG dari total, asal ada pelanggan
+            // (supaya jelas siapa yang masih berutang). Tanpa pelanggan, tetap
+            // ditolak seperti sebelumnya. Penjualannya tetap 'completed' (stok
+            // berkurang, laporan menghitungnya saat selesai); sisa tagihan
+            // dilunasi lewat POST /orders/{id}/payments.
+            if (round($paidAmount, 2) < round($totalAmount, 2) && empty($data['customer_id'])) {
                 throw ValidationException::withMessages([
-                    'payments' => __('orders_payments.payment_insufficient'),
+                    'payments' => __('orders_payments.customer_required_for_partial_payment'),
                 ]);
             }
 
@@ -201,11 +207,19 @@ class OrderService
                 );
             }
 
+            // Tiap pembayaran checkout dicatat di shift penjualan ini (di sinilah
+            // uangnya diterima) oleh kasir yang bertransaksi. Order sendiri sudah
+            // menjadi jejak audit-nya (kasir + waktu), jadi checkout TIDAK menulis
+            // baris activity_logs per penjualan — hanya pembayaran susulan/hapus.
             foreach ($data['payments'] as $paymentInput) {
-                $this->paymentRecorder->record($paymentInput, $order->id, null);
+                $this->paymentRecorder->record(
+                    array_merge($paymentInput, ['session_id' => $session->id, 'recorded_by' => $cashier->id]),
+                    $order->id,
+                    null,
+                );
             }
 
-            return $order->load(['items', 'payments.proofs']);
+            return $order->load(['items', 'payments.proofs', 'payments.recorder']);
         });
     }
 

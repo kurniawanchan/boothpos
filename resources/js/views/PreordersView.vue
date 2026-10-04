@@ -20,6 +20,7 @@ import {
   bulkEmailPreorderInvoices,
   duplicatePreorders,
   deletePreorderPayment,
+  createPreorderPayment,
 } from '../api/preorders';
 import { createShipment, updateShipment } from '../api/shipments';
 import { getPaymentProofBlobUrl } from '../api/payments';
@@ -50,7 +51,9 @@ import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import CustomerSearchDropdown from '../components/preorder/CustomerSearchDropdown.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
-import RecordPaymentModal from '../components/payment/RecordPaymentModal.vue';
+import AddPaymentModal from '../components/payment/AddPaymentModal.vue';
+import PaymentSummaryCard from '../components/payment/PaymentSummaryCard.vue';
+import PaymentHistoryList from '../components/payment/PaymentHistoryList.vue';
 import PreorderStatusStepper from '../components/preorder/PreorderStatusStepper.vue';
 import PreorderPrintMenu from '../components/preorder/PreorderPrintMenu.vue';
 import PreorderRowActions from '../components/preorder/PreorderRowActions.vue';
@@ -1047,14 +1050,28 @@ async function submitCancel() {
 
 const paymentPurpose = computed(() => (detail.value?.status === 'arrived' ? 'settlement' : 'down_payment'));
 
-// 010-split-payment-preorder-reports (US2/T007) — RecordPaymentModal now
-// submits each split entry itself (sequential calls to the existing
-// POST /preorders/{id}/payments, research.md R2) and only asks the parent
-// to refresh once every entry has succeeded.
-async function handlePaymentSaved() {
-  showRecordPayment.value = false;
-  await Promise.all([refreshDetail(), load()]);
+// 028-partial-split-payment — AddPaymentModal menyimpan SATU pembayaran per klik
+// lewat POST /preorders/{id}/payments dan mengembalikan pre-order terbaru; kita
+// pakai itu langsung (ringkasan + riwayat segar) lalu menyegarkan list dan kartu
+// ringkasan di atas tabel.
+function submitPreorderPayment(payload) {
+  return createPreorderPayment(detail.value.id, payload);
 }
+
+async function handlePaymentSaved(result) {
+  showRecordPayment.value = false;
+  if (result?.payment_summary) detail.value = { ...detail.value, ...result };
+  else await refreshDetail();
+  await load();
+  loadSummary();
+}
+
+// Tombol Tambah pembayaran: hanya selama masih ada sisa tagihan DAN pre-order
+// belum ditutup (server menolak dengan 409 untuk handed_over/cancelled).
+const canAddPayment = computed(
+  () => !!detail.value && !['handed_over', 'cancelled'].includes(detail.value.status)
+    && parseMoney(detail.value.payment_summary?.remaining ?? detail.value.outstanding) > 0,
+);
 
 function openShipmentForm() {
   // 022-preorder-invoice-crud-overhaul (US2, FR-005) — nama/telepon/alamat
@@ -1668,65 +1685,25 @@ async function saveShipmentChanges() {
 
           <div class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
             <span class="text-[14.5px] font-bold">{{ t('preorders.payment') }}</span>
+            <PaymentSummaryCard v-if="detail.payment_summary" :summary="detail.payment_summary" />
             <p class="text-[12px] leading-relaxed text-muted-3">
               {{ t('preorders.payment_history_note') }}
             </p>
 
-            <!-- 010-split-payment-preorder-reports (US4, T020) — setiap
-                 entri pembayaran (termasuk split-payment, FR-005) tampil
-                 satu per satu dengan tombol cetak struk per entri. -->
-            <div v-if="(detail.payments ?? []).length" class="flex flex-col gap-2">
-              <!-- Kolom kanan detail sempit: label+jumlah di atas, tombol aksi di
-                   baris sendiri di bawahnya (flex-wrap) — dulu semuanya sebaris
-                   sehingga teks pembayaran terhimpit jadi satu kata per baris. -->
-              <div
-                v-for="p in detail.payments"
-                :key="p.id"
-                class="flex flex-col gap-2 rounded-lg border border-line-2 px-3 py-2.5"
-              >
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex min-w-0 flex-col gap-0.5">
-                    <span class="text-[12.5px] font-semibold">
-                      {{ p.purpose === 'settlement' ? t('preorders.payment_event_settlement') : t('preorders.payment_event_down_payment') }}
-                    </span>
-                    <span class="text-[11px] text-muted-3">{{ formatDateTime(p.paid_at) }}</span>
-                  </div>
-                  <span class="whitespace-nowrap text-[13.5px] font-bold">{{ formatIDR(p.amount) }}</span>
-                </div>
-                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
-                  <button
-                    v-if="p.proof_id"
-                    type="button"
-                    class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active disabled:opacity-50"
-                    :disabled="loadingProofId === p.proof_id"
-                    @click="viewPaymentProof(p.proof_id)"
-                  >
-                    {{ t('preorders.view_proof') }}
-                  </button>
-                  <button
-                    type="button"
-                    class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active"
-                    @click="openPaymentReceipt(p.id)"
-                  >
-                    {{ t('preorders.print_payment_receipt') }}
-                  </button>
-                  <button
-                    v-if="canDeletePayments"
-                    type="button"
-                    class="ml-auto whitespace-nowrap text-[12px] font-semibold text-danger-text hover:underline"
-                    data-testid="delete-payment"
-                    @click="confirmDeletePayment(p)"
-                  >
-                    {{ t('common.delete') }}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p v-else class="text-[12px] text-muted-3">{{ t('preorders.payment_history_empty') }}</p>
+            <!-- 028-partial-split-payment (US3) — riwayat pembayaran bersama (juga dipakai
+                 di Sales): tiap entri berdiri sendiri, tanpa aksi ubah; Hapus hanya
+                 owner/admin dan diaudit server. -->
+            <PaymentHistoryList
+              :payments="detail.payments ?? []"
+              :can-delete="canDeletePayments"
+              @view-proof="(p) => viewPaymentProof(p.proof_id)"
+              @print="(p) => openPaymentReceipt(p.id)"
+              @delete="confirmDeletePayment"
+            />
 
-            <BaseButton v-if="parseMoney(detail.outstanding) > 0" @click="showRecordPayment = true">
+            <BaseButton v-if="canAddPayment" data-testid="add-payment" @click="showRecordPayment = true">
               <i class="ph-duotone ph-plus-circle text-[17px]" aria-hidden="true"></i>
-              {{ t('preorders.record_settlement') }}
+              {{ t('payment_ledger.add_payment') }}
             </BaseButton>
           </div>
 
@@ -1833,13 +1810,13 @@ async function saveShipmentChanges() {
       </template>
     </BaseModal>
 
-    <RecordPaymentModal
+    <AddPaymentModal
       v-if="detail"
       :open="showRecordPayment"
-      :preorder-id="detail.id"
-      :due-amount="detail.outstanding"
+      :remaining="detail.payment_summary?.remaining ?? detail.outstanding"
       :purpose="paymentPurpose"
-      :title="t('preorders.record_preorder_settlement')"
+      :title="detail.payment_summary?.payment_count > 0 ? t('payment_ledger.add_another_payment') : t('payment_ledger.add_payment')"
+      :submit-fn="submitPreorderPayment"
       @close="showRecordPayment = false"
       @saved="handlePaymentSaved"
     />

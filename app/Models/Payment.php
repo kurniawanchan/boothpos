@@ -14,6 +14,7 @@ class Payment extends Model
     protected $fillable = [
         'order_id', 'preorder_id', 'purchase_order_id', 'channel_id', 'method', 'purpose', 'amount',
         'verification', 'verified_by', 'verified_at', 'reject_reason', 'paid_at', 'notes',
+        'reference', 'client_ref', 'session_id', 'recorded_by',
     ];
 
     protected function casts(): array
@@ -26,4 +27,10 @@ class Payment extends Model
     public function purchaseOrder(): BelongsTo { return $this->belongsTo(PurchaseOrder::class); }
     public function channel(): BelongsTo { return $this->belongsTo(PaymentChannel::class, 'channel_id'); }
     public function proofs(): HasMany { return $this->hasMany(PaymentProof::class); }
+
+    /** 028 — siapa yang mencatat pembayaran ini (NULL untuk baris lama). */
+    public function recorder(): BelongsTo { return $this->belongsTo(User::class, 'recorded_by'); }
+
+    /** 028 — shift kasir tempat uang ini DITERIMA (NULL untuk pembayaran pre-order). */
+    public function session(): BelongsTo { return $this->belongsTo(CashierSession::class, 'session_id'); }
 }

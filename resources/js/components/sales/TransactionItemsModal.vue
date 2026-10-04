@@ -7,7 +7,11 @@ import BaseTextarea from '../ui/BaseTextarea.vue';
 import StatusPill from '../ui/StatusPill.vue';
 import ProductDetailModal from '../product/ProductDetailModal.vue';
 import ReceiptModal from '../receipt/ReceiptModal.vue';
-import { getOrder, voidOrder } from '../../api/orders';
+import ConfirmDialog from '../ui/ConfirmDialog.vue';
+import PaymentSummaryCard from '../payment/PaymentSummaryCard.vue';
+import PaymentHistoryList from '../payment/PaymentHistoryList.vue';
+import AddPaymentModal from '../payment/AddPaymentModal.vue';
+import { getOrder, voidOrder, addOrderPayment, deleteOrderPayment } from '../../api/orders';
 import { formatIDR, parseMoney } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
@@ -87,6 +91,40 @@ function openProductDetail(item) {
 }
 
 const showReceipt = ref(false);
+
+// --- Pembayaran (028-partial-split-payment, US5) -------------------------------------------
+// Ringkasan + riwayat bersama dengan pre-order; Tambah pembayaran selama masih ada sisa dan
+// penjualannya tidak batal; Hapus hanya owner/admin (server menegakkan: 403 / 409).
+const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));
+const canAddPayment = computed(() => !!order.value && !voided.value && parseMoney(order.value.payment_summary?.remaining) > 0);
+const canDeletePayments = computed(() => isOwnerOrAdmin.value && !voided.value);
+const showAddPayment = ref(false);
+const paymentDeleteTarget = ref(null);
+const deletingPayment = ref(false);
+
+function submitOrderPayment(payload) {
+  return addOrderPayment(order.value.id, payload);
+}
+
+function handlePaymentSaved(result) {
+  showAddPayment.value = false;
+  if (result?.id) order.value = result;
+  emit('changed'); // daftar di belakang (status pembayaran, sisa) perlu dimuat ulang
+}
+
+async function performDeletePayment() {
+  if (!paymentDeleteTarget.value || deletingPayment.value) return;
+  deletingPayment.value = true;
+  try {
+    order.value = await deleteOrderPayment(order.value.id, paymentDeleteTarget.value.id);
+    paymentDeleteTarget.value = null;
+    emit('changed');
+  } catch {
+    // 409 (order batal / tunai shift yang sudah ditutup) sudah di-toast interceptor global.
+  } finally {
+    deletingPayment.value = false;
+  }
+}
 
 // --- Batalkan transaksi -------------------------------------------------------------------
 // Digerbang menu 'settings' — persis aturan server (OrderController::void() memetakan aksi
@@ -212,23 +250,23 @@ async function performVoid() {
           <div class="flex items-baseline justify-between border-t border-dashed border-line-2 pt-2"><span class="text-[13.5px] font-bold">{{ t('reports.col_total') }}</span><span class="text-[19px] font-extrabold tracking-tight">{{ formatIDR(order.total_amount) }}</span></div>
         </div>
 
-        <div v-if="payments.length" data-testid="order-payments" class="flex flex-col gap-2 rounded-lg border border-line-2 px-4 py-3.5">
+        <div v-if="payments.length || order.payment_summary" data-testid="order-payments" class="flex flex-col gap-3 rounded-lg border border-line-2 px-4 py-3.5">
           <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">{{ t('reports.order_payments') }}</span>
-          <div v-for="payment in payments" :key="payment.id" class="flex items-baseline justify-between gap-3 text-[13px]">
-            <span class="flex flex-col">
-              <span class="font-semibold">{{ paymentMethodLabel(t, payment.method) }}<span v-if="payment.provider" class="font-normal text-muted-3"> · {{ payment.provider }}</span></span>
-              <span v-if="payment.paid_at" class="text-[11.5px] text-muted-3">{{ formatDateTime(payment.paid_at) }}</span>
-              <StatusPill v-if="payment.verification === 'pending'" variant="warn" class="mt-0.5 self-start">{{ t('reports.payment_state_pending') }}</StatusPill>
-              <StatusPill v-else-if="payment.verification === 'rejected'" variant="danger" class="mt-0.5 self-start">{{ t('reports.payment_state_rejected') }}</StatusPill>
-            </span>
-            <span class="font-semibold">{{ formatIDR(payment.amount) }}</span>
-          </div>
-          <div class="mt-1 flex justify-between border-t border-dashed border-line-2 pt-2 text-[12.5px]">
-            <span class="text-muted-4">{{ t('reports.order_paid') }}</span><span class="font-semibold">{{ formatIDR(order.paid_amount) }}</span>
-          </div>
+          <PaymentSummaryCard v-if="order.payment_summary" :summary="order.payment_summary" />
+          <PaymentHistoryList
+            :payments="payments"
+            :show-proof="false"
+            :show-print="false"
+            :can-delete="canDeletePayments"
+            @delete="(p) => (paymentDeleteTarget = p)"
+          />
           <div v-if="changeAmount > 0" class="flex justify-between text-[12.5px]">
             <span class="text-muted-4">{{ t('reports.order_change') }}</span><span class="font-semibold">{{ formatIDR(changeAmount) }}</span>
           </div>
+          <BaseButton v-if="canAddPayment" data-testid="add-payment" @click="showAddPayment = true">
+            <i class="ph-duotone ph-plus-circle text-[17px]" aria-hidden="true"></i>
+            {{ order.payment_summary?.payment_count > 0 ? t('payment_ledger.add_another_payment') : t('payment_ledger.add_payment') }}
+          </BaseButton>
         </div>
       </template>
     </div>
@@ -254,6 +292,26 @@ async function performVoid() {
       </div>
     </template>
   </BaseModal>
+
+  <AddPaymentModal
+    v-if="order"
+    :open="showAddPayment"
+    :remaining="order.payment_summary?.remaining ?? '0.00'"
+    purpose="full"
+    :title="order.payment_summary?.payment_count > 0 ? t('payment_ledger.add_another_payment') : t('payment_ledger.add_payment')"
+    :submit-fn="submitOrderPayment"
+    @close="showAddPayment = false"
+    @saved="handlePaymentSaved"
+  />
+  <ConfirmDialog
+    :open="paymentDeleteTarget !== null"
+    :title="t('preorders.delete_payment')"
+    :message="t('payment_ledger.delete_confirm_order', { amount: formatIDR(paymentDeleteTarget?.amount ?? 0), number: order?.order_number ?? '' })"
+    :confirm-label="t('common.delete')"
+    :loading="deletingPayment"
+    @close="paymentDeleteTarget = null"
+    @confirm="performDeletePayment"
+  />
 
   <ProductDetailModal :open="showProductDetail" :product-id="detailProductId" @close="showProductDetail = false" />
   <ReceiptModal :open="showReceipt" :order-id="order?.id ?? null" @close="showReceipt = false" />

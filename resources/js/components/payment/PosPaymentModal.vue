@@ -1,9 +1,10 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import PaymentPanel from './PaymentPanel.vue';
-import { formatIDR } from '../../utils/money';
+import ConfirmDialog from '../ui/ConfirmDialog.vue';
+import { formatIDR, parseMoney } from '../../utils/money';
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -12,12 +13,34 @@ const props = defineProps({
   discountAmount: { type: String, default: '0.00' },
   total: { type: String, required: true },
   submitting: { type: Boolean, default: false },
+  // 028-partial-split-payment (US5) — pelanggan yang terpasang pada penjualan ini.
+  // Tanpa pelanggan, penjualan tak bisa diselesaikan dengan pembayaran kurang.
+  customerName: { type: String, default: '' },
 });
 const emit = defineEmits(['close', 'submit']);
 
 const { t } = useI18n();
 const panelRef = ref(null);
-defineExpose({ reset: () => panelRef.value?.reset() });
+const allowPartial = computed(() => props.customerName.trim() !== '');
+
+// Penyelesaian dengan sisa tagihan SELALU lewat konfirmasi — penjualan selesai,
+// stok berkurang, dan pelanggan berutang; ini bukan hal yang boleh terjadi karena salah klik.
+const pendingPartial = ref(null);
+const pendingRemaining = computed(() =>
+  pendingPartial.value
+    ? Math.max(parseMoney(props.total) - pendingPartial.value.reduce((sum, e) => sum + parseMoney(e.amount), 0), 0)
+    : 0,
+);
+function askPartial(entries) {
+  pendingPartial.value = entries;
+}
+function confirmPartial() {
+  const entries = pendingPartial.value;
+  pendingPartial.value = null;
+  emit('submit', entries);
+}
+
+defineExpose({ reset: () => { pendingPartial.value = null; panelRef.value?.reset(); } });
 </script>
 
 <template>
@@ -30,7 +53,9 @@ defineExpose({ reset: () => panelRef.value?.reset() });
           :due-amount="total"
           :submitting="submitting"
           :submit-label="t('pos.confirm_and_save_transaction')"
+          :allow-partial="allowPartial"
           @submit="(payload) => emit('submit', payload)"
+          @submit-partial="askPartial"
         />
       </div>
       <div class="flex flex-col gap-4 border-t border-line-3 bg-surface-subtle px-[26px] py-6 md:border-l md:border-t-0">
@@ -53,4 +78,14 @@ defineExpose({ reset: () => panelRef.value?.reset() });
       </div>
     </div>
   </BaseModal>
+
+  <ConfirmDialog
+    :open="pendingPartial !== null"
+    :title="t('payment_ledger.confirm_partial_title')"
+    :message="t('payment_ledger.confirm_partial_message', { customer: customerName, remaining: formatIDR(pendingRemaining) })"
+    :confirm-label="t('payment_ledger.confirm_partial_action')"
+    :loading="submitting"
+    @close="pendingPartial = null"
+    @confirm="confirmPartial"
+  />
 </template>

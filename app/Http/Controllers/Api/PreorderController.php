@@ -6,6 +6,7 @@ use App\Exports\GenericArrayExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DuplicatePreordersRequest;
 use App\Http\Requests\SplitPreorderRequest;
+use App\Http\Requests\StorePaymentRequest;
 use App\Http\Requests\StorePreorderRequest;
 use App\Http\Requests\UpdatePreorderRequest;
 use App\Http\Resources\CustomerResource;
@@ -174,7 +175,7 @@ class PreorderController extends Controller
 
     public function show(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items.variant.product.category', 'payments.proofs', 'shipment', 'customer', 'notifications', 'splitChildren']);
+        $preorder->load(['items.variant.product.category', 'payments.proofs', 'payments.recorder', 'shipment', 'customer', 'notifications', 'splitChildren']);
 
         return response()->json([
             ...$this->present($preorder),
@@ -229,7 +230,7 @@ class PreorderController extends Controller
      */
     public function invoice(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items', 'payments.proofs', 'customer', 'event']);
+        $preorder->load(['items', 'payments.proofs', 'payments.recorder', 'customer', 'event']);
 
         return response()->json($this->invoicePayload($preorder));
     }
@@ -249,7 +250,7 @@ class PreorderController extends Controller
             'document' => ['required', 'in:invoice,payment_invoice'],
         ]);
 
-        $preorders = Preorder::with(['items', 'payments.proofs', 'customer', 'event'])
+        $preorders = Preorder::with(['items', 'payments.proofs', 'payments.recorder', 'customer', 'event'])
             ->whereIn('id', $validated['preorder_ids'])
             ->get();
 
@@ -275,7 +276,7 @@ class PreorderController extends Controller
             'document' => ['required', 'in:invoice,payment_invoice'],
         ]);
 
-        $preorders = Preorder::with(['items', 'customer', 'payments.proofs'])
+        $preorders = Preorder::with(['items', 'customer', 'payments.proofs', 'payments.recorder'])
             ->whereIn('id', $validated['preorder_ids'])
             ->get();
 
@@ -678,7 +679,7 @@ class PreorderController extends Controller
         return response()->json($this->present(
             // Eager-load sama persis dengan show() — present() menyembunyikan
             // relasi yang tak dimuat secara diam-diam (lihat CLAUDE.md).
-            $preorder->fresh(['items.variant.product.category', 'payments.proofs', 'shipment', 'customer'])
+            $preorder->fresh(['items.variant.product.category', 'payments.proofs', 'payments.recorder', 'shipment', 'customer'])
         ));
     }
 
@@ -700,24 +701,18 @@ class PreorderController extends Controller
         return response()->json($this->present($preorder));
     }
 
-    public function storePayment(Request $request, Preorder $preorder): JsonResponse
+    public function storePayment(StorePaymentRequest $request, Preorder $preorder): JsonResponse
     {
-        $validated = $request->validate([
-            'method' => ['required', 'in:cash,bank_transfer,qr_ewallet'],
-            'channel_id' => ['nullable', 'integer', 'exists:payment_channels,id'],
-            'purpose' => ['sometimes', 'in:full,down_payment,settlement'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
-            'proof_token' => ['nullable', 'uuid'],
-            'notes' => ['nullable', 'string'],
-        ]);
-
         try {
-            $preorder = $this->preorderService->recordPayment($preorder, $validated);
+            $preorder = $this->preorderService->recordPayment($preorder, $request->validated(), $request->user(), $replayed);
         } catch (ValidationException $e) {
-            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+            // Service menandai konflik status dengan ->status(409); selebihnya 422.
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
         }
 
-        return response()->json($this->present($preorder), 201);
+        // 200 = replay `client_ref` (pembayarannya sudah tercatat, tak ada baris baru);
+        // 201 = pembayaran baru.
+        return response()->json($this->present($preorder), $replayed ? 200 : 201);
     }
 
     private function present(Preorder $preorder): array
@@ -754,6 +749,9 @@ class PreorderController extends Controller
             'total_amount' => number_format((float) $preorder->total_amount, 2, '.', ''),
             'paid_amount' => number_format((float) $preorder->paid_amount, 2, '.', ''),
             'outstanding' => number_format($preorder->outstanding(), 2, '.', ''),
+            // 028-partial-split-payment — ringkasan turunan dari entri pembayaran
+            // (grand total / total terbayar / sisa / status / jumlah entri).
+            'payment_summary' => $preorder->paymentSummary(),
             'expected_date' => $preorder->expected_date?->toDateString(),
             // 021-preorder-form-updates — tanggal ASLI (bukan label "Day 1"),
             // diturunkan dari rentang tanggal event saat create() (research.md
@@ -817,6 +815,13 @@ class PreorderController extends Controller
                 'id' => $p->id, 'method' => $p->method, 'purpose' => $p->purpose,
                 'amount' => number_format((float) $p->amount, 2, '.', ''),
                 'verification' => $p->verification, 'paid_at' => $p->paid_at,
+                // 028-partial-split-payment — jejak buku besar: nomor referensi,
+                // pencatat (null untuk baris lama), dan status entri. Entri
+                // `rejected` tidak dihitung ke total terbayar (PaymentSummary);
+                // selain itu semuanya "paid" (research Decision 9).
+                'reference' => $p->reference,
+                'recorded_by_name' => $p->relationLoaded('recorder') ? $p->recorder?->name : null,
+                'status' => $p->verification === 'rejected' ? 'rejected' : 'paid',
                 // 024-invoice-layout-shipping-slip (US-payment-proof) —
                 // bukti pembayaran diunggah SEBELUM payment dibuat lalu
                 // ditautkan lewat proof_token (PaymentRecorder); satu

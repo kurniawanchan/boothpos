@@ -2,8 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\CashierSession;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\User;
+use App\Support\PaymentSummary;
 use Illuminate\Support\Collection;
 
 /**
@@ -51,7 +54,23 @@ class SalesTransactionsService
             ->sortByDesc(fn (array $r) => $r['created_at'].sprintf('%012d', $r['id']))
             ->values();
 
-        $sessions = $orders->pluck('session')->filter()->unique('id')
+        // 028-partial-split-payment (research Decision 7) — shift yang ditampilkan =
+        // shift penjualan DAN shift tempat pembayaran susulannya diterima, supaya
+        // shift yang hanya menerima pelunasan (tanpa penjualan di daftar) tetap
+        // muncul. `cash_received` dihitung per shift dari SEMUA pembayarannya (bukan
+        // hanya pesanan yang sedang disaring), lewat dua query teragregasi.
+        $sessionIds = $orders->pluck('session_id')
+            ->merge($orders->flatMap(fn (Order $o) => $o->payments->pluck('session_id')))
+            ->filter()->unique()->values();
+
+        $cashRows = Payment::whereIn('session_id', $sessionIds)
+            ->where('method', 'cash')->where('verification', 'verified')
+            ->whereHas('order', fn ($q) => $q->where('status', '!=', 'voided'))
+            ->selectRaw('session_id, SUM(amount) AS total')->groupBy('session_id')->pluck('total', 'session_id');
+        $changeRows = Order::whereIn('session_id', $sessionIds)->where('status', '!=', 'voided')
+            ->selectRaw('session_id, SUM(change_amount) AS total')->groupBy('session_id')->pluck('total', 'session_id');
+
+        $sessions = CashierSession::with('user')->whereIn('id', $sessionIds)->get()
             ->sortByDesc('opened_at')
             ->map(fn ($s) => [
                 'id' => $s->id,
@@ -62,6 +81,7 @@ class SalesTransactionsService
                 'opening_cash' => $this->money($s->opening_cash),
                 'closing_cash' => $s->closing_cash === null ? null : $this->money($s->closing_cash),
                 'expected_cash' => $s->expected_cash === null ? null : $this->money($s->expected_cash),
+                'cash_received' => $this->money(max(0, (float) ($cashRows[$s->id] ?? 0) - (float) ($changeRows[$s->id] ?? 0))),
             ])->values();
 
         return ['transactions' => $rows, 'sessions' => $sessions];
@@ -71,6 +91,7 @@ class SalesTransactionsService
     {
         $items = $order->items;
         $payments = $order->payments->where('verification', '!=', 'rejected');
+        $summary = PaymentSummary::for($order, $order->payments);
         $cash = (float) $payments->where('method', 'cash')->sum('amount');
         $noncash = (float) $payments->where('method', '!=', 'cash')->sum('amount');
         $top = $items->sortByDesc(fn ($i) => (float) $i->line_total)->values();
@@ -104,6 +125,11 @@ class SalesTransactionsService
             // Tunai BERSIH: uang tunai yang diterima dikurangi kembalian.
             'cash_amount' => $this->money(max(0, $cash - (float) $order->change_amount)),
             'noncash_amount' => $this->money($noncash),
+            // 028 — status pembayaran turunan (Unpaid/Partially Paid/Fully Paid), uang yang
+            // sudah dibayar, dan sisa tagihan; `payment_state` (verifikasi) tetap ada.
+            'paid_amount' => $summary['total_paid'],
+            'balance_amount' => $summary['remaining'],
+            'payment_status' => $summary['status'],
             'session_id' => $order->session_id,
         ];
 

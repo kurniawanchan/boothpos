@@ -17,4 +17,13 @@ return [
     'discount_exceeds_line_value' => 'The discount for variant :sku exceeds that line\'s value.',
     'discount_exceeds_subtotal' => 'The order discount exceeds the subtotal.',
     'channel_in_use' => 'This payment channel is in use and cannot be deleted.',
+
+    // 028-partial-split-payment
+    'payment_exceeds_balance' => 'The amount is higher than the remaining balance. You can pay at most :max.',
+    'payment_already_fully_paid' => 'This transaction is already fully paid.',
+    'payment_target_closed' => 'This transaction is closed (handed over, cancelled or voided), so payments can no longer be added or removed.',
+    'payment_session_required' => 'Cash payments need an open cashier session. Open a session first, then record the payment.',
+    'payment_client_ref_conflict' => 'This payment reference key was already used for a different transaction.',
+    'customer_required_for_partial_payment' => 'A customer is required to complete a sale that is not paid in full, so it is clear who owes the remaining balance.',
+    'payment_delete_closed_shift' => 'This cash payment belongs to a cashier shift that is already closed and reconciled, so it cannot be deleted.',
 ];

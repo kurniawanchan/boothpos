@@ -34,8 +34,12 @@ const props = defineProps({
   allowCash: { type: Boolean, default: true },
   submitting: { type: Boolean, default: false },
   submitLabel: { type: String, default: 'Konfirmasi pembayaran' },
+  // 028-partial-split-payment (US5) — checkout boleh diselesaikan dengan pembayaran
+  // KURANG dari total, tetapi hanya bila penjualan punya pelanggan (diputuskan
+  // pemanggil; server menegakkannya juga).
+  allowPartial: { type: Boolean, default: false },
 });
-const emit = defineEmits(['submit']);
+const emit = defineEmits(['submit', 'submit-partial']);
 
 const toast = useToastStore();
 const { t } = useI18n();
@@ -44,6 +48,7 @@ const channels = ref([]);
 const channelId = ref(null);
 const amount = ref(parseMoney(props.dueAmount));
 const notes = ref('');
+const reference = ref('');
 const proofToken = ref(null);
 const uploading = ref(false);
 
@@ -82,6 +87,8 @@ const isSplitting = computed(() => entries.value.length > 0);
 // submit() itself read this, so the label can never drift from the actual
 // behavior (research.md R3).
 const coversRemainingBalance = computed(() => {
+  // 028 — mode "record": satu pembayaran = satu simpan; tak ada akumulasi entri.
+  if (props.mode === 'record') return true;
   return method.value === 'cash'
     ? amount.value >= remainingBeforeCurrent.value
     : remainingBeforeCurrent.value - amount.value <= 0;
@@ -136,6 +143,12 @@ const amountToSend = computed(() => amount.value);
 const canSubmitCurrent = computed(() => {
   if (uploading.value) return false;
   if (remainingBeforeCurrent.value <= 0 && entries.value.length) return false;
+  // 028 — mode "record" (Tambah pembayaran): jumlah > 0 dan TIDAK melebihi sisa
+  // tagihan untuk semua metode (tak ada kembalian di sini; kelebihan bayar ditolak).
+  if (props.mode === 'record') {
+    if (amount.value <= 0 || amount.value > remainingBeforeCurrent.value) return false;
+    return method.value === 'cash' || (channelId.value !== null && proofToken.value !== null);
+  }
   if (method.value === 'cash') {
     return amount.value > 0;
   }
@@ -149,6 +162,7 @@ function currentEntryPayload() {
     channel_id: method.value === 'cash' ? null : channelId.value,
     amount: toMoneyString(amountToSend.value),
     proof_token: method.value === 'cash' ? null : proofToken.value,
+    reference: reference.value.trim() || null,
     notes: notes.value || null,
   };
 }
@@ -158,6 +172,7 @@ function resetCurrentEntryFields() {
   channelId.value = null;
   proofToken.value = null;
   notes.value = '';
+  reference.value = '';
   amount.value = remainingBeforeCurrent.value;
 }
 
@@ -178,6 +193,11 @@ function submit() {
 
   const newEntry = currentEntryPayload();
 
+  if (props.mode === 'record') {
+    emit('submit', [newEntry]);
+    return;
+  }
+
   if (coversRemainingBalance.value) {
     emit('submit', [...entries.value, newEntry]);
     return;
@@ -185,6 +205,29 @@ function submit() {
 
   entries.value = [...entries.value, newEntry];
   resetCurrentEntryFields();
+}
+
+// 028 — penyelesaian dengan sisa tagihan (checkout saja). Entri yang sudah
+// terkumpul ditambah entri saat ini BILA valid dan belum menutup tagihan; bila
+// entri saat ini sudah menutup sisa, ia bukan bagian dari "sebagian".
+const partialEntries = computed(() => {
+  const list = [...entries.value];
+  if (canSubmitCurrent.value && !coversRemainingBalance.value) list.push(currentEntryPayload());
+  return list;
+});
+const partialPaid = computed(() => partialEntries.value.reduce((sum, e) => sum + parseMoney(e.amount), 0));
+const partialRemaining = computed(() => Math.max(dueNum.value - partialPaid.value, 0));
+const canFinishPartial = computed(
+  () => props.mode === 'checkout' && props.allowPartial && partialEntries.value.length > 0 && partialRemaining.value > 0,
+);
+// Tanpa pelanggan, membayar kurang dari total tidak bisa diselesaikan — beri tahu mengapa.
+const showNeedsCustomer = computed(
+  () => props.mode === 'checkout' && !props.allowPartial && !coversRemainingBalance.value && amount.value > 0,
+);
+
+function finishPartial() {
+  if (!canFinishPartial.value) return;
+  emit('submit-partial', partialEntries.value);
 }
 
 function removeEntry(index) {
@@ -198,6 +241,7 @@ function reset() {
   channelId.value = null;
   proofToken.value = null;
   notes.value = '';
+  reference.value = '';
   amount.value = dueNum.value;
 }
 
@@ -210,7 +254,7 @@ const METHOD_LABELS = { cash: 'pos.method_cash', bank_transfer: 'pos.method_tran
 // than staying on the static submitLabel prop regardless of what the click
 // will actually do.
 const submitButtonLabel = computed(() =>
-  !coversRemainingBalance.value ? t('pos.add_and_continue') : props.submitLabel
+  props.mode !== 'record' && !coversRemainingBalance.value ? t('pos.add_and_continue') : props.submitLabel
 );
 </script>
 
@@ -227,7 +271,7 @@ const submitButtonLabel = computed(() =>
          visible in both checkout and record modes, even before the first
          entry is committed, so the capability itself is discoverable, not
          just its result. -->
-    <div class="flex flex-col gap-1.5 rounded-lg border border-line-3 bg-surface-subtle p-3">
+    <div v-if="mode !== 'record'" class="flex flex-col gap-1.5 rounded-lg border border-line-3 bg-surface-subtle p-3">
       <span class="text-[11px] font-bold uppercase tracking-wider text-muted-3">{{ t('pos.payments_so_far') }}</span>
       <p v-if="!entries.length" class="text-[12px] leading-relaxed text-muted-3">{{ t('pos.split_payment_hint') }}</p>
       <div v-for="(e, idx) in entries" :key="idx" class="flex items-center justify-between gap-2 text-[12.5px]">
@@ -278,12 +322,27 @@ const submitButtonLabel = computed(() =>
       <ProofCapture @captured="handleCaptured" @cleared="handleCleared" />
     </div>
 
+    <BaseInput
+      v-if="mode === 'record' || method !== 'cash'"
+      v-model="reference"
+      :label="t('payment_ledger.reference_optional')"
+      :placeholder="t('payment_ledger.reference_placeholder')"
+      maxlength="100"
+      autocomplete="off"
+    />
+
     <BaseTextarea v-if="mode === 'record' || mode === 'checkout'" :model-value="notes" :label="t('pos.notes_optional')" :rows="2" @update:model-value="(v) => (notes = v)" />
 
     <div class="flex flex-col gap-2">
       <BaseButton variant="primary" size="lg" class="w-full" :disabled="!canSubmitCurrent" :loading="submitting || uploading" @click="submit">
         {{ submitButtonLabel }}
       </BaseButton>
+      <BaseButton v-if="canFinishPartial" variant="secondary" size="lg" class="w-full" data-testid="finish-partial" @click="finishPartial">
+        {{ t('payment_ledger.finish_partial', { remaining: formatIDR(partialRemaining) }) }}
+      </BaseButton>
+      <p v-else-if="showNeedsCustomer" class="text-center text-[11.5px] leading-relaxed text-warn-text" data-testid="partial-needs-customer">
+        {{ t('payment_ledger.partial_needs_customer') }}
+      </p>
       <p class="text-center text-[11px] leading-relaxed text-muted-3">
         <template v-if="method === 'cash'">{{ t('pos.cash_no_proof_needed') }}</template>
         <template v-else>{{ t('pos.proof_required_before_confirm') }}</template>

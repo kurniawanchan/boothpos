@@ -314,10 +314,13 @@ class ReportController extends Controller
                     // Angka (bukan string) supaya bisa dijumlah langsung di Excel.
                     'discount' => (float) $r['discount_amount'],
                     'payment_methods' => implode(', ', $r['payment_methods']->all()),
-                    'payment_status' => $r['payment_state'],
+                    // 028 — Unpaid/Partially Paid/Fully Paid (dulu status verifikasi mentah).
+                    'payment_status' => $r['payment_status'],
                     'cash' => (float) $r['cash_amount'],
                     'non_cash' => (float) $r['noncash_amount'],
                     'total' => (float) $r['total_amount'],
+                    'paid' => (float) $r['paid_amount'],
+                    'balance' => (float) $r['balance_amount'],
                 ];
                 if (array_key_exists('cost_total', $r)) {
                     $row['cost'] = (float) $r['cost_total'];

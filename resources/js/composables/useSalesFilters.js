@@ -14,6 +14,8 @@ import { toLocalDateKey } from '../utils/date';
  */
 const CUSTOMER_TYPES = ['named', 'walkin'];
 const PAY_STATES = ['pending', 'rejected', 'verified'];
+// 028 — status pembayaran turunan (bukan status verifikasi di atas).
+const SETTLEMENTS = ['unpaid', 'partially_paid', 'fully_paid'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LIST = 50;
 
@@ -48,7 +50,7 @@ export function useSalesFilters({ transactions, sessions }) {
   const includeVoided = ref(false);
   const filters = reactive({
     dateFrom: '', dateTo: '', cashiers: [], sellers: [], payments: [], sessions: [],
-    customerType: '', paymentState: '', minTotal: '', maxTotal: '',
+    customerType: '', paymentState: '', settlement: '', minTotal: '', maxTotal: '',
   });
   const sortKey = ref('created_at');
   const sortDir = ref('desc');
@@ -89,6 +91,8 @@ export function useSalesFilters({ transactions, sessions }) {
     if (f.payments.length && !(tx.payment_methods ?? []).some((m) => f.payments.includes(m))) return false;
     if (f.sessions.length && !f.sessions.some((id) => id == tx.session_id)) return false;
     if (f.paymentState && (tx.payment_state ?? 'none') !== f.paymentState) return false;
+    // Payload lama tanpa `payment_status` dianggap lunas (dulu semua penjualan lunas).
+    if (f.settlement && (tx.payment_status ?? 'fully_paid') !== f.settlement) return false;
     if (f.customerType === 'walkin' && tx.customer_name) return false;
     if (f.customerType === 'named' && !tx.customer_name) return false;
 
@@ -114,7 +118,7 @@ export function useSalesFilters({ transactions, sessions }) {
     const f = filters;
     return [
       search.value.trim() !== '', f.dateFrom !== '', f.dateTo !== '', f.cashiers.length > 0, f.sellers.length > 0,
-      f.payments.length > 0, f.sessions.length > 0, f.customerType !== '', f.paymentState !== '',
+      f.payments.length > 0, f.sessions.length > 0, f.customerType !== '', f.paymentState !== '', f.settlement !== '',
       f.minTotal !== '' && f.minTotal !== null, f.maxTotal !== '' && f.maxTotal !== null,
     ].filter(Boolean).length;
   });
@@ -123,7 +127,7 @@ export function useSalesFilters({ transactions, sessions }) {
     search.value = '';
     Object.assign(filters, {
       dateFrom: '', dateTo: '', cashiers: [], sellers: [], payments: [], sessions: [],
-      customerType: '', paymentState: '', minTotal: '', maxTotal: '',
+      customerType: '', paymentState: '', settlement: '', minTotal: '', maxTotal: '',
     });
   }
 
@@ -164,6 +168,8 @@ export function useSalesFilters({ transactions, sessions }) {
       amount: sum((tx) => num(tx.total_amount)),
       cash: sum((tx) => num(tx.cash_amount)),
       noncash: sum((tx) => num(tx.noncash_amount)),
+      // 028 — sisa tagihan penjualan yang sedang tampil (transaksi batal tak pernah dihitung).
+      outstanding: sum((tx) => num(tx.balance_amount)),
       margin: hasMargin.value ? sum((tx) => num(tx.margin_amount)) : null,
     };
   });
@@ -175,9 +181,14 @@ export function useSalesFilters({ transactions, sessions }) {
     if (!session) return null;
 
     // Dari SEMUA baris shift itu (bukan yang sudah disaring filter lain), tanpa yang batal.
-    const cashSales = all.value
-      .filter((tx) => tx.session_id == session.id && !isVoided(tx))
-      .reduce((acc, tx) => acc + num(tx.cash_amount), 0);
+    // 028 — bila server mengirim `cash_received`, itulah tunai yang DITERIMA di shift ini
+    // (termasuk pelunasan susulan atas penjualan shift lain, dan semua baris shift — bukan
+    // hanya yang lolos filter). Payload lama jatuh kembali ke penjumlahan per baris.
+    const cashSales = session.cash_received !== undefined && session.cash_received !== null
+      ? num(session.cash_received)
+      : all.value
+        .filter((tx) => tx.session_id == session.id && !isVoided(tx))
+        .reduce((acc, tx) => acc + num(tx.cash_amount), 0);
     const opening = num(session.opening_cash);
     const closed = session.status === 'closed' && session.expected_cash !== null && session.closing_cash !== null;
 
@@ -201,7 +212,7 @@ export function useSalesFilters({ transactions, sessions }) {
     put('q', search.value.trim());
     put('from', f.dateFrom); put('to', f.dateTo);
     put('cashier', f.cashiers); put('seller', f.sellers); put('pay', f.payments); put('session', f.sessions);
-    put('cust', f.customerType); put('pstate', f.paymentState);
+    put('cust', f.customerType); put('pstate', f.paymentState); put('settle', f.settlement);
     put('min', f.minTotal); put('max', f.maxTotal);
     if (includeVoided.value) q.voided = '1';
     if (sortKey.value !== 'created_at' || sortDir.value !== 'desc') { q.sort = sortKey.value; q.dir = sortDir.value; }
@@ -224,6 +235,7 @@ export function useSalesFilters({ transactions, sessions }) {
     filters.sessions = listOf(one(query.session));
     filters.customerType = oneOf(query.cust, CUSTOMER_TYPES);
     filters.paymentState = oneOf(query.pstate, PAY_STATES);
+    filters.settlement = oneOf(query.settle, SETTLEMENTS);
     filters.minTotal = amount(query.min);
     filters.maxTotal = amount(query.max);
     includeVoided.value = one(query.voided) === '1';

@@ -1292,6 +1292,13 @@ paths:
         tanpa order yang dibatalkan (`voided`) — rumus yang sama dengan panel
         shift di halaman Sales — lalu menghitung selisih terhadap
         `closing_cash` yang dilaporkan kasir.
+
+        028-partial-split-payment (PERUBAHAN PERILAKU): tunai dihitung di shift
+        TEMPAT UANG DITERIMA (`payments.session_id`), bukan shift penjualan
+        aslinya. Pembayaran susulan atas penjualan lama masuk ke shift saat ia
+        diterima; shift yang sudah ditutup tak pernah berubah. Kembalian tetap
+        dikurangkan di shift penjualannya. Pembayaran pre-order (tanpa shift)
+        tetap di luar kas shift.
       requestBody:
         required: true
         content:
@@ -1527,7 +1534,11 @@ paths:
         - Sesi kasir harus berstatus `open`
         - Harga diambil dari master, bukan dari kiriman klien
         - Pembayaran non-tunai wajib menyertakan `proof_token`
-        - Total pembayaran harus menutup `total_amount`
+        - Total pembayaran harus menutup `total_amount` — KECUALI penjualan memiliki
+          `customer_id` (028-partial-split-payment): penjualan boleh selesai
+          dibayar sebagian (`completed`, stok berkurang, `change_amount` 0) dan
+          sisanya dilunasi lewat `POST /orders/{id}/payments`. Tanpa pelanggan,
+          pembayaran kurang → 409 `customer_required_for_partial_payment`.
         - Stok tidak boleh menjadi negatif
 
         **Idempotensi** — sertakan `local_ref` berupa UUID yang dibuat
@@ -1591,12 +1602,71 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /orders/{id}/payments:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Sales]
+      summary: Pembayaran susulan atas penjualan POS yang dibayar sebagian (028-partial-split-payment, US5)
+      description: |
+        Mencatat SATU pembayaran dan mengembalikan penjualan terbaru dengan `payment_summary`.
+        Siapa saja yang login boleh mencatat (sama seperti checkout). Aturan, semuanya dinilai
+        setelah baris order dikunci:
+        - `client_ref` (UUID) yang sama pada order yang sama → **200** tanpa pembayaran baru
+          (idempotensi); ref milik transaksi lain → 422;
+        - order `voided` → 409; sudah lunas → 409; `amount` > sisa tagihan → 422 (`errors.amount`
+          menyebut maksimumnya);
+        - pembayaran **tunai** memerlukan sesi kasir TERBUKA milik pencatat (409 bila tidak ada) dan
+          disimpan di `payments.session_id` — uang dihitung di shift tempat ia diterima; non-tunai
+          mencatat sesi bila ada;
+        - non-tunai wajib `channel_id` + `proof_token`.
+        Menulis baris `activity_logs` `payment_recorded` di transaksi yang sama.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentInput' }
+      responses:
+        '201':
+          description: Pembayaran baru tersimpan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '200':
+          description: Replay `client_ref` — tidak ada pembayaran baru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '409': { description: "Order batal, sudah lunas, atau tunai tanpa sesi kasir terbuka" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/{id}/payments/{payment_id}:
+    delete:
+      tags: [Sales]
+      summary: Hapus satu pembayaran penjualan POS (028-partial-split-payment)
+      description: |
+        Hanya owner/admin (403 untuk peran lain). 404 bila pembayaran bukan milik order ini. 409 untuk
+        order `voided`, dan untuk pembayaran **tunai** milik shift yang SUDAH ditutup (sudah direkonsiliasi —
+        menghapusnya akan merusak laporan shift). Menghapus baris pembayaran dan buktinya, menghitung ulang
+        `paid_amount`, dan menulis `activity_logs` `payment_deleted` (jumlah/status lama dan baru).
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Order sesudah dihitung ulang
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Order batal, atau tunai milik shift yang sudah ditutup" }
+
   /orders/{id}/receipt:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     get:
       tags: [Sales]
       summary: Data struk
-      description: Mengembalikan data siap tampil untuk struk di layar, termasuk identitas toko dari pengaturan dan `app_name` (nama aplikasi untuk teks "Powered by …").
+      description: Mengembalikan data siap tampil untuk struk di layar, termasuk identitas toko dari pengaturan dan `app_name` (nama aplikasi untuk teks "Powered by …"). 028-partial-split-payment — juga `paid_amount`, `balance_amount`, `payment_status` (`unpaid|partially_paid|fully_paid`) dan `reference`/`paid_at` per pembayaran; struk yang diambil ulang setelah pembayaran susulan memuatnya.
       responses:
         '200':
           description: Berhasil
@@ -2723,6 +2793,7 @@ paths:
         `409` untuk pre-order `handed_over`/`cancelled`; `404` bila pembayaran
         bukan milik pre-order ini. Satu baris `activity_logs` (`payment_deleted`,
         berisi status dan jumlah lama/baru) ditulis di transaksi yang sama.
+        Respons memuat `payment_summary` yang sudah dihitung ulang (028-partial-split-payment).
       parameters:
         - { $ref: '#/components/parameters/Id' }
         - { name: payment_id, in: path, required: true, schema: { type: integer } }
@@ -2742,9 +2813,21 @@ paths:
       tags: [Preorder]
       summary: Catat pembayaran pre-order
       description: |
-        Dipakai untuk DP maupun pelunasan. Pembayaran non-tunai wajib
-        menyertakan `proof_token`. Server memperbarui `paid_amount` dan
-        memindahkan status bila pembayaran melunasi tagihan.
+        Dipakai untuk DP maupun pelunasan. Setiap pembayaran tersimpan SENDIRI
+        dan LANGSUNG, berapa pun jumlahnya (028-partial-split-payment): tidak ada
+        lagi penahanan entri di klien sampai tagihan tertutup. Pembayaran
+        non-tunai wajib menyertakan `proof_token` dan kanal. Server menghitung
+        ulang `paid_amount` dari entri, memindahkan status (pembayaran pertama →
+        `dp_paid`; melunasi pre-order `arrived` → `settled`), menulis baris
+        `activity_logs` `payment_recorded`, dan mengembalikan pre-order lengkap
+        dengan `payment_summary` serta `payments[]` (referensi, pencatat, status).
+        Pre-order `handed_over`/`cancelled` → 409.
+
+        Pengaman (028): jumlah harus > 0 dan ≤ sisa tagihan (dinilai ulang setelah
+        baris pre-order dikunci, jadi dua staf yang membayar bersamaan tak bisa
+        melebihi tagihan); `client_ref` (UUID, opsional di server, selalu dikirim
+        SPA) membuat klik ganda / coba-ulang aman — kunci yang sama pada
+        pre-order yang sama menjawab 200 tanpa menambah pembayaran.
       requestBody:
         required: true
         content:
@@ -2752,11 +2835,17 @@ paths:
             schema: { $ref: '#/components/schemas/PaymentInput' }
       responses:
         '201':
-          description: Tersimpan
+          description: Tersimpan — pre-order terbaru dengan `payment_summary`
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Payment' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '200':
+          description: Replay idempotensi — `client_ref` yang sama sudah tercatat pada pre-order ini; tidak ada pembayaran baru, isinya keadaan terkini (sama seperti 201).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '409': { description: "Pre-order sudah diserahkan/dibatalkan, atau sudah lunas (tidak ada sisa tagihan)" }
+        '422': { description: "Bentuk salah, `amount` melebihi sisa tagihan (`errors.amount` menyebut maksimum yang bisa dibayar; PERUBAHAN 028 — dulu kelebihan bayar diterima), atau `client_ref` sudah dipakai transaksi lain" }
 
   /preorders/{id}/shipment:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -2845,6 +2934,9 @@ paths:
         item, "Nama ×qty; …"), `units, discount, payment_methods, payment_status, cash, non_cash, total`;
         pengguna yang boleh melihat laporan juga mendapat `cost, margin`. Kontak pelanggan
         (telepon/email) SENGAJA tidak ikut. Nominal berupa angka agar bisa dijumlah di Excel.
+
+        028-partial-split-payment: kolom `payment_status` kini berisi `unpaid|partially_paid|fully_paid`
+        (dulu status verifikasi mentah) dan ditambah `paid`, `balance` (setelah `total`, sebelum `cost, margin`).
       requestBody:
         required: false
         content:
@@ -5354,6 +5446,26 @@ components:
           nullable: true
           description: 006-purchase-order-and-ops (US5) — catatan bebas per entri pembayaran, mis. nomor referensi transfer.
         notes: { type: string, nullable: true }
+        reference:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: 028-partial-split-payment — nomor referensi / transaksi pembayaran (opsional).
+        client_ref:
+          type: string
+          format: uuid
+          nullable: true
+          description: 028 — kunci idempotensi buatan klien. Pembayaran ber-`client_ref` yang sama pada transaksi yang sama tidak pernah tercatat dua kali.
+
+    PaymentSummary:
+      type: object
+      description: 028-partial-split-payment — ringkasan turunan dari entri pembayaran (tidak pernah disimpan untuk order). Entri `rejected` tidak dihitung; untuk order, total terbayar = jumlah entri − kembalian.
+      properties:
+        grand_total: { $ref: '#/components/schemas/Money' }
+        total_paid: { $ref: '#/components/schemas/Money' }
+        remaining: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [unpaid, partially_paid, fully_paid] }
+        payment_count: { type: integer }
 
     Payment:
       type: object
@@ -5470,7 +5582,9 @@ components:
           items: { $ref: '#/components/schemas/OrderItem' }
         payments:
           type: array
+          description: Entri pembayaran dalam urutan dicatat; tiap entri membawa `reference`, `recorded_by_name`, `status` (`paid`/`rejected`), dan `session_id` (shift tempat uang diterima).
           items: { $ref: '#/components/schemas/Payment' }
+        payment_summary: { $ref: '#/components/schemas/PaymentSummary' }
 
     Backup:
       type: object
@@ -5654,7 +5768,9 @@ components:
               line_total: { $ref: '#/components/schemas/Money' }
         payments:
           type: array
+          description: Entri pembayaran dalam urutan dicatat. Tiap entri membawa `reference`, `recorded_by_name`, dan `status` (`paid`/`rejected`).
           items: { $ref: '#/components/schemas/Payment' }
+        payment_summary: { $ref: '#/components/schemas/PaymentSummary' }
         shipment:
           allOf:
             - $ref: '#/components/schemas/Shipment'
@@ -5726,6 +5842,7 @@ components:
               opening_cash: { $ref: '#/components/schemas/Money' }
               closing_cash: { $ref: '#/components/schemas/Money', nullable: true }
               expected_cash: { $ref: '#/components/schemas/Money', nullable: true }
+              cash_received: { $ref: '#/components/schemas/Money', description: "028-partial-split-payment — tunai yang DITERIMA di shift ini (pembayaran tunai terverifikasi dengan `session_id` = shift, tanpa order batal) dikurangi kembalian order shift ini; mencakup pelunasan susulan atas penjualan shift lain dan tidak bergantung pada filter. Shift yang hanya menerima pelunasan susulan juga tercantum." }
         group_by: { type: string, enum: [product, category, artist, day, event, customer] }
         group_label:
           type: string
@@ -5775,6 +5892,9 @@ components:
           items:
             type: object
             properties:
+              paid_amount: { $ref: '#/components/schemas/Money', description: "028 — uang yang sudah dibayar (jumlah entri non-ditolak dikurangi kembalian)." }
+              balance_amount: { $ref: '#/components/schemas/Money', description: "028 — sisa tagihan." }
+              payment_status: { type: string, enum: [unpaid, partially_paid, fully_paid], description: "028 — status pembayaran turunan; berbeda dari `payment_state` (status verifikasi)." }
               id: { type: integer }
               order_number: { type: string }
               created_at: { type: string, format: date-time }
