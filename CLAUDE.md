@@ -88,6 +88,7 @@ Vue 3 SPA (`resources/js/`: `api/`, `stores/` (Pinia), `router/`, `composables/`
 - **Frontend tests live in `qa-tests/`; backend tests in `tests/Feature/`.**
 - One central error handler maps the 422/409/403/401 convention above; `usePaginatedList` handles the pagination envelope. Reuse them rather than re-implementing per screen.
 - Login posts a **`username`**, not an email.
+- **Semua unduhan dokumen (invoice, payment invoice, surat jalan, struk, PO, invoice billing) lewat `utils/pdfCapture.js`.** Gambar ditukar ke data URL di klon html2canvas berdasarkan `src`-nya sendiri, **JANGAN PERNAH berdasarkan indeks**: argumen pertama `onclone` adalah klon SELURUH halaman, jadi gambar lain di halaman (avatar, thumbnail) menggeser indeks dan QR pembayaran tampil di slot logo (feature 029). Tes regresinya memakai gambar umpan (`qa-tests/unit/pdfCapture.test.js`). Dokumen invoice pre-order didefinisikan SEKALI di `components/preorder/PreorderInvoiceDocument.vue` — dipakai modal invoice DAN unduh massal (`PreordersView.vue::mountBulkDocument`); jangan buat tata letak invoice kedua (payment invoice massal masih memakai `utils/invoiceDocument.js`).
 
 ## Scope discipline
 
@@ -259,7 +260,21 @@ Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/028-partial-split-payment/plan.md`
+Active feature plan: `specs/029-fix-bulk-invoice-logo/plan.md`
+(branch `029-fix-bulk-invoice-logo`, branched from `develop` after PR #23) — a
+frontend-only defect fix: bulk-downloaded invoice PDFs showed the payment QR
+image in the store-logo slot. Root cause is in the shared
+`utils/pdfCapture.js::captureElementCanvas()`: it swapped the pre-fetched
+`data:` images into html2canvas's clone BY INDEX over
+`clonedDoc.querySelectorAll('img')`, but `onclone`'s first argument is a clone
+of the WHOLE page, so any other `<img>` on the page (avatar, product
+thumbnails) shifted every index. The fix keys the swap by each image's own
+`src` (identity, not position), so an image can only ever get its own bytes;
+all eight document-download call sites inherit it. Never reintroduce
+index-based matching between `el.querySelectorAll('img')` and the clone. See
+research.md.
+
+Previous feature: `specs/028-partial-split-payment/plan.md`
 (branch `028-partial-split-payment`, branched from `develop` after PR #22) —
 payments become an independently saved ledger for BOTH pre-orders and POS
 sales. One `PaymentService` records/deletes payments (amount ≤ remaining,

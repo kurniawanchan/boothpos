@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import PreordersView from '../../resources/js/views/PreordersView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listPreorders, getPreorder, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices, updatePreorderDispatchStatus, getPreorderInvoice, duplicatePreorders, splitPreorder, deletePreorderPayment, createPreorderPayment } from '../../resources/js/api/preorders';
+import { listPreorders, getPreorder, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices, bulkPreorderInvoices, updatePreorderDispatchStatus, getPreorderInvoice, duplicatePreorders, splitPreorder, deletePreorderPayment, createPreorderPayment } from '../../resources/js/api/preorders';
 import { listArtists } from '../../resources/js/api/artists';
 import { listCustomers, getCustomer } from '../../resources/js/api/customers';
 import { lookupVariants } from '../../resources/js/api/products';
@@ -40,6 +40,28 @@ vi.mock('../../resources/js/api/preorders', () => ({
   splitPreorder: vi.fn(),
   deletePreorderPayment: vi.fn(),
   createPreorderPayment: vi.fn(),
+}));
+// 029-fix-bulk-invoice-logo — unduhan massal merender tiap invoice lewat helper bersama;
+// helper dan pembuat zip/PDF diganti agar yang diuji hanya alurnya.
+const bulk = vi.hoisted(() => ({ captures: [], zipFiles: [] }));
+vi.mock('../../resources/js/utils/pdfCapture', () => ({
+  downloadElementAsPdf: vi.fn(),
+  captureElementCanvas: vi.fn(async (el) => {
+    bulk.captures.push({ html: el.innerHTML, attached: document.body.contains(el), el });
+    return { width: 96, height: 96, toDataURL: () => 'data:image/png;base64,AAAA' };
+  }),
+}));
+vi.mock('jszip', () => ({
+  default: class {
+    file(name) { bulk.zipFiles.push(name); }
+    async generateAsync() { return new Blob(['zip']); }
+  },
+}));
+vi.mock('jspdf', () => ({
+  jsPDF: class {
+    addImage() {}
+    output() { return new Blob(['pdf']); }
+  },
 }));
 vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
 vi.mock('../../resources/js/api/shipments', () => ({ createShipment: vi.fn(), updateShipment: vi.fn() }));
@@ -1259,5 +1281,86 @@ describe('PreordersView — payment summary and Add Payment (028 US1)', () => {
     const amount = await screen.findByLabelText(/jumlah dibayar/i);
     await waitFor(() => expect(amount).toHaveValue(600000));
     expect(screen.getByTestId('summary-status')).toHaveTextContent('Dibayar sebagian');
+  });
+});
+
+/**
+ * 029-fix-bulk-invoice-logo (US1) — unduhan massal merender SETIAP invoice terpisah
+ * lewat captureElementCanvas, berurutan, dengan logo toko di header dan QR hanya di
+ * bagian pembayaran, serta tidak menyisakan kontainer di halaman. Halaman sengaja
+ * memuat <img> lain (avatar/thumbnail) — penyebab asli QR tampil di slot logo.
+ */
+describe('PreordersView — bulk invoice download renders each invoice with its own images (029)', () => {
+  const LOGO = 'http://example.test/storage/store-logo/logo.png';
+  const QR = 'http://example.test/storage/payment-channels/qris.jpg';
+  const invoiceFor = (id, number) => ({
+    id,
+    preorder_number: number,
+    status: 'ordered',
+    document_type: 'invoice',
+    fulfillment: 'pickup',
+    items: [{ id: 1, name_snapshot: 'Poster — Std', qty: 2, sell_price: '500000.00', line_total: '1000000.00' }],
+    total_amount: '1000000.00',
+    paid_amount: '0.00',
+    outstanding: '1000000.00',
+    event_name: 'Comifuro 23',
+    event_location: 'ICE BSD',
+    customer: { name: `Pelanggan ${number}` },
+    store_identity: { name: 'Sakana Fridge', address: 'Jl. Contoh No. 1', logo_url: LOGO },
+    payment_channels: [
+      { id: 1, type: 'qr_ewallet', provider: 'Shopee', qr_image_url: QR },
+      { id: 2, type: 'bank_transfer', provider: 'BCA', account_number: '8010591199' },
+    ],
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    bulk.captures.length = 0;
+    bulk.zipFiles.length = 0;
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+    bulkPreorderInvoices.mockResolvedValue({ data: [invoiceFor(10, 'PO-0010'), invoiceFor(11, 'PO-0011')] });
+    URL.createObjectURL = vi.fn(() => 'blob:zip');
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  it('captures one container per invoice, in order, with the logo before the QR, and cleans up', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    // <img> lain di halaman (pemicu bug asli: indeks bergeser)
+    const decoy = document.createElement('img');
+    decoy.setAttribute('src', 'http://example.test/avatar.png');
+    document.body.prepend(decoy);
+
+    for (const number of ['PO-0010', 'PO-0011']) {
+      await user.click(within(screen.getByText(number).closest('tr')).getByRole('checkbox'));
+    }
+    await user.click(await screen.findByRole('button', { name: 'Unduh invoice' }));
+
+    await waitFor(() => expect(bulk.captures).toHaveLength(2));
+    expect(bulkPreorderInvoices).toHaveBeenCalledWith([10, 11], 'invoice');
+
+    expect(bulk.captures.map((c) => c.attached)).toEqual([true, true]);
+    bulk.captures.forEach((c, i) => {
+      const srcs = [...c.html.matchAll(/<img[^>]*\ssrc="([^"]*)"/g)].map((m) => m[1]);
+      expect(srcs).toEqual([LOGO, QR]);
+      expect(c.html).toContain(i === 0 ? 'PO-0010' : 'PO-0011');
+      // tata letak sama dengan modal invoice (bukan pembuat HTML lama): identitas toko, kartu pelanggan, kartu "Cara pembayaran"
+      expect(c.html).toContain('Sakana Fridge');
+      expect(c.html).toContain('Jl. Contoh No. 1');
+      expect(c.html).toContain(`Pelanggan ${i === 0 ? 'PO-0010' : 'PO-0011'}`);
+      expect(c.html).toContain('Cara pembayaran');
+      expect(c.html).toContain('8010591199');
+    });
+    expect(bulk.captures[0].el).not.toBe(bulk.captures[1].el);
+
+    await waitFor(() => expect(bulk.zipFiles).toEqual(['invoice-PO-0010.pdf', 'invoice-PO-0011.pdf']));
+    bulk.captures.forEach((c) => expect(document.body.contains(c.el)).toBe(false));
+
+    decoy.remove();
   });
 });

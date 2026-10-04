@@ -12,6 +12,11 @@ import { resolveAppName } from './appName';
  * this is the same document, rendered for a batch context, not a second
  * design.
  *
+ * 029-fix-bulk-invoice-logo — unduh massal INVOICE kini merender komponen
+ * PreorderInvoiceDocument.vue (sama dengan modal); fungsi ini tinggal dipakai
+ * unduh massal PAYMENT INVOICE dan surat jalan. Jangan menambah tata letak
+ * invoice baru di sini — ubah komponennya.
+ *
  * 024-invoice-layout-shipping-slip — format updated to match the modal:
  * no green "Pre-order" badge, "Pre-Order Invoice" title, bordered event
  * block instead of bg-brand, footer with default fallback, QR + bank
