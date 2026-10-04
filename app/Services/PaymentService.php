@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CashierSession;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\PaymentProof;
 use App\Models\Preorder;
 use App\Models\User;
 use App\Support\PaymentSummary;
@@ -210,6 +211,114 @@ class PaymentService
     }
 
     /**
+     * 031-optional-payment-proof (research Decision 2) — menambah / mengubah /
+     * mengganti KONFIRMASI sebuah pembayaran non-tunai: bukti (foto/berkas),
+     * nomor referensi, dan catatan. Bukan "ubah pembayaran" umum: jumlah, metode,
+     * kanal, tujuan, waktu, shift, dan total/status transaksi TIDAK pernah ditulis
+     * di sini (028 sengaja menutup jalur ubah itu); hanya keterangan deskriptif yang
+     * bisa berubah.
+     *
+     * Urutan pemeriksaan (semuanya SETELAH baris target dikunci, seperti
+     * addPayment/deletePayment):
+     *  1. pembayaran milik transaksi ini (404 bila bukan);
+     *  2. transaksi tidak batal: penjualan `voided` / pre-order `cancelled` → 409.
+     *     Pre-order `handed_over` SENGAJA boleh — konfirmasi tak menggerakkan uang,
+     *     dan bukti susulan justru lazim datang untuk pesanan yang sudah selesai;
+     *  3. bukan tunai (422);   4. pelaku: owner/admin atau pencatat (403);
+     *  5. minimal satu dari bukti/referensi/catatan dikirim (422);
+     *  6. token bukti valid & belum terpakai (422);
+     *  7. hasil akhirnya tak boleh kosong sama sekali (422) — hapus bukti secara
+     *     mentah memang tidak ditawarkan, hanya menggantinya.
+     * Mengganti bukti = bukti lama DITANDAI `superseded_at`, TIDAK dihapus (file dan
+     * baris tetap ada untuk audit; activity log menunjuk ke keduanya).
+     */
+    public function updateConfirmation(Preorder|Order $target, Payment $payment, array $input, User $user): Preorder|Order
+    {
+        return DB::transaction(function () use ($target, $payment, $input, $user) {
+            $locked = $this->lock($target);
+
+            // Pembayaran milik transaksi lain → 404, bukan diubah diam-diam.
+            $entry = $locked->payments()->with('proofs')->whereKey($payment->id)->firstOrFail();
+
+            $closed = $locked instanceof Preorder ? $locked->status === 'cancelled' : $locked->status === 'voided';
+            if ($closed) {
+                throw ValidationException::withMessages(['status' => __('orders_payments.payment_confirmation_target_closed')])->status(409);
+            }
+            if ($entry->method === 'cash') {
+                throw ValidationException::withMessages(['method' => __('orders_payments.payment_confirmation_cash')]);
+            }
+            // Pertahanan berlapis: controller sudah menjaga ini, tetapi aturan bisnis
+            // tidak boleh bergantung pada pemanggil yang ingat memanggilnya.
+            if (! $entry->mayManageConfirmation($user)) {
+                throw ValidationException::withMessages(['confirmation' => __('orders_payments.payment_confirmation_not_allowed')])->status(403);
+            }
+
+            $token = $input['proof_token'] ?? null;
+            $touchesReference = array_key_exists('reference', $input);
+            $touchesNotes = array_key_exists('notes', $input);
+
+            if (! $token && ! $touchesReference && ! $touchesNotes) {
+                throw ValidationException::withMessages(['confirmation' => __('orders_payments.payment_confirmation_empty')]);
+            }
+
+            $proof = null;
+            if ($token) {
+                // Dikunci supaya dua permintaan serentak tak bisa memakai token yang sama.
+                $proof = PaymentProof::where('proof_token', $token)->whereNull('payment_id')->lockForUpdate()->first();
+
+                if (! $proof) {
+                    throw ValidationException::withMessages(['proof_token' => __('orders_payments.proof_token_invalid')]);
+                }
+            }
+
+            $current = $entry->currentProof();
+            $newReference = $touchesReference ? $this->blankToNull($input['reference'] ?? null) : $entry->reference;
+            $newNotes = $touchesNotes ? $this->blankToNull($input['notes'] ?? null) : $entry->notes;
+            $newProofId = $proof?->id ?? $current?->id;
+
+            if ($newReference === null && $newNotes === null && $newProofId === null) {
+                throw ValidationException::withMessages(['confirmation' => __('orders_payments.payment_confirmation_empty')]);
+            }
+
+            if ($proof === null && $newReference === $entry->reference && $newNotes === $entry->notes) {
+                return $this->reload($locked); // tak ada yang benar-benar berubah: tanpa tulis, tanpa log
+            }
+
+            $old = ['payment_id' => $entry->id, 'reference' => $entry->reference, 'notes' => $entry->notes, 'proof_id' => $current?->id];
+
+            if ($proof) {
+                $current?->update(['superseded_at' => now()]);
+                $proof->update(['payment_id' => $entry->id]);
+            }
+            $entry->update(['reference' => $newReference, 'notes' => $newNotes]);
+
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'payment_confirmation_updated',
+                entityType: $locked instanceof Order ? 'Order' : 'Preorder',
+                entityId: $locked->id,
+                description: sprintf(
+                    'Mengubah konfirmasi pembayaran %s Rp %s pada %s%s',
+                    $entry->method, number_format((float) $entry->amount, 0, ',', '.'), $this->numberOf($locked),
+                    $proof && $current ? ' (bukti diganti)' : ($proof ? ' (bukti ditambahkan)' : ''),
+                ),
+                oldValues: $old,
+                newValues: ['payment_id' => $entry->id, 'reference' => $newReference, 'notes' => $newNotes, 'proof_id' => $newProofId],
+            );
+
+            return $this->reload($locked);
+        });
+    }
+
+    /** Teks kosong/spasi saja berarti "kosongkan" (NULL), sisanya di-trim. */
+    private function blankToNull(?string $value): ?string
+    {
+        $value = $value === null ? null : trim($value);
+
+        return $value === '' ? null : $value;
+    }
+
+    /**
      * Shift tempat uang ini DITERIMA (research Decision 7). Hanya untuk penjualan
      * POS: tunai wajib punya shift terbuka milik pencatat (409 bila tidak ada),
      * non-tunai mencatatnya bila ada. Pembayaran pre-order tak punya shift (null),
@@ -285,7 +394,7 @@ class PaymentService
         return $target->fresh(
             $target instanceof Preorder
                 ? PreorderService::PAYLOAD_RELATIONS
-                : ['items', 'payments.channel', 'payments.recorder', 'customer'],
+                : ['items', 'payments.channel', 'payments.recorder', 'payments.proofs', 'customer'],
         );
     }
 

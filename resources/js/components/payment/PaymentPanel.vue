@@ -147,12 +147,15 @@ const canSubmitCurrent = computed(() => {
   // tagihan untuk semua metode (tak ada kembalian di sini; kelebihan bayar ditolak).
   if (props.mode === 'record') {
     if (amount.value <= 0 || amount.value > remainingBeforeCurrent.value) return false;
-    return method.value === 'cash' || (channelId.value !== null && proofToken.value !== null);
+    // 031-optional-payment-proof — bukti (foto/berkas) opsional; kanal tetap wajib untuk non-tunai.
+    return method.value === 'cash' || channelId.value !== null;
   }
   if (method.value === 'cash') {
     return amount.value > 0;
   }
-  return channelId.value !== null && proofToken.value !== null
+  // 031 — sama: bukti opsional (boleh ditambahkan belakangan dari detail transaksi),
+  // sedangkan unggahan yang SEDANG berjalan sudah ditahan oleh guard `uploading` di atas.
+  return channelId.value !== null
     && amountToSend.value > 0 && amountToSend.value <= remainingBeforeCurrent.value;
 });
 
@@ -345,7 +348,7 @@ const submitButtonLabel = computed(() =>
       </p>
       <p class="text-center text-[11px] leading-relaxed text-muted-3">
         <template v-if="method === 'cash'">{{ t('pos.cash_no_proof_needed') }}</template>
-        <template v-else>{{ t('pos.proof_required_before_confirm') }}</template>
+        <template v-else>{{ t('pos.proof_optional_hint') }}</template>
       </p>
     </div>
   </div>

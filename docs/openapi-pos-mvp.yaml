@@ -1484,7 +1484,12 @@ paths:
     get:
       tags: [Payment]
       summary: Ambil berkas bukti pembayaran
-      description: Disajikan melalui pemeriksaan izin, bukan tautan langsung ke penyimpanan.
+      description: |
+        Disajikan melalui pemeriksaan izin, bukan tautan langsung ke penyimpanan. Boleh dibuka:
+        owner/admin, pengunggah berkas, dan (031-optional-payment-proof) pencatat pembayaran untuk
+        bukti yang BERLAKU pada pembayaran itu (bukti yang ditambahkan owner belakangan tetap bisa
+        dibuka kasir pemilik pembayarannya). Bukti yang sudah diganti (`superseded_at`) hanya untuk
+        owner/admin dan pengunggahnya. Pengguna lain → 403.
       responses:
         '200':
           description: Berkas gambar
@@ -1533,7 +1538,9 @@ paths:
         **Aturan yang ditegakkan server:**
         - Sesi kasir harus berstatus `open`
         - Harga diambil dari master, bukan dari kiriman klien
-        - Pembayaran non-tunai wajib menyertakan `proof_token`
+        - Pembayaran non-tunai wajib menyertakan `channel_id`; `proof_token` (foto/berkas bukti) OPSIONAL
+          sejak 031-optional-payment-proof — bisa ditambahkan belakangan lewat
+          `PATCH /orders/{id}/payments/{payment_id}/confirmation`. Token yang dikirim harus valid dan belum terpakai.
         - Total pembayaran harus menutup `total_amount` — KECUALI penjualan memiliki
           `customer_id` (028-partial-split-payment): penjualan boleh selesai
           dibayar sebagian (`completed`, stok berkurang, `change_amount` 0) dan
@@ -1618,7 +1625,7 @@ paths:
         - pembayaran **tunai** memerlukan sesi kasir TERBUKA milik pencatat (409 bila tidak ada) dan
           disimpan di `payments.session_id` — uang dihitung di shift tempat ia diterima; non-tunai
           mencatat sesi bila ada;
-        - non-tunai wajib `channel_id` + `proof_token`.
+        - non-tunai wajib `channel_id`; `proof_token` opsional (031) — bukti bisa ditambahkan belakangan.
         Menulis baris `activity_logs` `payment_recorded` di transaksi yang sama.
       requestBody:
         required: true
@@ -1660,6 +1667,46 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: "Order batal, atau tunai milik shift yang sudah ditutup" }
+
+  /orders/{id}/payments/{payment_id}/confirmation:
+    patch:
+      tags: [Sales]
+      summary: Tambah / ubah / ganti konfirmasi pembayaran penjualan POS (031-optional-payment-proof)
+      description: |
+        031-optional-payment-proof — menambah, mengubah, atau mengganti KONFIRMASI sebuah pembayaran
+        non-tunai yang sudah tercatat: bukti (`proof_token` dari `POST /payment-proofs`), `reference`,
+        dan `notes`. Semua kunci opsional; minimal satu harus dikirim (422 `errors.confirmation`).
+        Mengirim `null` mengosongkan referensi/catatan, tetapi hasil akhirnya tidak boleh kosong
+        sama sekali (bukti, referensi, dan catatan semuanya tak ada → 422). Bukti tidak bisa
+        dihapus mentah, hanya diganti: bukti lama ditandai `superseded_at`, file dan barisnya
+        DIPERTAHANKAN untuk audit.
+
+        **Otorisasi:** owner/admin, atau pengguna yang mencatat pembayaran itu (`payments.recorded_by`);
+        pengguna lain → 403. Pembayaran lama tanpa pencatat → hanya owner/admin.
+
+        **Aturan** (setelah baris transaksi dikunci): pembayaran milik transaksi ini (404 bila bukan);
+        penjualan `voided` → 409; pembayaran tunai → 422 (`errors.method`); token bukti tak dikenal/sudah terpakai → 422.
+
+        Tidak pernah mengubah jumlah, metode, kanal, waktu, status, total, atau kas shift. Menulis
+        `activity_logs` `payment_confirmation_updated` (nilai lama dan baru) di transaksi yang sama.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentConfirmationInput' }
+      responses:
+        '200':
+          description: Penjualan sesudah diubah (payments[] memuat notes, proof_id, has_proof, can_view_proof, can_edit_confirmation)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Penjualan sudah dibatalkan" }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /orders/{id}/receipt:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -2807,6 +2854,46 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: "Pre-order sudah diserahkan atau dibatalkan" }
 
+  /preorders/{id}/payments/{payment_id}/confirmation:
+    patch:
+      tags: [Preorder]
+      summary: Tambah / ubah / ganti konfirmasi pembayaran pre-order (031-optional-payment-proof)
+      description: |
+        031-optional-payment-proof — menambah, mengubah, atau mengganti KONFIRMASI sebuah pembayaran
+        non-tunai yang sudah tercatat: bukti (`proof_token` dari `POST /payment-proofs`), `reference`,
+        dan `notes`. Semua kunci opsional; minimal satu harus dikirim (422 `errors.confirmation`).
+        Mengirim `null` mengosongkan referensi/catatan, tetapi hasil akhirnya tidak boleh kosong
+        sama sekali (bukti, referensi, dan catatan semuanya tak ada → 422). Bukti tidak bisa
+        dihapus mentah, hanya diganti: bukti lama ditandai `superseded_at`, file dan barisnya
+        DIPERTAHANKAN untuk audit.
+
+        **Otorisasi:** owner/admin, atau pengguna yang mencatat pembayaran itu (`payments.recorded_by`);
+        pengguna lain → 403. Pembayaran lama tanpa pencatat → hanya owner/admin.
+
+        **Aturan** (setelah baris transaksi dikunci): pembayaran milik transaksi ini (404 bila bukan);
+        pre-order `cancelled` → 409 (pre-order `handed_over` tetap boleh: konfirmasi tak menggerakkan uang); pembayaran tunai → 422 (`errors.method`); token bukti tak dikenal/sudah terpakai → 422.
+
+        Tidak pernah mengubah jumlah, metode, kanal, waktu, status, total, atau kas shift. Menulis
+        `activity_logs` `payment_confirmation_updated` (nilai lama dan baru) di transaksi yang sama.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentConfirmationInput' }
+      responses:
+        '200':
+          description: Pre-order sesudah diubah (payments[] memuat notes, proof_id, has_proof, can_view_proof, can_edit_confirmation)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Pre-order sudah dibatalkan" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /preorders/{id}/payments:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     post:
@@ -2816,7 +2903,9 @@ paths:
         Dipakai untuk DP maupun pelunasan. Setiap pembayaran tersimpan SENDIRI
         dan LANGSUNG, berapa pun jumlahnya (028-partial-split-payment): tidak ada
         lagi penahanan entri di klien sampai tagihan tertutup. Pembayaran
-        non-tunai wajib menyertakan `proof_token` dan kanal. Server menghitung
+        non-tunai wajib menyertakan kanal; `proof_token` opsional sejak
+        031-optional-payment-proof (bukti bisa ditambahkan belakangan lewat
+        `PATCH /preorders/{id}/payments/{payment_id}/confirmation`). Server menghitung
         ulang `paid_amount` dari entri, memindahkan status (pembayaran pertama →
         `dp_paid`; melunasi pre-order `arrived` → `settled`), menulis baris
         `activity_logs` `payment_recorded`, dan mengembalikan pre-order lengkap
@@ -5442,7 +5531,7 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Wajib untuk metode non-tunai. Diperoleh dari POST /payment-proofs.
+          description: Opsional (031-optional-payment-proof; dulu wajib untuk non-tunai pada penjualan dan pre-order — pembayaran PURCHASE ORDER non-tunai tetap wajib bukti). Diperoleh dari POST /payment-proofs; bila dikirim harus valid dan belum terpakai (422).
         notes:
           type: string
           nullable: true
@@ -5458,6 +5547,14 @@ components:
           format: uuid
           nullable: true
           description: 028 — kunci idempotensi buatan klien. Pembayaran ber-`client_ref` yang sama pada transaksi yang sama tidak pernah tercatat dua kali.
+
+    PaymentConfirmationInput:
+      type: object
+      description: 031-optional-payment-proof — hanya kunci yang berubah; minimal satu kunci.
+      properties:
+        proof_token: { type: string, format: uuid, nullable: true, description: "Dari POST /payment-proofs; menjadi bukti yang berlaku dan menandai bukti sebelumnya superseded." }
+        reference: { type: string, nullable: true, maxLength: 100 }
+        notes: { type: string, nullable: true, maxLength: 1000 }
 
     PaymentSummary:
       type: object
@@ -5480,7 +5577,12 @@ components:
         amount: { $ref: '#/components/schemas/Money' }
         verification: { type: string, enum: [pending, verified, rejected] }
         paid_at: { type: string, format: date-time }
-        proof_id: { type: integer, nullable: true, description: "024-invoice-layout-shipping-slip — id PaymentProof yang ditautkan (jika ada), dipakai frontend untuk GET /payment-proofs/{id}/file." }
+        proof_id: { type: integer, nullable: true, description: "024-invoice-layout-shipping-slip — id PaymentProof yang BERLAKU (jika ada; 031: bukti lama yang sudah diganti tidak ikut), dipakai frontend untuk GET /payment-proofs/{id}/file. Pada GET /orders/{id} juga tersedia sejak 031. Dihilangkan bila endpoint tak memuat relasi bukti." }
+        reference: { type: string, nullable: true, maxLength: 100 }
+        notes: { type: string, nullable: true, description: "031 — catatan pembayaran (sebelumnya tersimpan tetapi tak dikirim)." }
+        has_proof: { type: boolean, description: "031 — apakah pembayaran ini punya bukti yang berlaku. Dihilangkan bila relasi bukti tak dimuat (bukan 'tidak ada bukti')." }
+        can_view_proof: { type: boolean, description: "031 — dihitung server untuk pengguna yang meminta: boleh membuka berkas bukti (owner/admin, pengunggah, atau pencatat pembayaran untuk bukti yang berlaku)." }
+        can_edit_confirmation: { type: boolean, description: "031 — dihitung server: pengguna boleh menambah/mengubah/mengganti konfirmasi (non-tunai; owner/admin atau pencatat pembayaran; transaksi tidak batal)." }
         proofs:
           type: array
           items:

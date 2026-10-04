@@ -50,17 +50,36 @@ class OrderResource extends JsonResource
             ])),
             // 028-partial-split-payment — ringkasan turunan dari entri pembayaran.
             'payment_summary' => $this->whenLoaded('payments', fn () => \App\Support\PaymentSummary::for($this->resource)),
-            'payments' => $this->whenLoaded('payments', fn () => $this->payments->map(fn ($p) => [
-                'id' => $p->id, 'method' => $p->method, 'amount' => number_format((float) $p->amount, 2, '.', ''),
-                'verification' => $p->verification,
-                'paid_at' => $p->paid_at,
-                'reference' => $p->reference,
-                'recorded_by_name' => $p->relationLoaded('recorder') ? $p->recorder?->name : null,
-                'status' => $p->verification === 'rejected' ? 'rejected' : 'paid',
-                'session_id' => $p->session_id,
-                // Nama kanal (bank/e-wallet) bila ada; null untuk tunai.
-                'provider' => $p->relationLoaded('channel') ? $p->channel?->provider : null,
-            ])),
+            'payments' => $this->whenLoaded('payments', fn () => $this->payments->map(function ($p) use ($request) {
+                $user = $request->user();
+                $row = [
+                    'id' => $p->id, 'method' => $p->method, 'amount' => number_format((float) $p->amount, 2, '.', ''),
+                    'verification' => $p->verification,
+                    'paid_at' => $p->paid_at,
+                    'reference' => $p->reference,
+                    // 031 — catatan pembayaran; sebelumnya tersimpan tetapi tak pernah dikirim.
+                    'notes' => $p->notes,
+                    'recorded_by_name' => $p->relationLoaded('recorder') ? $p->recorder?->name : null,
+                    'status' => $p->verification === 'rejected' ? 'rejected' : 'paid',
+                    'session_id' => $p->session_id,
+                    // Nama kanal (bank/e-wallet) bila ada; null untuk tunai.
+                    'provider' => $p->relationLoaded('channel') ? $p->channel?->provider : null,
+                    // 031 — siapa boleh mengubah konfirmasi dihitung SERVER (SPA tak pernah menebak
+                    // dari peran); transaksi batal tak bisa diubah (FR-012).
+                    'can_edit_confirmation' => $user !== null && $this->status !== 'voided' && $p->confirmationEditableBy($user),
+                ];
+
+                // Hanya bila bukti dimuat: tanpa `payments.proofs` kolom-kolom ini DIHILANGKAN,
+                // bukan diisi "tak ada bukti" (jebakan relationLoaded yang sama seperti present()).
+                if ($p->relationLoaded('proofs')) {
+                    $current = $p->currentProof();
+                    $row['proof_id'] = $current?->id;
+                    $row['has_proof'] = $current !== null;
+                    $row['can_view_proof'] = $user !== null && $current !== null && $p->proofViewableBy($user, $current);
+                }
+
+                return $row;
+            })),
         ];
     }
 }

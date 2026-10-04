@@ -54,6 +54,7 @@ import EmptyState from '../components/ui/EmptyState.vue';
 import CustomerSearchDropdown from '../components/preorder/CustomerSearchDropdown.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import AddPaymentModal from '../components/payment/AddPaymentModal.vue';
+import PaymentConfirmationModal from '../components/payment/PaymentConfirmationModal.vue';
 import PaymentSummaryCard from '../components/payment/PaymentSummaryCard.vue';
 import PaymentHistoryList from '../components/payment/PaymentHistoryList.vue';
 import PreorderStatusStepper from '../components/preorder/PreorderStatusStepper.vue';
@@ -1092,6 +1093,17 @@ async function handlePaymentSaved(result) {
   loadSummary();
 }
 
+// 031-optional-payment-proof — bukti bayar opsional; bukti/referensi/catatan sebuah pembayaran
+// non-tunai ditambah atau diubah belakangan lewat dialog yang sama dengan detail Sales. Server
+// menentukan siapa yang boleh (`can_edit_confirmation`) dan mengembalikan pre-order terbaru.
+const confirmationTarget = ref(null);
+
+async function handleConfirmationSaved(result) {
+  if (result?.id) detail.value = { ...detail.value, ...result };
+  else await refreshDetail();
+  await load();
+}
+
 // Tombol Tambah pembayaran: hanya selama masih ada sisa tagihan DAN pre-order
 // belum ditutup (server menolak dengan 409 untuk handed_over/cancelled).
 const canAddPayment = computed(
@@ -1723,6 +1735,7 @@ async function saveShipmentChanges() {
               :payments="detail.payments ?? []"
               :can-delete="canDeletePayments"
               @view-proof="(p) => viewPaymentProof(p.proof_id)"
+              @edit-confirmation="(p) => (confirmationTarget = p)"
               @print="(p) => openPaymentReceipt(p.id)"
               @delete="confirmDeletePayment"
             />
@@ -1845,6 +1858,16 @@ async function saveShipmentChanges() {
       :submit-fn="submitPreorderPayment"
       @close="showRecordPayment = false"
       @saved="handlePaymentSaved"
+    />
+
+    <PaymentConfirmationModal
+      v-if="detail"
+      :open="confirmationTarget !== null"
+      :payment="confirmationTarget"
+      kind="preorders"
+      :target-id="detail.id"
+      @close="confirmationTarget = null"
+      @saved="handleConfirmationSaved"
     />
 
     <PreorderInvoiceModal

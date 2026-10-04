@@ -142,7 +142,9 @@ class OrderTest extends TestCase
         $this->assertDatabaseCount('orders', 0);
     }
 
-    public function test_non_cash_payment_without_proof_token_is_rejected(): void
+    // 031-optional-payment-proof — bukti bayar (foto/berkas) TIDAK lagi wajib untuk
+    // pembayaran non-tunai; bisa ditambahkan belakangan dari detail Sales.
+    public function test_non_cash_payment_without_proof_token_is_accepted(): void
     {
         $channel = PaymentChannel::factory()->create(['type' => 'bank_transfer']);
 
@@ -150,7 +152,52 @@ class OrderTest extends TestCase
             'payments' => [['method' => 'bank_transfer', 'channel_id' => $channel->id, 'amount' => 50000]],
         ]));
 
+        $response->assertCreated();
+        $this->assertDatabaseHas('payments', ['method' => 'bank_transfer', 'channel_id' => $channel->id, 'verification' => 'pending']);
+        $this->assertDatabaseCount('payment_proofs', 0);
+    }
+
+    public function test_split_checkout_accepts_a_proofless_and_a_proof_bearing_non_cash_entry_together(): void
+    {
+        $channel = PaymentChannel::factory()->create(['type' => 'qr_ewallet']);
+        $token = $this->postJson('/api/v1/payment-proofs', [
+            'file' => \Illuminate\Http\UploadedFile::fake()->image('bukti.jpg'), 'captured_via' => 'upload',
+        ])->json('proof_token');
+
+        $this->postJson('/api/v1/orders', $this->basePayload([
+            'payments' => [
+                ['method' => 'qr_ewallet', 'channel_id' => $channel->id, 'amount' => 20000],
+                ['method' => 'qr_ewallet', 'channel_id' => $channel->id, 'amount' => 30000, 'proof_token' => $token],
+            ],
+        ]))->assertCreated();
+
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertDatabaseCount('payment_proofs', 1);
+        $this->assertDatabaseMissing('payment_proofs', ['proof_token' => $token, 'payment_id' => null]);
+    }
+
+    public function test_non_cash_payment_with_an_unknown_proof_token_is_still_refused(): void
+    {
+        $channel = PaymentChannel::factory()->create(['type' => 'bank_transfer']);
+
+        $response = $this->postJson('/api/v1/orders', $this->basePayload([
+            'payments' => [[
+                'method' => 'bank_transfer', 'channel_id' => $channel->id, 'amount' => 50000,
+                'proof_token' => (string) \Illuminate\Support\Str::uuid(),
+            ]],
+        ]));
+
         $response->assertStatus(409);
+        $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_non_cash_payment_without_a_channel_is_refused_cleanly_not_as_a_database_error(): void
+    {
+        $response = $this->postJson('/api/v1/orders', $this->basePayload([
+            'payments' => [['method' => 'bank_transfer', 'amount' => 50000]],
+        ]));
+
+        $response->assertStatus(409); // OrderController memetakan semua ValidationException service ke 409
         $this->assertDatabaseCount('orders', 0);
     }
 

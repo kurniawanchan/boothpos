@@ -10,20 +10,33 @@ import { paymentMethodLabel } from '../../utils/paymentMethods';
  * penjualan POS), dalam urutan dicatat. Setiap entri berdiri sendiri: metode,
  * jumlah, waktu, nomor referensi (bila ada), pencatat (bila diketahui), status.
  *
- * Entri TIDAK punya aksi ubah (tak ada jalur ubah di server). Satu-satunya aksi
- * destruktif adalah Hapus untuk owner/admin (`canDelete`), yang diaudit server.
+ * Jumlah/metode/waktu entri TIDAK bisa diubah (tak ada jalur ubah di server).
+ * Satu-satunya aksi destruktif adalah Hapus untuk owner/admin (`canDelete`), yang
+ * diaudit server.
+ *
+ * 031-optional-payment-proof — satu-satunya yang bisa berubah belakangan adalah
+ * KONFIRMASI pembayaran non-tunai (bukti, referensi, catatan). Entri non-tunai tanpa
+ * bukti ditandai "Belum ada bukti"; aksi "Tambah/Ubah konfirmasi" dan "Lihat bukti"
+ * mengikuti flag yang dihitung SERVER per entri (`can_edit_confirmation`,
+ * `can_view_proof`) — komponen ini tak menebak izin dari peran. Entri dari endpoint
+ * yang tak memuat bukti (tanpa `has_proof`) tampil persis seperti sebelumnya.
  * Komponen ini hanya menampilkan dan memancarkan event; pemanggil yang membuka
- * bukti, mencetak invoice, dan mengonfirmasi hapus.
+ * bukti, membuka dialog konfirmasi, mencetak invoice, dan mengonfirmasi hapus.
  */
 defineProps({
   payments: { type: Array, default: () => [] },
   canDelete: { type: Boolean, default: false },
-  // Penjualan POS tak punya invoice-per-pembayaran maupun bukti yang dimuat di
-  // detailnya; pre-order punya keduanya.
+  // Penjualan POS tak punya invoice-per-pembayaran (showPrint=false); sejak 031 bukti dimuat di
+  // detail penjualan juga, jadi keduanya menampilkan "Lihat bukti" (menurut flag server).
   showProof: { type: Boolean, default: true },
   showPrint: { type: Boolean, default: true },
 });
-const emit = defineEmits(['view-proof', 'print', 'delete']);
+const emit = defineEmits(['view-proof', 'print', 'delete', 'edit-confirmation']);
+
+// "Belum ada bukti" hanya bila server MENYATAKAN has_proof === false (non-tunai).
+const lacksProof = (p) => p.method !== 'cash' && p.has_proof === false;
+const hasAnyConfirmation = (p) => !!(p.has_proof || p.proof_id || p.reference || p.notes);
+const canViewProof = (p) => p.proof_id && p.can_view_proof !== false;
 
 const { t } = useI18n();
 </script>
@@ -43,6 +56,9 @@ const { t } = useI18n();
           <span v-if="p.reference" class="break-all text-[11px] text-muted-4" data-testid="payment-reference">
             {{ t('payment_ledger.reference_short') }}: {{ p.reference }}
           </span>
+          <span v-if="p.notes" class="whitespace-pre-line break-words text-[11px] text-muted-4" data-testid="payment-notes">
+            {{ t('payment_ledger.notes_short') }}: {{ p.notes }}
+          </span>
           <span v-if="p.recorded_by_name" class="text-[11px] text-muted-3" data-testid="payment-recorder">
             {{ t('payment_ledger.recorded_by', { name: p.recorded_by_name }) }}
           </span>
@@ -52,15 +68,23 @@ const { t } = useI18n();
           <StatusPill :variant="p.status === 'rejected' ? 'danger' : 'mint'">
             {{ p.status === 'rejected' ? t('payment_ledger.entry_rejected') : t('payment_ledger.entry_paid') }}
           </StatusPill>
+          <StatusPill v-if="lacksProof(p)" variant="warn" data-testid="no-proof">{{ t('payment_ledger.no_proof') }}</StatusPill>
         </div>
       </div>
-      <div v-if="(showProof && p.proof_id) || showPrint || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
+      <div v-if="(showProof && canViewProof(p)) || p.can_edit_confirmation || showPrint || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
         <button
-          v-if="showProof && p.proof_id"
+          v-if="showProof && canViewProof(p)"
           type="button"
           class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active"
           @click="emit('view-proof', p)"
         >{{ t('preorders.view_proof') }}</button>
+        <button
+          v-if="p.can_edit_confirmation"
+          type="button"
+          class="whitespace-nowrap text-[12px] font-semibold text-brand-active hover:underline"
+          data-testid="edit-confirmation"
+          @click="emit('edit-confirmation', p)"
+        >{{ hasAnyConfirmation(p) ? t('payment_ledger.edit_confirmation') : t('payment_ledger.add_confirmation') }}</button>
         <button
           v-if="showPrint"
           type="button"

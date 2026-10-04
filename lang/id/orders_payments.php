@@ -26,4 +26,11 @@ return [
     'payment_client_ref_conflict' => 'Kunci referensi pembayaran ini sudah dipakai untuk transaksi lain.',
     'customer_required_for_partial_payment' => 'Penjualan yang tidak dibayar penuh wajib memiliki pelanggan, supaya jelas siapa yang masih berutang.',
     'payment_delete_closed_shift' => 'Pembayaran tunai ini milik shift kasir yang sudah ditutup dan direkonsiliasi, sehingga tidak bisa dihapus.',
+
+    // 031-optional-payment-proof
+    'channel_required_for_non_cash' => 'Kanal pembayaran wajib untuk metode non-tunai.',
+    'payment_confirmation_not_allowed' => 'Hanya owner/admin atau pengguna yang mencatat pembayaran ini yang boleh mengubah konfirmasinya.',
+    'payment_confirmation_empty' => 'Isi minimal satu: bukti, referensi, atau catatan; konfirmasi tidak boleh dikosongkan.',
+    'payment_confirmation_cash' => 'Pembayaran tunai tidak punya konfirmasi untuk ditambahkan.',
+    'payment_confirmation_target_closed' => 'Transaksi ini sudah dibatalkan; konfirmasinya tidak bisa diubah lagi.',
 ];
