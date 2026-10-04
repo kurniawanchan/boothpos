@@ -216,12 +216,17 @@ watch(preorderView, async (view) => {
 const filteredSettlements = computed(() =>
   !artistFilter.value ? (settlements.value ?? []) : (settlements.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
 );
-const settlementTotals = computed(() => sumRows(filteredSettlements.value, ['total_sales', 'payable_amount', 'paid_amount', 'outstanding'], ['total_units']));
+const settlementTotals = computed(() => sumRows(filteredSettlements.value, ['total_sales', 'pos_sales', 'preorder_sales', 'payable_amount', 'paid_amount', 'outstanding'], ['total_units', 'pos_units', 'preorder_units']));
 
 const filteredArtistProfit = computed(() =>
   !artistFilter.value ? (artistProfit.value ?? []) : (artistProfit.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
 );
-const artistProfitTotals = computed(() => sumRows(filteredArtistProfit.value, ['total_sales', 'modal', 'gross_profit']));
+const artistProfitTotals = computed(() => sumRows(filteredArtistProfit.value, [
+  'total_sales', 'modal', 'gross_profit',
+  'sales_pos', 'sales_preorder', 'modal_pos', 'modal_preorder', 'gross_profit_pos', 'gross_profit_preorder',
+]));
+// 033 — respons lama (tanpa rincian POS/pre-order) tidak menampilkan sub-baris di footer.
+const hasArtistProfitSplit = computed(() => (filteredArtistProfit.value ?? []).some((r) => r.sales_pos != null));
 
 const filteredStockByArtist = computed(() =>
   !artistFilter.value ? (stockByArtist.value ?? []) : (stockByArtist.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
@@ -394,7 +399,11 @@ function openPreorderDetail(row) {
         <DataTable
           :columns="[
             { key: 'artist_name', label: t('reports.col_artist') },
+            { key: 'pos_units', label: t('reports.col_pos_unit') },
+            { key: 'preorder_units', label: t('reports.col_preorder_unit') },
             { key: 'total_units', label: t('reports.col_unit') },
+            { key: 'pos_sales', label: t('reports.col_pos_sales') },
+            { key: 'preorder_sales', label: t('reports.col_preorder_sales') },
             { key: 'total_sales', label: t('reports.col_sales') },
             { key: 'payable_amount', label: t('reports.col_payable') },
             { key: 'paid_amount', label: t('reports.col_paid') },
@@ -407,6 +416,13 @@ function openPreorderDetail(row) {
           row-key="artist_id"
           :empty-message="t('reports.no_active_artists_settlement')"
         >
+          <!-- 033 — pemisahan POS vs pre-order; respons lama tanpa field ini
+               ditampilkan "–" alih-alih 0 yang menyesatkan. POS + pre-order
+               selalu sama dengan Unit/Penjualan di baris yang sama. -->
+          <template #cell-pos_units="{ row }">{{ row.pos_units ?? '–' }}</template>
+          <template #cell-preorder_units="{ row }">{{ row.preorder_units ?? '–' }}</template>
+          <template #cell-pos_sales="{ row }"><span class="whitespace-nowrap">{{ row.pos_sales != null ? formatIDR(row.pos_sales) : '–' }}</span></template>
+          <template #cell-preorder_sales="{ row }"><span class="whitespace-nowrap">{{ row.preorder_sales != null ? formatIDR(row.preorder_sales) : '–' }}</span></template>
           <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
           <template #cell-payable_amount="{ row }">{{ formatIDR(row.payable_amount) }}</template>
           <template #cell-paid_amount="{ row }">{{ formatIDR(row.paid_amount) }}</template>
@@ -433,7 +449,11 @@ function openPreorderDetail(row) {
           <template #footer>
             <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
               <td class="px-4 py-3 text-[13px]">{{ t('reports.grand_total') }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ settlementTotals.pos_units }}</td>
+              <td class="px-4 py-3 text-[13px]">{{ settlementTotals.preorder_units }}</td>
               <td class="px-4 py-3 text-[13px]">{{ settlementTotals.total_units }}</td>
+              <td class="px-4 py-3 text-[13px] whitespace-nowrap">{{ formatIDR(settlementTotals.pos_sales) }}</td>
+              <td class="px-4 py-3 text-[13px] whitespace-nowrap">{{ formatIDR(settlementTotals.preorder_sales) }}</td>
               <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.total_sales) }}</td>
               <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.payable_amount) }}</td>
               <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.paid_amount) }}</td>
@@ -450,9 +470,9 @@ function openPreorderDetail(row) {
     <template v-else-if="activeTab === 'profit'">
       <EmptyState v-if="!eventId" icon="ph-calendar-dots" :message="t('reports.pick_event_for_profit')" />
       <div v-else-if="profit" class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.revenue') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.revenue) }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.cost_of_goods') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.cost_of_goods) }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.gross_profit') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.gross_profit) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.revenue') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.revenue) }}</span><span v-if="profit.revenue_pos != null" class="text-[11.5px] text-muted-3">{{ t('reports.split_line', { pos: formatIDR(profit.revenue_pos), preorder: formatIDR(profit.revenue_preorder) }) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.cost_of_goods') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.cost_of_goods) }}</span><span v-if="profit.cost_of_goods_pos != null" class="text-[11.5px] text-muted-3">{{ t('reports.split_line', { pos: formatIDR(profit.cost_of_goods_pos), preorder: formatIDR(profit.cost_of_goods_preorder) }) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.gross_profit') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.gross_profit) }}</span><span v-if="profit.gross_profit_pos != null" class="text-[11.5px] text-muted-3">{{ t('reports.split_line', { pos: formatIDR(profit.gross_profit_pos), preorder: formatIDR(profit.gross_profit_preorder) }) }}</span></div>
         <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.event_cost') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.event_cost) }}</span></div>
         <div class="flex flex-col gap-1.5 rounded-card border border-mint-border bg-mint-50 p-4"><span class="text-[11.5px] font-semibold text-brand-active">{{ t('reports.net_profit') }}</span><span class="text-[21px] font-extrabold tracking-tight text-brand-active">{{ formatIDR(profit.net_profit) }}</span></div>
       </div>
@@ -469,11 +489,15 @@ function openPreorderDetail(row) {
              dari "Modal & Untung" tingkat event, padahal itu laporan lain. -->
         <div class="flex items-start gap-2.5 rounded-lg border border-line-2 bg-surface-subtle px-4 py-3">
           <i class="ph-duotone ph-info text-[16px] text-muted-3" aria-hidden="true"></i>
-          <p class="text-[12px] leading-relaxed text-muted-3">
-            <i18n-t keypath="reports.artist_profit_note" tag="span">
-              <template #bold><span class="font-semibold text-muted-4">{{ t('reports.artist_profit_note_bold') }}</span></template>
-            </i18n-t>
-          </p>
+          <div class="flex flex-col gap-1.5">
+            <p class="text-[12px] leading-relaxed text-muted-3">
+              <i18n-t keypath="reports.artist_profit_note" tag="span">
+                <template #bold><span class="font-semibold text-muted-4">{{ t('reports.artist_profit_note_bold') }}</span></template>
+              </i18n-t>
+            </p>
+            <!-- 033 — laporan ini kini juga menghitung bagian pre-order yang terbayar. -->
+            <p class="text-[12px] leading-relaxed text-muted-3">{{ t('reports.artist_profit_includes_preorder') }}</p>
+          </div>
         </div>
         <div class="overflow-hidden rounded-card border border-line-2 bg-white">
           <DataTable
@@ -488,15 +512,36 @@ function openPreorderDetail(row) {
             row-key="artist_id"
             :empty-message="t('reports.no_artist_sales')"
           >
-            <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
-            <template #cell-modal="{ row }">{{ formatIDR(row.modal) }}</template>
-            <template #cell-gross_profit="{ row }"><span class="font-semibold text-brand-active">{{ formatIDR(row.gross_profit) }}</span></template>
+            <!-- 033 — total (POS + pre-order) dengan rincian ringkas di bawahnya;
+                 tiga metrik x tiga kolom akan terlalu lebar, jadi rincian dibuat
+                 sub-baris. Respons lama tanpa field rincian: sub-baris disembunyikan. -->
+            <template #cell-total_sales="{ row }">
+              {{ formatIDR(row.total_sales) }}
+              <div v-if="row.sales_pos != null" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(row.sales_pos), preorder: formatIDR(row.sales_preorder) }) }}</div>
+            </template>
+            <template #cell-modal="{ row }">
+              {{ formatIDR(row.modal) }}
+              <div v-if="row.modal_pos != null" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(row.modal_pos), preorder: formatIDR(row.modal_preorder) }) }}</div>
+            </template>
+            <template #cell-gross_profit="{ row }">
+              <span class="font-semibold text-brand-active">{{ formatIDR(row.gross_profit) }}</span>
+              <div v-if="row.gross_profit_pos != null" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(row.gross_profit_pos), preorder: formatIDR(row.gross_profit_preorder) }) }}</div>
+            </template>
             <template #footer>
               <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
                 <td class="px-4 py-3 text-[13px]">{{ t('reports.grand_total') }}</td>
-                <td class="px-4 py-3 text-[13px]">{{ formatIDR(artistProfitTotals.total_sales) }}</td>
-                <td class="px-4 py-3 text-[13px]">{{ formatIDR(artistProfitTotals.modal) }}</td>
-                <td class="px-4 py-3 text-[13px] text-brand-active">{{ formatIDR(artistProfitTotals.gross_profit) }}</td>
+                <td class="px-4 py-3 text-[13px]">
+                  {{ formatIDR(artistProfitTotals.total_sales) }}
+                  <div v-if="hasArtistProfitSplit" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(artistProfitTotals.sales_pos), preorder: formatIDR(artistProfitTotals.sales_preorder) }) }}</div>
+                </td>
+                <td class="px-4 py-3 text-[13px]">
+                  {{ formatIDR(artistProfitTotals.modal) }}
+                  <div v-if="hasArtistProfitSplit" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(artistProfitTotals.modal_pos), preorder: formatIDR(artistProfitTotals.modal_preorder) }) }}</div>
+                </td>
+                <td class="px-4 py-3 text-[13px] text-brand-active">
+                  {{ formatIDR(artistProfitTotals.gross_profit) }}
+                  <div v-if="hasArtistProfitSplit" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(artistProfitTotals.gross_profit_pos), preorder: formatIDR(artistProfitTotals.gross_profit_preorder) }) }}</div>
+                </td>
               </tr>
             </template>
           </DataTable>

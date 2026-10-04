@@ -3177,7 +3177,14 @@ paths:
         pendapatan yang benar-benar terkumpul (bukan nilai penuh
         pre-order) beserta `cost_price` yang diproporsikan dengan rasio
         yang sama, memakai aturan diakui/proporsi yang sama seperti
-        `GET /reports/sales` di atas. Bentuk respons tidak berubah.
+        `GET /reports/sales` di atas.
+
+        033-seller-recap-pos-preorder-split — `revenue`, `cost_of_goods`
+        dan `gross_profit` juga dipisah menurut jenisnya lewat field
+        `*_pos` (penjualan POS) dan `*_preorder` (porsi pre-order yang
+        terbayar). Bagian pre-order adalah SISA dari total yang tampil
+        (dalam sen), jadi POS + pre-order persis sama dengan totalnya.
+        `event_cost` dan `net_profit` milik seluruh event dan tidak dipisah.
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -3194,10 +3201,21 @@ paths:
       summary: Laporan modal dan laba kotor per artist (F9.5)
       description: |
         Untuk setiap artist dengan minimal satu `order_items` 'completed'
-        pada event ini: `total_sales` (SUM `line_total`), `modal` (SUM
-        `cost_price * qty`, snapshot yang sama dipakai `GET /reports/profit`
-        — bukan modal BOM hidup, lihat docblock `ReportController::
-        artistProfit()`), dan `gross_profit = total_sales - modal`.
+        ATAU pre-order non-`cancelled` yang sudah terbayar pada event ini:
+        `total_sales` (SUM `line_total`), `modal` (SUM `cost_price * qty`,
+        snapshot yang sama dipakai `GET /reports/profit` — bukan modal BOM
+        hidup, lihat docblock `ReportController::artistProfit()`), dan
+        `gross_profit = total_sales - modal`.
+
+        033-seller-recap-pos-preorder-split — **PERUBAHAN PERILAKU**: laporan
+        ini dulu HANYA membaca `order_items` (POS). Kini `total_sales`,
+        `modal` dan `gross_profit` adalah POS + porsi pre-order yang sudah
+        terbayar (aturan diakui/proporsi sama seperti Rekap Seller dan
+        `GET /reports/profit`), sehingga `total_sales` seorang seller sama
+        dengan `total_sales`-nya di `GET /reports/artist-settlements`.
+        Rinciannya ada di `*_pos` (sama dengan angka lama) dan `*_preorder`
+        (sisa dari total, tepat sampai sen). Seller yang hanya punya
+        pre-order kini ikut tampil. Urut nama.
 
         `event_cost` TIDAK dikurangkan di laporan ini sama sekali (sudah
         diperhitungkan terpisah pada `GET /reports/profit`, F9.3) — sengaja
@@ -3223,6 +3241,12 @@ paths:
                         total_sales: { $ref: '#/components/schemas/Money' }
                         modal: { $ref: '#/components/schemas/Money' }
                         gross_profit: { $ref: '#/components/schemas/Money' }
+                        sales_pos: { $ref: '#/components/schemas/Money' }
+                        sales_preorder: { $ref: '#/components/schemas/Money' }
+                        modal_pos: { $ref: '#/components/schemas/Money' }
+                        modal_preorder: { $ref: '#/components/schemas/Money' }
+                        gross_profit_pos: { $ref: '#/components/schemas/Money' }
+                        gross_profit_preorder: { $ref: '#/components/schemas/Money' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /reports/purchases:
@@ -3420,7 +3444,14 @@ paths:
         `total_units` sejak fitur ini juga memuat kontribusi Pre-order,
         dihitung ulang dari `preorder_items`/`payments` dengan aturan
         diakui/proporsi yang sama seperti `GET /reports/sales`
-        (pre-order `cancelled` menyumbang nol). Bentuk respons tidak
+        (pre-order `cancelled` menyumbang nol).
+
+        033-seller-recap-pos-preorder-split — tiap baris juga memuat
+        pemisahan `pos_units`/`preorder_units` dan `pos_sales`/
+        `preorder_sales`. Bagian POS apa adanya; bagian pre-order adalah
+        SISA dari total yang tampil (unit integer, uang dalam sen), jadi
+        POS + pre-order selalu persis sama dengan `total_units`/
+        `total_sales` pada baris yang sama. Field yang sudah ada tidak
         berubah.
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
@@ -3544,6 +3575,13 @@ paths:
         tidak berubah) dan "Detail Transaksi" (baru — satu baris flat per
         item per order, lintas semua artist di event ini: artist_name,
         order_number, date, item_name, qty, line_total).
+
+        033 — sheet "Rekap" mendapat empat kolom di UJUNG (`pos_units`,
+        `preorder_units`, `pos_sales`, `preorder_sales`, nama sama dengan
+        field API); kolom lama tetap di tempatnya. Sheet "Detail Transaksi"
+        tetap hanya memuat item POS (tidak diubah). Ekspor `profit` dan
+        `artist-profit` otomatis membawa field `*_pos`/`*_preorder` baru
+        sebagai kolom tambahan setelah kolom lama.
 
         012-seller-preorder-report-detail-export (US4) — tiga tipe laporan
         yang sebelumnya sama sekali tidak bisa diekspor:
@@ -6186,6 +6224,12 @@ components:
         gross_profit: { $ref: '#/components/schemas/Money' }
         event_cost: { $ref: '#/components/schemas/Money' }
         net_profit: { $ref: '#/components/schemas/Money' }
+        revenue_pos: { $ref: '#/components/schemas/Money' }
+        revenue_preorder: { $ref: '#/components/schemas/Money' }
+        cost_of_goods_pos: { $ref: '#/components/schemas/Money' }
+        cost_of_goods_preorder: { $ref: '#/components/schemas/Money' }
+        gross_profit_pos: { $ref: '#/components/schemas/Money' }
+        gross_profit_preorder: { $ref: '#/components/schemas/Money' }
 
     ArtistSettlement:
       type: object
@@ -6209,6 +6253,23 @@ components:
         outstanding: { $ref: '#/components/schemas/Money' }
         status: { type: string, enum: [unpaid, partial, paid] }
         calculated_at: { type: string, format: date-time, nullable: true }
+        pos_units:
+          type: integer
+          description: |
+            033 — unit dari penjualan POS (order `completed`). Hanya ada pada
+            baris `GET /reports/artist-settlements`. `pos_units + preorder_units
+            = total_units`, selalu.
+        preorder_units:
+          type: integer
+          description: |
+            033 — `total_units - pos_units`. `total_units` tersimpan sudah
+            dibulatkan ke integer, jadi bagian pre-order adalah SISA-nya
+            (bukan pembulatan terpisah dari unit pecahan).
+        pos_sales: { $ref: '#/components/schemas/Money' }
+        preorder_sales:
+          allOf:
+            - { $ref: '#/components/schemas/Money' }
+          description: '033 — `total_sales - pos_sales` (tepat sampai sen): bagian pre-order yang sudah terbayar.'
 
     Setting:
       type: object
