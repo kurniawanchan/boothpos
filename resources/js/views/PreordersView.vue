@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed, onMounted, watch } from 'vue';
+import { reactive, ref, computed, onMounted, watch, h, render, getCurrentInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { usePaginatedList } from '../composables/usePaginatedList';
@@ -37,7 +37,9 @@ import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDate, formatDateTime } from '../utils/date';
 import { downloadElementAsPdf, captureElementCanvas } from '../utils/pdfCapture';
-import { buildInvoiceHtml, buildShippingSlipHtml } from '../utils/invoiceDocument';
+import { buildShippingSlipHtml } from '../utils/invoiceDocument';
+import PreorderInvoiceDocument from '../components/preorder/PreorderInvoiceDocument.vue';
+import PreorderPaymentDocument from '../components/preorder/PreorderPaymentDocument.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -762,6 +764,30 @@ function toggleSelected(id) {
   selectedIds.value = next;
 }
 
+// 029-fix-bulk-invoice-logo — unduh massal merender KOMPONEN yang sama dengan
+// modalnya (PreorderInvoiceDocument / PreorderPaymentDocument), jadi PDF-nya
+// identik dengan dokumen di layar (logo/identitas toko, header dua kolom,
+// kartu "Cara pembayaran"). appContext diteruskan agar vue-i18n tersedia di
+// render terpisah ini. Lebar = lebar dokumen di modal 720px: invoice berada
+// di dalam padding px-6 (672px), payment invoice membawa paddingnya sendiri.
+const appContext = getCurrentInstance().appContext;
+const BULK_DOCUMENTS = {
+  invoice: { component: PreorderInvoiceDocument, width: 672 },
+  payment_invoice: { component: PreorderPaymentDocument, width: 720 },
+};
+function mountBulkDocument(invoice, documentType) {
+  const { component, width } = BULK_DOCUMENTS[documentType];
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.left = '-9999px';
+  container.style.width = `${width}px`;
+  document.body.appendChild(container);
+  const vnode = h(component, { invoice });
+  vnode.appContext = appContext;
+  render(vnode, container);
+  return { container, dispose: () => { render(null, container); container.remove(); } };
+}
+
 async function doBulkDownload() {
   const ids = [...selectedIds.value];
   if (!ids.length) return;
@@ -776,13 +802,13 @@ async function doBulkDownload() {
     // Sequential, not parallel — rendering N canvases at once would freeze
     // the tab for a realistic batch size (plan.md Performance Goals).
     for (const invoice of invoices) {
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.innerHTML = buildInvoiceHtml(invoice, bulkDocumentType.value);
-      document.body.appendChild(container);
-      const canvas = await captureElementCanvas(container);
-      document.body.removeChild(container);
+      const { container, dispose } = mountBulkDocument(invoice, bulkDocumentType.value);
+      let canvas;
+      try {
+        canvas = await captureElementCanvas(container);
+      } finally {
+        dispose();
+      }
 
       const imgData = canvas.toDataURL('image/png');
       const widthPt = (canvas.width * 72) / 96;
