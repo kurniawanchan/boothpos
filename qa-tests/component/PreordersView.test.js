@@ -10,6 +10,7 @@ import { listArtists } from '../../resources/js/api/artists';
 import { listCustomers, getCustomer } from '../../resources/js/api/customers';
 import { lookupVariants } from '../../resources/js/api/products';
 import { listEvents } from '../../resources/js/api/events';
+import { updatePaymentConfirmation, getPaymentProofBlobUrl } from '../../resources/js/api/payments';
 import id from '../../resources/js/locales/id.json';
 import en from '../../resources/js/locales/en.json';
 
@@ -68,6 +69,13 @@ vi.mock('../../resources/js/api/shipments', () => ({ createShipment: vi.fn(), up
 vi.mock('../../resources/js/api/products', () => ({ lookupVariants: vi.fn() }));
 vi.mock('../../resources/js/api/customers', () => ({ listCustomers: vi.fn(), createCustomer: vi.fn(), getCustomer: vi.fn() }));
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
+// 031 — bukti/konfirmasi pembayaran dan kanal pembayaran (dialog Tambah pembayaran memuatnya).
+vi.mock('../../resources/js/api/payments', () => ({
+  listPaymentChannels: vi.fn().mockResolvedValue({ data: [{ id: 1, provider: 'Shopee', type: 'qr_ewallet' }] }),
+  uploadPaymentProof: vi.fn(),
+  updatePaymentConfirmation: vi.fn(),
+  getPaymentProofBlobUrl: vi.fn(),
+}));
 
 const ARTISTS = [
   { id: 1, name: 'Artist A' },
@@ -1387,5 +1395,120 @@ describe('PreordersView — bulk invoice download renders each invoice with its 
     expect(capture.html).toContain('Sakana Fridge');
     expect(capture.html).toContain('Rp 500.000');
     await waitFor(() => expect(bulk.zipFiles).toEqual(['payment_invoice-PO-0010.pdf']));
+  });
+});
+
+/**
+ * 031-optional-payment-proof (US3) — pembayaran pre-order memakai form dan riwayat yang
+ * sama dengan penjualan POS: bukti opsional, dan konfirmasinya bisa ditambahkan/diubah
+ * belakangan dari riwayat pembayaran di detail (aksi mengikuti flag server per pembayaran).
+ */
+describe('PreordersView — payment confirmation (031 US3)', () => {
+  const ROW = { id: 80, preorder_number: 'PO-0080', customer_name: 'Dewi', status: 'dp_paid', fulfillment: 'pickup', total_amount: '200000.00', paid_amount: '50000.00', outstanding: '150000.00', sellers: [] };
+  const entry = (overrides = {}) => ({
+    id: 5, method: 'qr_ewallet', provider: 'Shopee', purpose: 'down_payment', amount: '50000.00', paid_at: '2026-10-02T01:00:00Z',
+    status: 'paid', reference: null, notes: null, recorded_by_name: 'Kasir Satu',
+    proof_id: null, has_proof: false, can_view_proof: false, can_edit_confirmation: true,
+    ...overrides,
+  });
+  const detail = (payment) => ({
+    id: 80, preorder_number: 'PO-0080', status: 'dp_paid', dispatch_status: 'pending', fulfillment: 'pickup',
+    total_amount: '200000.00', paid_amount: '50000.00', outstanding: '150000.00', items: [], customer: { name: 'Dewi' },
+    payments: [payment],
+    payment_summary: { grand_total: '200000.00', total_paid: '50000.00', remaining: '150000.00', status: 'partially_paid', payment_count: 1 },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: [ROW], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
+    getPreorderSummary.mockResolvedValue({ transaction_count: 1 });
+  });
+
+  async function openDetail(user) {
+    await renderPreorders();
+    await screen.findByText('PO-0080');
+    await user.click(screen.getByRole('button', { name: 'PO-0080' }));
+  }
+
+  it('marks a payment without a proof and offers to add the confirmation', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue(detail(entry()));
+    await openDetail(user);
+
+    const row = await screen.findByTestId('payment-entry');
+    expect(within(row).getByText('Belum ada bukti')).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Tambah konfirmasi' })).toBeInTheDocument();
+  });
+
+  it('offers no confirmation action when the server says the user may not change it', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue(detail(entry({ can_edit_confirmation: false, reference: 'TRX-5' })));
+    await openDetail(user);
+
+    const row = await screen.findByTestId('payment-entry');
+    expect(within(row).queryByRole('button', { name: /konfirmasi/i })).not.toBeInTheDocument();
+    expect(within(row).getByText(/TRX-5/)).toBeInTheDocument();
+  });
+
+  it('saves a reference from the dialog, refreshes the entry from the response and reloads the list', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue(detail(entry()));
+    updatePaymentConfirmation.mockResolvedValue(detail(entry({ reference: 'TRX-9' })));
+    await openDetail(user);
+
+    await user.click(within(await screen.findByTestId('payment-entry')).getByRole('button', { name: 'Tambah konfirmasi' }));
+    await user.type(await screen.findByLabelText(/nomor referensi/i), 'TRX-9');
+    await user.click(screen.getByRole('button', { name: 'Simpan' }));
+
+    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith('preorders', 80, 5, { reference: 'TRX-9' }));
+    await waitFor(() => expect(within(screen.getByTestId('payment-entry')).getByText(/TRX-9/)).toBeInTheDocument());
+    await waitFor(() => expect(listPreorders.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('opens the proof only for users the server allows, through the proof endpoint', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue(detail(entry({ proof_id: 9, has_proof: true, can_view_proof: true })));
+    getPaymentProofBlobUrl.mockResolvedValue('blob:proof-9');
+    await openDetail(user);
+
+    await user.click(within(await screen.findByTestId('payment-entry')).getByRole('button', { name: /lihat bukti/i }));
+
+    await waitFor(() => expect(getPaymentProofBlobUrl).toHaveBeenCalledWith(9));
+  });
+
+  it('hides View proof when the server says this user may not open it (the text stays visible)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue(detail(entry({ proof_id: 9, has_proof: true, can_view_proof: false, can_edit_confirmation: false, notes: 'DP QRIS' })));
+    await openDetail(user);
+
+    const row = await screen.findByTestId('payment-entry');
+    expect(within(row).queryByRole('button', { name: /lihat bukti/i })).not.toBeInTheDocument();
+    expect(within(row).getByTestId('payment-notes')).toHaveTextContent('DP QRIS');
+  });
+
+  it('records a QRIS payment from Add Payment with NO proof (the shared form no longer requires one)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue({
+      ...detail(entry()), status: 'ordered', paid_amount: '0.00', outstanding: '200000.00', payments: [],
+      payment_summary: { grand_total: '200000.00', total_paid: '0.00', remaining: '200000.00', status: 'unpaid', payment_count: 0 },
+    });
+    createPreorderPayment.mockResolvedValue(detail(entry()));
+    await openDetail(user);
+
+    await user.click(await screen.findByTestId('add-payment'));
+    await user.click(await screen.findByRole('radio', { name: /qris/i }));
+    const save = screen.getByRole('button', { name: /simpan pembayaran/i });
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+
+    await waitFor(() => expect(createPreorderPayment).toHaveBeenCalledWith(80, expect.objectContaining({ method: 'qr_ewallet', channel_id: 1, proof_token: null })));
   });
 });

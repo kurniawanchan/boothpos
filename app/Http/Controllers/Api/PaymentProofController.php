@@ -71,13 +71,19 @@ class PaymentProofController extends Controller
 
     public function show(Request $request, PaymentProof $proof): Response|JsonResponse
     {
-        // Otorisasi objek: hanya owner/admin, atau si pengunggah sendiri.
-        // Mencegah kasir A membaca bukti pembayaran transaksi kasir B lewat
-        // tebak-tebakan ID (BOLA).
+        // Otorisasi objek (BOLA): owner/admin atau pengunggah sendiri — mencegah kasir A
+        // membaca bukti transaksi kasir B lewat tebak-tebakan ID. 031: bukti yang sudah
+        // tertaut ke sebuah pembayaran juga boleh dibuka PENCATAT pembayaran itu (bukti yang
+        // ditambahkan owner belakangan tetap bisa dibuka kasir pemilik pembayarannya); bukti
+        // yang sudah di-supersede hanya untuk owner/admin dan pengunggahnya. Aturannya satu
+        // tempat: Payment::proofViewableBy().
         $user = $request->user();
-        $isOwnerOfProof = $proof->uploaded_by === $user->id;
+        $payment = $proof->payment;
+        $allowed = $payment
+            ? $payment->proofViewableBy($user, $proof)
+            : ($user->isOwnerOrAdmin() || $proof->uploaded_by === $user->id);
 
-        if (! $user->isOwnerOrAdmin() && ! $isOwnerOfProof) {
+        if (! $allowed) {
             return response()->json(['message' => __('orders_payments.not_authorized_proof_access')], 403);
         }
 

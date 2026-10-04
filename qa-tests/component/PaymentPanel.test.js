@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import PaymentPanel from '../../resources/js/components/payment/PaymentPanel.vue';
+import { uploadPaymentProof } from '../../resources/js/api/payments';
 
 vi.mock('../../resources/js/api/payments', () => ({
   listPaymentChannels: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'QRIS Toko', type: 'qr_ewallet' }] }),
@@ -261,5 +262,104 @@ describe('PaymentPanel — partial finish in checkout mode (028 US5)', () => {
 
     expect(screen.queryByTestId('finish-partial')).not.toBeInTheDocument();
     expect(screen.queryByTestId('partial-needs-customer')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 031-optional-payment-proof — foto/berkas bukti bayar OPSIONAL untuk pembayaran
+ * non-tunai (checkout dan "tambah pembayaran"); bisa ditambahkan belakangan dari
+ * detail transaksi. Dulu tombol konfirmasi mati sampai bukti diunggah.
+ */
+describe('PaymentPanel — proof is optional for non-cash (031)', () => {
+  // ProofCapture sungguhan butuh kamera/canvas; stub memancarkan event `captured` yang sama.
+  const ProofCaptureStub = {
+    emits: ['captured', 'cleared'],
+    setup(_, { emit }) {
+      return { capture: () => emit('captured', new File(['x'], 'bukti.jpg'), 'upload') };
+    },
+    template: '<button type="button" data-testid="stub-capture" @click="capture">stub bukti</button>',
+  };
+
+  function renderWithStub(props) {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    return render(PaymentPanel, { props, global: { plugins: [pinia], stubs: { ProofCapture: ProofCaptureStub } } });
+  }
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it('checkout: confirms a QRIS payment with NO proof and sends proof_token null', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithStub({ mode: 'checkout', dueAmount: '30000.00', onSubmit });
+
+    await user.click(screen.getByRole('radio', { name: /qris/i }));
+    const confirm = screen.getByRole('button', { name: /konfirmasi pembayaran/i });
+    await waitFor(() => expect(confirm).toBeEnabled());
+    await user.click(confirm);
+
+    expect(onSubmit).toHaveBeenCalledWith([expect.objectContaining({ method: 'qr_ewallet', channel_id: 1, proof_token: null })]);
+    expect(uploadPaymentProof).not.toHaveBeenCalled();
+  });
+
+  it('checkout: still sends the proof token when a proof was attached', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithStub({ mode: 'checkout', dueAmount: '30000.00', onSubmit });
+
+    await user.click(screen.getByRole('radio', { name: /qris/i }));
+    await user.click(screen.getByTestId('stub-capture'));
+    await waitFor(() => expect(uploadPaymentProof).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: /konfirmasi pembayaran/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith([expect.objectContaining({ method: 'qr_ewallet', proof_token: 'fake-token' })]);
+  });
+
+  it('checkout: the confirm action stays disabled while a proof upload is still in flight', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    let finish;
+    uploadPaymentProof.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+    renderWithStub({ mode: 'checkout', dueAmount: '30000.00', onSubmit: vi.fn() });
+
+    await user.click(screen.getByRole('radio', { name: /qris/i }));
+    await user.click(screen.getByTestId('stub-capture'));
+
+    expect(screen.getByRole('button', { name: /konfirmasi pembayaran/i })).toBeDisabled();
+    finish({ proof_token: 'late-token', file_size: 1 });
+    await waitFor(() => expect(screen.getByRole('button', { name: /konfirmasi pembayaran/i })).toBeEnabled());
+  });
+
+  it('record mode: saves a non-cash payment without a proof', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithStub({ mode: 'record', dueAmount: '100000.00', onSubmit, submitLabel: 'Simpan pembayaran' });
+
+    await user.click(screen.getByRole('radio', { name: /transfer/i }));
+    const amountInput = screen.getByLabelText(/jumlah dibayar/i);
+    await user.clear(amountInput);
+    await user.type(amountInput, '40000');
+
+    // transfer: kanal harus dipilih; mock hanya punya kanal qr_ewallet, jadi pakai QRIS
+    await user.click(screen.getByRole('radio', { name: /qris/i }));
+    const save = screen.getByRole('button', { name: /simpan pembayaran/i });
+    await waitFor(() => expect(save).toBeEnabled());
+    await user.click(save);
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith([expect.objectContaining({ method: 'qr_ewallet', amount: '40000.00', proof_token: null })]));
+  });
+
+  it('no longer says a proof must be attached; shows the optional hint instead', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderWithStub({ mode: 'checkout', dueAmount: '30000.00', onSubmit: vi.fn() });
+
+    await user.click(screen.getByRole('radio', { name: /qris/i }));
+
+    expect(screen.queryByText(/wajib dilampirkan/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/bukti bersifat opsional/i)).toBeInTheDocument();
   });
 });

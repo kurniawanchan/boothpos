@@ -58,3 +58,13 @@ export function uploadPaymentProof(file, capturedVia) {
 export function getPaymentProofBlobUrl(proofId) {
   return client.get(`/payment-proofs/${proofId}/file`, { responseType: 'blob' }).then((r) => URL.createObjectURL(r.data));
 }
+
+/**
+ * 031-optional-payment-proof — tambah / ubah / ganti konfirmasi (bukti, referensi,
+ * catatan) satu pembayaran yang sudah tercatat. `kind` = 'orders' (penjualan POS) atau
+ * 'preorders'. Payload hanya berisi kunci yang berubah (`proof_token`, `reference`,
+ * `notes`; `null` mengosongkan). Mengembalikan transaksi terbaru.
+ */
+export function updatePaymentConfirmation(kind, targetId, paymentId, payload) {
+  return client.patch(`/${kind}/${targetId}/payments/${paymentId}/confirmation`, payload).then((r) => r.data);
+}

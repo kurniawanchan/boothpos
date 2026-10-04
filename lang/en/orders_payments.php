@@ -26,4 +26,11 @@ return [
     'payment_client_ref_conflict' => 'This payment reference key was already used for a different transaction.',
     'customer_required_for_partial_payment' => 'A customer is required to complete a sale that is not paid in full, so it is clear who owes the remaining balance.',
     'payment_delete_closed_shift' => 'This cash payment belongs to a cashier shift that is already closed and reconciled, so it cannot be deleted.',
+
+    // 031-optional-payment-proof
+    'channel_required_for_non_cash' => 'A payment channel is required for non-cash methods.',
+    'payment_confirmation_not_allowed' => 'Only an owner/admin or the user who recorded this payment can change its confirmation.',
+    'payment_confirmation_empty' => 'Provide at least a proof, a reference or notes; a confirmation cannot be left empty.',
+    'payment_confirmation_cash' => 'Cash payments have no confirmation to add.',
+    'payment_confirmation_target_closed' => 'This transaction is voided or cancelled; its confirmation can no longer be changed.',
 ];

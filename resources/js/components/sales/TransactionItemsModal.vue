@@ -11,7 +11,10 @@ import ConfirmDialog from '../ui/ConfirmDialog.vue';
 import PaymentSummaryCard from '../payment/PaymentSummaryCard.vue';
 import PaymentHistoryList from '../payment/PaymentHistoryList.vue';
 import AddPaymentModal from '../payment/AddPaymentModal.vue';
+import PaymentConfirmationModal from '../payment/PaymentConfirmationModal.vue';
+import ImageLightbox from '../ui/ImageLightbox.vue';
 import { getOrder, voidOrder, addOrderPayment, deleteOrderPayment } from '../../api/orders';
+import { getPaymentProofBlobUrl } from '../../api/payments';
 import { formatIDR, parseMoney } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
@@ -124,6 +127,32 @@ async function performDeletePayment() {
   } finally {
     deletingPayment.value = false;
   }
+}
+
+// --- Konfirmasi pembayaran (031-optional-payment-proof) ------------------------------------
+// Bukti bayar opsional saat checkout; di sini bukti, referensi, dan catatan pembayaran
+// non-tunai bisa ditambah/diubah belakangan. Siapa yang boleh (owner/admin atau pencatat) dan
+// siapa yang boleh membuka file bukti dihitung SERVER per pembayaran (`can_edit_confirmation`,
+// `can_view_proof`); modal ini hanya menampilkan aksinya.
+const confirmationTarget = ref(null);
+const proofLightboxSrc = ref(null);
+
+function handleConfirmationSaved(result) {
+  if (result?.id) order.value = result;
+  emit('changed');
+}
+
+async function viewPaymentProof(payment) {
+  try {
+    proofLightboxSrc.value = await getPaymentProofBlobUrl(payment.proof_id);
+  } catch (err) {
+    toast.error(err.message || t('preorders.proof_load_failed'));
+  }
+}
+
+function closeProofLightbox() {
+  if (proofLightboxSrc.value) URL.revokeObjectURL(proofLightboxSrc.value);
+  proofLightboxSrc.value = null;
 }
 
 // --- Batalkan transaksi -------------------------------------------------------------------
@@ -255,10 +284,12 @@ async function performVoid() {
           <PaymentSummaryCard v-if="order.payment_summary" :summary="order.payment_summary" />
           <PaymentHistoryList
             :payments="payments"
-            :show-proof="false"
+            :show-proof="true"
             :show-print="false"
             :can-delete="canDeletePayments"
             @delete="(p) => (paymentDeleteTarget = p)"
+            @view-proof="viewPaymentProof"
+            @edit-confirmation="(p) => (confirmationTarget = p)"
           />
           <div v-if="changeAmount > 0" class="flex justify-between text-[12.5px]">
             <span class="text-muted-4">{{ t('reports.order_change') }}</span><span class="font-semibold">{{ formatIDR(changeAmount) }}</span>
@@ -312,6 +343,17 @@ async function performVoid() {
     @close="paymentDeleteTarget = null"
     @confirm="performDeletePayment"
   />
+
+  <PaymentConfirmationModal
+    v-if="order"
+    :open="confirmationTarget !== null"
+    :payment="confirmationTarget"
+    kind="orders"
+    :target-id="order.id"
+    @close="confirmationTarget = null"
+    @saved="handleConfirmationSaved"
+  />
+  <ImageLightbox :open="!!proofLightboxSrc" :src="proofLightboxSrc" :alt="t('preorders.view_proof')" @close="closeProofLightbox" />
 
   <ProductDetailModal :open="showProductDetail" :product-id="detailProductId" @close="showProductDetail = false" />
   <ReceiptModal :open="showReceipt" :order-id="order?.id ?? null" @close="showReceipt = false" />

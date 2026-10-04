@@ -158,11 +158,39 @@ class PreorderPaymentLedgerTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
     }
 
-    public function test_a_non_cash_payment_still_needs_a_channel_and_proof(): void
+    // 031-optional-payment-proof — dulu "non-tunai wajib punya bukti"; sekarang bukti
+    // opsional, tapi kanal tetap wajib (DB chk_payments_channel) dan kini ditolak
+    // bersih (422), bukan 500 dari constraint.
+    public function test_a_non_cash_payment_without_a_channel_is_refused_cleanly(): void
     {
         $order = $this->order();
 
         $this->pay($order['id'], ['method' => 'bank_transfer', 'amount' => 50000])->assertStatus(422);
+
+        $this->assertDatabaseCount('payments', 0);
+    }
+
+    public function test_a_non_cash_payment_with_a_channel_but_no_proof_is_accepted(): void
+    {
+        $order = $this->order();
+        $channel = PaymentChannel::factory()->create(['type' => 'bank_transfer']);
+
+        $response = $this->pay($order['id'], ['method' => 'bank_transfer', 'channel_id' => $channel->id, 'amount' => 50000])->assertCreated();
+
+        $this->assertDatabaseCount('payment_proofs', 0);
+        $this->assertSame('50000.00', $response->json('payments.0.amount'));
+        $this->assertSame('dp_paid', $response->json('status'));
+    }
+
+    public function test_a_non_cash_payment_with_an_unknown_proof_token_is_still_refused(): void
+    {
+        $order = $this->order();
+        $channel = PaymentChannel::factory()->create(['type' => 'bank_transfer']);
+
+        $this->pay($order['id'], [
+            'method' => 'bank_transfer', 'channel_id' => $channel->id, 'amount' => 50000,
+            'proof_token' => (string) \Illuminate\Support\Str::uuid(),
+        ])->assertStatus(422);
 
         $this->assertDatabaseCount('payments', 0);
     }

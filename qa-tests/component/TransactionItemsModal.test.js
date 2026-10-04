@@ -5,6 +5,7 @@ import TransactionItemsModal from '../../resources/js/components/sales/Transacti
 import { getOrder, getReceipt, voidOrder, addOrderPayment, deleteOrderPayment } from '../../resources/js/api/orders';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { getProduct } from '../../resources/js/api/products';
+import { updatePaymentConfirmation, getPaymentProofBlobUrl, uploadPaymentProof } from '../../resources/js/api/payments';
 
 vi.mock('../../resources/js/api/orders', () => ({
   getOrder: vi.fn(), getReceipt: vi.fn(), voidOrder: vi.fn(), addOrderPayment: vi.fn(), deleteOrderPayment: vi.fn(),
@@ -12,6 +13,8 @@ vi.mock('../../resources/js/api/orders', () => ({
 vi.mock('../../resources/js/api/payments', () => ({
   listPaymentChannels: vi.fn().mockResolvedValue({ data: [] }),
   uploadPaymentProof: vi.fn(),
+  updatePaymentConfirmation: vi.fn(),
+  getPaymentProofBlobUrl: vi.fn(),
 }));
 vi.mock('../../resources/js/api/products', () => ({ getProduct: vi.fn() }));
 
@@ -434,3 +437,96 @@ describe('TransactionItemsModal — voiding a transaction', () => {
   });
 });
 
+
+/**
+ * 031-optional-payment-proof (US2) — dari detail Sales: pembayaran non-tunai tanpa bukti
+ * ditandai; pemilik/pencatat bisa menambah bukti, referensi, dan catatan belakangan.
+ * Siapa yang boleh ditentukan SERVER lewat flag per pembayaran, bukan ditebak dari peran.
+ */
+describe('TransactionItemsModal — payment confirmation (031)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const qrisEntry = (overrides = {}) => ({
+    id: 2, method: 'qr_ewallet', amount: '85000.00', verification: 'pending', status: 'paid',
+    paid_at: '2026-09-27T11:25:00Z', provider: 'Shopee', reference: null, notes: null, recorded_by_name: 'Kasir Satu',
+    proof_id: null, has_proof: false, can_view_proof: false, can_edit_confirmation: true,
+    ...overrides,
+  });
+  const orderWith = (entry, extra = {}) => ({
+    ...FULL_ORDER,
+    paid_amount: '85000.00', change_amount: '0.00',
+    payment_summary: { grand_total: '85000.00', total_paid: '85000.00', remaining: '0.00', status: 'fully_paid', payment_count: 1 },
+    payments: [entry],
+    ...extra,
+  });
+
+  it('marks a QRIS payment without a proof and offers to add the confirmation', async () => {
+    await open(orderWith(qrisEntry()));
+
+    const entry = screen.getByTestId('payment-entry');
+    expect(within(entry).getByText('Belum ada bukti')).toBeInTheDocument();
+    expect(within(entry).getByRole('button', { name: 'Tambah konfirmasi' })).toBeInTheDocument();
+  });
+
+  it('offers no confirmation action when the server says the user may not change it, but still shows the text', async () => {
+    await open(orderWith(qrisEntry({ can_edit_confirmation: false, reference: 'TRX-5', notes: 'Catatan kasir' })));
+
+    const entry = screen.getByTestId('payment-entry');
+    expect(within(entry).queryByRole('button', { name: /konfirmasi/i })).not.toBeInTheDocument();
+    expect(within(entry).getByText(/TRX-5/)).toBeInTheDocument();
+    expect(within(entry).getByTestId('payment-notes')).toHaveTextContent('Catatan kasir');
+  });
+
+  it('adds a reference and a note from the dialog, then shows them on the entry and tells the list to reload', async () => {
+    const user = await open(orderWith(qrisEntry()));
+    updatePaymentConfirmation.mockResolvedValue(orderWith(qrisEntry({ reference: 'TRX-77', notes: 'Sudah dicek', can_edit_confirmation: true })));
+
+    await user.click(within(screen.getByTestId('payment-entry')).getByRole('button', { name: 'Tambah konfirmasi' }));
+    await user.type(await screen.findByLabelText(/nomor referensi/i), 'TRX-77');
+    await user.type(screen.getByLabelText(/catatan \(opsional\)/i), 'Sudah dicek');
+    await user.click(screen.getByRole('button', { name: 'Simpan' }));
+
+    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith('orders', 101, 2, { reference: 'TRX-77', notes: 'Sudah dicek' }));
+    const entry = await screen.findByTestId('payment-entry');
+    await waitFor(() => expect(within(entry).getByText(/TRX-77/)).toBeInTheDocument());
+    expect(within(entry).getByTestId('payment-notes')).toHaveTextContent('Sudah dicek');
+    expect(onChanged).toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalled();
+  });
+
+  it('attaches a photo: uploads, then the entry shows View proof which opens the image', async () => {
+    const user = await open(orderWith(qrisEntry()));
+    uploadPaymentProof.mockResolvedValue({ proof_token: 'tok-9', file_size: 5 });
+    updatePaymentConfirmation.mockResolvedValue(orderWith(qrisEntry({ proof_id: 31, has_proof: true, can_view_proof: true })));
+    getPaymentProofBlobUrl.mockResolvedValue('blob:proof-31');
+
+    await user.click(within(screen.getByTestId('payment-entry')).getByRole('button', { name: 'Tambah konfirmasi' }));
+    // widget kamera sungguhan tak jalan di jsdom: unggah lewat input berkas tersembunyi tidak diuji di sini
+    // (dicakup PaymentConfirmationModal.test.js); lanjutkan dari respons server yang sudah berisi bukti.
+    await user.type(await screen.findByLabelText(/catatan \(opsional\)/i), 'x');
+    await user.click(screen.getByRole('button', { name: 'Simpan' }));
+
+    const entry = await screen.findByTestId('payment-entry');
+    await user.click(await within(entry).findByRole('button', { name: /lihat bukti/i }));
+
+    await waitFor(() => expect(getPaymentProofBlobUrl).toHaveBeenCalledWith(31));
+    expect(await screen.findByRole('img', { name: /bukti/i })).toHaveAttribute('src', 'blob:proof-31');
+  });
+
+  it('shows a clear message when the proof cannot be opened', async () => {
+    const user = await open(orderWith(qrisEntry({ proof_id: 31, has_proof: true, can_view_proof: true, can_edit_confirmation: false })));
+    getPaymentProofBlobUrl.mockRejectedValue(new Error('Tidak diizinkan.'));
+
+    await user.click(within(screen.getByTestId('payment-entry')).getByRole('button', { name: /lihat bukti/i }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+  });
+
+  it('keeps a voided sale read-only: the server sends no edit flag, so no action is offered', async () => {
+    await open(orderWith(qrisEntry({ can_edit_confirmation: false, proof_id: 31, has_proof: true, can_view_proof: true }), { status: 'voided', void_reason: 'Salah input' }));
+
+    const entry = screen.getByTestId('payment-entry');
+    expect(within(entry).queryByRole('button', { name: /konfirmasi/i })).not.toBeInTheDocument();
+    expect(within(entry).getByRole('button', { name: /lihat bukti/i })).toBeInTheDocument();
+  });
+});

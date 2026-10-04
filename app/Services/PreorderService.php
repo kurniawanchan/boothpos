@@ -682,6 +682,16 @@ class PreorderService
         return app(PaymentService::class)->deletePayment($preorder, $payment, $user);
     }
 
+    /**
+     * 031-optional-payment-proof — delegasi ke PaymentService (tambah/ubah/ganti bukti,
+     * referensi, catatan sebuah pembayaran; aturan siapa boleh, transaksi batal, tunai, hasil
+     * tak boleh kosong, supersede bukti lama, dan audit ada di sana).
+     */
+    public function updatePaymentConfirmation(Preorder $preorder, Payment $payment, array $input, User $user): Preorder
+    {
+        return app(PaymentService::class)->updateConfirmation($preorder, $payment, $input, $user);
+    }
+
     public function transitionStatus(Preorder $preorder, string $newStatus, ?string $cancelReason, User $user): Preorder
     {
         if (! $preorder->canTransitionTo($newStatus)) {

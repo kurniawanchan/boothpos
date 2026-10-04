@@ -252,7 +252,15 @@ Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService
 - **Idempotency**: optional client UUID `client_ref` (SPA always sends it; reused on retry, regenerated per open). Same ref + same target → `200` replay, no new row; ref on another target → 422; `payments.client_ref` is UNIQUE across modes (lookup uses `withoutGlobalScopes()`).
 - **Shift cash follows `payments.session_id`** (the shift the money was RECEIVED in), not `orders.session_id`. Checkout payments get the sale's shift; a later cash payment needs the recording user's OPEN shift (409 otherwise); non-cash records it if present; pre-order payments stay NULL (outside shift cash). `close()`, `summary()` and `SalesTransactionsService` (`sessions[].cash_received`, which also lists shifts that only received late payments) use it. Deleting a CASH payment of a CLOSED shift is refused (409) — it would break the stored reconciliation.
 - **Partial POS sale** (`POST /orders` with paid < total) requires `customer_id` (409 otherwise — `OrderController::store()` maps every service `ValidationException` to 409). It stays `completed`, so every report still counts it at completion; only the Sales page shows `paid_amount` / `balance_amount` / `payment_status`. POS checkout payments are NOT written to `activity_logs` (the order is the audit trail); later payments and every delete are.
-- `PaymentSummaryCard` + `PaymentHistoryList` + `AddPaymentModal` are shared by Pre-orders and the Sales detail modal; `RecordPaymentModal` (client-side accumulation) no longer exists. History entries have no edit path; Delete is owner/admin only.
+- `PaymentSummaryCard` + `PaymentHistoryList` + `AddPaymentModal` are shared by Pre-orders and the Sales detail modal; `RecordPaymentModal` (client-side accumulation) no longer exists. History entries' money (amount/method/channel/date) has no edit path; Delete is owner/admin only. What CAN change later is the *confirmation* (see below).
+
+### Payment confirmation: optional proof, addable later (feature 031, 2026-10-04)
+
+- **The proof (photo/file) is OPTIONAL** for non-cash sale and pre-order payments (reference and notes always were). `PaymentRecorder` no longer demands a `proof_token`, but a *supplied* token must be valid and unlinked, a non-cash payment must carry a `channel_id` (explicit 422/409 instead of the DB's `chk_payments_channel` 500), and **purchase-order payments keep the old rule** (non-cash still needs a proof). `PaymentPanel` mirrors it (Confirm no longer waits for a proof, only for an in-flight upload).
+- **Confirmation path**: `PATCH /orders|preorders/{id}/payments/{payment}/confirmation` → `PaymentService::updateConfirmation()` (row-locked, activity log `payment_confirmation_updated` inside the transaction). Body keys `proof_token` / `reference` / `notes`, all optional, at least one; `null` clears reference/notes but the result may never be entirely empty. Allowed for **non-cash** payments only, for **owner/admin or the user who recorded that payment** (`Payment::mayManageConfirmation()` / `confirmationEditableBy()` — the single definition; legacy `recorded_by` NULL ⇒ owner/admin only), while the target is not a voided sale / cancelled pre-order (a handed-over pre-order is still allowed — no money moves). It can **never** change amount, method, channel, date, status, totals or shift cash.
+- **Replacing a proof supersedes, never deletes**: the old `payment_proofs` row gets `superseded_at` (file kept for audit); `Payment::currentProof()` is the one definition of "the proof" used by both payload presenters. `deletePayment()` still removes every proof row and file of the payment.
+- **Viewing**: `GET /payment-proofs/{id}/file` stays owner/admin or uploader (BOLA protection) **plus the payment's recorder for the current proof** (`Payment::proofViewableBy()`); superseded proofs only owner/admin/uploader. Payment payloads (`OrderResource`, `PreorderController::present()`) carry server-computed `notes`, `proof_id`, `has_proof`, `can_view_proof`, `can_edit_confirmation` — the SPA never derives permission from the role. The proof-dependent fields appear only when `payments.proofs` is eager-loaded (omitted, not "no proof", otherwise — the usual `relationLoaded` trap), so every endpoint that returns payments must load it.
+- UI: `PaymentHistoryList` shows "No proof yet", notes, and the add/edit action; `PaymentConfirmationModal` (reuses `ProofCapture`) is shared by the Sales detail (`TransactionItemsModal`) and the Pre-order detail.
 
 ## Conventions
 
@@ -261,7 +269,24 @@ Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/030-fix-pos-search-product-image/plan.md`
+Active feature plan: `specs/031-optional-payment-proof/plan.md`
+(branch `031-optional-payment-proof`, branched from `develop` after PR #25) — the
+payment proof (photo/file) becomes OPTIONAL for non-cash sales and pre-order
+payments (reference and notes already were): `PaymentRecorder` no longer demands
+a `proof_token` (an invalid one is still refused; purchase-order payments keep the
+rule) and `PaymentPanel` no longer gates the Confirm button on it. A confirmation
+(proof, reference, notes) can then be added or changed LATER from the Sales detail
+(and the Pre-order payment history, same `PaymentHistoryList`) through
+`PATCH /orders|preorders/{id}/payments/{payment}/confirmation`
+(`PaymentService::updateConfirmation()`, row-locked, audited in the same transaction),
+allowed only for owner/admin or the cashier who recorded that payment, for non-cash
+payments of a not-voided sale / not-cancelled pre-order. Replacing a proof marks the
+old `payment_proofs` row `superseded_at` (file kept for audit). It never touches
+amount/method/status/totals/shift cash. The proof viewing rule (owner/admin or
+uploader) is kept and extended to the payment's recorder; payloads carry server-
+computed `can_view_proof` / `can_edit_confirmation`. See research.md.
+
+Previous feature: `specs/030-fix-pos-search-product-image/plan.md`
 (branch `030-fix-pos-search-product-image`, branched from `develop` after PR #24) —
 a frontend fix: POS search result cards showed the placeholder icon and the cart
 line had no photo for items added from a search. `GET /variants/lookup` already
