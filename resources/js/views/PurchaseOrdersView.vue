@@ -21,6 +21,7 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import PurchaseOrderDetailModal from '../components/purchaseOrders/PurchaseOrderDetailModal.vue';
+import PreorderRowActions from '../components/preorder/PreorderRowActions.vue';
 
 const { t } = useI18n();
 const toast = useToastStore();
@@ -159,7 +160,10 @@ async function savePo() {
     showForm.value = false;
     await load();
   } catch (err) {
-    if (err.isValidation) {
+    // 035 — 409 yang membawa `errors` (mis. seller tidak bisa diubah karena
+    // barisnya sudah dipakai BOM) ditampilkan di bawah kolomnya, drawer tetap
+    // terbuka; toast 409 sudah ditampilkan interceptor bersama.
+    if (err.isValidation || (err.isConflict && err.errors)) {
       Object.assign(formErrors, Object.fromEntries(Object.entries(err.errors).map(([k, v]) => [k, v[0]])));
     } else {
       toast.error(err.message);
@@ -209,10 +213,46 @@ async function performDelete() {
     showDelete.value = false;
     await load();
   } catch {
-    // 409 (bukan draft) sudah ditoast oleh interceptor bersama.
+    // 409 (bukan draft / sudah ada pembayaran / dipakai BOM) sudah ditoast oleh
+    // interceptor bersama. Daftar di layar bisa basi (status berubah di tempat
+    // lain), jadi tutup dialog dan muat ulang supaya baris menampilkan keadaan
+    // sebenarnya (Delete nonaktif dengan alasannya).
+    showDelete.value = false;
+    await load();
   } finally {
     deleting.value = false;
   }
+}
+
+// --- Aksi per baris (035-po-row-actions) --------------------------------------
+// Detail / Edit / Delete tampil di SETIAP baris apa pun statusnya, memakai
+// komponen menu yang sama dengan daftar Pre-order. Aksi yang tidak boleh untuk
+// status itu TETAP terlihat tetapi nonaktif dengan alasannya (bukan
+// disembunyikan): Delete hanya untuk draft — ordered/received/paid/cancelled
+// bisa sudah punya stok, pembayaran, atau dipakai BOM, jadi caranya Batalkan.
+// Server menegakkan aturan yang sama (409); ini hanya penjelasan di layar.
+// maxInline 3 supaya ketiganya selalu tampil sebagai tautan; tombol status
+// (Tandai ...) tetap di sebelahnya seperti semula.
+function rowActions(row) {
+  const isDraft = row.status === 'draft';
+
+  return [
+    { key: 'detail', label: t('common.detail') },
+    { key: 'edit', label: t('common.edit') },
+    {
+      key: 'delete',
+      label: t('common.delete'),
+      danger: true,
+      disabled: !isDraft,
+      title: isDraft ? '' : t('purchase_orders.delete_draft_only'),
+    },
+  ];
+}
+
+function onRowAction(row, key) {
+  if (key === 'detail') openDetail(row);
+  else if (key === 'edit') openEdit(row);
+  else if (key === 'delete') confirmDelete(row);
 }
 
 // --- Detail / invoice ----------------------------------------------------
@@ -270,7 +310,7 @@ function openDetail(po) {
         </template>
         <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
         <template #cell-actions="{ row }">
-          <div class="flex justify-end gap-2">
+          <div class="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
             <button
               v-for="next in NEXT_STATUSES[row.status]"
               :key="next"
@@ -281,8 +321,7 @@ function openDetail(po) {
             >
               {{ t(`purchase_orders.action_${next}`) }}
             </button>
-            <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
-            <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
+            <PreorderRowActions :actions="rowActions(row)" :max-inline="3" @select="(key) => onRowAction(row, key)" />
           </div>
         </template>
       </DataTable>

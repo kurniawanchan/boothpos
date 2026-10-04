@@ -33,6 +33,8 @@ const toast = useToastStore();
 
 const loading = ref(false);
 const adding = ref(false);
+// 035: gagal memuat BUKAN "tidak ada baris layak" — tampilkan galat + Coba lagi.
+const loadError = ref('');
 const rows = ref([]);
 const meta = ref({ current_page: 1, per_page: 10, total: 0, last_page: 1 });
 const vendors = ref([]);
@@ -57,6 +59,7 @@ async function load(page = 1) {
   if (!props.variantId) return;
   const mine = ++requestId;
   loading.value = true;
+  loadError.value = '';
   try {
     const params = { page, per_page: 10 };
     for (const [k, v] of Object.entries(filters)) if (v !== '') params[k] = v;
@@ -65,7 +68,10 @@ async function load(page = 1) {
     rows.value = res.data;
     meta.value = res.meta;
   } catch (err) {
-    if (mine === requestId) toast.error(err.message);
+    if (mine === requestId) {
+      rows.value = [];
+      loadError.value = err.message || t('schema.load_failed');
+    }
   } finally {
     if (mine === requestId) loading.value = false;
   }
@@ -146,6 +152,10 @@ async function addSelected() {
       </div>
 
       <div v-if="loading && !rows.length" class="py-10 text-center text-[13px] text-muted-3">{{ t('common.loading_data') }}</div>
+      <div v-else-if="loadError" role="alert" class="flex flex-col items-center gap-3 rounded-lg border border-dashed border-danger-border px-4 py-9 text-center">
+        <span class="text-[13px] font-semibold text-danger-text">{{ loadError }}</span>
+        <BaseButton variant="secondary" size="sm" @click="load(meta.current_page)">{{ t('common.retry') }}</BaseButton>
+      </div>
       <div v-else-if="!rows.length" class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-disabled-2 px-4 py-9 text-center">
         <span class="text-[13px] font-semibold text-muted-4">{{ t('master_data.bom_no_eligible_lines') }}</span>
         <span v-if="!hasFilters" class="text-[12px] text-muted-3">{{ t('master_data.bom_no_eligible_hint') }}</span>

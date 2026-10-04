@@ -301,6 +301,15 @@ paths:
                       toko (`store_name`). Diubah owner/admin lewat `PUT /settings`
                       (key `app_name`, maks. 50 karakter — lebih panjang ditolak
                       422); kosong/spasi saja berarti kembali ke default.
+                  schema_update_required:
+                    type: boolean
+                    description: |
+                      035-po-row-actions — `true` hanya untuk pengguna yang boleh
+                      mengelola pengaturan (owner/admin) SAAT ada migrasi yang
+                      belum diterapkan; selalu `false` untuk peran lain dan bila
+                      database sudah mutakhir. Daftar migrasinya TIDAK PERNAH
+                      dikirim. Aplikasi tidak pernah menerapkan migrasi dari
+                      sebuah request — administrator yang melakukannya.
 
   /settings/payment:
     get:
@@ -1966,6 +1975,11 @@ paths:
         ditolak 409 bila salah satu baris PO ini sudah dipakai baris BOM.
         Setiap penetapan/perubahan ditulis ke activity log
         (`purchase_order_seller_assigned` / `purchase_order_seller_changed`).
+
+        035-po-row-actions — PO berstatus APA PUN (kecuali dibatalkan, 409)
+        tetap bisa mengubah vendor, seller, dan catatan; baris dikunci setelah
+        `draft`. Perubahan vendor/total/baris ditulis ke activity log
+        (`purchase_order_updated`, nilai lama + baru) di transaksi yang sama.
       requestBody:
         required: true
         content:
@@ -1982,7 +1996,12 @@ paths:
     delete:
       tags: [Purchase Order]
       summary: Hapus purchase order
-      description: Hanya diizinkan selama status masih `draft` — 409 bila tidak.
+      description: |
+        Hanya diizinkan selama status masih `draft` — 409 bila tidak (pesan
+        menyarankan Batalkan untuk status lain). 035-po-row-actions: juga 409
+        bila PO sudah punya pembayaran, atau salah satu barisnya sudah dipakai
+        baris BOM varian — penghapusan tidak boleh meninggalkan data yatim.
+        Penghapusan ditulis ke activity log di transaksi yang sama.
       responses:
         '204': { description: Dihapus }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -5210,6 +5229,22 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    SchemaOutdated:
+      description: |
+        035-po-row-actions — struktur database TERTINGGAL dari versi aplikasi
+        (migrasi belum diterapkan; kolom/tabel belum ada). Bisa muncul dari
+        endpoint API MANA PUN yang menyentuh bagian skema yang belum ada.
+        Hanya SQLSTATE 42S22/42S02 yang dikonversi; galat database lain tetap
+        500. Pesan ramah tanpa SQL/nama tabel/kolom; detail lengkap hanya di
+        log server. Klien menampilkan status galat + "Coba lagi", bukan layar
+        kosong atau keadaan kosong yang menyesatkan.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+              code: { type: string, enum: [schema_outdated] }
     ValidationError:
       description: Validasi gagal
       content:

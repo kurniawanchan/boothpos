@@ -302,6 +302,13 @@ The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **PO
 - Cost & Profit adds flat `*_pos` / `*_preorder` keys (flat so the generic export gets real columns); `event_cost` / `net_profit` are whole-event figures and are NOT split.
 - Exports: the Recap summary sheet appends `pos_units, preorder_units, pos_sales, preorder_sales` after the old columns; the "Detail Transaksi" sheet is still POS-only (known gap). The seller drill-down rounds per row, so its by-kind sums can differ from the column by ≤ 1 cent per row for sub-cent pre-order fractions (display rounding only; pinned by a test).
 
+## Purchase-order row actions and stale-schema handling (feature 035, 2026-10-05)
+
+- **Every PO row offers Detail / Edit / Delete** through the shared `PreorderRowActions.vue` (generic `{key,label,danger?,disabled?,title?}[]`) — never a second row-menu component. Actions that are not available stay VISIBLE but disabled with a reason: Delete is enabled for `draft` only (`purchase_orders.delete_draft_only`). Edit opens at any status; non-draft orders keep lines locked and save only vendor/seller/notes (already the server rule, now audited as `purchase_order_updated` inside the transaction).
+- **`PurchaseOrderService::delete()` guards (409):** not draft, has payments, or any line is referenced by a BOM line (`ProductVariantBomLine::withoutGlobalScopes()` — a lock check must see BOTH data modes).
+- **Stale database is explained, not exposed.** `bootstrap/app.php` converts a `QueryException` with SQLSTATE `42S22`/`42S02` on an API request into **503 `{code:'schema_outdated'}`** with a generic message (`lang/*/system.php`, never SQL/table/column names); every other database error stays a 500, and reporting is untouched (full detail stays in the log). `App\Support\SchemaStatus::pendingMigrations()` (files minus ran, `[]` if the `migrations` table is missing, never throws) feeds `GET /settings/features` → `schema_update_required`, true **only** for users with the `settings` menu (owner/admin), never listing names. **The app never runs migrations from a web request** — the admin does (`docker/php/entrypoint.sh` migrates only when the container STARTS; see RUNBOOK §"Setelah menarik perubahan kode"). Root cause of the two screenshots that started this feature was exactly that, not a code bug.
+- **A failed load is a failure state, not an empty state.** `PurchaseOrderDetailModal`, `AddBomItemModal` and `VariantBomModal` keep a `loadError` and render the message + **Retry** (`common.retry`); the selector must never answer a failed request with "no eligible lines". `ApiError.isSchemaOutdated` + one cooldown-limited toast in `api/client.js`; `settings.schemaUpdateRequired` drives `SchemaUpdateBanner.vue` in `AppShell.vue`.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -309,7 +316,22 @@ The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **PO
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/034-seller-po-bom/plan.md`
+Active feature plan: `specs/035-po-row-actions/plan.md`
+(branch `035-po-row-actions`, branched from `develop` after PR #29) — Purchase Orders
+list gets Detail / Edit / Delete on every row (reusing `PreorderRowActions`; unavailable
+actions stay visible with a reason). Edit is no longer draft-only (after draft: vendor,
+seller, notes; lines locked); Delete stays draft-only server-side (message now says
+"Cancel it instead", plus payment/BOM guards); edits write `purchase_order_updated`.
+The two reported errors were NOT code bugs: the dev DB had 4 pending migrations (the
+container started before PR #29; the entrypoint only migrates on start). To stop a stale
+schema from looking like a bug: a global renderer maps database "unknown column / table
+not found" (SQLSTATE 42S22/42S02) on API requests to **503 `schema_outdated`** with a
+friendly message (SQL stays in the log); `SchemaStatus` feeds
+`GET /settings/features.schema_update_required` (owner/admin only) for an app-shell
+banner; the PO detail dialog and the BOM selector/modal show the error + Retry instead of a
+blank dialog / a misleading "no eligible lines". See research.md.
+
+Previous feature: `specs/034-seller-po-bom/plan.md`
 (branch `034-seller-po-bom`, branched from `develop` after PR #28) — a variant's
 BOM becomes the traceable list of PURCHASE-ORDER LINES that produce it. A PO gets a
 seller (`purchase_orders.artist_id`, one per PO, required on create, NULL = legacy and

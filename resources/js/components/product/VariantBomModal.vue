@@ -40,6 +40,8 @@ const loading = ref(false);
 const rows = ref([]);
 const summary = ref(null);
 const showAdd = ref(false);
+// 035: gagal memuat = galat + Coba lagi (bukan tabel BOM kosong yang menyesatkan).
+const loadError = ref('');
 
 const canEdit = computed(() => auth.canAccessMenu('products') && auth.canAccessMenu('purchase_orders'));
 
@@ -53,10 +55,13 @@ function apply(payload) {
 async function reload() {
   if (!props.variantId) return;
   loading.value = true;
+  loadError.value = '';
   try {
     apply(await listBomLines(props.variantId));
   } catch (err) {
-    toast.error(err.message || t('master_data.bom_load_failed'));
+    rows.value = [];
+    summary.value = null;
+    loadError.value = err.message || t('master_data.bom_load_failed');
   } finally {
     loading.value = false;
   }
@@ -226,6 +231,10 @@ async function performReopen() {
 <template>
   <BaseModal :open="open" :title="t('master_data.bom_title', { variant: variantSku || variantName })" max-width-class="max-w-[980px]" @close="emit('close')">
     <div v-if="loading && !summary" class="px-6 py-14 text-center text-[13px] text-muted-3">{{ t('master_data.bom_loading') }}</div>
+    <div v-else-if="loadError" role="alert" class="flex flex-col items-center gap-3 px-6 py-14 text-center">
+      <span class="text-[13px] font-semibold text-danger-text">{{ loadError }}</span>
+      <BaseButton variant="secondary" size="sm" @click="reload">{{ t('common.retry') }}</BaseButton>
+    </div>
     <div v-else class="flex flex-col gap-4 px-6 py-5">
       <div v-if="summary" class="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div class="flex flex-col gap-0.5 rounded-lg border border-line-2 bg-surface-subtle px-4 py-3">

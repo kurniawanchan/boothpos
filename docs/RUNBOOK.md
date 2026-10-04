@@ -326,12 +326,32 @@ pertama, bukan sesuatu yang diam-diam dianggap selesai):
   nyata) — yang sudah diverifikasi baru penyalinan ke folder lokal
   pengganti.
 
+### Setelah menarik perubahan kode (migrasi database)
+
+Cabang baru sering membawa migrasi. Terapkan sebelum mencoba layar baru:
+
+```bash
+php artisan migrate                              # native
+docker compose exec app php artisan migrate      # Docker dev
+```
+
+Pada Docker, `docker/php/entrypoint.sh` hanya menjalankan migrasi saat
+container **dimulai** — container yang sudah berjalan sebelum `git pull`
+tidak mendapat migrasi baru sampai di-restart (`docker compose restart app`)
+atau perintah di atas dijalankan. Gejalanya: layar yang memakai kolom baru
+gagal. Sejak fitur 035 API menjawab **503 `schema_outdated`** dengan pesan
+ramah (bukan galat SQL), dialog menampilkan "Coba lagi", dan owner/admin
+melihat banner "Database perlu diperbarui" di atas halaman. Setelah migrasi
+diterapkan, "Coba lagi" langsung bekerja tanpa memuat ulang halaman. Aplikasi
+sendiri TIDAK PERNAH menjalankan migrasi dari request web.
+
 ## 8. Troubleshooting cepat
 
 | Gejala | Penyebab | Solusi |
 |---|---|---|
 | Migration gagal dengan error dekat `CHECK` / `ALTER TABLE` | `DB_CONNECTION` masih `sqlite` (default `.env.example`) | Set ke `mysql`, lihat §2 |
 | `php artisan test` gagal total sejak migration awal | `.env.testing` belum dibuat, atau menunjuk ke database yang sama dengan `.env` aplikasi | Buat `.env.testing` terpisah, lihat §5 |
+| Layar/dialog gagal dengan "Database perlu diperbarui" (503 `schema_outdated`) | Migrasi belum diterapkan (container berjalan sebelum `git pull`) | Terapkan migrasi, lihat bagian "Setelah menarik perubahan kode" di atas |
 | Login selalu 422 "field required" | Mengirim `email` alih-alih `username` | Field login adalah `username`, lihat §4 |
 | `app:backup` gagal "mysqldump: command not found" | Tidak ada `mysqldump` di `PATH` | Untuk instalasi toko sungguhan: pasang MySQL client normal di server. Untuk mesin dev dengan MySQL di Docker: lihat §7, JANGAN `brew install mysql-client` |
 | Upload bukti pembayaran / backup melewatkan file bukti pembayaran | Path disk `local` berbeda antar versi Laravel (`storage/app` vs `storage/app/private`) | Sudah diperbaiki di `BackupPos` sesi ini (ambil path dari disk, bukan hardcode) — kalau muncul lagi, cek `config/filesystems.php` |

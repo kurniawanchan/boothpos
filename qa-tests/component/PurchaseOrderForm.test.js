@@ -91,7 +91,8 @@ describe('PurchaseOrdersView — seller (034)', () => {
     const user = userEvent.setup();
     renderView();
     await screen.findByText('PO-10');
-    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    // 035 — setiap baris kini punya Edit; ambil yang milik draft PO-10.
+    await user.click(within(screen.getByText('PO-10').closest('tr')).getByRole('button', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Simpan' }));
 

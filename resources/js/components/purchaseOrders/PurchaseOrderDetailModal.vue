@@ -29,6 +29,8 @@ const toast = useToastStore();
 
 const po = ref(null);
 const loading = ref(false);
+// 035: gagal memuat = status galat + Coba lagi, bukan dialog kosong.
+const loadError = ref('');
 const invoiceEl = ref(null);
 const downloadingPdf = ref(false);
 
@@ -40,10 +42,12 @@ async function load() {
     return;
   }
   loading.value = true;
+  loadError.value = '';
   try {
     po.value = await getPurchaseOrder(props.purchaseOrderId);
   } catch (err) {
-    toast.error(err.message);
+    po.value = null;
+    loadError.value = err.message || t('schema.load_failed');
   } finally {
     loading.value = false;
   }
@@ -131,6 +135,10 @@ async function submitPayment() {
 <template>
   <BaseModal :open="open" :title="po?.po_number" max-width-class="max-w-[560px]" @close="emit('close')">
     <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">{{ t('common.loading_data') }}</div>
+    <div v-else-if="loadError" role="alert" class="flex flex-col items-center gap-3 px-6 py-12 text-center">
+      <span class="text-[13px] font-semibold text-danger-text">{{ loadError }}</span>
+      <BaseButton variant="secondary" size="sm" @click="load">{{ t('common.retry') }}</BaseButton>
+    </div>
     <div v-else-if="po" class="flex flex-col gap-4 px-6 py-5">
       <div class="flex items-center justify-between">
         <StatusPill :variant="STATUS_VARIANT[po.status]">{{ t(`purchase_orders.status_${po.status}`) }}</StatusPill>

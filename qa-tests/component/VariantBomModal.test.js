@@ -324,3 +324,29 @@ describe('VariantBomModal — hint wording before completion (034)', () => {
   });
 });
 
+// 035-po-row-actions (US4) — galat memuat BOM = status galat + Coba lagi, bukan tabel kosong.
+describe('VariantBomModal — load failure (035)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listVendors.mockResolvedValue({ data: [] });
+  });
+
+  it('shows the error with Retry instead of an empty BOM, then loads after Retry', async () => {
+    const { ApiError } = await import('../../resources/js/utils/errors');
+    listBomLines
+      .mockRejectedValueOnce(new ApiError('Database perlu diperbarui.', { status: 503, code: 'schema_outdated' }))
+      .mockResolvedValueOnce({ data: ROWS, summary: SUMMARY });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderModal();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Database perlu diperbarui');
+    expect(screen.queryByText('Ball Chain')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Coba lagi' }));
+
+    expect(await screen.findByText('Ball Chain')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
