@@ -442,3 +442,39 @@ describe('SalesView — export and selection', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
   });
 });
+
+// 028-partial-split-payment (US5) — penjualan yang dibayar sebagian terlihat di daftar,
+// bisa disaring, dan sisa tagihannya dijumlahkan di ringkasan.
+describe('SalesView — partially paid sales (028 US5)', () => {
+  const R5 = { ...base, key: 'order:305', id: 305, order_number: 'ORD-305', status: 'completed', customer_name: 'Wulan', created_at: '2026-09-02T12:00:00Z', cashier_id: 2, cashier_name: 'Kasir B', session_id: 12, item_count: 1, unit_count: 2, total_amount: '100000.00', cash_amount: '40000.00', noncash_amount: '0.00', payment_methods: ['cash'], artist_names: ['Nekoyama Studio'], items_preview: [{ name: 'Poster', qty: 2 }], payment_status: 'partially_paid', paid_amount: '40000.00', balance_amount: '60000.00' };
+  const paid = (r) => ({ ...r, payment_status: 'fully_paid', paid_amount: r.total_amount, balance_amount: '0.00' });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
+  });
+
+  it('marks a partially paid sale with its remaining balance and sums the outstanding in the summary', async () => {
+    await setup({ data: response([R5, paid(R3)]), ready: 'ORD-305' });
+
+    expect(within(rowOf('ORD-305')).getByTestId('row-partial')).toHaveTextContent('60.000');
+    expect(within(rowOf('ORD-303')).queryByTestId('row-partial')).not.toBeInTheDocument();
+    expect(screen.getByText(/sisa tagihan Rp\s*60\.000/)).toBeInTheDocument();
+  });
+
+  it('restores the payment-status filter from the URL so only partially paid sales are listed', async () => {
+    await setup({ url: '/sales?settle=partially_paid', data: response([R5, paid(R3)]), ready: 'ORD-305' });
+
+    expect(order()).toEqual(['ORD-305']);
+  });
+
+  it('uses the shift cash received (including later payments) for the open shift panel', async () => {
+    const sessions = [
+      { id: 12, cashier_name: 'Kasir B', opened_at: '2026-09-02T02:00:00Z', closed_at: null, status: 'open', opening_cash: '50000.00', closing_cash: null, expected_cash: null, cash_received: '340000.00' },
+    ];
+    await setup({ url: '/sales?session=12', data: { ...response([R5, paid(R3)]), sessions }, ready: 'ORD-305' });
+
+    expect(shiftLine('Penjualan tunai')).toHaveTextContent('340.000');
+    expect(shiftLine('Perkiraan kas di laci')).toHaveTextContent('390.000');
+  });
+});

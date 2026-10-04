@@ -84,6 +84,12 @@ class Preorder extends Model
         return in_array($newStatus, self::ALLOWED_TRANSITIONS[$this->status] ?? [], true);
     }
 
+    /** 028 — ringkasan pembayaran turunan (lihat App\Support\PaymentSummary). */
+    public function paymentSummary(): array
+    {
+        return \App\Support\PaymentSummary::for($this);
+    }
+
     public function outstanding(): float
     {
         return round((float) $this->total_amount - (float) $this->paid_amount, 2);

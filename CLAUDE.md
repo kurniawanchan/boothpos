@@ -240,6 +240,18 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - List rows carry `has_payments` (one `withExists('payments')` subquery) so the UI can disable Split without N+1. Activity-log actions: `duplicated`, `split` (written inside the transaction).
 - Row actions: Split is hidden for closed statuses but DISABLED with a tooltip when paid; Duplicate exists for every status — which is why a handed-over row now has a "More" menu.
 
+## Payment ledger — partial and split payments (added post-MVP, 2026-10-04)
+
+Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService` / `PaymentSummary`):
+
+- **Single write path.** `PaymentRecorder::record()` is still the only creator of `payments` rows; `PaymentService::addPayment()/deletePayment()` wrap it for BOTH targets (row lock, closed-state guard, cache recompute, pre-order lifecycle, audit row — all in one transaction). `PreorderService::recordPayment()/deletePayment()` are thin delegates. Never `Payment::create()` elsewhere.
+- **The summary is derived, never stored for orders.** `PaymentSummary::for($target)` = grand total / total paid / remaining / status (`unpaid|partially_paid|fully_paid`) / count. Rejected entries are excluded; non-cash `pending` entries count (nothing ever verifies them); for an ORDER total paid = Σ entries − `change_amount` (payments store the tendered cash). `preorders.paid_amount` / `orders.paid_amount` are caches rewritten from it (the order cache keeps the tendered semantic).
+- **Overpayment is refused** (422 `errors.amount` naming the max; a fully paid or closed target is 409). This deliberately REVERSED the old "no overpay guard" pre-order behaviour — see the rewritten `PreorderTest` case.
+- **Idempotency**: optional client UUID `client_ref` (SPA always sends it; reused on retry, regenerated per open). Same ref + same target → `200` replay, no new row; ref on another target → 422; `payments.client_ref` is UNIQUE across modes (lookup uses `withoutGlobalScopes()`).
+- **Shift cash follows `payments.session_id`** (the shift the money was RECEIVED in), not `orders.session_id`. Checkout payments get the sale's shift; a later cash payment needs the recording user's OPEN shift (409 otherwise); non-cash records it if present; pre-order payments stay NULL (outside shift cash). `close()`, `summary()` and `SalesTransactionsService` (`sessions[].cash_received`, which also lists shifts that only received late payments) use it. Deleting a CASH payment of a CLOSED shift is refused (409) — it would break the stored reconciliation.
+- **Partial POS sale** (`POST /orders` with paid < total) requires `customer_id` (409 otherwise — `OrderController::store()` maps every service `ValidationException` to 409). It stays `completed`, so every report still counts it at completion; only the Sales page shows `paid_amount` / `balance_amount` / `payment_status`. POS checkout payments are NOT written to `activity_logs` (the order is the audit trail); later payments and every delete are.
+- `PaymentSummaryCard` + `PaymentHistoryList` + `AddPaymentModal` are shared by Pre-orders and the Sales detail modal; `RecordPaymentModal` (client-side accumulation) no longer exists. History entries have no edit path; Delete is owner/admin only.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -247,9 +259,29 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/027-preorder-duplicate-split/plan.md`
-(branch `027-preorder-duplicate-split`, branched from `develop` after feature
-026's tip) — two new pre-order actions. **Duplicate** (one row or the
+Active feature plan: `specs/028-partial-split-payment/plan.md`
+(branch `028-partial-split-payment`, branched from `develop` after PR #22) —
+payments become an independently saved ledger for BOTH pre-orders and POS
+sales. One `PaymentService` records/deletes payments (amount ≤ remaining,
+row-locked, idempotent via a client `client_ref` UUID, audited inside the
+transaction) on top of the single row-writer `PaymentRecorder`, and returns a
+derived `payment_summary` (grand total / total paid / remaining / status
+unpaid|partially_paid|fully_paid / count) that is NEVER stored for orders
+(pre-order and order `paid_amount` stay as caches recomputed from the
+entries). Deliberate reversals: pre-order overpayment is now refused (422; the
+old "no overpay guard" test is rewritten) and cash shift attribution moves
+from `orders.session_id` to a new `payments.session_id` (the shift the money
+was RECEIVED in) so a late cash payment cannot corrupt a closed shift's
+reconciliation; `close()`, `summary()` and the Sales shift panel are rebased
+on it. A POS sale may be completed partly paid only with a customer attached
+(it stays `completed`, so every report still counts it at completion), and is
+settled later from the Sales page. `RecordPaymentModal` (client-side
+accumulation + sequential submit) is replaced by a single-click
+`AddPaymentModal` plus shared `PaymentSummaryCard`/`PaymentHistoryList`. See
+research.md Decisions 1–12.
+
+Previous feature: `specs/027-preorder-duplicate-split/plan.md`
+(merged, PR #22) — two new pre-order actions. **Duplicate** (one row or the
 checkbox selection, `POST /preorders/duplicate`) is built ON TOP of
 `PreorderService::create()`, not `replicate()`, so every copy is re-priced at
 today's variant price (product-owner answer), starts `ordered` with no

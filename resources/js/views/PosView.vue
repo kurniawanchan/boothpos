@@ -391,6 +391,7 @@ async function resumeDraft(draftId) {
       :discount-amount="discount.toFixed(2)"
       :total="Math.max(parseFloat(cart.subtotal) - discount, 0).toFixed(2)"
       :submitting="submittingOrder"
+      :customer-name="selectedCustomer?.name ?? ''"
       @close="showPayment = false"
       @submit="handlePaymentSubmit"
     />

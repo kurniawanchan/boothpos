@@ -48,10 +48,16 @@ class OrderResource extends JsonResource
                 'variant_name' => $i->relationLoaded('variant') ? $i->variant?->variant_name : null,
                 'image_url' => $i->relationLoaded('variant') ? $i->variant?->image_url : null,
             ])),
+            // 028-partial-split-payment — ringkasan turunan dari entri pembayaran.
+            'payment_summary' => $this->whenLoaded('payments', fn () => \App\Support\PaymentSummary::for($this->resource)),
             'payments' => $this->whenLoaded('payments', fn () => $this->payments->map(fn ($p) => [
                 'id' => $p->id, 'method' => $p->method, 'amount' => number_format((float) $p->amount, 2, '.', ''),
                 'verification' => $p->verification,
                 'paid_at' => $p->paid_at,
+                'reference' => $p->reference,
+                'recorded_by_name' => $p->relationLoaded('recorder') ? $p->recorder?->name : null,
+                'status' => $p->verification === 'rejected' ? 'rejected' : 'paid',
+                'session_id' => $p->session_id,
                 // Nama kanal (bank/e-wallet) bila ada; null untuk tunai.
                 'provider' => $p->relationLoaded('channel') ? $p->channel?->provider : null,
             ])),

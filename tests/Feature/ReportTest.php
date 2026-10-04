@@ -926,6 +926,10 @@ class ReportTest extends TestCase
     // terhadap subtotal preorder.
     // ------------------------------------------------------------------
 
+    // 028-partial-split-payment — pembayaran pertama kini memindahkan pre-order
+    // ke "dp_paid" juga saat dicatat lewat service langsung (dulu fixture ini
+    // diam-diam tertinggal di "ordered" karena atribut status default DB tidak
+    // terbaca pada model hasil create()); itu yang terjadi di jalur API nyata.
     private function createPartiallyPaidPreorder(Event $event, Customer $customer, array $itemsByArtist, float $paidAmount): \App\Models\Preorder
     {
         $preorderService = app(\App\Services\PreorderService::class);
@@ -1188,7 +1192,7 @@ class ReportTest extends TestCase
 
         $this->assertNotNull($rowA);
         $this->assertNotNull($rowB);
-        $this->assertSame('ordered', $rowA['status']);
+        $this->assertSame('dp_paid', $rowA['status']);
         $this->assertSame('partial', $rowA['payment_completeness']);
         $this->assertSame(1, $rowA['preorder_count']);
         $this->assertSame('6000.00', $rowA['total_order_value']);
@@ -1205,7 +1209,7 @@ class ReportTest extends TestCase
         // same event.
         $defaultResponse = $this->getJson("/api/v1/reports/preorders?event_id={$event->id}")->assertOk();
         $defaultRow = collect($defaultResponse->json('rows'))
-            ->firstWhere(fn ($r) => $r['status'] === 'ordered' && $r['payment_completeness'] === 'partial');
+            ->firstWhere(fn ($r) => $r['status'] === 'dp_paid' && $r['payment_completeness'] === 'partial');
 
         $this->assertNotNull($defaultRow);
         $sumCollected = (float) $rowA['total_collected'] + (float) $rowB['total_collected'];
@@ -1278,12 +1282,12 @@ class ReportTest extends TestCase
 
         $summaryResponse = $this->getJson("/api/v1/reports/preorders?event_id={$event->id}")->assertOk();
         $summaryRow = collect($summaryResponse->json('rows'))
-            ->firstWhere(fn ($r) => $r['status'] === 'ordered' && $r['payment_completeness'] === 'partial');
+            ->firstWhere(fn ($r) => $r['status'] === 'dp_paid' && $r['payment_completeness'] === 'partial');
         $this->assertNotNull($summaryRow);
         $this->assertSame(2, $summaryRow['preorder_count']);
 
         $drilldownResponse = $this->getJson(
-            "/api/v1/reports/preorders?event_id={$event->id}&status=ordered&payment_completeness=partial"
+            "/api/v1/reports/preorders?event_id={$event->id}&status=dp_paid&payment_completeness=partial"
         )->assertOk();
 
         $rows = collect($drilldownResponse->json('rows'));
@@ -1334,7 +1338,7 @@ class ReportTest extends TestCase
         $this->assertNotNull($breakdownRowA);
 
         $drilldownResponse = $this->getJson(
-            "/api/v1/reports/preorders?event_id={$event->id}&status=ordered&payment_completeness=partial&artist_id={$artistA->id}"
+            "/api/v1/reports/preorders?event_id={$event->id}&status=dp_paid&payment_completeness=partial&artist_id={$artistA->id}"
         )->assertOk();
 
         $rows = collect($drilldownResponse->json('rows'));

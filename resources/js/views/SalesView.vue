@@ -98,6 +98,12 @@ const paymentStateOptions = computed(() => [
   { value: 'rejected', label: t('reports.paystate_rejected') },
   { value: 'verified', label: t('reports.paystate_verified') },
 ]);
+// 028-partial-split-payment — status pembayaran turunan (beda dari status verifikasi di atas).
+const settlementOptions = computed(() => [
+  { value: 'partially_paid', label: t('payment_ledger.status_partially_paid') },
+  { value: 'unpaid', label: t('payment_ledger.status_unpaid') },
+  { value: 'fully_paid', label: t('payment_ledger.status_fully_paid') },
+]);
 const sessionOptions = computed(() =>
   sessions.value.map((s) => ({
     value: s.id,
@@ -162,6 +168,7 @@ const summaryText = computed(() => {
     t('reports.summary_cash', { amount: formatIDR(s.cash) }),
     t('reports.summary_noncash', { amount: formatIDR(s.noncash) }),
   ];
+  if (s.outstanding > 0) parts.push(t('payment_ledger.summary_outstanding', { amount: formatIDR(s.outstanding) }));
   if (s.margin !== null) parts.push(t('reports.summary_margin', { amount: formatIDR(s.margin) }));
   if (s.voided > 0) parts.push(t('reports.summary_voided', { count: s.voided }));
   return parts.join(' · ');
@@ -299,7 +306,7 @@ function showCustomerDetail(row) {
           <BaseMultiSelect v-model="filters.payments" :options="paymentOptions" :all-label="t('reports.filter_payment_all')" />
           <BaseSelect v-model="filters.paymentState" :placeholder="t('reports.filter_paystate_all')" :options="paymentStateOptions" />
           <BaseSelect v-model="filters.customerType" :placeholder="t('reports.filter_customer_all')" :options="customerTypeOptions" />
-          <span></span>
+          <BaseSelect v-model="filters.settlement" data-testid="filter-settlement" :placeholder="t('payment_ledger.filter_all')" :options="settlementOptions" />
 
           <input v-model="filters.minTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_min_total')" :placeholder="t('reports.filter_min_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
           <input v-model="filters.maxTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_max_total')" :placeholder="t('reports.filter_max_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
@@ -398,6 +405,11 @@ function showCustomerDetail(row) {
                 <span v-for="method in row.payment_methods" :key="method" class="whitespace-nowrap rounded-full bg-line-7 px-2 py-0.5 text-[11px] font-semibold text-muted-4">{{ paymentLabel(method) }}</span>
               </span>
               <span v-else class="text-muted-3">—</span>
+              <!-- 028 — penjualan yang belum lunas ditandai langsung di daftar, lengkap dengan sisa tagihannya. -->
+              <StatusPill v-if="row.payment_status === 'partially_paid'" variant="warn" data-testid="row-partial">
+                {{ t('payment_ledger.status_partially_paid') }} · {{ formatIDR(row.balance_amount) }}
+              </StatusPill>
+              <StatusPill v-else-if="row.payment_status === 'unpaid'" variant="danger" data-testid="row-unpaid">{{ t('payment_ledger.status_unpaid') }}</StatusPill>
               <StatusPill v-if="row.payment_state === 'pending'" variant="warn">{{ t('reports.payment_state_pending') }}</StatusPill>
               <StatusPill v-else-if="row.payment_state === 'rejected'" variant="danger">{{ t('reports.payment_state_rejected') }}</StatusPill>
             </div>

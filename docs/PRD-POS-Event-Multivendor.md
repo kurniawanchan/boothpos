@@ -235,6 +235,17 @@ Atas permintaan pemilik produk, layar Pre-order mendapat dua aksi baru, tanpa no
 
 Kedua pre-order hasilnya mencatat asalnya ("Duplikat dari" / "Dipisah dari"). Lihat `specs/027-preorder-duplicate-split/`.
 
+**Catatan penambahan pasca-MVP — 2026-10-04 (pembayaran sebagian / split payment)**
+
+Atas permintaan pemilik produk, pembayaran menjadi buku besar (ledger) yang disimpan satu per satu untuk **pre-order dan penjualan POS** (pembelian ke vendor tidak termasuk):
+
+- Setiap pembayaran tersimpan **langsung dan sendiri-sendiri**, berapa pun jumlahnya (tidak ada lagi penahanan entri di dialog sampai tagihan tertutup). Layar menampilkan ringkasan — total tagihan, total terbayar, sisa tagihan, status (Belum dibayar / Dibayar sebagian / Lunas) — dan riwayat pembayaran dengan metode, jumlah, waktu, nomor referensi, pencatat, dan status; tombol Tambah pembayaran hilang saat lunas.
+- **Perubahan perilaku yang disengaja:** kelebihan bayar pada pre-order kini **ditolak** (dulu diterima); jumlah tidak boleh melebihi sisa tagihan. Klik ganda/coba-ulang tidak pernah menggandakan pembayaran (kunci idempotensi), dan dua staf yang membayar bersamaan tak bisa melebihi tagihan.
+- **POS:** penjualan boleh selesai dibayar sebagian **bila ada pelanggan** (tetap berstatus selesai, stok berkurang, laporan menghitungnya saat selesai) dan dilunasi nanti dari halaman Sales. Uang tunai dihitung di **shift tempat uang itu diterima**, bukan shift penjualannya, supaya rekonsiliasi shift yang sudah ditutup tidak rusak.
+- Entri pembayaran tidak bisa diubah; satu-satunya koreksi adalah hapus (owner/admin) yang diaudit dan menghitung ulang status.
+
+Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/028-partial-split-payment/`.
+
 ### 7.3 Artist management
 
 **Model lisensi (v1.6):** BoothPOS dijual dalam dua tingkat harga. **Pro** — satu artist saja (toko itu sendiri), tanpa konsinyasi. **Master** — multi-artist dengan rekap hasil dan bagi hasil per artist. Perbedaan ini ditegakkan lewat satu pengaturan (`multi_artist_enabled`), bukan build kode terpisah — satu basis kode untuk kedua tingkat harga.

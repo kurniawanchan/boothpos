@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import PreordersView from '../../resources/js/views/PreordersView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listPreorders, getPreorder, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices, updatePreorderDispatchStatus, getPreorderInvoice, duplicatePreorders, splitPreorder, deletePreorderPayment } from '../../resources/js/api/preorders';
+import { listPreorders, getPreorder, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices, updatePreorderDispatchStatus, getPreorderInvoice, duplicatePreorders, splitPreorder, deletePreorderPayment, createPreorderPayment } from '../../resources/js/api/preorders';
 import { listArtists } from '../../resources/js/api/artists';
 import { listCustomers, getCustomer } from '../../resources/js/api/customers';
 import { lookupVariants } from '../../resources/js/api/products';
@@ -39,6 +39,7 @@ vi.mock('../../resources/js/api/preorders', () => ({
   duplicatePreorders: vi.fn(),
   splitPreorder: vi.fn(),
   deletePreorderPayment: vi.fn(),
+  createPreorderPayment: vi.fn(),
 }));
 vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
 vi.mock('../../resources/js/api/shipments', () => ({ createShipment: vi.fn(), updateShipment: vi.fn() }));
@@ -1158,5 +1159,105 @@ describe('PreordersView — customer & fulfillment card in the detail panel', ()
     expect(fulfillment).not.toHaveTextContent('Ambil di booth');
 
     expect(screen.getByTestId('detail-customer').textContent.match(/—/g).length).toBe(4);
+  });
+});
+
+// 028-partial-split-payment (US1) — ringkasan + Tambah pembayaran di panel detail.
+describe('PreordersView — payment summary and Add Payment (028 US1)', () => {
+  const ROW = { id: 95, preorder_number: 'PO-0095', customer_name: 'Lia', status: 'ordered', fulfillment: 'pickup', total_amount: '1000000.00', paid_amount: '0.00', outstanding: '1000000.00', sellers: [] };
+  const UNPAID = {
+    id: 95, preorder_number: 'PO-0095', status: 'ordered', dispatch_status: 'pending', fulfillment: 'pickup',
+    total_amount: '1000000.00', paid_amount: '0.00', outstanding: '1000000.00', items: [], customer: { name: 'Lia' }, payments: [],
+    payment_summary: { grand_total: '1000000.00', total_paid: '0.00', remaining: '1000000.00', status: 'unpaid', payment_count: 0 },
+  };
+  const PARTIAL = {
+    ...UNPAID, status: 'dp_paid', paid_amount: '400000.00', outstanding: '600000.00',
+    payments: [{ id: 1, method: 'cash', purpose: 'down_payment', amount: '400000.00', paid_at: '2026-10-04T05:00:00Z', status: 'paid', reference: null, recorded_by_name: 'Kasir' }],
+    payment_summary: { grand_total: '1000000.00', total_paid: '400000.00', remaining: '600000.00', status: 'partially_paid', payment_count: 1 },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: [ROW], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
+    getPreorderSummary.mockResolvedValue({ transaction_count: 1 });
+    getPreorder.mockResolvedValue(UNPAID);
+  });
+
+  it('shows the payment summary with the unpaid status and the Add Payment button', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderPreorders();
+    await screen.findByText('PO-0095');
+    await user.click(screen.getByRole('button', { name: 'PO-0095' }));
+
+    expect(await screen.findByTestId('summary-status')).toHaveTextContent('Belum dibayar');
+    expect(screen.getByTestId('summary-remaining')).toHaveTextContent('1.000.000');
+    expect(screen.getByTestId('add-payment')).toBeInTheDocument();
+  });
+
+  it('saves a partial payment from the dialog with one click and shows the updated summary', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const { fireEvent, waitFor: wf } = await import('@testing-library/vue');
+    const user = userEvent.setup();
+    createPreorderPayment.mockResolvedValue(PARTIAL);
+    await renderPreorders();
+    await screen.findByText('PO-0095');
+    await user.click(screen.getByRole('button', { name: 'PO-0095' }));
+    await user.click(await screen.findByTestId('add-payment'));
+
+    const amount = await screen.findByLabelText(/jumlah dibayar/i);
+    await fireEvent.update(amount, '400000');
+    await wf(() => expect(amount).toHaveValue(400000));
+    await user.click(screen.getByRole('button', { name: /simpan pembayaran/i }));
+
+    await wf(() => expect(createPreorderPayment).toHaveBeenCalledTimes(1));
+    expect(createPreorderPayment).toHaveBeenCalledWith(95, expect.objectContaining({ method: 'cash', amount: '400000.00', purpose: 'down_payment' }));
+    await wf(() => expect(screen.getByTestId('summary-status')).toHaveTextContent('Dibayar sebagian'));
+    expect(screen.getByTestId('summary-remaining')).toHaveTextContent('600.000');
+    await wf(() => expect(listPreorders.mock.calls.length).toBeGreaterThan(1));
+    await wf(() => expect(getPreorderSummary.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  it('hides Add Payment and shows the Fully Paid banner once nothing remains', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue({
+      ...PARTIAL, status: 'settled', paid_amount: '1000000.00', outstanding: '0.00',
+      payment_summary: { grand_total: '1000000.00', total_paid: '1000000.00', remaining: '0.00', status: 'fully_paid', payment_count: 2 },
+    });
+    await renderPreorders();
+    await screen.findByText('PO-0095');
+    await user.click(screen.getByRole('button', { name: 'PO-0095' }));
+
+    expect(await screen.findByTestId('summary-fully-paid')).toBeInTheDocument();
+    expect(screen.queryByTestId('add-payment')).not.toBeInTheDocument();
+  });
+
+  it('does not offer Add Payment on a handed-over or cancelled pre-order even with a balance', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue({ ...PARTIAL, status: 'cancelled' });
+    await renderPreorders();
+    await screen.findByText('PO-0095');
+    await user.click(screen.getByRole('button', { name: 'PO-0095' }));
+
+    await screen.findByTestId('summary-status');
+    expect(screen.queryByTestId('add-payment')).not.toBeInTheDocument();
+  });
+
+  it('opens the dialog for another payment with the amount defaulted to the NEW remaining balance', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue(PARTIAL);
+    await renderPreorders();
+    await screen.findByText('PO-0095');
+    await user.click(screen.getByRole('button', { name: 'PO-0095' }));
+    await user.click(await screen.findByTestId('add-payment'));
+
+    const amount = await screen.findByLabelText(/jumlah dibayar/i);
+    await waitFor(() => expect(amount).toHaveValue(600000));
+    expect(screen.getByTestId('summary-status')).toHaveTextContent('Dibayar sebagian');
   });
 });

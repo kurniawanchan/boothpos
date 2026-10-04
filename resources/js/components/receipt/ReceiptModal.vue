@@ -166,9 +166,16 @@ watch(
           <span class="text-[30px] font-extrabold tracking-tight">{{ formatIDR(receipt.total_amount) }}</span>
         </div>
         <div v-for="(p, idx) in receipt.payment_summary" :key="idx" class="flex justify-between pt-1.5 text-[13.5px]">
-          <span class="text-muted">{{ METHOD_LABELS[p.method] ?? p.method }}</span><span class="font-semibold">{{ formatIDR(p.amount) }}</span>
+          <span class="text-muted">{{ METHOD_LABELS[p.method] ?? p.method }}<span v-if="p.reference" class="text-[11.5px]" data-testid="receipt-payment-ref"> · Ref {{ p.reference }}</span></span><span class="font-semibold">{{ formatIDR(p.amount) }}</span>
         </div>
         <div class="flex justify-between text-[13.5px]"><span class="text-muted">Kembalian</span><span class="font-semibold">{{ formatIDR(receipt.change_amount) }}</span></div>
+        <!-- 028-partial-split-payment — penjualan yang belum lunas: jumlah dibayar, sisa tagihan,
+             dan status. Struk lunas tak berubah. Struk selalu berbahasa Indonesia. -->
+        <template v-if="receipt.payment_status === 'partially_paid'">
+          <div class="flex justify-between border-t border-dashed border-line-3 pt-2 text-[13.5px]" data-testid="receipt-paid"><span class="text-muted">Sudah dibayar</span><span class="font-semibold">{{ formatIDR(receipt.paid_amount) }}</span></div>
+          <div class="flex justify-between text-[13.5px]" data-testid="receipt-balance"><span class="font-bold">Sisa tagihan</span><span class="font-extrabold text-warn-text">{{ formatIDR(receipt.balance_amount) }}</span></div>
+          <p class="text-center text-[12px] font-bold uppercase tracking-wider text-warn-text" data-testid="receipt-status">Dibayar sebagian</p>
+        </template>
       </div>
 
       <!-- Follow-up 2 (FR-024) — pembeli transaksi INI, bukan kontak toko

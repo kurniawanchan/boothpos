@@ -15,7 +15,7 @@ use Illuminate\Validation\ValidationException;
 class PaymentRecorder
 {
     /**
-     * @param array{method:string,channel_id:?int,purpose:string,amount:float|string,proof_token:?string,notes:?string} $input
+     * @param array{method:string,channel_id:?int,purpose:string,amount:float|string,proof_token:?string,notes:?string,reference?:?string,client_ref?:?string,session_id?:?int,recorded_by?:?int} $input
      * @throws ValidationException
      */
     public function record(array $input, ?int $orderId, ?int $preorderId, ?int $purchaseOrderId = null): Payment
@@ -54,6 +54,12 @@ class PaymentRecorder
             'verification' => $method === 'cash' ? 'verified' : 'pending',
             'paid_at' => now(),
             'notes' => $input['notes'] ?? null,
+            // 028-partial-split-payment — jejak buku besar. Semuanya opsional supaya
+            // pemanggil lama (mis. PurchaseOrderService) tetap berfungsi apa adanya.
+            'reference' => $input['reference'] ?? null,
+            'client_ref' => $input['client_ref'] ?? null,
+            'session_id' => $input['session_id'] ?? null,
+            'recorded_by' => $input['recorded_by'] ?? null,
         ]);
 
         if (isset($proof)) {

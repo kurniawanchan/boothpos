@@ -21,7 +21,7 @@ class PreorderService
 {
     /** Relasi yang dibaca PreorderController::present() — dimuat ulang agar field tak hilang diam-diam. */
     public const PAYLOAD_RELATIONS = [
-        'items.artist', 'items.variant.product.category', 'payments.proofs', 'shipment', 'customer', 'splitChildren',
+        'items.artist', 'items.variant.product.category', 'payments.proofs', 'payments.recorder', 'shipment', 'customer', 'splitChildren',
     ];
 
     public function __construct(
@@ -625,7 +625,7 @@ class PreorderService
                     : $preorder->shipping_at,
             ]);
 
-            return $preorder->fresh(['items', 'payments.proofs', 'customer', 'shipment']);
+            return $preorder->fresh(['items', 'payments.proofs', 'payments.recorder', 'customer', 'shipment']);
         });
     }
 
@@ -663,95 +663,23 @@ class PreorderService
         });
     }
 
-    public function recordPayment(Preorder $preorder, array $paymentInput): Preorder
+    /**
+     * 028-partial-split-payment — delegasi ke PaymentService (satu-satunya jalur
+     * pencatatan pembayaran untuk pre-order dan POS). `$user` opsional supaya
+     * pemanggil non-HTTP (mis. test laporan) tetap bisa memakainya.
+     */
+    public function recordPayment(Preorder $preorder, array $paymentInput, ?User $user = null, ?bool &$replayed = null): Preorder
     {
-        return DB::transaction(function () use ($preorder, $paymentInput) {
-            $this->paymentRecorder->record($paymentInput, null, $preorder->id);
-
-            $newPaidAmount = (float) $preorder->paid_amount + (float) $paymentInput['amount'];
-            $preorder->update(['paid_amount' => $newPaidAmount]);
-
-            // Auto-transisi status berdasar pembayaran — sejalan dengan
-            // state machine, tanpa perlu panggilan status terpisah dari
-            // klien untuk kasus umum ini.
-            if ($preorder->status === 'ordered') {
-                $preorder->update(['status' => 'dp_paid']);
-            } elseif ($preorder->status === 'arrived' && $newPaidAmount >= (float) $preorder->total_amount) {
-                $preorder->update(['status' => 'settled']);
-            }
-
-            return $preorder->fresh(['items', 'payments.proofs', 'customer', 'shipment']);
-        });
+        return app(PaymentService::class)->addPayment($preorder, $paymentInput, $user, $replayed);
     }
 
     /**
-     * Menghapus SATU pembayaran (beserta bukti bayarnya) dan menghitung ulang
-     * paid_amount + status dari pembayaran yang tersisa — kebalikan dari
-     * recordPayment(). Untuk pembayaran yang salah catat / ganda.
-     *
-     * Status mundur HANYA sejauh yang ditimbulkan pembayaran itu sendiri:
-     *  - settled yang tak lagi lunas      → arrived  (barang tetap sudah tiba)
-     *  - dp_paid tanpa pembayaran tersisa → ordered
-     *  - arrived tak pernah mundur ke ordered: stok "purchase" sudah masuk.
-     * handed_over/cancelled ditolak (409) — transaksinya sudah tertutup, dan
-     * handed_over mensyaratkan lunas.
-     *
-     * paid_amount dihitung ULANG dari jumlah pembayaran yang tersisa (bukan
-     * dikurangi), sehingga cache yang pernah menyimpang ikut terkoreksi.
+     * 028-partial-split-payment — delegasi ke PaymentService (logika hapus
+     * pembayaran, hitung ulang status, audit, dan hapus file bukti ada di sana).
      */
     public function deletePayment(Preorder $preorder, Payment $payment, User $user): Preorder
     {
-        $filesToDelete = [];
-
-        $result = DB::transaction(function () use ($preorder, $payment, $user, &$filesToDelete) {
-            $locked = Preorder::lockForUpdate()->findOrFail($preorder->id);
-
-            if (in_array($locked->status, ['handed_over', 'cancelled'], true)) {
-                throw ValidationException::withMessages(['status' => __('preorders.payment_delete_not_allowed_status')])->status(409);
-            }
-
-            // Pembayaran milik pre-order lain → 404, bukan dihapus diam-diam.
-            $target = $locked->payments()->whereKey($payment->id)->firstOrFail();
-
-            $oldStatus = $locked->status;
-            $oldPaid = (float) $locked->paid_amount;
-
-            $proofs = $target->proofs()->get();
-            $filesToDelete = $proofs->pluck('file_path')->all();
-            $target->proofs()->delete(); // payment_proofs.payment_id restrictOnDelete → baris bukti dulu
-            $target->delete();
-
-            $newPaid = round((float) $locked->payments()->sum('amount'), 2);
-            $newStatus = $oldStatus;
-            if ($oldStatus === 'settled' && (float) $locked->total_amount - $newPaid > 0.01) {
-                $newStatus = 'arrived';
-            } elseif ($oldStatus === 'dp_paid' && $newPaid <= 0) {
-                $newStatus = 'ordered';
-            }
-
-            $locked->update(['paid_amount' => $newPaid, 'status' => $newStatus]);
-
-            // Di dalam transaksi yang sama: menghapus catatan uang adalah tindakan sensitif.
-            $this->activityLogger->log(
-                userId: $user->id,
-                action: 'payment_deleted',
-                entityType: 'Preorder',
-                entityId: $locked->id,
-                description: "Menghapus pembayaran {$target->purpose} Rp ".number_format((float) $target->amount, 0, ',', '.')." dari {$locked->preorder_number}",
-                oldValues: ['payment_id' => $target->id, 'amount' => (float) $target->amount, 'method' => $target->method, 'status' => $oldStatus, 'paid_amount' => $oldPaid],
-                newValues: ['status' => $newStatus, 'paid_amount' => $newPaid],
-            );
-
-            return $locked->fresh(self::PAYLOAD_RELATIONS);
-        });
-
-        // File bukti dihapus SETELAH commit: transaksi yang gagal/rollback tidak
-        // boleh meninggalkan baris bukti yang filenya sudah hilang.
-        foreach ($filesToDelete as $path) {
-            Storage::disk('local')->delete($path);
-        }
-
-        return $result;
+        return app(PaymentService::class)->deletePayment($preorder, $payment, $user);
     }
 
     public function transitionStatus(Preorder $preorder, string $newStatus, ?string $cancelReason, User $user): Preorder
@@ -794,7 +722,7 @@ class PreorderService
                 'cancel_reason' => $newStatus === 'cancelled' ? $cancelReason : $preorder->cancel_reason,
             ]);
 
-            return $preorder->fresh(['items', 'payments.proofs', 'shipment', 'customer']);
+            return $preorder->fresh(['items', 'payments.proofs', 'payments.recorder', 'shipment', 'customer']);
         });
     }
 
