@@ -10,7 +10,7 @@ import { usePosCartStore } from '../stores/posCart';
 import { useToastStore } from '../stores/toast';
 import { uuid } from '../utils/uuid';
 import { formatIDR, toMoneyString } from '../utils/money';
-import { buildProductCards, toCartItem } from '../utils/posProductCards';
+import { buildProductCards, buildSearchCards, toCartItem } from '../utils/posProductCards';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import PosCartPanel from '../components/pos/PosCartPanel.vue';
 import PosPaymentModal from '../components/payment/PosPaymentModal.vue';
@@ -88,21 +88,35 @@ watch(selectedArtistIds, loadBrowse);
 const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
 const categoryOptions = computed(() => categories.value.map((c) => ({ value: c.id, label: c.name })));
 
+// BUG YANG DITEMUKAN & DIPERBAIKI (030-fix-pos-search-product-image) —
+// pencarian ini di-debounce tapi permintaannya TIDAK berurutan: dua
+// permintaan bertumpuk bisa selesai terbalik, sehingga hasil (dan foto)
+// kata kunci yang lebih LAMA menimpa hasil kata kunci terakhir. Setiap
+// pencarian mengambil nomor urut; respons yang bukan milik pencarian terakhir
+// dibuang. Mengosongkan kotak pencarian juga membatalkan permintaan yang
+// masih berjalan, supaya hasil lama tidak muncul kembali setelah dihapus.
+let searchSeq = 0;
 const runSearch = useDebouncedFn(async () => {
+  const seq = ++searchSeq;
   const term = search.value.trim();
   if (!term) {
     searchResults.value = null;
+    loadingGrid.value = false;
     return;
   }
   loadingGrid.value = true;
   try {
     // GET /variants/lookup — the cashier-facing search endpoint. It has no
-    // category filter and returns no category info, so search results
-    // fall back to a generic thumbnail (see cards computed below).
+    // category/seller filter; each hit carries its already-resolved
+    // `image_url` (variant's photo, else the product's), which
+    // buildSearchCards passes through to the card and, via the card, to the
+    // cart line, and its `category_name` shows as the same label the browse
+    // cards have (030).
     const res = await lookupVariants(term, 40);
+    if (seq !== searchSeq) return;
     searchResults.value = res.data;
   } finally {
-    loadingGrid.value = false;
+    if (seq === searchSeq) loadingGrid.value = false;
   }
 }, 300);
 watch(search, runSearch);
@@ -112,18 +126,7 @@ watch(search, runSearch);
 // added to the cart directly (see selectProductCard below).
 const browseCards = computed(() => buildProductCards(browsedProducts.value, categoryCodeById.value, categoryNameById.value));
 
-const searchCards = computed(() =>
-  (searchResults.value ?? []).map((v) => ({
-    variant_id: v.variant_id,
-    sku: v.sku,
-    name: v.label,
-    artist_name: v.artist_name,
-    sell_price: v.sell_price,
-    current_stock: v.current_stock,
-    category_code: null,
-    category_name: null,
-  }))
-);
+const searchCards = computed(() => buildSearchCards(searchResults.value));
 
 // Search hits stay variant-granular (the cashier searched for a specific
 // SKU/name), so they're never re-grouped by product — only the plain

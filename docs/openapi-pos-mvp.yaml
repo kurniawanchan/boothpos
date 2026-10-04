@@ -5194,9 +5194,11 @@ components:
         sku: { type: string }
         label: { type: string, example: Keychain Sakura — Varian A }
         artist_name: { type: string }
+        category_name: { type: string, nullable: true, description: "Nama kategori produk induk (untuk membedakan produk bernama sama)" }
         sell_price: { $ref: '#/components/schemas/Money' }
         current_stock: { type: integer }
         is_preorder: { type: boolean }
+        image_url: { type: string, nullable: true, description: "Foto varian sendiri; bila tidak ada, foto produk induk; bila tidak ada, null. Layar kasir memakainya di kartu hasil pencarian dan baris keranjang." }
 
     Product:
       type: object

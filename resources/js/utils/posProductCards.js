@@ -59,3 +59,36 @@ export function toCartItem(card, variant) {
     image_url: variant.image_url ?? card.image_url ?? null,
   };
 }
+
+/**
+ * BUG YANG DITEMUKAN & DIPERBAIKI (030-fix-pos-search-product-image) —
+ * kartu hasil pencarian POS dulu dibuat inline di PosView.vue dengan
+ * `map` yang menyalin hanya sebagian field, sehingga `image_url` yang SUDAH
+ * dikirim GET /variants/lookup ikut terbuang: kartu menampilkan ikon
+ * placeholder dan baris keranjang (kartu yang sama didorong ke posCart apa
+ * adanya) juga tanpa foto. Bentuk kartu browse dan item keranjang sudah
+ * tinggal di file ini; bentuk kartu pencarian ikut di sini supaya
+ * satu field baru di endpoint tidak lagi hilang diam-diam di sebuah `map`
+ * milik view. JANGAN kembali membuat kartu pencarian secara inline.
+ *
+ * `image_url` sudah di-resolve backend (foto varian sendiri, else foto
+ * produk induk — ProductVariant::image_url), jadi hasil pencarian dan grid
+ * browse menampilkan foto yang sama untuk item yang sama. Nama kategori juga
+ * ikut (permintaan lanjutan, FR-009): endpoint sudah mengirim `category_name`
+ * dan kartu browse menampilkannya, jadi kartu pencarian pun menampilkan label
+ * yang sama untuk membedakan produk bernama sama. `category_code` tetap null:
+ * itu hanya dipakai sebagai pengganti foto di kartu browse.
+ */
+export function buildSearchCards(results) {
+  return (results || []).map((v) => ({
+    variant_id: v.variant_id,
+    sku: v.sku,
+    name: v.label,
+    artist_name: v.artist_name,
+    sell_price: v.sell_price,
+    current_stock: v.current_stock,
+    category_code: null,
+    category_name: v.category_name ?? null,
+    image_url: v.image_url ?? null,
+  }));
+}
