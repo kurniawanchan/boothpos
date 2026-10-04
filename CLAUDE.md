@@ -270,6 +270,16 @@ Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService
 - **Money is untouched** (amount, status, totals, expected shift cash, reports). One intended visible effect: `CashierSessionController::summary()` has always counted only VERIFIED payments in its per-method breakdown, so a verified QRIS payment now appears there; expected cash is cash-only and unaffected.
 - UI: `PaymentHistoryList` shows "Not verified"/"Verified" + "Verified by X · date" and the "Mark verified" action (always behind a "cannot be undone" `ConfirmDialog`), in the Sales detail and the Pre-order payment history; the Sales list has "Mark verified (N)" next to Export, meant to be used with the existing "Needs verification" (`pstate=pending`) filter + Select all.
 
+## Reports: POS vs pre-order split (feature 033, 2026-10-04)
+
+The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **POS** part and the **pre-order** part next to the total. Rules (all in `SettlementService` / `ReportController` / `App\Support\ReportSplit`):
+
+- **One source.** `SettlementService::salesBreakdownForEvent()` runs the two aggregations (completed `order_items`; non-cancelled `preorder_items` × paid fraction) and `recalculateForEvent()` is built on it — and now RETURNS that breakdown so `artistSettlements()` reads the same snapshot that wrote the stored totals. Never add a second formula for "POS vs pre-order".
+- **The pre-order part is the REMAINDER of the shown total** (`total − POS`: integer units, cents for money via `ReportSplit::remainder()`), never an independently rounded figure. `artist_settlements.total_units` is a rounded integer, so independent rounding can drift by 1; the remainder makes POS + pre-order equal the total exactly. Don't "fix" pre-order units to decimals.
+- **Seller Cost (`GET /reports/artist-profit`) used to be POS-only** and now includes the paid part of pre-orders (product-owner decision) so its `total_sales` equals the Recap's; `sales_pos`/`modal_pos`/`gross_profit_pos` equal the old figures, and pre-order-only sellers now appear. It does one extra `GROUP BY` query over `preorderRecognizedRevenueBase()` with the explicit `data_mode` filter.
+- Cost & Profit adds flat `*_pos` / `*_preorder` keys (flat so the generic export gets real columns); `event_cost` / `net_profit` are whole-event figures and are NOT split.
+- Exports: the Recap summary sheet appends `pos_units, preorder_units, pos_sales, preorder_sales` after the old columns; the "Detail Transaksi" sheet is still POS-only (known gap). The seller drill-down rounds per row, so its by-kind sums can differ from the column by ≤ 1 cent per row for sub-cent pre-order fractions (display rounding only; pinned by a test).
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -277,7 +287,22 @@ Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/032-mark-payment-verified/plan.md`
+Active feature plan: `specs/033-seller-recap-pos-preorder-split/plan.md`
+(branch `033-seller-recap-pos-preorder-split`, branched from `develop` after PR #27) —
+the Seller Recap's Unit/Sales, Cost & Profit's revenue/cost/gross profit blend POS
+sales with the paid portion of pre-orders but only show the sum. No new storage:
+`SettlementService::salesBreakdownForEvent()` exposes the two aggregations it already
+runs (and `recalculateForEvent()` is built on it, so totals = POS + pre-order by
+construction); the reports add `pos_*`/`preorder_*` parts, the pre-order part always
+derived as the REMAINDER of the shown total (integer units, cents) so POS + pre-order
+equals the total with zero drift despite the stored unit total being a rounded
+integer. **Seller Cost (`artist-profit`) used to be POS-only** — by the requester's
+decision it now includes pre-orders (POS parts = the old figures, plus a pre-order
+part and a combined total), matching the Seller Recap. UI: four columns on the Recap,
+"POS · Pre-order" sub-lines on Cost & Profit and Seller Cost; exports append the new
+columns. See research.md.
+
+Previous feature: `specs/032-mark-payment-verified/plan.md`
 (branch `032-mark-payment-verified`, branched from `develop` after PR #26) — the
 "Not verified" badge on non-cash sales never cleared because nothing could change
 `payments.verification`. Adds the missing, **one-way** action (no schema change: the

@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Services\SettlementService;
 use App\Support\ModeGate;
+use App\Support\ReportSplit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -441,13 +442,33 @@ class ReportController extends Controller
         $grossProfit = $revenue - $cost;
         $netProfit = $grossProfit - (float) $event->event_cost;
 
+        // 033 — pemisahan POS vs pre-order. Bagian POS apa adanya; bagian
+        // pre-order = SISA dari total yang tampil (dalam sen), jadi POS +
+        // pre-order selalu persis sama dengan angka total di atas. Laba
+        // kotor dipisah dengan cara yang sama terhadap gross_profit yang
+        // tampil (bisa berselisih 1 sen dari pendapatan − modal bagian
+        // pre-order, murni efek pembulatan). event_cost/net_profit milik
+        // seluruh event, sengaja TIDAK dipisah.
+        $revenueText = number_format($revenue, 2, '.', '');
+        $costText = number_format($cost, 2, '.', '');
+        $grossText = number_format($grossProfit, 2, '.', '');
+        $revenuePos = number_format((float) ($totals->revenue ?? 0), 2, '.', '');
+        $costPos = number_format((float) ($totals->cost_of_goods ?? 0), 2, '.', '');
+        $grossPos = ReportSplit::money(ReportSplit::cents($revenuePos) - ReportSplit::cents($costPos));
+
         return response()->json([
             'event' => $event,
-            'revenue' => number_format($revenue, 2, '.', ''),
-            'cost_of_goods' => number_format($cost, 2, '.', ''),
-            'gross_profit' => number_format($grossProfit, 2, '.', ''),
+            'revenue' => $revenueText,
+            'cost_of_goods' => $costText,
+            'gross_profit' => $grossText,
             'event_cost' => number_format((float) $event->event_cost, 2, '.', ''),
             'net_profit' => number_format($netProfit, 2, '.', ''),
+            'revenue_pos' => $revenuePos,
+            'revenue_preorder' => ReportSplit::remainder($revenueText, $revenuePos),
+            'cost_of_goods_pos' => $costPos,
+            'cost_of_goods_preorder' => ReportSplit::remainder($costText, $costPos),
+            'gross_profit_pos' => $grossPos,
+            'gross_profit_preorder' => ReportSplit::remainder($grossText, $grossPos),
         ]);
     }
 
@@ -468,7 +489,9 @@ class ReportController extends Controller
 
         // Selalu dihitung ulang agar angka live, bukan dibaca mentah dari
         // cache — konsisten dengan keputusan desain SettlementService.
-        $this->settlementService->recalculateForEvent($event);
+        // 033: rincian POS vs pre-order datang dari snapshot yang sama
+        // dengan yang menulis total, jadi POS + pre-order == total.
+        $breakdown = $this->settlementService->recalculateForEvent($event);
 
         $settlements = ArtistSettlement::where('event_id', $eventId)->get()->keyBy('artist_id');
 
@@ -500,11 +523,20 @@ class ReportController extends Controller
             ->orderBy('name')
             ->get();
 
-        $data = $artists->map(function (Artist $artist) use ($settlements) {
+        $data = $artists->map(function (Artist $artist) use ($settlements, $breakdown) {
             $s = $settlements->get($artist->id);
 
             $payable = (float) ($s?->payable_amount ?? 0);
             $paid = (float) ($s?->paid_amount ?? 0);
+
+            // 033 — bagian POS apa adanya; bagian pre-order = SISA dari total
+            // yang tampil (total_units tersimpan sudah dibulatkan ke integer,
+            // jadi membulatkan pecahan pre-order sendiri bisa berselisih 1).
+            $parts = $breakdown->get($artist->id);
+            $totalUnits = (int) ($s?->total_units ?? 0);
+            $posUnits = (int) round($parts['pos_units'] ?? 0);
+            $posSales = number_format((float) ($parts['pos_sales'] ?? 0), 2, '.', '');
+            $totalSales = number_format((float) ($s?->total_sales ?? 0), 2, '.', '');
 
             return [
                 // null HANYA untuk artist yang memang belum punya baris
@@ -514,8 +546,12 @@ class ReportController extends Controller
                 'id' => $s?->id,
                 'artist_id' => $artist->id,
                 'artist_name' => $artist->name,
-                'total_sales' => number_format((float) ($s?->total_sales ?? 0), 2, '.', ''),
-                'total_units' => (int) ($s?->total_units ?? 0),
+                'total_sales' => $totalSales,
+                'total_units' => $totalUnits,
+                'pos_units' => $posUnits,
+                'preorder_units' => $totalUnits - $posUnits,
+                'pos_sales' => $posSales,
+                'preorder_sales' => ReportSplit::remainder($totalSales, $posSales),
                 'deduction' => number_format((float) ($s?->deduction ?? 0), 2, '.', ''),
                 'payable_amount' => number_format($payable, 2, '.', ''),
                 'paid_amount' => number_format($paid, 2, '.', ''),
@@ -714,7 +750,7 @@ class ReportController extends Controller
         $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
         $event = Event::findOrFail($eventId);
 
-        $rows = DB::table('order_items')
+        $posRows = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->join('artists', 'artists.id', '=', 'order_items.artist_id')
             ->where('orders.event_id', $eventId)
@@ -727,21 +763,62 @@ class ReportController extends Controller
                 SUM(order_items.cost_price * order_items.qty) as modal
             ')
             ->groupBy('artists.id', 'artists.name')
-            ->orderBy('artists.name')
             ->get()
-            ->map(function ($row) {
-                $totalSales = (float) $row->total_sales;
-                $modal = (float) $row->modal;
-                $grossProfit = $totalSales - $modal;
+            ->keyBy('artist_id');
+
+        // 033 — laporan ini dulu HANYA membaca order_items sehingga seller
+        // yang cuma punya pre-order tidak muncul dan totalnya tidak sama
+        // dengan Rekap Seller. Kini pre-order yang diakui (porsi terbayar,
+        // pecahan dan pembatalan sama persis dengan sales()/profit()/Rekap)
+        // ikut dihitung lewat SATU query agregat tambahan per seller.
+        $fraction = self::PREORDER_FRACTION_EXPR;
+        $preorderRows = $this->preorderRecognizedRevenueBase($request)
+            ->where('preorders.event_id', $eventId)
+            ->selectRaw("
+                artists.id as artist_id,
+                artists.name as artist_name,
+                SUM(preorder_items.line_total * ({$fraction})) as total_sales,
+                SUM(preorder_items.cost_price * preorder_items.qty * ({$fraction})) as modal
+            ")
+            ->groupBy('artists.id', 'artists.name')
+            ->get()
+            ->keyBy('artist_id');
+
+        $rows = $posRows->keys()->merge($preorderRows->keys())->unique()
+            ->map(function ($artistId) use ($posRows, $preorderRows) {
+                $pos = $posRows->get($artistId);
+                $pre = $preorderRows->get($artistId);
+
+                $posSales = (float) ($pos->total_sales ?? 0);
+                $posModal = (float) ($pos->modal ?? 0);
+                $totalSales = $posSales + (float) ($pre->total_sales ?? 0);
+                $totalModal = $posModal + (float) ($pre->modal ?? 0);
+
+                $salesText = number_format($totalSales, 2, '.', '');
+                $modalText = number_format($totalModal, 2, '.', '');
+                $grossText = number_format($totalSales - $totalModal, 2, '.', '');
+                $salesPos = number_format($posSales, 2, '.', '');
+                $modalPos = number_format($posModal, 2, '.', '');
+                $grossPos = ReportSplit::money(ReportSplit::cents($salesPos) - ReportSplit::cents($modalPos));
 
                 return [
-                    'artist_id' => $row->artist_id,
-                    'artist_name' => $row->artist_name,
-                    'total_sales' => number_format($totalSales, 2, '.', ''),
-                    'modal' => number_format($modal, 2, '.', ''),
-                    'gross_profit' => number_format($grossProfit, 2, '.', ''),
+                    'artist_id' => $artistId,
+                    'artist_name' => $pos->artist_name ?? $pre->artist_name,
+                    // Total = POS + pre-order (nama kunci lama dipertahankan).
+                    'total_sales' => $salesText,
+                    'modal' => $modalText,
+                    'gross_profit' => $grossText,
+                    // Bagian POS apa adanya; bagian pre-order = sisa total (sen).
+                    'sales_pos' => $salesPos,
+                    'sales_preorder' => ReportSplit::remainder($salesText, $salesPos),
+                    'modal_pos' => $modalPos,
+                    'modal_preorder' => ReportSplit::remainder($modalText, $modalPos),
+                    'gross_profit_pos' => $grossPos,
+                    'gross_profit_preorder' => ReportSplit::remainder($grossText, $grossPos),
                 ];
-            });
+            })
+            ->sortBy('artist_name', SORT_STRING | SORT_FLAG_CASE)
+            ->values();
 
         return response()->json(['event' => $event, 'data' => $rows]);
     }
@@ -1250,7 +1327,19 @@ class ReportController extends Controller
         }
 
         $summaryPayload = json_decode($summaryResponse->getContent(), true);
-        $summaryRows = $summaryPayload['data'];
+        // 033 — SheetArrayExport menulis lewat fromArray() dengan pembanding
+        // null NON-strict, sehingga integer 0 tampil sebagai sel KOSONG
+        // (bukan 0). Dua kolom unit baru diberi bentuk string supaya nol
+        // tetap tertulis sebagai angka 0 (value binder mengubahnya jadi
+        // numerik); isi API tidak berubah. total_units lama sengaja tidak
+        // disentuh (bentuk lama dipertahankan).
+        $summaryRows = array_map(function (array $row) {
+            foreach (['pos_units', 'preorder_units'] as $key) {
+                $row[$key] = (string) $row[$key];
+            }
+
+            return $row;
+        }, $summaryPayload['data']);
 
         $eventId = $request->integer('event_id');
 
@@ -1280,7 +1369,11 @@ class ReportController extends Controller
             ])
             ->all();
 
-        $summaryHeadings = ['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status'];
+        // 033 — bentuk lama TETAP di tempatnya; kolom POS/pre-order hanya
+        // ditambahkan di ujung, memakai nama yang sama dengan field API
+        // (baris diambil dari artistSettlements() di atas, jadi nilainya
+        // pasti sama dengan layar).
+        $summaryHeadings = ['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status', 'pos_units', 'preorder_units', 'pos_sales', 'preorder_sales'];
         $detailHeadings = ['artist_name', 'order_number', 'date', 'item_name', 'qty', 'line_total'];
 
         return \Maatwebsite\Excel\Facades\Excel::download(
