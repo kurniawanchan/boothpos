@@ -157,7 +157,6 @@ async function afterImport() {
 }
 
 const columns = computed(() => [
-  { key: 'image_url', label: '' },
   { key: 'code_prefix', label: t('master_data.col_code') },
   { key: 'sku', label: t('master_data.col_sku') },
   { key: 'name', label: t('master_data.col_product_name') },
@@ -576,25 +575,27 @@ async function performDelete() {
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
       <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_products')">
-        <template #cell-image_url="{ row }">
-          <button
-            v-if="row.image_url"
-            type="button"
-            class="cursor-zoom-in"
-            :aria-label="t('master_data.enlarge_product_image', { name: row.name })"
-            @click="openImageLightbox(row)"
-          >
-            <!-- 036: 36px -> 56px agar foto produk terbaca di daftar; placeholder satu ukuran. -->
-            <img :src="row.image_url" :alt="row.name" class="h-14 w-14 rounded-md border border-line-2 object-cover" />
-          </button>
-          <div v-else class="flex h-14 w-14 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
-            <i class="ph-duotone ph-image text-[22px]" aria-hidden="true"></i>
-          </div>
-        </template>
-        <!-- 036: kode SELALU satu baris (tadinya "SPF-KC-" / "DMC" terpotong di tanda hubung); kode yang
-             sangat panjang dipotong dengan kode lengkap di tooltip, tidak pernah dibungkus. -->
+        <!-- 038: gambar dan kode digabung dalam SATU kolom (gambar di atas, kode tepat di bawahnya) supaya
+             gambar bisa lebih besar — 56px (036) -> 96px — tanpa melebarkan tabel: kolom khusus gambar
+             dihapus. 036: kode SELALU satu baris (tadinya "SPF-KC-" / "DMC" terpotong di tanda hubung);
+             kode yang sangat panjang dipotong dengan kode lengkap di tooltip, tidak pernah dibungkus.
+             Placeholder satu ukuran supaya baris tetap sejajar. -->
         <template #cell-code_prefix="{ row }">
-          <span class="inline-block max-w-[190px] truncate whitespace-nowrap align-middle font-mono text-[12px] font-bold text-brand-active" :title="row.code_prefix">{{ row.code_prefix }}</span>
+          <div class="flex flex-col items-center gap-1.5">
+            <button
+              v-if="row.image_url"
+              type="button"
+              class="cursor-zoom-in"
+              :aria-label="t('master_data.enlarge_product_image', { name: row.name })"
+              @click="openImageLightbox(row)"
+            >
+              <img :src="row.image_url" :alt="row.name" class="h-24 w-24 rounded-md border border-line-2 object-cover" />
+            </button>
+            <div v-else class="flex h-24 w-24 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
+              <i class="ph-duotone ph-image text-[30px]" aria-hidden="true"></i>
+            </div>
+            <span class="inline-block max-w-[190px] truncate whitespace-nowrap font-mono text-[12px] font-bold text-brand-active" :title="row.code_prefix">{{ row.code_prefix }}</span>
+          </div>
         </template>
         <!-- 024-invoice-layout-shipping-slip — SKU sungguhan per varian
              (bukan sekadar code_prefix bersama); satu produk = satu atau
@@ -607,11 +608,15 @@ async function performDelete() {
               v-for="(v, i) in (expandedSkuRowIds.has(row.id) ? row.variants : row.variants.slice(0, SKU_PREVIEW_COUNT))"
               :key="v.id"
             >
-              <button
-                type="button"
-                class="font-mono text-[11.5px] text-muted-3 underline decoration-dotted hover:text-brand-active"
-                @click="openVariantDetail(row, v)"
-              >{{ v.sku }}</button><span
+              <!-- 038: nama varian muncul saat SKU di-hover / difokus (BaseTooltip yang di-teleport, jadi tidak
+                   terpotong wadah gulir tabel); klik tetap membuka detail varian. Nama kosong = tanpa tooltip. -->
+              <BaseTooltip :text="v.variant_name ?? ''">
+                <button
+                  type="button"
+                  class="font-mono text-[11.5px] text-muted-3 underline decoration-dotted hover:text-brand-active"
+                  @click="openVariantDetail(row, v)"
+                >{{ v.sku }}</button>
+              </BaseTooltip><span
                 v-if="i < (expandedSkuRowIds.has(row.id) ? row.variants.length : Math.min(row.variants.length, SKU_PREVIEW_COUNT)) - 1"
                 class="text-[11.5px] text-muted-3"
               >,</span>

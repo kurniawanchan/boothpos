@@ -244,7 +244,7 @@ A variant's BOM is the traceable list of PURCHASE-ORDER LINES that produce it (s
 ## Variant drawer and BOM copy tool (feature 037, 2026-10-05)
 
 - **Variant card (`ProductsView.vue` Edit-product drawer, `max-w-[1040px]`):** white bordered `rounded-card shadow-sm` cards on a `surface-subtle` tray. Header chips are colour-coded by role — SKU `sky`, markup `mint` (danger when negative), margin `violet` (danger when negative), BOM cost `warn` (only for a saved variant with a BOM) — via the new `--color-sky-*` / `--color-violet-*` `@theme` pairs (contrast ≥ 4.5:1; every chip keeps its text label). Header actions, right side, exact order: **Open BOM** (`BaseButton` inside `BaseTooltip`, saved variants only) · **Apply markup** · delete. Fields: name · stock · cost · sell. Picture 66 px (+50 %) with a same-size placeholder. `data-testid="variant-card"` / `"variant-header"` are used by the tests.
-- **`BaseTooltip`** (`components/ui`): hover/focus tooltip (`role="tooltip"`, `aria-describedby`, Escape closes) — the native `title` is not keyboard-accessible; reuse it instead of `title` for explanatory text.
+- **`BaseTooltip`** (`components/ui`): hover/focus tooltip (`role="tooltip"`, `aria-describedby`, Escape closes) — the native `title` is not keyboard-accessible; reuse it instead of `title` for explanatory text. **038:** the bubble is Teleported to `body` with `position: fixed` (below the trigger, flips above when < 90 px below, clamped to the viewport, closes on scroll/resize, never shown for blank `text`) because absolutely-positioned bubbles are clipped by scroll containers such as `DataTable`'s `overflow-auto`. The Products list uses it on every SKU (variant name); its first column is the picture (96 px) above the one-line code.
 - **Duplicate variant** has NO endpoint: `duplicateVariantRow()` splices an UNSAVED card below the source (name `"<name> (copy)"`, prices, low-stock alert, status, and the source's STOCK — product-owner decision — with `original_stock = 0`), so saving reuses the new-variant flow: `POST /products/{id}/variants` with `copy_bom_from_variant_id` (the server copies the BOM in the same transaction, never marks it complete, and re-checks products + purchase_orders) and the shared stock-adjustment reason for the copied stock. Picture, SKU and history are never copied. BOM is promised only when the source is a saved variant WITH a BOM and the user has `purchase_orders`. `VariantDuplicateFlowTest` pins these server guarantees.
 - **`BaseSelect` fits the screen:** the fixed panel flips upward when there is < 220 px below and more room above, and its height is capped to the available space (140–320 px). The reported "copy picker can't scroll to the bottom" was the panel running off the viewport (it always opened downward at a fixed height). Options may carry `thumb` (URL or `null`) to show thumbnails/placeholders — opt-in.
 - **Copy to chosen variants:** `POST /variants/{v}/bom/copy-out` with `mode: "selected"` + `variant_ids[]` (`CopyBomRequest`, `VariantBomService::copyTargets()` loads exactly those ids — a missing one fails the whole request; `copy()` still enforces same product / not the source / confirm-replace / never complete). UI: `VariantPickList` (inline checkbox list with pictures, search, select-all of the VISIBLE rows, own scroll container) inside `BomCopyMenu`, behind the same unsaved-changes `guard`. **Add BOM item** shares one row with **Save changes** in `VariantBomModal` (`data-testid="bom-actions-row"`).
@@ -334,7 +334,16 @@ The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **PO
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/037-variant-drawer-bom-ui/plan.md`
+Active feature plan: `specs/038-product-list-image-sku-tooltip/plan.md`
+(branch `038-product-list-image-sku-tooltip`, from `develop` after PR #31) — Products list: the
+picture-only column is merged into the Code column (96 px picture above the one-line code, so the
+table gets narrower, not wider) and each SKU shows its variant name in a `BaseTooltip` on hover /
+keyboard focus (click still opens the variant detail). `BaseTooltip` now teleports its bubble to
+`body` with fixed positioning (below the trigger, flips above, clamped to the viewport, closes on
+scroll/resize, never shown for blank text) because `DataTable`'s `overflow-auto` wrapper would
+clip an absolutely-positioned bubble. Frontend only. See research.md.
+
+Previous feature: `specs/037-variant-drawer-bom-ui/plan.md`
 (branch `037-variant-drawer-bom-ui`, branched from `036-bom-variant-stock-ux`) — UI pass on the
 Edit-product variant cards and the BOM dialog: bounded cards, four distinct chip colours (new
 `sky`/`violet` token pairs; SKU blue, markup green, margin violet, BOM cost amber), header actions
