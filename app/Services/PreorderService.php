@@ -591,7 +591,7 @@ class PreorderService
                     $variant = ProductVariant::lockForUpdate()->findOrFail($variantId);
                     $this->stockService->applyMovement(
                         variant: $variant, type: 'purchase', qtyChange: $delta,
-                        referenceType: 'preorder_item', referenceId: $preorder->id, userId: $user->id,
+                        referenceType: 'preorder', referenceId: $preorder->id, userId: $user->id, // id PRE-ORDER (036): dulu 'preorder_item' -> bentrok makna dengan baris tiba/serah terima
                     );
                 }
             }

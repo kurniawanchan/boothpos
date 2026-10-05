@@ -30,10 +30,10 @@ class BomCostTest extends TestCase
 
         $response = $this->postJson("/api/v1/variants/{$variant->id}/bom", [
             'material_id' => $material->id,
-            'qty_needed' => 2.5,
+            'qty_needed' => 3, // 036: jumlah per unit wajib bilangan bulat
         ]);
 
-        $response->assertCreated()->assertJsonPath('qty_needed', '2.5000');
+        $response->assertCreated()->assertJsonPath('qty_needed', '3.0000');
     }
 
     public function test_same_material_cannot_be_added_twice_to_the_same_variant_bom(): void

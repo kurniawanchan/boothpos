@@ -8,6 +8,7 @@ use App\Http\Requests\CopyBomRequest;
 use App\Http\Requests\ReplaceBomSourceRequest;
 use App\Http\Requests\StoreBomItemsRequest;
 use App\Http\Requests\UpdateBomItemRequest;
+use App\Http\Requests\UpdateBomQuantitiesRequest;
 use App\Models\ProductVariant;
 use App\Models\ProductVariantBomLine;
 use App\Models\PurchaseOrderItem;
@@ -155,6 +156,22 @@ class VariantBomController extends Controller
         return response()->json($this->bomService->payload($variant));
     }
 
+    /** 036 — tombol Simpan: banyak jumlah sekaligus, semua-atau-tidak-sama-sekali. */
+    public function updateQuantities(UpdateBomQuantitiesRequest $request, ProductVariant $variant): JsonResponse
+    {
+        if ($denied = $this->authorizeBom($request, true)) {
+            return $denied;
+        }
+
+        try {
+            $variant = $this->bomService->updateQuantities($variant, $request->validated('lines'), $request->user());
+        } catch (BomRuleException $e) {
+            return $this->ruleViolation($e);
+        }
+
+        return response()->json($this->bomService->payload($variant));
+    }
+
     public function destroy(Request $request, ProductVariantBomLine $bomLine): JsonResponse
     {
         if ($denied = $this->authorizeBom($request, true)) {
@@ -214,19 +231,19 @@ class VariantBomController extends Controller
         return response()->json($this->bomService->payload($variant) + ['results' => $results]);
     }
 
-    /** Salin BOM varian ini KE varian berikutnya atau SEMUA varian lain produk yang sama. */
+    /** Salin BOM varian ini KE varian berikutnya, SEMUA varian lain, atau varian PILIHAN (037) produk yang sama. */
     public function copyOut(CopyBomRequest $request, ProductVariant $variant): JsonResponse
     {
         if ($denied = $this->authorizeBom($request, true)) {
             return $denied;
         }
 
-        $request->validate(['mode' => ['in:next,all']]);
+        $request->validate(['mode' => ['in:next,all,selected']]);
 
         try {
             $results = $this->bomService->copy(
                 $variant,
-                $this->bomService->copyTargets($variant, $request->string('mode')->toString()),
+                $this->bomService->copyTargets($variant, $request->string('mode')->toString(), (array) $request->input('variant_ids', [])),
                 $request->boolean('confirm_replace'),
                 $request->user(),
             );

@@ -55,6 +55,14 @@ export function updateBomLine(id, payload) {
   return client.put(`/bom/${id}`, payload).then((r) => r.data);
 }
 
+/**
+ * 036 — tombol Simpan dialog BOM: banyak jumlah sekaligus, semua-atau-tidak-sama-sekali.
+ * lines: [{ id, qty_needed }] — hanya baris yang berubah.
+ */
+export function saveBomQuantities(variantId, lines) {
+  return client.put(`/variants/${variantId}/bom`, { lines }).then((r) => r.data);
+}
+
 export function deleteBomLine(id) {
   return client.delete(`/bom/${id}`).then((r) => r.data);
 }
@@ -73,8 +81,11 @@ export function copyBomFrom(variantId, sourceVariantId, confirmReplace = false) 
   return client.post(`/variants/${variantId}/bom/copy`, { mode: 'from', source_variant_id: sourceVariantId, confirm_replace: confirmReplace }).then((r) => r.data);
 }
 
-export function copyBomOut(variantId, mode, confirmReplace = false) {
-  return client.post(`/variants/${variantId}/bom/copy-out`, { mode, confirm_replace: confirmReplace }).then((r) => r.data);
+// 037: mode 'selected' menyalin ke varian PILIHAN (variantIds); mode lain mengabaikan variantIds.
+export function copyBomOut(variantId, mode, confirmReplace = false, variantIds = null) {
+  const body = { mode, confirm_replace: confirmReplace };
+  if (mode === 'selected') body.variant_ids = variantIds ?? [];
+  return client.post(`/variants/${variantId}/bom/copy-out`, body).then((r) => r.data);
 }
 
 // Ganti sumber baris BOM ke baris PO lain (mis. "pakai harga terbaru") — tindakan eksplisit.

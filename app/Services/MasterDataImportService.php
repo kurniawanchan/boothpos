@@ -2196,6 +2196,13 @@ class MasterDataImportService
             return null;
         }
 
+        // 036: jumlah BOM per unit wajib bilangan bulat (aturan yang sama dengan HTTP).
+        if (floor($parsed) !== $parsed) {
+            $this->addError($sheet, $row, $column, "Jumlah bahan per unit harus bilangan bulat tanpa desimal (ditemukan '{$value}').");
+
+            return null;
+        }
+
         return $parsed;
     }
 

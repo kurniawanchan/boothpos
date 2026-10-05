@@ -1,10 +1,11 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import StatusPill from '../ui/StatusPill.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
 import VariantBomModal from './VariantBomModal.vue';
+import VariantHistoryModal from './VariantHistoryModal.vue';
 import { getProduct } from '../../api/products';
 import { formatIDR } from '../../utils/money';
 import { useToastStore } from '../../stores/toast';
@@ -20,6 +21,8 @@ import { useAuthStore } from '../../stores/auth';
 const props = defineProps({
   open: { type: Boolean, default: false },
   productId: { type: [Number, String, null], default: null },
+  // 036: varian yang disorot (mis. dari klik SKU di layar Stok); digulung ke tengah pandangan.
+  highlightVariantId: { type: [Number, String, null], default: null },
 });
 const emit = defineEmits(['close']);
 
@@ -35,6 +38,26 @@ function openBom(variant) {
   bomVariant.value = variant;
   showBom.value = true;
 }
+
+// 036 — riwayat transaksi per varian (hanya-baca); butuh akses stok ATAU produk, sama dengan endpoint-nya.
+const showHistory = ref(false);
+const historyVariant = ref(null);
+const canSeeHistory = computed(() => auth.canAccessMenu('stock') || auth.canAccessMenu('products'));
+const showActionsColumn = computed(() => canSeeHistory.value || auth.canAccessMenu('products'));
+function openHistory(variant) {
+  historyVariant.value = variant;
+  showHistory.value = true;
+}
+
+// Sorot + gulung ke varian yang diminta begitu produknya selesai dimuat.
+watch(
+  () => [product.value, props.highlightVariantId],
+  async ([loaded, variantId]) => {
+    if (!loaded || !variantId) return;
+    await nextTick();
+    document.querySelector('tr[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' });
+  },
+);
 
 watch(
   () => [props.open, props.productId],
@@ -119,11 +142,17 @@ function openImageLightbox(src, alt) {
                 <th class="px-3 py-2 text-right font-bold text-muted-2">{{ t('master_data.col_sell_price') }}</th>
                 <th class="px-3 py-2 text-right font-bold text-muted-2">{{ t('master_data.col_stock') }}</th>
                 <th class="px-3 py-2 font-bold text-muted-2">{{ t('master_data.col_status') }}</th>
-                <th v-if="auth.canAccessMenu('products')" class="px-3 py-2"></th>
+                <th v-if="showActionsColumn" class="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="v in product.variants" :key="v.id" class="border-t border-line-5 transition-colors hover:bg-line-7">
+              <tr
+                v-for="v in product.variants"
+                :key="v.id"
+                class="border-t border-line-5 transition-colors hover:bg-line-7"
+                :class="Number(v.id) === Number(highlightVariantId) ? 'bg-mint-50' : ''"
+                :aria-current="Number(v.id) === Number(highlightVariantId) ? 'true' : undefined"
+              >
                 <td class="px-3 py-2">
                   <button
                     v-if="v.image_url"
@@ -145,8 +174,11 @@ function openImageLightbox(src, alt) {
                 <td class="px-3 py-2">
                   <StatusPill :variant="v.is_active ? 'mint' : 'neutral'">{{ v.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
                 </td>
-                <td v-if="auth.canAccessMenu('products')" class="px-3 py-2 text-right">
-                  <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openBom(v)">{{ t('master_data.bom') }}</button>
+                <td v-if="showActionsColumn" class="px-3 py-2 text-right">
+                  <div class="flex items-center justify-end gap-3">
+                    <button v-if="canSeeHistory" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openHistory(v)">{{ t('master_data.history') }}</button>
+                    <button v-if="auth.canAccessMenu('products')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openBom(v)">{{ t('master_data.bom') }}</button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -163,6 +195,14 @@ function openImageLightbox(src, alt) {
     :variant-name="bomVariant?.variant_name"
     :siblings="product?.variants ?? []"
     @close="showBom = false"
+  />
+
+  <VariantHistoryModal
+    :open="showHistory"
+    :variant-id="historyVariant?.id"
+    :variant-sku="historyVariant?.sku"
+    :variant-name="historyVariant?.variant_name"
+    @close="showHistory = false"
   />
 
   <ImageLightbox :open="lightboxOpen" :src="lightboxSrc" :alt="lightboxAlt" @close="lightboxOpen = false" />

@@ -115,6 +115,24 @@ class MasterDataImportVendorMaterialTest extends TestCase
         $this->assertDatabaseHas('product_variant_bom_lines', ['product_variant_id' => $variant->id, 'qty_needed' => 2.0000]);
     }
 
+    // 036 — jumlah BOM per unit wajib bilangan bulat juga lewat Excel; semua-atau-tidak-sama-sekali tetap berlaku.
+    public function test_a_fractional_bom_quantity_is_a_row_error_and_nothing_is_applied(): void
+    {
+        $this->actingAsRole('owner');
+        $variant = ProductVariant::factory()->create(['sku' => 'EXISTINGSKU2']);
+        Material::factory()->create(['code' => 'AC4']);
+
+        $response = $this->postImport($this->workbook([
+            'bom' => ['rows' => [
+                ['sku' => $variant->sku, 'material_code' => 'AC4', 'qty_needed' => 1.5],
+            ]],
+        ]));
+
+        $response->assertStatus(422)->assertJsonPath('applied', false);
+        $this->assertStringContainsString('bilangan bulat', json_encode($response->json('errors')));
+        $this->assertDatabaseMissing('product_variant_bom_lines', ['product_variant_id' => $variant->id]);
+    }
+
     public function test_a_row_referencing_an_unknown_vendor_code_is_a_row_level_error(): void
     {
         $this->actingAsRole('owner');

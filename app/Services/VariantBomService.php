@@ -163,6 +163,57 @@ class VariantBomService
         });
     }
 
+    /**
+     * 036 — simpan SEKALIGUS jumlah per unit yang berubah (tombol Simpan pada
+     * dialog BOM). Satu transaksi, satu kunci varian: semua id dibuktikan milik
+     * varian ini SEBELUM ada yang ditulis (409 `bom_line_not_found` bila tidak —
+     * mis. baris dihapus orang lain), nilai yang tidak berubah dilewati tanpa
+     * jejak audit, tiap baris yang berubah dicatat satu kali (bentuk sama dengan
+     * updateLine), dan harga modal disinkronkan SEKALI di akhir bila BOM selesai.
+     * Nilai tidak punya versi optimistis: penyimpan terakhir menang (aplikasi
+     * satu toko; dicatat di research.md D4).
+     *
+     * @param  array<int, array{id: int|string, qty_needed: int|string|float}>  $lines
+     */
+    public function updateQuantities(ProductVariant $variant, array $lines, User $user): ProductVariant
+    {
+        return DB::transaction(function () use ($variant, $lines, $user) {
+            $locked = $this->lockVariant($variant);
+            $existing = $locked->bomLines()->get()->keyBy('id');
+
+            foreach ($lines as $input) {
+                if (! $existing->has((int) $input['id'])) {
+                    throw new BomRuleException(__('bom.line_not_found'), 'bom_line_not_found');
+                }
+            }
+
+            foreach ($lines as $input) {
+                $line = $existing->get((int) $input['id']);
+                $old = $line->only(['qty_needed', 'notes']);
+
+                if ($this->num($old['qty_needed']) === $this->num($input['qty_needed'])) {
+                    continue;
+                }
+
+                $line->update(['qty_needed' => $input['qty_needed']]);
+
+                $this->activityLogger->log(
+                    userId: $user->id,
+                    action: 'bom_qty_changed',
+                    entityType: 'ProductVariantBomLine',
+                    entityId: $line->id,
+                    description: "Mengubah baris BOM varian {$locked->sku}: {$line->item_name}.",
+                    oldValues: $old,
+                    newValues: $line->only(['qty_needed', 'notes']),
+                );
+            }
+
+            $this->syncCostPriceIfComplete($locked, $user->id);
+
+            return $locked;
+        });
+    }
+
     /** Ubah jumlah per unit dan/atau catatan. Biaya/sumber TIDAK pernah berubah di sini. */
     public function updateLine(ProductVariantBomLine $line, array $changes, User $user): ProductVariant
     {
@@ -324,12 +375,32 @@ class VariantBomService
     }
 
     /**
-     * Varian target untuk "salin ke berikutnya" / "salin ke semua".
+     * Varian target untuk "salin ke berikutnya" / "salin ke semua" / "salin ke varian pilihan" (037).
+     * Mode `selected` memuat TEPAT varian yang dipilih (id dikirim klien); satu id yang tidak ditemukan
+     * (dihapus / mode data lain) menggagalkan seluruh permintaan alih-alih menyalin sebagian. Kesamaan
+     * produk, "bukan sumber sendiri", dan konfirmasi ganti tetap ditegakkan copy().
      *
+     * @param  array<int, int|string>  $ids  hanya dipakai mode `selected`
      * @return \Illuminate\Support\Collection<int, ProductVariant>
      */
-    public function copyTargets(ProductVariant $source, string $mode): \Illuminate\Support\Collection
+    public function copyTargets(ProductVariant $source, string $mode, array $ids = []): \Illuminate\Support\Collection
     {
+        if ($mode === 'selected') {
+            $ids = array_values(array_unique(array_map('intval', $ids)));
+
+            if ($ids === []) {
+                throw ValidationException::withMessages(['variant_ids' => __('bom.copy_selected_empty')]);
+            }
+
+            $targets = ProductVariant::query()->whereIn('id', $ids)->orderBy('id')->get();
+
+            if ($targets->count() !== count($ids)) {
+                throw ValidationException::withMessages(['variant_ids' => __('bom.copy_selected_missing')]);
+            }
+
+            return $targets;
+        }
+
         $siblings = ProductVariant::query()->where('product_id', $source->product_id)->where('id', '!=', $source->id)->orderBy('id');
 
         if ($mode === 'next') {
@@ -486,6 +557,8 @@ class VariantBomService
                 'has_legacy' => $breakdown['has_legacy'],
                 'bom_complete' => (bool) $variant->bom_complete,
                 'cost_price' => number_format((float) $variant->cost_price, 2, '.', ''),
+                // 036: stok varian saat dibaca — hanya-baca; tidak ada aksi BOM yang mengubah stok.
+                'current_stock' => (int) $variant->current_stock,
                 'reopened' => $reopened,
             ],
         ];

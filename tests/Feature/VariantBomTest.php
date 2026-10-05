@@ -198,18 +198,19 @@ class VariantBomTest extends TestCase
         $this->assertSame(0, $variant->bomLines()->count());
     }
 
-    public function test_quantity_must_be_positive_and_at_most_four_decimals(): void
+    // 036: dulu "positif, maks. 4 desimal"; sekarang bilangan bulat >= 1 (WholeBomQuantity).
+    public function test_quantity_must_be_a_whole_number_of_one_or_more(): void
     {
         $variant = $this->variantFor($this->sellerA);
         [$item] = $this->po($this->sellerA, 'ordered', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 500]]);
 
-        foreach ([0, -1, 'abc', 0.00001] as $qty) {
+        foreach ([0, -1, 'abc', 0.00001, 0.0525, 1.5] as $qty) {
             $this->addItems($variant, [['purchase_order_item_id' => $item->id, 'qty' => $qty]])
                 ->assertStatus(422)->assertJsonValidationErrors('items.0.qty');
         }
 
-        $this->addItems($variant, [['purchase_order_item_id' => $item->id, 'qty' => 0.0525]])
-            ->assertCreated()->assertJsonPath('data.0.qty_needed', '0.0525');
+        $this->addItems($variant, [['purchase_order_item_id' => $item->id, 'qty' => 11]])
+            ->assertCreated()->assertJsonPath('data.0.qty_needed', '11.0000');
     }
 
     public function test_the_same_po_line_cannot_be_added_twice_and_a_failed_batch_adds_nothing(): void

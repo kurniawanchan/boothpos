@@ -54,6 +54,34 @@ describe('ProductsView — product images & clickable filters', () => {
     expect(screen.queryByAltText('Keychain B')).not.toBeInTheDocument();
   });
 
+  // 036-bom-variant-stock-ux (US4) — daftar produk yang lebih mudah dibaca.
+  it('shows a translated Type header and never a raw translation key', async () => {
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    expect(screen.getByRole('columnheader', { name: 'Tipe' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/master_data\.col_type/i);
+  });
+
+  it('shows larger thumbnails (image and placeholder share the same 56px box)', async () => {
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    const img = screen.getByAltText('Keychain A');
+    expect(img).toHaveClass('h-14', 'w-14');
+    expect(img).not.toHaveClass('h-9');
+    const placeholder = document.querySelector('.ph-image').parentElement;
+    expect(placeholder).toHaveClass('h-14', 'w-14');
+  });
+
+  it('keeps the product code on one line, with the full code available on hover', async () => {
+    renderProducts();
+    const code = await screen.findByText('ARTKY001');
+
+    expect(code).toHaveClass('whitespace-nowrap');
+    expect(code).toHaveAttribute('title', 'ARTKY001');
+  });
+
   it('filters via the searchable artist dropdown and returns to "all" by re-selecting it', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();

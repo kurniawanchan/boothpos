@@ -745,3 +745,63 @@ bisa dipakai FK `product_variant_id`, dan menolak menghapus index komposit
 DAN tanpa header `Accept: application/json` menjawab 500 (bukan 401) —
 ASSUMPTION: redirect ke route `login` yang tidak terdaftar; tidak
 diverifikasi penyebabnya. Aplikasi sendiri selalu mengirim kedua header itu.
+
+## Bug yang ditemukan saat eksekusi fitur 036-bom-variant-stock-ux (2026-10-05)
+
+Ditemukan lewat membaca penulis data dan menulis tes untuk aturan baru (bukan
+sekadar membaca kode); butir 5 lewat browser dan butir 6 ditangkap suite tes penuh:
+
+1. **`master_data.col_type` tidak pernah didefinisikan** di `en.json`/`id.json`,
+   padahal dipakai `ProductsView.vue` dan `StockView.vue` — header kolom
+   tampil mentah sebagai `MASTER_DATA.COL_TYPE`. Pindai semua `t('a.b')`
+   literal: hanya kunci inilah yang hilang. Diperbaiki + tes statis
+   `qa-tests/unit/localeKeys.test.js` agar kunci hilang tidak bisa lolos lagi.
+2. **`BaseSelect.vue` menutup dirinya saat daftarnya sendiri digulung.**
+   Listener scroll window (capture) menangkap scroll di dalam panel, jadi
+   daftar panjang (produk dengan 8+ varian, mis. "Salin dari varian lain")
+   tidak bisa dipakai. Daftar pendek tidak pernah perlu digulung, makanya
+   tidak ada yang melihatnya. Diperbaiki (scroll dari dalam panel diabaikan).
+3. **`GET /stock/movements` tidak pernah mengirim `user_name`** (OpenAPI
+   menjanjikannya; kolom "Oleh" selalu kosong) dan **terbuka untuk semua
+   peran yang login** tanpa pemeriksaan menu di server. Diperbaiki: field
+   dikirim, endpoint dibatasi menu `stock`/`products`.
+4. **`stock_movements.reference_id` bermakna berbeda per penulis:** penjualan
+   menyimpan id ORDER di bawah `order_item`, retur menyimpan id ITEM order;
+   tiba/serah terima pre-order menyimpan id ITEM, sedangkan selisih qty saat
+   EDIT pre-order menyimpan id PRE-ORDER di bawah `preorder_item` (bentrok
+   makna). Penulis jalur edit kini memakai `reference_type = 'preorder'`;
+   baris lama tetap ambigu dan diselesaikan dengan penjaga varian (nomor
+   tidak pernah salah, paling buruk tidak ada). **Keterbatasan yang dicatat,
+   BUKAN diperbaiki:** mengedit pre-order setelah barang tiba membangun ulang
+   item-nya, sehingga baris pergerakan "tiba" sebelumnya menunjuk item yang
+   sudah tidak ada dan tampil tanpa referensi.
+5. **`StockView.vue` — filter tipe tidak pernah menampilkan pilihannya**
+   (kotak tetap bertuliskan "Semua tipe" setelah memilih "Penjualan") dan tidak
+   ada jalan kembali ke semua tipe: `BaseSelect` tidak diikat (`v-model`) dan
+   tidak punya opsi kosong. Ketahuan lewat browser sungguhan. Diperbaiki
+   (terikat + opsi "Semua tipe"; `BaseSelect` menyembunyikan baris placeholder
+   bawaannya bila pemanggil sudah punya opsi kosong, supaya tidak ada dua baris
+   kembar).
+6. **`VariantBomModal.vue` (kode fitur ini sendiri) — `watch(..., {immediate:
+   true})` mereset `qtyDrafts` yang dideklarasikan SETELAHNYA** → "Cannot
+   access 'qtyDrafts' before initialization" pada setiap layar yang memasang
+   dialog dalam keadaan tertutup (135 tes tak terkait gagal). Dideklarasikan
+   sebelum watcher, dengan komentar sebabnya.
+
+## Bug yang ditemukan saat eksekusi fitur 037-variant-drawer-bom-ui (2026-10-05)
+
+1. **`BaseSelect.vue` — panel dropdown selalu terbuka DI BAWAH pemicu dengan tinggi
+   tetap 256px**, tanpa memeriksa ruang yang tersedia. Di dekat tepi bawah layar
+   (mis. "Salin dari varian lain" di dasar dialog BOM) daftarnya keluar layar dan —
+   karena `position: fixed` — tidak bisa dijangkau dengan menggulung halaman maupun
+   dialog, sehingga entri terakhir tak terjangkau ("tidak bisa di-scroll sampai
+   bawah"). Fitur 036 hanya memperbaiki penutupan-sendiri saat daftar digulung; akar
+   kedua ini baru kelihatan di browser sungguhan pada dialog yang panjang. Diperbaiki:
+   panel membuka ke ATAS bila ruang bawah < 220px dan ruang atas lebih lega, dan
+   tingginya dibatasi sesuai ruang (140–320px). Diverifikasi di browser: pemicu di
+   y=679 pada layar 800px -> panel 353–673px, menggulung sampai entri terakhir.
+2. **Dicatat, bukan diperbaiki:** `public/storage` di mesin dev ini adalah symlink ke
+   path Docker (`/var/www/html/...`) yang tidak ada di host, jadi gambar unggahan tidak
+   termuat saat aplikasi dijalankan native (`php artisan serve`). Verifikasi gambar
+   varian memakai berkas sementara di `public/` yang dihapus setelahnya.
+
