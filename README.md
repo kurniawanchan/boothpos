@@ -805,3 +805,19 @@ sekadar membaca kode); butir 5 lewat browser dan butir 6 ditangkap suite tes pen
    termuat saat aplikasi dijalankan native (`php artisan serve`). Verifikasi gambar
    varian memakai berkas sementara di `public/` yang dihapus setelahnya.
 
+## Bug yang ditemukan saat eksekusi fitur 039-preorder-seller-subtotal (2026-10-05)
+
+1. **`ReportController::preordersByArtist()` — baris dua penjual BERNAMA SAMA saling
+   menyelang.** Urutan hanya `artists.name`, jadi dua penjual dengan nama sama tetapi
+   `artist_id` berbeda bisa bercampur baris-barisnya. Sebelum fitur ini hanya tampil
+   sebagai daftar yang agak aneh; dengan subtotal per penjual, baris subtotal akan
+   jatuh di tengah blok penjual lain. Ketahuan oleh tes kontiguitas. Diperbaiki:
+   kunci urut kedua `preorder_items.artist_id`. Diverifikasi di browser dengan dua
+   penjual "Ccc Kembar" — tiap penjual mendapat blok dan subtotalnya sendiri.
+2. **Dicatat, bukan diperbaiki:** baris pre-order berstatus Paid bisa menampilkan
+   *terkumpul > nilai order* (di data uji: Rp 65.000 terkumpul untuk order Rp 60.000;
+   dibuat dengan mengubah nominal payment langsung di DB uji, karena jalur aplikasi
+   menolak overpayment). Outstanding baris sudah di-clamp ke 0, sehingga subtotal
+   outstanding sengaja = JUMLAH outstanding baris, bukan nilai − terkumpul (keduanya
+   akan berbeda untuk seller tsb). Perilaku laporan lama, tidak diubah.
+

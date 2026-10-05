@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Services\SettlementService;
 use App\Support\ModeGate;
+use App\Support\PreorderSellerSubtotals;
 use App\Support\ReportSplit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -1111,6 +1112,9 @@ class ReportController extends Controller
             ")
             ->groupBy('preorder_items.artist_id', 'artists.name', 'preorders.status', 'payment_completeness')
             ->orderBy('artists.name')
+            // 039: dua penjual bernama SAMA tidak boleh saling menyusup — baris satu penjual harus
+            // berurutan supaya baris Subtotal-nya tepat di bawah baris terakhirnya.
+            ->orderBy('preorder_items.artist_id')
             ->orderBy('preorders.status')
             ->orderBy('payment_completeness')
             ->get()
@@ -1125,7 +1129,9 @@ class ReportController extends Controller
                 'total_outstanding' => number_format((float) $row->total_outstanding, 2, '.', ''),
             ]);
 
-        return response()->json(['rows' => $rows]);
+        // 039: subtotal per penjual dihitung SEKALI di sini (PreorderSellerSubtotals, dalam sen) dan dipakai
+        // layar DAN ekspor Excel; `rows` tidak berubah, jadi klien lama tetap jalan.
+        return response()->json(['rows' => $rows, 'subtotals' => PreorderSellerSubtotals::fromRows($rows->all())]);
     }
 
     /**
@@ -1396,6 +1402,44 @@ class ReportController extends Controller
      * ekspor yang sama (satu unduhan, bukan dua tombol export terpisah —
      * lihat alternatif yang ditolak di research.md R5).
      */
+    /**
+     * 039 — sisipkan baris "Subtotal — <penjual>" tepat sesudah baris terakhir tiap penjual pada sheet
+     * "Per Seller" (keputusan pemilik produk 2026-10-05: file sama dengan layar). Angkanya diambil dari
+     * `subtotals` respons API yang SAMA — tidak dihitung ulang di sini. Sel artist_id, status, dan
+     * payment_completeness dikosongkan supaya baris ini tidak bisa tertukar dengan baris data; tidak ada
+     * baris grand-total (memang tidak ada di ekspor ini).
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  array<int, array<string, mixed>>  $subtotals
+     * @return array<int, array<string, mixed>>
+     */
+    private function withSellerSubtotalRows(array $rows, array $subtotals): array
+    {
+        $byArtist = collect($subtotals)->keyBy('artist_id');
+        $out = [];
+
+        foreach ($rows as $i => $row) {
+            $out[] = $row;
+            $isLastOfSeller = ! isset($rows[$i + 1]) || $rows[$i + 1]['artist_id'] !== $row['artist_id'];
+            $sub = $byArtist->get($row['artist_id']);
+
+            if ($isLastOfSeller && $sub !== null) {
+                $out[] = [
+                    'artist_id' => null,
+                    'artist_name' => 'Subtotal — '.$sub['artist_name'],
+                    'status' => '',
+                    'payment_completeness' => '',
+                    'preorder_count' => $sub['preorder_count'],
+                    'total_order_value' => $sub['total_order_value'],
+                    'total_collected' => $sub['total_collected'],
+                    'total_outstanding' => $sub['total_outstanding'],
+                ];
+            }
+        }
+
+        return $out;
+    }
+
     private function exportPreorderReport(Request $request)
     {
         $summaryResponse = $this->preorders($request);
@@ -1419,7 +1463,7 @@ class ReportController extends Controller
         }
 
         $breakdownPayload = json_decode($breakdownResponse->getContent(), true);
-        $breakdownRows = $breakdownPayload['rows'];
+        $breakdownRows = $this->withSellerSubtotalRows($breakdownPayload['rows'], $breakdownPayload['subtotals'] ?? []);
 
         $summaryHeadings = ['status', 'payment_completeness', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'];
         $breakdownHeadings = ['artist_id', 'artist_name', 'status', 'payment_completeness', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'];

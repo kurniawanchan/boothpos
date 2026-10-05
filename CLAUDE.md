@@ -327,6 +327,15 @@ The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **PO
 - **Stale database is explained, not exposed.** `bootstrap/app.php` converts a `QueryException` with SQLSTATE `42S22`/`42S02` on an API request into **503 `{code:'schema_outdated'}`** with a generic message (`lang/*/system.php`, never SQL/table/column names); every other database error stays a 500, and reporting is untouched (full detail stays in the log). `App\Support\SchemaStatus::pendingMigrations()` (files minus ran, `[]` if the `migrations` table is missing, never throws) feeds `GET /settings/features` → `schema_update_required`, true **only** for users with the `settings` menu (owner/admin), never listing names. **The app never runs migrations from a web request** — the admin does (`docker/php/entrypoint.sh` migrates only when the container STARTS; see RUNBOOK §"Setelah menarik perubahan kode"). Root cause of the two screenshots that started this feature was exactly that, not a code bug.
 - **A failed load is a failure state, not an empty state.** `PurchaseOrderDetailModal`, `AddBomItemModal` and `VariantBomModal` keep a `loadError` and render the message + **Retry** (`common.retry`); the selector must never answer a failed request with "no eligible lines". `ApiError.isSchemaOutdated` + one cooldown-limited toast in `api/client.js`; `settings.schemaUpdateRequired` drives `SchemaUpdateBanner.vue` in `AppShell.vue`.
 
+## Pre-order report: per-seller subtotals (feature 039, 2026-10-05)
+
+Reports → Pre-order → By Seller shows a **Subtotal row after each seller's last row**; the Grand Total footer is unchanged. Rules (all in `App\Support\PreorderSellerSubtotals` / `ReportController`):
+
+- **One implementation, server-side.** `PreorderSellerSubtotals::fromRows()` sums the SAME rows the response returns, per `artist_id`, in integer cents (`ReportSplit::cents()/money()`); the API returns them as `subtotals[]` and the Excel "Per Seller" sheet inserts them as `Subtotal — <name>` rows. The SPA only PLACES them — never re-derive a subtotal client-side from a different source.
+- **`total_outstanding` is the SUM of the rows' (already clamped) outstanding**, not `order value − collected`: a Paid row can have collected > order value, so the subtraction would disagree with hand addition of the visible column.
+- **Rows of one seller must be contiguous.** `preordersByArtist()` orders by `artists.name` THEN `preorder_items.artist_id` — two sellers with the same name used to interleave their rows (found in 039), which would have put a subtotal in the middle of another seller's block.
+- The seller filter on the screen hides rows and their seller's subtotal together; the filtered subtotal/Grand Total still equal the visible rows. The default (summary) and drill-down shapes of `GET /reports/preorders` are untouched; the Summary sheet of the export is untouched.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -334,7 +343,17 @@ The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **PO
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/038-product-list-image-sku-tooltip/plan.md`
+Active feature plan: `specs/039-preorder-seller-subtotal/plan.md`
+(branch `039-preorder-seller-subtotal`, from `develop` after PR #32) — Reports → Pre-order → By Seller
+gets a "Subtotal — <seller>" row after each seller's rows (also in the Excel "Per Seller" sheet — product-owner
+decision). ONE implementation: `App\Support\PreorderSellerSubtotals::fromRows()` sums the four figures per seller
+in cents (reusing `ReportSplit`), `GET /reports/preorders?breakdown=artist` adds `subtotals` (additive; `rows`
+unchanged and now contiguous per seller) and the export interleaves the same subtotals; the SPA only places them.
+Outstanding is the SUM of the rows' clamped outstanding values, not value − collected (a paid row can have
+collected > order value). Grand Total unchanged = Σ subtotals (client `sumRows` made cent-exact). No migration.
+See research.md.
+
+Previous feature: `specs/038-product-list-image-sku-tooltip/plan.md`
 (branch `038-product-list-image-sku-tooltip`, from `develop` after PR #31) — Products list: the
 picture-only column is merged into the Code column (96 px picture above the one-line code, so the
 table gets narrower, not wider) and each SKU shows its variant name in a `BaseTooltip` on hover /

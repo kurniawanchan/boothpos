@@ -3423,6 +3423,15 @@ paths:
         2. `?status=&payment_completeness=` (opsional `artist_id`) —
            drill-down: daftar preorder INDIVIDUAL yang menyusun satu baris
            ringkasan/breakdown, bukan agregat.
+
+        039-preorder-seller-subtotal — dengan `?breakdown=artist`, baris
+        diurutkan per seller (nama lalu `artist_id`, sehingga seluruh baris
+        satu seller BERURUTAN) dan respons membawa `subtotals[]`: satu entri
+        per seller, dijumlahkan di server dari baris yang sama dalam sen
+        (`App\Support\PreorderSellerSubtotals`). `total_outstanding` adalah
+        jumlah `total_outstanding` baris (bukan nilai − terkumpul), sehingga
+        subtotal selalu sama dengan penjumlahan tangan baris yang tampil.
+        Bentuk default dan drill-down tidak berubah.
       parameters:
         - { name: event_id, in: query, schema: { type: integer }, description: 'Filter ke satu event (FR-014).' }
         - { name: breakdown, in: query, schema: { type: string, enum: [artist] }, description: '012 US2 — pecah baris ringkasan per seller.' }
@@ -3471,6 +3480,21 @@ paths:
                             order_value: { type: string, example: '75000.00' }
                             collected: { type: string, example: '75000.00' }
                             outstanding: { type: string, example: '0.00' }
+                  subtotals:
+                    type: array
+                    description: |
+                      039 — hanya ada saat `breakdown=artist`. Satu entri per
+                      seller (urutan sama dengan kemunculan pertama di `rows`);
+                      penjumlahan semua entri sama dengan penjumlahan semua baris.
+                    items:
+                      type: object
+                      properties:
+                        artist_id: { type: integer }
+                        artist_name: { type: string }
+                        preorder_count: { type: integer }
+                        total_order_value: { type: string, example: '1500000.00' }
+                        total_collected: { type: string, example: '500000.00' }
+                        total_outstanding: { type: string, example: '1000000.00' }
                     items:
                       type: object
                       properties:
@@ -3647,7 +3671,10 @@ paths:
           tidak pernah memakai bentuk detail per-varian.
         - `report=preorder` — DUA sheet seperti `artist-settlements`:
           "Ringkasan" (bentuk `GET /reports/preorders` default) dan
-          "Per Seller" (bentuk `?breakdown=artist`).
+          "Per Seller" (bentuk `?breakdown=artist`). Sheet "Per Seller"
+          (039) memuat satu baris "Subtotal — <nama seller>" setelah baris
+          terakhir tiap seller (nilai dari `subtotals[]` yang sama dengan
+          layar; kolom status/kelengkapan kosong, `artist_id` kosong).
       parameters:
         - { name: event_id, in: query, schema: { type: integer } }
       responses:

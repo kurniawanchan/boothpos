@@ -55,6 +55,8 @@ const preorderStats = ref(null);
 // sudah dipakai StockByArtistDetailModal di tab lain.
 const preorderView = ref('summary');
 const preorderByArtist = ref(null);
+// 039 — subtotal per penjual dari server (PreorderSellerSubtotals); layar hanya menempatkannya, tidak menghitung.
+const preorderBySubtotals = ref([]);
 const artists = ref([]);
 const purchasesStatusFilter = ref('');
 const loading = ref(false);
@@ -69,14 +71,19 @@ const artistFilter = ref('');
 // Field mana yang dijumlahkan (sebagai uang vs angka polos) untuk baris
 // Grand Total tiap tab — satu tempat, dipakai oleh computed *Totals di bawah,
 // supaya baris footer tidak menduplikasi logika sum per tab.
+// 039: uang dijumlahkan dalam SEN (bukan float) supaya Grand Total persis sama dengan jumlah semua
+// subtotal per penjual (yang dihitung server dalam sen). Nilai tampil tidak berubah untuk tabel lain:
+// semua masukan sudah bernilai 2 desimal.
 function sumRows(rows, moneyKeys = [], countKeys = []) {
+  const cents = {};
   const totals = {};
-  for (const k of moneyKeys) totals[k] = 0;
+  for (const k of moneyKeys) cents[k] = 0;
   for (const k of countKeys) totals[k] = 0;
   for (const row of rows) {
-    for (const k of moneyKeys) totals[k] += parseMoney(row[k]);
+    for (const k of moneyKeys) cents[k] += Math.round(parseMoney(row[k]) * 100);
     for (const k of countKeys) totals[k] += Number(row[k]) || 0;
   }
+  for (const k of moneyKeys) totals[k] = cents[k] / 100;
   return totals;
 }
 
@@ -194,6 +201,7 @@ async function loadPreorderByArtist() {
     ...row,
     id: `${row.artist_id}__${row.status}__${row.payment_completeness}`,
   }));
+  preorderBySubtotals.value = res.subtotals ?? [];
 }
 
 watch(preorderView, async (view) => {
@@ -241,6 +249,25 @@ const filteredPreorderByArtist = computed(() =>
   !artistFilter.value ? (preorderByArtist.value ?? []) : (preorderByArtist.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
 );
 const preorderByArtistTotals = computed(() => sumRows(filteredPreorderByArtist.value, ['total_order_value', 'total_collected', 'total_outstanding'], ['preorder_count']));
+
+// 039 — baris yang DITAMPILKAN pada tabel Per Penjual: baris data (sesudah filter penjual) dengan satu baris
+// Subtotal sintetis disisipkan tepat sesudah baris terakhir tiap penjual (server menjamin baris satu
+// penjual berurutan). Baris sintetis TIDAK pernah dipakai Grand Total (membaca baris data saja) maupun
+// drill-down Detail (tombolnya disembunyikan untuk baris Subtotal).
+const preorderByArtistDisplayRows = computed(() => {
+  const rows = filteredPreorderByArtist.value;
+  const bySeller = new Map(preorderBySubtotals.value.map((s) => [String(s.artist_id), s]));
+  const out = [];
+  rows.forEach((row, i) => {
+    out.push(row);
+    const next = rows[i + 1];
+    if (next && String(next.artist_id) === String(row.artist_id)) return;
+    const sub = bySeller.get(String(row.artist_id));
+    if (sub) out.push({ ...sub, id: `subtotal__${sub.artist_id}`, _subtotal: true });
+  });
+  return out;
+});
+const preorderRowClass = (row) => (row._subtotal ? 'bg-surface-subtle font-semibold border-t border-line-2' : '');
 
 async function doExport(report) {
   try {
@@ -690,17 +717,23 @@ function openPreorderDetail(row) {
             { key: 'total_outstanding', label: t('reports.preorder_col_outstanding') },
             { key: 'actions', label: '' },
           ]"
-          :rows="filteredPreorderByArtist"
+          :rows="preorderByArtistDisplayRows"
+          :row-class="preorderRowClass"
           :loading="loading"
           :empty-message="t('reports.no_preorder_report_data')"
         >
-          <template #cell-status="{ row }">{{ PREORDER_STATUS_LABEL[row.status] ?? row.status }}</template>
-          <template #cell-payment_completeness="{ row }">{{ PAYMENT_COMPLETENESS_LABEL[row.payment_completeness] ?? row.payment_completeness }}</template>
+          <!-- 039: baris Subtotal (sintetis) — label di kolom penjual, sel status/kelengkapan kosong, tanpa Detail. -->
+          <template #cell-artist_name="{ row }">
+            <span v-if="row._subtotal" class="font-bold">{{ t('reports.subtotal') }} — {{ row.artist_name }}</span>
+            <template v-else>{{ row.artist_name }}</template>
+          </template>
+          <template #cell-status="{ row }"><template v-if="!row._subtotal">{{ PREORDER_STATUS_LABEL[row.status] ?? row.status }}</template></template>
+          <template #cell-payment_completeness="{ row }"><template v-if="!row._subtotal">{{ PAYMENT_COMPLETENESS_LABEL[row.payment_completeness] ?? row.payment_completeness }}</template></template>
           <template #cell-total_order_value="{ row }">{{ formatIDR(row.total_order_value) }}</template>
           <template #cell-total_collected="{ row }">{{ formatIDR(row.total_collected) }}</template>
           <template #cell-total_outstanding="{ row }">{{ formatIDR(row.total_outstanding) }}</template>
           <template #cell-actions="{ row }">
-            <div class="flex justify-end">
+            <div v-if="!row._subtotal" class="flex justify-end">
               <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openPreorderDetail(row)">{{ t('reports.preorder_detail_action') }}</button>
             </div>
           </template>
