@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
+import id from '../../resources/js/locales/id.json';
 import ProductsView from '../../resources/js/views/ProductsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listProducts, getProduct, updateProduct, updateVariant, addVariant, uploadVariantImage } from '../../resources/js/api/products';
@@ -63,15 +64,33 @@ describe('ProductsView — product images & clickable filters', () => {
     expect(document.body.textContent).not.toMatch(/master_data\.col_type/i);
   });
 
-  it('shows larger thumbnails (image and placeholder share the same 56px box)', async () => {
+  // 038 — gambar + kode dalam SATU kolom supaya gambar bisa lebih besar (96px, tadinya 56px).
+  it('has no picture-only column: the first column is "Kode" and holds the picture above the code', async () => {
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent.trim());
+    expect(headers.slice(0, 3)).toEqual(['Kode', 'SKU', 'Nama produk']);
+    expect(headers.filter((h) => h === '')).toHaveLength(1); // hanya kolom aksi di ujung kanan yang tanpa judul
+
+    const code = screen.getByText('ARTKY001');
+    const img = screen.getByAltText('Keychain A');
+    const cell = code.closest('td');
+    expect(cell).toContainElement(img);
+    expect(Boolean(img.compareDocumentPosition(code) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true); // gambar di atas kode
+  });
+
+  it('shows a 96px picture, and a same-size placeholder when there is none', async () => {
     renderProducts();
     await screen.findByText('Keychain A');
 
     const img = screen.getByAltText('Keychain A');
-    expect(img).toHaveClass('h-14', 'w-14');
-    expect(img).not.toHaveClass('h-9');
+    expect(img).toHaveClass('h-24', 'w-24');
+    expect(img).not.toHaveClass('h-14');
     const placeholder = document.querySelector('.ph-image').parentElement;
-    expect(placeholder).toHaveClass('h-14', 'w-14');
+    expect(placeholder).toHaveClass('h-24', 'w-24');
+    // placeholder juga berada di sel yang sama dengan kodenya
+    expect(screen.getByText('ARTKY002').closest('td')).toContainElement(placeholder);
   });
 
   it('keeps the product code on one line, with the full code available on hover', async () => {
@@ -343,6 +362,95 @@ describe('ProductsView — variants with a completed BOM (034)', () => {
     await user.click(screen.getByRole('button', { name: /tambah varian/i }));
 
     expect(screen.queryByText('BOM untuk varian baru ini')).not.toBeInTheDocument();
+  });
+});
+
+// 038-product-list-image-sku-tooltip (US2) — nama varian muncul saat SKU di-hover / difokus.
+describe('ProductsView — SKU tooltip shows the variant name (038)', () => {
+  const V = (n, name) => ({ id: 100 + n, sku: `VLC-SK-ARE-00${n}`, variant_name: name, sell_price: '20000.00', current_stock: 5, is_active: true, image_url: null });
+  const WITH_VARIANTS = [
+    {
+      id: 7, code_prefix: 'VLC-SK-ARE', name: 'Arekku', artist_name: 'Artist A', category_name: 'Kategori A', is_preorder: false, is_active: true, image_url: null,
+      variants: [V(1, 'Merah'), V(2, 'Biru'), V(3, 'Hijau'), V(4, 'Kuning'), V(5, 'Biru'), V(6, '')],
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProducts.mockResolvedValue({ data: WITH_VARIANTS, meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
+    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+  });
+
+  async function setup() {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderProducts();
+    await screen.findByText('Arekku');
+
+    return user;
+  }
+  const sku = (n) => screen.getByRole('button', { name: `VLC-SK-ARE-00${n}` });
+  const showMore = () => screen.getByRole('button', { name: new RegExp(`^${id.master_data.show_more_count.replace('{count}', '3').replace(/[+]/g, '\\+')}`) });
+
+  it('shows that variant\'s name when the SKU is hovered and hides it when the pointer leaves', async () => {
+    const user = await setup();
+
+    await user.hover(sku(2));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Biru');
+    await user.unhover(sku(2));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    await user.hover(sku(1));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Merah');
+  });
+
+  it('shows the same tooltip on keyboard focus and Escape hides it', async () => {
+    const user = await setup();
+
+    await user.tab(); // fokus ke tombol pertama pada halaman; arahkan ke SKU secara eksplisit
+    sku(3).focus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Hijau');
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('gives SKUs revealed by "+N more" their own variant name, and tells same-named variants apart by SKU', async () => {
+    const user = await setup();
+    await user.click(showMore());
+
+    await user.hover(sku(4));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Kuning');
+    await user.unhover(sku(4));
+
+    await user.hover(sku(2));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Biru');
+    await user.unhover(sku(2));
+    await user.hover(sku(5));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Biru'); // nama sama, tetapi SKU tetap tampil & berbeda
+    expect(sku(2)).not.toBe(sku(5));
+  });
+
+  it('still opens that variant\'s detail when the SKU is clicked while its tooltip is showing', async () => {
+    const user = await setup();
+
+    await user.hover(sku(2));
+    expect(screen.getByRole('tooltip')).toBeVisible();
+    await user.click(sku(2));
+
+    expect(await screen.findByRole('dialog', { name: 'VLC-SK-ARE-002' })).toBeInTheDocument();
+  });
+
+  it('gives the "+N more" toggle no tooltip, and a variant without a name none either', async () => {
+    const user = await setup();
+
+    await user.hover(showMore());
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    await user.click(showMore()); // membuka SKU yang tersembunyi (tombol berubah menjadi "lebih sedikit")
+
+    await user.hover(sku(6)); // variant_name = ''
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 });
 
