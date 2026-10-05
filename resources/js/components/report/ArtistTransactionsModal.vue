@@ -9,7 +9,9 @@ import { useToastStore } from '../../stores/toast';
 
 /**
  * F11.6 — drill-down transaksi yang menyusun rekap satu artist, dibuka dari
- * baris "Rekap Artist" di ReportsView. Setiap order di sini HANYA memuat
+ * baris "Rekap Artist" di ReportsView. 040: HANYA transaksi POS (rekapnya
+ * sendiri POS-saja), jadi tidak ada lagi lencana jenis Penjualan/Pre-order.
+ * Setiap order di sini HANYA memuat
  * item MILIK ARTIST INI (backend sudah menyaring order_items.artist_id,
  * bukan seluruh isi order) — sengaja TIDAK disaring ulang di sini supaya
  * tidak ada dua sumber kebenaran soal isolasi antar-artist dalam satu order.
@@ -62,15 +64,7 @@ watch(
       >
         <div class="flex items-center justify-between gap-2">
           <div class="flex flex-col gap-1">
-            <div class="flex items-center gap-1.5">
-              <span class="font-mono text-[12.5px] font-bold text-brand-active">{{ tx.number }}</span>
-              <span
-                class="rounded-full px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide"
-                :class="tx.source === 'preorder' ? 'bg-warn-bg text-warn-text' : 'bg-mint-100 text-brand-active'"
-              >
-                {{ tx.source === 'preorder' ? t('reports.transaction_type_preorder') : t('reports.transaction_type_order') }}
-              </span>
-            </div>
+            <span class="font-mono text-[12.5px] font-bold text-brand-active">{{ tx.number }}</span>
             <span class="text-[11.5px] text-muted-3">{{ tx.created_at ? formatDateTime(tx.created_at) : '—' }}</span>
           </div>
           <span class="text-[14px] font-extrabold tracking-tight">{{ formatIDR(tx.amount_for_artist) }}</span>

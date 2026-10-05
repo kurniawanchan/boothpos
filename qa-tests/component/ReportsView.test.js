@@ -134,12 +134,13 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
   });
 });
 
-// 033 — Rekap Seller memisahkan POS vs pre-order; keduanya selalu menjumlah
-// ke Unit/Penjualan di baris yang sama, dan Grand Total ikut dipisah.
-describe('ReportsView — Rekap Seller POS vs pre-order (033)', () => {
-  const SPLIT_ROWS = [
-    { id: 1, artist_id: 5, artist_name: 'Artist A', total_units: 4, pos_units: 3, preorder_units: 1, total_sales: '35000.00', pos_sales: '30000.00', preorder_sales: '5000.00', deduction: '0.00', payable_amount: '35000.00', paid_amount: '0.00', outstanding: '35000.00', status: 'unpaid' },
-    { id: null, artist_id: 6, artist_name: 'Artist B', total_units: 2, pos_units: 0, preorder_units: 2, total_sales: '20000.00', pos_sales: '0.00', preorder_sales: '20000.00', deduction: '0.00', payable_amount: '0.00', paid_amount: '0.00', outstanding: '0.00', status: 'unpaid' },
+// 040 — Rekap Seller HANYA menghitung penjualan POS: tidak ada lagi kolom POS/pre-order,
+// dan Grand Total menjumlah baris yang tampil. (Membalik pengujian 033 di tempat ini.)
+describe('ReportsView — Rekap Seller POS-saja (040)', () => {
+  const POS_ROWS = [
+    { id: 1, artist_id: 5, artist_name: 'Artist A', total_units: 3, total_sales: '30000.00', deduction: '0.00', payable_amount: '30000.00', paid_amount: '10000.00', outstanding: '20000.00', status: 'partial' },
+    { id: null, artist_id: 6, artist_name: 'Artist B', total_units: 0, total_sales: '0.00', deduction: '0.00', payable_amount: '0.00', paid_amount: '0.00', outstanding: '0.00', status: 'unpaid' },
+    { id: 3, artist_id: 7, artist_name: 'Artist C', total_units: 2, total_sales: '25000.00', deduction: '0.00', payable_amount: '25000.00', paid_amount: '25000.00', outstanding: '0.00', status: 'paid' },
   ];
 
   beforeEach(() => {
@@ -148,33 +149,56 @@ describe('ReportsView — Rekap Seller POS vs pre-order (033)', () => {
     listArtists.mockResolvedValue({ data: [] });
   });
 
-  it('shows the POS and pre-order unit/sales columns and a Grand Total row that reconciles', async () => {
-    artistSettlements.mockResolvedValue({ data: SPLIT_ROWS });
+  it('shows Unit and Sales only (no POS / pre-order columns) and a Grand Total that adds up the rows', async () => {
+    artistSettlements.mockResolvedValue({ data: POS_ROWS });
     renderReports();
     await screen.findByText('Artist A');
 
-    for (const label of ['Unit POS', 'Unit pre-order', 'Penjualan POS', 'Penjualan pre-order']) {
-      expect(screen.getByRole('columnheader', { name: label })).toBeInTheDocument();
+    for (const gone of ['Unit POS', 'Unit pre-order', 'Penjualan POS', 'Penjualan pre-order']) {
+      expect(screen.queryByRole('columnheader', { name: gone })).not.toBeInTheDocument();
+    }
+    for (const kept of ['Penjual', 'Unit', 'Penjualan']) {
+      expect(screen.getByRole('columnheader', { name: kept })).toBeInTheDocument();
     }
 
     const grand = screen.getByText('Grand Total').closest('tr');
     const cells = [...grand.querySelectorAll('td')].map((td) => td.textContent.replace(/\s+/g, ' ').trim());
-    // [label, pos unit, pre-order unit, unit, pos sales, pre-order sales, sales, ...]
-    expect(cells[1]).toBe('3');
-    expect(cells[2]).toBe('3');
-    expect(cells[3]).toBe('6'); // 3 + 3 == total units
-    expect(cells[4]).toMatch(/30\.000/);
-    expect(cells[5]).toMatch(/25\.000/);
-    expect(cells[6]).toMatch(/55\.000/); // 30.000 + 25.000 == total sales
+    // [label, unit, sales, payable, paid, outstanding, ...]
+    expect(cells[1]).toBe('5');
+    expect(cells[2]).toMatch(/55\.000/);
+    expect(cells[3]).toMatch(/55\.000/);
+    expect(cells[4]).toMatch(/35\.000/);
+    expect(cells[5]).toMatch(/20\.000/);
   });
 
-  it('still renders an old response without the split fields (shows a dash, not a misleading zero)', async () => {
-    artistSettlements.mockResolvedValue({
-      data: [{ id: 1, artist_id: 5, artist_name: 'Artist A', total_units: 3, total_sales: '90000.00', payable_amount: '90000.00', paid_amount: '0.00', outstanding: '90000.00', status: 'unpaid' }],
-    });
+  it('keeps listing a seller without sales (zeros) and offers Record payment only where something is outstanding', async () => {
+    artistSettlements.mockResolvedValue({ data: POS_ROWS });
+    renderReports();
+    await screen.findByText('Artist B');
+
+    const rowOf = (name) => screen.getByText(name).closest('tr');
+    expect(rowOf('Artist A').textContent).toMatch(/Catat bayar|Record payment/i);
+    expect(rowOf('Artist B').textContent).not.toMatch(/Catat bayar|Record payment/i);
+    expect(rowOf('Artist C').textContent).not.toMatch(/Catat bayar|Record payment/i);
+  });
+
+  it('the seller filter narrows the rows and the Grand Total follows it', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    listArtists.mockResolvedValue({ data: [{ id: 5, name: 'Artist A' }, { id: 7, name: 'Artist C' }] });
+    artistSettlements.mockResolvedValue({ data: POS_ROWS });
     renderReports();
     await screen.findByText('Artist A');
-    expect(screen.getAllByText('–').length).toBeGreaterThanOrEqual(4);
+
+    const sellerFilter = screen.getAllByRole('combobox').find((c) => /semua penjual/i.test(c.textContent));
+    await user.click(sellerFilter);
+    await user.click(await screen.findByRole('option', { name: 'Artist C' }));
+
+    await waitFor(() => expect(screen.queryByText('Artist A')).not.toBeInTheDocument());
+    const grand = screen.getByText('Grand Total').closest('tr');
+    const cells = [...grand.querySelectorAll('td')].map((td) => td.textContent.replace(/\s+/g, ' ').trim());
+    expect(cells[1]).toBe('2');
+    expect(cells[2]).toMatch(/25\.000/);
   });
 });
 

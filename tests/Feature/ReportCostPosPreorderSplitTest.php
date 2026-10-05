@@ -7,7 +7,6 @@ use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Event;
-use App\Models\Payment;
 use App\Models\Preorder;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -22,12 +21,14 @@ use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
- * 033-seller-recap-pos-preorder-split — kolom POS vs pre-order pada Rekap
- * Seller (US1/US2), Laba-Rugi dan Modal Seller (US3). Jaminan utamanya
- * REKONSILIASI: bagian POS + bagian pre-order == total yang sudah tampil,
- * persis (unit bulat, uang dalam sen), untuk tiap baris dan grand total.
+ * 033-seller-recap-pos-preorder-split — pemisahan POS vs pre-order pada
+ * Laba-Rugi dan Modal Seller (US3). Jaminan utamanya REKONSILIASI: bagian
+ * POS + bagian pre-order == total yang sudah tampil, persis (uang dalam sen).
+ * Sejak 040 Rekap Seller TIDAK lagi memuat pre-order, jadi pengujian Rekap
+ * pindah ke SellerRecapPosOnlyTest; berkas ini hanya menyisakan laporan modal
+ * yang memang masih memisahkan POS dan pre-order.
  */
-class ReportPosPreorderSplitTest extends TestCase
+class ReportCostPosPreorderSplitTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -108,240 +109,6 @@ class ReportPosPreorderSplitTest extends TestCase
         return collect($response->json('data'))->keyBy('artist_id');
     }
 
-    private function assertRowReconciles(array $row): void
-    {
-        $this->assertSame((int) $row['total_units'], $row['pos_units'] + $row['preorder_units'], 'unit POS + pre-order != total');
-        $this->assertSame(
-            ReportSplit::cents($row['total_sales']),
-            ReportSplit::cents($row['pos_sales']) + ReportSplit::cents($row['preorder_sales']),
-            'sales POS + pre-order != total'
-        );
-    }
-
-    // ===================================================================
-    // US1 — Rekap Seller
-    // ===================================================================
-
-    public function test_recap_row_splits_pos_and_partially_paid_preorder_and_reconciles(): void
-    {
-        [$artist, $variant] = $this->seller('SPA');
-        $this->posSale([[$variant, 3]]);                // 30000, 3 unit
-        $this->preorder([[$variant, 2]], paid: 5000);   // 20000 subtotal, 25% terbayar -> 5000, 0,5 unit
-
-        $row = $this->recapRows()[$artist->id];
-
-        $this->assertSame(3, $row['pos_units']);
-        $this->assertSame('30000.00', $row['pos_sales']);
-        $this->assertSame('5000.00', $row['preorder_sales']);
-        $this->assertSame('35000.00', $row['total_sales']);
-        // total_units adalah integer hasil pembulatan (3 + 0,5 -> 4); bagian
-        // pre-order adalah SISA-nya, bukan pembulatan terpisah.
-        $this->assertSame(4, $row['total_units']);
-        $this->assertSame(1, $row['preorder_units']);
-        $this->assertRowReconciles($row);
-    }
-
-    public function test_pos_only_and_preorder_only_and_empty_sellers(): void
-    {
-        [$posOnly, $posVariant] = $this->seller('SPB');
-        [$preOnly, $preVariant] = $this->seller('SPC');
-        $empty = Artist::factory()->create(['code' => 'SPD', 'name' => 'Seller SPD']);
-
-        $this->posSale([[$posVariant, 2]]);
-        $this->preorder([[$preVariant, 1]], paid: 10000);
-
-        $rows = $this->recapRows();
-
-        $this->assertSame(0, $rows[$posOnly->id]['preorder_units']);
-        $this->assertSame('0.00', $rows[$posOnly->id]['preorder_sales']);
-        $this->assertSame(2, $rows[$posOnly->id]['pos_units']);
-        $this->assertSame('20000.00', $rows[$posOnly->id]['pos_sales']);
-
-        $this->assertSame(0, $rows[$preOnly->id]['pos_units']);
-        $this->assertSame('0.00', $rows[$preOnly->id]['pos_sales']);
-        $this->assertSame(1, $rows[$preOnly->id]['preorder_units']);
-        $this->assertSame('10000.00', $rows[$preOnly->id]['preorder_sales']);
-
-        // Seller aktif tanpa penjualan tetap tampil dengan nol di keempat kolom.
-        $this->assertSame(0, $rows[$empty->id]['pos_units']);
-        $this->assertSame(0, $rows[$empty->id]['preorder_units']);
-        $this->assertSame('0.00', $rows[$empty->id]['pos_sales']);
-        $this->assertSame('0.00', $rows[$empty->id]['preorder_sales']);
-
-        $rows->each(fn ($row) => $this->assertRowReconciles($row));
-    }
-
-    public function test_existing_recap_fields_are_unchanged_by_the_split(): void
-    {
-        [$artist, $variant] = $this->seller('SPE');
-        $this->posSale([[$variant, 1]]);
-        $this->preorder([[$variant, 1]], paid: 4000);
-
-        $row = $this->recapRows()[$artist->id];
-
-        foreach (['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status'] as $key) {
-            $this->assertArrayHasKey($key, $row);
-        }
-        $this->assertSame('14000.00', $row['total_sales']);
-        $this->assertSame('14000.00', $row['payable_amount']);
-        $this->assertSame('unpaid', $row['status']);
-    }
-
-    // ----- pembulatan ------------------------------------------------------
-
-    public function test_half_unit_and_sub_unit_preorder_fractions_never_drift_from_the_total(): void
-    {
-        [$half, $halfVariant] = $this->seller('SPF');
-        [$tiny, $tinyVariant] = $this->seller('SPG');
-
-        $this->preorder([[$halfVariant, 1]], paid: 5000);  // 0,5 unit -> total dibulatkan jadi 1
-        $this->preorder([[$tinyVariant, 1]], paid: 3000);  // 0,3 unit -> total dibulatkan jadi 0
-
-        $rows = $this->recapRows();
-
-        $this->assertSame(1, $rows[$half->id]['total_units']);
-        $this->assertSame(1, $rows[$half->id]['preorder_units']);
-        $this->assertSame(0, $rows[$tiny->id]['total_units']);
-        $this->assertSame(0, $rows[$tiny->id]['preorder_units']);
-        $this->assertSame('3000.00', $rows[$tiny->id]['preorder_sales']);
-        $rows->each(fn ($row) => $this->assertRowReconciles($row));
-    }
-
-    public function test_sub_cent_proration_across_three_sellers_still_reconciles_per_row(): void
-    {
-        [$a, $va] = $this->seller('SPH');
-        [$b, $vb] = $this->seller('SPI');
-        [$c, $vc] = $this->seller('SPJ');
-
-        // Subtotal 30000, 10000 terkumpul -> tiap seller 3333,333... (bukan sen utuh).
-        $this->preorder([[$va, 1], [$vb, 1], [$vc, 1]], paid: 10000);
-
-        $rows = $this->recapRows();
-
-        foreach ([$a, $b, $c] as $artist) {
-            $this->assertSame('3333.33', $rows[$artist->id]['preorder_sales']);
-            $this->assertSame('0.00', $rows[$artist->id]['pos_sales']);
-            $this->assertRowReconciles($rows[$artist->id]);
-        }
-    }
-
-    // ----- pengecualian ------------------------------------------------------
-
-    public function test_cancelled_preorders_voided_orders_and_rejected_payments_are_in_neither_part(): void
-    {
-        [$artist, $variant] = $this->seller('SPK');
-
-        $voided = $this->posSale([[$variant, 5]]);
-        app(OrderService::class)->void($voided, 'batal', $this->owner);
-
-        $cancelled = $this->preorder([[$variant, 1]], paid: 10000);
-        app(PreorderService::class)->transitionStatus($cancelled, 'cancelled', 'batal', $this->owner);
-
-        $rejected = $this->preorder([[$variant, 1]], paid: 10000);
-        Payment::where('preorder_id', $rejected->id)->update(['verification' => 'rejected']);
-
-        $row = $this->recapRows()[$artist->id];
-
-        $this->assertSame(0, $row['pos_units']);
-        $this->assertSame('0.00', $row['pos_sales']);
-        $this->assertSame(0, $row['preorder_units']);
-        $this->assertSame('0.00', $row['preorder_sales']);
-        $this->assertRowReconciles($row);
-    }
-
-    // ----- mode DEMO/LIVE & otorisasi ------------------------------------------
-
-    public function test_demo_data_never_leaks_into_the_live_parts(): void
-    {
-        [$artist, $variant] = $this->seller('SPL');
-        $this->posSale([[$variant, 1]]);
-        $this->preorder([[$variant, 1]], paid: 10000);
-
-        ModeGate::runAs('demo', function () use ($artist) {
-            $event = Event::factory()->create(['status' => 'active']);
-            $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
-            $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $this->category->id]);
-            $variant = $product->variants()->create(['sku' => 'SPLKYDEM0001', 'sell_price' => 999999, 'cost_price' => 1, 'current_stock' => 100]);
-            $this->posSale([[$variant, 1]], $event, $session);
-            $this->preorder([[$variant, 1]], paid: 888888, event: $event);
-        });
-
-        Setting::updateOrCreate(['key' => 'system_mode'], ['value' => 'live', 'type' => 'string', 'group' => 'system']);
-
-        $row = $this->recapRows()[$artist->id];
-
-        $this->assertSame('10000.00', $row['pos_sales']);
-        $this->assertSame('10000.00', $row['preorder_sales']);
-        $this->assertRowReconciles($row);
-    }
-
-    public function test_recap_split_is_forbidden_for_cashier_and_inventory(): void
-    {
-        foreach (['cashier', 'inventory'] as $role) {
-            $this->actingAs(User::factory()->create(['role' => $role]), 'sanctum');
-            $this->getJson("/api/v1/reports/artist-settlements?event_id={$this->event->id}")->assertForbidden();
-        }
-    }
-
-    // ===================================================================
-    // US2 — rekonsiliasi dengan detail transaksi dan ekspor
-    // ===================================================================
-
-    private function drilldown(Artist $artist): \Illuminate\Support\Collection
-    {
-        return collect($this->getJson("/api/v1/reports/artist-settlements/{$artist->id}/transactions?event_id={$this->event->id}")
-            ->assertOk()->json('transactions'));
-    }
-
-    private function sumCents(\Illuminate\Support\Collection $transactions, string $source): int
-    {
-        return $transactions->where('source', $source)
-            ->sum(fn ($tx) => ReportSplit::cents($tx['amount_for_artist']));
-    }
-
-    public function test_drilldown_sums_by_kind_equal_the_pos_and_preorder_columns(): void
-    {
-        [$artist, $variant] = $this->seller('SQA');
-        $this->posSale([[$variant, 2]]);
-        $this->posSale([[$variant, 1]]);
-        $this->preorder([[$variant, 2]], paid: 5000);
-        $this->preorder([[$variant, 1]], paid: 10000);
-
-        $row = $this->recapRows()[$artist->id];
-        $transactions = $this->drilldown($artist);
-
-        $this->assertSame(ReportSplit::cents($row['pos_sales']), $this->sumCents($transactions, 'order'));
-        $this->assertSame(ReportSplit::cents($row['preorder_sales']), $this->sumCents($transactions, 'preorder'));
-        $this->assertSame(
-            (int) $row['pos_units'],
-            (int) $transactions->where('source', 'order')->sum(fn ($tx) => collect($tx['items'])->sum('qty'))
-        );
-    }
-
-    public function test_drilldown_rounds_each_row_so_sub_cent_preorders_may_differ_from_the_column_by_at_most_one_cent_per_row(): void
-    {
-        // Tiga pre-order masing-masing 3333,333... diakui untuk seller yang sama:
-        // drill-down membulatkan PER BARIS (tiap transaksi tampil 3333.33), sedangkan
-        // kolom memakai jumlah pecahan penuh lalu dibulatkan sekali. Selisihnya
-        // murni pembulatan tampilan (<= 1 sen per baris), bukan data yang berbeda.
-        [$artist, $variant] = $this->seller('SQB', price: 10000);
-        [, $other1] = $this->seller('SQC');
-        [, $other2] = $this->seller('SQD');
-        foreach (range(1, 3) as $i) {
-            $this->preorder([[$variant, 1], [$other1, 1], [$other2, 1]], paid: 10000);
-        }
-
-        $row = $this->recapRows()[$artist->id];
-        $transactions = $this->drilldown($artist);
-
-        $column = ReportSplit::cents($row['preorder_sales']);
-        $detail = $this->sumCents($transactions, 'preorder');
-
-        $this->assertSame(3, $transactions->where('source', 'preorder')->count());
-        $this->assertLessThanOrEqual(3, abs($column - $detail));
-        $this->assertSame(0, ReportSplit::cents($row['pos_sales']));
-    }
-
     private function exportSheet(string $report = 'artist-settlements'): array
     {
         $response = $this->get("/api/v1/reports/{$report}/export?event_id={$this->event->id}");
@@ -354,52 +121,6 @@ class ReportPosPreorderSplitTest extends TestCase
         unlink($tmp);
 
         return $rows;
-    }
-
-    public function test_recap_export_keeps_existing_headings_in_place_and_appends_the_split_columns(): void
-    {
-        [$artist, $variant] = $this->seller('SQE');
-        $this->posSale([[$variant, 3]]);
-        $this->preorder([[$variant, 2]], paid: 5000);
-
-        $api = $this->recapRows()[$artist->id];
-        $sheet = $this->exportSheet();
-        $headings = $sheet[0];
-
-        $this->assertSame(
-            ['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status'],
-            array_slice($headings, 0, 10),
-            'bentuk lama harus tetap di tempatnya'
-        );
-        $this->assertSame(['pos_units', 'preorder_units', 'pos_sales', 'preorder_sales'], array_slice($headings, 10, 4));
-
-        $row = array_combine($headings, collect($sheet)->first(fn ($r) => (string) $r[array_search('artist_id', $headings)] === (string) $artist->id));
-
-        // Excel menyimpan angka sebagai numerik ("30000.00" -> 30000), jadi banding
-        // sebagai angka, bukan string.
-        foreach (['pos_units', 'preorder_units', 'pos_sales', 'preorder_sales'] as $key) {
-            $this->assertEqualsWithDelta((float) $api[$key], (float) $row[$key], 0.001, $key);
-        }
-    }
-
-    public function test_recap_export_writes_zero_units_as_zero_not_as_a_blank_cell(): void
-    {
-        [$posOnly, $posVariant] = $this->seller('SQF');
-        $this->posSale([[$posVariant, 1]]);
-
-        $sheet = $this->exportSheet();
-        $headings = $sheet[0];
-        $row = array_combine($headings, collect($sheet)->first(fn ($r) => (string) $r[array_search('artist_id', $headings)] === (string) $posOnly->id));
-
-        $this->assertNotNull($row['preorder_units']);
-        $this->assertEquals(0, $row['preorder_units']);
-        $this->assertEquals(1, $row['pos_units']);
-    }
-
-    public function test_recap_export_is_forbidden_for_non_owner_admin(): void
-    {
-        $this->actingAs(User::factory()->create(['role' => 'cashier']), 'sanctum');
-        $this->get("/api/v1/reports/artist-settlements/export?event_id={$this->event->id}")->assertForbidden();
     }
 
     // ===================================================================
@@ -526,8 +247,11 @@ class ReportPosPreorderSplitTest extends TestCase
         }
     }
 
-    public function test_seller_cost_sales_total_equals_the_seller_recap_total_for_every_seller(): void
+    public function test_seller_cost_pos_part_equals_the_pos_only_seller_recap_but_its_total_still_adds_preorders(): void
     {
+        // 040: Rekap Seller kini POS-saja, sedangkan Modal Seller tetap memuat bagian
+        // pre-order yang terbayar (033) — jadi total keduanya SENGAJA tidak lagi sama;
+        // yang tetap sama adalah bagian POS Modal Seller dengan penjualan di Rekap.
         [, $va] = $this->seller('SRH');
         [, $vb] = $this->seller('SRI');
         [, $vc] = $this->seller('SRJ');
@@ -540,8 +264,13 @@ class ReportPosPreorderSplitTest extends TestCase
 
         $this->assertNotEmpty($cost);
         foreach ($cost as $artistId => $row) {
-            $this->assertSame($recap[$artistId]['total_sales'], $row['total_sales'], "seller {$artistId}");
+            $this->assertSame($recap[$artistId]['total_sales'], $row['sales_pos'], "seller {$artistId}");
+            $this->assertCentsAdd($row['total_sales'], $row['sales_pos'], $row['sales_preorder'], "seller {$artistId}");
         }
+        $this->assertTrue(
+            $cost->contains(fn ($row) => $row['sales_preorder'] !== '0.00'),
+            'Modal Seller tetap memuat pre-order, jadi totalnya berbeda dari Rekap'
+        );
     }
 
     public function test_seller_cost_excludes_cancelled_preorders_and_voided_orders_and_isolates_demo_mode(): void

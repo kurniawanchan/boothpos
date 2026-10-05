@@ -310,15 +310,26 @@ Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService
 - **Money is untouched** (amount, status, totals, expected shift cash, reports). One intended visible effect: `CashierSessionController::summary()` has always counted only VERIFIED payments in its per-method breakdown, so a verified QRIS payment now appears there; expected cash is cash-only and unaffected.
 - UI: `PaymentHistoryList` shows "Not verified"/"Verified" + "Verified by X · date" and the "Mark verified" action (always behind a "cannot be undone" `ConfirmDialog`), in the Sales detail and the Pre-order payment history; the Sales list has "Mark verified (N)" next to Export, meant to be used with the existing "Needs verification" (`pstate=pending`) filter + Select all.
 
+## Seller Recap is POS-only (feature 040, 2026-10-06)
+
+**This REVERSES the Seller Recap half of feature 033 below** (product-owner decision: "change to only show POS transaction", whole recap, not just the detail list). Rules:
+
+- `SettlementService::recalculateForEvent()` aggregates **completed, non-voided POS `order_items` only** (`posSalesForEvent()`, explicit `data_mode` filter). The pre-order aggregation, `salesBreakdownForEvent()` and the remainder rules no longer exist for the recap. So the stored `artist_settlements` (`total_sales`, `total_units`, `payable_amount = total_sales − deduction`), Payable/Paid/Outstanding/Status, "Record payment" and the totals written on **event close** are all POS-only. The existing "reset every settlement row first" step zeroes a seller that used to have pre-order-derived totals; `paid_amount` is never touched.
+- `GET /reports/artist-settlements` no longer returns `pos_units`/`preorder_units`/`pos_sales`/`preorder_sales`, and `outstanding = max(0, payable − paid)` (a seller paid against the old pre-order-inclusive payable keeps the recorded `paid_amount`; only the remainder shows 0). The recap table has Unit / Sales only; the "Transaction detail" list (`artistSettlementTransactions()`) and the recap export lose their pre-order parts (no `source` field, no type badge; export "Rekap" has 10 columns).
+- **Not changed, on purpose:** the Pre-order report, Cost & Profit and Seller Cost keep the 033 POS + pre-order split. So **Seller Cost's `total_sales` no longer equals the recap's** for an event with pre-orders (its `sales_pos` still does). The Dashboard "Results per seller" panel reads the recap's `total_sales` and therefore became POS-only too.
+- Consequence to remember: **pre-order revenue no longer produces a payable amount on the recap**; settling sellers for pre-order sales has to happen outside that screen (the Pre-order report still shows what was collected per seller).
+
 ## Reports: POS vs pre-order split (feature 033, 2026-10-04)
+
+> **040 (2026-10-06):** the Seller Recap part of this section is superseded — see "Seller Recap is POS-only" above. Cost & Profit and Seller Cost below are unchanged.
 
 The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **POS** part and the **pre-order** part next to the total. Rules (all in `SettlementService` / `ReportController` / `App\Support\ReportSplit`):
 
-- **One source.** `SettlementService::salesBreakdownForEvent()` runs the two aggregations (completed `order_items`; non-cancelled `preorder_items` × paid fraction) and `recalculateForEvent()` is built on it — and now RETURNS that breakdown so `artistSettlements()` reads the same snapshot that wrote the stored totals. Never add a second formula for "POS vs pre-order".
+- **One source.** *(Superseded for the recap by 040: `salesBreakdownForEvent()` was deleted and the settlement is POS-only. Cost & Profit / Seller Cost keep their own aggregations in `ReportController`.)* It used to be `SettlementService::salesBreakdownForEvent()` running the two aggregations (completed `order_items`; non-cancelled `preorder_items` × paid fraction), with `recalculateForEvent()` built on it. Never add a second formula for "POS vs pre-order".
 - **The pre-order part is the REMAINDER of the shown total** (`total − POS`: integer units, cents for money via `ReportSplit::remainder()`), never an independently rounded figure. `artist_settlements.total_units` is a rounded integer, so independent rounding can drift by 1; the remainder makes POS + pre-order equal the total exactly. Don't "fix" pre-order units to decimals.
-- **Seller Cost (`GET /reports/artist-profit`) used to be POS-only** and now includes the paid part of pre-orders (product-owner decision) so its `total_sales` equals the Recap's; `sales_pos`/`modal_pos`/`gross_profit_pos` equal the old figures, and pre-order-only sellers now appear. It does one extra `GROUP BY` query over `preorderRecognizedRevenueBase()` with the explicit `data_mode` filter.
+- **Seller Cost (`GET /reports/artist-profit`) used to be POS-only** and now includes the paid part of pre-orders (product-owner decision) — at the time so its `total_sales` equalled the Recap's (no longer true since 040: only `sales_pos` equals the recap); `sales_pos`/`modal_pos`/`gross_profit_pos` equal the old figures, and pre-order-only sellers now appear. It does one extra `GROUP BY` query over `preorderRecognizedRevenueBase()` with the explicit `data_mode` filter.
 - Cost & Profit adds flat `*_pos` / `*_preorder` keys (flat so the generic export gets real columns); `event_cost` / `net_profit` are whole-event figures and are NOT split.
-- Exports: the Recap summary sheet appends `pos_units, preorder_units, pos_sales, preorder_sales` after the old columns; the "Detail Transaksi" sheet is still POS-only (known gap). The seller drill-down rounds per row, so its by-kind sums can differ from the column by ≤ 1 cent per row for sub-cent pre-order fractions (display rounding only; pinned by a test).
+- Exports: ~~the Recap summary sheet appends `pos_units, preorder_units, pos_sales, preorder_sales`~~ (removed in 040; the "Detail Transaksi" sheet was always POS-only and now agrees with the summary). The seller drill-down rounds per row, so its by-kind sums can differ from the column by ≤ 1 cent per row for sub-cent pre-order fractions (display rounding only; pinned by a test).
 
 ## Purchase-order row actions and stale-schema handling (feature 035, 2026-10-05)
 
@@ -343,7 +354,19 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/039-preorder-seller-subtotal/plan.md`
+Active feature plan: `specs/040-recap-pos-transactions-only/plan.md`
+(branch `040-recap-pos-transactions-only`, from `develop` after PR #33) — the Seller Recap becomes POS-ONLY
+(product-owner decision: whole recap, not just the detail list). `SettlementService` aggregates completed POS
+order items only (the 033 pre-order aggregation/breakdown is deleted, `salesBreakdownForEvent` → `posSalesForEvent`),
+so the stored settlement (`total_sales/total_units/payable_amount`), Payable/Paid/Outstanding, "Record payment" and
+event close are POS-only. `GET /reports/artist-settlements` drops `pos_units/preorder_units/pos_sales/preorder_sales`
+and clamps `outstanding` at 0 (a seller already paid against the old pre-order-inclusive payable keeps `paid_amount`
+untouched); the seller "Transaction detail" and the export lose their pre-order parts; the Dashboard "Results per
+seller" panel follows (it reads the same `total_sales`). Seller Cost / Cost & Profit / Pre-order report are
+UNCHANGED and still include pre-orders, so Seller Cost's total no longer equals the recap's Sales. Consequence:
+pre-order revenue no longer yields a payable amount on the recap. No migration. See research.md.
+
+Previous feature: `specs/039-preorder-seller-subtotal/plan.md`
 (branch `039-preorder-seller-subtotal`, from `develop` after PR #32) — Reports → Pre-order → By Seller
 gets a "Subtotal — <seller>" row after each seller's rows (also in the Excel "Per Seller" sheet — product-owner
 decision). ONE implementation: `App\Support\PreorderSellerSubtotals::fromRows()` sums the four figures per seller

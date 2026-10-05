@@ -490,9 +490,8 @@ class ReportController extends Controller
 
         // Selalu dihitung ulang agar angka live, bukan dibaca mentah dari
         // cache — konsisten dengan keputusan desain SettlementService.
-        // 033: rincian POS vs pre-order datang dari snapshot yang sama
-        // dengan yang menulis total, jadi POS + pre-order == total.
-        $breakdown = $this->settlementService->recalculateForEvent($event);
+        // 040: hasilnya POS-saja; tidak ada lagi rincian POS vs pre-order.
+        $this->settlementService->recalculateForEvent($event);
 
         $settlements = ArtistSettlement::where('event_id', $eventId)->get()->keyBy('artist_id');
 
@@ -524,20 +523,11 @@ class ReportController extends Controller
             ->orderBy('name')
             ->get();
 
-        $data = $artists->map(function (Artist $artist) use ($settlements, $breakdown) {
+        $data = $artists->map(function (Artist $artist) use ($settlements) {
             $s = $settlements->get($artist->id);
 
             $payable = (float) ($s?->payable_amount ?? 0);
             $paid = (float) ($s?->paid_amount ?? 0);
-
-            // 033 — bagian POS apa adanya; bagian pre-order = SISA dari total
-            // yang tampil (total_units tersimpan sudah dibulatkan ke integer,
-            // jadi membulatkan pecahan pre-order sendiri bisa berselisih 1).
-            $parts = $breakdown->get($artist->id);
-            $totalUnits = (int) ($s?->total_units ?? 0);
-            $posUnits = (int) round($parts['pos_units'] ?? 0);
-            $posSales = number_format((float) ($parts['pos_sales'] ?? 0), 2, '.', '');
-            $totalSales = number_format((float) ($s?->total_sales ?? 0), 2, '.', '');
 
             return [
                 // null HANYA untuk artist yang memang belum punya baris
@@ -547,16 +537,16 @@ class ReportController extends Controller
                 'id' => $s?->id,
                 'artist_id' => $artist->id,
                 'artist_name' => $artist->name,
-                'total_sales' => $totalSales,
-                'total_units' => $totalUnits,
-                'pos_units' => $posUnits,
-                'preorder_units' => $totalUnits - $posUnits,
-                'pos_sales' => $posSales,
-                'preorder_sales' => ReportSplit::remainder($totalSales, $posSales),
+                'total_sales' => number_format((float) ($s?->total_sales ?? 0), 2, '.', ''),
+                'total_units' => (int) ($s?->total_units ?? 0),
                 'deduction' => number_format((float) ($s?->deduction ?? 0), 2, '.', ''),
                 'payable_amount' => number_format($payable, 2, '.', ''),
                 'paid_amount' => number_format($paid, 2, '.', ''),
-                'outstanding' => number_format($payable - $paid, 2, '.', ''),
+                // 040: tidak pernah negatif. Payable kini POS-saja, jadi seller
+                // yang dulu sudah dibayar terhadap Payable yang memuat pre-order
+                // bisa punya paid > payable; angka yang tercatat TIDAK diubah,
+                // hanya sisanya yang ditampilkan 0.
+                'outstanding' => number_format(max(0, $payable - $paid), 2, '.', ''),
                 'status' => $s?->status ?? 'unpaid',
             ];
         })->values();
@@ -580,14 +570,13 @@ class ReportController extends Controller
      * tidak ikut ditampilkan atau nilainya tidak tercampur ke artist ini.
      */
     /**
-     * 012-seller-preorder-report-detail-export (US1, research.md R1) — detail
-     * transaksi seorang seller pada suatu event, MENGGABUNGKAN penjualan
-     * reguler (orders) dan preorder yang sudah terkumpul pembayarannya,
-     * supaya totalnya bisa ditelusuri sampai ke transaksi pembentuknya
-     * (FR-001..FR-004). Dua query terpisah (order & preorder) digabung dan
-     * di-sort ulang di PHP — BUKAN satu UNION SQL — karena OrderItem dan
-     * PreorderItem punya kolom yang tidak simetris (lihat research.md R1
-     * "Alternatives considered"), pola yang sama seperti sales()/profit().
+     * 040-recap-pos-transactions-only — detail transaksi seorang seller pada
+     * suatu event: HANYA penjualan POS, supaya jumlahnya persis sama dengan
+     * kolom Penjualan pada baris rekap (yang juga POS-saja). Fitur 012
+     * sempat menggabungkan pre-order di sini (query kedua + sort ulang di
+     * PHP); itu dihapus bersama field `source` karena rekapnya sendiri tidak
+     * lagi memuat pre-order. Pre-order tetap bisa ditelusuri dari laporan
+     * Pre-order dan layar Pre-orders.
      */
     public function artistSettlementTransactions(Request $request, Artist $artist): JsonResponse
     {
@@ -620,7 +609,7 @@ class ReportController extends Controller
                 'order_items.line_total',
             ]);
 
-        $orderTransactions = $items
+        $transactions = $items
             ->groupBy('order_id')
             ->map(function ($rowsForOrder) {
                 $first = $rowsForOrder->first();
@@ -628,7 +617,6 @@ class ReportController extends Controller
                 return [
                     'key' => 'order-'.$first->order_id,
                     'number' => $first->order_number,
-                    'source' => 'order',
                     'created_at' => $first->order_created_at
                         ? \Illuminate\Support\Carbon::parse($first->order_created_at)->toIso8601String()
                         : null,
@@ -643,70 +631,9 @@ class ReportController extends Controller
                     'amount_for_artist' => number_format(
                         (float) $rowsForOrder->sum('line_total'), 2, '.', ''
                     ),
-                    // Dipakai hanya untuk sort gabungan di bawah, dibuang
-                    // sebelum dikirim ke response.
-                    '_sort_at' => $first->order_created_at,
                 ];
             })
             ->values();
-
-        // 012 (US1, R1) — sisi preorder, memakai basis query DAN rumus
-        // proporsi yang SAMA PERSIS dengan sales()/profit()
-        // (preorderRecognizedRevenueBase() + PREORDER_FRACTION_EXPR),
-        // supaya jumlah detail ini selalu sama dengan total Seller Recap
-        // yang sudah dihitung dengan rumus itu (FR-002/FR-003). Preorder
-        // 'cancelled' sudah dikeluarkan di dalam base query itu sendiri
-        // (FR-004).
-        $fraction = self::PREORDER_FRACTION_EXPR;
-        $preorderRows = $this->preorderRecognizedRevenueBase($request)
-            ->where('preorders.event_id', $eventId)
-            ->where('preorder_items.artist_id', $artist->id)
-            ->orderByDesc('preorders.created_at')
-            ->get([
-                'preorders.id as preorder_id',
-                'preorders.preorder_number',
-                'preorders.created_at as preorder_created_at',
-                'preorder_items.name_snapshot',
-                'preorder_items.sku_snapshot',
-                'preorder_items.qty',
-                'preorder_items.line_total',
-                DB::raw("(preorder_items.line_total * ({$fraction})) as recognized_amount"),
-            ]);
-
-        $preorderTransactions = $preorderRows
-            ->groupBy('preorder_id')
-            ->map(function ($rowsForPreorder) {
-                $first = $rowsForPreorder->first();
-
-                return [
-                    'key' => 'preorder-'.$first->preorder_id,
-                    'number' => $first->preorder_number,
-                    'source' => 'preorder',
-                    'created_at' => $first->preorder_created_at
-                        ? \Illuminate\Support\Carbon::parse($first->preorder_created_at)->toIso8601String()
-                        : null,
-                    'items' => $rowsForPreorder->map(fn ($r) => [
-                        'sku' => $r->sku_snapshot,
-                        'name' => $r->name_snapshot,
-                        'qty' => (int) $r->qty,
-                        'line_total' => number_format((float) $r->line_total, 2, '.', ''),
-                    ])->values(),
-                    // Bagian artist ini dari jumlah yang SUDAH TERKUMPUL
-                    // (bukan nilai penuh preorder) — FR-002/Acceptance
-                    // Scenario 3.
-                    'amount_for_artist' => number_format(
-                        (float) $rowsForPreorder->sum('recognized_amount'), 2, '.', ''
-                    ),
-                    '_sort_at' => $first->preorder_created_at,
-                ];
-            })
-            ->values();
-
-        $transactions = $orderTransactions
-            ->concat($preorderTransactions)
-            ->sortByDesc(fn ($tx) => $tx['_sort_at'] ?? '')
-            ->values()
-            ->map(fn ($tx) => \Illuminate\Support\Arr::except($tx, ['_sort_at']));
 
         return response()->json([
             'event' => $event,
@@ -1332,20 +1259,7 @@ class ReportController extends Controller
             return $summaryResponse;
         }
 
-        $summaryPayload = json_decode($summaryResponse->getContent(), true);
-        // 033 — SheetArrayExport menulis lewat fromArray() dengan pembanding
-        // null NON-strict, sehingga integer 0 tampil sebagai sel KOSONG
-        // (bukan 0). Dua kolom unit baru diberi bentuk string supaya nol
-        // tetap tertulis sebagai angka 0 (value binder mengubahnya jadi
-        // numerik); isi API tidak berubah. total_units lama sengaja tidak
-        // disentuh (bentuk lama dipertahankan).
-        $summaryRows = array_map(function (array $row) {
-            foreach (['pos_units', 'preorder_units'] as $key) {
-                $row[$key] = (string) $row[$key];
-            }
-
-            return $row;
-        }, $summaryPayload['data']);
+        $summaryRows = json_decode($summaryResponse->getContent(), true)['data'];
 
         $eventId = $request->integer('event_id');
 
@@ -1375,11 +1289,11 @@ class ReportController extends Controller
             ])
             ->all();
 
-        // 033 — bentuk lama TETAP di tempatnya; kolom POS/pre-order hanya
-        // ditambahkan di ujung, memakai nama yang sama dengan field API
-        // (baris diambil dari artistSettlements() di atas, jadi nilainya
-        // pasti sama dengan layar).
-        $summaryHeadings = ['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status', 'pos_units', 'preorder_units', 'pos_sales', 'preorder_sales'];
+        // 040 — baris diambil dari artistSettlements() di atas, jadi nilainya
+        // pasti sama dengan layar (POS-saja); empat kolom POS/pre-order dari
+        // 033 sudah tidak ada. Sheet "Detail Transaksi" memang sejak awal
+        // POS-saja sehingga kini cocok dengan ringkasannya.
+        $summaryHeadings = ['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status'];
         $detailHeadings = ['artist_name', 'order_number', 'date', 'item_name', 'qty', 'line_total'];
 
         return \Maatwebsite\Excel\Facades\Excel::download(

@@ -224,7 +224,7 @@ watch(preorderView, async (view) => {
 const filteredSettlements = computed(() =>
   !artistFilter.value ? (settlements.value ?? []) : (settlements.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
 );
-const settlementTotals = computed(() => sumRows(filteredSettlements.value, ['total_sales', 'pos_sales', 'preorder_sales', 'payable_amount', 'paid_amount', 'outstanding'], ['total_units', 'pos_units', 'preorder_units']));
+const settlementTotals = computed(() => sumRows(filteredSettlements.value, ['total_sales', 'payable_amount', 'paid_amount', 'outstanding'], ['total_units']));
 
 const filteredArtistProfit = computed(() =>
   !artistFilter.value ? (artistProfit.value ?? []) : (artistProfit.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
@@ -426,11 +426,7 @@ function openPreorderDetail(row) {
         <DataTable
           :columns="[
             { key: 'artist_name', label: t('reports.col_artist') },
-            { key: 'pos_units', label: t('reports.col_pos_unit') },
-            { key: 'preorder_units', label: t('reports.col_preorder_unit') },
             { key: 'total_units', label: t('reports.col_unit') },
-            { key: 'pos_sales', label: t('reports.col_pos_sales') },
-            { key: 'preorder_sales', label: t('reports.col_preorder_sales') },
             { key: 'total_sales', label: t('reports.col_sales') },
             { key: 'payable_amount', label: t('reports.col_payable') },
             { key: 'paid_amount', label: t('reports.col_paid') },
@@ -443,13 +439,7 @@ function openPreorderDetail(row) {
           row-key="artist_id"
           :empty-message="t('reports.no_active_artists_settlement')"
         >
-          <!-- 033 — pemisahan POS vs pre-order; respons lama tanpa field ini
-               ditampilkan "–" alih-alih 0 yang menyesatkan. POS + pre-order
-               selalu sama dengan Unit/Penjualan di baris yang sama. -->
-          <template #cell-pos_units="{ row }">{{ row.pos_units ?? '–' }}</template>
-          <template #cell-preorder_units="{ row }">{{ row.preorder_units ?? '–' }}</template>
-          <template #cell-pos_sales="{ row }"><span class="whitespace-nowrap">{{ row.pos_sales != null ? formatIDR(row.pos_sales) : '–' }}</span></template>
-          <template #cell-preorder_sales="{ row }"><span class="whitespace-nowrap">{{ row.preorder_sales != null ? formatIDR(row.preorder_sales) : '–' }}</span></template>
+          <!-- 040 — rekap ini POS-saja: tidak ada lagi kolom POS/pre-order. -->
           <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
           <template #cell-payable_amount="{ row }">{{ formatIDR(row.payable_amount) }}</template>
           <template #cell-paid_amount="{ row }">{{ formatIDR(row.paid_amount) }}</template>
@@ -476,11 +466,7 @@ function openPreorderDetail(row) {
           <template #footer>
             <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
               <td class="px-4 py-3 text-[13px]">{{ t('reports.grand_total') }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ settlementTotals.pos_units }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ settlementTotals.preorder_units }}</td>
               <td class="px-4 py-3 text-[13px]">{{ settlementTotals.total_units }}</td>
-              <td class="px-4 py-3 text-[13px] whitespace-nowrap">{{ formatIDR(settlementTotals.pos_sales) }}</td>
-              <td class="px-4 py-3 text-[13px] whitespace-nowrap">{{ formatIDR(settlementTotals.preorder_sales) }}</td>
               <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.total_sales) }}</td>
               <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.payable_amount) }}</td>
               <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.paid_amount) }}</td>
