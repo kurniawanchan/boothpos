@@ -231,19 +231,19 @@ class VariantBomController extends Controller
         return response()->json($this->bomService->payload($variant) + ['results' => $results]);
     }
 
-    /** Salin BOM varian ini KE varian berikutnya atau SEMUA varian lain produk yang sama. */
+    /** Salin BOM varian ini KE varian berikutnya, SEMUA varian lain, atau varian PILIHAN (037) produk yang sama. */
     public function copyOut(CopyBomRequest $request, ProductVariant $variant): JsonResponse
     {
         if ($denied = $this->authorizeBom($request, true)) {
             return $denied;
         }
 
-        $request->validate(['mode' => ['in:next,all']]);
+        $request->validate(['mode' => ['in:next,all,selected']]);
 
         try {
             $results = $this->bomService->copy(
                 $variant,
-                $this->bomService->copyTargets($variant, $request->string('mode')->toString()),
+                $this->bomService->copyTargets($variant, $request->string('mode')->toString(), (array) $request->input('variant_ids', [])),
                 $request->boolean('confirm_replace'),
                 $request->user(),
             );

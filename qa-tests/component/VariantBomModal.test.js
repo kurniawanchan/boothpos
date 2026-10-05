@@ -496,3 +496,70 @@ describe('VariantBomModal — draft, Save and guard (036)', () => {
     expect(screen.getByText('Stok saat ini')).toBeInTheDocument();
   });
 });
+
+// 037-variant-drawer-bom-ui (US3) — "Tambah Item BOM" sebaris dengan "Simpan perubahan".
+describe('VariantBomModal — Add BOM item on the Save row (037)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listBomLines.mockResolvedValue({ data: ROWS, summary: SUMMARY });
+    listVendors.mockResolvedValue({ data: [] });
+    eligibleBomLines.mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 10, total: 0, last_page: 1 } });
+  });
+
+  it('puts Add BOM item (left) and Save changes (right) in the same row, before the copy tool', async () => {
+    renderModal();
+    await screen.findByText('Ball Chain');
+
+    const add = screen.getByRole('button', { name: /tambah item bom/i });
+    const save = screen.getByRole('button', { name: 'Simpan perubahan' });
+    const row = add.closest('[data-testid="bom-actions-row"]');
+
+    expect(row).not.toBeNull();
+    expect(row).toContainElement(save);
+    expect(row).toHaveClass('justify-between');
+    expect(Boolean(add.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  });
+
+  it('keeps the unsaved indicator next to Save inside that row', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByText('Ball Chain');
+
+    await user.clear(screen.getByLabelText('Jumlah per 1 produk Ball Chain'));
+    await user.type(screen.getByLabelText('Jumlah per 1 produk Ball Chain'), '9');
+
+    const row = screen.getByRole('button', { name: /tambah item bom/i }).closest('[data-testid="bom-actions-row"]');
+    expect(within(row).getByText('Ada perubahan yang belum disimpan')).toBeInTheDocument();
+  });
+
+  it('shows only Add BOM item for an empty BOM (no Save to align with)', async () => {
+    listBomLines.mockResolvedValue({ data: [], summary: { ...SUMMARY, bom_cost: '0.00', material_cost: '0.00', service_cost: '0.00' } });
+    renderModal();
+
+    const add = await screen.findByRole('button', { name: /tambah item bom/i });
+    expect(add.closest('[data-testid="bom-actions-row"]')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Simpan perubahan' })).not.toBeInTheDocument();
+  });
+
+  it('still guards Add BOM item when there are unsaved changes, and read-only users get neither button', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByText('Ball Chain');
+    await user.clear(screen.getByLabelText('Jumlah per 1 produk Ball Chain'));
+    await user.type(screen.getByLabelText('Jumlah per 1 produk Ball Chain'), '9');
+
+    await user.click(screen.getByRole('button', { name: /tambah item bom/i }));
+    expect(await screen.findByRole('dialog', { name: /buang perubahan/i })).toBeInTheDocument();
+  });
+
+  it('shows neither Add nor Save to a read-only user', async () => {
+    renderModal(['dashboard', 'products']);
+    await screen.findByText('Ball Chain');
+
+    expect(screen.queryByRole('button', { name: /tambah item bom/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Simpan perubahan' })).not.toBeInTheDocument();
+  });
+});
+

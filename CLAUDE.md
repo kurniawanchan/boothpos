@@ -241,6 +241,14 @@ A variant's BOM is the traceable list of PURCHASE-ORDER LINES that produce it (s
 - **i18n guard:** `qa-tests/unit/localeKeys.test.js` fails when any literal `t('a.b')` is missing from `en.json`/`id.json` (`master_data.col_type` was the only one — it surfaced as the raw header `MASTER_DATA.COL_TYPE`). Dynamic keys are not checked.
 - Stock list: the SKU is a button (opens `ProductDetailModal` with the variant highlighted) only with the `products` menu, plain text otherwise; Products list: 56 px thumbnail and a one-line (truncated, titled) code.
 
+## Variant drawer and BOM copy tool (feature 037, 2026-10-05)
+
+- **Variant card (`ProductsView.vue` Edit-product drawer, `max-w-[1040px]`):** white bordered `rounded-card shadow-sm` cards on a `surface-subtle` tray. Header chips are colour-coded by role — SKU `sky`, markup `mint` (danger when negative), margin `violet` (danger when negative), BOM cost `warn` (only for a saved variant with a BOM) — via the new `--color-sky-*` / `--color-violet-*` `@theme` pairs (contrast ≥ 4.5:1; every chip keeps its text label). Header actions, right side, exact order: **Open BOM** (`BaseButton` inside `BaseTooltip`, saved variants only) · **Apply markup** · delete. Fields: name · stock · cost · sell. Picture 66 px (+50 %) with a same-size placeholder. `data-testid="variant-card"` / `"variant-header"` are used by the tests.
+- **`BaseTooltip`** (`components/ui`): hover/focus tooltip (`role="tooltip"`, `aria-describedby`, Escape closes) — the native `title` is not keyboard-accessible; reuse it instead of `title` for explanatory text.
+- **Duplicate variant** has NO endpoint: `duplicateVariantRow()` splices an UNSAVED card below the source (name `"<name> (copy)"`, prices, low-stock alert, status, and the source's STOCK — product-owner decision — with `original_stock = 0`), so saving reuses the new-variant flow: `POST /products/{id}/variants` with `copy_bom_from_variant_id` (the server copies the BOM in the same transaction, never marks it complete, and re-checks products + purchase_orders) and the shared stock-adjustment reason for the copied stock. Picture, SKU and history are never copied. BOM is promised only when the source is a saved variant WITH a BOM and the user has `purchase_orders`. `VariantDuplicateFlowTest` pins these server guarantees.
+- **`BaseSelect` fits the screen:** the fixed panel flips upward when there is < 220 px below and more room above, and its height is capped to the available space (140–320 px). The reported "copy picker can't scroll to the bottom" was the panel running off the viewport (it always opened downward at a fixed height). Options may carry `thumb` (URL or `null`) to show thumbnails/placeholders — opt-in.
+- **Copy to chosen variants:** `POST /variants/{v}/bom/copy-out` with `mode: "selected"` + `variant_ids[]` (`CopyBomRequest`, `VariantBomService::copyTargets()` loads exactly those ids — a missing one fails the whole request; `copy()` still enforces same product / not the source / confirm-replace / never complete). UI: `VariantPickList` (inline checkbox list with pictures, search, select-all of the VISIBLE rows, own scroll container) inside `BomCopyMenu`, behind the same unsaved-changes `guard`. **Add BOM item** shares one row with **Save changes** in `VariantBomModal` (`data-testid="bom-actions-row"`).
+
 ## App name ("Powered by") and the backup/restore screen (added post-MVP, 2026-09-30)
 
 - **`app_name`** is one more `settings` row (single value for the whole install, NOT per DEMO/LIVE like `store_name`), read only through `App\Support\AppName::current()` — trimmed, blank means the default `BoothPOS`, max 50 characters (validated in `UpdateSettingsRequest`). It is exposed to every role via `GET /settings/features`, and rides along inside the invoice payloads (`BuildsInvoiceDocument`, so bulk downloads match the screen) and `GET /orders/{id}/receipt`. Frontend: `stores/settings.js` (`appName`), the sidebar brand, and a "Powered by {name}" line on the pre-order invoice, payment invoice, sales receipt and the bulk-download HTML (`utils/invoiceDocument.js`). The frontend default lives in `utils/appName.js` (`resolveAppName`) — keep it equal to `AppName::DEFAULT`. The bulk builder HTML-escapes the name (it is user-typed). Not applied to the billing `InvoiceDetailModal` (the vendor's licence invoice) or the license-key e-mail.
@@ -326,7 +334,20 @@ The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **PO
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/036-bom-variant-stock-ux/plan.md`
+Active feature plan: `specs/037-variant-drawer-bom-ui/plan.md`
+(branch `037-variant-drawer-bom-ui`, branched from `036-bom-variant-stock-ux`) — UI pass on the
+Edit-product variant cards and the BOM dialog: bounded cards, four distinct chip colours (new
+`sky`/`violet` token pairs; SKU blue, markup green, margin violet, BOM cost amber), header actions
+`Open BOM (button + BaseTooltip) · Apply markup · delete`, fields name → stock → cost → sell, drawer
+820 → 1040 px, variant picture 44 → 66 px. **Duplicate variant** reuses the existing new-variant
+save flow (unsaved card seeded from the source incl. its stock — product-owner decision — with
+`copy_bom_from` so the server copies the BOM; no new endpoint). BOM copy: `BaseSelect` now flips
+above / caps its height to the space on screen (the picker used to run off the bottom of the
+viewport) and supports option thumbnails; new `mode=selected` + `variant_ids[]` on
+`POST /variants/{v}/bom/copy-out` (still `VariantBomService::copy()`), UI `VariantPickList`;
+**Add BOM item** moves onto the Save changes row. No migration. See research.md.
+
+Previous feature: `specs/036-bom-variant-stock-ux/plan.md`
 (branch `036-bom-variant-stock-ux`, branched from `develop` after PR #30) — UX/correctness
 pass on the BOM dialog, variant history and the product/stock lists. BOM quantities become
 WHOLE numbers through one shared rule (`App\Rules\WholeBomQuantity`, every HTTP + Excel

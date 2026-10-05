@@ -39,6 +39,10 @@ const query = ref('');
 
 // Daftar yang tampil: seluruh options, atau yang cocok dengan pencarian. Semua logika indeks
 // aktif/pilih bekerja pada daftar INI, bukan props.options, supaya panah/Enter mengikuti hasil filter.
+// 037: opsi boleh membawa `thumb` (URL gambar, atau null = placeholder). Bila ada SATU saja opsi yang
+// memiliki kuncinya, semua baris (dan label terpilih di pemicu) memakai thumbnail supaya sejajar.
+const hasThumbs = computed(() => props.options.some((o) => 'thumb' in o));
+
 // Bila pemanggil sudah menyediakan opsi kosong sendiri (mis. "Semua tipe", value ''), baris placeholder
 // bawaan disembunyikan — kalau tidak, panel menampilkan dua baris kosong yang kembar.
 const hasEmptyOption = computed(() => props.options.some((o) => o.value === ''));
@@ -62,14 +66,27 @@ const displayLabel = computed(() => selectedOption.value?.label ?? effectivePlac
 // absolute keeps it in that ancestor's stacking/clipping context no matter
 // what z-index it's given, which is invisible to the eye but not to any
 // DOM query, so this bites in exactly the cases that are hardest to spot.
+//
+// BUG YANG DITEMUKAN & DIPERBAIKI (037): panel SELALU terbuka di bawah pemicu dengan tinggi tetap 256px.
+// Dekat tepi bawah layar (mis. "Salin dari varian lain" di dasar dialog BOM) daftarnya keluar layar dan —
+// karena fixed — tidak bisa digulung halaman/dialog, jadi entri terakhir tak terjangkau. Kini panel
+// membuka KE ATAS bila ruang di bawah sempit dan ruang di atas lebih lega, dan tingginya dibatasi
+// sesuai ruang yang tersedia (140–320px); isinya menggulung sendiri.
+const PANEL_MARGIN = 12;
+const PANEL_MIN_BELOW = 220;
 function updatePanelPosition() {
   if (!triggerEl.value) return;
   const r = triggerEl.value.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - r.bottom - PANEL_MARGIN;
+  const spaceAbove = r.top - PANEL_MARGIN;
+  const openUp = spaceBelow < PANEL_MIN_BELOW && spaceAbove > spaceBelow;
+  const available = openUp ? spaceAbove : spaceBelow;
   panelStyle.value = {
     position: 'fixed',
-    top: `${r.bottom + 6}px`,
+    ...(openUp ? { bottom: `${window.innerHeight - r.top + 6}px` } : { top: `${r.bottom + 6}px` }),
     left: `${r.left}px`,
     width: `${r.width}px`,
+    maxHeight: `${Math.round(Math.max(140, Math.min(320, available)))}px`,
   };
 }
 
@@ -197,7 +214,11 @@ onBeforeUnmount(() => {
       @click="toggle"
       @keydown="onTriggerKeydown"
     >
-      <span class="truncate">{{ displayLabel }}</span>
+      <template v-if="hasThumbs && selectedOption">
+        <img v-if="selectedOption.thumb" :src="selectedOption.thumb" alt="" class="h-7 w-7 flex-none rounded-md border border-line-2 object-cover" />
+        <span v-else class="flex h-7 w-7 flex-none items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3"><i class="ph-duotone ph-image text-[14px]" aria-hidden="true"></i></span>
+      </template>
+      <span class="flex-1 truncate">{{ displayLabel }}</span>
       <i
         class="ph-duotone ph-caret-down shrink-0 text-[13px] text-muted-3 transition-transform"
         :class="{ 'rotate-180': isOpen }"
@@ -213,7 +234,7 @@ onBeforeUnmount(() => {
         role="listbox"
         :aria-labelledby="label ? `${id}-label` : undefined"
         :style="panelStyle"
-        class="z-[95] max-h-64 overflow-y-auto overscroll-contain rounded-lg border border-line bg-white p-1 shadow-lg"
+        class="z-[95] overflow-y-auto overscroll-contain rounded-lg border border-line bg-white p-1 shadow-lg"
       >
         <div v-if="searchable" class="sticky top-0 z-10 bg-white p-1 pb-2">
           <input
@@ -253,7 +274,11 @@ onBeforeUnmount(() => {
           @click="select(opt)"
           @mouseenter="activeIndex = i"
         >
-          <span class="truncate">{{ opt.label }}</span>
+          <template v-if="hasThumbs">
+            <img v-if="opt.thumb" :src="opt.thumb" alt="" class="h-7 w-7 flex-none rounded-md border border-line-2 object-cover" />
+            <span v-else class="flex h-7 w-7 flex-none items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3"><i class="ph-duotone ph-image text-[14px]" aria-hidden="true"></i></span>
+          </template>
+          <span class="flex-1 truncate">{{ opt.label }}</span>
           <i v-if="opt.value == modelValue" class="ph-duotone ph-check shrink-0 text-[14px] text-brand" aria-hidden="true"></i>
         </button>
         <div v-if="visibleOptions.length === 0" class="px-3 py-2 text-[13px] text-muted-3">{{ t('common.no_options') }}</div>

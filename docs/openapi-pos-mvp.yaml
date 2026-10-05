@@ -4889,12 +4889,22 @@ paths:
       - { name: variant, in: path, required: true, schema: { type: integer } }
     post:
       tags: [Vendor & Bahan Baku]
-      summary: Salin BOM varian ini ke varian berikutnya / semua varian lain
+      summary: Salin BOM varian ini ke varian berikutnya / semua varian lain / varian pilihan
       description: |
         `next` = varian berikutnya (id lebih besar) pada produk yang sama;
         `all` = semua varian lain. Semua-atau-tidak-sama-sekali dalam satu
         transaksi; aturan konfirmasi dan pembukaan kembali sama dengan
         `/bom/copy`.
+
+        037-variant-drawer-bom-ui — `selected` = hanya varian di `variant_ids`
+        (wajib untuk mode ini: 1..200 id berbeda dan ada; diabaikan oleh mode
+        lain). Varian pilihan harus produk yang sama dan bukan varian sumber
+        sendiri (422); satu id yang tidak ditemukan menggagalkan seluruh
+        permintaan (422, tidak ada yang disalin). Varian pilihan yang sudah
+        punya baris BOM menghasilkan 409 `requires_confirmation` + `variants[]`
+        sampai `confirm_replace: true`. Salinan tidak pernah menandai target
+        selesai (target yang selesai dibuka kembali); varian yang tidak dipilih
+        tidak pernah tersentuh; satu audit `bom_copied` per target.
       requestBody:
         required: true
         content:
@@ -4903,7 +4913,13 @@ paths:
               type: object
               required: [mode]
               properties:
-                mode: { type: string, enum: [next, all] }
+                mode: { type: string, enum: [next, all, selected] }
+                variant_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items: { type: integer }
+                  description: Wajib bila mode = selected; id varian TUJUAN (produk yang sama, bukan sumber, berbeda satu sama lain).
                 confirm_replace: { type: boolean }
       responses:
         '200':

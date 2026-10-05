@@ -787,3 +787,21 @@ sekadar membaca kode); butir 5 lewat browser dan butir 6 ditangkap suite tes pen
    access 'qtyDrafts' before initialization" pada setiap layar yang memasang
    dialog dalam keadaan tertutup (135 tes tak terkait gagal). Dideklarasikan
    sebelum watcher, dengan komentar sebabnya.
+
+## Bug yang ditemukan saat eksekusi fitur 037-variant-drawer-bom-ui (2026-10-05)
+
+1. **`BaseSelect.vue` — panel dropdown selalu terbuka DI BAWAH pemicu dengan tinggi
+   tetap 256px**, tanpa memeriksa ruang yang tersedia. Di dekat tepi bawah layar
+   (mis. "Salin dari varian lain" di dasar dialog BOM) daftarnya keluar layar dan —
+   karena `position: fixed` — tidak bisa dijangkau dengan menggulung halaman maupun
+   dialog, sehingga entri terakhir tak terjangkau ("tidak bisa di-scroll sampai
+   bawah"). Fitur 036 hanya memperbaiki penutupan-sendiri saat daftar digulung; akar
+   kedua ini baru kelihatan di browser sungguhan pada dialog yang panjang. Diperbaiki:
+   panel membuka ke ATAS bila ruang bawah < 220px dan ruang atas lebih lega, dan
+   tingginya dibatasi sesuai ruang (140–320px). Diverifikasi di browser: pemicu di
+   y=679 pada layar 800px -> panel 353–673px, menggulung sampai entri terakhir.
+2. **Dicatat, bukan diperbaiki:** `public/storage` di mesin dev ini adalah symlink ke
+   path Docker (`/var/www/html/...`) yang tidak ada di host, jadi gambar unggahan tidak
+   termuat saat aplikasi dijalankan native (`php artisan serve`). Verifikasi gambar
+   varian memakai berkas sementara di `public/` yang dihapus setelahnya.
+

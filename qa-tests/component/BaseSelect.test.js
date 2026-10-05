@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/vue';
+import { render, screen, fireEvent, within } from '@testing-library/vue';
 import userEvent from '@testing-library/user-event';
 import BaseSelect from '../../resources/js/components/ui/BaseSelect.vue';
 
@@ -178,3 +178,81 @@ describe('BaseSelect — scrolling and search (036)', () => {
     expect(screen.getByRole('combobox')).toHaveTextContent('Semua tipe');
   });
 });
+
+// 037-variant-drawer-bom-ui (US3) — panel harus selalu muat di layar: AKAR MASALAH "tidak bisa di-scroll sampai
+// bawah" adalah panel fixed yang SELALU terbuka di bawah pemicu dengan tinggi tetap, sehingga di dekat tepi bawah
+// layar daftarnya keluar layar dan tidak ada yang bisa menggulungnya.
+function placeTrigger(top, height = 46, innerHeight = 800) {
+  Object.defineProperty(window, 'innerHeight', { value: innerHeight, configurable: true });
+  const trigger = screen.getByRole('combobox');
+  trigger.getBoundingClientRect = () => ({ top, bottom: top + height, left: 20, right: 320, width: 300, height, x: 20, y: top });
+}
+
+describe('BaseSelect — fits the screen (037)', () => {
+  it('opens downward below the trigger when there is room', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: MANY } });
+    placeTrigger(100);
+    await user.click(screen.getByRole('combobox'));
+
+    const style = screen.getByRole('listbox').style;
+    expect(style.top).toBe('152px'); // bottom 146 + 6
+    expect(style.bottom).toBe('');
+    expect(style.maxHeight).toBe('320px');
+  });
+
+  it('opens UPWARD when the trigger is near the bottom edge and there is more room above', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: MANY } });
+    placeTrigger(700);
+    await user.click(screen.getByRole('combobox'));
+
+    const style = screen.getByRole('listbox').style;
+    expect(style.bottom).toBe('106px'); // innerHeight 800 - trigger.top 700 + 6
+    expect(style.top).toBe('');
+    expect(style.maxHeight).toBe('320px');
+  });
+
+  it('caps the height to the space actually available (never taller than the screen allows)', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: MANY } });
+    placeTrigger(500); // bottom 546 -> 800 - 546 - 12 = 242 below (>= 220: stays downward)
+    await user.click(screen.getByRole('combobox'));
+    expect(screen.getByRole('listbox').style.maxHeight).toBe('242px');
+  });
+
+  it('caps an upward panel to the space above in a short viewport', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: MANY } });
+    placeTrigger(200, 46, 300); // below 300-246-12 = 42, above 200-12 = 188
+    await user.click(screen.getByRole('combobox'));
+
+    const style = screen.getByRole('listbox').style;
+    expect(style.bottom).toBe('106px'); // 300 - 200 + 6
+    expect(style.maxHeight).toBe('188px');
+  });
+
+  it('shows option thumbnails (image or placeholder) in the list and beside the selected label, only when options opt in', async () => {
+    const user = userEvent.setup();
+    const options = [
+      { value: 1, label: 'SPF-001 — Red', thumb: 'https://example.test/red.png' },
+      { value: 2, label: 'SPF-002 — Blue', thumb: null },
+    ];
+    render(BaseSelect, { props: { options, modelValue: 1 } });
+
+    expect(screen.getByRole('combobox').querySelector('img')).toHaveAttribute('src', 'https://example.test/red.png');
+    await user.click(screen.getByRole('combobox'));
+    const list = screen.getByRole('listbox');
+    expect(list.querySelectorAll('img')).toHaveLength(1);
+    expect(list.querySelectorAll('.ph-image')).toHaveLength(1);
+  });
+
+  it('renders no thumbnail element when no option has a thumb key', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: OPTIONS, modelValue: 1 } });
+    await user.click(screen.getByRole('combobox'));
+
+    expect(screen.getByRole('listbox').querySelector('img, .ph-image')).toBeNull();
+  });
+});
+

@@ -424,20 +424,19 @@ async function performReopen() {
         </table>
       </div>
 
-      <div v-if="canEdit && rows.length" class="flex flex-wrap items-center justify-end gap-3">
-        <span v-if="dirty" class="text-[12.5px] font-semibold text-warn-text">{{ t('master_data.bom_unsaved') }}</span>
-        <BaseButton :loading="saving" :disabled="!canSave" @click="saveQuantities">{{ t('master_data.bom_save') }}</BaseButton>
+      <!-- 037: "Tambah Item BOM" (kiri) sebaris dengan "Simpan perubahan" (kanan); Simpan hanya ada bila BOM punya baris. -->
+      <div v-if="canEdit" data-testid="bom-actions-row" class="flex flex-wrap items-center justify-between gap-3">
+        <BaseButton variant="secondary" @click="guard(() => (showAdd = true))">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('master_data.add_bom_item') }}
+        </BaseButton>
+        <div v-if="rows.length" class="flex flex-wrap items-center gap-3">
+          <span v-if="dirty" class="text-[12.5px] font-semibold text-warn-text">{{ t('master_data.bom_unsaved') }}</span>
+          <BaseButton :loading="saving" :disabled="!canSave" @click="saveQuantities">{{ t('master_data.bom_save') }}</BaseButton>
+        </div>
       </div>
 
-      <div v-if="canEdit" class="flex flex-col gap-3">
-        <div>
-          <BaseButton variant="secondary" @click="guard(() => (showAdd = true))">
-            <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-            {{ t('master_data.add_bom_item') }}
-          </BaseButton>
-        </div>
-        <BomCopyMenu v-if="variantId && siblings.length" :variant-id="variantId" :siblings="siblings" :has-rows="rows.length > 0" :guard="guard" @copied="onCopied" />
-      </div>
+      <BomCopyMenu v-if="canEdit && variantId && siblings.length" :variant-id="variantId" :siblings="siblings" :has-rows="rows.length > 0" :guard="guard" @copied="onCopied" />
     </div>
 
     <AddBomItemModal :open="showAdd" :variant-id="variantId" @close="showAdd = false" @added="onAdded" />

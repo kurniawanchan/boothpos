@@ -375,12 +375,32 @@ class VariantBomService
     }
 
     /**
-     * Varian target untuk "salin ke berikutnya" / "salin ke semua".
+     * Varian target untuk "salin ke berikutnya" / "salin ke semua" / "salin ke varian pilihan" (037).
+     * Mode `selected` memuat TEPAT varian yang dipilih (id dikirim klien); satu id yang tidak ditemukan
+     * (dihapus / mode data lain) menggagalkan seluruh permintaan alih-alih menyalin sebagian. Kesamaan
+     * produk, "bukan sumber sendiri", dan konfirmasi ganti tetap ditegakkan copy().
      *
+     * @param  array<int, int|string>  $ids  hanya dipakai mode `selected`
      * @return \Illuminate\Support\Collection<int, ProductVariant>
      */
-    public function copyTargets(ProductVariant $source, string $mode): \Illuminate\Support\Collection
+    public function copyTargets(ProductVariant $source, string $mode, array $ids = []): \Illuminate\Support\Collection
     {
+        if ($mode === 'selected') {
+            $ids = array_values(array_unique(array_map('intval', $ids)));
+
+            if ($ids === []) {
+                throw ValidationException::withMessages(['variant_ids' => __('bom.copy_selected_empty')]);
+            }
+
+            $targets = ProductVariant::query()->whereIn('id', $ids)->orderBy('id')->get();
+
+            if ($targets->count() !== count($ids)) {
+                throw ValidationException::withMessages(['variant_ids' => __('bom.copy_selected_missing')]);
+            }
+
+            return $targets;
+        }
+
         $siblings = ProductVariant::query()->where('product_id', $source->product_id)->where('id', '!=', $source->id)->orderBy('id');
 
         if ($mode === 'next') {

@@ -19,6 +19,8 @@ return [
     'source_replace_not_allowed' => 'Baris ini tidak bisa diganti sumbernya.',
     'copy_source_empty' => 'BOM sumber masih kosong, tidak ada yang bisa disalin.',
     'line_not_found' => 'Salah satu baris BOM ini sudah tidak ada pada varian ini. Muat ulang lalu coba lagi.',
+    'copy_selected_empty' => 'Pilih minimal satu varian tujuan salin.',
+    'copy_selected_missing' => 'Salah satu varian yang dipilih sudah tidak ada. Muat ulang lalu pilih lagi.',
     'qty_whole' => 'Masukkan bilangan bulat 1 atau lebih (tanpa desimal).',
     'copy_no_other_variants' => 'Produk ini tidak punya varian lain.',
 ];

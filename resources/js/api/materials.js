@@ -81,8 +81,11 @@ export function copyBomFrom(variantId, sourceVariantId, confirmReplace = false) 
   return client.post(`/variants/${variantId}/bom/copy`, { mode: 'from', source_variant_id: sourceVariantId, confirm_replace: confirmReplace }).then((r) => r.data);
 }
 
-export function copyBomOut(variantId, mode, confirmReplace = false) {
-  return client.post(`/variants/${variantId}/bom/copy-out`, { mode, confirm_replace: confirmReplace }).then((r) => r.data);
+// 037: mode 'selected' menyalin ke varian PILIHAN (variantIds); mode lain mengabaikan variantIds.
+export function copyBomOut(variantId, mode, confirmReplace = false, variantIds = null) {
+  const body = { mode, confirm_replace: confirmReplace };
+  if (mode === 'selected') body.variant_ids = variantIds ?? [];
+  return client.post(`/variants/${variantId}/bom/copy-out`, body).then((r) => r.data);
 }
 
 // Ganti sumber baris BOM ke baris PO lain (mis. "pakai harga terbaru") — tindakan eksplisit.

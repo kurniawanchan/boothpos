@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseSelect from '../ui/BaseSelect.vue';
 import ConfirmDialog from '../ui/ConfirmDialog.vue';
+import VariantPickList from './VariantPickList.vue';
 import { copyBomFrom, copyBomOut } from '../../api/materials';
 import { useToastStore } from '../../stores/toast';
 
@@ -36,7 +37,12 @@ const pending = ref(null); // { run: (confirm) => Promise, names: string|null, f
 
 const others = computed(() => props.siblings.filter((v) => Number(v.id) !== Number(props.variantId)));
 const nextVariant = computed(() => others.value.filter((v) => Number(v.id) > Number(props.variantId)).sort((a, b) => a.id - b.id)[0] ?? null);
-const copySources = computed(() => others.value.filter((v) => v.has_bom).map((v) => ({ value: v.id, label: `${v.sku} — ${v.variant_name}` })));
+// 037: `thumb` membuat BaseSelect menampilkan gambar varian (atau placeholder) di tiap baris.
+const copySources = computed(() => others.value.filter((v) => v.has_bom).map((v) => ({ value: v.id, label: `${v.sku} — ${v.variant_name}`, thumb: v.image_url ?? null })));
+// "Salin ke varian pilihan" (037): daftar centang varian lain produk ini; hanya id terpilih yang dikirim.
+const pickOpen = ref(false);
+const pickedIds = ref([]);
+const pickedVariants = computed(() => others.value.filter((v) => pickedIds.value.includes(Number(v.id))));
 const nameOf = (v) => `${v.sku} — ${v.variant_name}`;
 
 function ask(run, targets, fromSource = null) {
@@ -53,6 +59,8 @@ async function execute(run, confirm) {
     pending.value = null;
     open.value = false;
     sourceId.value = '';
+    pickOpen.value = false;
+    pickedIds.value = [];
     emit('copied', res);
   } catch {
     // 409/422 sudah ditoast interceptor bersama.
@@ -64,6 +72,7 @@ async function execute(run, confirm) {
 
 const toAll = () => props.guard(() => ask((c) => copyBomOut(props.variantId, 'all', c), others.value));
 const toNext = () => props.guard(() => ask((c) => copyBomOut(props.variantId, 'next', c), nextVariant.value ? [nextVariant.value] : []));
+const toChosen = () => props.guard(() => ask((c) => copyBomOut(props.variantId, 'selected', c, pickedVariants.value.map((v) => Number(v.id))), pickedVariants.value));
 function fromOther() {
   if (!sourceId.value) return;
   props.guard(doFromOther);
@@ -96,6 +105,14 @@ function confirmPending() {
         <BaseButton v-if="nextVariant" size="sm" variant="secondary" :loading="working" @click="toNext">
           {{ t('master_data.bom_copy_to_next', { name: nextVariant.variant_name }) }}
         </BaseButton>
+        <BaseButton size="sm" variant="secondary" :loading="working" @click="pickOpen = !pickOpen">{{ t('master_data.bom_copy_to_chosen') }}</BaseButton>
+      </div>
+      <div v-if="hasRows && pickOpen" class="flex flex-col gap-2.5 rounded-lg border border-line-2 bg-white p-3">
+        <span class="text-[12.5px] font-semibold text-muted-4">{{ t('master_data.bom_pick_title') }}</span>
+        <VariantPickList v-model="pickedIds" :variants="others" />
+        <div class="flex justify-end">
+          <BaseButton size="sm" :loading="working" :disabled="!pickedIds.length" @click="toChosen">{{ t('master_data.bom_copy_to_count', { count: pickedIds.length }) }}</BaseButton>
+        </div>
       </div>
       <div v-if="copySources.length" class="flex items-end gap-2">
         <div class="flex-1">
