@@ -559,13 +559,18 @@ async function performDelete() {
             :aria-label="t('master_data.enlarge_product_image', { name: row.name })"
             @click="openImageLightbox(row)"
           >
-            <img :src="row.image_url" :alt="row.name" class="h-9 w-9 rounded-md border border-line-2 object-cover" />
+            <!-- 036: 36px -> 56px agar foto produk terbaca di daftar; placeholder satu ukuran. -->
+            <img :src="row.image_url" :alt="row.name" class="h-14 w-14 rounded-md border border-line-2 object-cover" />
           </button>
-          <div v-else class="flex h-9 w-9 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
-            <i class="ph-duotone ph-image text-[16px]" aria-hidden="true"></i>
+          <div v-else class="flex h-14 w-14 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
+            <i class="ph-duotone ph-image text-[22px]" aria-hidden="true"></i>
           </div>
         </template>
-        <template #cell-code_prefix="{ row }"><span class="font-mono text-[12px] font-bold text-brand-active">{{ row.code_prefix }}</span></template>
+        <!-- 036: kode SELALU satu baris (tadinya "SPF-KC-" / "DMC" terpotong di tanda hubung); kode yang
+             sangat panjang dipotong dengan kode lengkap di tooltip, tidak pernah dibungkus. -->
+        <template #cell-code_prefix="{ row }">
+          <span class="inline-block max-w-[190px] truncate whitespace-nowrap align-middle font-mono text-[12px] font-bold text-brand-active" :title="row.code_prefix">{{ row.code_prefix }}</span>
+        </template>
         <!-- 024-invoice-layout-shipping-slip — SKU sungguhan per varian
              (bukan sekadar code_prefix bersama); satu produk = satu atau
              lebih varian. Hanya SKU_PREVIEW_COUNT pertama ditampilkan

@@ -20,6 +20,9 @@ const props = defineProps({
   siblings: { type: Array, default: () => [] },
   // BOM varian ini punya baris (syarat menyalin KELUAR dari varian ini).
   hasRows: { type: Boolean, default: false },
+  // 036: penjaga perubahan yang belum disimpan milik dialog induk — menyalin memuat ulang BOM,
+  // jadi setiap aksi salin lewat sini dulu (default: langsung jalan).
+  guard: { type: Function, default: (action) => action() },
 });
 const emit = defineEmits(['copied']);
 
@@ -59,10 +62,13 @@ async function execute(run, confirm) {
   }
 }
 
-const toAll = () => ask((c) => copyBomOut(props.variantId, 'all', c), others.value);
-const toNext = () => ask((c) => copyBomOut(props.variantId, 'next', c), nextVariant.value ? [nextVariant.value] : []);
+const toAll = () => props.guard(() => ask((c) => copyBomOut(props.variantId, 'all', c), others.value));
+const toNext = () => props.guard(() => ask((c) => copyBomOut(props.variantId, 'next', c), nextVariant.value ? [nextVariant.value] : []));
 function fromOther() {
   if (!sourceId.value) return;
+  props.guard(doFromOther);
+}
+function doFromOther() {
   const source = others.value.find((v) => Number(v.id) === Number(sourceId.value));
   // Menyalin KE varian ini mengganti barisnya sendiri bila sudah ada.
   const run = (c) => copyBomFrom(props.variantId, Number(sourceId.value), c);
@@ -93,7 +99,7 @@ function confirmPending() {
       </div>
       <div v-if="copySources.length" class="flex items-end gap-2">
         <div class="flex-1">
-          <BaseSelect v-model="sourceId" :label="t('master_data.bom_copy_from')" :options="copySources" :placeholder="t('master_data.bom_copy_pick')" />
+          <BaseSelect v-model="sourceId" :label="t('master_data.bom_copy_from')" :options="copySources" :placeholder="t('master_data.bom_copy_pick')" searchable />
         </div>
         <BaseButton size="sm" :loading="working" :disabled="!sourceId" @click="fromOther">{{ t('master_data.bom_copy_go') }}</BaseButton>
       </div>

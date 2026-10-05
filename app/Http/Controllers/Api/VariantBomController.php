@@ -8,6 +8,7 @@ use App\Http\Requests\CopyBomRequest;
 use App\Http\Requests\ReplaceBomSourceRequest;
 use App\Http\Requests\StoreBomItemsRequest;
 use App\Http\Requests\UpdateBomItemRequest;
+use App\Http\Requests\UpdateBomQuantitiesRequest;
 use App\Models\ProductVariant;
 use App\Models\ProductVariantBomLine;
 use App\Models\PurchaseOrderItem;
@@ -151,6 +152,22 @@ class VariantBomController extends Controller
         }
 
         $variant = $this->bomService->updateLine($bomLine, $request->validated(), $request->user());
+
+        return response()->json($this->bomService->payload($variant));
+    }
+
+    /** 036 — tombol Simpan: banyak jumlah sekaligus, semua-atau-tidak-sama-sekali. */
+    public function updateQuantities(UpdateBomQuantitiesRequest $request, ProductVariant $variant): JsonResponse
+    {
+        if ($denied = $this->authorizeBom($request, true)) {
+            return $denied;
+        }
+
+        try {
+            $variant = $this->bomService->updateQuantities($variant, $request->validated('lines'), $request->user());
+        } catch (BomRuleException $e) {
+            return $this->ruleViolation($e);
+        }
 
         return response()->json($this->bomService->payload($variant));
     }

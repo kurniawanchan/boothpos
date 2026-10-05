@@ -111,3 +111,47 @@ describe('BomCopyMenu (034)', () => {
     expect(screen.getByRole('button', { name: 'Salin ke semua varian' })).toBeInTheDocument();
   });
 });
+
+// 036-bom-variant-stock-ux (US2) — produk dengan banyak varian: daftar sumber bisa dicari dan di-scroll.
+describe('BomCopyMenu — picker with many variants (036)', () => {
+  const MANY = Array.from({ length: 12 }, (_, i) => ({ id: i + 10, sku: `SPF-KC-MCY-${String(i + 1).padStart(3, '0')}`, variant_name: `Warna ${i + 1}`, has_bom: true }));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    copyBomFrom.mockResolvedValue({ data: [], summary: {}, results: [{ variant_id: 1, status: 'copied', rows: 3 }] });
+  });
+
+  it('offers every sibling that has a BOM, searchable by SKU or variant name', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderMenu({ variantId: 1, siblings: [{ id: 1, sku: 'SPF-KC-MCY-000', variant_name: 'Ini', has_bom: false }, ...MANY], hasRows: false });
+    await openPanel(user);
+
+    await user.click(screen.getByRole('combobox', { name: 'Salin dari varian lain' }));
+    expect(screen.getAllByRole('option').length).toBe(13); // 12 sumber + baris placeholder
+
+    const box = screen.getByRole('textbox', { name: 'Cari…' });
+    await user.type(box, 'MCY-011');
+    expect(screen.getByRole('option', { name: /MCY-011/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /MCY-010/ })).not.toBeInTheDocument();
+
+    await user.clear(box);
+    await user.type(box, 'warna 7');
+    expect(screen.getByRole('option', { name: /Warna 7/ })).toBeInTheDocument();
+  });
+
+  it('copies from the variant picked out of the filtered list', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderMenu({ variantId: 1, siblings: [{ id: 1, sku: 'SPF-KC-MCY-000', variant_name: 'Ini', has_bom: false }, ...MANY], hasRows: false });
+    await openPanel(user);
+
+    await user.click(screen.getByRole('combobox', { name: 'Salin dari varian lain' }));
+    await user.type(screen.getByRole('textbox', { name: 'Cari…' }), 'MCY-012');
+    await user.click(screen.getByRole('option', { name: /MCY-012/ }));
+    await user.click(screen.getByRole('button', { name: 'Salin' }));
+
+    await waitFor(() => expect(copyBomFrom).toHaveBeenCalledWith(1, 21, false));
+  });
+});
+

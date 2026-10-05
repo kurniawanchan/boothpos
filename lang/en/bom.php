@@ -19,4 +19,6 @@ return [
     'source_replace_not_allowed' => 'This row\'s source cannot be replaced.',
     'copy_source_empty' => 'The source BOM is empty, there is nothing to copy.',
     'copy_no_other_variants' => 'This product has no other variants.',
+    'line_not_found' => 'One of these BOM rows no longer exists for this variant. Reload and try again.',
+    'qty_whole' => 'Enter a whole number of 1 or more (no decimals).',
 ];

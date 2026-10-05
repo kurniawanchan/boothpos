@@ -1055,6 +1055,18 @@ paths:
     get:
       tags: [Stock]
       summary: Riwayat pergerakan stok
+      description: |
+        036-bom-variant-stock-ux — dipakai layar Stok DAN riwayat transaksi per
+        varian (`variant_id`). Urutan: `created_at` terbaru dulu, lalu `id`
+        terbaru dulu (timestamp kembar tetap stabil). **Akses**: menu `stock`
+        ATAU `products` — peran lain 403 (dulu terbuka untuk semua peran yang
+        login, sehingga `user_name` tidak boleh ikut dibuka).
+
+        `reference` diselesaikan server menjadi nomor transaksi yang bisa dibaca
+        (penjualan/retur -> nomor order; tiba/serah terima/selisih edit pre-order ->
+        nomor pre-order) dan `null` bila tidak bisa dibuktikan menyangkut varian
+        ini (tidak pernah menampilkan nomor yang salah). Penyesuaian stok awal/manual
+        dan impor tidak punya referensi (alasan ada di `reason`).
       parameters:
         - { name: variant_id, in: query, schema: { type: integer } }
         - { name: type, in: query, schema: { type: string, enum: [purchase, sale, preorder_handover, adjustment, return, initial] } }
@@ -1075,6 +1087,7 @@ paths:
                       data:
                         type: array
                         items: { $ref: '#/components/schemas/StockMovement' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /stock/adjustments:
     post:
@@ -4629,6 +4642,53 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/VariantBom' }
         '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Vendor & Bahan Baku]
+      summary: Simpan jumlah per unit beberapa baris BOM sekaligus (tombol Simpan)
+      description: |
+        036-bom-variant-stock-ux. Semua-atau-tidak-sama-sekali dalam SATU
+        transaksi: varian dikunci sekali; setiap `id` dibuktikan milik varian ini
+        SEBELUM ada yang ditulis; nilai yang tidak berubah dilewati (tanpa jejak
+        audit); tiap baris yang berubah dicatat `bom_qty_changed`; bila BOM sudah
+        SELESAI, harga modal disinkronkan SEKALI di akhir (`cost_price_synced`).
+        Hanya `qty_needed` yang berubah; biaya/vendor/sumber tidak tersentuh.
+        Penyimpan terakhir menang (tanpa versi optimistis). Perlu menu `products`
+        DAN `purchase_orders`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lines]
+              properties:
+                lines:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [id, qty_needed]
+                    properties:
+                      id: { type: integer, description: id baris BOM; harus unik dalam permintaan. }
+                      qty_needed: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Disimpan; BOM yang dimuat ulang.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Salah satu id bukan baris varian ini (mis. dihapus orang lain) — `code` = `bom_line_not_found`; tidak ada yang disimpan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Bentuk atau jumlah tidak valid (kunci galat `lines.N.qty_needed`); tidak ada yang disimpan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     post:
       tags: [Vendor & Bahan Baku]
       deprecated: true
@@ -4696,7 +4756,7 @@ paths:
       description: |
         Biaya satuan, vendor, nomor PO, dan nama item DISALIN SERVER dari
         baris PO (snapshot) — `unit_cost` dari klien diabaikan. `qty` =
-        jumlah per SATU unit produk jadi (default 1; > 0; maks. 4 desimal).
+        jumlah per SATU unit produk jadi (default 1; bilangan bulat >= 1 — 036: pecahan ditolak 422).
         Semua-atau-tidak-sama-sekali: satu baris yang ditolak membatalkan
         seluruh permintaan.
       requestBody:
@@ -4716,7 +4776,7 @@ paths:
                     required: [purchase_order_item_id]
                     properties:
                       purchase_order_item_id: { type: integer }
-                      qty: { type: number, exclusiveMinimum: 0, nullable: true }
+                      qty: { type: integer, minimum: 1, nullable: true, description: Bilangan bulat >= 1 (angka bulat berbentuk 2.0 / "2" diterima). }
       responses:
         '201':
           description: Dibuat
@@ -4867,7 +4927,9 @@ paths:
       description: |
         Hanya `qty_needed` dan `notes`; biaya/vendor/sumber tidak pernah
         berubah di sini. KONTRAK BERUBAH (034): respons kini BOM yang dimuat
-        ulang (VariantBom), bukan satu baris datar.
+        ulang (VariantBom), bukan satu baris datar. 036: `qty_needed` bilangan
+        bulat >= 1; UI memakai `PUT /variants/{variant}/bom` (Simpan) untuk
+        banyak baris sekaligus.
       requestBody:
         required: true
         content:
@@ -4875,7 +4937,7 @@ paths:
             schema:
               type: object
               properties:
-                qty_needed: { type: number, exclusiveMinimum: 0 }
+                qty_needed: { type: integer, minimum: 1 }
                 notes: { type: string, nullable: true }
       responses:
         '200':
@@ -5729,6 +5791,7 @@ components:
         has_legacy: { type: boolean }
         bom_complete: { type: boolean }
         cost_price: { type: string, example: "1800.00" }
+        current_stock: { type: integer, readOnly: true, description: "036 — stok varian saat dibaca; hanya-baca (tidak ada aksi BOM yang mengubah stok)." }
         reopened: { type: boolean, description: true bila BOM selesai dibuka kembali otomatis oleh permintaan ini (menjadi kosong). }
 
     EligibleBomLine:
@@ -5763,7 +5826,7 @@ components:
       description: material_id wajib hanya saat membuat (POST); tidak berlaku saat update (PUT).
       properties:
         material_id: { type: integer }
-        qty_needed: { type: number, exclusiveMinimum: 0 }
+        qty_needed: { type: integer, minimum: 1, description: "036 — bilangan bulat >= 1 (pecahan ditolak 422). Baris lama yang sudah berpecahan tetap terbaca dan terhitung apa adanya." }
         notes: { type: string, nullable: true }
 
     BomCostBreakdown:
@@ -5911,10 +5974,19 @@ components:
         qty_change: { type: integer }
         stock_before: { type: integer }
         stock_after: { type: integer }
-        reference_type: { type: string, nullable: true }
-        reference_id: { type: integer, nullable: true }
         reason: { type: string, nullable: true }
-        user_name: { type: string, nullable: true, readOnly: true }
+        user_name: { type: string, nullable: true, readOnly: true, description: Pengguna pencatat; null bila penggunanya sudah dihapus. }
+        variant_name: { type: string, nullable: true, readOnly: true }
+        product_id: { type: integer, nullable: true, readOnly: true, description: null bila produknya sudah dihapus (layar Stok memberi pesan jelas). }
+        product_name: { type: string, nullable: true, readOnly: true }
+        reference:
+          type: object
+          nullable: true
+          readOnly: true
+          properties:
+            type: { type: string, enum: [order, preorder] }
+            id: { type: integer, description: id order / pre-order }
+            number: { type: string, example: "TRX-20261004-0007" }
         created_at: { type: string, format: date-time }
 
     Event:

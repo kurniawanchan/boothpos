@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/vue';
+import { render, screen, fireEvent } from '@testing-library/vue';
 import userEvent from '@testing-library/user-event';
 import BaseSelect from '../../resources/js/components/ui/BaseSelect.vue';
 
@@ -86,5 +86,95 @@ describe('BaseSelect', () => {
     render(BaseSelect, { props: { options: OPTIONS, error: 'Wajib diisi' } });
     expect(screen.getByText('Wajib diisi')).toBeInTheDocument();
     expect(screen.getByRole('combobox')).toHaveAttribute('aria-invalid', 'true');
+  });
+});
+
+// 036-bom-variant-stock-ux (US2) — daftar panjang harus bisa di-scroll dan dicari.
+// AKAR MASALAH: listener scroll tingkat window (capture) menutup panel pada SETIAP
+// scroll, termasuk scroll di dalam daftarnya sendiri — daftar pendek tidak pernah
+// perlu di-scroll, jadi tidak ada yang melihatnya sampai produk punya banyak varian.
+const MANY = Array.from({ length: 30 }, (_, i) => ({ value: i + 1, label: `SPF-KC-MCY-${String(i + 1).padStart(3, '0')} — Varian ${i + 1}` }));
+
+describe('BaseSelect — scrolling and search (036)', () => {
+  it('stays open when the list itself is scrolled', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: MANY } });
+    await user.click(screen.getByRole('combobox'));
+
+    await fireEvent.scroll(screen.getByRole('listbox'));
+
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('still closes when something OUTSIDE the list scrolls (fixed-position panel would float)', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: MANY } });
+    await user.click(screen.getByRole('combobox'));
+
+    await fireEvent.scroll(document.body);
+
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('has no search box unless it is opted in', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: MANY } });
+    await user.click(screen.getByRole('combobox'));
+
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('searchable: filters case-insensitively on the label and says so when nothing matches', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: MANY, searchable: true } });
+    await user.click(screen.getByRole('combobox'));
+    const box = screen.getByRole('textbox', { name: 'Cari…' });
+    expect(box).toHaveFocus();
+    expect(screen.getAllByRole('option').length).toBeGreaterThan(30); // 30 pilihan + baris placeholder
+
+    await user.type(box, 'mcy-012');
+    expect(screen.getByRole('option', { name: /SPF-KC-MCY-012/ })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /SPF-KC-MCY-013/ })).not.toBeInTheDocument();
+
+    await user.clear(box);
+    await user.type(box, 'zzz-nothing');
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.getByText('Tidak ada pilihan.')).toBeInTheDocument();
+  });
+
+  it('searchable: arrows and Enter act on the FILTERED list, and the choice is emitted', async () => {
+    const user = userEvent.setup();
+    const { emitted } = render(BaseSelect, { props: { options: MANY, searchable: true } });
+    await user.click(screen.getByRole('combobox'));
+
+    await user.type(screen.getByRole('textbox', { name: 'Cari…' }), 'varian 2');
+    // cocok: Varian 2, 20..29  ->  yang aktif pertama = Varian 2; ArrowDown -> Varian 20
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(emitted()['update:modelValue'][0]).toEqual([20]);
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('searchable: Escape closes without a value, and reopening starts with an empty search', async () => {
+    const user = userEvent.setup();
+    const { emitted } = render(BaseSelect, { props: { options: MANY, searchable: true } });
+    await user.click(screen.getByRole('combobox'));
+    await user.type(screen.getByRole('textbox', { name: 'Cari…' }), 'varian 9');
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(emitted()['update:modelValue']).toBeUndefined();
+
+    await user.click(screen.getByRole('combobox'));
+    expect(screen.getByRole('textbox', { name: 'Cari…' })).toHaveValue('');
+  });
+
+  it('hides its own placeholder row when the caller already provides an empty-value option', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: [{ value: '', label: 'Semua tipe' }, { value: 1, label: 'Penjualan' }], modelValue: '', placeholder: 'Semua tipe' } });
+    await user.click(screen.getByRole('combobox'));
+
+    expect(screen.getAllByRole('option').map((o) => o.textContent.trim())).toEqual(['Semua tipe', 'Penjualan']);
+    expect(screen.getByRole('combobox')).toHaveTextContent('Semua tipe');
   });
 });

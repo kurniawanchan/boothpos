@@ -231,6 +231,16 @@ A variant's BOM is the traceable list of PURCHASE-ORDER LINES that produce it (s
 - **`ProductVariantResource`** always carries `bom_complete`; `has_bom`/`bom_cost` appear only when `bomLines` was eager-loaded (`ProductController::variantRelations()`, products-menu users on show/update) — the `relationLoaded()` trap again.
 - "Linked Product" is gone from the PO form but `purchase_order_items.product_id` stays (API still accepts it; the form carries an existing value through when a draft is edited).
 
+## BOM quantities, batch save, variant history (feature 036, 2026-10-05)
+
+- **BOM quantity is a WHOLE number ≥ 1 everywhere it is written** — one rule, `App\Rules\WholeBomQuantity` (accepts `2`, `"2"`, `2.0`, `"11.0000"`; refuses `1.5`, `0`, `-1`). It is NOT Laravel's `integer` (that rejects `"11.0000"`/`2.0`, exactly what the DB and Excel hand back). Used by `PUT /bom/{id}`, `POST …/bom/items`, the legacy `POST /variants/{v}/bom`, the batch save and the Excel `bom` sheet (per-row error, all-or-nothing import unchanged). **Stored legacy fractions are never rewritten** (still read and costed as stored; editing that row needs a whole number) — `BomCostTest` keeps a model-level `2.5` fixture on purpose.
+- **Save is one all-or-nothing batch:** `PUT /variants/{variant}/bom` → `VariantBomService::updateQuantities()` (one lock, ids proven to belong to the variant BEFORE any write → 409 `bom_line_not_found`, unchanged values skipped, one `bom_qty_changed` audit row per changed line, `cost_price` re-synced ONCE when complete). Last writer wins (no optimistic version). The dialog keeps quantities as a DRAFT (no blur-save), shows an unsaved indicator and routes close / add / remove / replace / copy / complete / reopen through one `guard()` that asks before discarding. `summary.current_stock` is read-only — nothing in the BOM dialog changes stock or deducts materials. Cost labels say "per 1 product"; the maths is unchanged. A `watch(..., {immediate:true})` that resets state must come AFTER the refs it touches are declared (TDZ crash seen in 135 unrelated tests).
+- **`GET /stock/movements` is the one ledger source** for the Stock screen and the per-variant history (`VariantHistoryModal`, opened from the variant row in `ProductDetailModal`). It is now gated to the `stock` OR `products` menu (it was open to every logged-in role) and returns `user_name` (the Stock screen's BY column was always blank — the OpenAPI promised it, the controller never sent it), `variant_name`, `product_id` (null when the product is deleted), `product_name`, and a resolved `reference {type: order|preorder, id, number}`.
+- **`reference_id` means different things per writer**, so `StockMovementReferences` resolves by (movement type, reference_type) and proves the order/item really involves the movement's variant, else `null` (never a wrong number): `sale`+`order_item` = order id; `return`+`order_item` = order-item id; `purchase`/`preorder_handover`+`preorder_item` = pre-order-item id; `purchase`+`preorder` = pre-order id (written by the pre-order edit delta since 036; older edit rows were stored as `preorder_item` holding a pre-order id — ambiguous, resolved as an item with the variant guard). Known limitation: editing a pre-order after arrival rebuilds its items, so the earlier arrival movement points at a deleted item and shows no reference. `purchase_order_item` references exist only on MATERIAL movements.
+- **`BaseSelect`** no longer closes when its own list scrolls (the window-level capture scroll listener used to catch it) and has an opt-in `searchable` mode (default off; the 8 other callers are unchanged). `BomCopyMenu` uses it.
+- **i18n guard:** `qa-tests/unit/localeKeys.test.js` fails when any literal `t('a.b')` is missing from `en.json`/`id.json` (`master_data.col_type` was the only one — it surfaced as the raw header `MASTER_DATA.COL_TYPE`). Dynamic keys are not checked.
+- Stock list: the SKU is a button (opens `ProductDetailModal` with the variant highlighted) only with the `products` menu, plain text otherwise; Products list: 56 px thumbnail and a one-line (truncated, titled) code.
+
 ## App name ("Powered by") and the backup/restore screen (added post-MVP, 2026-09-30)
 
 - **`app_name`** is one more `settings` row (single value for the whole install, NOT per DEMO/LIVE like `store_name`), read only through `App\Support\AppName::current()` — trimmed, blank means the default `BoothPOS`, max 50 characters (validated in `UpdateSettingsRequest`). It is exposed to every role via `GET /settings/features`, and rides along inside the invoice payloads (`BuildsInvoiceDocument`, so bulk downloads match the screen) and `GET /orders/{id}/receipt`. Frontend: `stores/settings.js` (`appName`), the sidebar brand, and a "Powered by {name}" line on the pre-order invoice, payment invoice, sales receipt and the bulk-download HTML (`utils/invoiceDocument.js`). The frontend default lives in `utils/appName.js` (`resolveAppName`) — keep it equal to `AppName::DEFAULT`. The bulk builder HTML-escapes the name (it is user-typed). Not applied to the billing `InvoiceDetailModal` (the vendor's licence invoice) or the license-key e-mail.
@@ -316,7 +326,24 @@ The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **PO
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/035-po-row-actions/plan.md`
+Active feature plan: `specs/036-bom-variant-stock-ux/plan.md`
+(branch `036-bom-variant-stock-ux`, branched from `develop` after PR #30) — UX/correctness
+pass on the BOM dialog, variant history and the product/stock lists. BOM quantities become
+WHOLE numbers through one shared rule (`App\Rules\WholeBomQuantity`, every HTTP + Excel
+entry point; stored legacy fractions are never rewritten); quantity edits become a draft
+saved by an explicit Save through ONE all-or-nothing batch endpoint
+(`PUT /variants/{variant}/bom` → `VariantBomService::updateQuantities()`), with an
+unsaved-changes guard, the variant's current stock (read-only, `summary.current_stock`) and
+"per 1 product" labels (cost maths untouched). Root causes found: the copy picker could not
+scroll because `BaseSelect` closed on ANY scroll event, including its own list (fixed +
+opt-in `searchable` mode); `master_data.col_type` was never defined (the only missing literal
+i18n key — a static test now guards all keys). Variant history reuses
+`GET /stock/movements` (adds `user_name`, product/variant names, a safely-resolved
+`reference`; now gated to the `stock`/`products` menu — it was open to every role).
+SKU on the Stock list opens `ProductDetailModal`; Products list gets a larger thumbnail and a
+one-line code. No migration. See research.md.
+
+Previous feature: `specs/035-po-row-actions/plan.md`
 (branch `035-po-row-actions`, branched from `develop` after PR #29) — Purchase Orders
 list gets Detail / Edit / Delete on every row (reusing `PreorderRowActions`; unavailable
 actions stay visible with a reason). Edit is no longer draft-only (after draft: vendor,

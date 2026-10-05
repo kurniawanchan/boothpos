@@ -189,6 +189,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/variants/{variant}/bom/complete', [VariantBomController::class, 'complete']);
         Route::post('/variants/{variant}/bom/reopen', [VariantBomController::class, 'reopen']);
         Route::get('/variants/{variant}/bom', [VariantBomController::class, 'index']);
+        // 036 — tombol Simpan dialog BOM: simpan banyak jumlah sekaligus (semua-atau-tidak-sama-sekali).
+        Route::put('/variants/{variant}/bom', [VariantBomController::class, 'updateQuantities']);
         Route::post('/variants/{variant}/bom', [MaterialController::class, 'storeBomLine']);
         Route::put('/bom/{bomLine}', [VariantBomController::class, 'update']);
         Route::post('/bom/{bomLine}/replace-source', [VariantBomController::class, 'replaceSource']);

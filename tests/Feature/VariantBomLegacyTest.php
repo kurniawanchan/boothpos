@@ -157,8 +157,8 @@ class VariantBomLegacyTest extends TestCase
     {
         $material = Material::factory()->create();
 
-        $this->postJson("/api/v1/variants/{$this->variant->id}/bom", ['material_id' => $material->id, 'qty_needed' => 2.5, 'notes' => 'lama'])
-            ->assertCreated()->assertJsonPath('is_legacy', true)->assertJsonPath('qty_needed', '2.5000');
+        $this->postJson("/api/v1/variants/{$this->variant->id}/bom", ['material_id' => $material->id, 'qty_needed' => 3, 'notes' => 'lama']) // 036: bilangan bulat
+            ->assertCreated()->assertJsonPath('is_legacy', true)->assertJsonPath('qty_needed', '3.0000');
 
         $log = ActivityLog::where('action', 'bom_item_added')->firstOrFail();
         $this->assertSame($this->owner->id, $log->user_id);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\WholeBomQuantity;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -22,9 +23,8 @@ class StoreBomItemsRequest extends FormRequest
         return [
             'items' => ['required', 'array', 'min:1', 'max:100'],
             'items.*.purchase_order_item_id' => ['required', 'integer', 'distinct', 'exists:purchase_order_items,id'],
-            // Jumlah per SATU unit produk jadi: > 0, maksimal 4 desimal
-            // (kolom decimal(12,4)); kosong = 1.
-            'items.*.qty' => ['nullable', 'numeric', 'gt:0', 'decimal:0,4', 'max:99999999'],
+            // Jumlah per SATU unit produk jadi: bilangan bulat >= 1 (036); kosong = 1.
+            'items.*.qty' => ['nullable', new WholeBomQuantity],
         ];
     }
 }

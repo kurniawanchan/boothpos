@@ -3,12 +3,13 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import VariantBomModal from '../../resources/js/components/product/VariantBomModal.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listBomLines, updateBomLine, deleteBomLine, eligibleBomLines, completeBom, reopenBom, replaceBomSource } from '../../resources/js/api/materials';
+import { listBomLines, updateBomLine, saveBomQuantities, deleteBomLine, eligibleBomLines, completeBom, reopenBom, replaceBomSource } from '../../resources/js/api/materials';
 import { listVendors } from '../../resources/js/api/vendors';
 
 vi.mock('../../resources/js/api/materials', () => ({
   listBomLines: vi.fn(),
   updateBomLine: vi.fn(),
+  saveBomQuantities: vi.fn(),
   deleteBomLine: vi.fn(),
   eligibleBomLines: vi.fn(),
   addBomItems: vi.fn(),
@@ -23,7 +24,7 @@ const ROWS = [
   { id: 2, line_type: 'material', item_name: 'Keychain Ring', is_legacy: false, material_id: 4, material_unit: 'pcs', purchase_order_item_id: 12, po_number: 'PO-002', vendor_id: 5, vendor_name: 'Vendor X', unit_cost: '300.00', qty_needed: '1.0000', item_cost: '300.00', po_qty: 500, notes: null },
   { id: 3, line_type: 'service', item_name: 'Assembly', is_legacy: false, material_id: null, material_unit: null, purchase_order_item_id: 13, po_number: 'PO-003', vendor_id: 6, vendor_name: 'Vendor Y', unit_cost: '1000.00', qty_needed: '1.0000', item_cost: '1000.00', po_qty: 200, notes: null },
 ];
-const SUMMARY = { material_cost: '800.00', service_cost: '1000.00', bom_cost: '1800.00', has_legacy: false, bom_complete: false, cost_price: '0.00', reopened: false };
+const SUMMARY = { material_cost: '800.00', service_cost: '1000.00', bom_cost: '1800.00', has_legacy: false, bom_complete: false, cost_price: '0.00', current_stock: 12, reopened: false };
 
 function renderModal(menuKeys = ['dashboard', 'products', 'purchase_orders']) {
   const pinia = createPinia();
@@ -48,7 +49,7 @@ describe('VariantBomModal — BOM table from purchase order lines (034)', () => 
     renderModal();
 
     expect(await screen.findByText('Ball Chain')).toBeInTheDocument();
-    for (const header of ['Item', 'Tipe', 'Purchase Order', 'Vendor', 'Biaya Satuan', 'Jumlah', 'Total Biaya', 'Aksi']) {
+    for (const header of ['Item', 'Tipe', 'Purchase Order', 'Vendor', 'Biaya Satuan', 'Jumlah per 1 produk', 'Total Biaya', 'Aksi']) {
       expect(screen.getByRole('columnheader', { name: header })).toBeInTheDocument();
     }
     expect(screen.getByText('PO-003')).toBeInTheDocument();
@@ -66,36 +67,20 @@ describe('VariantBomModal — BOM table from purchase order lines (034)', () => 
     expect(await screen.findByText(/belum ada item pada bom ini/i)).toBeInTheDocument();
   });
 
-  it('rejects a zero or malformed quantity in the browser without calling the API', async () => {
+  it('rejects zero, decimals and malformed quantities in the browser without calling the API', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderModal();
-    const qty = await screen.findByLabelText('Jumlah Ball Chain');
+    const qty = await screen.findByLabelText('Jumlah per 1 produk Ball Chain');
 
-    await user.clear(qty);
-    await user.type(qty, '0');
-    await user.tab();
-
-    expect(await screen.findByText(/lebih dari nol/i)).toBeInTheDocument();
+    for (const bad of ['0', '1.5', 'abc', '-2']) {
+      await user.clear(qty);
+      await user.type(qty, bad);
+      expect(await screen.findByText(/bilangan bulat 1 atau lebih/i), bad).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Simpan perubahan' })).toBeDisabled();
+    }
+    expect(saveBomQuantities).not.toHaveBeenCalled();
     expect(updateBomLine).not.toHaveBeenCalled();
-  });
-
-  it('saves a valid quantity on blur and refreshes the table from the response', async () => {
-    updateBomLine.mockResolvedValue({
-      data: [{ ...ROWS[0], qty_needed: '3.0000', item_cost: '1500.00' }, ROWS[1], ROWS[2]],
-      summary: { ...SUMMARY, material_cost: '1800.00', bom_cost: '2800.00' },
-    });
-    const { default: userEvent } = await import('@testing-library/user-event');
-    const user = userEvent.setup();
-    renderModal();
-    const qty = await screen.findByLabelText('Jumlah Ball Chain');
-
-    await user.clear(qty);
-    await user.type(qty, '3');
-    await user.tab();
-
-    await waitFor(() => expect(updateBomLine).toHaveBeenCalledWith(1, { qty_needed: '3' }));
-    expect(await screen.findAllByText('Rp 2.800')).not.toHaveLength(0);
   });
 
   it('removes a row after confirmation and shows the refreshed total', async () => {
@@ -120,7 +105,7 @@ describe('VariantBomModal — BOM table from purchase order lines (034)', () => 
     await screen.findByText('Ball Chain');
     expect(screen.queryByRole('button', { name: /tambah item bom/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Hapus' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Jumlah Ball Chain')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Jumlah per 1 produk Ball Chain')).not.toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Aksi' })).not.toBeInTheDocument();
   });
 
@@ -171,7 +156,7 @@ describe('VariantBomModal — complete and reopen (034)', () => {
 
     await waitFor(() => expect(completeBom).toHaveBeenCalledWith(42));
     expect(await screen.findByText('BOM selesai')).toBeInTheDocument();
-    expect(screen.getByText('Harga modal (dari BOM)')).toBeInTheDocument();
+    expect(screen.getByText('Harga modal (dari BOM, per 1 produk)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Buka kembali BOM' })).toBeInTheDocument();
   });
 
@@ -350,3 +335,164 @@ describe('VariantBomModal — load failure (035)', () => {
   });
 });
 
+
+// 036-bom-variant-stock-ux (US1) — draft jumlah + tombol Simpan + penjaga perubahan + stok + label per unit.
+describe('VariantBomModal — draft, Save and guard (036)', () => {
+  const SAVED = { data: [{ ...ROWS[0], qty_needed: '11.0000', item_cost: '5500.00' }, ROWS[1], ROWS[2]], summary: { ...SUMMARY, material_cost: '5800.00', bom_cost: '6800.00' } };
+
+  async function setup(menuKeys) {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const view = renderModal(menuKeys);
+    await screen.findByText('Ball Chain');
+
+    return { user, ...view };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listBomLines.mockResolvedValue({ data: ROWS, summary: SUMMARY });
+    listVendors.mockResolvedValue({ data: [] });
+    eligibleBomLines.mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 10, total: 0, last_page: 1 } });
+  });
+
+  it('shows stored quantities as whole numbers (no trailing .0000) and keeps a legacy fraction as stored', async () => {
+    listBomLines.mockResolvedValue({ data: [ROWS[0], { ...ROWS[1], qty_needed: '2.5000' }], summary: SUMMARY });
+    await setup();
+
+    expect(screen.getByLabelText('Jumlah per 1 produk Ball Chain')).toHaveValue('1');
+    expect(screen.getByLabelText('Jumlah per 1 produk Keychain Ring')).toHaveValue('2.5');
+  });
+
+  it('keeps edits as a draft: nothing is sent on blur, and Save starts disabled', async () => {
+    const { user } = await setup();
+    expect(screen.getByRole('button', { name: 'Simpan perubahan' })).toBeDisabled();
+
+    const qty = screen.getByLabelText('Jumlah per 1 produk Ball Chain');
+    await user.clear(qty);
+    await user.type(qty, '11');
+    await user.tab();
+
+    expect(saveBomQuantities).not.toHaveBeenCalled();
+    expect(updateBomLine).not.toHaveBeenCalled();
+    expect(screen.getByText('Ada perubahan yang belum disimpan')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Simpan perubahan' })).toBeEnabled();
+  });
+
+  it('saves ONLY the changed rows in one call and refreshes the totals from the response', async () => {
+    saveBomQuantities.mockResolvedValue(SAVED);
+    const { user } = await setup();
+    const qty = screen.getByLabelText('Jumlah per 1 produk Ball Chain');
+    await user.clear(qty);
+    await user.type(qty, '11');
+    // tanpa mengubah baris lain; mengetik nilai yang sama pada baris kedua bukan perubahan
+    const ring = screen.getByLabelText('Jumlah per 1 produk Keychain Ring');
+    await user.clear(ring);
+    await user.type(ring, '1');
+
+    await user.click(screen.getByRole('button', { name: 'Simpan perubahan' }));
+
+    await waitFor(() => expect(saveBomQuantities).toHaveBeenCalledTimes(1));
+    expect(saveBomQuantities).toHaveBeenCalledWith(42, [{ id: 1, qty_needed: '11' }]);
+    expect((await screen.findAllByText('Rp 6.800')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Ada perubahan yang belum disimpan')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Jumlah per 1 produk Ball Chain')).toHaveValue('11');
+  });
+
+  it('keeps every draft and marks the offending row when the server refuses the batch (422)', async () => {
+    const { ApiError } = await import('../../resources/js/utils/errors');
+    saveBomQuantities.mockRejectedValue(new ApiError('Validasi gagal', { status: 422, errors: { 'lines.1.qty_needed': ['Masukkan bilangan bulat 1 atau lebih (tanpa desimal).'] } }));
+    const { user } = await setup();
+    await user.clear(screen.getByLabelText('Jumlah per 1 produk Ball Chain'));
+    await user.type(screen.getByLabelText('Jumlah per 1 produk Ball Chain'), '5');
+    await user.clear(screen.getByLabelText('Jumlah per 1 produk Keychain Ring'));
+    await user.type(screen.getByLabelText('Jumlah per 1 produk Keychain Ring'), '7');
+
+    await user.click(screen.getByRole('button', { name: 'Simpan perubahan' }));
+
+    expect(await screen.findByText(/bilangan bulat 1 atau lebih/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Jumlah per 1 produk Ball Chain')).toHaveValue('5');
+    expect(screen.getByLabelText('Jumlah per 1 produk Keychain Ring')).toHaveValue('7');
+    expect(screen.getByLabelText('Jumlah per 1 produk Keychain Ring')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('asks before closing with a draft; Cancel keeps it, Discard closes', async () => {
+    const { user, emitted } = await setup();
+    await user.clear(screen.getByLabelText('Jumlah per 1 produk Ball Chain'));
+    await user.type(screen.getByLabelText('Jumlah per 1 produk Ball Chain'), '9');
+
+    await user.click(screen.getByRole('button', { name: /tutup dialog/i }));
+    const dialog = await screen.findByRole('dialog', { name: /buang perubahan/i });
+    expect(emitted().close).toBeFalsy();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Batal' }));
+    expect(screen.getByLabelText('Jumlah per 1 produk Ball Chain')).toHaveValue('9');
+    expect(emitted().close).toBeFalsy();
+
+    await user.click(screen.getByRole('button', { name: /tutup dialog/i }));
+    await user.click(within(await screen.findByRole('dialog', { name: /buang perubahan/i })).getByRole('button', { name: 'Buang dan lanjutkan' }));
+    expect(emitted().close).toBeTruthy();
+  });
+
+  it('closes without asking when there is no draft', async () => {
+    const { user, emitted } = await setup();
+
+    await user.click(screen.getByRole('button', { name: /tutup dialog/i }));
+
+    expect(emitted().close).toBeTruthy();
+  });
+
+  it('guards actions that would reload the BOM: add item, remove, complete', async () => {
+    const { user } = await setup();
+    await user.clear(screen.getByLabelText('Jumlah per 1 produk Ball Chain'));
+    await user.type(screen.getByLabelText('Jumlah per 1 produk Ball Chain'), '9');
+
+    await user.click(screen.getByRole('button', { name: /tambah item bom/i }));
+    expect(await screen.findByRole('dialog', { name: /buang perubahan/i })).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog', { name: /buang perubahan/i })).getByRole('button', { name: 'Batal' }));
+    expect(eligibleBomLines).not.toHaveBeenCalled();
+
+    await user.click(screen.getAllByRole('button', { name: 'Hapus' })[0]);
+    expect(await screen.findByRole('dialog', { name: /buang perubahan/i })).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog', { name: /buang perubahan/i })).getByRole('button', { name: 'Batal' }));
+
+    await user.click(screen.getByRole('button', { name: /tandai bom selesai/i }));
+    expect(await screen.findByRole('dialog', { name: /buang perubahan/i })).toBeInTheDocument();
+  });
+
+  it('runs the guarded action after Discard (draft dropped, add dialog opens)', async () => {
+    const { user } = await setup();
+    await user.clear(screen.getByLabelText('Jumlah per 1 produk Ball Chain'));
+    await user.type(screen.getByLabelText('Jumlah per 1 produk Ball Chain'), '9');
+
+    await user.click(screen.getByRole('button', { name: /tambah item bom/i }));
+    await user.click(within(await screen.findByRole('dialog', { name: /buang perubahan/i })).getByRole('button', { name: 'Buang dan lanjutkan' }));
+
+    await waitFor(() => expect(eligibleBomLines).toHaveBeenCalled());
+    expect(screen.getByLabelText('Jumlah per 1 produk Ball Chain')).toHaveValue('1');
+  });
+
+  it('shows the current stock read-only and never calls a stock-changing API', async () => {
+    await setup();
+
+    expect(screen.getByText('Stok saat ini')).toBeInTheDocument();
+    expect(screen.getByText('12')).toBeInTheDocument();
+  });
+
+  it('labels the cost cards and the quantity column as per 1 product', async () => {
+    await setup();
+
+    for (const label of ['Biaya bahan (per 1 produk)', 'Biaya jasa (per 1 produk)', 'Total biaya BOM (per 1 produk)', 'Harga modal (per 1 produk)']) {
+      expect(screen.getAllByText(label).length, label).toBeGreaterThan(0);
+    }
+    expect(screen.getByRole('columnheader', { name: 'Jumlah per 1 produk' })).toBeInTheDocument();
+  });
+
+  it('shows no Save button and no inputs to a read-only user', async () => {
+    await setup(['dashboard', 'products']);
+
+    expect(screen.queryByRole('button', { name: 'Simpan perubahan' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Jumlah per 1 produk Ball Chain')).not.toBeInTheDocument();
+    expect(screen.getByText('Stok saat ini')).toBeInTheDocument();
+  });
+});

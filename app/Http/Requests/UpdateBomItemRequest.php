@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\WholeBomQuantity;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -19,7 +20,7 @@ class UpdateBomItemRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'qty_needed' => ['sometimes', 'required', 'numeric', 'gt:0', 'decimal:0,4', 'max:99999999'],
+            'qty_needed' => ['sometimes', 'required', new WholeBomQuantity],
             'notes' => ['sometimes', 'nullable', 'string'],
         ];
     }

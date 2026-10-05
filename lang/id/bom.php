@@ -18,5 +18,7 @@ return [
     'purchase_order_seller_in_use' => 'Seller purchase order ini tidak bisa diubah karena barisnya sudah dipakai BOM.',
     'source_replace_not_allowed' => 'Baris ini tidak bisa diganti sumbernya.',
     'copy_source_empty' => 'BOM sumber masih kosong, tidak ada yang bisa disalin.',
+    'line_not_found' => 'Salah satu baris BOM ini sudah tidak ada pada varian ini. Muat ulang lalu coba lagi.',
+    'qty_whole' => 'Masukkan bilangan bulat 1 atau lebih (tanpa desimal).',
     'copy_no_other_variants' => 'Produk ini tidak punya varian lain.',
 ];

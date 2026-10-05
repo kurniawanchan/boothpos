@@ -55,6 +55,14 @@ export function updateBomLine(id, payload) {
   return client.put(`/bom/${id}`, payload).then((r) => r.data);
 }
 
+/**
+ * 036 — tombol Simpan dialog BOM: banyak jumlah sekaligus, semua-atau-tidak-sama-sekali.
+ * lines: [{ id, qty_needed }] — hanya baris yang berubah.
+ */
+export function saveBomQuantities(variantId, lines) {
+  return client.put(`/variants/${variantId}/bom`, { lines }).then((r) => r.data);
+}
+
 export function deleteBomLine(id) {
   return client.delete(`/bom/${id}`).then((r) => r.data);
 }
