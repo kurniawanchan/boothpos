@@ -99,9 +99,9 @@ class ReportTest extends TestCase
 
     // Regresi — celah access-control ditemukan saat security review:
     // artistSettlements() tidak punya pemeriksaan owner/admin sama sekali,
-    // padahal mengembalikan payable_amount/deduction per artist (data
-    // komersial sesensitif laporan profit), dan sibling-nya di controller
-    // yang sama (profit, recordSettlementPayment) sudah menegakkannya.
+    // padahal mengembalikan data penjualan per artist (data komersial
+    // sesensitif laporan profit), dan sibling-nya di controller yang sama
+    // (profit) sudah menegakkannya.
     public function test_artist_settlements_report_requires_owner_or_admin(): void
     {
         $cashier = User::factory()->create(['role' => 'cashier']);
@@ -145,61 +145,19 @@ class ReportTest extends TestCase
         $this->assertCount(2, $rows);
 
         $this->assertSame('20000.00', $rows[$selling->id]['total_sales']);
-        $this->assertIsInt($rows[$selling->id]['id']); // artist yang laku tetap punya id settlement
 
         $this->assertSame('0.00', $rows[$idle->id]['total_sales']);
         $this->assertSame(0, $rows[$idle->id]['total_units']);
-        $this->assertSame('0.00', $rows[$idle->id]['payable_amount']);
-        $this->assertSame('0.00', $rows[$idle->id]['paid_amount']);
-        $this->assertSame('0.00', $rows[$idle->id]['outstanding']);
-        $this->assertSame('unpaid', $rows[$idle->id]['status']);
-        $this->assertNull($rows[$idle->id]['id']);
         $this->assertSame('Artist Belum Laku', $rows[$idle->id]['artist_name']);
     }
 
-    // Baris settlement yang PUNYA id tetap bisa dibayar lewat endpoint
-    // pembayaran — id yang dikembalikan laporan harus benar-benar bisa
-    // dipakai sebagai {settlement} di rute itu.
-    public function test_settlement_payment_still_works_for_the_id_returned_by_the_report(): void
+    // 040 (tindak lanjut) — endpoint "Record payment" untuk seller dihapus; rutenya tidak ada lagi.
+    public function test_the_seller_settlement_payment_endpoint_no_longer_exists(): void
     {
-        $cashier = User::factory()->create(['role' => 'cashier']);
-        $this->actingAs($cashier, 'sanctum');
-
-        $event = Event::factory()->create(['status' => 'active']);
-        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
-
-        $selling = Artist::factory()->create(['code' => 'PAY']);
-        Artist::factory()->create(['code' => 'NIL']); // artist nol penjualan, id-nya null
-        $category = Category::factory()->create();
-
-        $product = Product::factory()->create(['artist_id' => $selling->id, 'category_id' => $category->id]);
-        $variant = $product->variants()->create(['sku' => 'PAYKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
-
-        app(OrderService::class)->create([
-            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
-            'items' => [['variant_id' => $variant->id, 'qty' => 5]],
-            'payments' => [['method' => 'cash', 'amount' => 50000]],
-        ], $cashier);
-
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $rows = collect($this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->json('data'))
-            ->keyBy('artist_id');
-
-        $settlementId = $rows[$selling->id]['id'];
-        $this->assertNotNull($settlementId);
-
-        $this->postJson("/api/v1/reports/artist-settlements/{$settlementId}/payment", ['amount' => 20000])
-            ->assertOk()
-            ->assertJsonPath('status', 'partial');
-
-        $after = collect($this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->json('data'))
-            ->keyBy('artist_id');
-
-        $this->assertSame('20000.00', $after[$selling->id]['paid_amount']);
-        $this->assertSame('30000.00', $after[$selling->id]['outstanding']);
-        $this->assertSame('partial', $after[$selling->id]['status']);
+        $this->postJson('/api/v1/reports/artist-settlements/1/payment', ['amount' => 20000])->assertStatus(404);
     }
 
     // Artist nonaktif TIDAK ikut dilaporkan bila tidak punya penjualan —
@@ -500,12 +458,12 @@ class ReportTest extends TestCase
     }
 
     // =====================================================================
-    // 012-seller-preorder-report-detail-export (US1, T004) — detail
-    // transaksi seller memuat preorder yang sudah berkontribusi ke Seller
-    // Recap, bukan hanya order reguler.
+    // 012-seller-preorder-report-detail-export (US1, T004) — detail transaksi
+    // seller. 040: kini HANYA transaksi POS, supaya jumlahnya sama dengan
+    // kolom Penjualan di Rekap (yang juga POS-saja).
     // =====================================================================
 
-    public function test_artist_settlement_transactions_includes_both_a_regular_sale_and_a_partially_paid_preorder(): void
+    public function test_artist_settlement_transactions_lists_only_the_regular_sale_and_never_a_preorder(): void
     {
         $cashier = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($cashier, 'sanctum');
@@ -519,15 +477,13 @@ class ReportTest extends TestCase
         $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'US1KYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
-        // Sale reguler: 1 x 10000 = 10000.
         $order = app(OrderService::class)->create([
             'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
             'items' => [['variant_id' => $variant->id, 'qty' => 1]],
             'payments' => [['method' => 'cash', 'amount' => 10000]],
         ], $cashier);
 
-        // Preorder: subtotal 10000 (qty 1 x 10000), baru dibayar 4000 (40%)
-        // -> amount_for_artist yang diakui = 4000.00 (bukan 10000.00 penuh).
+        // Pre-order sebagian terbayar: dulu muncul sebagai entri kedua (4000.00).
         $preorder = $this->createPartiallyPaidPreorder($event, $customer, [
             ['variant' => $variant, 'qty' => 1],
         ], paidAmount: 4000);
@@ -539,19 +495,33 @@ class ReportTest extends TestCase
             ->assertOk();
 
         $transactions = collect($response->json('transactions'));
-        $this->assertCount(2, $transactions);
+        $this->assertCount(1, $transactions);
 
-        $orderTx = $transactions->firstWhere('key', 'order-'.$order->id);
-        $this->assertNotNull($orderTx);
-        $this->assertSame('order', $orderTx['source']);
+        $orderTx = $transactions->first();
+        $this->assertSame('order-'.$order->id, $orderTx['key']);
         $this->assertSame('10000.00', $orderTx['amount_for_artist']);
+        $this->assertArrayNotHasKey('source', $orderTx);
+        $this->assertNotContains('preorder-'.$preorder->id, $transactions->pluck('key')->all());
+    }
 
-        $preorderTx = $transactions->firstWhere('key', 'preorder-'.$preorder->id);
-        $this->assertNotNull($preorderTx);
-        $this->assertSame('preorder', $preorderTx['source']);
-        // 40% dari 10000 = 4000.00 — jumlah yang BENAR-BENAR terkumpul,
-        // bukan nilai penuh preorder (Acceptance Scenario 3).
-        $this->assertSame('4000.00', $preorderTx['amount_for_artist']);
+    public function test_a_preorder_only_seller_has_an_empty_transaction_list(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+
+        $event = Event::factory()->create(['status' => 'active']);
+        $category = Category::factory()->create();
+        $artist = Artist::factory()->create(['code' => 'US5']);
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $variant = $product->variants()->create(['sku' => 'US5KYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
+
+        $this->createPartiallyPaidPreorder($event, Customer::factory()->create(), [
+            ['variant' => $variant, 'qty' => 1],
+        ], paidAmount: 10000);
+
+        $this->getJson("/api/v1/reports/artist-settlements/{$artist->id}/transactions?event_id={$event->id}")
+            ->assertOk()
+            ->assertJsonPath('transactions', []);
     }
 
     public function test_artist_settlement_transactions_amounts_sum_to_the_seller_recap_total_sales(): void
@@ -591,8 +561,9 @@ class ReportTest extends TestCase
         $recapRow = collect($recapResponse->json('data'))->firstWhere('artist_id', $artist->id);
         $this->assertNotNull($recapRow);
 
-        $this->assertSame(14000.0, $sumOfEntries);
-        $this->assertSame(14000.0, (float) $recapRow['total_sales']);
+        // 040: pre-order (4000 terkumpul) tidak lagi ikut di keduanya.
+        $this->assertSame(10000.0, $sumOfEntries);
+        $this->assertSame(10000.0, (float) $recapRow['total_sales']);
         $this->assertEqualsWithDelta((float) $recapRow['total_sales'], $sumOfEntries, 0.001);
     }
 
@@ -622,7 +593,7 @@ class ReportTest extends TestCase
         $this->assertNotContains('preorder-'.$preorder->id, $keys);
     }
 
-    public function test_artist_settlement_transactions_never_mixes_demo_and_live_orders_or_preorders(): void
+    public function test_artist_settlement_transactions_never_mixes_demo_and_live_orders(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
@@ -674,11 +645,11 @@ class ReportTest extends TestCase
             ->assertOk();
 
         $transactions = collect($response->json('transactions'));
-        $this->assertCount(2, $transactions);
+        $this->assertCount(1, $transactions);
         $sum = $transactions->sum(fn ($tx) => (float) $tx['amount_for_artist']);
-        // 10000 (order LIVE) + 4000 (preorder LIVE, 40% dari 10000) —
-        // TANPA kontaminasi dari order/preorder DEMO senilai jutaan.
-        $this->assertSame(14000.0, $sum);
+        // 10000 (order LIVE) saja — TANPA kontaminasi dari order/preorder DEMO
+        // senilai jutaan, dan (040) tanpa pre-order LIVE-nya.
+        $this->assertSame(10000.0, $sum);
     }
 
     // =====================================================================
@@ -723,8 +694,8 @@ class ReportTest extends TestCase
         $this->assertContains('Detail Transaksi', $sheetNames);
 
         $summarySheet = $spreadsheet->getSheetByName('Rekap');
-        $this->assertSame('artist_name', $summarySheet->getCell('C1')->getValue());
-        $this->assertSame('Artist Ekspor', $summarySheet->getCell('C2')->getValue());
+        $this->assertSame('artist_name', $summarySheet->getCell('B1')->getValue());
+        $this->assertSame('Artist Ekspor', $summarySheet->getCell('B2')->getValue());
 
         $detailSheet = $spreadsheet->getSheetByName('Detail Transaksi');
         $this->assertSame('item_name', $detailSheet->getCell('D1')->getValue());
@@ -1103,7 +1074,10 @@ class ReportTest extends TestCase
         $this->assertSame('3500.00', $profitResponse->json('gross_profit'));
     }
 
-    public function test_artist_settlement_recalculation_includes_preorder_recognized_revenue_with_same_proration_and_cancellation_rules(): void
+    // 040 — membalik tes 033/010 di tempat ini: settlement TIDAK lagi memuat pendapatan
+    // pre-order. Pre-order (sebagian terbayar maupun dibatalkan) tidak boleh menghasilkan
+    // baris settlement sama sekali; baris hanya lahir dari penjualan POS.
+    public function test_artist_settlement_recalculation_ignores_preorders_entirely(): void
     {
         $event = Event::factory()->create(['status' => 'active']);
         $customer = Customer::factory()->create();
@@ -1117,15 +1091,12 @@ class ReportTest extends TestCase
         $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
         $variantB = $productB->variants()->create(['sku' => 'SMBKYAAA0001', 'sell_price' => 4000, 'cost_price' => 1000, 'current_stock' => 100]);
 
-        // Sama seperti tes multi-artist di atas: subtotal 10000, 5000
-        // terkumpul (50%) -> A dapat 3000, B dapat 2000.
+        // Subtotal 10000 dengan 5000 terkumpul: sebelum 040 menyumbang 3000 ke A dan 2000 ke B.
         $this->createPartiallyPaidPreorder($event, $customer, [
             ['variant' => $variantA, 'qty' => 1],
             ['variant' => $variantB, 'qty' => 1],
         ], paidAmount: 5000);
 
-        // Preorder kedua, dibatalkan setelah sempat dibayar — TIDAK BOLEH
-        // menyumbang apa pun ke settlement artist A.
         $cancelledArtist = Artist::factory()->create(['code' => 'SMC']);
         $productC = Product::factory()->create(['artist_id' => $cancelledArtist->id, 'category_id' => $category->id]);
         $variantC = $productC->variants()->create(['sku' => 'SMCKYAAA0001', 'sell_price' => 5000, 'cost_price' => 2000, 'current_stock' => 100]);
@@ -1138,18 +1109,7 @@ class ReportTest extends TestCase
 
         app(SettlementService::class)->recalculateForEvent($event);
 
-        $settlementA = \App\Models\ArtistSettlement::where('event_id', $event->id)->where('artist_id', $artistA->id)->first();
-        $settlementB = \App\Models\ArtistSettlement::where('event_id', $event->id)->where('artist_id', $artistB->id)->first();
-        $settlementC = \App\Models\ArtistSettlement::where('event_id', $event->id)->where('artist_id', $cancelledArtist->id)->first();
-
-        $this->assertNotNull($settlementA);
-        $this->assertSame('3000.00', number_format((float) $settlementA->total_sales, 2, '.', ''));
-        $this->assertNotNull($settlementB);
-        $this->assertSame('2000.00', number_format((float) $settlementB->total_sales, 2, '.', ''));
-        // Cancelled preorder tidak pernah menghasilkan baris settlement sama
-        // sekali (bukan baris bernilai nol) karena tidak pernah muncul di
-        // agregasi order_items maupun preorder_items non-cancelled.
-        $this->assertNull($settlementC);
+        $this->assertSame(0, \App\Models\ArtistSettlement::where('event_id', $event->id)->count());
     }
 
     // =====================================================================

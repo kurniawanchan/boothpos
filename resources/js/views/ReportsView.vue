@@ -12,14 +12,11 @@ import {
   purchasesReport,
   stockByArtistReport,
   preorderReport,
-  recordSettlementPayment,
   exportReport,
 } from '../api/reports';
-import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
+import { formatIDR, parseMoney } from '../utils/money';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
-import BaseModal from '../components/ui/BaseModal.vue';
-import BaseInput from '../components/ui/BaseInput.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import ArtistTransactionsModal from '../components/report/ArtistTransactionsModal.vue';
@@ -224,7 +221,7 @@ watch(preorderView, async (view) => {
 const filteredSettlements = computed(() =>
   !artistFilter.value ? (settlements.value ?? []) : (settlements.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
 );
-const settlementTotals = computed(() => sumRows(filteredSettlements.value, ['total_sales', 'pos_sales', 'preorder_sales', 'payable_amount', 'paid_amount', 'outstanding'], ['total_units', 'pos_units', 'preorder_units']));
+const settlementTotals = computed(() => sumRows(filteredSettlements.value, ['total_sales'], ['total_units']));
 
 const filteredArtistProfit = computed(() =>
   !artistFilter.value ? (artistProfit.value ?? []) : (artistProfit.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
@@ -274,36 +271,6 @@ async function doExport(report) {
     await exportReport(report, { event_id: eventId.value || undefined });
   } catch {
     toast.error(t('reports.export_report_failed'));
-  }
-}
-
-const showSettlementPay = ref(false);
-const settlementTarget = ref(null);
-const settlementAmount = ref('0');
-const settlementNotes = ref('');
-const payingSettlement = ref(false);
-
-function openSettlementPay(row) {
-  settlementTarget.value = row;
-  settlementAmount.value = row.outstanding;
-  settlementNotes.value = '';
-  showSettlementPay.value = true;
-}
-
-async function submitSettlementPayment() {
-  payingSettlement.value = true;
-  try {
-    await recordSettlementPayment(settlementTarget.value.id, {
-      amount: toMoneyString(settlementAmount.value),
-      notes: settlementNotes.value || null,
-    });
-    toast.success(t('reports.payment_to_artist_recorded'));
-    showSettlementPay.value = false;
-    await loadActiveTab();
-  } catch (err) {
-    if (err.isValidation) toast.error(Object.values(err.errors)[0]?.[0] ?? err.message);
-  } finally {
-    payingSettlement.value = false;
   }
 }
 
@@ -426,16 +393,8 @@ function openPreorderDetail(row) {
         <DataTable
           :columns="[
             { key: 'artist_name', label: t('reports.col_artist') },
-            { key: 'pos_units', label: t('reports.col_pos_unit') },
-            { key: 'preorder_units', label: t('reports.col_preorder_unit') },
             { key: 'total_units', label: t('reports.col_unit') },
-            { key: 'pos_sales', label: t('reports.col_pos_sales') },
-            { key: 'preorder_sales', label: t('reports.col_preorder_sales') },
             { key: 'total_sales', label: t('reports.col_sales') },
-            { key: 'payable_amount', label: t('reports.col_payable') },
-            { key: 'paid_amount', label: t('reports.col_paid') },
-            { key: 'outstanding', label: t('reports.col_outstanding') },
-            { key: 'status', label: t('reports.col_status') },
             { key: 'actions', label: '' },
           ]"
           :rows="filteredSettlements"
@@ -443,20 +402,8 @@ function openPreorderDetail(row) {
           row-key="artist_id"
           :empty-message="t('reports.no_active_artists_settlement')"
         >
-          <!-- 033 — pemisahan POS vs pre-order; respons lama tanpa field ini
-               ditampilkan "–" alih-alih 0 yang menyesatkan. POS + pre-order
-               selalu sama dengan Unit/Penjualan di baris yang sama. -->
-          <template #cell-pos_units="{ row }">{{ row.pos_units ?? '–' }}</template>
-          <template #cell-preorder_units="{ row }">{{ row.preorder_units ?? '–' }}</template>
-          <template #cell-pos_sales="{ row }"><span class="whitespace-nowrap">{{ row.pos_sales != null ? formatIDR(row.pos_sales) : '–' }}</span></template>
-          <template #cell-preorder_sales="{ row }"><span class="whitespace-nowrap">{{ row.preorder_sales != null ? formatIDR(row.preorder_sales) : '–' }}</span></template>
+          <!-- 040 — rekap ini POS-saja: tidak ada lagi kolom POS/pre-order. -->
           <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
-          <template #cell-payable_amount="{ row }">{{ formatIDR(row.payable_amount) }}</template>
-          <template #cell-paid_amount="{ row }">{{ formatIDR(row.paid_amount) }}</template>
-          <template #cell-outstanding="{ row }">{{ formatIDR(row.outstanding) }}</template>
-          <template #cell-status="{ row }">
-            <span class="text-[12px] font-semibold capitalize" :class="row.status === 'paid' ? 'text-brand-active' : 'text-warn-text'">{{ row.status }}</span>
-          </template>
           <template #cell-actions="{ row }">
             <div class="flex items-center justify-end gap-3">
               <!-- F11.6 — drill-down tersedia untuk artist manapun di rekap
@@ -466,26 +413,13 @@ function openPreorderDetail(row) {
                    diverifikasi langsung sebagai daftar kosong, bukan
                    kontrol yang hilang begitu saja. -->
               <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openArtistTransactions(row)">{{ t('reports.transaction_detail') }}</button>
-              <!-- id is null until a real settlement row exists (an artist
-                   with zero sales this event) — there is nothing to record a
-                   payment against yet, so the action must stay hidden rather
-                   than firing a request the backend can't resolve. -->
-              <button v-if="row.id !== null && parseMoney(row.outstanding) > 0" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openSettlementPay(row)">{{ t('reports.record_payment_action') }}</button>
             </div>
           </template>
           <template #footer>
             <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
               <td class="px-4 py-3 text-[13px]">{{ t('reports.grand_total') }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ settlementTotals.pos_units }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ settlementTotals.preorder_units }}</td>
               <td class="px-4 py-3 text-[13px]">{{ settlementTotals.total_units }}</td>
-              <td class="px-4 py-3 text-[13px] whitespace-nowrap">{{ formatIDR(settlementTotals.pos_sales) }}</td>
-              <td class="px-4 py-3 text-[13px] whitespace-nowrap">{{ formatIDR(settlementTotals.preorder_sales) }}</td>
               <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.total_sales) }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.payable_amount) }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.paid_amount) }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.outstanding) }}</td>
-              <td class="px-4 py-3"></td>
               <td class="px-4 py-3"></td>
             </tr>
           </template>
@@ -777,20 +711,6 @@ function openPreorderDetail(row) {
         </DataTable>
       </div>
     </template>
-
-    <BaseModal :open="showSettlementPay" :title="t('reports.record_payment_to_artist')" max-width-class="max-w-[400px]" @close="showSettlementPay = false">
-      <div class="flex flex-col gap-3.5 px-6 py-5">
-        <p class="text-[13px] text-muted-4">{{ t('reports.remaining_amount', { artist: settlementTarget?.artist_name, amount: formatIDR(settlementTarget?.outstanding) }) }}</p>
-        <BaseInput v-model="settlementAmount" type="number" min="0" :label="t('reports.amount_paid_rp')" />
-        <BaseInput v-model="settlementNotes" :label="t('reports.notes_optional')" />
-      </div>
-      <template #footer>
-        <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showSettlementPay = false">{{ t('common.cancel') }}</BaseButton>
-          <BaseButton :loading="payingSettlement" @click="submitSettlementPayment">{{ t('common.save') }}</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
 
     <ArtistTransactionsModal
       :open="showArtistTransactions"

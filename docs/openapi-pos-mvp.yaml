@@ -3265,10 +3265,11 @@ paths:
         033-seller-recap-pos-preorder-split — **PERUBAHAN PERILAKU**: laporan
         ini dulu HANYA membaca `order_items` (POS). Kini `total_sales`,
         `modal` dan `gross_profit` adalah POS + porsi pre-order yang sudah
-        terbayar (aturan diakui/proporsi sama seperti Rekap Seller dan
-        `GET /reports/profit`), sehingga `total_sales` seorang seller sama
-        dengan `total_sales`-nya di `GET /reports/artist-settlements`.
-        Rinciannya ada di `*_pos` (sama dengan angka lama) dan `*_preorder`
+        terbayar (aturan diakui/proporsi sama seperti `GET /reports/profit`).
+        040 — `GET /reports/artist-settlements` sejak itu POS-SAJA, jadi
+        `total_sales` laporan ini TIDAK lagi sama dengan Rekap Seller bila
+        event punya pre-order; yang tetap sama adalah `sales_pos` dengan
+        `total_sales` Rekap. Rinciannya ada di `*_pos` (sama dengan angka lama) dan `*_preorder`
         (sisa dari total, tepat sampai sen). Seller yang hanya punya
         pre-order kini ikut tampil. Urut nama.
 
@@ -3514,24 +3515,27 @@ paths:
         Angka dihitung ulang dari `order_items` setiap kali dibaca, tanpa
         potongan komisi.
 
+        040-recap-pos-transactions-only — rekap ini HANYA memuat penjualan
+        POS (order `completed`, bukan void): `total_sales`/`total_units`
+        dan snapshot yang disimpan di `artist_settlements` semuanya POS-saja.
+        Pre-order tidak menyumbang apa pun (membalik 010/033; pre-order tetap
+        ada di `GET /reports/preorders*`, `/reports/profit` dan
+        `/reports/artist-profit`).
+
+        Tindak lanjut 040 — tiap baris HANYA `artist_id`, `artist_name`,
+        `total_sales`, `total_units`. Field `id`, `deduction`,
+        `payable_amount`, `paid_amount`, `outstanding`, `status` dan
+        endpoint `POST /reports/artist-settlements/{id}/payment` DIHAPUS
+        (layar rekap hanya Penjual / Unit / Penjualan). `paid_amount` lama
+        di tabel tidak disentuh.
+
         Daftar memuat **seluruh artist aktif**, termasuk yang belum punya
-        penjualan sama sekali di event ini (seluruh nilai uang `"0.00"`,
-        `total_units` 0, `status` `unpaid`, `id` `null`). Artist nonaktif
-        hanya ikut bila punya baris settlement di event ini.
+        penjualan sama sekali di event ini (`total_sales` `"0.00"`,
+        `total_units` 0). Artist nonaktif hanya ikut bila punya baris
+        settlement di event ini.
 
-        010-split-payment-preorder-reports (US5) — `total_sales`/
-        `total_units` sejak fitur ini juga memuat kontribusi Pre-order,
-        dihitung ulang dari `preorder_items`/`payments` dengan aturan
-        diakui/proporsi yang sama seperti `GET /reports/sales`
-        (pre-order `cancelled` menyumbang nol).
-
-        033-seller-recap-pos-preorder-split — tiap baris juga memuat
-        pemisahan `pos_units`/`preorder_units` dan `pos_sales`/
-        `preorder_sales`. Bagian POS apa adanya; bagian pre-order adalah
-        SISA dari total yang tampil (unit integer, uang dalam sen), jadi
-        POS + pre-order selalu persis sama dengan `total_units`/
-        `total_sales` pada baris yang sama. Field yang sudah ada tidak
-        berubah.
+        Field 033 `pos_units`, `preorder_units`, `pos_sales` dan
+        `preorder_sales` DIHAPUS (tidak ada lagi pemisahan).
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -3563,18 +3567,11 @@ paths:
         pada setiap baris HANYA memuat item milik artist yang diminta —
         bukan seluruh isi order tersebut. Hanya peran owner dan admin.
 
-        012-seller-preorder-report-detail-export (US1) — `transactions[]`
-        sekarang juga menyertakan entri bersumber Pre-order (bukan hanya
-        Order), dibedakan lewat `source`. Field pengidentifikasi berganti
-        nama dari `order_id`/`order_total_for_artist` menjadi `key`/
-        `amount_for_artist` karena entri pre-order tidak punya `order_id`.
-        Nilai `amount_for_artist` untuk entri pre-order adalah porsi yang
-        SUDAH TERKUMPUL (diproporsikan, research.md R1 di 010 & 012),
-        bukan nilai penuh preorder — konsisten dengan `total_sales` di
-        `GET /reports/artist-settlements`. Preorder berstatus `cancelled`
-        tidak pernah muncul di sini. Perbaikan sekaligus: query ini
-        sebelumnya tidak memfilter `data_mode` sama sekali (celah lama,
-        ditutup di fitur ini).
+        040 — HANYA transaksi POS, sehingga jumlah `amount_for_artist`
+        sama dengan `total_sales` seller itu di `GET /reports/artist-settlements`.
+        Entri pre-order (012) dan field `source` dihapus. Field pengidentifikasi
+        tetap `key` ("order-<id>") / `amount_for_artist`. Query memfilter
+        `data_mode` (celah lama ditutup di 012).
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -3596,9 +3593,8 @@ paths:
                     items:
                       type: object
                       properties:
-                        key: { type: string, example: 'order-42', description: '"order-<id>" atau "preorder-<id>".' }
-                        number: { type: string, description: 'order_number atau preorder_number.' }
-                        source: { type: string, enum: [order, preorder] }
+                        key: { type: string, example: 'order-42', description: '"order-<id>".' }
+                        number: { type: string, description: 'order_number.' }
                         created_at: { type: string, format: date-time, nullable: true }
                         items:
                           type: array
@@ -3612,29 +3608,6 @@ paths:
                         amount_for_artist:
                           $ref: '#/components/schemas/Money'
         '403': { $ref: '#/components/responses/Forbidden' }
-
-  /reports/artist-settlements/{id}/payment:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    post:
-      tags: [Report]
-      summary: Catat pembayaran ke artist
-      description: Menandai berapa yang sudah diserahkan ke artist. Tidak mengubah `total_sales`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [amount]
-              properties:
-                amount: { type: string, example: "1250000.00" }
-                notes: { type: string, nullable: true }
-      responses:
-        '200':
-          description: Diperbarui
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ArtistSettlement' }
 
   /reports/{report}/export:
     parameters:
@@ -3655,10 +3628,12 @@ paths:
         item per order, lintas semua artist di event ini: artist_name,
         order_number, date, item_name, qty, line_total).
 
-        033 — sheet "Rekap" mendapat empat kolom di UJUNG (`pos_units`,
-        `preorder_units`, `pos_sales`, `preorder_sales`, nama sama dengan
-        field API); kolom lama tetap di tempatnya. Sheet "Detail Transaksi"
-        tetap hanya memuat item POS (tidak diubah). Ekspor `profit` dan
+        040 — sheet "Rekap" berisi kolom `artist_id, artist_name,
+        total_sales, total_units` (kolom pos/pre-order dari 033 dan, pada
+        tindak lanjut, id/deduction/payable/paid/outstanding/status dihapus;
+        nilainya sama dengan `GET /reports/artist-settlements`, POS-saja).
+        Sheet "Detail Transaksi" memang hanya memuat item POS dan kini
+        jumlahnya sama dengan sheet "Rekap". Ekspor `profit` dan
         `artist-profit` otomatis membawa field `*_pos`/`*_preorder` baru
         sebagai kolom tambahan setelah kolom lama.
 
@@ -6782,42 +6757,10 @@ components:
     ArtistSettlement:
       type: object
       properties:
-        id:
-          type: integer
-          nullable: true
-          description: |
-            ID baris `artist_settlements` — dipakai sebagai `{id}` pada
-            `POST /reports/artist-settlements/{id}/payment`. Bernilai `null`
-            untuk artist aktif yang belum punya penjualan di event ini
-            (barisnya belum ada, dan memang tidak ada yang perlu dibayar).
-            Pakai `artist_id` sebagai kunci baris di tabel UI.
         artist_id: { type: integer }
         artist_name: { type: string }
         total_sales: { $ref: '#/components/schemas/Money' }
         total_units: { type: integer }
-        deduction: { $ref: '#/components/schemas/Money' }
-        payable_amount: { $ref: '#/components/schemas/Money' }
-        paid_amount: { $ref: '#/components/schemas/Money' }
-        outstanding: { $ref: '#/components/schemas/Money' }
-        status: { type: string, enum: [unpaid, partial, paid] }
-        calculated_at: { type: string, format: date-time, nullable: true }
-        pos_units:
-          type: integer
-          description: |
-            033 — unit dari penjualan POS (order `completed`). Hanya ada pada
-            baris `GET /reports/artist-settlements`. `pos_units + preorder_units
-            = total_units`, selalu.
-        preorder_units:
-          type: integer
-          description: |
-            033 — `total_units - pos_units`. `total_units` tersimpan sudah
-            dibulatkan ke integer, jadi bagian pre-order adalah SISA-nya
-            (bukan pembulatan terpisah dari unit pecahan).
-        pos_sales: { $ref: '#/components/schemas/Money' }
-        preorder_sales:
-          allOf:
-            - { $ref: '#/components/schemas/Money' }
-          description: '033 — `total_sales - pos_sales` (tepat sampai sen): bagian pre-order yang sudah terbayar.'
 
     Setting:
       type: object

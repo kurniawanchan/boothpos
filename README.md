@@ -821,3 +821,27 @@ sekadar membaca kode); butir 5 lewat browser dan butir 6 ditangkap suite tes pen
    outstanding sengaja = JUMLAH outstanding baris, bukan nilai − terkumpul (keduanya
    akan berbeda untuk seller tsb). Perilaku laporan lama, tidak diubah.
 
+## Bug yang ditemukan saat eksekusi fitur 040-recap-pos-transactions-only (2026-10-06)
+
+1. **`ReportController::artistSettlements()` — `outstanding` bisa NEGATIF.** Rumusnya
+   `payable − paid` tanpa batas bawah. Selama Payable ikut memuat pre-order hal ini
+   jarang terlihat, tetapi begitu Payable menjadi POS-saja, seller yang sudah dibayar
+   terhadap angka lama langsung punya `paid > payable`. Diperbaiki: `max(0, …)` (lalu
+   tidak relevan lagi: permintaan lanjutan menghapus kolom Payable/Paid/Outstanding/Status,
+   field-nya di API/ekspor, dan endpoint pembayaran);
+   `paid_amount` yang tercatat tidak diubah. Diverifikasi di browser dengan seller
+   yang dibayar Rp 50.000 terhadap Payable Rp 30.000 (Sisa tampil Rp 0, status paid).
+2. **Dicatat, bukan diperbaiki — Dashboard menampilkan dua angka seller yang berbeda.**
+   Panel "Hasil per penjual" membaca `total_sales` dari endpoint rekap, jadi kini POS-saja
+   (Aaa Mixed: Rp 30.000), sedangkan "Penjualan per penjual" dan kartu "Net sales" di
+   halaman yang sama masih memuat pre-order (Aaa Mixed ±Rp 270.000). Keputusan
+   perencanaan 040 (research.md R5); bila ingin keduanya sama, panel itu butuh field
+   pre-order-inklusif tersendiri atau ikut dibuat POS-saja.
+3. **Dicatat, bukan diperbaiki — sheet "Rekap" menulis `total_units` 0 sebagai sel
+   KOSONG** (pembanding null non-strict di `SheetArrayExport`; tampak pada seller tanpa
+   penjualan di ekspor). Perilaku lama yang sudah didokumentasikan di 033; uang `0.00`
+   tetap tertulis sebagai 0.
+4. **Konsekuensi, bukan bug:** pendapatan pre-order tidak lagi menghasilkan jumlah
+   yang wajib dibayar di rekap; pembayaran ke seller untuk pre-order harus diurus di
+   luar layar itu (laporan Pre-order tetap menampilkan jumlah terkumpul per seller).
+
