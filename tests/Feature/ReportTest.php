@@ -99,9 +99,9 @@ class ReportTest extends TestCase
 
     // Regresi — celah access-control ditemukan saat security review:
     // artistSettlements() tidak punya pemeriksaan owner/admin sama sekali,
-    // padahal mengembalikan payable_amount/deduction per artist (data
-    // komersial sesensitif laporan profit), dan sibling-nya di controller
-    // yang sama (profit, recordSettlementPayment) sudah menegakkannya.
+    // padahal mengembalikan data penjualan per artist (data komersial
+    // sesensitif laporan profit), dan sibling-nya di controller yang sama
+    // (profit) sudah menegakkannya.
     public function test_artist_settlements_report_requires_owner_or_admin(): void
     {
         $cashier = User::factory()->create(['role' => 'cashier']);
@@ -145,61 +145,19 @@ class ReportTest extends TestCase
         $this->assertCount(2, $rows);
 
         $this->assertSame('20000.00', $rows[$selling->id]['total_sales']);
-        $this->assertIsInt($rows[$selling->id]['id']); // artist yang laku tetap punya id settlement
 
         $this->assertSame('0.00', $rows[$idle->id]['total_sales']);
         $this->assertSame(0, $rows[$idle->id]['total_units']);
-        $this->assertSame('0.00', $rows[$idle->id]['payable_amount']);
-        $this->assertSame('0.00', $rows[$idle->id]['paid_amount']);
-        $this->assertSame('0.00', $rows[$idle->id]['outstanding']);
-        $this->assertSame('unpaid', $rows[$idle->id]['status']);
-        $this->assertNull($rows[$idle->id]['id']);
         $this->assertSame('Artist Belum Laku', $rows[$idle->id]['artist_name']);
     }
 
-    // Baris settlement yang PUNYA id tetap bisa dibayar lewat endpoint
-    // pembayaran — id yang dikembalikan laporan harus benar-benar bisa
-    // dipakai sebagai {settlement} di rute itu.
-    public function test_settlement_payment_still_works_for_the_id_returned_by_the_report(): void
+    // 040 (tindak lanjut) — endpoint "Record payment" untuk seller dihapus; rutenya tidak ada lagi.
+    public function test_the_seller_settlement_payment_endpoint_no_longer_exists(): void
     {
-        $cashier = User::factory()->create(['role' => 'cashier']);
-        $this->actingAs($cashier, 'sanctum');
-
-        $event = Event::factory()->create(['status' => 'active']);
-        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
-
-        $selling = Artist::factory()->create(['code' => 'PAY']);
-        Artist::factory()->create(['code' => 'NIL']); // artist nol penjualan, id-nya null
-        $category = Category::factory()->create();
-
-        $product = Product::factory()->create(['artist_id' => $selling->id, 'category_id' => $category->id]);
-        $variant = $product->variants()->create(['sku' => 'PAYKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
-
-        app(OrderService::class)->create([
-            'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
-            'items' => [['variant_id' => $variant->id, 'qty' => 5]],
-            'payments' => [['method' => 'cash', 'amount' => 50000]],
-        ], $cashier);
-
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $rows = collect($this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->json('data'))
-            ->keyBy('artist_id');
-
-        $settlementId = $rows[$selling->id]['id'];
-        $this->assertNotNull($settlementId);
-
-        $this->postJson("/api/v1/reports/artist-settlements/{$settlementId}/payment", ['amount' => 20000])
-            ->assertOk()
-            ->assertJsonPath('status', 'partial');
-
-        $after = collect($this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->json('data'))
-            ->keyBy('artist_id');
-
-        $this->assertSame('20000.00', $after[$selling->id]['paid_amount']);
-        $this->assertSame('30000.00', $after[$selling->id]['outstanding']);
-        $this->assertSame('partial', $after[$selling->id]['status']);
+        $this->postJson('/api/v1/reports/artist-settlements/1/payment', ['amount' => 20000])->assertStatus(404);
     }
 
     // Artist nonaktif TIDAK ikut dilaporkan bila tidak punya penjualan —
@@ -736,8 +694,8 @@ class ReportTest extends TestCase
         $this->assertContains('Detail Transaksi', $sheetNames);
 
         $summarySheet = $spreadsheet->getSheetByName('Rekap');
-        $this->assertSame('artist_name', $summarySheet->getCell('C1')->getValue());
-        $this->assertSame('Artist Ekspor', $summarySheet->getCell('C2')->getValue());
+        $this->assertSame('artist_name', $summarySheet->getCell('B1')->getValue());
+        $this->assertSame('Artist Ekspor', $summarySheet->getCell('B2')->getValue());
 
         $detailSheet = $spreadsheet->getSheetByName('Detail Transaksi');
         $this->assertSame('item_name', $detailSheet->getCell('D1')->getValue());

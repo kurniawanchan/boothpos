@@ -35,3 +35,9 @@ Unchanged (`amount >= 0.01`; `403` without the reports menu). Status is derived 
 ## Unchanged on purpose
 
 `GET /reports/preorders*`, `GET /reports/profit`, `GET /reports/artist-profit`, `GET /reports/sales`, Pre-orders screen. The Dashboard's per-seller panel reads `total_sales` above and therefore becomes POS-only.
+
+## Follow-up (2026-10-06) — supersedes the fields/endpoints above
+
+- `GET /reports/artist-settlements` rows are ONLY `{artist_id, artist_name, total_sales, total_units}` (no `id`, `deduction`, `payable_amount`, `paid_amount`, `outstanding`, `status`).
+- Export "Rekap" sheet headings: `artist_id, artist_name, total_sales, total_units`. "Detail Transaksi" unchanged.
+- `POST /reports/artist-settlements/{settlement}/payment` is **removed** (404).

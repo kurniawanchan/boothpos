@@ -18,7 +18,6 @@ vi.mock('../../resources/js/api/reports', () => ({
   artistProfitReport: vi.fn(),
   purchasesReport: vi.fn(),
   stockByArtistReport: vi.fn(),
-  recordSettlementPayment: vi.fn(),
   exportReport: vi.fn(),
   preorderReport: vi.fn(),
 }));

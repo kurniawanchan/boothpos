@@ -826,7 +826,9 @@ sekadar membaca kode); butir 5 lewat browser dan butir 6 ditangkap suite tes pen
 1. **`ReportController::artistSettlements()` — `outstanding` bisa NEGATIF.** Rumusnya
    `payable − paid` tanpa batas bawah. Selama Payable ikut memuat pre-order hal ini
    jarang terlihat, tetapi begitu Payable menjadi POS-saja, seller yang sudah dibayar
-   terhadap angka lama langsung punya `paid > payable`. Diperbaiki: `max(0, …)`;
+   terhadap angka lama langsung punya `paid > payable`. Diperbaiki: `max(0, …)` (lalu
+   tidak relevan lagi: permintaan lanjutan menghapus kolom Payable/Paid/Outstanding/Status,
+   field-nya di API/ekspor, dan endpoint pembayaran);
    `paid_amount` yang tercatat tidak diubah. Diverifikasi di browser dengan seller
    yang dibayar Rp 50.000 terhadap Payable Rp 30.000 (Sisa tampil Rp 0, status paid).
 2. **Dicatat, bukan diperbaiki — Dashboard menampilkan dua angka seller yang berbeda.**

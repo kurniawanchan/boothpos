@@ -523,31 +523,17 @@ class ReportController extends Controller
             ->orderBy('name')
             ->get();
 
+        // 040 (tindak lanjut) — rekap kini hanya Penjual / Unit / Penjualan: tidak ada lagi
+        // id settlement, deduction, payable, paid, outstanding, maupun status, dan endpoint
+        // "Record payment" dihapus. `artist_id` (selalu ada) adalah kunci baris untuk UI.
         $data = $artists->map(function (Artist $artist) use ($settlements) {
             $s = $settlements->get($artist->id);
 
-            $payable = (float) ($s?->payable_amount ?? 0);
-            $paid = (float) ($s?->paid_amount ?? 0);
-
             return [
-                // null HANYA untuk artist yang memang belum punya baris
-                // settlement (nol penjualan). Baris yang dulu bernilai
-                // angka tetap bernilai angka — 'artist_id' di bawah adalah
-                // kunci baris yang selalu terisi untuk kebutuhan tabel UI.
-                'id' => $s?->id,
                 'artist_id' => $artist->id,
                 'artist_name' => $artist->name,
                 'total_sales' => number_format((float) ($s?->total_sales ?? 0), 2, '.', ''),
                 'total_units' => (int) ($s?->total_units ?? 0),
-                'deduction' => number_format((float) ($s?->deduction ?? 0), 2, '.', ''),
-                'payable_amount' => number_format($payable, 2, '.', ''),
-                'paid_amount' => number_format($paid, 2, '.', ''),
-                // 040: tidak pernah negatif. Payable kini POS-saja, jadi seller
-                // yang dulu sudah dibayar terhadap Payable yang memuat pre-order
-                // bisa punya paid > payable; angka yang tercatat TIDAK diubah,
-                // hanya sisanya yang ditampilkan 0.
-                'outstanding' => number_format(max(0, $payable - $paid), 2, '.', ''),
-                'status' => $s?->status ?? 'unpaid',
             ];
         })->values();
 
@@ -1156,19 +1142,6 @@ class ReportController extends Controller
         return response()->json(['rows' => $rows]);
     }
 
-    public function recordSettlementPayment(Request $request, ArtistSettlement $settlement): JsonResponse
-    {
-        if (! $request->user()->canAccessMenu('reports')) {
-            return response()->json(['message' => __('reports.not_authorized_generic')], 403);
-        }
-
-        $validated = $request->validate(['amount' => ['required', 'numeric', 'min:0.01']]);
-
-        $settlement = $this->settlementService->recordPayment($settlement, (float) $validated['amount']);
-
-        return response()->json($settlement);
-    }
-
     /**
      * ASSUMPTION: PRD sengaja tidak menyebut nama pustaka Excel (lihat
      * PRD 9.1). Saya pilih maatwebsite/excel karena ini pustaka Excel
@@ -1293,7 +1266,7 @@ class ReportController extends Controller
         // pasti sama dengan layar (POS-saja); empat kolom POS/pre-order dari
         // 033 sudah tidak ada. Sheet "Detail Transaksi" memang sejak awal
         // POS-saja sehingga kini cocok dengan ringkasannya.
-        $summaryHeadings = ['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status'];
+        $summaryHeadings = ['artist_id', 'artist_name', 'total_sales', 'total_units'];
         $detailHeadings = ['artist_name', 'order_number', 'date', 'item_name', 'qty', 'line_total'];
 
         return \Maatwebsite\Excel\Facades\Excel::download(

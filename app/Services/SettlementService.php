@@ -21,6 +21,12 @@ use Illuminate\Support\Facades\DB;
  * agregasi pre-order dihapus dari jalur ini sepenuhnya (bukan sekadar
  * disembunyikan di UI). Laporan Modal Seller / Laba-Rugi punya agregasi
  * pre-order sendiri di ReportController dan tidak terpengaruh.
+ *
+ * Tindak lanjut 040: rekap di layar/API/ekspor kini hanya Penjual, Unit,
+ * Penjualan — endpoint "Record payment" dan field payable/paid/outstanding/
+ * status dihapus dari API. Kolom-kolomnya di artist_settlements tetap
+ * dipelihara di sini (tanpa migrasi) sebagai snapshot saat event ditutup;
+ * paid_amount lama tidak pernah disentuh.
  */
 class SettlementService
 {
@@ -88,19 +94,6 @@ class SettlementService
                 'sales' => (float) $row->total_sales,
                 'units' => (float) $row->total_units,
             ]]);
-    }
-
-    public function recordPayment(ArtistSettlement $settlement, float $amount): ArtistSettlement
-    {
-        $newPaid = (float) $settlement->paid_amount + $amount;
-
-        $settlement->update([
-            'paid_amount' => $newPaid,
-            'status' => $this->deriveStatus($newPaid, (float) $settlement->payable_amount),
-            'paid_at' => now(),
-        ]);
-
-        return $settlement->fresh();
     }
 
     private function deriveStatus(float $paid, float $payable): string

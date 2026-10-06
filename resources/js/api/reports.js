@@ -61,12 +61,6 @@ export function preorderReport(params = {}) {
   return client.get('/reports/preorders', { params }).then((r) => r.data);
 }
 
-export function recordSettlementPayment(settlementId, payload) {
-  return client
-    .post(`/reports/artist-settlements/${settlementId}/payment`, payload)
-    .then((r) => r.data);
-}
-
 /**
  * report is one of: sales | profit | artist-settlements. Downloaded via
  * axios (not a plain <a href>) because the export endpoint requires the

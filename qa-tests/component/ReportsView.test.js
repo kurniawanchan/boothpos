@@ -16,7 +16,6 @@ vi.mock('../../resources/js/api/reports', () => ({
   artistProfitReport: vi.fn(),
   purchasesReport: vi.fn(),
   stockByArtistReport: vi.fn(),
-  recordSettlementPayment: vi.fn(),
   exportReport: vi.fn(),
 }));
 
@@ -149,12 +148,12 @@ describe('ReportsView — Rekap Seller POS-saja (040)', () => {
     listArtists.mockResolvedValue({ data: [] });
   });
 
-  it('shows Unit and Sales only (no POS / pre-order columns) and a Grand Total that adds up the rows', async () => {
+  it('shows only Seller, Unit and Sales (no pre-order, payable, paid, outstanding or status columns) and a Grand Total that adds up the rows', async () => {
     artistSettlements.mockResolvedValue({ data: POS_ROWS });
     renderReports();
     await screen.findByText('Artist A');
 
-    for (const gone of ['Unit POS', 'Unit pre-order', 'Penjualan POS', 'Penjualan pre-order']) {
+    for (const gone of ['Unit POS', 'Unit pre-order', 'Penjualan POS', 'Penjualan pre-order', 'Wajib dibayar', 'Sudah dibayar', 'Sisa', 'Status']) {
       expect(screen.queryByRole('columnheader', { name: gone })).not.toBeInTheDocument();
     }
     for (const kept of ['Penjual', 'Unit', 'Penjualan']) {
@@ -163,23 +162,22 @@ describe('ReportsView — Rekap Seller POS-saja (040)', () => {
 
     const grand = screen.getByText('Grand Total').closest('tr');
     const cells = [...grand.querySelectorAll('td')].map((td) => td.textContent.replace(/\s+/g, ' ').trim());
-    // [label, unit, sales, payable, paid, outstanding, ...]
+    // [label, unit, sales, actions]
     expect(cells[1]).toBe('5');
     expect(cells[2]).toMatch(/55\.000/);
-    expect(cells[3]).toMatch(/55\.000/);
-    expect(cells[4]).toMatch(/35\.000/);
-    expect(cells[5]).toMatch(/20\.000/);
   });
 
-  it('keeps listing a seller without sales (zeros) and offers Record payment only where something is outstanding', async () => {
+  it('keeps listing a seller without sales (zeros) and never offers Record payment or a status', async () => {
     artistSettlements.mockResolvedValue({ data: POS_ROWS });
     renderReports();
     await screen.findByText('Artist B');
 
+    expect(screen.queryByText(/Catat bayar|Record payment/i)).not.toBeInTheDocument();
     const rowOf = (name) => screen.getByText(name).closest('tr');
-    expect(rowOf('Artist A').textContent).toMatch(/Catat bayar|Record payment/i);
-    expect(rowOf('Artist B').textContent).not.toMatch(/Catat bayar|Record payment/i);
-    expect(rowOf('Artist C').textContent).not.toMatch(/Catat bayar|Record payment/i);
+    for (const name of ['Artist A', 'Artist B', 'Artist C']) {
+      expect(rowOf(name).textContent).not.toMatch(/unpaid|partial|paid/i);
+      expect(rowOf(name).textContent).toMatch(/Detail transaksi|Transaction detail/i);
+    }
   });
 
   it('the seller filter narrows the rows and the Grand Total follows it', async () => {

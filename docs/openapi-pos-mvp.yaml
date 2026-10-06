@@ -3516,18 +3516,23 @@ paths:
         potongan komisi.
 
         040-recap-pos-transactions-only — rekap ini HANYA memuat penjualan
-        POS (order `completed`, bukan void): `total_sales`/`total_units`,
-        `payable_amount` (= `total_sales` − `deduction`) dan total yang
-        disimpan di `artist_settlements` semuanya POS-saja. Pre-order tidak
-        menyumbang apa pun (membalik 010/033; pre-order tetap ada di
-        `GET /reports/preorders*`, `/reports/profit` dan `/reports/artist-profit`).
-        `outstanding = max(0, payable_amount − paid_amount)` — tidak pernah
-        negatif; `paid_amount` yang sudah tercatat tidak diubah.
+        POS (order `completed`, bukan void): `total_sales`/`total_units`
+        dan snapshot yang disimpan di `artist_settlements` semuanya POS-saja.
+        Pre-order tidak menyumbang apa pun (membalik 010/033; pre-order tetap
+        ada di `GET /reports/preorders*`, `/reports/profit` dan
+        `/reports/artist-profit`).
+
+        Tindak lanjut 040 — tiap baris HANYA `artist_id`, `artist_name`,
+        `total_sales`, `total_units`. Field `id`, `deduction`,
+        `payable_amount`, `paid_amount`, `outstanding`, `status` dan
+        endpoint `POST /reports/artist-settlements/{id}/payment` DIHAPUS
+        (layar rekap hanya Penjual / Unit / Penjualan). `paid_amount` lama
+        di tabel tidak disentuh.
 
         Daftar memuat **seluruh artist aktif**, termasuk yang belum punya
-        penjualan sama sekali di event ini (seluruh nilai uang `"0.00"`,
-        `total_units` 0, `status` `unpaid`, `id` `null`). Artist nonaktif
-        hanya ikut bila punya baris settlement di event ini.
+        penjualan sama sekali di event ini (`total_sales` `"0.00"`,
+        `total_units` 0). Artist nonaktif hanya ikut bila punya baris
+        settlement di event ini.
 
         Field 033 `pos_units`, `preorder_units`, `pos_sales` dan
         `preorder_sales` DIHAPUS (tidak ada lagi pemisahan).
@@ -3604,29 +3609,6 @@ paths:
                           $ref: '#/components/schemas/Money'
         '403': { $ref: '#/components/responses/Forbidden' }
 
-  /reports/artist-settlements/{id}/payment:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    post:
-      tags: [Report]
-      summary: Catat pembayaran ke artist
-      description: Menandai berapa yang sudah diserahkan ke artist. Tidak mengubah `total_sales`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [amount]
-              properties:
-                amount: { type: string, example: "1250000.00" }
-                notes: { type: string, nullable: true }
-      responses:
-        '200':
-          description: Diperbarui
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ArtistSettlement' }
-
   /reports/{report}/export:
     parameters:
       - name: report
@@ -3646,9 +3628,9 @@ paths:
         item per order, lintas semua artist di event ini: artist_name,
         order_number, date, item_name, qty, line_total).
 
-        040 — sheet "Rekap" berisi kolom `id, artist_id, artist_name,
-        total_sales, total_units, deduction, payable_amount, paid_amount,
-        outstanding, status` (empat kolom pos/pre-order dari 033 dihapus;
+        040 — sheet "Rekap" berisi kolom `artist_id, artist_name,
+        total_sales, total_units` (kolom pos/pre-order dari 033 dan, pada
+        tindak lanjut, id/deduction/payable/paid/outstanding/status dihapus;
         nilainya sama dengan `GET /reports/artist-settlements`, POS-saja).
         Sheet "Detail Transaksi" memang hanya memuat item POS dan kini
         jumlahnya sama dengan sheet "Rekap". Ekspor `profit` dan
@@ -6775,28 +6757,10 @@ components:
     ArtistSettlement:
       type: object
       properties:
-        id:
-          type: integer
-          nullable: true
-          description: |
-            ID baris `artist_settlements` — dipakai sebagai `{id}` pada
-            `POST /reports/artist-settlements/{id}/payment`. Bernilai `null`
-            untuk artist aktif yang belum punya penjualan di event ini
-            (barisnya belum ada, dan memang tidak ada yang perlu dibayar).
-            Pakai `artist_id` sebagai kunci baris di tabel UI.
         artist_id: { type: integer }
         artist_name: { type: string }
         total_sales: { $ref: '#/components/schemas/Money' }
         total_units: { type: integer }
-        deduction: { $ref: '#/components/schemas/Money' }
-        payable_amount: { $ref: '#/components/schemas/Money' }
-        paid_amount: { $ref: '#/components/schemas/Money' }
-        outstanding:
-          allOf:
-            - { $ref: '#/components/schemas/Money' }
-          description: '040 — `max(0, payable_amount − paid_amount)`; tidak pernah negatif.'
-        status: { type: string, enum: [unpaid, partial, paid] }
-        calculated_at: { type: string, format: date-time, nullable: true }
 
     Setting:
       type: object

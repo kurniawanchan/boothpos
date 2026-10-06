@@ -139,22 +139,18 @@ class SellerRecapPosOnlyTest extends TestCase
 
         $this->assertSame('30000.00', $row['total_sales']);
         $this->assertSame(3, $row['total_units']);
-        $this->assertSame('30000.00', $row['payable_amount']);
     }
 
-    public function test_the_033_pos_and_preorder_split_fields_are_gone_from_the_response(): void
+    public function test_each_recap_row_has_only_the_seller_unit_and_sales_fields(): void
     {
         [$artist, $variant] = $this->seller('SPB');
         $this->posSale([[$variant, 1]]);
 
         $row = $this->recapRows()[$artist->id];
 
-        foreach (['pos_units', 'preorder_units', 'pos_sales', 'preorder_sales'] as $removed) {
-            $this->assertArrayNotHasKey($removed, $row, $removed);
-        }
-        foreach (['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status'] as $kept) {
-            $this->assertArrayHasKey($kept, $row, $kept);
-        }
+        // 040: sisa field 033 (pos_*/preorder_*) dan, pada tindak lanjut, id/deduction/payable/paid/
+        // outstanding/status sudah tidak ada — rekap hanya Penjual, Unit, Penjualan.
+        $this->assertSame(['artist_id', 'artist_name', 'total_sales', 'total_units'], array_keys($row));
     }
 
     public function test_a_seller_with_one_pos_unit_and_a_huge_paid_preorder_shows_only_the_pos_unit(): void
@@ -183,8 +179,6 @@ class SellerRecapPosOnlyTest extends TestCase
             $this->assertTrue($rows->has($artist->id), "seller {$artist->id} harus tetap tampil");
             $this->assertSame('0.00', $rows[$artist->id]['total_sales']);
             $this->assertSame(0, $rows[$artist->id]['total_units']);
-            $this->assertSame('0.00', $rows[$artist->id]['payable_amount']);
-            $this->assertSame('0.00', $rows[$artist->id]['outstanding']);
         }
     }
 
@@ -236,16 +230,16 @@ class SellerRecapPosOnlyTest extends TestCase
     }
 
     // ===================================================================
-    // US3 — Payable, Paid, Outstanding, Record payment
+    // Settlement tersimpan (snapshot saat event ditutup) — tetap POS-saja
     // ===================================================================
 
-    public function test_a_settlement_row_left_over_from_the_preorder_inclusive_rule_is_reset_and_its_payments_kept(): void
+    public function test_a_settlement_row_left_over_from_the_preorder_inclusive_rule_is_reset_and_its_payment_kept(): void
     {
-        // Seller yang HANYA punya pre-order: sebelum 040 baris settlement-nya punya
-        // total_sales dari pre-order dan sudah ada pembayaran tercatat.
+        // Seller yang HANYA punya pre-order: sebelum 040 baris settlement-nya punya total_sales dari
+        // pre-order dan pembayaran tercatat. Kini total dinolkan, paid_amount TIDAK disentuh.
         [$artist, $variant] = $this->seller('SPH');
         $this->preorder([[$variant, 1]], paid: 10000);
-        ArtistSettlement::create([
+        $settlement = ArtistSettlement::create([
             'event_id' => $this->event->id, 'artist_id' => $artist->id,
             'total_sales' => 10000, 'total_units' => 1, 'deduction' => 0,
             'payable_amount' => 10000, 'paid_amount' => 4000, 'status' => 'partial',
@@ -255,49 +249,24 @@ class SellerRecapPosOnlyTest extends TestCase
 
         $this->assertSame('0.00', $row['total_sales']);
         $this->assertSame(0, $row['total_units']);
-        $this->assertSame('0.00', $row['payable_amount']);
-        $this->assertSame('4000.00', $row['paid_amount'], 'pembayaran yang sudah tercatat tidak boleh berubah');
-        $this->assertSame('0.00', $row['outstanding'], 'Outstanding tidak pernah negatif');
-        $this->assertSame('paid', $row['status']);
+
+        $settlement->refresh();
+        $this->assertSame('0.00', number_format((float) $settlement->total_sales, 2, '.', ''));
+        $this->assertSame('4000.00', number_format((float) $settlement->paid_amount, 2, '.', ''));
     }
 
-    public function test_outstanding_is_never_negative_when_paid_exceeds_the_new_pos_only_payable(): void
+    public function test_recalculation_never_changes_a_recorded_paid_amount(): void
     {
         [$artist, $variant] = $this->seller('SPI');
-        $this->posSale([[$variant, 3]]);   // payable 30000
-        ArtistSettlement::create([
+        $this->posSale([[$variant, 3]]);
+        $settlement = ArtistSettlement::create([
             'event_id' => $this->event->id, 'artist_id' => $artist->id,
             'total_sales' => 0, 'total_units' => 0, 'deduction' => 0,
             'payable_amount' => 0, 'paid_amount' => 50000, 'status' => 'paid',
         ]);
 
-        $row = $this->recapRows()[$artist->id];
-
-        $this->assertSame('30000.00', $row['payable_amount']);
-        $this->assertSame('50000.00', $row['paid_amount']);
-        $this->assertSame('0.00', $row['outstanding']);
-        $this->assertSame('paid', $row['status']);
-    }
-
-    public function test_recording_a_payment_works_against_the_pos_only_payable_and_moves_the_status(): void
-    {
-        [$artist, $variant] = $this->seller('SPJ');
-        $this->posSale([[$variant, 3]]);
-        $this->preorder([[$variant, 5]], paid: 50000);   // tidak menambah apa pun ke Payable
-
-        $settlementId = $this->recapRows()[$artist->id]['id'];
-
-        $this->postJson("/api/v1/reports/artist-settlements/{$settlementId}/payment", ['amount' => 10000])
-            ->assertOk()->assertJsonPath('status', 'partial');
-
-        $row = $this->recapRows()[$artist->id];
-        $this->assertSame('30000.00', $row['payable_amount']);
-        $this->assertSame('10000.00', $row['paid_amount']);
-        $this->assertSame('20000.00', $row['outstanding']);
-
-        $this->postJson("/api/v1/reports/artist-settlements/{$settlementId}/payment", ['amount' => 20000])
-            ->assertOk()->assertJsonPath('status', 'paid');
-        $this->assertSame('0.00', $this->recapRows()[$artist->id]['outstanding']);
+        $this->assertSame('30000.00', $this->recapRows()[$artist->id]['total_sales']);
+        $this->assertSame('50000.00', number_format((float) $settlement->fresh()->paid_amount, 2, '.', ''));
     }
 
     public function test_closing_the_event_stores_the_same_pos_only_numbers_the_recap_shows(): void
@@ -311,9 +280,8 @@ class SellerRecapPosOnlyTest extends TestCase
 
         $stored = ArtistSettlement::where('event_id', $this->event->id)->where('artist_id', $artist->id)->firstOrFail();
 
-        $this->assertSame('20000.00', (string) $stored->total_sales);
+        $this->assertSame('20000.00', number_format((float) $stored->total_sales, 2, '.', ''));
         $this->assertSame(2, (int) $stored->total_units);
-        $this->assertSame('20000.00', (string) $stored->payable_amount);
         $this->assertSame($this->recapRows()[$artist->id]['total_sales'], number_format((float) $stored->total_sales, 2, '.', ''));
     }
 
@@ -321,7 +289,7 @@ class SellerRecapPosOnlyTest extends TestCase
     // US4 — ekspor
     // ===================================================================
 
-    public function test_recap_export_has_no_preorder_columns_and_matches_the_screen(): void
+    public function test_recap_export_has_only_the_screen_columns_and_matches_the_screen(): void
     {
         [$artist, $variant] = $this->seller('SPL');
         $this->posSale([[$variant, 3]]);
@@ -331,17 +299,12 @@ class SellerRecapPosOnlyTest extends TestCase
         $summary = $this->exportSheets()['summary'];
         $headings = $summary[0];
 
-        $this->assertSame(
-            ['id', 'artist_id', 'artist_name', 'total_sales', 'total_units', 'deduction', 'payable_amount', 'paid_amount', 'outstanding', 'status'],
-            $headings
-        );
+        $this->assertSame(['artist_id', 'artist_name', 'total_sales', 'total_units'], $headings);
 
-        $row = array_combine($headings, collect($summary)->skip(1)->first(fn ($r) => (string) $r[array_search('artist_id', $headings)] === (string) $artist->id));
+        $row = array_combine($headings, collect($summary)->skip(1)->first(fn ($r) => (string) $r[0] === (string) $artist->id));
 
         // Excel menyimpan angka sebagai numerik, jadi banding sebagai angka.
-        foreach (['total_sales', 'payable_amount', 'paid_amount', 'outstanding'] as $key) {
-            $this->assertEqualsWithDelta((float) $api[$key], (float) $row[$key], 0.001, $key);
-        }
+        $this->assertEqualsWithDelta((float) $api['total_sales'], (float) $row['total_sales'], 0.001);
         $this->assertEquals($api['total_units'], $row['total_units']);
     }
 
