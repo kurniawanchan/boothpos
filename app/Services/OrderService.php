@@ -36,6 +36,16 @@ class OrderService
         if (! empty($data['local_ref'])) {
             $existing = Order::where('local_ref', $data['local_ref'])->first();
             if ($existing) {
+                // 028 — uuid klien yang sama dengan sebuah TAB TERBUKA bukan
+                // retry penjualan ini; mengembalikannya sebagai "order yang
+                // dibuat" akan menampilkan tab belum-dibayar sebagai
+                // penjualan sukses (research.md Keputusan 5, baris 3).
+                if ($existing->status === Order::STATUS_OPEN) {
+                    throw ValidationException::withMessages([
+                        'local_ref' => __('orders_payments.local_ref_belongs_to_open_tab'),
+                    ]);
+                }
+
                 return $existing->load(['items', 'payments']);
             }
         }
@@ -197,7 +207,7 @@ class OrderService
                     'line_total' => $line['line_total'],
                 ]);
 
-                $this->stockService->applyMovement(
+                $this->stockService->applyMovementIfTracked(
                     variant: $variant,
                     type: 'sale',
                     qtyChange: -$line['qty'],
@@ -229,10 +239,19 @@ class OrderService
             throw ValidationException::withMessages(['status' => __('orders_payments.already_voided')]);
         }
 
+        // 028 — tab terbuka dibatalkan lewat TabService::voidTab() yang tahu
+        // baris mana yang stoknya boleh dikembalikan (yang sudah mulai
+        // dimasak tidak). Jalur void penjualan selesai ini mengembalikan
+        // SEMUA baris, jadi kalau ia dibiarkan menerima tab terbuka, stok
+        // makanan yang sudah dimasak akan "kembali" ke rak.
+        if ($order->status === Order::STATUS_OPEN) {
+            throw ValidationException::withMessages(['status' => __('orders_payments.cannot_void_open_tab')]);
+        }
+
         return DB::transaction(function () use ($order, $reason, $user) {
             foreach ($order->items as $item) {
                 $variant = ProductVariant::lockForUpdate()->findOrFail($item->variant_id);
-                $this->stockService->applyMovement(
+                $this->stockService->applyMovementIfTracked(
                     variant: $variant,
                     type: 'return',
                     qtyChange: $item->qty, // dikembalikan
@@ -269,7 +288,7 @@ class OrderService
      * nomor struk memang harus unik lintas seluruh instalasi, terlepas
      * dari mode, sesuai constraint database itu sendiri.
      */
-    private function generateOrderNumber(): string
+    public function generateOrderNumber(): string
     {
         $today = now()->format('Ymd');
         $countToday = Order::withoutGlobalScope(DataModeScope::class)

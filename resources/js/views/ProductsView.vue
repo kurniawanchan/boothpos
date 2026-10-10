@@ -19,6 +19,7 @@ import BaseDrawer from '../components/ui/BaseDrawer.vue';
 import BaseTooltip from '../components/ui/BaseTooltip.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
+import { listStations } from '../api/stations';
 import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
@@ -167,12 +168,22 @@ const columns = computed(() => [
   { key: 'actions', label: '' },
 ]);
 
-const emptyVariant = () => ({ id: null, copy_bom_from: '', variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, image_file: null, image_error: '' });
+const emptyVariant = () => ({ id: null, copy_bom_from: '', variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, track_stock: true, image_file: null, image_error: '' });
 
 const showDrawer = ref(false);
 const editingProduct = ref(null);
 const saving = ref(false);
 const markupPercent = ref(150);
+// 028 — daftar stasiun untuk dropdown; 403 (peran tanpa `dining_setup`/`kitchen`) = dropdown disembunyikan.
+const stations = ref([]);
+onMounted(async () => {
+  try {
+    stations.value = (await listStations({ active: 1 })).data;
+  } catch {
+    stations.value = [];
+  }
+});
+
 const productForm = reactive({
   artist_id: '',
   category_id: '',
@@ -182,6 +193,7 @@ const productForm = reactive({
   is_preorder: false,
   preorder_eta: '',
   is_active: true,
+  station_id: '',
 });
 const variantRows = ref([emptyVariant()]);
 const formErrors = reactive({});
@@ -254,6 +266,7 @@ function openCreate() {
     is_preorder: false,
     preorder_eta: '',
     is_active: true,
+    station_id: '',
   });
   variantRows.value = [emptyVariant()];
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
@@ -280,6 +293,7 @@ async function openEdit(product) {
     is_preorder: full.is_preorder,
     preorder_eta: full.preorder_eta ?? '',
     is_active: full.is_active,
+    station_id: full.station_id ?? '',
   });
   variantRows.value = full.variants.length
     ? full.variants.map((v) => ({ ...v, low_stock_alert: v.low_stock_alert ?? '', original_stock: v.current_stock, image_file: null, image_error: '' }))
@@ -422,6 +436,7 @@ async function saveProduct() {
         is_preorder: productForm.is_preorder,
         preorder_eta: productForm.is_preorder ? productForm.preorder_eta || null : null,
         is_active: productForm.is_active,
+        station_id: productForm.station_id || null,
       });
       for (const row of variantRows.value) {
         const payload = {
@@ -430,6 +445,7 @@ async function saveProduct() {
           sell_price: toMoneyString(row.sell_price),
           low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
           is_active: row.is_active,
+          track_stock: row.track_stock !== false,
         };
         const newVariantPayload = row.copy_bom_from ? { ...payload, copy_bom_from_variant_id: Number(row.copy_bom_from) } : payload;
         const variantId = row.id ? (await updateVariant(row.id, payload)).id : (await addVariant(editingProduct.value.id, newVariantPayload)).id;
@@ -447,11 +463,13 @@ async function saveProduct() {
         is_preorder: productForm.is_preorder,
         preorder_eta: productForm.is_preorder ? productForm.preorder_eta || null : null,
         is_active: productForm.is_active,
+        station_id: productForm.station_id || null,
         variants: variantRows.value.map((row) => ({
           variant_name: row.variant_name,
           cost_price: toMoneyString(row.cost_price),
           sell_price: toMoneyString(row.sell_price),
           low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
+          track_stock: row.track_stock !== false,
         })),
       });
       productId = created.id;
@@ -663,6 +681,9 @@ async function performDelete() {
           <div class="grid grid-cols-2 gap-3.5">
             <BaseSelect v-model="productForm.artist_id" :label="t('master_data.owner_artist')" required :options="artists.map((a) => ({ value: a.id, label: a.name }))" :error="formErrors.artist_id" />
             <BaseSelect v-model="productForm.category_id" :label="t('master_data.category')" required :options="categories.map((c) => ({ value: c.id, label: c.name }))" :error="formErrors.category_id" />
+            <!-- 028 — stasiun persiapan khusus produk ini (menang atas stasiun kategorinya). Hanya tampil bila
+                 peran boleh membaca daftar stasiun; kosong = ikut kategori. -->
+            <BaseSelect v-if="stations.length" v-model="productForm.station_id" :label="t('master_data.station')" :placeholder="t('master_data.station_follow_category')" :options="stations.map((s) => ({ value: s.id, label: s.name }))" :hint="t('master_data.station_hint')" :error="formErrors.station_id" />
           </div>
           <div class="grid grid-cols-[2fr_1fr] gap-3.5">
             <BaseInput v-model="productForm.name" :label="t('master_data.product_name')" required maxlength="150" :error="formErrors.name" />
@@ -787,6 +808,15 @@ async function performDelete() {
             <p v-if="row.is_duplicate && Number(row.current_stock) > 0" class="rounded-md bg-warn-bg px-3 py-2 text-[12px] font-semibold text-warn-text">
               {{ t('master_data.duplicate_stock_note', { qty: row.current_stock }) }}
             </p>
+			<!-- 028 — hidangan made-to-order tidak punya stok fisik: matikan pelacakan supaya
+                 tidak ada stok palsu dan penjualan tidak pernah terblokir "stok habis". -->
+            <label class="flex items-start gap-2.5 text-[12.5px] font-semibold text-muted-4">
+              <input v-model="row.track_stock" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-line accent-brand" />
+              <span>
+                {{ t('master_data.track_stock') }}
+                <span class="block text-[11.5px] font-normal text-muted-3">{{ t('master_data.track_stock_hint') }}</span>
+              </span>
+            </label>
             <!-- Per-variant image, added at the product owner's explicit
                  request — each variant (e.g. a different design/motif) can
                  show its own picture, independent of the product's own

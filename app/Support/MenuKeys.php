@@ -43,6 +43,10 @@ class MenuKeys
         'users' => 'Pengguna',
         'roles' => 'Peran',
         'settings' => 'Pengaturan',
+        // 028-restaurant-dine-in-ordering
+        'floor' => 'Lantai & Tab',
+        'kitchen' => 'Dapur & Bar',
+        'dining_setup' => 'Pengaturan Restoran',
     ];
 
     /**

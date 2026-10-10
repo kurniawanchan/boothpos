@@ -39,6 +39,8 @@ class ProductVariantResource extends JsonResource
                     ? app(BomCostCalculator::class)->breakdown($this->resource)['bom_cost']
                     : null,
             ]),
+            // 028 — false untuk hidangan made-to-order (tanpa stok fisik).
+            'track_stock' => (bool) $this->track_stock,
         ];
     }
 }

@@ -58,18 +58,18 @@ sintaksnya MySQL-only dan akan gagal total di SQLite. Timpa bagian
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=boothpos
+DB_DATABASE=warkop_wjm
 DB_USERNAME=<user_aplikasi_anda>
 DB_PASSWORD=<password_aplikasi_anda>
 
 BACKUP_EXTERNAL_PATH=/path/ke/flashdisk-atau-hdd   # lokal: folder biasa juga cukup untuk dev
 ```
 
-Kalau `boothpos`/`<user_aplikasi_anda>` belum ada di container MySQL,
+Kalau `warkop_wjm`/`<user_aplikasi_anda>` belum ada di container MySQL,
 buat sekali (lewat `docker exec -it laradock-mysql-1 mysql -uroot -p...`
 atau client MySQL apa pun yang sudah Anda punya) — jangan pakai user
 `root` di `.env` aplikasi, buat user khusus yang haknya dibatasi ke
-database `boothpos`/`boothpos_test` saja.
+database `warkop_wjm`/`warkop_wjm_test` saja.
 
 Lalu:
 
@@ -149,7 +149,7 @@ docker compose exec app php artisan db:seed                              # akun 
 docker compose exec app php artisan db:seed --class=SakanaFridgeDemoSeeder  # data contoh
 ```
 
-Buka `http://localhost:8000` (atau `http://localhost:5173` untuk jalur
+Buka `http://localhost:8010` (app di Docker; Vite dev Docker di `http://localhost:5180`) (atau `http://localhost:5173` untuk jalur
 hot-reload Vite, sama seperti Mode B) di browser.
 
 - **Data bertahan** melewati `docker compose down` + `up` lagi (volume
@@ -159,9 +159,9 @@ hot-reload Vite, sama seperti Mode B) di browser.
 - **Menjalankan test di dalam Docker** (hasilnya harus identik dengan
   native — lihat §5). **PENTING, BUG DITEMUKAN (020-customer-data-import-export)**:
   `docker compose exec app php artisan test` TANPA flag `-e` di bawah ini
-  diam-diam menjalankan test melawan `boothpos` (database DEV SUNGGUHAN),
-  BUKAN `boothpos_test` — `env_file: .env` pada service `app` di
-  `docker-compose.yml` menyuntik `APP_ENV=local`/`DB_DATABASE=boothpos`
+  diam-diam menjalankan test melawan `warkop_wjm` (database DEV SUNGGUHAN),
+  BUKAN `warkop_wjm_test` — `env_file: .env` pada service `app` di
+  `docker-compose.yml` menyuntik `APP_ENV=local`/`DB_DATABASE=warkop_wjm`
   sebagai environment variable level-OS di dalam container, yang menang
   atas `.env.testing` DAN atas `<env force="true">` di `phpunit.xml`
   (sudah dicoba, terbukti tidak cukup — lihat komentar di phpunit.xml).
@@ -169,7 +169,7 @@ hot-reload Vite, sama seperti Mode B) di browser.
   test dijalankan, tanpa satu pun error. Override env secara eksplisit
   setiap kali menjalankan test di Docker:
   ```bash
-  docker compose exec -e APP_ENV=testing -e DB_DATABASE=boothpos_test app php artisan test
+  docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test app php artisan test
   docker compose exec node npm test
   ```
   Kalau data dev/demo kamu hilang setelah menjalankan test tanpa flag ini,
@@ -225,7 +225,7 @@ APP_ENV=testing
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=boothpos_test
+DB_DATABASE=warkop_wjm_test
 DB_USERNAME=<user_aplikasi_anda>
 DB_PASSWORD=<password_aplikasi_anda>
 BACKUP_EXTERNAL_PATH=<folder lokal apa saja untuk uji backup, lihat §7>
@@ -277,7 +277,7 @@ php artisan app:restore <path> --force   # lewati konfirmasi interaktif, untuk a
 ```
 
 **MENIMPA seluruh isi database tujuan** — jangan jalankan ke database
-`boothpos` produksi tanpa yakin.
+`warkop_wjm` produksi tanpa yakin.
 
 **Lewat layar (Pengaturan → Cadangan & pemulihan database)**, owner/admin
 bisa membuat cadangan, mengunduhnya, memulihkan dari daftar, atau memulihkan
@@ -315,7 +315,7 @@ dari kode produk:
 
 ```bash
 docker exec -e MYSQL_PWD='<password>' laradock-mysql-1 \
-  mysqldump -u<user> boothpos > /tmp/manual-check.sql
+  mysqldump -u<user> warkop_wjm > /tmp/manual-check.sql
 ```
 
 Yang BELUM dikerjakan (catat sebagai tugas lanjutan sebelum event
@@ -362,7 +362,7 @@ sendiri TIDAK PERNAH menjalankan migrasi dari request web.
 ## 9. Perbedaan dev vs instalasi toko sungguhan
 
 Runbook ini ditulis untuk mesin development (Docker MySQL, database
-`boothpos`/`boothpos_test` terpisah, `BACKUP_EXTERNAL_PATH` menunjuk ke
+`warkop_wjm`/`warkop_wjm_test` terpisah, `BACKUP_EXTERNAL_PATH` menunjuk ke
 folder lokal). Untuk instalasi toko sungguhan (satu server lokal per
 toko, sesuai model lisensi BoothPOS):
 - MySQL terpasang native di server yang sama, `mysqldump`/`mysql` di
@@ -462,3 +462,60 @@ trik `docker exec` ke container lain seperti di §7 untuk mesin dev), dan
 persis lewat `docker-compose.store.yml` — arahkan ke titik mount drive
 eksternal fisik yang sungguhan tercolok di laptop toko, bukan folder di
 disk yang sama (persis peringatan §9).
+
+## 11. Varian restoran (fitur 028 — meja, tab terbuka, modifier, dapur/bar)
+
+Salinan proyek ini berjalan terpisah dari instalasi BoothPOS lain: port **app 8010 / Vite 5180 / MySQL host 3308**,
+database **`warkop_wjm`** (dev) dan **`warkop_wjm_test`** (test), project Docker `warkop_wjm`. Jangan pernah menjalankan
+perintah terhadap container/database instalasi lain dari sini.
+
+### 11.1 Setup awal restoran (sekali per mode DEMO/LIVE — tanpa kode)
+
+1. **Event berumur panjang.** Setiap penjualan milik sebuah shift, dan setiap shift milik sebuah event yang berstatus
+   `Active`. Restoran tidak punya "event satuan", jadi buat SATU event, mis. `Operasional Restoran` (mulai hari ini,
+   selesai bertahun-tahun ke depan, status Active). Event dibuat terpisah di mode DEMO dan LIVE.
+2. **Satu artist.** Tanpa lisensi multi-artist, instalasi boleh punya tepat satu artist aktif. Buat `Restoran`; semua menu
+   memakai artist ini. Laporan rekap penjual akan menampilkan satu baris — itu wajar.
+3. Kategori & menu (varian = ukuran). **Hidangan yang dibuat saat dipesan**: matikan "Lacak stok" pada variannya supaya
+   tidak ada stok palsu dan penjualan tidak pernah terblokir "stok habis".
+4. *Pengaturan Restoran*: **Meja** (nama/area/kursi), **Stasiun** (Dapur, Bar), **Modifier** (grup + opsi + lampiran ke
+   produk/kategori). Tetapkan stasiun pada kategori atau produk di layar Kategori/Produk (stasiun produk menang atas
+   kategori; menu tanpa stasiun langsung dianggap siap saji).
+5. Buka sesi kasir (*Sesi Kasir*) pada event itu.
+
+### 11.2 Hak akses (kunci menu, dapat diatur per peran di layar Peran)
+
+| Kunci | Untuk | Default |
+|---|---|---|
+| `floor` | lantai, buka/ubah/kirim/bayar/pisah/gabung/pindah tab, tandai diantar | Owner, Admin, Kasir |
+| `kitchen` | layar dapur/bar, mulai/siap, daftar stasiun (baca) | Owner, Admin, Kasir |
+| `dining_setup` | meja, stasiun, modifier | Owner, Admin, Inventory |
+| `settings` (owner/admin) | batalkan item yang sudah dimasak, batalkan tab, serah-terima tab | Owner, Admin |
+
+Peran "Dapur" atau "Pelayan" tidak di-seed: buat sendiri di layar Peran dengan mencentang kunci yang perlu.
+
+### 11.3 Pembaruan layar & performa
+
+Layar lantai, dapur, dan tab memakai **polling pendek (±3–4 dtk)** dengan token versi — bukan koneksi yang dibiarkan
+terbuka — karena server PHP dijalankan dengan `php artisan serve`. Konsekuensinya: tablet/monitor harus berada di
+jaringan lokal yang sama dan tidak butuh internet; layar yang tersembunyi berhenti menarik data dan pulih sendiri saat
+tampil lagi.
+
+**Beberapa worker (sudah diterapkan, diukur 2026-10-04).** Server bawaan PHP hanya melayani satu permintaan pada satu
+waktu: tanpa worker tambahan, satu ekspor/laporan yang berjalan 4 dtk menahan poll ringan layar dapur selama ±3,5 dtk.
+Kedua entrypoint (`docker/php/`, `docker/store/`) kini mengekspor `PHP_CLI_SERVER_WORKERS` (bawaan **4**) dan menjalankan
+`artisan serve --no-reload` — `--no-reload` WAJIB, sebab tanpanya `artisan serve` mengabaikan variabel itu. Hasil ukur:
+poll ringan selesai ±7 ms dengan 4 worker; 5 proses `php -S` berjalan (1 induk + 4 worker); 60/60 permintaan serentak
+berstatus 200. Cache/session memakai driver `file` yang dipakai bersama semua worker. Untuk mematikannya, set
+`PHP_CLI_SERVER_WORKERS=1` di `.env`. Catatan: dokumentasi PHP menandai mode worker server bawaan sebagai
+*experimental* dan server ini tidak ditujukan untuk produksi — keduanya sudah menjadi cara layanan ini dijalankan, dan
+pengaturan ini hanya menambah proses, bukan mengubah arsitektur.
+
+### 11.4 Mengatasi masalah
+
+- **Tab tidak bisa dibayar / shift tidak bisa ditutup:** tab terbuka menahan shift. Bayar, batalkan (owner/admin), atau
+  serahkan ke shift lain (owner/admin). Layar Sesi Kasir menampilkan daftar tab penghalangnya.
+- **Tab yang sudah ada pembayaran sebagian** tidak bisa dipisah, digabung (sebagai sumber), atau dibatalkan — selesaikan
+  pembayaran atau (untuk satu item) hapus baris selama total tidak turun di bawah yang sudah dibayar.
+- Menjalankan test di dalam container: **selalu**
+  `docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test app php artisan test`.

@@ -13,6 +13,7 @@ class OrderItem extends Model
     protected $fillable = [
         'order_id', 'variant_id', 'artist_id', 'sku_snapshot', 'name_snapshot',
         'qty', 'cost_price', 'sell_price', 'discount_amount', 'line_total',
+        'modifiers', 'note', 'sent_at',
     ];
 
     protected function casts(): array
@@ -20,10 +21,14 @@ class OrderItem extends Model
         return [
             'cost_price' => 'decimal:2', 'sell_price' => 'decimal:2',
             'discount_amount' => 'decimal:2', 'line_total' => 'decimal:2',
+            'modifiers' => 'array', 'sent_at' => 'datetime',
         ];
     }
 
     public function order(): BelongsTo { return $this->belongsTo(Order::class); }
     public function variant(): BelongsTo { return $this->belongsTo(ProductVariant::class, 'variant_id'); }
     public function artist(): BelongsTo { return $this->belongsTo(Artist::class); }
+
+    /** 028 — item tiket dapur untuk baris ini (ada setelah baris dikirim). */
+    public function ticketItem(): \Illuminate\Database\Eloquent\Relations\HasOne { return $this->hasOne(KitchenTicketItem::class); }
 }

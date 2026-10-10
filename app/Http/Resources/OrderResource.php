@@ -40,6 +40,9 @@ class OrderResource extends JsonResource
                 'qty' => $i->qty, 'sell_price' => number_format((float) $i->sell_price, 2, '.', ''),
                 'line_total' => number_format((float) $i->line_total, 2, '.', ''),
                 'discount_amount' => number_format((float) $i->discount_amount, 2, '.', ''),
+                // 028 — pilihan modifier & catatan (snapshot; kosong untuk penjualan ritel biasa).
+                'modifiers' => \App\Support\ModifierSnapshot::forDisplay($i->modifiers),
+                'note' => $i->note,
                 // Field tampilan — semuanya null-safe: varian/produk bisa saja sudah
                 // dihapus/dipindah kategori sejak transaksi terjadi. cost_price
                 // SENGAJA tidak disertakan (halaman ini terbuka untuk kasir).

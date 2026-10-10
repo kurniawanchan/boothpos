@@ -40,7 +40,13 @@ class ProductVariant extends Model
         'bom_complete',
         'bom_completed_at',
         'bom_completed_by',
+        'track_stock',
     ];
+
+    // Default DB tidak terlihat pada model hasil create() — dicerminkan di
+    // sini supaya StockService::applyMovementIfTracked() tidak salah membaca
+    // null sebagai "tidak dilacak" (pola sama dengan Preorder::$attributes).
+    protected $attributes = ['track_stock' => true];
 
     protected function casts(): array
     {
@@ -51,6 +57,7 @@ class ProductVariant extends Model
             'is_active' => 'boolean',
             'bom_complete' => 'boolean',
             'bom_completed_at' => 'datetime',
+            'track_stock' => 'boolean',
         ];
     }
 

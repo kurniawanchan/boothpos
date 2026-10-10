@@ -53,6 +53,8 @@ watch(openingCashEntriesTotal, (total) => {
 const closingCash = ref(0);
 const closeNotes = ref('');
 const closing = ref(false);
+// 028 — tab yang menghalangi penutupan shift (dari 409 `open_tabs`).
+const openTabs = ref([]);
 const closeErrors = reactive({});
 
 const METHOD_LABELS = computed(() => ({
@@ -132,9 +134,12 @@ async function handleClose() {
     summary.value = null;
     closingCash.value = 0;
     closeNotes.value = '';
+    openTabs.value = [];
     await load();
-  } catch {
-    // 409/403 already toasted globally.
+  } catch (err) {
+    // 028 — shift yang masih memegang tab terbuka ditolak (409) dengan daftar tab-nya;
+    // tampilkan daftar itu dengan tautan, bukan hanya toast. 409/403 lain sudah ditoast global.
+    openTabs.value = err.isConflict && Array.isArray(err.data?.open_tabs) ? err.data.open_tabs : [];
   } finally {
     closing.value = false;
   }
@@ -270,6 +275,18 @@ async function handleClose() {
           :rows="3"
           :error="closeErrors.notes"
         />
+
+        <!-- 028 — shift tidak bisa ditutup selagi masih memegang tab terbuka (409). -->
+        <div v-if="openTabs.length" role="alert" class="flex flex-col gap-2 rounded-lg border border-warn-border bg-warn-bg px-3.5 py-3 text-[13px] text-warn-text">
+          <p class="font-bold">{{ t('events_sessions.open_tabs_blocking') }}</p>
+          <ul class="flex flex-col gap-1">
+            <li v-for="tab in openTabs" :key="tab.id">
+              <router-link :to="{ name: 'floor-tab', params: { id: tab.id } }" class="font-semibold underline">
+                {{ t('events_sessions.open_tab_item', { number: tab.order_number, place: tab.table ? t('floor.tab.table_label', { name: tab.table }) : tab.tab_label || t('floor.takeaway') }) }}
+              </router-link>
+            </li>
+          </ul>
+        </div>
 
         <BaseButton variant="dark" size="lg" class="w-full" :loading="closing" @click="handleClose">
           <i class="ph-duotone ph-lock-simple text-[17px]" aria-hidden="true"></i>

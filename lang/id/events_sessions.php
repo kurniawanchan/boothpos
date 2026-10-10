@@ -17,4 +17,5 @@ return [
     'available_on_label' => 'Hari tersedia',
     'available_on_day_1' => 'Hari 1 ({date})',
     'available_on_day_2' => 'Hari 2 ({date})',
+    'cannot_close_with_open_tabs' => 'Shift hanya bisa ditutup setelah semua tab terbuka dibayar, dibatalkan, atau diserahkan.',
 ];

@@ -1,0 +1,227 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\CashierSession;
+use App\Models\KitchenTicketItem;
+use App\Models\Order;
+use App\Models\Payment;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * 028 US2 — pembayaran tab. Memakai PaymentRecorder APA ADANYA (bukti non-tunai,
+ * verifikasi) dan aturan kembalian kasir ritel: kembalian hanya boleh berasal
+ * dari uang tunai. Beda dari penjualan ritel: pembayaran BOLEH sebagian
+ * (saldo berjalan); tab baru selesai bila yang dibayar ≥ total.
+ */
+class TabSettlementService
+{
+    public function __construct(
+        private TabService $tabs,
+        private PaymentRecorder $paymentRecorder,
+        private OrderService $orders,
+    ) {}
+
+    /**
+     * @param array{client_ref:string, payments:array<int,array>, discount_amount?:float|string|null} $data
+     */
+    public function settle(Order $tab, array $data, User $user): Order
+    {
+        $ref = $data['client_ref'];
+
+        return DB::transaction(function () use ($tab, $data, $ref) {
+            $order = $this->tabs->lock($tab);
+
+            // Idempotensi: pengiriman ulang (jaringan putus) dengan client_ref
+            // yang sama TIDAK mencatat apa pun lagi — kembalikan keadaan terkini.
+            if (Payment::where('order_id', $order->id)->where('client_ref', $ref)->exists()) {
+                return $this->tabs->loaded($order);
+            }
+
+            if ($order->status !== Order::STATUS_OPEN) {
+                throw ValidationException::withMessages(['status' => __('restaurant.tab_not_open')]);
+            }
+
+            $this->tabs->assertSessionOpen(CashierSession::findOrFail($order->session_id));
+
+            if (! $order->items()->exists()) {
+                throw ValidationException::withMessages(['tab' => __('restaurant.tab_empty')]);
+            }
+
+            if (array_key_exists('discount_amount', $data) && $data['discount_amount'] !== null) {
+                $discount = round((float) $data['discount_amount'], 2);
+                if ($discount > (float) $order->subtotal) {
+                    throw ValidationException::withMessages(['discount_amount' => __('orders_payments.discount_exceeds_subtotal')]);
+                }
+                $order->update(['discount_amount' => $discount, 'total_amount' => round((float) $order->subtotal - $discount, 2)]);
+            }
+
+            $total = round((float) $order->total_amount, 2);
+            $newPaid = round((float) collect($data['payments'])->sum('amount'), 2);
+            $paidTotal = round((float) $order->paid_amount + $newPaid, 2);
+            $completes = $paidTotal >= $total;
+
+            foreach ($data['payments'] as $input) {
+                // 'full' hanya untuk pembayaran yang menuntaskan tab; sebelumnya uang muka.
+                $input['purpose'] = $completes ? 'full' : 'down_payment';
+                $payment = $this->paymentRecorder->record($input, $order->id, null);
+                $payment->forceFill(['client_ref' => $ref])->save();
+            }
+
+            $update = ['paid_amount' => $paidTotal];
+
+            if ($completes) {
+                $change = round(max(0, $paidTotal - $total), 2);
+                $cashReceived = (float) Payment::where('order_id', $order->id)->where('method', 'cash')->sum('amount');
+
+                // Kembalian hanya masuk akal dari uang tunai (aturan yang sama dengan OrderService).
+                if ($change > $cashReceived + 0.01) {
+                    throw ValidationException::withMessages(['payments' => __('orders_payments.change_exceeds_cash_received')]);
+                }
+
+                $update += ['status' => Order::STATUS_COMPLETED, 'change_amount' => $change];
+            }
+
+            $order->update($update);
+
+            return $this->tabs->loaded($order);
+        });
+    }
+
+    /**
+     * Pisah tagihan: sebagian baris (atau sebagian unit sebuah baris) dibayar sebagai PENJUALAN
+     * TERPISAH (order baru berstatus `completed`, nomor sendiri, `split_from_order_id` = tab ini),
+     * sisanya tetap terbuka di meja yang sama.
+     *
+     *  - baris yang dipilih UTUH dipindah (re-parent: id baris yang sama, jadi pergerakan stok dan
+     *    item tiket dapur tetap valid); sebagian unit → baris asal dikecilkan dan snapshot-nya diklon;
+     *  - TIDAK memanggil StockService (stok sudah berkurang saat item ditambahkan; FR-016);
+     *  - ditolak (409) bila tab sudah punya pembayaran apa pun: tidak ada logika alokasi;
+     *  - sebagian unit hanya untuk baris yang belum dikirim atau sudah `served` (satu item tiket
+     *    hanya menunjuk satu baris); baris UTUH selalu boleh, termasuk yang masih dimasak;
+     *  - jumlah kedua sisi selalu persis sama dengan tagihan semula (jumlah qty × harga yang sama).
+     *
+     * @param array{items: array<int, array{item_id:int, qty:int}>, payments: array<int, array>, client_ref: string, discount_amount?: float|string|null} $data
+     * @return array{paid_order: Order, tab: Order, replayed: bool}
+     */
+    public function split(Order $tab, array $data, User $user): array
+    {
+        $ref = $data['client_ref'];
+
+        return DB::transaction(function () use ($tab, $data, $user, $ref) {
+            $order = $this->tabs->lock($tab);
+
+            // Idempotensi: pengiriman ulang dengan client_ref yang sama tidak memisah dua kali.
+            $existing = Order::where('split_from_order_id', $order->id)
+                ->whereHas('payments', fn ($q) => $q->where('client_ref', $ref))
+                ->first();
+            if ($existing) {
+                return ['paid_order' => $this->tabs->loaded($existing), 'tab' => $this->tabs->loaded($order), 'replayed' => true];
+            }
+
+            if ($order->status !== Order::STATUS_OPEN) {
+                throw ValidationException::withMessages(['status' => __('restaurant.tab_not_open')]);
+            }
+            $this->tabs->assertSessionOpen(CashierSession::findOrFail($order->session_id));
+            if ($order->payments()->exists()) {
+                throw ValidationException::withMessages(['tab' => __('restaurant.split_has_payments')]);
+            }
+
+            // Validasi seluruh pilihan SEBELUM mengubah apa pun.
+            $picks = [];
+            foreach ($data['items'] as $pick) {
+                $line = $order->items()->with('ticketItem')->findOrFail((int) $pick['item_id']); // baris tab lain → 404
+                $qty = (int) $pick['qty'];
+
+                if ($qty > $line->qty) {
+                    throw ValidationException::withMessages(['items' => __('restaurant.split_qty_exceeds', ['name' => $line->name_snapshot])]);
+                }
+                if ($qty < $line->qty && $line->sent_at !== null && $line->ticketItem?->status !== KitchenTicketItem::SERVED) {
+                    throw ValidationException::withMessages(['items' => __('restaurant.split_partial_sent_line', ['name' => $line->name_snapshot])]);
+                }
+                $picks[] = [$line, $qty];
+            }
+
+            // Dibuat langsung `completed`: tab asli masih memegang kunci "satu tab terbuka per meja".
+            $paid = Order::create([
+                'order_number' => $this->orders->generateOrderNumber(),
+                'event_id' => $order->event_id,
+                'session_id' => $order->session_id,
+                'customer_id' => $order->customer_id,
+                'user_id' => $user->id,
+                'channel' => 'offline',
+                'service_type' => $order->service_type,
+                'table_id' => $order->table_id,
+                'tab_label' => $order->tab_label,
+                'split_from_order_id' => $order->id,
+                'subtotal' => 0, 'discount_amount' => 0, 'total_amount' => 0, 'total_cost' => 0,
+                'paid_amount' => 0, 'change_amount' => 0,
+                'status' => Order::STATUS_COMPLETED,
+            ]);
+
+            foreach ($picks as [$line, $qty]) {
+                if ($qty === $line->qty) {
+                    $line->update(['order_id' => $paid->id]);
+
+                    continue;
+                }
+
+                $paid->items()->create([
+                    'variant_id' => $line->variant_id,
+                    'artist_id' => $line->artist_id,
+                    'sku_snapshot' => $line->sku_snapshot,
+                    'name_snapshot' => $line->name_snapshot,
+                    'qty' => $qty,
+                    'cost_price' => $line->cost_price,
+                    'sell_price' => $line->sell_price,
+                    'discount_amount' => 0,
+                    'line_total' => round((float) $line->sell_price * $qty, 2),
+                    'modifiers' => $line->modifiers,
+                    'note' => $line->note,
+                    'sent_at' => $line->sent_at,
+                ]);
+                $remaining = $line->qty - $qty;
+                $line->update(['qty' => $remaining, 'line_total' => round((float) $line->sell_price * $remaining - (float) $line->discount_amount, 2)]);
+            }
+
+            $this->tabs->recalculate($paid);
+
+            if (array_key_exists('discount_amount', $data) && $data['discount_amount'] !== null) {
+                $discount = round((float) $data['discount_amount'], 2);
+                if ($discount > (float) $paid->subtotal) {
+                    throw ValidationException::withMessages(['discount_amount' => __('orders_payments.discount_exceeds_subtotal')]);
+                }
+                $paid->update(['discount_amount' => $discount, 'total_amount' => round((float) $paid->subtotal - $discount, 2)]);
+            }
+
+            $total = round((float) $paid->total_amount, 2);
+            $paidAmount = round((float) collect($data['payments'])->sum('amount'), 2);
+            if ($paidAmount < $total) {
+                throw ValidationException::withMessages(['payments' => __('orders_payments.payment_insufficient')]);
+            }
+
+            foreach ($data['payments'] as $input) {
+                $input['purpose'] = 'full';
+                $payment = $this->paymentRecorder->record($input, $paid->id, null);
+                $payment->forceFill(['client_ref' => $ref])->save();
+            }
+
+            $change = round(max(0, $paidAmount - $total), 2);
+            $cash = (float) collect($data['payments'])->where('method', 'cash')->sum('amount');
+            if ($change > $cash + 0.01) {
+                throw ValidationException::withMessages(['payments' => __('orders_payments.change_exceeds_cash_received')]);
+            }
+            $paid->update(['paid_amount' => $paidAmount, 'change_amount' => $change]);
+
+            // Sisa tab: dihitung ulang; bila tak ada baris tersisa, tab (kini kosong) ditutup dan mejanya kosong.
+            $this->tabs->recalculate($order);
+            if (! $order->items()->exists()) {
+                $order->update(['status' => Order::STATUS_VOIDED, 'void_reason' => __('restaurant.split_paid_in_full_reason')]);
+            }
+
+            return ['paid_order' => $this->tabs->loaded($paid), 'tab' => $this->tabs->loaded($order), 'replayed' => false];
+        });
+    }
+}

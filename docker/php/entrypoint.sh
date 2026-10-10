@@ -41,4 +41,11 @@ echo "[entrypoint] running migrations..."
 php artisan migrate --force
 
 # 4. Hand off to the dev server, reachable from outside the container.
-exec php artisan serve --host=0.0.0.0 --port=8000
+# 028 — beberapa worker supaya SATU permintaan berat (ekspor/laporan) tidak membekukan layar dapur,
+# lantai, dan tab yang polling tiap ±3 dtk. Diukur: tanpa ini, permintaan 4 dtk menahan poll ringan 3,5 dtk;
+# dengan 4 worker poll itu selesai dalam ~7 ms (specs/028-restaurant-dine-in-ordering/research.md, risiko 1).
+# `artisan serve` HANYA menghormati variabel ini bersama --no-reload (kalau tidak, ia memperingatkan dan
+# membuat satu server saja). Cache/session memakai driver `file` yang dipakai bersama oleh semua worker.
+# Server bawaan PHP menandai mode worker "experimental"; set PHP_CLI_SERVER_WORKERS=1 untuk mematikannya.
+export PHP_CLI_SERVER_WORKERS="${PHP_CLI_SERVER_WORKERS:-4}"
+exec php artisan serve --no-reload --host=0.0.0.0 --port=8000

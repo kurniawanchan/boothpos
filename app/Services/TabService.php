@@ -1,0 +1,611 @@
+<?php
+
+namespace App\Services;
+
+use App\Exceptions\InputRejectedException;
+use App\Exceptions\TabConflictException;
+use App\Models\CashierSession;
+use App\Models\Customer;
+use App\Models\KitchenTicket;
+use App\Models\KitchenTicketItem;
+use App\Models\DiningTable;
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\ProductVariant;
+use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+/**
+ * 028 US2 — daur hidup tab: buka, tambah/ubah/hapus baris, tutup-kosong,
+ * serah-terima. Pembayaran ada di TabSettlementService.
+ *
+ * Aturan yang berlaku di SEMUA method yang mengubah tab:
+ *  - berjalan dalam satu transaksi yang pertama-tama mengunci baris order
+ *    (`lockForUpdate`), sehingga dua pelayan yang menambah ke tab yang sama
+ *    diserialkan dan tidak ada yang kehilangan item;
+ *  - harga/total selalu dihitung di sini dari master data, tidak pernah dari klien;
+ *  - stok hanya berubah lewat StockService (applyMovementIfTracked), dengan
+ *    reference_id = id baris order_items (konvensi yang sama dengan movement
+ *    'return' pada void ritel).
+ */
+class TabService
+{
+    public function __construct(
+        private StockService $stockService,
+        private OrderService $orderService,
+        private ActivityLogger $activityLogger,
+        private ModifierResolver $modifiers,
+    ) {}
+
+    // --- buka ---------------------------------------------------------------
+
+    /**
+     * @param array{session_id:int, table_id?:?int, tab_label?:?string, customer_id?:?int, local_ref?:?string} $data
+     */
+    public function open(array $data, User $user): Order
+    {
+        // Idempotensi: uuid klien yang sama mengembalikan tab pertama. Uuid
+        // milik PENJUALAN ritel bukan retry pembukaan tab.
+        if (! empty($data['local_ref'])) {
+            $existing = Order::where('local_ref', $data['local_ref'])->first();
+            if ($existing) {
+                if ($existing->service_type === Order::SERVICE_RETAIL) {
+                    throw ValidationException::withMessages(['local_ref' => __('restaurant.local_ref_not_a_tab')]);
+                }
+
+                return $this->loaded($existing);
+            }
+        }
+
+        $session = CashierSession::findOrFail($data['session_id']);
+        $this->assertSessionOpen($session);
+
+        $table = null;
+        if (! empty($data['table_id'])) {
+            $table = DiningTable::findOrFail($data['table_id']);
+            if (! $table->is_active) {
+                throw ValidationException::withMessages(['table_id' => __('restaurant.table_inactive')]);
+            }
+            $this->assertTableFree($table);
+        }
+
+        if (! empty($data['customer_id'])) {
+            try {
+                Customer::findOrFail($data['customer_id']);
+            } catch (ModelNotFoundException) {
+                throw InputRejectedException::withMessages(['customer_id' => __('orders_payments.customer_not_found')]);
+            }
+        }
+
+        try {
+            $order = DB::transaction(fn () => Order::create([
+                'order_number' => $this->orderService->generateOrderNumber(),
+                'event_id' => $session->event_id,
+                'session_id' => $session->id,
+                'customer_id' => $data['customer_id'] ?? null,
+                'user_id' => $user->id,
+                'channel' => 'offline',
+                'service_type' => $table ? Order::SERVICE_DINE_IN : Order::SERVICE_TAKEAWAY,
+                'table_id' => $table?->id,
+                'tab_label' => isset($data['tab_label']) && trim($data['tab_label']) !== '' ? trim($data['tab_label']) : null,
+                'subtotal' => 0, 'discount_amount' => 0, 'total_amount' => 0, 'total_cost' => 0,
+                'paid_amount' => 0, 'change_amount' => 0,
+                'status' => Order::STATUS_OPEN,
+                'local_ref' => $data['local_ref'] ?? null,
+            ]));
+        } catch (UniqueConstraintViolationException $e) {
+            // Dua pelayan membuka meja yang sama di detik yang sama: pemeriksaan
+            // di atas sudah lolos untuk keduanya, indeks UNIQUE database yang
+            // menahan yang kedua (research.md Keputusan 10).
+            if ($table && str_contains($e->getMessage(), 'uniq_orders_open_table_key')) {
+                // Pemenangnya biasanya sudah terlihat; kalau belum (belum commit
+                // saat kita membaca), tetap konflik 409 — BUKAN galat 500.
+                throw new TabConflictException(__('restaurant.table_occupied'), [
+                    'existing_tab_id' => $table->openTab()->value('id'),
+                ]);
+            }
+            if (! empty($data['local_ref']) && str_contains($e->getMessage(), 'local_ref')) {
+                return $this->loaded(Order::where('local_ref', $data['local_ref'])->firstOrFail());
+            }
+            throw $e;
+        }
+
+        return $this->loaded($order);
+    }
+
+    // --- baris --------------------------------------------------------------
+
+    /**
+     * @param array{variant_id:int, qty:int, note?:?string, modifier_option_ids?:array<int,int>} $data
+     */
+    public function addLine(Order $tab, array $data, User $user): Order
+    {
+        return DB::transaction(function () use ($tab, $data, $user) {
+            $order = $this->lockOpen($tab);
+
+            $variant = ProductVariant::with('product')->lockForUpdate()->findOrFail($data['variant_id']);
+            if (! $variant->is_active) {
+                throw ValidationException::withMessages([
+                    'variant_id' => __('orders_payments.variant_inactive', ['sku' => $variant->sku]),
+                ]);
+            }
+
+            $qty = (int) $data['qty'];
+            $note = $this->cleanNote($data['note'] ?? null);
+
+            // Pilihan modifier divalidasi & di-snapshot SERVER-side (ModifierResolver); harga
+            // efektif per unit = harga menu + selisih pilihan. Validasi terjadi SEBELUM stok
+            // disentuh, dan karena semuanya satu transaksi, penolakan tidak meninggalkan jejak.
+            $resolved = $this->modifiers->resolve($variant, $data['modifier_option_ids'] ?? []);
+            $snapshot = $resolved['snapshot'] ?: null;
+            $unitPrice = $resolved['unit_price'];
+
+            // Baris belum-terkirim yang IDENTIK (varian, catatan, pilihan modifier, harga efektif
+            // saat ditambahkan) digabung. Harga ikut dicocokkan: item yang sudah di tab
+            // mempertahankan harga saat ia ditambahkan, hanya item baru yang memakai harga terbaru
+            // (spec, edge case "harga berubah di tengah makan").
+            $line = $order->items()
+                ->whereNull('sent_at')
+                ->where('variant_id', $variant->id)
+                ->where('sell_price', $unitPrice)
+                ->when($note === null, fn ($q) => $q->whereNull('note'), fn ($q) => $q->where('note', $note))
+                ->get()
+                ->first(fn (OrderItem $l) => $this->sameOptions($l->modifiers, $snapshot));
+
+            if ($line) {
+                $line->qty += $qty;
+                $line->line_total = round((float) $line->sell_price * $line->qty - (float) $line->discount_amount, 2);
+                $line->save();
+            } else {
+                $line = $order->items()->create([
+                    'variant_id' => $variant->id,
+                    'artist_id' => $variant->product->artist_id,
+                    'sku_snapshot' => $variant->sku,
+                    'name_snapshot' => $variant->product->name.' — '.$variant->variant_name,
+                    'qty' => $qty,
+                    'cost_price' => $variant->cost_price,
+                    'sell_price' => $unitPrice,
+                    'discount_amount' => 0,
+                    'line_total' => round($unitPrice * $qty, 2),
+                    'note' => $note,
+                    'modifiers' => $snapshot,
+                ]);
+            }
+
+            $this->stockService->applyMovementIfTracked(
+                variant: $variant, type: 'sale', qtyChange: -$qty,
+                referenceType: 'order_item', referenceId: $line->id, userId: $user->id,
+            );
+
+            $this->recalculate($order);
+
+            return $this->loaded($order);
+        });
+    }
+
+    /**
+     * @param array{qty?:int, note?:?string, modifier_option_ids?:array<int,int>} $data
+     */
+    public function updateLine(Order $tab, int $itemId, array $data, User $user): Order
+    {
+        return DB::transaction(function () use ($tab, $itemId, $data, $user) {
+            $order = $this->lockOpen($tab);
+            $line = $order->items()->findOrFail($itemId);
+            $this->assertUnsent($line);
+
+            $reprice = false;
+
+            if (array_key_exists('note', $data)) {
+                $line->note = $this->cleanNote($data['note']);
+            }
+
+            // Mengganti pilihan modifier: harga dasar = harga SAAT BARIS DITAMBAHKAN
+            // (harga efektif lama dikurangi selisih lama), bukan harga menu hari ini.
+            if (array_key_exists('modifier_option_ids', $data)) {
+                $variant = ProductVariant::with('product')->findOrFail($line->variant_id);
+                $oldDelta = collect($line->modifiers ?? [])->sum(fn ($m) => (float) $m['price_delta']);
+                $resolved = $this->modifiers->resolve($variant, $data['modifier_option_ids'], (float) $line->sell_price - $oldDelta);
+
+                $line->modifiers = $resolved['snapshot'] ?: null;
+                $line->sell_price = $resolved['unit_price'];
+                $reprice = true;
+            }
+
+            if (isset($data['qty']) && (int) $data['qty'] !== $line->qty) {
+                $delta = (int) $data['qty'] - $line->qty;
+                $variant = ProductVariant::lockForUpdate()->findOrFail($line->variant_id);
+
+                $this->stockService->applyMovementIfTracked(
+                    variant: $variant,
+                    type: $delta > 0 ? 'sale' : 'return',
+                    qtyChange: -$delta,
+                    referenceType: 'order_item', referenceId: $line->id, userId: $user->id,
+                );
+
+                $line->qty = (int) $data['qty'];
+                $reprice = true;
+            }
+
+            if ($reprice) {
+                $line->line_total = round((float) $line->sell_price * $line->qty - (float) $line->discount_amount, 2);
+            }
+
+            $line->save();
+            $this->recalculate($order);
+            $this->assertNotBelowPaid($order);
+
+            return $this->loaded($order);
+        });
+    }
+
+    /**
+     * Menghapus/membatalkan sebuah baris tab.
+     *
+     *  - BELUM dikirim: dihapus bebas, stok kembali penuh, tanpa alasan.
+     *  - SUDAH dikirim dan item dapurnya masih `new` (belum dimasak): boleh siapa pun dengan izin `floor`,
+     *    alasan WAJIB, stok kembali.
+     *  - SUDAH dikirim dan item dapurnya `preparing`/`ready`/`served`: hanya owner/admin, alasan WAJIB,
+     *    stok TIDAK kembali (bahan sudah terpakai) — mirip void penjualan.
+     * Baris dihapus dari order_items (supaya tak ada laporan yang perlu menyaring "baris batal");
+     * item tiket dapurnya menjadi `cancelled` dengan siapa/kapan/alasan, dan layar stasiun tetap
+     * menampilkannya agar tak ada yang memasaknya. Semua perubahan + baris log berada dalam SATU
+     * transaksi: penolakan di akhir (total < sudah dibayar) membatalkan semuanya, termasuk log.
+     *
+     * @throws AuthorizationException membatalkan item yang sudah dimasak tanpa hak owner/admin
+     * @throws InputRejectedException alasan kosong untuk item yang sudah dikirim
+     */
+    public function removeLine(Order $tab, int $itemId, User $user, ?string $reason = null): Order
+    {
+        return DB::transaction(function () use ($tab, $itemId, $user, $reason) {
+            $order = $this->lockOpen($tab);
+            $line = $order->items()->with('ticketItem')->findOrFail($itemId);
+
+            if ($line->sent_at === null) {
+                $this->returnStock($line, $line->qty, $user);
+                $line->delete();
+                $this->recalculate($order);
+                $this->assertNotBelowPaid($order);
+
+                return $this->loaded($order);
+            }
+
+            $ticketItem = $line->ticketItem;
+            $kitchenStatus = $ticketItem?->status ?? KitchenTicketItem::NEW;
+            $started = $kitchenStatus !== KitchenTicketItem::NEW;
+
+            if ($started && ! $user->isOwnerOrAdmin()) {
+                throw new AuthorizationException(__('restaurant.cancel_after_prep_forbidden'));
+            }
+
+            $reason = $this->cleanNote($reason);
+            if ($reason === null) {
+                throw InputRejectedException::withMessages(['reason' => [__('restaurant.cancel_reason_required')]]);
+            }
+
+            if (! $started) {
+                $this->returnStock($line, $line->qty, $user);
+            }
+
+            $ticketItem?->update([
+                'status' => KitchenTicketItem::CANCELLED,
+                'cancelled_at' => now(),
+                'cancelled_by' => $user->id,
+                'cancel_reason' => $reason,
+            ]);
+
+            $snapshot = ['line_id' => $line->id, 'name' => $line->name_snapshot, 'qty' => $line->qty, 'kitchen_status' => $kitchenStatus, 'stock_restored' => ! $started];
+            $line->delete();
+            $this->recalculate($order);
+            $this->assertNotBelowPaid($order);
+
+            // Terakhir: baris log hanya ada bila seluruh pembatalan berhasil.
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'item_cancelled',
+                entityType: 'Order',
+                entityId: $order->id,
+                description: "Membatalkan {$snapshot['qty']}× {$snapshot['name']} dari tab {$order->order_number} (status dapur: {$kitchenStatus}). "
+                    .'Stok '.($started ? 'tidak dikembalikan (sudah dimasak)' : 'dikembalikan').". Alasan: {$reason}.",
+                oldValues: $snapshot,
+                newValues: ['reason' => $reason],
+            );
+
+            return $this->loaded($order);
+        });
+    }
+
+    /**
+     * Membatalkan SELURUH tab terbuka (owner/admin, alasan wajib — izin diperiksa di request).
+     * Ditolak (409) bila sudah ada pembayaran: tidak ada alur refund. Stok hanya kembali untuk baris yang
+     * belum dikirim atau item dapurnya masih `new`; item tiket yang belum selesai menjadi `cancelled`;
+     * yang sudah `served` tetap final. Baris tetap ada pada order `voided` (seperti void penjualan).
+     */
+    public function voidTab(Order $tab, string $reason, User $user): Order
+    {
+        return DB::transaction(function () use ($tab, $reason, $user) {
+            $order = $this->lockOpen($tab);
+
+            if ($order->payments()->exists()) {
+                throw ValidationException::withMessages(['tab' => __('restaurant.void_has_payments')]);
+            }
+
+            $returned = 0;
+            foreach ($order->items()->with('ticketItem')->get() as $line) {
+                $ticketItem = $line->ticketItem;
+
+                if ($line->sent_at === null || $ticketItem === null || $ticketItem->status === KitchenTicketItem::NEW) {
+                    $this->returnStock($line, $line->qty, $user);
+                    $returned++;
+                }
+
+                if ($ticketItem && in_array($ticketItem->status, KitchenTicketItem::UNFINISHED, true)) {
+                    $ticketItem->update([
+                        'status' => KitchenTicketItem::CANCELLED,
+                        'cancelled_at' => now(),
+                        'cancelled_by' => $user->id,
+                        'cancel_reason' => $reason,
+                    ]);
+                }
+            }
+
+            $order->update(['status' => Order::STATUS_VOIDED, 'void_reason' => $reason]);
+
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'tab_voided',
+                entityType: 'Order',
+                entityId: $order->id,
+                description: "Membatalkan tab {$order->order_number} (total {$order->total_amount}). Alasan: {$reason}.",
+                oldValues: ['status' => Order::STATUS_OPEN, 'total_amount' => $order->total_amount],
+                newValues: ['reason' => $reason, 'lines_with_stock_returned' => $returned],
+            );
+
+            return $this->loaded($order);
+        });
+    }
+
+    /** Mengembalikan stok sebuah baris, kecuali varian tidak dilacak atau sudah dihapus dari menu. */
+    private function returnStock(OrderItem $line, int $qty, User $user): void
+    {
+        // Varian yang dihapus di tengah makan tidak lagi punya stok yang bisa dihitung.
+        $variant = ProductVariant::withTrashed()->find($line->variant_id);
+        if (! $variant || $variant->trashed()) {
+            return;
+        }
+
+        $this->stockService->applyMovementIfTracked(
+            variant: $variant, type: 'return', qtyChange: $qty,
+            referenceType: 'order_item', referenceId: $line->id, userId: $user->id,
+        );
+    }
+
+    // --- tutup kosong / serah-terima ---------------------------------------
+
+    /** Tab tanpa baris ditutup tanpa efek stok/penjualan; mejanya kosong lagi. */
+    public function closeEmpty(Order $tab, User $user): void
+    {
+        DB::transaction(function () use ($tab) {
+            $order = $this->lockOpen($tab);
+
+            if ($order->items()->exists()) {
+                throw ValidationException::withMessages(['tab' => __('restaurant.tab_not_empty')]);
+            }
+
+            $order->update(['status' => Order::STATUS_VOIDED, 'void_reason' => __('restaurant.empty_tab_reason')]);
+        });
+    }
+
+    /** Memindahkan tab terbuka ke shift lain yang masih terbuka (owner/admin — dicek di controller). */
+    public function handover(Order $tab, int $sessionId, User $user): Order
+    {
+        return DB::transaction(function () use ($tab, $sessionId, $user) {
+            $order = $this->lockOpen($tab);
+            $target = CashierSession::findOrFail($sessionId);
+            $this->assertSessionOpen($target);
+
+            if ($target->id !== $order->session_id) {
+                $from = $order->session_id;
+                $order->update(['session_id' => $target->id, 'event_id' => $target->event_id]);
+
+                $this->activityLogger->log(
+                    userId: $user->id,
+                    action: 'handed_over',
+                    entityType: 'Order',
+                    entityId: $order->id,
+                    description: "Tab {$order->order_number} diserahkan dari shift #{$from} ke shift #{$target->id}.",
+                    oldValues: ['session_id' => $from],
+                    newValues: ['session_id' => $target->id],
+                );
+            }
+
+            return $this->loaded($order);
+        });
+    }
+
+    // --- pindah / gabung ------------------------------------------------------
+
+    /** Memindahkan tab terbuka ke meja KOSONG lain (juga mendudukkan tab takeaway di sebuah meja). */
+    public function move(Order $tab, int $tableId, User $user): Order
+    {
+        try {
+            return DB::transaction(function () use ($tab, $tableId) {
+                $order = $this->lockOpen($tab);
+                $table = DiningTable::findOrFail($tableId);
+
+                if (! $table->is_active) {
+                    throw ValidationException::withMessages(['table_id' => __('restaurant.table_inactive')]);
+                }
+
+                if ($order->table_id !== $table->id) {
+                    $this->assertTableFree($table);
+                    $order->update(['table_id' => $table->id, 'service_type' => Order::SERVICE_DINE_IN]);
+                }
+
+                return $this->loaded($order);
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            // Balapan dengan tab lain yang baru duduk di meja yang sama: indeks UNIQUE database yang menahan.
+            if (str_contains($e->getMessage(), 'uniq_orders_open_table_key')) {
+                throw new TabConflictException(__('restaurant.table_occupied'), [
+                    'existing_tab_id' => DiningTable::whereKey($tableId)->first()?->openTab()->value('id'),
+                ]);
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Menggabungkan tab SUMBER ke tab TARGET (shift yang sama). Baris, tiket dapur dan item tiketnya
+     * pindah apa adanya: status persiapan ikut, stok TIDAK disentuh. Sumber ditutup (`voided`,
+     * alasan "digabung") dan mejanya kosong. Sumber yang sudah punya pembayaran ditolak: tidak ada
+     * logika alokasi pembayaran (sama seperti pisah tagihan).
+     */
+    public function merge(Order $target, int $sourceId, User $user): Order
+    {
+        return DB::transaction(function () use ($target, $sourceId, $user) {
+            // Kunci kedua baris dengan urutan id tetap supaya dua penggabungan bersilang tidak saling-tunggu (deadlock).
+            $ids = [$target->id, $sourceId];
+            sort($ids);
+            $locked = [];
+            foreach ($ids as $id) {
+                $locked[$id] = $this->lock(Order::findOrFail($id));
+            }
+            $targetRow = $locked[$target->id];
+            $source = $locked[$sourceId];
+
+            if ($source->id === $targetRow->id) {
+                throw ValidationException::withMessages(['source_tab_id' => __('restaurant.merge_same_tab')]);
+            }
+            foreach ([$targetRow, $source] as $row) {
+                if ($row->status !== Order::STATUS_OPEN) {
+                    throw ValidationException::withMessages(['status' => __('restaurant.tab_not_open')]);
+                }
+            }
+            if ($source->session_id !== $targetRow->session_id) {
+                throw ValidationException::withMessages(['source_tab_id' => __('restaurant.merge_different_shift')]);
+            }
+            if ($source->payments()->exists()) {
+                throw ValidationException::withMessages(['source_tab_id' => __('restaurant.merge_source_has_payments')]);
+            }
+
+            OrderItem::where('order_id', $source->id)->update(['order_id' => $targetRow->id]);
+            // Tiket (dan item tiketnya) mengikuti: layar stasiun harus menampilkan tab yang MASIH ADA.
+            KitchenTicket::where('order_id', $source->id)->update(['order_id' => $targetRow->id]);
+
+            $this->recalculate($source);
+            $source->update(['status' => Order::STATUS_VOIDED, 'void_reason' => __('restaurant.merged_reason', ['number' => $targetRow->order_number])]);
+            $this->recalculate($targetRow);
+
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'merged',
+                entityType: 'Order',
+                entityId: $targetRow->id,
+                description: "Tab {$source->order_number} digabung ke {$targetRow->order_number}.",
+                oldValues: ['source_order_id' => $source->id, 'source_order_number' => $source->order_number],
+                newValues: ['target_order_id' => $targetRow->id],
+            );
+
+            return $this->loaded($targetRow);
+        });
+    }
+
+    // --- bantu (dipakai juga oleh TabSettlementService) ---------------------
+
+    /** Mengunci baris order dan memastikan ia adalah tab yang masih terbuka. */
+    public function lockOpen(Order $tab): Order
+    {
+        $order = $this->lock($tab);
+
+        if ($order->status !== Order::STATUS_OPEN) {
+            throw ValidationException::withMessages(['status' => __('restaurant.tab_not_open')]);
+        }
+
+        return $order;
+    }
+
+    /** Mengunci baris order; penjualan ritel BUKAN tab → 404. */
+    public function lock(Order $tab): Order
+    {
+        $order = Order::lockForUpdate()->findOrFail($tab->id);
+
+        if ($order->service_type === Order::SERVICE_RETAIL) {
+            throw (new ModelNotFoundException)->setModel(Order::class, [$tab->id]);
+        }
+
+        return $order;
+    }
+
+    public function assertSessionOpen(CashierSession $session): void
+    {
+        if ($session->status !== 'open') {
+            throw ValidationException::withMessages(['session_id' => __('orders_payments.session_not_open')]);
+        }
+    }
+
+    /** Menghitung ulang subtotal/total/biaya dari baris-barisnya (satu-satunya tempat). */
+    public function recalculate(Order $order): void
+    {
+        $items = $order->items()->get(['qty', 'cost_price', 'line_total']);
+
+        $subtotal = round((float) $items->sum('line_total'), 2);
+        $cost = round((float) $items->sum(fn ($i) => (float) $i->cost_price * $i->qty), 2);
+        // Diskon tingkat-order yang sudah tersimpan tidak boleh melebihi subtotal baru.
+        $discount = min((float) $order->discount_amount, $subtotal);
+
+        $order->update([
+            'subtotal' => $subtotal,
+            'total_cost' => $cost,
+            'discount_amount' => $discount,
+            'total_amount' => round($subtotal - $discount, 2),
+        ]);
+    }
+
+    public function loaded(Order $order): Order
+    {
+        return $order->fresh(['items.ticketItem.ticket.station', 'payments', 'table']);
+    }
+
+    private function assertTableFree(DiningTable $table): void
+    {
+        $existing = $table->openTab()->first();
+
+        if ($existing) {
+            throw new TabConflictException(__('restaurant.table_occupied'), ['existing_tab_id' => $existing->id]);
+        }
+    }
+
+    private function assertUnsent(OrderItem $line): void
+    {
+        if ($line->sent_at !== null) {
+            throw ValidationException::withMessages(['item' => __('restaurant.line_already_sent')]);
+        }
+    }
+
+    /** Tidak ada alur refund: total tidak boleh turun di bawah yang sudah dibayar. */
+    private function assertNotBelowPaid(Order $order): void
+    {
+        if (round((float) $order->fresh()->total_amount, 2) < round((float) $order->paid_amount, 2)) {
+            throw ValidationException::withMessages(['total_amount' => __('restaurant.total_below_paid')]);
+        }
+    }
+
+    /** Dua daftar pilihan dianggap sama bila himpunan id opsinya sama, apa pun urutan kirimnya. */
+    private function sameOptions(?array $a, ?array $b): bool
+    {
+        $ids = fn (?array $snap) => collect($snap ?? [])->pluck('option_id')->map(fn ($i) => (int) $i)->sort()->values()->all();
+
+        return $ids($a) === $ids($b);
+    }
+
+    private function cleanNote(?string $note): ?string
+    {
+        $note = $note === null ? null : trim($note);
+
+        return $note === '' ? null : $note;
+    }
+}

@@ -33,7 +33,13 @@ class OrderController extends Controller
     {
         $perPage = min((int) $request->integer('per_page', 25), 100);
 
+        // 028 — daftar order adalah daftar PENJUALAN: tab terbuka (belum
+        // dibayar) punya endpoint sendiri (/tabs) dan tidak boleh bocor ke
+        // sini, bahkan lewat ?status=open — konsumen mana pun yang lupa
+        // memfilter status akan menampilkan tab belum-dibayar sebagai
+        // transaksi (research.md Keputusan 5, baris 4).
         $orders = Order::query()
+            ->whereIn('status', [Order::STATUS_COMPLETED, Order::STATUS_VOIDED])
             ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
             ->when($request->filled('session_id'), fn ($q) => $q->where('session_id', $request->integer('session_id')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
@@ -208,8 +214,13 @@ class OrderController extends Controller
     // "perbaiki" ini jadi ikut ter-i18n-kan.
     public function receipt(Order $order): JsonResponse
     {
-        $order->load(['items.artist', 'payments', 'cashier', 'event', 'customer']);
-        $summary = PaymentSummary::for($order);
+        // 028 — struk untuk tab yang belum dibayar akan tampil seperti
+        // struk lunas dengan ringkasan pembayaran kosong.
+        if ($order->status === Order::STATUS_OPEN) {
+            return response()->json(['message' => __('orders_payments.receipt_unavailable_for_open_tab')], 409);
+        }
+
+        $order->load(['items.artist', 'payments', 'cashier', 'event', 'customer', 'table', 'splitFrom']);
 
         return response()->json([
             // 003-seed-demo-live follow-up — nama toko DEMO dan LIVE
@@ -252,6 +263,12 @@ class OrderController extends Controller
             'customer_phone' => $order->customer?->phone,
             'customer_email' => $order->customer?->email,
             'order_number' => $order->order_number,
+            // 028 — struk penjualan dari tab menampilkan meja/label takeaway.
+            'service_type' => $order->service_type,
+            'table' => $order->table ? ['id' => $order->table->id, 'name' => $order->table->name, 'area' => $order->table->area] : null,
+            'tab_label' => $order->tab_label,
+            // 028 — penjualan hasil pisah tagihan menyebut nomor tab asalnya.
+            'split_from_order_number' => $order->splitFrom?->order_number,
             'event_name' => $order->event->name,
             // 014-sales-receipt-event-footer (US2, R2) — event Order tidak
             // pernah null (beda dengan Preorder), tapi kolom tanggalnya
@@ -276,6 +293,9 @@ class OrderController extends Controller
                 'name' => $i->name_snapshot, 'qty' => $i->qty,
                 'price' => number_format((float) $i->sell_price, 2, '.', ''),
                 'line_total' => number_format((float) $i->line_total, 2, '.', ''),
+                // 028 — pilihan modifier & catatan dicetak di struk (kosong untuk penjualan ritel).
+                'modifiers' => \App\Support\ModifierSnapshot::forDisplay($i->modifiers),
+                'note' => $i->note,
                 // 003-seed-demo-live follow-up (FR-019) — satu transaksi
                 // booth multi-artist bisa berisi barang dari beberapa
                 // artist sekaligus; nama artist per baris, bukan satu

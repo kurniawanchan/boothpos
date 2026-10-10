@@ -21,6 +21,7 @@ class CategoryResource extends JsonResource
             'parent_id' => $this->parent_id,
             'display_order' => $this->display_order,
             'is_active' => $this->is_active,
+            'station_id' => $this->station_id,
             'product_count' => $this->products_count ?? null,
         ];
     }

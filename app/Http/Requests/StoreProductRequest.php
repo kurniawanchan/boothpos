@@ -23,11 +23,17 @@ class StoreProductRequest extends FormRequest
             'is_preorder' => ['sometimes', 'boolean'],
             'preorder_eta' => ['nullable', 'date', 'required_if:is_preorder,true'],
             'is_active' => ['sometimes', 'boolean'],
+            'station_id' => ['sometimes', 'nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) {
+                if ($value !== null && ! \App\Models\Station::whereKey($value)->exists()) {
+                    $fail(__('restaurant.station_not_found'));
+                }
+            }],
             'variants' => ['required', 'array', 'min:1'],
             'variants.*.variant_name' => ['required', 'string', 'max:100'],
             'variants.*.cost_price' => ['sometimes', 'numeric', 'min:0'],
             'variants.*.sell_price' => ['required', 'numeric', 'min:0'],
             'variants.*.low_stock_alert' => ['nullable', 'integer', 'min:0'],
+            'variants.*.track_stock' => ['sometimes', 'boolean'],
         ];
     }
 }

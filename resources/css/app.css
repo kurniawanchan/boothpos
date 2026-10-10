@@ -153,3 +153,33 @@ i.ph-duotone {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * 028 — cetak tiket dapur lewat dialog cetak browser (tanpa dependensi baru).
+ * Hanya #printable-ticket yang dicetak; seluruh halaman lain disembunyikan.
+ * Warna memakai token supaya konsisten dengan sisa aplikasi.
+ */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  #printable-ticket,
+  #printable-ticket * {
+    visibility: visible;
+    color: var(--color-ink);
+  }
+
+  #printable-ticket {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 80mm;
+    padding: 4mm;
+    background: transparent;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}

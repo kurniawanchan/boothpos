@@ -17,4 +17,5 @@ return [
     'available_on_label' => 'Available on',
     'available_on_day_1' => 'Day 1 ({date})',
     'available_on_day_2' => 'Day 2 ({date})',
+    'cannot_close_with_open_tabs' => 'Close the shift only after every open tab is paid, voided or handed over.',
 ];

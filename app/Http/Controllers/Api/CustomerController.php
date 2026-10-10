@@ -146,7 +146,8 @@ class CustomerController extends Controller
 
         // Scope DataModeScope global pada Order/Preorder sudah otomatis
         // menyaring sesuai mode DEMO/LIVE aktif — tidak perlu filter manual.
-        $orders = $customer->orders()->get()->map(fn (\App\Models\Order $order) => [
+        // 028 — tab yang masih terbuka belum menjadi transaksi pelanggan.
+        $orders = $customer->orders()->where('status', '!=', \App\Models\Order::STATUS_OPEN)->get()->map(fn (\App\Models\Order $order) => [
             'type' => 'order',
             'id' => $order->id,
             'number' => $order->order_number,
