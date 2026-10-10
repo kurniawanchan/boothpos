@@ -9,7 +9,9 @@ use App\Http\Controllers\Api\CashierSessionController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\DiningTableController;
 use App\Http\Controllers\Api\EventController;
+use App\Http\Controllers\Api\FloorController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\InvoiceExportImportController;
 use App\Http\Controllers\Api\InvoicePaymentSettingController;
@@ -17,7 +19,9 @@ use App\Http\Controllers\Api\LicenseCatalogController;
 use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\MasterDataExportController;
 use App\Http\Controllers\Api\MasterDataImportController;
+use App\Http\Controllers\Api\KitchenController;
 use App\Http\Controllers\Api\MaterialController;
+use App\Http\Controllers\Api\ModifierGroupController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentChannelController;
 use App\Http\Controllers\Api\PaymentProofController;
@@ -27,7 +31,11 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\StationController;
 use App\Http\Controllers\Api\StockController;
+use App\Http\Controllers\Api\TabController;
+use App\Http\Controllers\Api\TabLineController;
+use App\Http\Controllers\Api\TabPaymentController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VariantBomController;
 use App\Http\Controllers\Api\PosDraftController;
@@ -229,6 +237,39 @@ Route::prefix('v1')->group(function () {
         Route::post('/orders/{order}/payments/{payment}/verify', [OrderController::class, 'verifyPayment']);
         Route::post('/orders/verify-payments', [OrderController::class, 'verifyPayments']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
+
+        // 028-restaurant-dine-in-ordering — meja dan lantai. Setiap rute
+        // memeriksa menu-key-nya sendiri di sisi server (`dining_setup` /
+        // `floor`); layar hanya mencerminkan keputusan itu.
+        Route::apiResource('dining-tables', DiningTableController::class);
+        Route::get('/floor', [FloorController::class, 'index']);
+
+        // Stasiun persiapan + dapur/bar. Daftar stasiun terbuka juga untuk `kitchen` (pengalih layar).
+        Route::apiResource('stations', StationController::class);
+        Route::get('/stations/{station}/tickets', [KitchenController::class, 'feed']);
+        Route::get('/tickets/{ticket}', [KitchenController::class, 'show']);
+        Route::patch('/ticket-items/{ticketItem}/status', [KitchenController::class, 'updateStatus']);
+
+        // Grup modifier — lampiran ke produk/kategori memakai endpoint terpisah (penggantian penuh).
+        Route::apiResource('modifier-groups', ModifierGroupController::class)->parameters(['modifier-groups' => 'modifierGroup']);
+        Route::put('/modifier-groups/{modifierGroup}/attachments', [ModifierGroupController::class, 'attachments']);
+
+        // Tab (pesanan terbuka). `{order}` memakai route-model binding Order —
+        // penjualan ritel diperlakukan 404 oleh TabService/TabController.
+        Route::get('/tabs', [TabController::class, 'index']);
+        Route::post('/tabs', [TabController::class, 'store']);
+        Route::get('/tabs/{order}', [TabController::class, 'show']);
+        Route::delete('/tabs/{order}', [TabController::class, 'destroy']);
+        Route::post('/tabs/{order}/handover', [TabController::class, 'handover']);
+        Route::post('/tabs/{order}/send', [TabController::class, 'send']);
+        Route::post('/tabs/{order}/void', [TabController::class, 'void']);
+        Route::post('/tabs/{order}/move', [TabController::class, 'move']);
+        Route::post('/tabs/{order}/merge', [TabController::class, 'merge']);
+        Route::post('/tabs/{order}/split', [TabPaymentController::class, 'split']);
+        Route::post('/tabs/{order}/items', [TabLineController::class, 'store']);
+        Route::patch('/tabs/{order}/items/{item}', [TabLineController::class, 'update'])->whereNumber('item');
+        Route::delete('/tabs/{order}/items/{item}', [TabLineController::class, 'destroy'])->whereNumber('item');
+        Route::post('/tabs/{order}/payments', [TabPaymentController::class, 'store']);
 
         // 007-preorder-import-export-notify — rute statis ('export',
         // 'import/template', 'import') WAJIB didaftarkan SEBELUM

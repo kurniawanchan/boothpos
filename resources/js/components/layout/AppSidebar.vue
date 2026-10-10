@@ -40,6 +40,19 @@ const NAV_DEFS = [
   { name: 'pos', label: 'nav.pos', icon: 'ph-shopping-cart-simple', menuKey: 'pos' },
   { name: 'session', label: 'nav.session', icon: 'ph-cash-register', menuKey: 'session' },
   { name: 'sales', label: 'nav.sales', icon: 'ph-receipt', menuKey: 'sales' },
+  // 028-restaurant-dine-in-ordering — grup "Restoran" memakai mekanisme grup
+  // yang sama dengan 'settings-group'; muncul hanya bila minimal satu anaknya
+  // boleh diakses peran ini.
+  {
+    key: 'restaurant-group',
+    label: 'nav.restaurant_group',
+    icon: 'ph-fork-knife',
+    children: [
+      { name: 'floor', label: 'nav.floor', menuKey: 'floor' },
+      { name: 'kitchen', label: 'nav.kitchen', menuKey: 'kitchen' },
+      { name: 'dining-setup', label: 'nav.dining_setup', menuKey: 'dining_setup' },
+    ],
+  },
   {
     key: 'purchase-group',
     label: 'nav.purchase_group',

@@ -121,6 +121,9 @@ watch(
         <span v-if="receipt.store_address" class="max-w-[300px] text-[11.5px] leading-snug text-muted-3">{{ receipt.store_address }}</span>
         <span class="text-[12.5px] text-muted-2">{{ receipt.event_name }}</span>
         <span class="mt-1.5 font-mono text-[13px] font-semibold">{{ receipt.order_number }}</span>
+        <!-- 028 — penjualan dari tab: tampilkan meja atau label takeaway. -->
+        <span v-if="receipt.table" class="text-[12.5px] font-semibold text-muted-4">Meja {{ receipt.table.name }}</span>
+        <span v-else-if="receipt.service_type === 'takeaway'" class="text-[12.5px] font-semibold text-muted-4">Takeaway<template v-if="receipt.tab_label"> — {{ receipt.tab_label }}</template></span>
         <span class="text-[12px] text-muted-2">{{ formatDateTime(receipt.created_at) }} · Kasir {{ receipt.cashier_name }}</span>
       </div>
 
@@ -153,6 +156,9 @@ watch(
               {{ formatIDR(item.price) }}
               <template v-if="item.artist_name"> · {{ item.artist_name }}</template>
             </span>
+            <!-- 028 — pilihan modifier & catatan (struk selalu Bahasa Indonesia, lihat FR-009 fitur 002). -->
+            <span v-if="item.modifiers?.length" class="text-[12px] text-muted-4">{{ item.modifiers.map((m) => m.option).join(', ') }}</span>
+            <span v-if="item.note" class="text-[12px] italic text-muted-3">“{{ item.note }}”</span>
           </div>
           <span class="text-[14.5px] font-bold">{{ formatIDR(item.line_total) }}</span>
         </div>

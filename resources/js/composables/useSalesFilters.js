@@ -33,7 +33,11 @@ export const SORT_ACCESSORS = {
 };
 
 const num = (value) => parseFloat(value) || 0;
-const isVoided = (tx) => tx.status === 'voided';
+// 028 — tab restoran yang masih terbuka (belum dibayar) tidak pernah boleh
+// terhitung sebagai penjualan di ringkasan/panel shift. API sudah menyaringnya
+// (hanya status 'completed' yang dikirim); ini pertahanan berlapis supaya
+// perubahan payload di masa depan tidak diam-diam menghitung uang yang belum ada.
+const isCounted = (tx) => tx.status !== 'voided' && tx.status !== 'open';
 const cashierKey = (tx) => tx.cashier_id ?? tx.cashier_name;
 const listOf = (raw) => String(raw ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, MAX_LIST);
 
@@ -57,7 +61,11 @@ export function useSalesFilters({ transactions, sessions }) {
 
   // Setiap baris punya `key` ("order:5") — dipakai untuk seleksi baris dan ekspor. Payload lama
   // tanpa `key` dilengkapi di sini.
-  const all = computed(() => (transactions.value ?? []).map((tx) => (tx.key ? tx : { ...tx, key: `order:${tx.id}` })));
+  // 028 — baris 'open' (tab belum dibayar) dibuang di pintu masuk: tidak pernah tampil
+  // dan tidak pernah dihitung, apa pun yang dikirim API.
+  const all = computed(() => (transactions.value ?? [])
+    .filter((tx) => tx.status !== 'open')
+    .map((tx) => (tx.key ? tx : { ...tx, key: `order:${tx.id}` })));
 
   // --- opsi filter (diturunkan dari data yang dimuat) ----------------------------
   const cashierOptions = computed(() => {
@@ -158,12 +166,12 @@ export function useSalesFilters({ transactions, sessions }) {
 
   const summary = computed(() => {
     const rows = filtered.value;
-    const counted = rows.filter((tx) => !isVoided(tx));
+    const counted = rows.filter(isCounted);
     const sum = (fn) => counted.reduce((acc, tx) => acc + fn(tx), 0);
     return {
       shown: rows.length,
       total: all.value.length,
-      voided: rows.length - counted.length,
+      voided: rows.filter((tx) => tx.status === 'voided').length,
       units: Number(sum((tx) => Number(tx.unit_count ?? tx.item_count ?? 0)).toFixed(2)),
       amount: sum((tx) => num(tx.total_amount)),
       cash: sum((tx) => num(tx.cash_amount)),

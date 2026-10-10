@@ -40,4 +40,7 @@ return [
     'payment_already_verified' => 'Pembayaran ini sudah terverifikasi.',
     'payment_rejected_cannot_verify' => 'Pembayaran yang ditolak tidak bisa diverifikasi.',
     'payment_verify_target_closed' => 'Transaksi ini sudah dibatalkan; pembayarannya tidak bisa diverifikasi lagi.',
+    'local_ref_belongs_to_open_tab' => 'Referensi ini milik tab yang masih terbuka, bukan penjualan yang sudah selesai.',
+    'cannot_void_open_tab' => 'Tab terbuka tidak bisa dibatalkan sebagai penjualan. Gunakan "Batalkan tab".',
+    'receipt_unavailable_for_open_tab' => 'Struk belum bisa dicetak untuk tab yang belum dibayar.',
 ];

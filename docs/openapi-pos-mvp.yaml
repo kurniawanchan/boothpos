@@ -49,6 +49,7 @@ tags:
   - name: Purchase Order
   - name: Import & Export
   - name: Company Onboarding
+  - name: Restaurant
 
 security:
   - bearerAuth: []
@@ -856,6 +857,7 @@ paths:
         sedangkan layar kasir memakainya — memuatnya selalu hanya
         memperbesar payload untuk konsumen yang tidak butuh.
       parameters:
+        - { name: with_modifiers, in: query, schema: { type: boolean }, description: "028 — opt-in: sertakan `modifier_groups` (grup EFEKTIF aktif + opsi aktif: grup produk ∪ grup kategorinya). Default tidak berubah." }
         - { name: search, in: query, description: "Cocokkan nama produk, atau SKU/nama varian pada salah satu variannya", schema: { type: string } }
         - name: artist_id
           in: query
@@ -1323,14 +1325,12 @@ paths:
         tunai terverifikasi pada sesi DIKURANGI kembalian (`orders.change_amount`),
         tanpa order yang dibatalkan (`voided`) — rumus yang sama dengan panel
         shift di halaman Sales — lalu menghitung selisih terhadap
-        `closing_cash` yang dilaporkan kasir.
+        `closing_cash` yang dilaporkan kasir. Hanya order berstatus `completed`
+        yang dihitung (028: tab `open` tidak pernah masuk).
 
-        028-partial-split-payment (PERUBAHAN PERILAKU): tunai dihitung di shift
-        TEMPAT UANG DITERIMA (`payments.session_id`), bukan shift penjualan
-        aslinya. Pembayaran susulan atas penjualan lama masuk ke shift saat ia
-        diterima; shift yang sudah ditutup tak pernah berubah. Kembalian tetap
-        dikurangkan di shift penjualannya. Pembayaran pre-order (tanpa shift)
-        tetap di luar kas shift.
+        **028 — `409` bila shift masih memegang tab terbuka**; badan respons memuat
+        `open_tabs` (id, nomor, meja/label) supaya UI bisa menautkannya. Tab harus
+        dibayar, dibatalkan, atau diserahkan ke shift lain dulu.
       requestBody:
         required: true
         content:
@@ -1347,7 +1347,23 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CashierSession' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '409':
+          description: Sesi sudah ditutup, ATAU masih ada tab terbuka (memuat `open_tabs`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  open_tabs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        order_number: { type: string }
+                        table: { type: string, nullable: true, description: Nama meja; null untuk takeaway. }
+                        tab_label: { type: string, nullable: true }
 
   /sessions/{id}/summary:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -5263,6 +5279,740 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/MasterDataImportResult' }
 
+  # ---------------------------------------------------------------
+  # Restaurant — 028-restaurant-dine-in-ordering
+  # Setiap rute memeriksa menu-key-nya di SERVER (`dining_setup` / `floor`).
+  # ---------------------------------------------------------------
+  /dining-tables:
+    get:
+      tags: [Restaurant]
+      summary: Daftar meja (menu `dining_setup`)
+      description: Tidak berpaginasi — jumlah meja terbatas secara fisik. `?active=1` menyembunyikan meja nonaktif.
+      parameters:
+        - { name: active, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/DiningTable' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Restaurant]
+      summary: Buat meja (menu `dining_setup`)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DiningTableInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiningTable' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /dining-tables/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Restaurant]
+      summary: Detail meja (menu `dining_setup`)
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiningTable' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Restaurant]
+      summary: Ubah / nonaktifkan meja (menu `dining_setup`)
+      description: |
+        Semua field opsional. Nama harus unik per area (dalam mode DEMO/LIVE yang aktif).
+        Menonaktifkan meja yang sedang punya tab terbuka → `409`. Perubahan status aktif dicatat di log aktivitas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DiningTableInput' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiningTable' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Restaurant]
+      summary: Hapus meja (menu `dining_setup`)
+      description: Hanya meja yang BELUM pernah dipakai order apa pun. Selain itu → `409` (nonaktifkan saja). Penghapusan dicatat di log aktivitas.
+      responses:
+        '204': { description: Dihapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /floor:
+    get:
+      tags: [Restaurant]
+      summary: Lantai — semua meja aktif per area dan tab terbukanya (menu `floor`)
+      description: |
+        Dipanggil polling ±3 detik. Isi respons dihash menjadi `version`; bila klien mengirim
+        `?version=` yang sama, server membalas kerangka kecil `{unchanged: true, version}`.
+        Jumlah query konstan (tidak bergantung jumlah meja). Hanya data mode DEMO/LIVE yang aktif.
+      parameters:
+        - { name: version, in: query, schema: { type: string }, description: Token `version` dari respons sebelumnya. }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Floor'
+                  - $ref: '#/components/schemas/FloorUnchanged'
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /tabs:
+    get:
+      tags: [Restaurant]
+      summary: Daftar tab terbuka (menu `floor`)
+      parameters:
+        - { name: session_id, in: query, schema: { type: integer } }
+        - { name: table_id, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/TabSummary' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Restaurant]
+      summary: Buka tab (menu `floor`)
+      description: |
+        Tab dibuka di dalam shift yang masih terbuka. Dengan `table_id` → `dine_in`; tanpa → `takeaway`.
+        `local_ref` membuat pembukaan ulang (retry) mengembalikan tab pertama. Nomor tab memakai
+        penomoran penjualan (`TRX-…`) dan dipertahankan saat tab lunas.
+        `409`: meja sudah dipakai tab lain (`existing_tab_id`), meja nonaktif, shift tidak terbuka,
+        atau `local_ref` milik penjualan ritel. `422`: pelanggan tidak ditemukan. `404`: meja/shift
+        dari mode DEMO/LIVE lain.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OpenTabInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Konflik aturan bisnis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  existing_tab_id: { type: integer, nullable: true }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /tabs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Restaurant]
+      summary: Detail tab (menu `floor`)
+      description: Tab `open` atau `completed`. Penjualan ritel dan tab yang dibatalkan/digabung → `404` (pakai `GET /orders/{id}`).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Restaurant]
+      summary: Tutup tab KOSONG (menu `floor`)
+      description: Tanpa efek stok/penjualan; mejanya kosong lagi. Tab yang punya baris → `409`.
+      responses:
+        '204': { description: Ditutup }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tabs/{id}/handover:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Serahkan tab ke shift lain (owner/admin)
+      description: Shift tujuan harus masih terbuka. Dicatat di log aktivitas (`handed_over`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [session_id]
+              properties:
+                session_id: { type: integer }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tabs/{id}/items:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Tambah item ke tab (menu `floor`)
+      description: |
+        Harga dihitung SERVER dari master data — field harga dari klien diabaikan. Baris belum-terkirim
+        yang identik (varian, catatan, harga) digabung. Stok dikurangi saat item ditambahkan (varian yang
+        dilacak): stok kurang → `409` dan tab tidak berubah.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddTabLineInput' }
+      responses:
+        '201':
+          description: Tab terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /tabs/{id}/items/{item}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - { name: item, in: path, required: true, schema: { type: integer } }
+    patch:
+      tags: [Restaurant]
+      summary: Ubah jumlah/catatan baris yang BELUM dikirim (menu `floor`)
+      description: Selisih jumlah menggerakkan stok (sale/return) sebesar selisihnya. Baris yang sudah dikirim → `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTabLineInput' }
+      responses:
+        '200':
+          description: Tab terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Restaurant]
+      summary: Hapus (belum dikirim) atau BATALKAN (sudah dikirim) sebuah baris (menu `floor`)
+      description: |
+        - **Belum dikirim**: dihapus bebas, stok kembali penuh, `reason` tidak wajib.
+        - **Sudah dikirim, item dapur masih `new`**: izin `floor`, `reason` WAJIB (`422` bila kosong), stok kembali.
+        - **Sudah dikirim, item dapur `preparing`/`ready`/`served`**: hanya owner/admin (`403` selain itu), `reason`
+          WAJIB, stok TIDAK kembali (bahan sudah terpakai).
+
+        Baris dihapus dari order; item tiket dapurnya menjadi `cancelled` (siapa/kapan/alasan) dan tetap tampil di
+        layar stasiun agar tak dimasak. Pembatalan item yang sudah dikirim dicatat di log aktivitas
+        (`item_cancelled`) dalam transaksi yang sama. Penghapusan/pembatalan yang membuat total < jumlah yang sudah
+        dibayar → `409` dan SEMUANYA mundur (stok, tiket, baris, log). Baris order yang sudah `completed` → `409`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 255, description: Wajib untuk baris yang sudah dikirim. }
+      responses:
+        '200':
+          description: Tab terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tabs/{id}/payments:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Bayar tab — sebagian atau penuh (menu `floor`)
+      description: |
+        Memakai aturan pembayaran penjualan ritel (bukti non-tunai, kembalian hanya dari tunai).
+        Bila total yang dibayar ≥ total tab → status `completed`, `change_amount` dihitung, meja kosong.
+        Bila kurang → tab tetap `open` dengan `balance`. `client_ref` WAJIB: pengiriman ulang dengan
+        `client_ref` yang sama tidak mencatat pembayaran lagi (mengembalikan keadaan terkini).
+        Tab kosong / shift tidak terbuka / bukan `open` → `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TabPaymentInput' }
+      responses:
+        '200':
+          description: Tab terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /modifier-groups:
+    get:
+      tags: [Restaurant]
+      summary: Daftar grup modifier beserta opsi dan lampirannya (menu `dining_setup`)
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ModifierGroup' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Restaurant]
+      summary: Buat grup modifier (menu `dining_setup`)
+      description: |
+        Aturan turunan dinormalisasi server: `single` → `max_select = 1` dan `min_select` = 1 bila wajib,
+        0 bila opsional; `multiple` wajib → `min_select ≥ 1`; `max_select` kosong = tanpa batas atas.
+        Hanya `min_select > max_select` yang ditolak (`422`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModifierGroupInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModifierGroup' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /modifier-groups/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Restaurant]
+      summary: Detail grup modifier (menu `dining_setup`)
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModifierGroup' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Restaurant]
+      summary: Ubah grup / ganti opsi (menu `dining_setup`)
+      description: |
+        Semua field opsional. Bila `options` dikirim itu adalah PENGGANTIAN PENUH menurut id:
+        ada `id` → ubah, tanpa `id` → buat, opsi yang TIDAK dikirim **dinonaktifkan** (tidak pernah dihapus).
+        Pesanan/tab yang sudah ada tidak berubah (snapshot).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModifierGroupInput' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModifierGroup' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Restaurant]
+      summary: Hapus grup modifier (menu `dining_setup`)
+      description: Grup yang pernah muncul pada baris order → `409` (nonaktifkan saja). Penghapusan dicatat di log aktivitas.
+      responses:
+        '204': { description: Dihapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /modifier-groups/{id}/attachments:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Restaurant]
+      summary: Lampirkan grup ke produk dan/atau kategori — penggantian penuh (menu `dining_setup`)
+      description: |
+        Grup yang berlaku untuk sebuah produk = grup produk itu ∪ grup kategorinya (tanpa duplikat, hanya yang
+        aktif dan punya opsi aktif). Id dari mode DEMO/LIVE lain, atau grup tanpa opsi aktif → `422`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_ids, category_ids]
+              properties:
+                product_ids: { type: array, items: { type: integer } }
+                category_ids: { type: array, items: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ModifierGroup' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /stations:
+    get:
+      tags: [Restaurant]
+      summary: Daftar stasiun persiapan (menu `dining_setup` ATAU `kitchen`)
+      parameters:
+        - { name: active, in: query, schema: { type: boolean } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Station' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Restaurant]
+      summary: Buat stasiun (menu `dining_setup`)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StationInput' }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Station' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /stations/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Restaurant]
+      summary: Detail stasiun (menu `dining_setup`)
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Station' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Restaurant]
+      summary: Ubah / nonaktifkan stasiun (menu `dining_setup`)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StationInput' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Station' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Restaurant]
+      summary: Hapus stasiun (menu `dining_setup`)
+      description: Stasiun yang ditunjuk kategori/produk, atau pernah menerima tiket → `409` (nonaktifkan saja). Dicatat di log aktivitas.
+      responses:
+        '204': { description: Dihapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tabs/{id}/send:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Kirim item yang belum terkirim ke dapur/bar (menu `floor`)
+      description: |
+        ATOMIK dan terkunci pada baris tab. Satu tiket per stasiun, ditambah satu tiket "tanpa stasiun" untuk
+        item yang tidak perlu dimasak (item itu langsung berstatus `ready`). Stasiun ditentukan produk →
+        kategori → tidak ada; stasiun nonaktif dilewati. Setelah dikirim, baris tidak bisa lagi diubah lewat
+        `PATCH/DELETE /tabs/{id}/items/{item}`. Tidak ada yang baru untuk dikirim → `409`.
+      responses:
+        '200':
+          description: Tab terbaru + tiket yang dibuat
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tab: { $ref: '#/components/schemas/Tab' }
+                  tickets:
+                    type: array
+                    items: { $ref: '#/components/schemas/Ticket' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /stations/{id}/tickets:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Restaurant]
+      summary: Umpan layar stasiun (menu `kitchen`)
+      description: |
+        Tiket stasiun yang masih punya item belum-selesai, ditambah item selesai/batal dalam 30 menit terakhir;
+        tertua dulu; tiap tiket hanya membawa item yang relevan. Dipanggil polling ±3 detik: token `version`
+        (hash isi TANPA `waiting_seconds`) membuat jalur "tidak berubah" menjadi `{unchanged: true}`.
+      parameters:
+        - { name: version, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      tickets: { type: array, items: { $ref: '#/components/schemas/Ticket' } }
+                      version: { type: string }
+                  - $ref: '#/components/schemas/FloorUnchanged'
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tickets/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Restaurant]
+      summary: Satu tiket UTUH untuk tampilan cetak di browser (menu `kitchen` ATAU `floor`)
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ticket' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ticket-items/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      tags: [Restaurant]
+      summary: Ubah status satu item tiket (menu `kitchen` / `floor`)
+      description: |
+        Hanya MAJU: `new → preparing → ready → served`. `preparing`/`ready` memerlukan `kitchen`;
+        `served` boleh `floor` ATAU `kitchen`. Loncat/mundur/item yang sudah final → `409`. `cancelled`
+        TIDAK bisa diset di sini (`422`) — pembatalan lewat `DELETE /tabs/{id}/items/{item}`.
+        Siapa dan kapan dicatat per langkah.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [preparing, ready, served] }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  status: { type: string, enum: [preparing, ready, served] }
+                  preparing_at: { type: string, format: date-time, nullable: true }
+                  ready_at: { type: string, format: date-time, nullable: true }
+                  served_at: { type: string, format: date-time, nullable: true }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /tabs/{id}/move:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Pindahkan tab ke meja kosong lain (menu `floor`)
+      description: |
+        Meja lama kosong, meja baru terisi; baris, tiket dan pembayaran tidak berubah. Juga mendudukkan tab
+        takeaway di sebuah meja (`service_type` menjadi `dine_in`). Meja tujuan terisi → `409` dengan
+        `existing_tab_id` (sarankan menggabung); meja nonaktif → `409`; mode DEMO/LIVE lain → `404`.
+        Memindahkan ke meja yang sama tidak berefek.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [table_id], properties: { table_id: { type: integer } } }
+      responses:
+        '200':
+          description: Tab terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /tabs/{id}/merge:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Gabungkan tab SUMBER ke tab ini (menu `floor`)
+      description: |
+        Baris, tiket dapur dan item tiketnya pindah apa adanya (status persiapan ikut; stok TIDAK disentuh);
+        tab sumber menjadi `voided` ("Digabung ke …") dan mejanya kosong; dicatat di log aktivitas (`merged`).
+        `409`: tab yang sama, shift berbeda, salah satunya tidak `open`, atau tab sumber sudah punya
+        pembayaran (tidak ada logika alokasi pembayaran). Penjualan ritel → `404`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [source_tab_id], properties: { source_tab_id: { type: integer } } }
+      responses:
+        '200':
+          description: Tab tujuan terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tabs/{id}/split:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Pisah tagihan — bayar sebagian item sebagai penjualan terpisah (menu `floor`)
+      description: |
+        Membuat penjualan BARU berstatus `completed` (nomor sendiri, `split_from_order_id` = tab ini) dari item
+        yang dipilih dan langsung membayarnya; sisanya tetap terbuka di meja yang sama. Baris yang dipilih UTUH
+        dipindahkan (id baris yang sama); sebagian unit → baris asal dikecilkan dan snapshot-nya diklon.
+        Jumlah penjualan baru + sisa tab selalu persis sama dengan tagihan semula. Stok TIDAK disentuh.
+
+        `409`: tab sudah punya pembayaran apa pun; pembayaran kurang; jumlah melebihi yang ada; sebagian unit
+        pada baris yang sudah dikirim tetapi belum `served` (baris UTUH selalu boleh). Bila tak ada baris
+        tersisa, tab ditutup (`voided`) dan mejanya kosong. `client_ref` sama → `200` dengan hasil semula,
+        tidak memisah dua kali. `404`: baris milik tab lain.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SplitTabInput' }
+      responses:
+        '201':
+          description: Dipisah
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SplitTabResult' }
+        '200':
+          description: Pengiriman ulang (client_ref sama) — hasil semula
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SplitTabResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /tabs/{id}/void:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Batalkan seluruh tab terbuka (owner/admin)
+      description: |
+        `reason` WAJIB. Ditolak `409` bila sudah ada pembayaran apa pun (tidak ada alur refund) atau tab tidak `open`.
+        Stok hanya kembali untuk baris yang belum dikirim atau yang item dapurnya masih `new`; item tiket yang belum
+        selesai menjadi `cancelled`; yang sudah `served` tetap final. Tab menjadi `voided` dan mejanya kosong; baris
+        tetap ada pada order `voided` (seperti void penjualan). Dicatat di log aktivitas (`tab_voided`).
+        Untuk penjualan yang sudah `completed`, gunakan `POST /orders/{id}/void` (aturan lama, tidak berubah).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 255 }
+      responses:
+        '200':
+          description: Tab yang dibatalkan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
 # =====================================================================
 # COMPONENTS
 # =====================================================================
@@ -5309,22 +6059,6 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
-    SchemaOutdated:
-      description: |
-        035-po-row-actions — struktur database TERTINGGAL dari versi aplikasi
-        (migrasi belum diterapkan; kolom/tabel belum ada). Bisa muncul dari
-        endpoint API MANA PUN yang menyentuh bagian skema yang belum ada.
-        Hanya SQLSTATE 42S22/42S02 yang dikonversi; galat database lain tetap
-        500. Pesan ramah tanpa SQL/nama tabel/kolom; detail lengkap hanya di
-        log server. Klien menampilkan status galat + "Coba lagi", bukan layar
-        kosong atau keadaan kosong yang menyesatkan.
-      content:
-        application/json:
-          schema:
-            type: object
-            properties:
-              message: { type: string }
-              code: { type: string, enum: [schema_outdated] }
     ValidationError:
       description: Validasi gagal
       content:
@@ -5383,6 +6117,22 @@ components:
         (019-billing-system US4). Bukan HasDataMode-scoped — data
         administratif, tampil identik di mode DEMO/LIVE.
       properties:
+    SchemaOutdated:
+      description: |
+        035-po-row-actions — struktur database TERTINGGAL dari versi aplikasi
+        (migrasi belum diterapkan; kolom/tabel belum ada). Bisa muncul dari
+        endpoint API MANA PUN yang menyentuh bagian skema yang belum ada.
+        Hanya SQLSTATE 42S22/42S02 yang dikonversi; galat database lain tetap
+        500. Pesan ramah tanpa SQL/nama tabel/kolom; detail lengkap hanya di
+        log server. Klien menampilkan status galat + "Coba lagi", bukan layar
+        kosong atau keadaan kosong yang menyesatkan.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+              code: { type: string, enum: [schema_outdated] }
         id: { type: integer, example: 1 }
         bank_name: { type: string, nullable: true }
         account_number: { type: string, nullable: true }
@@ -5894,6 +6644,7 @@ components:
         parent_id: { type: integer, nullable: true }
         display_order: { type: integer }
         is_active: { type: boolean }
+        station_id: { type: integer, nullable: true, description: "028 — stasiun persiapan default untuk menu kategori ini (stasiun produk menang)." }
 
     CategoryInput:
       type: object
@@ -6853,10 +7604,325 @@ components:
         id: { type: integer }
         user_id: { type: integer, nullable: true }
         user_name: { type: string, nullable: true, readOnly: true }
-        action: { type: string, enum: [created, updated, deleted, stock_adjusted, price_changed, imported] }
+        action: { type: string, enum: [created, updated, deleted, stock_adjusted, price_changed, imported, activated, deactivated, handed_over, merged, item_cancelled, tab_voided] }
         entity_type: { type: string, example: Artist }
         entity_id: { type: integer, nullable: true }
         description: { type: string, nullable: true }
         old_values: { type: object, nullable: true, additionalProperties: true }
         new_values: { type: object, nullable: true, additionalProperties: true }
         created_at: { type: string, format: date-time }
+
+    DiningTable:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, maxLength: 60, example: "7" }
+        area: { type: string, maxLength: 60, example: Terrace, description: "`\"\"` = tanpa area." }
+        seats: { type: integer, minimum: 1, maximum: 99 }
+        display_order: { type: integer }
+        is_active: { type: boolean }
+        has_open_tab: { type: boolean, readOnly: true, description: Ada tab terbuka di meja ini sekarang. }
+
+    DiningTableInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 60 }
+        area: { type: string, nullable: true, maxLength: 60 }
+        seats: { type: integer, minimum: 1, maximum: 99 }
+        display_order: { type: integer }
+        is_active: { type: boolean }
+
+    FloorTab:
+      type: object
+      properties:
+        id: { type: integer }
+        order_number: { type: string, example: TRX-20261003-0012 }
+        total_amount: { type: string, example: "250000.00" }
+        opened_at: { type: string, format: date-time }
+        session_id: { type: integer }
+        ready_count: { type: integer, description: Item yang sudah siap disajikan (dapur). }
+        unsent_count: { type: integer, description: Item yang belum dikirim ke dapur. }
+
+    FloorTable:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        seats: { type: integer }
+        is_active: { type: boolean }
+        state: { type: string, enum: [free, occupied] }
+        tab: { allOf: [{ $ref: '#/components/schemas/FloorTab' }], nullable: true }
+
+    Floor:
+      type: object
+      properties:
+        areas:
+          type: array
+          description: Area bernama urut abjad alami; meja tanpa area (`area = ""`) selalu terakhir.
+          items:
+            type: object
+            properties:
+              area: { type: string }
+              tables:
+                type: array
+                items: { $ref: '#/components/schemas/FloorTable' }
+        takeaway_tabs:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/FloorTab'
+              - type: object
+                properties:
+                  tab_label: { type: string, nullable: true }
+        version: { type: string }
+
+    FloorUnchanged:
+      type: object
+      properties:
+        unchanged: { type: boolean, enum: [true] }
+        version: { type: string }
+
+    TabSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        order_number: { type: string }
+        status: { type: string, enum: [open] }
+        service_type: { type: string, enum: [dine_in, takeaway] }
+        table: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string }, area: { type: string } } }
+        tab_label: { type: string, nullable: true }
+        session_id: { type: integer }
+        total_amount: { type: string }
+        paid_amount: { type: string }
+        created_at: { type: string, format: date-time }
+
+    TabLine:
+      type: object
+      properties:
+        id: { type: integer }
+        variant_id: { type: integer }
+        name: { type: string }
+        qty: { type: integer }
+        unit_price: { type: string, description: Harga efektif per unit (snapshot saat ditambahkan). }
+        line_total: { type: string }
+        modifiers:
+          type: array
+          description: Snapshot pilihan modifier (tidak berubah walau menu diedit kemudian).
+          items: { $ref: '#/components/schemas/ModifierChoice' }
+        note: { type: string, nullable: true }
+        sent: { type: boolean }
+        prep_status: { type: string, nullable: true, enum: [new, preparing, ready, served, null], description: null untuk baris belum dikirim. }
+        ticket_item_id: { type: integer, nullable: true, description: "Id item tiket dapur — untuk menandai sudah diantar lewat `PATCH /ticket-items/{id}/status`." }
+        station: { type: object, nullable: true }
+
+    Tab:
+      type: object
+      description: Aman untuk kasir — tidak memuat field biaya.
+      properties:
+        id: { type: integer }
+        order_number: { type: string }
+        status: { type: string, enum: [open, completed] }
+        service_type: { type: string, enum: [dine_in, takeaway] }
+        table: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string }, area: { type: string } } }
+        tab_label: { type: string, nullable: true }
+        session_id: { type: integer }
+        customer_id: { type: integer, nullable: true }
+        subtotal: { type: string }
+        discount_amount: { type: string }
+        total_amount: { type: string }
+        paid_amount: { type: string }
+        change_amount: { type: string }
+        balance: { type: string, description: "max(0, total − dibayar)." }
+        created_at: { type: string, format: date-time }
+        lines: { type: array, items: { $ref: '#/components/schemas/TabLine' } }
+        payments:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+              amount: { type: string }
+              verification: { type: string }
+              paid_at: { type: string, format: date-time }
+
+    OpenTabInput:
+      type: object
+      required: [session_id]
+      properties:
+        session_id: { type: integer }
+        table_id: { type: integer, nullable: true }
+        tab_label: { type: string, nullable: true, maxLength: 100 }
+        customer_id: { type: integer, nullable: true }
+        local_ref: { type: string, format: uuid, nullable: true }
+
+    AddTabLineInput:
+      type: object
+      required: [variant_id, qty]
+      properties:
+        variant_id: { type: integer }
+        qty: { type: integer, minimum: 1, maximum: 999 }
+        note: { type: string, nullable: true, maxLength: 255 }
+        modifier_option_ids:
+          type: array
+          items: { type: integer }
+          description: |
+            Pilihan modifier. Divalidasi server terhadap grup efektif produk (wajib/opsional, tunggal/jamak,
+            min/max) — pelanggaran → `422` yang menyebut grup dan rentangnya. Harga efektif per unit =
+            harga menu + selisih pilihan (tidak boleh negatif); pilihan di-SNAPSHOT pada baris.
+
+    UpdateTabLineInput:
+      type: object
+      properties:
+        qty: { type: integer, minimum: 1, maximum: 999 }
+        note: { type: string, nullable: true, maxLength: 255 }
+        modifier_option_ids:
+          type: array
+          items: { type: integer }
+          description: Mengganti pilihan; harga dihitung ulang dari harga dasar SAAT baris ditambahkan (bukan harga menu hari ini).
+
+    TabPaymentInput:
+      type: object
+      required: [client_ref, payments]
+      properties:
+        client_ref: { type: string, format: uuid, description: Kunci idempotensi satu pengiriman pembayaran. }
+        discount_amount: { type: number, nullable: true, minimum: 0, description: Diskon tingkat-order saat membayar (≤ subtotal). }
+        payments:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [method, amount]
+            properties:
+              method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+              channel_id: { type: integer, nullable: true }
+              amount: { type: number, minimum: 0.01 }
+              proof_token: { type: string, format: uuid, nullable: true }
+              notes: { type: string, nullable: true }
+
+    ModifierChoice:
+      type: object
+      properties:
+        group: { type: string, example: Size }
+        option: { type: string, example: Large }
+        price_delta: { type: string, example: "5000.00", description: Bertanda. }
+
+    ModifierOption:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, maxLength: 100 }
+        price_delta: { type: string, example: "5000.00", description: Positif, nol, atau negatif. }
+        display_order: { type: integer }
+        is_active: { type: boolean }
+
+    ModifierGroup:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        selection_type: { type: string, enum: [single, multiple] }
+        is_required: { type: boolean }
+        min_select: { type: integer }
+        max_select: { type: integer, nullable: true, description: null = tanpa batas atas. }
+        display_order: { type: integer }
+        is_active: { type: boolean }
+        options: { type: array, items: { $ref: '#/components/schemas/ModifierOption' } }
+        product_ids: { type: array, items: { type: integer } }
+        category_ids: { type: array, items: { type: integer } }
+
+    ModifierGroupInput:
+      type: object
+      required: [name, selection_type, options]
+      properties:
+        name: { type: string, maxLength: 100 }
+        selection_type: { type: string, enum: [single, multiple] }
+        is_required: { type: boolean }
+        min_select: { type: integer, minimum: 0, maximum: 50 }
+        max_select: { type: integer, nullable: true, minimum: 1, maximum: 50 }
+        display_order: { type: integer }
+        is_active: { type: boolean }
+        options:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [name, price_delta]
+            properties:
+              id: { type: integer, nullable: true, description: Ada → ubah opsi itu; tanpa id → buat. }
+              name: { type: string, maxLength: 100 }
+              price_delta: { type: number }
+              display_order: { type: integer }
+              is_active: { type: boolean }
+
+    Station:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string, maxLength: 60, example: Dapur }
+        display_order: { type: integer }
+        is_active: { type: boolean }
+
+    StationInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 60 }
+        display_order: { type: integer }
+        is_active: { type: boolean }
+
+    TicketItem:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        qty: { type: integer }
+        modifiers: { type: array, items: { $ref: '#/components/schemas/ModifierChoice' } }
+        note: { type: string, nullable: true }
+        status: { type: string, enum: [new, preparing, ready, served, cancelled] }
+        preparing_at: { type: string, format: date-time, nullable: true }
+        ready_at: { type: string, format: date-time, nullable: true }
+        served_at: { type: string, format: date-time, nullable: true }
+        cancelled_at: { type: string, format: date-time, nullable: true }
+        cancel_reason: { type: string, nullable: true }
+
+    Ticket:
+      type: object
+      properties:
+        id: { type: integer }
+        round_no: { type: integer, description: Ronde pengiriman tab ini (1, 2, …). }
+        sent_at: { type: string, format: date-time }
+        station: { type: object, nullable: true, description: null = tiket "tanpa stasiun" (item langsung siap saji)., properties: { id: { type: integer }, name: { type: string } } }
+        order: { type: object, properties: { id: { type: integer }, order_number: { type: string } } }
+        table: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string } } }
+        tab_label: { type: string, nullable: true }
+        waiting_seconds: { type: integer }
+        items: { type: array, items: { $ref: '#/components/schemas/TicketItem' } }
+
+    SplitTabInput:
+      type: object
+      required: [client_ref, items, payments]
+      properties:
+        client_ref: { type: string, format: uuid }
+        discount_amount: { type: number, nullable: true, minimum: 0, description: Diskon untuk penjualan terpisah saja (≤ subtotalnya). }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [item_id, qty]
+            properties:
+              item_id: { type: integer, description: Id baris tab; tidak boleh kembar. }
+              qty: { type: integer, minimum: 1 }
+        payments:
+          type: array
+          minItems: 1
+          description: Harus menuntaskan penjualan terpisah dalam satu panggilan.
+          items: { type: object }
+
+    SplitTabResult:
+      type: object
+      properties:
+        paid_order: { $ref: '#/components/schemas/Tab' }
+        tab: { $ref: '#/components/schemas/Tab' }

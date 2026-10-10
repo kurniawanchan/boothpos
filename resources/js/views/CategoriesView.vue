@@ -15,6 +15,7 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import { listStations } from '../api/stations';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
 const auth = useAuthStore();
@@ -68,7 +69,17 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editingCategory = ref(null);
-const form = reactive({ code: '', name: '', parent_id: '', display_order: 0, is_active: true });
+const form = reactive({ code: '', name: '', parent_id: '', display_order: 0, is_active: true, station_id: '' });
+
+// 028 — daftar stasiun untuk dropdown; 403 (peran tanpa `dining_setup`/`kitchen`) = dropdown disembunyikan.
+const stations = ref([]);
+onMounted(async () => {
+  try {
+    stations.value = (await listStations({ active: 1 })).data;
+  } catch {
+    stations.value = [];
+  }
+});
 const formErrors = reactive({});
 const saving = ref(false);
 
@@ -114,7 +125,7 @@ function resetCategoryImage() {
 
 function openCreate() {
   editingCategory.value = null;
-  Object.assign(form, { code: '', name: '', parent_id: '', display_order: 0, is_active: true });
+  Object.assign(form, { code: '', name: '', parent_id: '', display_order: 0, is_active: true, station_id: '' });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   resetCategoryImage();
   showForm.value = true;
@@ -128,6 +139,7 @@ function openEdit(category) {
     parent_id: category.parent_id ?? '',
     display_order: category.display_order,
     is_active: category.is_active,
+    station_id: category.station_id ?? '',
   });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   resetCategoryImage();
@@ -145,6 +157,7 @@ async function saveCategory() {
         parent_id: form.parent_id || null,
         display_order: Number(form.display_order) || 0,
         is_active: form.is_active,
+        station_id: form.station_id || null,
       });
       toast.success(t('master_data.category_updated'));
     } else {
@@ -154,6 +167,7 @@ async function saveCategory() {
         parent_id: form.parent_id || null,
         display_order: Number(form.display_order) || 0,
         is_active: form.is_active,
+        station_id: form.station_id || null,
       });
       categoryId = created.id;
       toast.success(t('master_data.category_created'));
@@ -256,6 +270,8 @@ async function performDelete() {
         />
         <BaseInput v-model="form.name" :label="t('master_data.category_name')" required maxlength="100" :error="formErrors.name" />
         <BaseSelect v-model="form.parent_id" :label="t('master_data.parent_category')" :placeholder="t('master_data.no_parent_main_category')" :options="parentOptions" :error="formErrors.parent_id" />
+        <!-- 028 — stasiun persiapan default untuk menu dalam kategori ini; kosong = tidak perlu dimasak. -->
+        <BaseSelect v-if="stations.length" v-model="form.station_id" :label="t('master_data.station')" :placeholder="t('master_data.station_none')" :options="stations.map((s) => ({ value: s.id, label: s.name }))" :hint="t('master_data.station_hint')" :error="formErrors.station_id" />
         <BaseInput v-model="form.display_order" type="number" :label="t('master_data.display_order')" :error="formErrors.display_order" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />

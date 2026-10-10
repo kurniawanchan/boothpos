@@ -28,6 +28,11 @@ class UpdateProductRequest extends FormRequest
             'is_preorder' => ['sometimes', 'boolean'],
             'preorder_eta' => ['nullable', 'date'],
             'is_active' => ['sometimes', 'boolean'],
+            'station_id' => ['sometimes', 'nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) {
+                if ($value !== null && ! \App\Models\Station::whereKey($value)->exists()) {
+                    $fail(__('restaurant.station_not_found'));
+                }
+            }],
         ];
     }
 }

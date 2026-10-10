@@ -19,6 +19,7 @@ class UpdateVariantRequest extends FormRequest
             'sell_price' => ['sometimes', 'numeric', 'min:0'],
             'low_stock_alert' => ['nullable', 'integer', 'min:0'],
             'is_active' => ['sometimes', 'boolean'],
+            'track_stock' => ['sometimes', 'boolean'],
         ];
     }
 }

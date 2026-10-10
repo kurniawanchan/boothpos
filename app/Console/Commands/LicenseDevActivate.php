@@ -104,7 +104,7 @@ class LicenseDevActivate extends Command
         $this->info('Aktivasi      : berhasil (LicenseActivation record inserted)');
         $this->info('Fingerprint   : ' . $fingerprint);
         $this->info('');
-        $this->info('Aplikasi sudah ter-aktfivasi. Anda bisa akses http://localhost:8000');
+        $this->info('Aplikasi sudah ter-aktfivasi. Anda bisa akses http://localhost:8010');
         $this->info('Untuk share license key ini ke pemasang lain di mesin berbeda,');
         $this->info('pakai: php artisan license:generate {email} {issued_to} (vendor-side).');
 

@@ -37,7 +37,7 @@
         SATU-SATUNYA workaround yang terbukti benar-benar bekerja (lihat
         docs/RUNBOOK.md): override eksplisit di level `docker compose
         exec`, BUKAN lewat berkas ini:
-          docker compose exec -e APP_ENV=testing -e DB_DATABASE=boothpos_test app php artisan test
+          docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test app php artisan test
         -->
         <env name="APP_ENV" value="testing" force="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>

@@ -52,9 +52,16 @@ class ProductController extends Controller
         // GET /products/{id} — supaya kedua endpoint memberi isi yang sama
         // untuk produk yang sama, bukan diam-diam berbeda.
         $withVariants = $request->boolean('with_variants');
+        // 028 — ?with_modifiers=1 juga OPT-IN (daftar tetap ramping): grup efektif =
+        // grup produk ∪ grup kategorinya, dimuat lewat eager-load supaya tetap konstan.
+        $withModifiers = $request->boolean('with_modifiers');
 
         $products = Product::query()
-            ->with(array_merge(['artist', 'category'], $withVariants ? ['variants'] : []))
+            ->with(array_merge(
+                ['artist', 'category'],
+                $withVariants ? ['variants'] : [],
+                $withModifiers ? ['modifierGroups.options', 'category.modifierGroups.options'] : [],
+            ))
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = $request->string('search');
                 $q->where(function ($q2) use ($term) {
@@ -102,6 +109,7 @@ class ProductController extends Controller
             $product = Product::create([
                 'artist_id' => $data['artist_id'],
                 'category_id' => $data['category_id'],
+                'station_id' => $data['station_id'] ?? null,
                 'code_prefix' => $codePrefix,
                 'product_segment' => strtoupper($segment),
                 'name' => $data['name'],
@@ -119,6 +127,8 @@ class ProductController extends Controller
                     'cost_price' => $variantInput['cost_price'] ?? 0,
                     'sell_price' => $variantInput['sell_price'],
                     'low_stock_alert' => $variantInput['low_stock_alert'] ?? null,
+                    // 028 — default true: perilaku lama tak berubah.
+                    'track_stock' => $variantInput['track_stock'] ?? true,
                 ]);
             }
 
@@ -227,6 +237,7 @@ class ProductController extends Controller
                     'cost_price' => $request->validated('cost_price') ?? 0,
                     'sell_price' => $request->validated('sell_price'),
                     'low_stock_alert' => $request->validated('low_stock_alert'),
+                    'track_stock' => $request->validated('track_stock') ?? true,
                 ]);
 
                 if ($copyFromId) {
