@@ -7,6 +7,8 @@ import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -15,16 +17,25 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import { listStations } from '../api/stations';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 
 const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listCategories);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listCategories);
 const allCategories = ref([]); // for the parent picker + hierarchy column, unpaginated
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
+function onSearchInput(value) {
+  search.value = value;
+  debouncedSearch();
+}
+function resetFilters() {
+  search.value = '';
+  setFilter({ search: undefined });
+}
 
 async function loadAllCategories() {
   allCategories.value = (await listCategories({ per_page: 100 })).data;
@@ -68,7 +79,17 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editingCategory = ref(null);
-const form = reactive({ code: '', name: '', parent_id: '', display_order: 0, is_active: true });
+const form = reactive({ code: '', name: '', parent_id: '', display_order: 0, is_active: true, station_id: '' });
+
+// 028 — daftar stasiun untuk dropdown; 403 (peran tanpa `dining_setup`/`kitchen`) = dropdown disembunyikan.
+const stations = ref([]);
+onMounted(async () => {
+  try {
+    stations.value = (await listStations({ active: 1 })).data;
+  } catch {
+    stations.value = [];
+  }
+});
 const formErrors = reactive({});
 const saving = ref(false);
 
@@ -114,7 +135,7 @@ function resetCategoryImage() {
 
 function openCreate() {
   editingCategory.value = null;
-  Object.assign(form, { code: '', name: '', parent_id: '', display_order: 0, is_active: true });
+  Object.assign(form, { code: '', name: '', parent_id: '', display_order: 0, is_active: true, station_id: '' });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   resetCategoryImage();
   showForm.value = true;
@@ -128,6 +149,7 @@ function openEdit(category) {
     parent_id: category.parent_id ?? '',
     display_order: category.display_order,
     is_active: category.is_active,
+    station_id: category.station_id ?? '',
   });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   resetCategoryImage();
@@ -145,6 +167,7 @@ async function saveCategory() {
         parent_id: form.parent_id || null,
         display_order: Number(form.display_order) || 0,
         is_active: form.is_active,
+        station_id: form.station_id || null,
       });
       toast.success(t('master_data.category_updated'));
     } else {
@@ -154,6 +177,7 @@ async function saveCategory() {
         parent_id: form.parent_id || null,
         display_order: Number(form.display_order) || 0,
         is_active: form.is_active,
+        station_id: form.station_id || null,
       });
       categoryId = created.id;
       toast.success(t('master_data.category_created'));
@@ -196,20 +220,9 @@ async function performDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <div class="relative flex min-w-[230px] flex-1 items-center">
-        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="category-search">{{ t('master_data.search_category') }}</label>
-        <input
-          id="category-search"
-          v-model="search"
-          :placeholder="t('master_data.search_category_placeholder')"
-          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-          @input="debouncedSearch"
-        />
-      </div>
-      <template v-if="auth.canAccessMenu('categories')">
+  <div>
+    <PageHeader :title="t('nav.categories')" :description="t('nav.categories_subtitle')">
+      <template v-if="auth.canAccessMenu('categories')" #actions>
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('common.export_xlsx') }}
@@ -223,15 +236,31 @@ async function performDelete() {
           {{ t('master_data.new_category') }}
         </BaseButton>
       </template>
-    </div>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_categories')">
+    <div class="mx-[26px] mb-10 overflow-hidden border-2 border-line bg-white">
+      <FilterBar
+        :search="search"
+        :placeholder="t('master_data.search_category_placeholder')"
+        :search-label="t('master_data.search_category')"
+        :count="loading && !items.length ? null : meta.total"
+        :active="!!search"
+        @update:search="onSearchInput"
+        @reset="resetFilters"
+      />
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('master_data.no_categories')"
+        @retry="load"
+      >
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
         <template #cell-parent_id="{ row }">{{ row.parent_id ? nameById[row.parent_id] ?? `#${row.parent_id}` : '—' }}</template>
         <template #cell-product_count="{ row }">{{ row.product_count ?? 0 }}</template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'success' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div v-if="auth.canAccessMenu('categories')" class="flex justify-end gap-2">
@@ -256,6 +285,8 @@ async function performDelete() {
         />
         <BaseInput v-model="form.name" :label="t('master_data.category_name')" required maxlength="100" :error="formErrors.name" />
         <BaseSelect v-model="form.parent_id" :label="t('master_data.parent_category')" :placeholder="t('master_data.no_parent_main_category')" :options="parentOptions" :error="formErrors.parent_id" />
+        <!-- 028 — stasiun persiapan default untuk menu dalam kategori ini; kosong = tidak perlu dimasak. -->
+        <BaseSelect v-if="stations.length" v-model="form.station_id" :label="t('master_data.station')" :placeholder="t('master_data.station_none')" :options="stations.map((s) => ({ value: s.id, label: s.name }))" :hint="t('master_data.station_hint')" :error="formErrors.station_id" />
         <BaseInput v-model="form.display_order" type="number" :label="t('master_data.display_order')" :error="formErrors.display_order" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />

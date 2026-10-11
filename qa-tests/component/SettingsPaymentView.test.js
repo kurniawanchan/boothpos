@@ -55,4 +55,27 @@ describe('SettingsPaymentView (US4)', () => {
     const payload = updatePaymentSettings.mock.calls[0][0];
     expect(payload.bank_name).toBe('Mandiri');
   });
+
+  // 041-back-office-ui-redesign — struktur halaman baru.
+  it('memakai PageHeader: satu h1 (Pembayaran) dengan deskripsi halaman', async () => {
+    renderView();
+    await screen.findByDisplayValue('BCA');
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Pembayaran');
+    expect(screen.getByText('Digunakan sebagai informasi pembayaran default saat membuat invoice baru.')).toBeInTheDocument();
+  });
+
+  it('galat memuat menampilkan keadaan galat (bukan formulir kosong) dan coba lagi memuat ulang', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPaymentSettings.mockRejectedValueOnce(new Error('Gagal terhubung'));
+    renderView();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Gagal terhubung');
+    expect(screen.queryByRole('button', { name: /^simpan$/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /coba lagi/i }));
+
+    expect(await screen.findByDisplayValue('BCA')).toBeInTheDocument();
+  });
 });

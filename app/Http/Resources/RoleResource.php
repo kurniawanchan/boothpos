@@ -13,6 +13,8 @@ class RoleResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'menu_keys' => $this->menu_keys,
+            // 043 — izin yang BERLAKU (bawaan menurut nama peran bila belum diatur), bukan nilai mentah kolom.
+            'permissions' => array_values(array_filter(\App\Support\PermissionCatalog::keys(), fn ($k) => $this->resource->allows($k))),
             'is_system_default' => $this->is_system_default,
             // Dihitung di controller lewat withCount('users') dan dibatasi
             // ke pengguna aktif — dipasok siap pakai supaya frontend tidak

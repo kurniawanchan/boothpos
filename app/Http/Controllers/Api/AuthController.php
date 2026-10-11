@@ -143,6 +143,9 @@ class AuthController extends Controller
             // T009 — permukaan resolusi menu_keys sekali per sesi frontend
             // (bukan per-menu, lihat plan.md Performance Goals).
             'menu_keys' => $user->role?->menu_keys ?? [],
+            // 043 — izin tingkat-aksi yang BERLAKU (bawaan menurut nama peran bila belum diatur); UI hanya menyembunyikan,
+            // server tetap penegak (User::hasPermission).
+            'permissions' => $user->role ? array_values(array_filter(\App\Support\PermissionCatalog::keys(), fn ($k) => $user->role->allows($k))) : [],
             'is_active' => $user->is_active,
             'language' => $user->language,
             'photo_url' => $this->imageUploadService->url($user->photo_path),

@@ -20,6 +20,7 @@ class Role extends Model
     protected $fillable = [
         'name',
         'menu_keys',
+        'permissions',
         'is_system_default',
     ];
 
@@ -27,8 +28,20 @@ class Role extends Model
     {
         return [
             'menu_keys' => 'array',
+            'permissions' => 'array',
             'is_system_default' => 'boolean',
         ];
+    }
+
+    /**
+     * 043 — izin tingkat-aksi (App\Support\PermissionCatalog). `permissions` NULL = bawaan menurut nama
+     * peran sistem; nilai tersimpan (termasuk daftar kosong) dihormati apa adanya.
+     */
+    public function allows(string $permission): bool
+    {
+        $granted = $this->permissions ?? \App\Support\PermissionCatalog::defaultsFor((string) $this->name);
+
+        return in_array($permission, $granted, true);
     }
 
     public function users(): HasMany

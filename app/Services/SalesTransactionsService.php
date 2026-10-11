@@ -45,8 +45,8 @@ class SalesTransactionsService
             ->withCount('items')
             ->whereIn('status', filter_var($filters['include_voided'] ?? false, FILTER_VALIDATE_BOOLEAN) ? ['completed', 'voided'] : ['completed'])
             ->when(! empty($filters['event_id']), fn ($q) => $q->where('event_id', (int) $filters['event_id']))
-            ->when(! empty($filters['date_from']), fn ($q) => $q->whereDate('created_at', '>=', $filters['date_from']))
-            ->when(! empty($filters['date_to']), fn ($q) => $q->whereDate('created_at', '<=', $filters['date_to']))
+            ->when(! empty($filters['date_from']), fn ($q) => $q->where('business_date', '>=', \Illuminate\Support\Carbon::parse($filters['date_from'])->toDateString()))
+            ->when(! empty($filters['date_to']), fn ($q) => $q->where('business_date', '<=', \Illuminate\Support\Carbon::parse($filters['date_to'])->toDateString()))
             ->when($ids !== null, fn ($q) => $q->whereIn('id', $ids))
             ->get();
 

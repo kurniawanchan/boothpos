@@ -230,6 +230,11 @@ class MasterDataExportService
                 'initial_stock' => null,
                 'image_filename' => null, // lihat catatan di categoryRows().
                 'variant_image_filename' => null, // sama alasannya seperti image_filename di atas.
+                'short_name' => $v->product->short_name,
+                'tax_category' => $v->product->tax_category,
+                'prep_minutes' => $v->product->prep_minutes,
+                'is_retail' => $v->product->is_retail ? 1 : 0,
+                'status' => $v->product->status,
             ])->all();
     }
 

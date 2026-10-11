@@ -145,4 +145,10 @@ class RoleController extends Controller
     {
         return response()->json(['data' => MenuKeys::list()]);
     }
+
+    /** 043 — katalog izin tingkat-aksi untuk layar Peran (bersama /menu-keys). */
+    public function permissionCatalog(): JsonResponse
+    {
+        return response()->json(['data' => collect(\App\Support\PermissionCatalog::ALL)->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values()]);
+    }
 }

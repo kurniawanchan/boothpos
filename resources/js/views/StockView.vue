@@ -1,8 +1,9 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute, useRouter } from 'vue-router';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listMovements, createAdjustment } from '../api/stock';
+import { listMovements, createAdjustment, lowStock } from '../api/stock';
 import { lookupVariants } from '../api/products';
 import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
@@ -17,7 +18,8 @@ import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
-import EmptyState from '../components/ui/EmptyState.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 import { MOVEMENT_TYPES, movementTypeLabelKey, movementTypeVariant } from '../utils/stockMovements';
@@ -26,8 +28,47 @@ const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listMovements);
-onMounted(load);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listMovements);
+
+// 042-dashboard-revamp — butir "Item stok menipis" di Dashboard membuka layar ini dengan `?low=1`. Layar ini adalah
+// buku besar pergerakan (bukan daftar stok), jadi `low=1` menampilkan DAFTAR VARIAN yang menipis dari
+// GET /stock/low — predikat yang sama dengan yang dihitung Dashboard (is_active, low_stock_alert terisi,
+// current_stock <= low_stock_alert) — sehingga jumlah baris = angka di butir itu. Chip "Hanya stok menipis"
+// melepas filter dan kembali ke buku besar. Tanpa `?low` perilaku layar tidak berubah sama sekali.
+const route = useRoute();
+const router = useRouter();
+const lowOnly = computed(() => {
+  const raw = route?.query?.low;
+  return ['1', 'true'].includes(String(Array.isArray(raw) ? raw[0] : raw));
+});
+const lowItems = ref([]);
+const lowLoading = ref(false);
+const lowError = ref(false);
+async function loadLow() {
+  lowLoading.value = true;
+  lowError.value = false;
+  try {
+    lowItems.value = (await lowStock()).data ?? [];
+  } catch {
+    lowItems.value = [];
+    lowError.value = true;
+  } finally {
+    lowLoading.value = false;
+  }
+}
+function clearLowFilter() {
+  const rest = { ...route.query };
+  delete rest.low;
+  router.replace({ query: rest });
+}
+const lowColumns = computed(() => [
+  { key: 'product_name', label: t('dashboard.link_stock_low_col_product') },
+  { key: 'sku', label: t('dashboard.link_stock_low_col_sku') },
+  { key: 'current_stock', label: t('dashboard.link_stock_low_col_stock') },
+  { key: 'low_stock_alert', label: t('dashboard.link_stock_low_col_alert') },
+]);
+onMounted(() => (lowOnly.value ? loadLow() : load()));
+watch(lowOnly, (on) => (on ? loadLow() : load()));
 
 const exporting = ref(false);
 const showImportModal = ref(false);
@@ -89,8 +130,21 @@ const columns = computed(() => [
   { key: 'created_at', label: t('master_data.col_time') },
 ]);
 
+// 041 — tanggal kini terikat (v-model) supaya "Atur ulang filter" dan penanda filter aktif bisa dihitung;
+// parameter yang dikirim ke server tetap sama persis (type/date_from/date_to, kosong = tidak dikirim).
+const dateFrom = ref('');
+const dateTo = ref('');
+const filtersActive = computed(() => !!(typeFilter.value || dateFrom.value || dateTo.value));
+
 function applyFilters(patch) {
   setFilter(patch);
+}
+
+function resetFilters() {
+  typeFilter.value = '';
+  dateFrom.value = '';
+  dateTo.value = '';
+  setFilter({ type: undefined, date_from: undefined, date_to: undefined });
 }
 
 // --- Adjustment dialog -----------------------------------------------
@@ -155,19 +209,9 @@ async function submitAdjustment() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <BaseSelect
-        v-model="typeFilter"
-        class="w-52"
-        :placeholder="t('master_data.all_types')"
-        :options="typeOptions"
-        @update:model-value="(v) => applyFilters({ type: v || undefined })"
-      />
-      <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
-      <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_to: v || undefined })" />
-      <span class="flex-1"></span>
-      <template v-if="auth.canAccessMenu('stock')">
+  <div class="pb-10">
+    <PageHeader :title="t('nav.stock_page_title')" :description="t('nav.stock_subtitle')">
+      <template v-if="auth.canAccessMenu('stock')" #actions>
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('common.export_xlsx') }}
@@ -181,10 +225,57 @@ async function submitAdjustment() {
           {{ t('master_data.stock_adjustment') }}
         </BaseButton>
       </template>
-    </div>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_stock_movements')">
+    <section v-if="lowOnly" class="mx-[26px] border-2 border-line bg-white" data-testid="stock-low-section">
+      <div class="flex flex-wrap items-center gap-3 px-5 py-4">
+        <button
+          type="button"
+          data-testid="low-chip"
+          class="inline-flex items-center gap-1.5 border-2 border-line bg-white px-2 py-0.5 text-[12px] font-semibold text-muted-5 transition-colors hover:border-brand focus-visible:outline-none focus-visible:border-brand"
+          :aria-label="t('dashboard.orders_chip_remove', { label: t('dashboard.link_stock_low_chip') })"
+          @click="clearLowFilter"
+        >
+          {{ t('dashboard.link_stock_low_chip') }}
+          <i class="ph-duotone ph-x text-[12px]" aria-hidden="true"></i>
+        </button>
+        <span v-if="!lowLoading && !lowError" class="ml-auto text-[12.5px] font-semibold text-muted" data-testid="data-count">{{ t('page.data_count', { count: lowItems.length }) }}</span>
+      </div>
+      <DataTable
+        :columns="lowColumns"
+        :rows="lowItems"
+        row-key="variant_id"
+        :loading="lowLoading"
+        :error="lowError ? t('dashboard.link_stock_low_failed') : ''"
+        :empty-message="t('dashboard.link_stock_low_empty')"
+        @retry="loadLow"
+      >
+        <template #cell-sku="{ row }"><span class="font-mono text-[12px] font-semibold">{{ row.sku }}</span></template>
+        <template #cell-current_stock="{ row }"><span class="font-mono text-[13px] font-bold text-danger-text">{{ row.current_stock }}</span></template>
+      </DataTable>
+    </section>
+
+    <section v-else class="mx-[26px] border-2 border-line bg-white">
+      <FilterBar :searchable="false" :count="loading || error ? null : meta.total" :active="filtersActive" @reset="resetFilters">
+        <BaseSelect
+          v-model="typeFilter"
+          class="w-52"
+          :placeholder="t('master_data.all_types')"
+          :options="typeOptions"
+          @update:model-value="(v) => applyFilters({ type: v || undefined })"
+        />
+        <BaseInput v-model="dateFrom" type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
+        <BaseInput v-model="dateTo" type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_to: v || undefined })" />
+      </FilterBar>
+
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('master_data.no_stock_movements')"
+        @retry="load"
+      >
         <template #cell-sku="{ row }">
           <button
             v-if="canOpenProduct"
@@ -208,7 +299,7 @@ async function submitAdjustment() {
         <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
-    </div>
+    </section>
 
     <ProductDetailModal :open="detailProductId !== null" :product-id="detailProductId" :highlight-variant-id="detailVariantId" @close="closeDetail" />
 

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -21,6 +22,7 @@ class Category extends Model
         'parent_id',
         'display_order',
         'is_active',
+        'station_id',
     ];
 
     protected function casts(): array
@@ -97,5 +99,17 @@ class Category extends Model
         }
 
         return false;
+    }
+
+    /** 028 — stasiun persiapan default untuk menu dalam kategori ini (stasiun produk menang). */
+    public function station(): BelongsTo
+    {
+        return $this->belongsTo(Station::class);
+    }
+
+    /** 028 — grup modifier yang dilampirkan langsung ke sini (lihat ModifierResolver::effectiveGroups). */
+    public function modifierGroups(): BelongsToMany
+    {
+        return $this->belongsToMany(ModifierGroup::class, 'modifier_group_category');
     }
 }

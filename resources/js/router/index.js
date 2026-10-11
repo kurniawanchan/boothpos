@@ -44,6 +44,32 @@ const routes = [
         component: () => import('../views/SessionView.vue'),
         meta: { menuKey: 'session' },
       },
+      // 028-restaurant-dine-in-ordering — layar restoran. Setiap rute digerbang
+      // menu-key yang sama dengan yang diperiksa server di endpoint-nya.
+      {
+        path: 'floor',
+        name: 'floor',
+        component: () => import('../views/FloorView.vue'),
+        meta: { titleKey: 'nav.floor', subtitleKey: 'nav.floor_subtitle', menuKey: 'floor' },
+      },
+      {
+        path: 'floor/tabs/:id',
+        name: 'floor-tab',
+        component: () => import('../views/TabView.vue'),
+        meta: { titleKey: 'nav.floor', subtitleKey: 'nav.floor_subtitle', menuKey: 'floor' },
+      },
+      {
+        path: 'kitchen',
+        name: 'kitchen',
+        component: () => import('../views/KitchenView.vue'),
+        meta: { titleKey: 'nav.kitchen', subtitleKey: 'nav.kitchen_subtitle', menuKey: 'kitchen' },
+      },
+      {
+        path: 'dining-setup',
+        name: 'dining-setup',
+        component: () => import('../views/DiningSetupView.vue'),
+        meta: { titleKey: 'nav.dining_setup', subtitleKey: 'nav.dining_setup_subtitle', menuKey: 'dining_setup' },
+      },
       {
         path: 'events',
         name: 'events',
@@ -55,6 +81,14 @@ const routes = [
         name: 'products',
         component: () => import('../views/ProductsView.vue'),
         meta: { titleKey: 'nav.products_page_title', subtitleKey: 'nav.products_subtitle', menuKey: 'products' },
+      },
+      // 043 — halaman satu item (bagian-bagiannya datang di tugas berikutnya). Digerbang menu `products` yang sama
+      // dengan daftarnya; judul diambil PageHeader milik halaman, bukan meta.
+      {
+        path: 'products/:id(\\d+)',
+        name: 'product-detail',
+        component: () => import('../views/ProductDetailView.vue'),
+        meta: { titleKey: 'nav.products', menuKey: 'products' },
       },
       {
         path: 'artists',
@@ -256,7 +290,7 @@ router.beforeEach(async (to) => {
   // Screens we can predict will 403 for the current role are hidden from
   // nav entirely AND guarded here, so a typed-in URL doesn't crash into a
   // raw 403 — redirect somewhere useful instead. Cosmetic only, exactly
-  // like AppSidebar.vue's nav filter — the API is the real gate.
+  // like RailNav.vue's nav filter — the API is the real gate.
   if (to.meta.menuKey && !auth.canAccessMenu(to.meta.menuKey)) {
     return { name: 'dashboard' };
   }

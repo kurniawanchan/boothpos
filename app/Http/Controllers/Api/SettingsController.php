@@ -9,6 +9,7 @@ use App\Models\Setting;
 use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
 use App\Support\AppName;
+use App\Support\BusinessDay;
 use App\Support\LicenseGate;
 use App\Support\ModeGate;
 use App\Support\SchemaStatus;
@@ -57,6 +58,14 @@ class SettingsController extends Controller
             // menimpa. Disurfacekan di sini (bukan hanya GET /settings)
             // supaya tersedia app-wide tanpa endpoint owner/admin-only.
             'store_name' => Setting::get(ModeGate::current() === 'demo' ? 'store_name_demo' : 'store_name'),
+            // 042-dashboard-revamp — dibaca SPA untuk memformat "tanggal bisnis"; terbuka untuk semua
+            // peran (bukan rahasia), sama seperti system_mode.
+            // 043 — dibaca SPA untuk menampilkan/menyembunyikan banner rilis, dialog rilis, dan kontrol persetujuan.
+            'menu_release_enabled' => \App\Support\MenuSettings::releaseEnabled(),
+            'price_approval_threshold_pct' => \App\Support\MenuSettings::approvalThresholdPct(),
+            'price_rounding_default' => \App\Support\MenuSettings::roundingDefault(),
+            'store_timezone' => BusinessDay::timezone(),
+            'business_day_cutoff' => BusinessDay::cutoff(),
             // 035-po-row-actions — database tertinggal dari versi aplikasi? Hanya
             // owner/admin (menu `settings`) yang diberi tahu — itu yang berwenang
             // menerapkannya; daftar migrasinya sendiri tidak pernah dikirim.

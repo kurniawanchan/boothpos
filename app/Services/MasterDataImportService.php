@@ -872,6 +872,44 @@ class MasterDataImportService
             }
         }
 
+        // 043 — fakta item. Kolom `status` sengaja TIDAK dibaca: ia turunan (draft/active/discontinued) dan
+        // hanya ada di ekspor; perubahan status lewat aksi diskontinu/aktifkan atau kolom product_is_active.
+        if ($this->filled($values, 'short_name')) {
+            $short = $this->stringValue($values, 'short_name');
+            if (mb_strlen($short) > 24) {
+                $this->addError($sheet, $row, 'short_name', 'Nama pendek maksimal 24 karakter.');
+            } else {
+                $attributes['short_name'] = $short;
+            }
+        }
+
+        if ($this->filled($values, 'tax_category')) {
+            $tax = $this->stringValue($values, 'tax_category');
+            if (mb_strlen($tax) > 40) {
+                $this->addError($sheet, $row, 'tax_category', 'Kategori pajak maksimal 40 karakter.');
+            } else {
+                $attributes['tax_category'] = $tax;
+            }
+        }
+
+        if ($this->filled($values, 'prep_minutes')) {
+            $minutes = $this->parseInt($sheet, $row, 'prep_minutes', $values['prep_minutes'], 0);
+            if ($minutes !== null) {
+                if ($minutes > 1440) {
+                    $this->addError($sheet, $row, 'prep_minutes', 'Waktu siap maksimal 1440 menit.');
+                } else {
+                    $attributes['prep_minutes'] = $minutes;
+                }
+            }
+        }
+
+        if ($this->filled($values, 'is_retail')) {
+            $retail = $this->parseBool($sheet, $row, 'is_retail', $values['is_retail']);
+            if ($retail !== null) {
+                $attributes['is_retail'] = $retail;
+            }
+        }
+
         return $attributes;
     }
 
@@ -1196,13 +1234,23 @@ class MasterDataImportService
             }
 
             if ($entry['variant_attributes'] !== [] || $entry['variant_image_filename'] !== null) {
-                $variant->fill($entry['variant_attributes']);
+                // 043 — harga jual HANYA lewat PriceService (riwayat harga; mode rilis/persetujuan juga berlaku untuk
+                // impor, supaya spreadsheet bukan jalan pintas melewati persetujuan).
+                $attributes = $entry['variant_attributes'];
+                $newPrice = $attributes['sell_price'] ?? null;
+                unset($attributes['sell_price']);
+
+                $variant->fill($attributes);
 
                 if ($entry['variant_image_filename'] !== null) {
                     $this->applyImageFilename($variant, 'variants', $entry['variant_image_filename']);
                 }
 
                 $variant->save();
+
+                if ($newPrice !== null) {
+                    app(\App\Services\PriceService::class)->setBasePrice($variant, $newPrice, $user, 'import');
+                }
             }
         }
     }
@@ -1733,6 +1781,13 @@ class MasterDataImportService
             && array_key_exists('cost_price', $variantAttributes)
             && ReportSplit::cents($variantAttributes['cost_price']) !== ReportSplit::cents($variant->cost_price)) {
             $this->addError($sheet, $row, 'cost_price', "Harga modal varian '{$variant->sku}' mengikuti BOM yang sudah selesai dan tidak bisa diubah lewat impor. Buka kembali BOM untuk mengubahnya manual.");
+        }
+
+        // 043 — varian yang digerakkan RESEP dikunci dengan cara yang sama.
+        if (array_key_exists('cost_price', $variantAttributes)
+            && ReportSplit::cents($variantAttributes['cost_price']) !== ReportSplit::cents($variant->cost_price)
+            && app(RecipeService::class)->isRecipeDriven($variant)) {
+            $this->addError($sheet, $row, 'cost_price', "Harga modal varian '{$variant->sku}' mengikuti resep dan tidak bisa diubah lewat impor. Buat versi resep baru untuk mengubahnya.");
         }
     }
 

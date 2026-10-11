@@ -37,6 +37,8 @@ class MaterialController extends Controller
             ->withCount('vendorPrices')
             ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->string('search').'%'))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
+            // 043 (Q2 = B) — tab jenis bahan di layar Produk.
+            ->when($request->filled('kind') && in_array($request->string('kind')->value(), ['ingredient', 'semi_finished', 'packaging'], true), fn ($q) => $q->where('kind', $request->string('kind')->value()))
             ->orderBy('name')
             ->paginate($perPage);
 

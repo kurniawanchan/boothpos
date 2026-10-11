@@ -10,14 +10,14 @@ services:
       # DB_USERNAME=root in .env.docker.example, so the root password IS
       # the app's DB_PASSWORD (research.md R4/R8) — fine for a local-only
       # container, never internet-reachable.
-      MYSQL_ROOT_PASSWORD: boothpos_local_dev
+      MYSQL_ROOT_PASSWORD: warkopwjm_local_dev
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
-      - "3307:3306"
+      - "3308:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pboothpos_local_dev"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pwarkopwjm_local_dev"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -36,7 +36,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8000:8000"
+      - "8010:8000"
     depends_on:
       mysql:
         condition: service_healthy
@@ -57,9 +57,9 @@ services:
       # verbatim and the browser tries (and fails) to reach
       # http://0.0.0.0:5173 directly. See vite.config.js's server.origin
       # comment for the full bug writeup.
-      VITE_DEV_SERVER_ORIGIN: http://localhost:5174
+      VITE_DEV_SERVER_ORIGIN: http://localhost:5180
     ports:
-      - "5174:5173"
+      - "5180:5173"
     depends_on:
       - app
 

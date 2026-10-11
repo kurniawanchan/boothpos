@@ -29,6 +29,7 @@ class ProductVariantFactory extends Factory
             'sell_price' => fake()->randomFloat(2, 5000, 100000),
             'current_stock' => 0,
             'is_active' => true,
+            'track_stock' => true,
         ];
     }
 }

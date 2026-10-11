@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/vue';
+import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import DashboardView from '../../resources/js/views/DashboardView.vue';
@@ -8,19 +8,13 @@ import { listEvents } from '../../resources/js/api/events';
 import { salesReport, profitReport, artistSettlements } from '../../resources/js/api/reports';
 import { lowStock } from '../../resources/js/api/stock';
 import { listPreorders } from '../../resources/js/api/preorders';
+import { summary, attention, orders } from '../../resources/js/api/dashboard';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
-vi.mock('../../resources/js/api/reports', () => ({
-  salesReport: vi.fn(),
-  profitReport: vi.fn(),
-  artistSettlements: vi.fn(),
-}));
-vi.mock('../../resources/js/api/stock', () => ({ lowStock: vi.fn() }));
+vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), artistSettlements: vi.fn() }));
+vi.mock('../../resources/js/api/stock', () => ({ lowStock: vi.fn(), listMovements: vi.fn() }));
 vi.mock('../../resources/js/api/preorders', () => ({ listPreorders: vi.fn() }));
-// chart.js's Canvas-based resize/animation lifecycle doesn't play well
-// with jsdom teardown (getComputedStyle on a detached canvas throws) —
-// stub the two chart components so this test exercises the surrounding
-// data-fetching/DOM logic without touching the real canvas rendering.
+vi.mock('../../resources/js/api/dashboard', () => ({ summary: vi.fn(), attention: vi.fn(), orders: vi.fn(), downloadOrdersCsv: vi.fn(), exportDashboard: vi.fn() }));
 vi.mock('vue-chartjs', () => ({
   Bar: { template: '<div data-testid="bar-chart" />' },
   Doughnut: { template: '<div data-testid="doughnut-chart" />' },
@@ -28,32 +22,30 @@ vi.mock('vue-chartjs', () => ({
 
 const ROUTE_NAMES = ['dashboard', 'pos', 'preorders', 'stock', 'products', 'reports', 'events'];
 
-function makeRouter() {
-  return createRouter({
-    history: createMemoryHistory(),
-    routes: ROUTE_NAMES.map((name) => ({ path: `/${name}`, name, component: { template: '<div />' } })),
-  });
-}
-
-const EMPTY_SALES = { totals: { net_sales: '0.00', order_count: 0, unit_count: 0, discount_total: '0.00' }, rows: [] };
-
 async function renderDashboard(menuKeys) {
   const pinia = createPinia();
   setActivePinia(pinia);
-  const auth = useAuthStore();
-  auth.user = { id: 1, name: 'Test', username: 'test', role: 'Owner', menu_keys: menuKeys };
-  const router = makeRouter();
+  useAuthStore().user = { id: 1, name: 'Test', username: 'test', role: 'Owner', menu_keys: menuKeys };
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: ROUTE_NAMES.map((name) => ({ path: `/${name}`, name, component: { template: '<div />' } })),
+  });
   router.push('/dashboard');
   await router.isReady();
   return render(DashboardView, { global: { plugins: [pinia, router] } });
 }
 
-// 005-ux-enhancements-dashboard (US2)
-describe('DashboardView — shortcuts, day filter, charts, links', () => {
+// 042-dashboard-revamp (T025) — Dashboard baru membungkus panel LAMA di bagian "Per event" yang dimuat malas.
+// Tes ini membuktikan dari tampilan utuh bahwa semua isi lama (005 US2) tetap terjangkau dan berperilaku sama;
+// rincian per-panel ada di PerEventSection.test.js.
+describe('DashboardView — everything the old Dashboard showed is still reachable (042)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    summary.mockResolvedValue({ computed_at: '2026-10-11T12:30:04+07:00', business_date: '2026-10-11', comparison: { basis: 'same_time_yesterday', up_to: '12:30' }, kpis: {} });
+    attention.mockResolvedValue({ computed_at: '2026-10-11T12:30:04+07:00', count: 0, items: [] });
+    orders.mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 }, counts: { all: 0, open: 0, partial: 0, paid: 0, cancelled: 0 }, hidden_tabs: ['bill', 'closed'] });
     listEvents.mockResolvedValue({ data: [] });
-    salesReport.mockResolvedValue(EMPTY_SALES);
+    salesReport.mockResolvedValue({ totals: { net_sales: '0.00', order_count: 0, unit_count: 0, discount_total: '0.00' }, rows: [] });
     lowStock.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [], meta: { total: 0 } });
     profitReport.mockResolvedValue({ gross_profit: '0.00' });
@@ -62,42 +54,43 @@ describe('DashboardView — shortcuts, day filter, charts, links', () => {
 
   it('shows only the shortcuts the current role has menu access to', async () => {
     await renderDashboard(['dashboard', 'pos']);
-    await waitFor(() => expect(salesReport).toHaveBeenCalled());
-
-    expect(screen.getByText('Transaksi Baru')).toBeInTheDocument();
+    expect(await screen.findByText('Transaksi Baru', {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.queryByText('Tambah Produk')).not.toBeInTheDocument();
     expect(screen.queryByText('Sesuaikan Stok')).not.toBeInTheDocument();
-  });
+  }, 30000);
 
   it('re-fetches the sales panel with the chosen date range', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     await renderDashboard(['dashboard']);
+    await screen.findByText('Penjualan per kategori');
     await waitFor(() => expect(salesReport).toHaveBeenCalled());
     salesReport.mockClear();
 
-    const [fromInput, toInput] = screen.getAllByDisplayValue('');
+    // Tabel "Order terbaru" (042 US3) kini juga punya kotak isian kosong di atas "Per event": cari di dalam bagian ini saja.
+    const [fromInput] = within(screen.getByTestId('per-event-section')).getAllByDisplayValue('');
     await user.type(fromInput, '2026-09-01');
-
     await waitFor(() =>
       expect(salesReport).toHaveBeenLastCalledWith(expect.objectContaining({ group_by: 'day', date_from: '2026-09-01' }))
     );
   });
 
-  it('renders an empty state for the category/artist/event charts when there is no data', async () => {
+  it('offers the charts, drill-through links and pre-order / stock panels under a "Per event" heading', async () => {
     await renderDashboard(['dashboard']);
-    await screen.findByText('Penjualan per kategori');
+    expect(await screen.findByRole('heading', { level: 2, name: 'Per event' })).toBeInTheDocument();
+    expect(await screen.findByText('Penjualan per kategori')).toBeInTheDocument();
     expect(screen.getByText('Penjualan per penjual')).toBeInTheDocument();
     expect(screen.getByText('Penjualan per event')).toBeInTheDocument();
-
-    await waitFor(() => expect(screen.getAllByText(/belum ada penjualan tercatat/i).length).toBeGreaterThanOrEqual(3));
+    expect(screen.getAllByText(/lihat laporan lengkap/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/lihat pergerakan stok/i)).toBeInTheDocument();
+    expect(screen.getByText(/lihat semua pre-order/i)).toBeInTheDocument();
   });
 
-  it('offers a drill-through link on the sales-per-day and stock sections', async () => {
+  it('keeps the reports-only panels behind the reports menu (profit KPI, customer statistics, per-seller)', async () => {
     await renderDashboard(['dashboard']);
-    await screen.findByText(/lihat pergerakan stok/i);
-
-    expect(screen.getAllByText(/lihat laporan lengkap/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/lihat semua pre-order/i)).toBeInTheDocument();
+    await screen.findByText('Penjualan per kategori');
+    expect(profitReport).not.toHaveBeenCalled();
+    expect(screen.queryByText('Statistik per Pelanggan')).not.toBeInTheDocument();
+    expect(screen.queryByText('Hasil per penjual')).not.toBeInTheDocument();
   });
 });

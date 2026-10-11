@@ -14,13 +14,15 @@ import BaseButton from '../components/ui/BaseButton.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 
 const auth = useAuthStore();
 const { t, locale } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listUsers);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listUsers);
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
 
@@ -49,6 +51,20 @@ onMounted(() => {
   load();
   loadRoles();
 });
+
+function onSearchInput(value) {
+  search.value = value;
+  debouncedSearch();
+}
+
+// Penghitung FilterBar menggambarkan HASIL yang sedang difilter — total dari server (daftar berpaginasi).
+const filtersActive = computed(() => Boolean(search.value || roleFilter.value || statusFilter.value));
+function resetFilters() {
+  search.value = '';
+  roleFilter.value = '';
+  statusFilter.value = '';
+  setFilter({ search: undefined, role_id: undefined, is_active: undefined });
+}
 
 function onRoleFilterChange(value) {
   roleFilter.value = value;
@@ -194,33 +210,42 @@ async function performDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <div class="relative flex min-w-[230px] flex-1 items-center">
-        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="user-search">{{ t('users.search_user') }}</label>
-        <input
-          id="user-search"
-          v-model="search"
-          :placeholder="t('users.search_user_placeholder')"
-          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-          @input="debouncedSearch"
-        />
-      </div>
-      <div class="w-[180px]">
-        <BaseSelect :model-value="roleFilter" :options="roleFilterOptions" :placeholder="t('users.all_roles')" @update:model-value="onRoleFilterChange" />
-      </div>
-      <div class="w-[160px]">
-        <BaseSelect :model-value="statusFilter" :options="statusFilterOptions" :placeholder="t('users.all_status')" @update:model-value="onStatusFilterChange" />
-      </div>
+  <PageHeader :title="t('nav.users')" :description="t('nav.users_subtitle')">
+    <template #actions>
       <BaseButton @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('users.add_user') }}
       </BaseButton>
-    </div>
+    </template>
+  </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('users.no_users')">
+  <div class="px-[26px] pb-10">
+    <section class="overflow-hidden border-2 border-line bg-white">
+      <FilterBar
+        :search="search"
+        :placeholder="t('users.search_user_placeholder')"
+        :search-label="t('users.search_user')"
+        :count="meta.total"
+        :active="filtersActive"
+        @update:search="onSearchInput"
+        @reset="resetFilters"
+      >
+        <div class="w-[180px]">
+          <BaseSelect :model-value="roleFilter" :options="roleFilterOptions" :placeholder="t('users.all_roles')" @update:model-value="onRoleFilterChange" />
+        </div>
+        <div class="w-[160px]">
+          <BaseSelect :model-value="statusFilter" :options="statusFilterOptions" :placeholder="t('users.all_status')" @update:model-value="onStatusFilterChange" />
+        </div>
+      </FilterBar>
+
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? error.message || t('page.load_failed') : ''"
+        :empty-message="t('users.no_users')"
+        @retry="load"
+      >
         <template #cell-name="{ row }">
           <div class="flex items-center gap-2.5">
             <img v-if="row.photo_url" :src="row.photo_url" class="h-8 w-8 rounded-full object-cover" alt="" />
@@ -235,7 +260,7 @@ async function performDelete() {
           <span class="text-[12.5px] text-muted-4">{{ formatLastAccess(row.last_login_at) }}</span>
         </template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('users.active') : t('users.inactive') }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'success' : 'neutral'">{{ row.is_active ? t('users.active') : t('users.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
@@ -252,59 +277,59 @@ async function performDelete() {
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
-    </div>
-
-    <BaseModal :open="showForm" :title="editingUser ? t('users.edit_user') : t('users.new_user')" max-width-class="max-w-[480px]" @close="showForm = false">
-      <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveUser">
-        <BaseInput v-model="form.name" :label="t('users.name')" required maxlength="100" :error="formErrors.name" />
-        <BaseInput v-model="form.username" :label="t('users.username')" required maxlength="50" :error="formErrors.username" />
-        <BaseInput
-          v-model="form.password"
-          :label="t('users.password')"
-          type="password"
-          :required="!editingUser"
-          :hint="editingUser ? t('users.password_hint_edit') : ''"
-          :error="formErrors.password"
-        />
-        <BaseSelect
-          v-model="form.role_id"
-          :label="t('users.role')"
-          required
-          :options="roleOptions"
-          :disabled="isSelf(editingUser ?? {})"
-          :hint="isSelf(editingUser ?? {}) ? t('users.cannot_change_own_role') : ''"
-          :error="formErrors.role_id"
-        />
-        <div class="flex flex-col gap-1.5">
-          <span class="text-[12.5px] font-semibold text-muted-4">{{ t('users.photo') }}</span>
-          <input type="file" accept="image/jpeg,image/png" class="text-[12.5px]" @change="onPhotoChange" />
-        </div>
-        <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
-          <input
-            v-model="form.is_active"
-            type="checkbox"
-            class="h-4 w-4 rounded border-line accent-brand"
-            :disabled="isSelf(editingUser ?? {})"
-          />
-          {{ t('users.active') }}
-        </label>
-      </form>
-      <template #footer>
-        <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
-          <BaseButton :loading="saving" @click="saveUser">{{ t('common.save') }}</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
-
-    <ConfirmDialog
-      :open="showDelete"
-      :title="t('users.delete_user')"
-      :message="t('users.delete_user_confirm', { name: deleteTarget?.name })"
-      :confirm-label="t('vendors_materials.yes_delete')"
-      :loading="deleting"
-      @close="showDelete = false"
-      @confirm="performDelete"
-    />
+    </section>
   </div>
+
+  <BaseModal :open="showForm" :title="editingUser ? t('users.edit_user') : t('users.new_user')" max-width-class="max-w-[480px]" @close="showForm = false">
+    <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveUser">
+      <BaseInput v-model="form.name" :label="t('users.name')" required maxlength="100" :error="formErrors.name" />
+      <BaseInput v-model="form.username" :label="t('users.username')" required maxlength="50" :error="formErrors.username" />
+      <BaseInput
+        v-model="form.password"
+        :label="t('users.password')"
+        type="password"
+        :required="!editingUser"
+        :hint="editingUser ? t('users.password_hint_edit') : ''"
+        :error="formErrors.password"
+      />
+      <BaseSelect
+        v-model="form.role_id"
+        :label="t('users.role')"
+        required
+        :options="roleOptions"
+        :disabled="isSelf(editingUser ?? {})"
+        :hint="isSelf(editingUser ?? {}) ? t('users.cannot_change_own_role') : ''"
+        :error="formErrors.role_id"
+      />
+      <div class="flex flex-col gap-1.5">
+        <span class="text-[12.5px] font-semibold text-muted-4">{{ t('users.photo') }}</span>
+        <input type="file" accept="image/jpeg,image/png" class="text-[12.5px]" @change="onPhotoChange" />
+      </div>
+      <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
+        <input
+          v-model="form.is_active"
+          type="checkbox"
+          class="h-4 w-4 rounded border-line accent-brand"
+          :disabled="isSelf(editingUser ?? {})"
+        />
+        {{ t('users.active') }}
+      </label>
+    </form>
+    <template #footer>
+      <div class="flex justify-end gap-2.5">
+        <BaseButton variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+        <BaseButton :loading="saving" @click="saveUser">{{ t('common.save') }}</BaseButton>
+      </div>
+    </template>
+  </BaseModal>
+
+  <ConfirmDialog
+    :open="showDelete"
+    :title="t('users.delete_user')"
+    :message="t('users.delete_user_confirm', { name: deleteTarget?.name })"
+    :confirm-label="t('vendors_materials.yes_delete')"
+    :loading="deleting"
+    @close="showDelete = false"
+    @confirm="performDelete"
+  />
 </template>

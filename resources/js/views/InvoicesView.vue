@@ -1,13 +1,18 @@
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listInvoices, getInvoiceSummary, exportInvoices, getInvoiceImportTemplate, importInvoices } from '../api/invoices';
 import { listCompanies } from '../api/companies';
-import { formatIDR } from '../utils/money';
+import { formatIDR, formatCount } from '../utils/formatters';
 import { formatDate } from '../utils/date';
+import { useQueryState } from '../composables/useQueryState';
 import { useToastStore } from '../stores/toast';
 import { useAuthStore } from '../stores/auth';
+import PageHeader from '../components/page/PageHeader.vue';
+import KpiStrip from '../components/page/KpiStrip.vue';
+import TabBar from '../components/page/TabBar.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -35,7 +40,17 @@ const auth = useAuthStore();
 // untuk CRUD dasar.
 const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));
 
-const { items, meta, loading, load, setPage, setFilter, params } = usePaginatedList(listInvoices);
+// Filter status kini berupa tab (semantik sama: parameter `status` ke API, kosong = semua) dan
+// dicerminkan ke address bar (?status=paid). Nilai tak dikenal di URL jatuh ke "semua".
+const STATUS_TABS = ['all', 'unpaid', 'paid', 'cancelled'];
+const query = useQueryState({ status: 'all' });
+const activeStatus = computed(() => (STATUS_TABS.includes(query.state.status) ? query.state.status : 'all'));
+const statusParam = (tab) => (tab === 'all' ? undefined : tab);
+
+const { items, meta, loading, error, load, setPage, setFilter, params } = usePaginatedList(
+  listInvoices,
+  activeStatus.value === 'all' ? {} : { status: activeStatus.value }
+);
 const companiesById = ref({});
 
 async function loadCompanies() {
@@ -52,20 +67,68 @@ const rowsWithCompany = computed(() =>
   items.value.map((inv) => ({ ...inv, company_name: companiesById.value[inv.company_id] ?? '—' }))
 );
 
-const summary = reactive({
-  unpaid: { count: 0, total: '0.00' },
-  paid: { count: 0, total: '0.00' },
-  overall_count: 0,
-});
+// `null` = belum/tidak berhasil dimuat. Angka yang tidak tersedia tampil "—", bukan 0: nol palsu pada
+// tagihan lebih menyesatkan daripada angka yang hilang.
+const summary = ref(null);
 
 async function loadSummary() {
   try {
-    const res = await getInvoiceSummary();
-    Object.assign(summary, res);
+    summary.value = await getInvoiceSummary();
   } catch {
     // Statistik gagal dimuat tidak boleh menghalangi tabel tetap tampil.
+    summary.value = null;
   }
 }
+
+// Empat angka ringkasan, semuanya dari GET /invoices/summary yang sudah ada (tanpa filter, sama dengan
+// jumlah seluruh daftar). "Dibatalkan" diturunkan: seluruh invoice dikurangi yang belum dibayar dan lunas —
+// status invoice hanya unpaid/paid/cancelled, dan overall_count menghitung ketiganya.
+const cancelledCount = computed(() => {
+  const s = summary.value;
+  return s ? Math.max(0, s.overall_count - s.unpaid.count - s.paid.count) : null;
+});
+
+const kpiItems = computed(() => {
+  const s = summary.value;
+  return [
+    { key: 'overall', label: t('invoices.stat_overall'), value: s ? formatCount(s.overall_count) : null, unavailable: !s, tone: 'neutral' },
+    {
+      key: 'unpaid',
+      label: t('invoices.stat_unpaid'),
+      value: s ? formatIDR(s.unpaid.total) : null,
+      note: s ? t('invoices.stat_count', { count: s.unpaid.count }) : '',
+      unavailable: !s,
+      tone: 'warning',
+    },
+    {
+      key: 'paid',
+      label: t('invoices.stat_paid'),
+      value: s ? formatIDR(s.paid.total) : null,
+      note: s ? t('invoices.stat_count', { count: s.paid.count }) : '',
+      unavailable: !s,
+      tone: 'success',
+    },
+    {
+      key: 'cancelled',
+      label: t('invoices.status_cancelled'),
+      value: s ? formatCount(cancelledCount.value) : null,
+      unavailable: !s,
+      tone: 'neutral',
+    },
+  ];
+});
+
+// Chip jumlah tab = jumlah SELURUH bagian (bukan hasil filter), dari ringkasan yang sama; tanpa ringkasan
+// chip tidak ditampilkan daripada menampilkan angka yang dikarang.
+const statusTabs = computed(() => {
+  const s = summary.value;
+  return [
+    { key: 'all', label: t('invoices.filter_status_all'), count: s ? s.overall_count : undefined },
+    { key: 'unpaid', label: t('invoices.status_unpaid'), count: s ? s.unpaid.count : undefined, tone: 'warning' },
+    { key: 'paid', label: t('invoices.status_paid'), count: s ? s.paid.count : undefined },
+    { key: 'cancelled', label: t('invoices.status_cancelled'), count: s ? cancelledCount.value : undefined },
+  ];
+});
 
 async function refreshAll() {
   await Promise.all([load(), loadSummary()]);
@@ -75,10 +138,12 @@ onMounted(async () => {
   await Promise.all([loadCompanies(), refreshAll()]);
 });
 
-const statusFilter = ref('');
-function onStatusFilterChange(e) {
-  setFilter({ status: e.target.value || undefined });
+function selectStatus(tab) {
+  query.set({ status: tab });
 }
+
+// Satu jalur: klik tab -> URL -> watcher -> daftar (back/forward ikut memuat ulang).
+watch(activeStatus, (tab) => setFilter({ status: statusParam(tab) }));
 
 const columns = computed(() => [
   { key: 'invoice_number', label: t('invoices.col_invoice_number') },
@@ -90,9 +155,9 @@ const columns = computed(() => [
 ]);
 
 function statusVariant(status) {
-  if (status === 'paid') return 'mint';
+  if (status === 'paid') return 'success';
   if (status === 'cancelled') return 'neutral';
-  return 'warn';
+  return 'warning';
 }
 
 const showForm = ref(false);
@@ -224,60 +289,45 @@ function cancelImportPreview() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <div class="flex flex-col gap-1 rounded-card border border-line-2 bg-white px-4 py-3.5">
-        <span class="text-[12px] font-semibold text-muted-3">{{ t('invoices.stat_unpaid') }}</span>
-        <span class="text-[19px] font-bold tracking-tight">{{ formatIDR(summary.unpaid.total) }}</span>
-        <span class="text-[12px] text-muted-3">{{ t('invoices.stat_count', { count: summary.unpaid.count }) }}</span>
-      </div>
-      <div class="flex flex-col gap-1 rounded-card border border-line-2 bg-white px-4 py-3.5">
-        <span class="text-[12px] font-semibold text-muted-3">{{ t('invoices.stat_paid') }}</span>
-        <span class="text-[19px] font-bold tracking-tight">{{ formatIDR(summary.paid.total) }}</span>
-        <span class="text-[12px] text-muted-3">{{ t('invoices.stat_count', { count: summary.paid.count }) }}</span>
-      </div>
-      <div class="flex flex-col gap-1 rounded-card border border-line-2 bg-white px-4 py-3.5">
-        <span class="text-[12px] font-semibold text-muted-3">{{ t('invoices.stat_overall') }}</span>
-        <span class="text-[19px] font-bold tracking-tight">{{ summary.overall_count }}</span>
-      </div>
-    </div>
-
-    <div class="flex flex-wrap items-center justify-between gap-2.5">
-      <label class="flex items-center gap-2 text-[13px] font-semibold text-muted-4">
-        {{ t('invoices.filter_status') }}
-        <select
-          v-model="statusFilter"
-          class="h-[38px] rounded-lg border border-line bg-white px-3 text-[13px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-          @change="onStatusFilterChange"
-        >
-          <option value="">{{ t('invoices.filter_status_all') }}</option>
-          <option value="unpaid">{{ t('invoices.status_unpaid') }}</option>
-          <option value="paid">{{ t('invoices.status_paid') }}</option>
-          <option value="cancelled">{{ t('invoices.status_cancelled') }}</option>
-        </select>
-      </label>
-      <template v-if="isOwnerOrAdmin">
-        <BaseButton variant="secondary" :loading="exporting" @click="doExportInvoices">
-          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          {{ t('invoices.export_action') }}
+  <div class="pb-10">
+    <PageHeader :title="t('nav.invoices')" :description="t('invoices.page_subtitle')">
+      <template #actions>
+        <template v-if="isOwnerOrAdmin">
+          <BaseButton variant="secondary" :loading="exporting" @click="doExportInvoices">
+            <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+            {{ t('invoices.export_action') }}
+          </BaseButton>
+          <BaseButton variant="secondary" :loading="importing" @click="triggerImportFile">
+            <i class="ph-duotone ph-upload-simple text-[16px]" aria-hidden="true"></i>
+            {{ t('invoices.import_action') }}
+          </BaseButton>
+          <BaseButton variant="secondary" @click="doDownloadImportTemplate">
+            <i class="ph-duotone ph-download-simple text-[16px]" aria-hidden="true"></i>
+            {{ t('invoices.download_template_action') }}
+          </BaseButton>
+          <input ref="importFileInput" type="file" accept=".xlsx" class="hidden" @change="onImportFileSelected" />
+        </template>
+        <BaseButton @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('invoices.new_invoice_btn') }}
         </BaseButton>
-        <BaseButton variant="secondary" :loading="importing" @click="triggerImportFile">
-          <i class="ph-duotone ph-upload-simple text-[16px]" aria-hidden="true"></i>
-          {{ t('invoices.import_action') }}
-        </BaseButton>
-        <button type="button" class="text-[12px] font-semibold text-muted-4 underline hover:text-brand-active" @click="doDownloadImportTemplate">
-          {{ t('invoices.download_template_action') }}
-        </button>
-        <input ref="importFileInput" type="file" accept=".xlsx" class="hidden" @change="onImportFileSelected" />
       </template>
-      <BaseButton @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('invoices.new_invoice_btn') }}
-      </BaseButton>
-    </div>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="rowsWithCompany" :loading="loading" :empty-message="t('invoices.no_invoices')">
+    <KpiStrip :items="kpiItems" />
+
+    <div class="mx-[26px] border-2 border-line bg-white">
+      <TabBar :tabs="statusTabs" :model-value="activeStatus" :label="t('invoices.filter_status')" @update:model-value="selectStatus" />
+      <!-- API invoice tidak punya parameter pencarian: FilterBar tanpa kolom cari, penghitung = total server tab aktif. -->
+      <FilterBar :searchable="false" :count="loading || error ? null : meta.total" />
+      <DataTable
+        :columns="columns"
+        :rows="rowsWithCompany"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('invoices.no_invoices')"
+        @retry="load"
+      >
         <template #cell-invoice_number="{ row }">
           <button type="button" class="font-mono text-[13.5px] font-semibold text-brand-active hover:underline" @click="openDetail(row)">
             {{ row.invoice_number }}

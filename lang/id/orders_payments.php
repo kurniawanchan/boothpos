@@ -8,6 +8,9 @@ return [
     'not_authorized' => 'Tidak berhak.',
     'session_not_open' => 'Sesi kasir tidak dalam status terbuka.',
     'variant_inactive' => 'Varian :sku tidak aktif.',
+    'item_unavailable' => 'Item :sku tidak bisa dipesan: :reason.',
+    'unavailable_product_inactive' => 'item sudah didiskontinu atau belum diterbitkan',
+    'unavailable_sold_out' => 'item sedang habis (86)',
     'payment_insufficient' => 'Total pembayaran tidak menutup total transaksi.',
     'proof_required_for_non_cash' => 'Bukti pembayaran wajib untuk metode non-tunai.',
     'proof_token_invalid' => 'Token bukti pembayaran tidak valid atau sudah dipakai.',
@@ -40,4 +43,7 @@ return [
     'payment_already_verified' => 'Pembayaran ini sudah terverifikasi.',
     'payment_rejected_cannot_verify' => 'Pembayaran yang ditolak tidak bisa diverifikasi.',
     'payment_verify_target_closed' => 'Transaksi ini sudah dibatalkan; pembayarannya tidak bisa diverifikasi lagi.',
+    'local_ref_belongs_to_open_tab' => 'Referensi ini milik tab yang masih terbuka, bukan penjualan yang sudah selesai.',
+    'cannot_void_open_tab' => 'Tab terbuka tidak bisa dibatalkan sebagai penjualan. Gunakan "Batalkan tab".',
+    'receipt_unavailable_for_open_tab' => 'Struk belum bisa dicetak untuk tab yang belum dibayar.',
 ];

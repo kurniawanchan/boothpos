@@ -21,6 +21,36 @@ class StockService
     public function __construct(private ActivityLogger $activityLogger) {}
 
     /**
+     * 028 — hidangan made-to-order (`track_stock = false`) tidak punya stok
+     * fisik yang bisa dihitung, jadi tidak ada yang dicek/dikurangi/
+     * dikembalikan dan tidak ada baris stock_movements. Untuk varian yang
+     * dilacak, perilakunya IDENTIK dengan applyMovement() — method ini hanya
+     * mendelegasikan, bukan jalur tulis kedua (Constitution I: satu-satunya
+     * jalur sah mengubah stok tetap applyMovement()).
+     *
+     * Dipakai oleh kasir ritel (OrderService) DAN alur tab restoran, supaya
+     * satu varian berperilaku sama di kedua layar.
+     *
+     * @return StockMovement|null null bila varian tidak dilacak
+     * @throws ValidationException bila hasil qty_change membuat stok negatif
+     */
+    public function applyMovementIfTracked(
+        ProductVariant $variant,
+        string $type,
+        int $qtyChange,
+        ?string $referenceType = null,
+        ?int $referenceId = null,
+        ?string $reason = null,
+        ?int $userId = null,
+    ): ?StockMovement {
+        if (! $variant->track_stock) {
+            return null;
+        }
+
+        return $this->applyMovement($variant, $type, $qtyChange, $referenceType, $referenceId, $reason, $userId);
+    }
+
+    /**
      * @throws ValidationException bila hasil qty_change membuat stok negatif
      */
     public function applyMovement(

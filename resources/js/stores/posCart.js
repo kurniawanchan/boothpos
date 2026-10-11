@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { parseMoney, toMoneyString } from '../utils/money';
 
 /**
- * The POS cart is shared between the sidebar badge (AppSidebar) and the
+ * The POS cart is shared between the navigation rail badge (RailNav) and the
  * Kasir screen (PosView + PosCartPanel + PosPaymentModal) — three
  * components with no closer common ancestor than the app root, and it
  * deliberately survives navigating away from /pos and back so a cashier

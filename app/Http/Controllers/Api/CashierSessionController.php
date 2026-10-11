@@ -109,6 +109,29 @@ class CashierSessionController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
+        // 028 (FR-011) — shift TIDAK boleh ditutup selama masih memegang tab
+        // terbuka: uang tunai yang sudah diterima di tab itu ada di laci shift
+        // ini, jadi menutup shift akan membuat selisih kas yang tak terjelaskan.
+        // Tab harus dibayar, dibatalkan, atau diserahkan ke shift lain dulu.
+        $openTabs = Order::query()
+            ->where('session_id', $session->id)
+            ->where('status', Order::STATUS_OPEN)
+            ->with('table:id,name')
+            ->orderBy('id')
+            ->get();
+
+        if ($openTabs->isNotEmpty()) {
+            return response()->json([
+                'message' => __('events_sessions.cannot_close_with_open_tabs'),
+                'open_tabs' => $openTabs->map(fn (Order $o) => [
+                    'id' => $o->id,
+                    'order_number' => $o->order_number,
+                    'table' => $o->table?->name,
+                    'tab_label' => $o->tab_label,
+                ])->values(),
+            ], 409);
+        }
+
         // BUG YANG DITEMUKAN & DIPERBAIKI (026, code review) — dulu menjumlah
         // SEMUA pembayaran tunai terverifikasi apa adanya: `payments.amount` adalah
         // uang yang DISERAHKAN pembeli (kembalian disimpan terpisah di

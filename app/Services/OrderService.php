@@ -30,12 +30,26 @@ class OrderService
      */
     public function create(array $data, User $cashier): Order
     {
+        // 043 — rilis/harga berjadwal yang jatuh tempo diterapkan di titik masuk ini (tanpa penjadwal).
+        app(\App\Services\ReleaseService::class)->publishDueCached();
+        app(\App\Services\RecipeService::class)->applyDueCached();
+
         // Idempotensi — dicek DI LUAR transaksi lock supaya permintaan
         // yang benar-benar duplikat langsung dikembalikan tanpa membuka
         // transaksi baru sama sekali.
         if (! empty($data['local_ref'])) {
             $existing = Order::where('local_ref', $data['local_ref'])->first();
             if ($existing) {
+                // 028 — uuid klien yang sama dengan sebuah TAB TERBUKA bukan
+                // retry penjualan ini; mengembalikannya sebagai "order yang
+                // dibuat" akan menampilkan tab belum-dibayar sebagai
+                // penjualan sukses (research.md Keputusan 5, baris 3).
+                if ($existing->status === Order::STATUS_OPEN) {
+                    throw ValidationException::withMessages([
+                        'local_ref' => __('orders_payments.local_ref_belongs_to_open_tab'),
+                    ]);
+                }
+
                 return $existing->load(['items', 'payments']);
             }
         }
@@ -75,11 +89,8 @@ class OrderService
             foreach ($data['items'] as $itemInput) {
                 $variant = ProductVariant::with('product')->lockForUpdate()->findOrFail($itemInput['variant_id']);
 
-                if (! $variant->is_active) {
-                    throw ValidationException::withMessages([
-                        'items' => __('orders_payments.variant_inactive', ['sku' => $variant->sku]),
-                    ]);
-                }
+                // 043 — satu aturan "bisa dipesan" (varian, produk/diskontinu, tanda 86): App\Support\MenuAvailability.
+                \App\Support\MenuAvailability::assertOrderable($variant, 'items');
 
                 $qty = (int) $itemInput['qty'];
                 $discount = (float) ($itemInput['discount_amount'] ?? 0);
@@ -197,7 +208,7 @@ class OrderService
                     'line_total' => $line['line_total'],
                 ]);
 
-                $this->stockService->applyMovement(
+                $this->stockService->applyMovementIfTracked(
                     variant: $variant,
                     type: 'sale',
                     qtyChange: -$line['qty'],
@@ -229,10 +240,19 @@ class OrderService
             throw ValidationException::withMessages(['status' => __('orders_payments.already_voided')]);
         }
 
+        // 028 — tab terbuka dibatalkan lewat TabService::voidTab() yang tahu
+        // baris mana yang stoknya boleh dikembalikan (yang sudah mulai
+        // dimasak tidak). Jalur void penjualan selesai ini mengembalikan
+        // SEMUA baris, jadi kalau ia dibiarkan menerima tab terbuka, stok
+        // makanan yang sudah dimasak akan "kembali" ke rak.
+        if ($order->status === Order::STATUS_OPEN) {
+            throw ValidationException::withMessages(['status' => __('orders_payments.cannot_void_open_tab')]);
+        }
+
         return DB::transaction(function () use ($order, $reason, $user) {
             foreach ($order->items as $item) {
                 $variant = ProductVariant::lockForUpdate()->findOrFail($item->variant_id);
-                $this->stockService->applyMovement(
+                $this->stockService->applyMovementIfTracked(
                     variant: $variant,
                     type: 'return',
                     qtyChange: $item->qty, // dikembalikan
@@ -269,7 +289,7 @@ class OrderService
      * nomor struk memang harus unik lintas seluruh instalasi, terlepas
      * dari mode, sesuai constraint database itu sendiri.
      */
-    private function generateOrderNumber(): string
+    public function generateOrderNumber(): string
     {
         $today = now()->format('Ymd');
         $countToday = Order::withoutGlobalScope(DataModeScope::class)

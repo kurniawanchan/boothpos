@@ -14,11 +14,12 @@ import { useSettingsStore } from '../../resources/js/stores/settings';
  * badge or the settings toggle re-implements — and is proven server-side
  * by SettingsSystemModeTest::test_cashier_cannot_change_system_mode.
  */
-function renderBadge(mode) {
+function renderBadge(mode, loaded = true) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const settings = useSettingsStore();
   settings.systemMode = mode;
+  settings.loaded = loaded;
   return { settings, ...render(SystemModeBadge, { global: { plugins: [pinia] } }) };
 }
 
@@ -32,6 +33,17 @@ describe('SystemModeBadge', () => {
 
   it('shows DEMO styling and label when systemMode is demo', () => {
     renderBadge('demo');
+    expect(screen.getByText('DEMO')).toBeInTheDocument();
+  });
+
+  it('tidak menebak mode dari nilai bawaan: lencana disembunyikan sampai pengaturan selesai dimuat', async () => {
+    const { settings } = renderBadge('live', false);
+    expect(screen.queryByText('LIVE')).not.toBeInTheDocument();
+    expect(screen.queryByText('DEMO')).not.toBeInTheDocument();
+
+    settings.systemMode = 'demo';
+    settings.loaded = true;
+    await Promise.resolve();
     expect(screen.getByText('DEMO')).toBeInTheDocument();
   });
 

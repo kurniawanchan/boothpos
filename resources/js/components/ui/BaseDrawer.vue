@@ -7,6 +7,9 @@ const props = defineProps({
   title: { type: String, default: '' },
   subtitle: { type: String, default: '' },
   maxWidthClass: { type: String, default: 'max-w-[820px]' },
+  // 043 — isi tanpa padding: formulir bergaya "bagian rata" memberi padding & garis pemisah per bagian sendiri,
+  // sehingga garis pemisah membentang sampai tepi laci. Default false = perilaku semua pemanggil lama.
+  flush: { type: Boolean, default: false },
 });
 const emit = defineEmits(['close']);
 
@@ -46,7 +49,7 @@ function onKeydown(e) {
             <i class="ph-duotone ph-x text-[16px]" aria-hidden="true"></i>
           </button>
         </div>
-        <div class="flex-1 overflow-auto px-[26px] py-6">
+        <div class="flex-1 overflow-auto" :class="flush ? '' : 'px-[26px] py-6'">
           <slot />
         </div>
         <div v-if="$slots.footer" class="flex justify-end gap-2.5 border-t border-line-2 bg-white px-[26px] py-4">

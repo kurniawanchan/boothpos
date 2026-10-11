@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\ArtistController;
 use App\Http\Controllers\Api\AuthController;
@@ -9,7 +10,9 @@ use App\Http\Controllers\Api\CashierSessionController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\DiningTableController;
 use App\Http\Controllers\Api\EventController;
+use App\Http\Controllers\Api\FloorController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\InvoiceExportImportController;
 use App\Http\Controllers\Api\InvoicePaymentSettingController;
@@ -17,7 +20,9 @@ use App\Http\Controllers\Api\LicenseCatalogController;
 use App\Http\Controllers\Api\LicenseController;
 use App\Http\Controllers\Api\MasterDataExportController;
 use App\Http\Controllers\Api\MasterDataImportController;
+use App\Http\Controllers\Api\KitchenController;
 use App\Http\Controllers\Api\MaterialController;
+use App\Http\Controllers\Api\ModifierGroupController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentChannelController;
 use App\Http\Controllers\Api\PaymentProofController;
@@ -27,7 +32,11 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShipmentController;
+use App\Http\Controllers\Api\StationController;
 use App\Http\Controllers\Api\StockController;
+use App\Http\Controllers\Api\TabController;
+use App\Http\Controllers\Api\TabLineController;
+use App\Http\Controllers\Api\TabPaymentController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VariantBomController;
 use App\Http\Controllers\Api\PosDraftController;
@@ -92,6 +101,13 @@ Route::prefix('v1')->group(function () {
         // memuat daftar menu (untuk checkbox RoleMenuPicker) tanpa harus
         // punya akses baca ke satu peran pun.
         Route::get('/menu-keys', [RoleController::class, 'menuKeys']);
+        Route::get('/permission-catalog', [RoleController::class, 'permissionCatalog']);
+
+        // 043-products-page-redesign — daftar alasan (86, diskontinu, penolakan). Daftar terbuka untuk
+        // pengguna login; menulis hanya menu `settings` (dicek di FormRequest).
+        Route::get('/reason-codes', [\App\Http\Controllers\Api\ReasonCodeController::class, 'index']);
+        Route::post('/reason-codes', [\App\Http\Controllers\Api\ReasonCodeController::class, 'store']);
+        Route::put('/reason-codes/{reasonCode}', [\App\Http\Controllers\Api\ReasonCodeController::class, 'update']);
         Route::apiResource('roles', RoleController::class);
 
         Route::apiResource('artists', ArtistController::class);
@@ -108,6 +124,32 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('customers', CustomerController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
         Route::get('/customers/{customer}/transactions', [CustomerController::class, 'transactions']);
 
+        // 043 — harus SEBELUM apiResource agar 'summary' tidak ditangkap sebagai {product}.
+        Route::get('/products/summary', [ProductController::class, 'summary']);
+        // 043 — 86 (habis), diskontinu/aktifkan lagi, dan poll ketersediaan untuk terminal.
+        Route::get('/products/{product}/recipes', [\App\Http\Controllers\Api\RecipeController::class, 'index']);
+        Route::post('/products/{product}/recipes', [\App\Http\Controllers\Api\RecipeController::class, 'store']);
+        Route::post('/products/{product}/recipes/recalculate', [\App\Http\Controllers\Api\RecipeController::class, 'recalculate']);
+        Route::get('/recipes/{recipe}', [\App\Http\Controllers\Api\RecipeController::class, 'show']);
+        Route::put('/products/{product}/modifier-links', [\App\Http\Controllers\Api\ModifierLinkController::class, 'update']);
+        Route::put('/products/{product}/variants', [\App\Http\Controllers\Api\VariantBatchController::class, 'update']);
+        Route::get('/products/{product}/price-history', [ProductController::class, 'priceHistory']);
+        Route::post('/products/{product}/sold-out', [\App\Http\Controllers\Api\ProductAvailabilityController::class, 'store']);
+        Route::delete('/products/{product}/sold-out', [\App\Http\Controllers\Api\ProductAvailabilityController::class, 'destroy']);
+        Route::post('/products/{product}/discontinue', [\App\Http\Controllers\Api\ProductLifecycleController::class, 'discontinue']);
+        Route::post('/products/{product}/reactivate', [\App\Http\Controllers\Api\ProductLifecycleController::class, 'reactivate']);
+        Route::post('/price-changes/preview', [\App\Http\Controllers\Api\PriceChangeController::class, 'preview']);
+        Route::post('/price-changes', [\App\Http\Controllers\Api\PriceChangeController::class, 'store']);
+        Route::get('/menu/changes', [\App\Http\Controllers\Api\MenuChangeController::class, 'index']);
+        Route::post('/menu/changes/{change}/cancel', [\App\Http\Controllers\Api\MenuChangeController::class, 'cancel']);
+        Route::get('/menu/releases', [\App\Http\Controllers\Api\MenuReleaseController::class, 'index']);
+        Route::get('/menu/releases/{release}', [\App\Http\Controllers\Api\MenuReleaseController::class, 'show']);
+        Route::post('/menu/releases', [\App\Http\Controllers\Api\MenuReleaseController::class, 'store']);
+        Route::post('/menu/releases/{release}/cancel', [\App\Http\Controllers\Api\MenuReleaseController::class, 'cancel']);
+        Route::get('/approvals', [\App\Http\Controllers\Api\ApprovalController::class, 'index']);
+        Route::post('/approvals/{approval}/approve', [\App\Http\Controllers\Api\ApprovalController::class, 'approve']);
+        Route::post('/approvals/{approval}/reject', [\App\Http\Controllers\Api\ApprovalController::class, 'reject']);
+        Route::get('/menu/availability', [\App\Http\Controllers\Api\MenuAvailabilityController::class, 'show']);
         Route::apiResource('products', ProductController::class);
         Route::post('/products/{product}/image', [ProductController::class, 'uploadImage']);
         Route::post('/products/{product}/variants', [ProductController::class, 'storeVariant']);
@@ -230,6 +272,39 @@ Route::prefix('v1')->group(function () {
         Route::post('/orders/verify-payments', [OrderController::class, 'verifyPayments']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
 
+        // 028-restaurant-dine-in-ordering — meja dan lantai. Setiap rute
+        // memeriksa menu-key-nya sendiri di sisi server (`dining_setup` /
+        // `floor`); layar hanya mencerminkan keputusan itu.
+        Route::apiResource('dining-tables', DiningTableController::class);
+        Route::get('/floor', [FloorController::class, 'index']);
+
+        // Stasiun persiapan + dapur/bar. Daftar stasiun terbuka juga untuk `kitchen` (pengalih layar).
+        Route::apiResource('stations', StationController::class);
+        Route::get('/stations/{station}/tickets', [KitchenController::class, 'feed']);
+        Route::get('/tickets/{ticket}', [KitchenController::class, 'show']);
+        Route::patch('/ticket-items/{ticketItem}/status', [KitchenController::class, 'updateStatus']);
+
+        // Grup modifier — lampiran ke produk/kategori memakai endpoint terpisah (penggantian penuh).
+        Route::apiResource('modifier-groups', ModifierGroupController::class)->parameters(['modifier-groups' => 'modifierGroup']);
+        Route::put('/modifier-groups/{modifierGroup}/attachments', [ModifierGroupController::class, 'attachments']);
+
+        // Tab (pesanan terbuka). `{order}` memakai route-model binding Order —
+        // penjualan ritel diperlakukan 404 oleh TabService/TabController.
+        Route::get('/tabs', [TabController::class, 'index']);
+        Route::post('/tabs', [TabController::class, 'store']);
+        Route::get('/tabs/{order}', [TabController::class, 'show']);
+        Route::delete('/tabs/{order}', [TabController::class, 'destroy']);
+        Route::post('/tabs/{order}/handover', [TabController::class, 'handover']);
+        Route::post('/tabs/{order}/send', [TabController::class, 'send']);
+        Route::post('/tabs/{order}/void', [TabController::class, 'void']);
+        Route::post('/tabs/{order}/move', [TabController::class, 'move']);
+        Route::post('/tabs/{order}/merge', [TabController::class, 'merge']);
+        Route::post('/tabs/{order}/split', [TabPaymentController::class, 'split']);
+        Route::post('/tabs/{order}/items', [TabLineController::class, 'store']);
+        Route::patch('/tabs/{order}/items/{item}', [TabLineController::class, 'update'])->whereNumber('item');
+        Route::delete('/tabs/{order}/items/{item}', [TabLineController::class, 'destroy'])->whereNumber('item');
+        Route::post('/tabs/{order}/payments', [TabPaymentController::class, 'store']);
+
         // 007-preorder-import-export-notify — rute statis ('export',
         // 'import/template', 'import') WAJIB didaftarkan SEBELUM
         // apiResource('preorders', ...)'s 'show' (GET /preorders/{preorder}),
@@ -278,6 +353,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/imports/master-data/template', [MasterDataImportController::class, 'template']);
         Route::post('/imports/master-data', [MasterDataImportController::class, 'store']);
 
+        // 042-dashboard-revamp — Dashboard (izin menu `dashboard` dicek di controller).
+        Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
+        Route::get('/dashboard/attention', [DashboardController::class, 'attention']);
+        Route::get('/dashboard/orders', [DashboardController::class, 'orders']);
+        Route::get('/dashboard/orders/export', [DashboardController::class, 'ordersExport']);
+        Route::get('/dashboard/export', [DashboardController::class, 'export']);
         Route::get('/reports/sales', [ReportController::class, 'sales']);
         Route::post('/reports/sales/transactions/export', [ReportController::class, 'exportSalesTransactions']);
         Route::get('/reports/profit', [ReportController::class, 'profit']);

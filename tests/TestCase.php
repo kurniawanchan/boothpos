@@ -49,7 +49,7 @@ abstract class TestCase extends BaseTestCase
                 "\n\nREFUSING TO RUN TESTS: resolved database is '{$database}', not a *_test database.\n" .
                 "Running tests now would let RefreshDatabase WIPE this database.\n" .
                 "Run tests with the required overrides, e.g. from the host:\n" .
-                "  docker compose exec -e APP_ENV=testing -e DB_DATABASE=boothpos_test app php artisan test\n" .
+                "  docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test app php artisan test\n" .
                 "or simply: composer test\n\n"
             );
         }

@@ -17,6 +17,7 @@ class StoreVariantRequest extends FormRequest
             'variant_name' => ['required', 'string', 'max:100'],
             'cost_price' => ['sometimes', 'numeric', 'min:0'],
             'sell_price' => ['required', 'numeric', 'min:0'],
+            'track_stock' => ['sometimes', 'boolean'],
             'low_stock_alert' => ['nullable', 'integer', 'min:0'],
             // 034-seller-po-bom — salin BOM dari varian lain produk yang sama
             // saat varian dibuat (diperiksa ulang oleh VariantBomService::copy).

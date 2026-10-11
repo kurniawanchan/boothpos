@@ -16,6 +16,8 @@ class Material extends Model
         'code',
         'name',
         'unit',
+        'kind',
+        'standard_cost',
         'notes',
         'is_active',
         'current_stock',

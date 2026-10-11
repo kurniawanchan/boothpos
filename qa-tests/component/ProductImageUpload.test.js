@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import ProductsView from '../../resources/js/views/ProductsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { i18n } from '../../resources/js/i18n';
@@ -9,7 +10,7 @@ import { listArtists } from '../../resources/js/api/artists';
 import { listCategories } from '../../resources/js/api/categories';
 
 vi.mock('../../resources/js/api/products', () => ({
-  listProducts: vi.fn(),
+  listProducts: vi.fn(), productSummary: vi.fn(),
   getProduct: vi.fn(),
   createProduct: vi.fn(),
   updateProduct: vi.fn(),
@@ -26,12 +27,28 @@ function imageFile(name = 'produk.png', type = 'image/png') {
   return new File(['fake-bytes'], name, { type });
 }
 
-function renderProducts() {
+async function makeRouter() {
+  // 043: ProductsView memakai useQueryState (alamat URL) dan tautan ke halaman item, jadi butuh router; ?view=table
+  // membuka tampilan Tabel tempat tombol "Ubah" berada.
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/products', name: 'products', component: { template: '<div />' } },
+      { path: '/products/:id', name: 'product-detail', component: { template: '<div />' } },
+    ],
+  });
+  router.push('/products?view=table');
+  await router.isReady();
+  return router;
+}
+
+async function renderProducts() {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
   auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'products'] };
-  return render(ProductsView, { global: { plugins: [pinia] } });
+  const router = await makeRouter();
+  return render(ProductsView, { global: { plugins: [pinia, router] } });
 }
 
 describe('ProductsView — product image upload', () => {
@@ -46,9 +63,9 @@ describe('ProductsView — product image upload', () => {
   it('rejects a non-image file client-side without calling the upload API', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderProducts();
+    await renderProducts();
 
-    await user.click(await screen.findByRole('button', { name: /produk baru/i }));
+    await user.click(await screen.findByRole('button', { name: /tambah item/i }));
     const input = screen.getByLabelText(/gambar produk/i);
     await fireEvent.change(input, { target: { files: [new File(['x'], 'not-image.txt', { type: 'text/plain' })] } });
 
@@ -58,16 +75,18 @@ describe('ProductsView — product image upload', () => {
   it('includes the selected image in an upload call after the product is created', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderProducts();
+    await renderProducts();
 
-    await user.click(await screen.findByRole('button', { name: /produk baru/i }));
-    await user.type(screen.getByLabelText(/nama produk/i), 'Produk Baru');
+    await user.click(await screen.findByRole('button', { name: /tambah item/i }));
+    await user.type(screen.getByLabelText(/^nama item/i), 'Produk Baru');
+    await user.selectOptions(screen.getByLabelText(/^kategori menu/i), 'Kategori A');
+    await user.type(screen.getByLabelText(/^harga dasar/i), '10000');
 
     const input = screen.getByLabelText(/gambar produk/i);
     const file = imageFile();
     await fireEvent.change(input, { target: { files: [file] } });
 
-    await user.click(screen.getByRole('button', { name: /simpan produk/i }));
+    await user.click(screen.getByRole('button', { name: /simpan item/i }));
 
     await waitFor(() => expect(createProduct).toHaveBeenCalled());
     await waitFor(() => expect(uploadProductImage).toHaveBeenCalledWith(99, file));
@@ -78,11 +97,11 @@ describe('ProductsView — product image upload', () => {
   it('preserves in-progress form input when the language is switched mid-edit', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderProducts();
+    await renderProducts();
     i18n.global.locale.value = 'id';
 
-    await user.click(await screen.findByRole('button', { name: /produk baru/i }));
-    const nameInput = screen.getByLabelText(/nama produk/i);
+    await user.click(await screen.findByRole('button', { name: /tambah item/i }));
+    const nameInput = screen.getByLabelText(/^nama item/i);
     await user.type(nameInput, 'Kaos Polos Hitam');
     expect(nameInput).toHaveValue('Kaos Polos Hitam');
 
@@ -91,8 +110,8 @@ describe('ProductsView — product image upload', () => {
     await Promise.resolve();
 
     // The label re-renders in the new language...
-    expect(screen.getByLabelText(/product name/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^item name/i)).toBeInTheDocument();
     // ...but the value the user already typed survives untouched.
-    expect(screen.getByLabelText(/product name/i)).toHaveValue('Kaos Polos Hitam');
+    expect(screen.getByLabelText(/^item name/i)).toHaveValue('Kaos Polos Hitam');
   });
 });

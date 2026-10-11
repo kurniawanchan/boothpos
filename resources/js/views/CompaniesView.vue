@@ -3,8 +3,10 @@ import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listCompanies, deleteCompany, activateCompany, deactivateCompany } from '../api/companies';
-import { useDebouncedFn } from '../composables/useDebouncedFn';
+import { useUrlSearchFilter } from '../composables/useUrlSearchFilter';
 import { useToastStore } from '../stores/toast';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -16,9 +18,11 @@ import CompanyEditModal from '../components/companies/CompanyEditModal.vue';
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listCompanies);
-const search = ref('');
-const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
+// Pencarian (sisi-server, ?search=) dicerminkan ke address bar; parameter awal diambil dari URL
+// supaya tautan yang dibagikan langsung memuat hasil yang sama.
+const search = useUrlSearchFilter();
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listCompanies, search.initialParams());
+search.onCommitted((value) => setFilter({ search: value || undefined }));
 
 onMounted(load);
 
@@ -124,27 +128,34 @@ async function afterUpdated() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <div class="relative flex min-w-[230px] flex-1 items-center">
-        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="company-search">{{ t('companies.search_company') }}</label>
-        <input
-          id="company-search"
-          v-model="search"
-          :placeholder="t('companies.search_company_placeholder')"
-          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-          @input="debouncedSearch"
-        />
-      </div>
-      <BaseButton @click="showOnboarding = true">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('companies.onboard_company') }}
-      </BaseButton>
-    </div>
+  <div class="pb-10">
+    <PageHeader :title="t('nav.companies')" :description="t('nav.companies_subtitle')">
+      <template #actions>
+        <BaseButton @click="showOnboarding = true">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('companies.onboard_company') }}
+        </BaseButton>
+      </template>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('companies.no_companies')">
+    <div class="mx-[26px] border-2 border-line bg-white">
+      <FilterBar
+        :search="search.input.value"
+        :placeholder="t('companies.search_company_placeholder')"
+        :search-label="t('companies.search_company')"
+        :count="loading || error ? null : meta.total"
+        :active="search.input.value !== ''"
+        @update:search="search.onInput"
+        @reset="search.reset"
+      />
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('companies.no_companies')"
+        @retry="load"
+      >
         <template #cell-business_type="{ row }">{{ row.business_type?.name ?? '—' }}</template>
         <template #cell-license="{ row }">{{ row.license?.name ?? '—' }}</template>
         <template #cell-contact="{ row }">
@@ -157,7 +168,7 @@ async function afterUpdated() {
           <span class="font-mono text-[12.5px]">{{ row.owner_username ?? '—' }}</span>
         </template>
         <template #cell-status="{ row }">
-          <StatusPill :variant="row.status === 'active' ? 'mint' : 'neutral'">
+          <StatusPill :variant="row.status === 'active' ? 'success' : 'warning'">
             {{ row.status === 'active' ? t('companies.status_active') : t('companies.status_pending') }}
           </StatusPill>
         </template>

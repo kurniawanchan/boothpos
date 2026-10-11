@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/vue';
-import { createPinia, setActivePinia } from 'pinia';
-import ProductsView from '../../resources/js/views/ProductsView.vue';
-import { useAuthStore } from '../../resources/js/stores/auth';
+import { screen, waitFor, within } from '@testing-library/vue';
+import { renderDrawerHost } from './productFormDrawerHost';
 import { listProducts, getProduct, addVariant, updateVariant, updateProduct } from '../../resources/js/api/products';
 import { createAdjustment } from '../../resources/js/api/stock';
 import { listArtists } from '../../resources/js/api/artists';
@@ -10,7 +8,7 @@ import { listCategories } from '../../resources/js/api/categories';
 import id from '../../resources/js/locales/id.json';
 
 vi.mock('../../resources/js/api/products', () => ({
-  listProducts: vi.fn(), getProduct: vi.fn(), createProduct: vi.fn(), updateProduct: vi.fn(), deleteProduct: vi.fn(),
+  listProducts: vi.fn(), productSummary: vi.fn(), getProduct: vi.fn(), createProduct: vi.fn(), updateProduct: vi.fn(), deleteProduct: vi.fn(),
   addVariant: vi.fn(), updateVariant: vi.fn(), uploadProductImage: vi.fn(), uploadVariantImage: vi.fn(),
 }));
 vi.mock('../../resources/js/api/stock', () => ({ createAdjustment: vi.fn(), listMovements: vi.fn() }));
@@ -19,6 +17,8 @@ vi.mock('../../resources/js/api/categories', () => ({ listCategories: vi.fn() })
 vi.mock('../../resources/js/api/masterData', () => ({ exportMasterData: vi.fn(), importMasterData: vi.fn(), downloadImportTemplate: vi.fn() }));
 vi.mock('../../resources/js/api/materials', () => ({ listBomLines: vi.fn(), copyBomFrom: vi.fn(), copyBomOut: vi.fn(), saveBomQuantities: vi.fn() }));
 vi.mock('../../resources/js/api/vendors', () => ({ listVendors: vi.fn() }));
+vi.mock('../../resources/js/api/stations', () => ({ listStations: vi.fn().mockResolvedValue({ data: [] }) }));
+vi.mock('../../resources/js/api/modifierGroups', () => ({ listModifierGroups: vi.fn().mockResolvedValue({ data: [] }) }));
 
 const M = id.master_data;
 const PRODUCT = {
@@ -30,26 +30,27 @@ const PRODUCT = {
   ],
 };
 
+// 043: laci UBAH dibuka dari halaman item (bukan lagi dari daftar), jadi dipasang lewat inang yang meniru tombol itu.
 async function openEdit(menuKeys = ['dashboard', 'products', 'purchase_orders']) {
-  const pinia = createPinia();
-  setActivePinia(pinia);
-  useAuthStore().user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: menuKeys };
-  render(ProductsView, { global: { plugins: [pinia], stubs: { 'router-link': true } } });
+  renderDrawerHost({ menus: menuKeys, product: { id: 2, name: 'MCYT' } });
   const { default: userEvent } = await import('@testing-library/user-event');
   const user = userEvent.setup();
-  await screen.findByText('MCYT');
-  await user.click(screen.getAllByRole('button', { name: id.common.edit })[0]);
-  await screen.findAllByTestId('variant-card');
+  await user.click(screen.getAllByRole('button', { name: /^ubah /i })[0]);
+  await screen.findAllByTestId('variant-row');
 
   return user;
 }
 
-const cards = () => screen.getAllByTestId('variant-card');
+const P = id.products;
+// 043: kartu varian -> baris tabel. `value(row, 'name'|'cost'|'sell'|'stock')` membaca isian sel yang bersangkutan.
+const cards = () => screen.getAllByTestId('variant-row');
 const dup = (user, index) => user.click(within(cards()[index]).getByRole('button', { name: M.duplicate_variant }));
-const value = (card, label) => within(card).getByLabelText(new RegExp(`^${label}`)).value;
+const ARIA = { name: 'f_variant_name_aria', cost: 'f_variant_cost_aria', sell: 'f_variant_price_aria', stock: 'f_variant_stock_now_aria' };
+const cell = (row, field) => within(row).getByLabelText(new RegExp(`^${P[ARIA[field]].replace('{n}', '\\d+')}$`));
+const value = (row, field) => cell(row, field).value;
 
 // 037-variant-drawer-bom-ui (US2) — Duplikat varian: kartu belum-tersimpan, dibenihi dari sumbernya.
-describe('Duplicate variant in the Edit product drawer (037)', () => {
+describe('Duplicate variant in the Edit item drawer (037, table rows since 043)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listProducts.mockResolvedValue({ data: [{ id: 2, code_prefix: 'SPF-KC-MCY', name: 'MCYT', artist_name: 'A', category_name: 'K', is_preorder: false, is_active: true, image_url: null, variants: [] }], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
@@ -62,20 +63,20 @@ describe('Duplicate variant in the Edit product drawer (037)', () => {
     createAdjustment.mockResolvedValue({});
   });
 
-  it('inserts ONE unsaved card directly below the source, seeded from it, leaving the source unchanged', async () => {
+  it('inserts ONE unsaved row directly below the source, seeded from it, leaving the source unchanged', async () => {
     const user = await openEdit();
 
     await dup(user, 0);
 
     expect(cards()).toHaveLength(4);
     const copy = cards()[1];
-    expect(value(copy, M.variant_name)).toBe(M.variant_copy_suffix.replace('{name}', 'Red'));
-    expect(value(copy, M.cost_price)).toBe('1000.00');
-    expect(value(copy, M.sell_price)).toBe('2500.00');
-    expect(value(copy, M.col_stock)).toBe('6');
+    expect(value(copy, 'name')).toBe(M.variant_copy_suffix.replace('{name}', 'Red'));
+    expect(value(copy, 'cost')).toBe('1000');
+    expect(value(copy, 'sell')).toBe('2500');
+    expect(value(copy, 'stock')).toBe('6');
     expect(within(copy).queryByText('SPF-KC-MCY-001')).not.toBeInTheDocument(); // belum punya SKU
     expect(copy.querySelector('img')).toBeNull(); // gambar tidak disalin
-    expect(value(cards()[0], M.variant_name)).toBe('Red');
+    expect(value(cards()[0], 'name')).toBe('Red');
     expect(within(cards()[0]).getByText('SPF-KC-MCY-001')).toBeInTheDocument();
   });
 
@@ -95,7 +96,7 @@ describe('Duplicate variant in the Edit product drawer (037)', () => {
     await dup(user, 0);
     await user.type(screen.getByLabelText(new RegExp(M.stock_adjustment_reason)), 'duplikat varian');
 
-    await user.click(screen.getByRole('button', { name: M.save_product }));
+    await user.click(screen.getByRole('button', { name: id.products.f_save_item }));
 
     await waitFor(() => expect(addVariant).toHaveBeenCalledTimes(1));
     expect(addVariant).toHaveBeenCalledWith(2, expect.objectContaining({
@@ -110,9 +111,9 @@ describe('Duplicate variant in the Edit product drawer (037)', () => {
 
     const copy = cards()[1];
     expect(within(copy).queryByText(M.duplicate_bom_note.replace('{sku}', 'SPF-KC-MCY-001'))).not.toBeInTheDocument();
-    expect(value(copy, M.sell_price)).toBe('2500.00');
+    expect(value(copy, 'sell')).toBe('2500');
     await user.type(screen.getByLabelText(new RegExp(M.stock_adjustment_reason)), 'x');
-    await user.click(screen.getByRole('button', { name: M.save_product }));
+    await user.click(screen.getByRole('button', { name: id.products.f_save_item }));
 
     await waitFor(() => expect(addVariant).toHaveBeenCalled());
     expect(addVariant.mock.calls[0][1]).not.toHaveProperty('copy_bom_from_variant_id');
@@ -124,13 +125,13 @@ describe('Duplicate variant in the Edit product drawer (037)', () => {
     await dup(user, 1); // Blue: tanpa BOM
     expect(within(cards()[2]).queryByText(/BOM dari/)).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: M.add_variant }));
+    await user.click(screen.getByRole('button', { name: P.f_add_variant }));
     const unsavedIndex = cards().length - 1;
-    await user.clear(within(cards()[unsavedIndex]).getByLabelText(M.variant_name));
-    await user.type(within(cards()[unsavedIndex]).getByLabelText(M.variant_name), 'Baru');
+    await user.clear(cell(cards()[unsavedIndex], 'name'));
+    await user.type(cell(cards()[unsavedIndex], 'name'), 'Baru');
     await dup(user, unsavedIndex);
 
-    expect(value(cards()[unsavedIndex + 1], M.variant_name)).toBe(M.variant_copy_suffix.replace('{name}', 'Baru'));
+    expect(value(cards()[unsavedIndex + 1], 'name')).toBe(M.variant_copy_suffix.replace('{name}', 'Baru'));
     expect(within(cards()[unsavedIndex + 1]).queryByText(/BOM dari/)).not.toBeInTheDocument();
   });
 
@@ -143,19 +144,19 @@ describe('Duplicate variant in the Edit product drawer (037)', () => {
 
     await dup(user, 3); // Green: BOM selesai (kini di indeks 3)
     const copy = cards()[4];
-    expect(value(copy, M.cost_price)).toBe('397.00');
-    expect(within(copy).getByLabelText(new RegExp(`^${M.cost_price}`))).not.toBeDisabled();
+    expect(value(copy, 'cost')).toBe('397');
+    expect(cell(copy, 'cost')).not.toBeDisabled();
     expect(within(copy).queryByText(M.bom_from_bom)).not.toBeInTheDocument();
   });
 
   it('lets the user zero the copied stock, in which case no stock adjustment is queued', async () => {
     const user = await openEdit();
     await dup(user, 0);
-    const stock = within(cards()[1]).getByLabelText(M.col_stock);
+    const stock = cell(cards()[1], 'stock');
     await user.clear(stock);
     await user.type(stock, '0');
 
-    await user.click(screen.getByRole('button', { name: M.save_product }));
+    await user.click(screen.getByRole('button', { name: id.products.f_save_item }));
 
     await waitFor(() => expect(addVariant).toHaveBeenCalled());
     expect(createAdjustment).not.toHaveBeenCalled();
@@ -168,8 +169,8 @@ describe('Duplicate variant in the Edit product drawer (037)', () => {
     expect(cards()).toHaveLength(5);
 
     await user.click(screen.getByRole('button', { name: id.common.cancel }));
-    await user.click(screen.getAllByRole('button', { name: id.common.edit })[0]);
-    await screen.findAllByTestId('variant-card');
+    await user.click(screen.getAllByRole('button', { name: /^ubah /i })[0]);
+    await screen.findAllByTestId('variant-row');
 
     expect(cards()).toHaveLength(3);
     expect(addVariant).not.toHaveBeenCalled();

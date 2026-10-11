@@ -8,6 +8,14 @@
  * R1. This is the ONLY place outside app.css allowed to touch a raw hex
  * value (Constitution Principle III's single-token-sheet rule).
  */
+/**
+ * Warna aksen BAWAAN produk (indigo desain Back Office). HARUS sama dengan `--color-brand` di app.css —
+ * dijaga tes qa-tests/unit/themeDefault.test.js. Dipakai pemilih warna tema sebagai nilai awal; sebelumnya
+ * ketiga pemakai menulis hijau lama `#2f9e6e`, sehingga membuka lalu menyimpan pemilih diam-diam mengganti
+ * aksen ke hijau.
+ */
+export const DEFAULT_ACCENT_COLOR = '#4f46e5';
+
 function clamp(n) {
   return Math.max(0, Math.min(255, n));
 }

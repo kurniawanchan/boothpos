@@ -26,3 +26,9 @@ export function deleteRole(id) {
 export function listMenuKeys() {
   return client.get('/menu-keys').then((r) => r.data);
 }
+
+// 043 — katalog izin tingkat-aksi (App\Support\PermissionCatalog), { data: [{ key, label }] }. Dipakai blok
+// "Izin aksi" layar Peran supaya daftar tidak di-hardcode terpisah dari server.
+export function listPermissionCatalog() {
+  return client.get('/permission-catalog').then((r) => r.data);
+}

@@ -8,6 +8,9 @@ return [
     'not_authorized' => 'Not authorized.',
     'session_not_open' => 'The cashier session is not open.',
     'variant_inactive' => 'Variant :sku is inactive.',
+    'item_unavailable' => 'Item :sku cannot be ordered: :reason.',
+    'unavailable_product_inactive' => 'the item is discontinued or not published',
+    'unavailable_sold_out' => 'the item is sold out (86)',
     'payment_insufficient' => 'The payment total does not cover the transaction total.',
     'proof_required_for_non_cash' => 'A payment proof is required for non-cash methods.',
     'proof_token_invalid' => 'Invalid or already-used payment proof token.',
@@ -40,4 +43,7 @@ return [
     'payment_already_verified' => 'This payment is already verified.',
     'payment_rejected_cannot_verify' => 'A rejected payment cannot be verified.',
     'payment_verify_target_closed' => 'This transaction is voided or cancelled; its payments can no longer be verified.',
+    'local_ref_belongs_to_open_tab' => 'This reference belongs to a tab that is still open, not to a completed sale.',
+    'cannot_void_open_tab' => 'An open tab cannot be voided as a sale. Use "Void tab" instead.',
+    'receipt_unavailable_for_open_tab' => 'A receipt cannot be issued for a tab that has not been paid yet.',
 ];

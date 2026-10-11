@@ -104,7 +104,7 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
-    const tab = await screen.findByRole('button', { name: 'Modal Penjual' });
+    const tab = await screen.findByRole('tab', { name: 'Modal Penjual' });
     await user.click(tab);
     await waitFor(() => expect(artistProfitReport).toHaveBeenCalledWith(1));
     expect(await screen.findByText('Artist A')).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe('ReportsView — artist profit tab (F9.5)', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
-    await user.click(await screen.findByRole('button', { name: 'Modal Penjual' }));
+    await user.click(await screen.findByRole('tab', { name: 'Modal Penjual' }));
     expect(await screen.findByText(/belum dikurangi biaya event/i)).toBeInTheDocument();
   });
 
@@ -220,7 +220,7 @@ describe('ReportsView — POS vs pre-order di laporan modal (033)', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
-    await user.click(await screen.findByRole('button', { name: 'Modal & Untung' }));
+    await user.click(await screen.findByRole('tab', { name: 'Modal & Untung' }));
     expect(await screen.findByText('POS Rp 30.000 · Pre-order Rp 5.000')).toBeInTheDocument();
     expect(screen.getByText('POS Rp 12.000 · Pre-order Rp 2.000')).toBeInTheDocument();
     expect(screen.getByText('POS Rp 18.000 · Pre-order Rp 3.000')).toBeInTheDocument();
@@ -235,7 +235,7 @@ describe('ReportsView — POS vs pre-order di laporan modal (033)', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
-    await user.click(await screen.findByRole('button', { name: 'Modal & Untung' }));
+    await user.click(await screen.findByRole('tab', { name: 'Modal & Untung' }));
     expect(await screen.findByText('Rp 35.000')).toBeInTheDocument();
     expect(screen.queryByText(/^POS Rp/)).not.toBeInTheDocument();
   });
@@ -253,7 +253,7 @@ describe('ReportsView — POS vs pre-order di laporan modal (033)', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
-    await user.click(await screen.findByRole('button', { name: 'Modal Penjual' }));
+    await user.click(await screen.findByRole('tab', { name: 'Modal Penjual' }));
     await screen.findByText('Artist A');
     // baris
     expect(screen.getByText('POS Rp 30.000 · Pre-order Rp 5.000')).toBeInTheDocument();

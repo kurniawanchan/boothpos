@@ -6,58 +6,34 @@ import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { listPreorders } from '../../api/preorders';
 import { listEvents } from '../../api/events';
-import AppSidebar from './AppSidebar.vue';
-import AppTopbar from './AppTopbar.vue';
+import { useRailState } from '../../composables/useRailState';
+import { customHeaderCount } from '../../composables/usePageHeader';
+import RailNav from './RailNav.vue';
+import TopBar from './TopBar.vue';
 import SchemaUpdateBanner from './SchemaUpdateBanner.vue';
 
+/**
+ * 041-back-office-ui-redesign (US1) — kerangka seluruh halaman: rel navigasi + topbar + area konten.
+ * Menggantikan AppSidebar/AppTopbar. Yang dipertahankan dari versi sebelumnya (komentar asli di riwayat git):
+ *  - nama toko & event aktif dimuat SEKALI di sini (bukan di tiap view; tak ada endpoint "event aktif");
+ *  - judul/subjudul bawaan dari route.meta.titleKey/subtitleKey, jatuh ke nav.<nama>;
+ *  - badge pre-order = jumlah pre-order `dp_paid` (belum ada endpoint "alerts" khusus);
+ *  - tombol keluar → auth.logout() lalu ke halaman login.
+ * Yang baru: keadaan ciut/lebar rel diingat per pengguna (useRailState), tautan "lewati ke konten", dan judul
+ * bawaan yang otomatis disembunyikan begitu sebuah halaman memakai <PageHeader> (composables/usePageHeader.js).
+ */
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const settings = useSettingsStore();
 const { t } = useI18n();
 
-// 009-ui-ux-refinements US1/FR-019 — sama seperti DashboardView.vue:
-// tidak ada endpoint "event aktif saat ini" khusus, jadi event
-// `status=active` pertama dianggap sedang berlangsung. Dimuat sekali di
-// sini (bukan di tiap view) supaya nama event tersedia di navbar setiap
-// layar (research.md R11).
 const activeEvent = ref(null);
+const preorderAlertCount = ref(0);
+const { collapsed, toggle } = useRailState(computed(() => auth.user?.id ?? null));
 
-// Toggle tampilkan/sembunyikan sidebar — preferensi murni per-perangkat
-// (localStorage), bukan data akun, jadi sengaja tidak disimpan lewat API.
-// Dibungkus try/catch karena localStorage bisa melempar di mode privat
-// beberapa browser; kalau gagal, sidebar cukup selalu tampil (aman).
-const SIDEBAR_VISIBLE_KEY = 'boothpos:sidebar-visible';
-function readStoredSidebarVisible() {
-  try {
-    return localStorage.getItem(SIDEBAR_VISIBLE_KEY) !== 'hidden';
-  } catch {
-    return true;
-  }
-}
-const sidebarVisible = ref(readStoredSidebarVisible());
-function setSidebarVisible(visible) {
-  sidebarVisible.value = visible;
-  try {
-    localStorage.setItem(SIDEBAR_VISIBLE_KEY, visible ? 'visible' : 'hidden');
-  } catch {
-    // Non-fatal — preferensi cukup tidak tersimpan lintas sesi.
-  }
-}
-
-// Sebagian besar layar dinamai persis sama dengan menu_keys-nya
-// (route.name === 'dashboard', 'pos', dst.), jadi judul/subjudul default
-// mengambil dari nav.<name>/<name>_subtitle. Beberapa layar (Produk,
-// Stok) punya judul halaman lebih panjang daripada label sidebarnya
-// sendiri — meta.titleKey/subtitleKey di router/index.js mengganti
-// default itu untuk kasus tersebut.
 const pageTitle = computed(() => t(route.meta.titleKey ?? `nav.${route.name}`));
 const pageSubtitle = computed(() => t(route.meta.subtitleKey ?? `nav.${String(route.name)}_subtitle`));
-
-// Preorders needing action have no dedicated "alerts" endpoint — derived
-// client-side by counting dp_paid pre-orders (paid but goods not yet
-// marked arrived). See project brief §B / ASSUMPTION noted in the report.
-const preorderAlertCount = ref(0);
 
 onMounted(async () => {
   await settings.load();
@@ -65,13 +41,13 @@ onMounted(async () => {
     const res = await listPreorders({ status: 'dp_paid', per_page: 1 });
     preorderAlertCount.value = res.meta?.total ?? 0;
   } catch {
-    // Non-fatal — the badge just stays at 0 if this fails.
+    // Non-fatal — lencana tetap 0 bila gagal.
   }
   try {
     const eventsRes = await listEvents({ status: 'active', per_page: 1 });
     activeEvent.value = eventsRes.data[0] ?? null;
   } catch {
-    // Non-fatal — navbar simply omits the event name if this fails.
+    // Non-fatal — topbar cukup tidak menampilkan nama event.
   }
 });
 
@@ -82,38 +58,20 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="flex min-h-screen">
-    <!-- AppSidebar tetap ter-mount (bukan v-if) SELAMA transisi berjalan
-         supaya lebar wrapper bisa dianimasikan mulus (228px <-> 0);
-         v-if lama menghapus/memasang ulang secara instan tanpa animasi
-         sama sekali. overflow-hidden meng-clip isi <nav> yang tetap
-         w-[228px] internal saat wrapper menyempit — pola "slide collapse"
-         standar. Judul halaman tidak lagi bisa tertutup: tombol
-         "Tampilkan sidebar" sekarang di dalam AppTopbar (ikut alur flex
-         yang sama dengan judul), bukan elemen fixed melayang. -->
-    <div
-      class="flex-none overflow-hidden transition-[width] duration-500 ease-in-out"
-      :style="{ width: sidebarVisible ? '228px' : '0px' }"
-      :aria-hidden="!sidebarVisible"
-      :inert="!sidebarVisible"
-    >
-      <AppSidebar
-        :preorder-alert-count="preorderAlertCount"
-        @hide-sidebar="setSidebarVisible(false)"
-      />
-    </div>
+  <div class="flex min-h-screen bg-page">
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:bg-brand focus:px-3 focus:py-2 focus:text-[13px] focus:font-bold focus:text-white">
+      {{ t('frame.skip_to_content') }}
+    </a>
+    <RailNav :collapsed="collapsed" :preorder-alert-count="preorderAlertCount" @toggle="toggle" />
     <div class="flex min-w-0 flex-1 flex-col">
-      <AppTopbar
-        :title="pageTitle"
-        :subtitle="pageSubtitle"
-        :store-name="settings.storeName"
-        :active-event="activeEvent"
-        :sidebar-hidden="!sidebarVisible"
-        @show-sidebar="setSidebarVisible(true)"
-        @logout="handleLogout"
-      />
+      <TopBar :store-name="settings.storeName" :active-event="activeEvent" @logout="handleLogout" />
       <SchemaUpdateBanner v-if="settings.schemaUpdateRequired" />
-      <main class="min-h-0 flex-1 overflow-auto">
+      <main id="main-content" tabindex="-1" class="min-h-0 flex-1 overflow-auto outline-none">
+        <!-- Judul bawaan untuk halaman yang belum memakai <PageHeader>. -->
+        <div v-if="customHeaderCount === 0" class="flex flex-col gap-0.5 px-[26px] pt-5">
+          <h1 id="page-heading" tabindex="-1" class="text-[22px] font-bold tracking-tight outline-none">{{ pageTitle }}</h1>
+          <p class="text-[12.5px] text-muted">{{ pageSubtitle }}</p>
+        </div>
         <RouterView />
       </main>
     </div>

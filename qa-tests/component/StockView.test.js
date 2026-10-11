@@ -4,10 +4,11 @@ import { createPinia, setActivePinia } from 'pinia';
 import StockView from '../../resources/js/views/StockView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { useToastStore } from '../../resources/js/stores/toast';
-import { listMovements } from '../../resources/js/api/stock';
+import { createRouter, createMemoryHistory } from 'vue-router';
+import { listMovements, lowStock } from '../../resources/js/api/stock';
 import { getProduct } from '../../resources/js/api/products';
 
-vi.mock('../../resources/js/api/stock', () => ({ listMovements: vi.fn(), createAdjustment: vi.fn() }));
+vi.mock('../../resources/js/api/stock', () => ({ listMovements: vi.fn(), createAdjustment: vi.fn(), lowStock: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ lookupVariants: vi.fn(), getProduct: vi.fn() }));
 vi.mock('../../resources/js/api/masterData', () => ({ exportMasterData: vi.fn(), importMasterData: vi.fn(), downloadImportTemplate: vi.fn() }));
 vi.mock('../../resources/js/api/materials', () => ({ listBomLines: vi.fn() }));
@@ -112,5 +113,85 @@ describe('StockView (036)', () => {
 
     expect(screen.queryByRole('button', { name: 'SPF-KC-MCY-008' })).not.toBeInTheDocument();
     expect(screen.getAllByText('SPF-KC-MCY-008').length).toBeGreaterThan(0);
+  });
+});
+
+
+// 042-dashboard-revamp (T032) — tujuan tautan "Item stok menipis": /stock?low=1 menampilkan persis varian yang
+// dihitung butir Dashboard (GET /stock/low), bukan buku besar pergerakan. Tanpa ?low layar berperilaku seperti biasa.
+describe('StockView — ?low=1 destination of the Dashboard attention item (042)', () => {
+  const LOW = {
+    data: [
+      { variant_id: 11, sku: 'SPF-KC-MCY-008', product_name: 'MCYT', current_stock: 2, low_stock_alert: 5 },
+      { variant_id: 12, sku: 'SPF-KC-MCY-009', product_name: 'MCYT', current_stock: 0, low_stock_alert: 3 },
+      { variant_id: 20, sku: 'ABC-001', product_name: 'Poster', current_stock: 4, low_stock_alert: 4 },
+    ],
+  };
+
+  async function renderAt(url) {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useAuthStore().user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'stock', 'products'] };
+    const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/stock', name: 'stock', component: { template: '<div />' } }] });
+    router.push(url);
+    await router.isReady();
+    return { router, ...render(StockView, { global: { plugins: [pinia, router], stubs: { 'router-link': true } } }) };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lowStock.mockResolvedValue(LOW);
+    listMovements.mockResolvedValue({ data: [MOVEMENT(1)], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
+  });
+
+  it('lists exactly the low-stock variants and their count, and does not load the movement ledger', async () => {
+    await renderAt('/stock?low=1');
+    const section = await screen.findByTestId('stock-low-section');
+    expect(await within(section).findByText('SPF-KC-MCY-009')).toBeInTheDocument();
+    expect(within(section).getAllByRole('row')).toHaveLength(1 + LOW.data.length); // kepala + baris
+    expect(within(section).getByTestId('data-count')).toHaveTextContent('3 data');
+    expect(within(section).getByText('Poster')).toBeInTheDocument();
+    expect(listMovements).not.toHaveBeenCalled();
+    expect(screen.queryByRole('columnheader', { name: 'Tipe' })).toBeNull();
+  });
+
+  it('shows the filter as a chip; removing it returns to the movement ledger', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const { router } = await renderAt('/stock?low=1');
+    await screen.findByText('SPF-KC-MCY-009');
+
+    await user.click(screen.getByRole('button', { name: /Hapus filter Hanya stok menipis/ }));
+    await waitFor(() => expect(router.currentRoute.value.query.low).toBeUndefined());
+    expect(await screen.findByRole('columnheader', { name: 'Tipe' })).toBeInTheDocument();
+    expect(listMovements).toHaveBeenCalled();
+    expect(screen.queryByTestId('stock-low-section')).toBeNull();
+  });
+
+  it('shows an empty message when nothing is low, and an error with Retry when loading fails', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    lowStock.mockResolvedValueOnce({ data: [] });
+    const first = await renderAt('/stock?low=1');
+    expect(await screen.findByText('Semua stok masih aman.')).toBeInTheDocument();
+    first.unmount();
+
+    lowStock.mockRejectedValueOnce(new Error('down'));
+    await renderAt('/stock?low=1');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Gagal memuat item stok menipis');
+    await user.click(screen.getByRole('button', { name: /coba lagi/i }));
+    expect(await screen.findByText('SPF-KC-MCY-008')).toBeInTheDocument();
+  });
+
+  it('keeps the default behaviour (movement ledger, no low-stock call) when the parameter is absent or not truthy', async () => {
+    const first = await renderAt('/stock');
+    await screen.findAllByText('SPF-KC-MCY-008');
+    expect(lowStock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('stock-low-section')).toBeNull();
+    first.unmount();
+
+    await renderAt('/stock?low=0');
+    await screen.findByRole('columnheader', { name: 'Tipe' });
+    expect(lowStock).not.toHaveBeenCalled();
   });
 });

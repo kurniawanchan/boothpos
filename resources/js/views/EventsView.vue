@@ -16,6 +16,8 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 
 const auth = useAuthStore();
 const { t } = useI18n();
@@ -27,7 +29,7 @@ const toast = useToastStore();
 // canAccessMenu('settings') for this specific control.
 const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));
 
-const { items, meta, params, loading, load, setPage, setFilter } = usePaginatedList(listEvents);
+const { items, meta, params, loading, error, load, setPage, setFilter } = usePaginatedList(listEvents);
 onMounted(load);
 
 const STATUS_VARIANT = { draft: 'neutral', active: 'mint', closed: 'dark', cancelled: 'danger' };
@@ -154,29 +156,41 @@ async function performDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <BaseSelect
-        class="w-52"
-        :model-value="params.status ?? ''"
-        :placeholder="t('events_sessions.all_status')"
-        :options="[
-          { value: 'draft', label: t('events_sessions.status_draft') },
-          { value: 'active', label: t('events_sessions.status_active') },
-          { value: 'closed', label: t('events_sessions.status_closed') },
-          { value: 'cancelled', label: t('events_sessions.status_cancelled') },
-        ]"
-        @update:model-value="(v) => setFilter({ status: v || undefined })"
-      />
-      <span class="flex-1"></span>
-      <BaseButton v-if="auth.canAccessMenu('settings')" @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('events_sessions.new_event') }}
-      </BaseButton>
-    </div>
+  <div class="pb-10">
+    <!-- 041 — judul/deskripsi/tindakan utama kini dari PageHeader (kerangka menyembunyikan judul bawaannya). -->
+    <PageHeader :title="t('nav.events')" :description="t('nav.events_subtitle')">
+      <template v-if="auth.canAccessMenu('settings')" #actions>
+        <BaseButton @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('events_sessions.new_event') }}
+        </BaseButton>
+      </template>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('events_sessions.no_events')">
+    <section class="mx-[26px] border-2 border-line bg-white">
+      <!-- Daftar event tidak punya pencarian teks, hanya satu filter status: FilterBar tanpa kolom cari. -->
+      <FilterBar :searchable="false" :count="meta.total">
+        <BaseSelect
+          class="w-52"
+          :model-value="params.status ?? ''"
+          :placeholder="t('events_sessions.all_status')"
+          :options="[
+            { value: 'draft', label: t('events_sessions.status_draft') },
+            { value: 'active', label: t('events_sessions.status_active') },
+            { value: 'closed', label: t('events_sessions.status_closed') },
+            { value: 'cancelled', label: t('events_sessions.status_cancelled') },
+          ]"
+          @update:model-value="(v) => setFilter({ status: v || undefined })"
+        />
+      </FilterBar>
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? (error.message || t('page.load_failed')) : ''"
+        :empty-message="t('events_sessions.no_events')"
+        @retry="load"
+      >
         <template #cell-location="{ row }">{{ row.location || '—' }}</template>
         <template #cell-dates="{ row }">{{ formatDate(row.start_date) }} – {{ formatDate(row.end_date) }}</template>
         <template #cell-event_cost="{ row }">{{ formatIDR(row.event_cost) }}</template>
@@ -194,7 +208,7 @@ async function performDelete() {
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
-    </div>
+    </section>
 
     <BaseModal :open="showForm" :title="editingEvent ? t('events_sessions.edit_event') : t('events_sessions.new_event')" max-width-class="max-w-[520px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveEvent">

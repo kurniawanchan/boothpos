@@ -56,6 +56,43 @@ class PaymentSummary
         ];
     }
 
+    /**
+     * 042-dashboard-revamp — versi SET-BASED dari rumus yang sama (untuk menghitung tab dan status pembayaran
+     * ratusan order dalam satu query). Rumus TETAP satu: potongan SQL di bawah hanya menerjemahkan `for()`
+     * dan dijaga oleh PaymentSummarySqlParityTest (setiap kombinasi harus memberi status yang sama).
+     *
+     * Terbayar = SUM(entri bukan `rejected`) − kembalian; sisa = ROUND(GREATEST(0, total − terbayar), 2).
+     */
+    public static function orderPaidSql(string $orders = 'orders'): string
+    {
+        return "(COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.order_id = {$orders}.id AND p.verification <> 'rejected'), 0) - {$orders}.change_amount)";
+    }
+
+    public static function orderRemainingSql(string $orders = 'orders'): string
+    {
+        return 'ROUND(GREATEST(0, '.$orders.'.total_amount - '.self::orderPaidSql($orders).'), 2)';
+    }
+
+    public static function orderPaymentCountSql(string $orders = 'orders'): string
+    {
+        return "(SELECT COUNT(*) FROM payments p WHERE p.order_id = {$orders}.id AND p.verification <> 'rejected')";
+    }
+
+    /** Ada entri non-tunai yang masih menunggu verifikasi (tidak ada alur "ditolak" yang tersisa di sini). */
+    public static function orderHasPendingNonCashSql(string $orders = 'orders'): string
+    {
+        return "EXISTS (SELECT 1 FROM payments p WHERE p.order_id = {$orders}.id AND p.verification = 'pending' AND p.method <> 'cash')";
+    }
+
+    /** Status ringkasan (unpaid|partially_paid|fully_paid) dalam SQL — identik dengan `for()['status']`. */
+    public static function orderStatusSql(string $orders = 'orders'): string
+    {
+        $remaining = self::orderRemainingSql($orders);
+        $count = self::orderPaymentCountSql($orders);
+
+        return "CASE WHEN {$remaining} > 0 AND {$count} = 0 THEN 'unpaid' WHEN {$remaining} > 0 THEN 'partially_paid' ELSE 'fully_paid' END";
+    }
+
     private static function money(float $value): string
     {
         return number_format($value, 2, '.', '');

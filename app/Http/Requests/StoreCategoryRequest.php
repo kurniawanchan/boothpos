@@ -28,6 +28,11 @@ class StoreCategoryRequest extends FormRequest
             'parent_id' => ['nullable', 'integer', Rule::exists('categories', 'id')->whereNull('deleted_at')],
             'display_order' => ['sometimes', 'integer'],
             'is_active' => ['sometimes', 'boolean'],
+            'station_id' => ['sometimes', 'nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) {
+                if ($value !== null && ! \App\Models\Station::whereKey($value)->exists()) {
+                    $fail(__('restaurant.station_not_found'));
+                }
+            }],
         ];
     }
 

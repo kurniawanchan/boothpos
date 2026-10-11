@@ -21,12 +21,15 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import PurchaseOrderDetailModal from '../components/purchaseOrders/PurchaseOrderDetailModal.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import TabBar from '../components/page/TabBar.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import PreorderRowActions from '../components/preorder/PreorderRowActions.vue';
 
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listPurchaseOrders);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listPurchaseOrders);
 const vendors = ref([]);
 const materials = ref([]);
 const artists = ref([]);
@@ -34,7 +37,7 @@ const statusFilter = ref('');
 const artistFilter = ref('');
 
 const STATUSES = ['draft', 'ordered', 'received', 'paid', 'cancelled'];
-const STATUS_VARIANT = { draft: 'neutral', ordered: 'warn', received: 'mint', paid: 'dark', cancelled: 'danger' };
+const STATUS_VARIANT = { draft: 'neutral', ordered: 'warning', received: 'info', paid: 'success', cancelled: 'danger' };
 // Transisi maju yang diizinkan dari status saat ini — persis
 // PurchaseOrder::ALLOWED_TRANSITIONS di backend, disalin di sini murni
 // untuk menampilkan tombol aksi yang relevan (gerbang sungguhan tetap di
@@ -61,6 +64,27 @@ const artistFilterOptions = computed(() => [{ value: '', label: t('purchase_orde
 function applyArtistFilter(value) {
   artistFilter.value = value;
   setFilter({ artist_id: value || undefined });
+}
+
+// 041 — status menjadi TabBar (sebelumnya deretan chip). Nilai tab 'all' = tanpa filter status; semantiknya
+// identik dengan applyStatusFilter lama. Tab bukan "filter" di baris filter, jadi atur ulang hanya melepas seller.
+const ALL_TAB = 'all';
+const statusTab = computed({
+  get: () => statusFilter.value || ALL_TAB,
+  set: (key) => applyStatusFilter(key === ALL_TAB ? '' : key),
+});
+// Jumlah per status TIDAK dimuat (daftar berpaginasi dan tak ada endpoint ringkasan), jadi chip jumlah hanya
+// dipasang pada tab yang sedang aktif memakai total dari server — dan hanya bila tak ada filter seller,
+// karena jumlah tab menggambarkan seluruh bagian, bukan tampilan yang difilter.
+const countKnown = computed(() => !loading.value && !error.value && !artistFilter.value);
+const statusTabs = computed(() => [ALL_TAB, ...STATUSES].map((key) => ({
+  key,
+  label: key === ALL_TAB ? t('common.all') : t(`purchase_orders.status_${key}`),
+  count: countKnown.value && statusTab.value === key ? meta.value.total : undefined,
+})));
+
+function resetFilters() {
+  applyArtistFilter('');
 }
 
 const columns = computed(() => [
@@ -265,39 +289,32 @@ function openDetail(po) {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <div class="flex flex-1 flex-wrap gap-1.5">
-        <button
-          type="button"
-          class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-          :class="!statusFilter ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-          @click="applyStatusFilter('')"
-        >
-          {{ t('common.all') }}
-        </button>
-        <button
-          v-for="s in STATUSES"
-          :key="s"
-          type="button"
-          class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold capitalize transition-colors"
-          :class="statusFilter === s ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-          @click="applyStatusFilter(s)"
-        >
-          {{ t(`purchase_orders.status_${s}`) }}
-        </button>
-      </div>
-      <div class="w-[190px]">
-        <BaseSelect :model-value="artistFilter" :options="artistFilterOptions" :aria-label="t('purchase_orders.col_seller')" @update:model-value="applyArtistFilter" />
-      </div>
-      <BaseButton @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('purchase_orders.new_po') }}
-      </BaseButton>
-    </div>
+  <div class="pb-10">
+    <PageHeader :title="t('nav.purchase_orders')" :description="t('nav.purchase_orders_subtitle')">
+      <template #actions>
+        <BaseButton @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('purchase_orders.new_po') }}
+        </BaseButton>
+      </template>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('purchase_orders.no_purchase_orders')">
+    <section class="mx-[26px] border-2 border-line bg-white">
+      <TabBar v-model="statusTab" :tabs="statusTabs" :label="t('purchase_orders.col_status')" />
+      <FilterBar :searchable="false" :count="loading || error ? null : meta.total" :active="!!artistFilter" @reset="resetFilters">
+        <div class="w-[190px]">
+          <BaseSelect :model-value="artistFilter" :options="artistFilterOptions" :aria-label="t('purchase_orders.col_seller')" @update:model-value="applyArtistFilter" />
+        </div>
+      </FilterBar>
+
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('purchase_orders.no_purchase_orders')"
+        @retry="load"
+      >
         <template #cell-po_number="{ row }">
           <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active hover:underline" @click="openDetail(row)">{{ row.po_number }}</button>
         </template>
@@ -326,7 +343,7 @@ function openDetail(po) {
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
-    </div>
+    </section>
 
     <BaseDrawer :open="showForm" :title="editingPo ? t('purchase_orders.edit_po') : t('purchase_orders.new_po')" @close="showForm = false">
       <form class="flex flex-col gap-4 px-6 py-5" @submit.prevent="savePo">
