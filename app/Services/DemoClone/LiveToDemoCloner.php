@@ -2,7 +2,10 @@
 
 namespace App\Services\DemoClone;
 
+use App\Services\ActivityLogger;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -63,20 +66,49 @@ class LiveToDemoCloner
     }
 
     /**
-     * Seluruhnya dalam SATU transaksi; salinan berkas yang sudah dibuat
-     * dihapus bila transaksi gagal.
+     * Seluruhnya dalam SATU transaksi: sidik jari LIVE → cek tak ada LIVE yang
+     * menunjuk DEMO → hapus DEMO → salin → verifikasi → sidik jari LIVE lagi
+     * (harus sama) → catat log. Salinan berkas dihapus bila gagal; berkas DEMO
+     * lama yang tak dipakai siapa pun dihapus HANYA sesudah commit (rollback
+     * tak boleh menghilangkan berkas).
      */
     public function run(): array
     {
         $copier = new FileCopier;
+        $stale = [];
 
         try {
-            return DB::transaction(function () use ($copier) {
+            $report = DB::transaction(function () use ($copier, &$stale) {
+                $before = LiveFingerprint::capture();
+
+                $this->assertNoLiveReferencesToDemo();
+
+                $stale = $this->demoFiles();
                 $deleted = $this->wipeDemo();
                 $codes = new CodeAllocator;
                 $cloned = $this->cloneAll($copier, $codes);
 
                 $this->afterClone();
+
+                $this->verifyIntegrity();
+                $this->verifyFiles();
+
+                $changed = LiveFingerprint::diff($before, LiveFingerprint::capture());
+
+                if ($changed !== []) {
+                    throw new CloneException('Data LIVE berubah selama proses (tabel: '.implode(', ', $changed).'); dibatalkan.');
+                }
+
+                // Hanya hitungan: tidak ada nilai baris (PII) di log.
+                app(ActivityLogger::class)->log(
+                    null,
+                    'cloned_live_to_demo',
+                    'system',
+                    null,
+                    'Data DEMO diganti dengan salinan data LIVE.',
+                    null,
+                    ['deleted' => $deleted, 'cloned' => $cloned],
+                );
 
                 return [
                     'deleted' => $deleted,
@@ -92,6 +124,10 @@ class LiveToDemoCloner
 
             throw $e;
         }
+
+        $this->deleteUnreferencedFiles($stale);
+
+        return $report;
     }
 
     /**
@@ -99,6 +135,181 @@ class LiveToDemoCloner
      * penyalinan). Produksi tidak mengisinya.
      */
     protected function afterClone(): void {}
+
+    /** @return array<string,array{0:string,1:string}> "disk|path" => [disk, path] milik baris DEMO (sebelum dihapus) */
+    private function demoFiles(): array
+    {
+        $out = [];
+
+        foreach (CloneRegistry::tables() as $table => $spec) {
+            foreach ($spec['files'] as $column => $disk) {
+                $paths = DB::table($table)->whereRaw(CloneRegistry::scope($table, 'demo'))
+                    ->whereNotNull($column)->where($column, '!=', '')->pluck($column);
+
+                foreach ($paths as $path) {
+                    $out["{$disk}|{$path}"] = [$disk, (string) $path];
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Berkas DEMO lama dihapus hanya bila TIDAK ada baris (mode apa pun) yang
+     * masih menunjuknya — melindungi berkas LIVE kalau sisa kloning lama atau
+     * seeder pernah membuat baris DEMO menunjuk path LIVE.
+     */
+    private function deleteUnreferencedFiles(array $stale): void
+    {
+        foreach ($stale as [$disk, $path]) {
+            if (! $this->isReferenced($disk, $path)) {
+                Storage::disk($disk)->delete($path);
+            }
+        }
+    }
+
+    private function isReferenced(string $disk, string $path): bool
+    {
+        foreach (CloneRegistry::tables() as $table => $spec) {
+            foreach ($spec['files'] as $column => $fileDisk) {
+                if ($fileDisk === $disk && DB::table($table)->where($column, $path)->exists()) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function verifyIntegrity(): void
+    {
+        foreach (CloneRegistry::tables() as $table => $spec) {
+            $live = DB::table($table)->whereRaw(CloneRegistry::scope($table, 'live'))->count();
+            $demo = DB::table($table)->whereRaw(CloneRegistry::scope($table, 'demo'))->count();
+            $skipped = $this->skipped[$table] ?? 0;
+
+            if ($demo !== $live - $skipped) {
+                throw new CloneException("{$table}: jumlah baris DEMO ({$demo}) tidak sama dengan LIVE yang disalin (".($live - $skipped).').');
+            }
+
+            foreach (CloneRegistry::references($table) as $column => $parent) {
+                foreach ([['demo', 'live'], ['live', 'demo']] as [$childMode, $parentMode]) {
+                    $bad = $this->crossModeCount($table, $column, $parent, $childMode, $parentMode);
+
+                    if ($bad > 0) {
+                        throw new CloneException("{$table}.{$column}: {$bad} baris {$childMode} menunjuk induk {$parentMode} (lintas mode).");
+                    }
+                }
+            }
+
+            if ($skipped === 0) {
+                foreach ($this->decimalColumns($table) as $column) {
+                    $liveSum = (string) DB::table($table)->whereRaw(CloneRegistry::scope($table, 'live'))->selectRaw("SUM(`{$column}`) AS s")->value('s');
+                    $demoSum = (string) DB::table($table)->whereRaw(CloneRegistry::scope($table, 'demo'))->selectRaw("SUM(`{$column}`) AS s")->value('s');
+
+                    if ($liveSum !== $demoSum) {
+                        throw new CloneException("{$table}.{$column}: total DEMO ({$demoSum}) tidak sama dengan LIVE ({$liveSum}).");
+                    }
+                }
+            }
+        }
+
+        // Stok: salinan tidak boleh mengubah hubungan current_stock ↔ riwayat
+        // (kalau LIVE sendiri tidak konsisten, DEMO harus sama persis, bukan "diperbaiki").
+        $mismatch = fn (string $mode) => (int) DB::scalar(
+            "SELECT COUNT(*) FROM product_variants v WHERE v.data_mode = '{$mode}' AND v.current_stock <> COALESCE((SELECT SUM(m.qty_change) FROM stock_movements m WHERE m.variant_id = v.id), 0)"
+        );
+
+        if ($mismatch('live') !== $mismatch('demo')) {
+            throw new CloneException('Ketidakcocokan stok DEMO berbeda dari LIVE.');
+        }
+    }
+
+    /** Setiap path berkas DEMO ada di disknya dan tidak sama dengan path LIVE mana pun. */
+    private function verifyFiles(): void
+    {
+        $live = $this->filePaths('live');
+
+        foreach ($this->filePaths('demo') as $disk => $set) {
+            foreach (array_keys($set) as $path) {
+                $path = (string) $path;
+
+                if (isset($live[$disk][$path])) {
+                    throw new CloneException("Berkas di disk {$disk} dipakai bersama oleh baris LIVE dan DEMO.");
+                }
+
+                if (! Storage::disk($disk)->exists($path)) {
+                    throw new CloneException("Berkas DEMO di disk {$disk} tidak ditemukan sesudah disalin.");
+                }
+            }
+        }
+    }
+
+    /** @return array<string,array<string,true>> disk => [path => true] untuk satu mode */
+    private function filePaths(string $mode): array
+    {
+        $out = [];
+
+        foreach (CloneRegistry::tables() as $table => $spec) {
+            foreach ($spec['files'] as $column => $disk) {
+                $paths = DB::table($table)->whereRaw(CloneRegistry::scope($table, $mode))
+                    ->whereNotNull($column)->where($column, '!=', '')->pluck($column);
+
+                foreach ($paths as $path) {
+                    $out[$disk][(string) $path] = true;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /** Jumlah baris mode $childMode di $table yang kolom $column-nya menunjuk baris mode $parentMode di $parent. */
+    private function crossModeCount(string $table, string $column, string $parent, string $childMode, string $parentMode): int
+    {
+        return DB::table($table)
+            ->whereRaw(CloneRegistry::scope($table, $childMode))
+            ->whereRaw("`{$column}` IN (SELECT id FROM `{$parent}` WHERE ".CloneRegistry::scope($parent, $parentMode).')')
+            ->count();
+    }
+
+    /**
+     * Dijalankan SEBELUM DEMO dihapus. FK dengan ON DELETE SET NULL / CASCADE
+     * (orders.customer_id, preorders.event_id, payments.session_id,
+     * product_variant_bom_lines.product_variant_id, session_opening_cash_entries.session_id, …)
+     * akan DIAM-DIAM mengubah atau menghapus baris LIVE yang menunjuk baris DEMO
+     * saat DEMO dihapus. Sidik jari LIVE memang akan menangkapnya lalu membatalkan,
+     * tetapi dengan pesan umum; cek ini berhenti lebih awal dan menyebut tabel/kolom/jumlah.
+     * pos_drafts tidak disalin, tapi event_id-nya SET NULL dari events, jadi ikut dicek.
+     */
+    private function assertNoLiveReferencesToDemo(): void
+    {
+        foreach (CloneRegistry::tables() as $table => $_) {
+            foreach (CloneRegistry::references($table) as $column => $parent) {
+                $count = $this->crossModeCount($table, $column, $parent, 'live', 'demo');
+
+                if ($count > 0) {
+                    throw new CloneException("{$table}.{$column}: {$count} baris LIVE menunjuk induk {$parent} milik DEMO; data lintas mode harus dibereskan dulu, tidak ada yang diubah.");
+                }
+            }
+        }
+
+        $drafts = DB::table('pos_drafts')
+            ->where('data_mode', 'live')
+            ->whereIn('event_id', DB::table('events')->where('data_mode', 'demo')->select('id'))
+            ->count();
+
+        if ($drafts > 0) {
+            throw new CloneException("pos_drafts.event_id: {$drafts} baris LIVE menunjuk events milik DEMO; data lintas mode harus dibereskan dulu, tidak ada yang diubah.");
+        }
+    }
+
+    /** @return list<string> */
+    private function decimalColumns(string $table): array
+    {
+        return collect(Schema::getColumns($table))->where('type_name', 'decimal')->pluck('name')->all();
+    }
 
     /** @return array<string,int> */
     private function wipeDemo(): array
