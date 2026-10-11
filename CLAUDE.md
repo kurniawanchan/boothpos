@@ -348,6 +348,16 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **Rows of one seller must be contiguous.** `preordersByArtist()` orders by `artists.name` THEN `preorder_items.artist_id` — two sellers with the same name used to interleave their rows (found in 039), which would have put a subtotal in the middle of another seller's block.
 - The seller filter on the screen hides rows and their seller's subtotal together; the filtered subtotal/Grand Total still equal the visible rows. The default (summary) and drill-down shapes of `GET /reports/preorders` are untouched; the Summary sheet of the export is untouched.
 
+## Clone LIVE → DEMO (added 2026-10-11)
+
+`php artisan app:clone-live-to-demo [--force] [--yes]` replaces ALL `data_mode='demo'` rows with an exact mirror of LIVE (`App\Services\DemoClone\*`, spec in `docs/superpowers/specs/2026-10-11-clone-live-to-demo-design.md`). Non-obvious rules:
+
+- **LIVE is read-only.** All queries use `DB::table()` + `CloneRegistry::scope()`, never the `DataModeScope` (it follows the active mode). A LIVE fingerprint (`LiveFingerprint`) is taken before and after inside the transaction; any difference rolls back. **Add a new `HasDataMode` table to `CloneRegistry::tables()` in FK order**, or it is silently not mirrored (the parity check only covers registered tables). The cloner also aborts BEFORE wiping anything if a LIVE row references a DEMO row (ON DELETE SET NULL/CASCADE would silently alter LIVE data).
+- **`artists.code` is `char(3)`, `categories.code` is `char(2)`**, both UNIQUE across modes: demo codes are *allocated* (`CodeAllocator`: `Z`+first letters, then `Y`…), and `products.code_prefix` / `product_variants.sku` are rebuilt from them. Document numbers and vendor/material codes get `-DM`; `local_ref`/`client_ref`/`proof_token` get new UUIDs.
+- **Files are copied, never shared** (`FileCopier`): sharing a path would let a demo delete remove the LIVE file. A demo wipe deletes an old file only if no row in either mode still references it.
+- **Customer PII is copied verbatim** (product-owner decision) — keep DEMO data local. Error output never contains row values (`SafeError`).
+- Stock-movement `reference_id` is remapped by (type, reference_type); unknown non-null references become `NULL` (counted), a LIVE id is never copied.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.

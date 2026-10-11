@@ -462,3 +462,38 @@ trik `docker exec` ke container lain seperti di §7 untuk mesin dev), dan
 persis lewat `docker-compose.store.yml` — arahkan ke titik mount drive
 eksternal fisik yang sungguhan tercolok di laptop toko, bukan folder di
 disk yang sama (persis peringatan §9).
+
+## Salin data LIVE ke DEMO (`app:clone-live-to-demo`)
+
+Mengganti SELURUH data mode DEMO dengan salinan persis data mode LIVE: baris
+(termasuk yang soft-deleted), gambar produk/varian/kategori, dan bukti bayar.
+Data LIVE hanya dibaca — sidik jari tabel LIVE dicek sebelum dan sesudah, dan
+proses dibatalkan bila ada selisih.
+
+    php artisan app:clone-live-to-demo           # simulasi: tampilkan jumlah per tabel dan jumlah/ukuran berkas, tidak menulis
+    php artisan app:clone-live-to-demo --force   # tulis (minta konfirmasi)
+    php artisan app:clone-live-to-demo --force --yes   # tanpa pertanyaan
+
+Di Docker dev: `docker compose exec app php artisan app:clone-live-to-demo ...`
+(ini BUKAN suite test, jadi aturan `-e DB_DATABASE=boothpos_test` tidak berlaku).
+
+- **Konfirmasi:** `--yes` melewati pertanyaan. Menjalankan `--force` TANPA
+  `--yes` di konteks non-interaktif (`--no-interaction`, cron, `docker exec -T`)
+  langsung gagal dengan galat sebelum ada pertanyaan, cadangan, atau penulisan.
+- **Peringatan PII:** data pelanggan disalin APA ADANYA (telepon, email, akun
+  sosial, alamat). Jangan bagikan DB, screenshot, atau cadangan yang berisi DEMO.
+- Cadangan pengaman dibuat otomatis lebih dulu (id dicetak); pulihkan dengan
+  `php artisan app:restore <path/database.sql>`. Gambar produk di disk publik
+  TIDAK ikut dicadangkan oleh `app:backup` — gambar DEMO lama yang tidak dipakai
+  siapa pun memang dihapus (DEMO dibangun ulang), gambar LIVE tidak pernah disentuh.
+- Kode artist/kategori DEMO berbeda dari LIVE (kolomnya UNIQUE lintas mode dan
+  hanya 3/2 huruf): mis. `VLC` → `ZVL`; `code_prefix`/SKU DEMO disusun ulang dari
+  kode itu. Nomor dokumen DEMO berakhiran `-DM`.
+- Tidak disalin: `companies`, `invoices`, `pos_drafts`, riwayat `activity_logs`,
+  `preorder_notifications`, `users`, `payment_channels`, `settings`.
+- Pemeriksaan sebelum penghapusan: bila ada baris LIVE yang merujuk baris DEMO,
+  perintah dibatalkan SEBELUM menghapus apa pun (data lintas mode akan diubah
+  diam-diam oleh foreign key `ON DELETE SET NULL/CASCADE`). Perbaiki rujukan itu
+  lebih dulu.
+- Hentikan pemakaian aplikasi saat menjalankan: bila data LIVE berubah di tengah
+  proses, perintah membatalkan dirinya.
