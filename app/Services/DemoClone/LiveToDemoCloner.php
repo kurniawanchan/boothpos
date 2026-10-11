@@ -4,6 +4,7 @@ namespace App\Services\DemoClone;
 
 use App\Services\ActivityLogger;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -71,6 +72,18 @@ class LiveToDemoCloner
      * (harus sama) → catat log. Salinan berkas dihapus bila gagal; berkas DEMO
      * lama yang tak dipakai siapa pun dihapus HANYA sesudah commit (rollback
      * tak boleh menghilangkan berkas).
+     *
+     * PRASYARAT: dipanggil DI LUAR transaksi DB lain. Penghapusan berkas lama
+     * sesudah DB::transaction() mengandaikan transaksi itu adalah commit yang
+     * sebenarnya; di dalam transaksi luar, "commit" itu baru savepoint dan
+     * berkas bisa terhapus untuk data yang kemudian di-rollback. Perintah
+     * artisan memanggilnya di tingkat atas. Tidak dipaksa di kode karena test
+     * dibungkus transaksi RefreshDatabase.
+     *
+     * Hanya melempar SEBELUM commit. Kegagalan membersihkan berkas lama
+     * (sesudah commit) tidak dilempar: DEMO sudah terlanjur diganti, jadi
+     * pemanggil tidak boleh mengira semuanya dibatalkan — dilaporkan lewat
+     * 'files_cleanup_failed'.
      */
     public function run(): array
     {
@@ -120,12 +133,27 @@ class LiveToDemoCloner
                 ];
             });
         } catch (\Throwable $e) {
-            $copier->discardCopies();
+            // Galat ASLI yang harus sampai ke pemanggil; kegagalan membersihkan
+            // salinan tidak boleh menggantikannya (hanya nama kelas yang dicatat).
+            try {
+                $copier->discardCopies();
+            } catch (\Throwable $discardError) {
+                Log::warning('app:clone-live-to-demo: penghapusan salinan berkas gagal: '.get_class($discardError));
+            }
 
             throw $e;
         }
 
-        $this->deleteUnreferencedFiles($stale);
+        $report['files_cleanup_failed'] = false;
+
+        try {
+            $this->deleteUnreferencedFiles($stale);
+        } catch (\Throwable $e) {
+            // Sudah commit: jangan membuat pemanggil mengira semuanya dibatalkan.
+            // Hanya nama kelas yang dicatat (pesan bisa memuat path).
+            Log::warning('app:clone-live-to-demo: pembersihan berkas DEMO lama gagal setelah commit: '.get_class($e));
+            $report['files_cleanup_failed'] = true;
+        }
 
         return $report;
     }
@@ -158,9 +186,10 @@ class LiveToDemoCloner
     /**
      * Berkas DEMO lama dihapus hanya bila TIDAK ada baris (mode apa pun) yang
      * masih menunjuknya — melindungi berkas LIVE kalau sisa kloning lama atau
-     * seeder pernah membuat baris DEMO menunjuk path LIVE.
+     * seeder pernah membuat baris DEMO menunjuk path LIVE. protected sebagai
+     * titik sambung test untuk kegagalan sesudah commit.
      */
-    private function deleteUnreferencedFiles(array $stale): void
+    protected function deleteUnreferencedFiles(array $stale): void
     {
         foreach ($stale as [$disk, $path]) {
             if (! $this->isReferenced($disk, $path)) {

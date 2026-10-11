@@ -117,6 +117,18 @@ class CloneLiveToDemo extends Command
         foreach ($report['skipped'] as $table => $count) {
             $this->warn("{$table}: {$count} baris dilewati karena berkas sumber hilang.");
         }
+
+        if ($report['files_cleanup_failed'] ?? false) {
+            $this->warn('DEMO sudah diganti; pembersihan berkas DEMO lama gagal — berkas lama mungkin tersisa di disk.');
+        }
+
+        // Kode artis/kategori DEMO dialokasikan ulang (kolomnya terlalu sempit
+        // untuk akhiran); tampilkan padanannya. Kode bisnis, bukan PII.
+        foreach (['artists' => 'Artis', 'categories' => 'Kategori'] as $table => $label) {
+            foreach ($report['codes'][$table] ?? [] as $liveCode => $demoCode) {
+                $this->line("Kode {$label}: {$liveCode} → {$demoCode}");
+            }
+        }
     }
 
     private function megabytes(int $bytes): string

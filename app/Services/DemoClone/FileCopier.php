@@ -54,7 +54,13 @@ final class FileCopier
         $name = Str::uuid()->toString().($extension !== '' ? ".{$extension}" : '');
         $destination = ($directory === '.' || $directory === '') ? $name : "{$directory}/{$name}";
 
-        $storage->copy($path, $destination);
+        // Flysystem/Laravel mengembalikan false (bukan melempar) saat salinan gagal;
+        // tanpa pemeriksaan ini galatnya baru muncul belakangan sebagai pesan yang
+        // menyesatkan. Pesan sengaja tanpa path/nilai.
+        if ($storage->copy($path, $destination) === false) {
+            throw new CloneException("Gagal menyalin berkas di disk {$disk}.");
+        }
+
         $this->created[] = [$disk, $destination];
 
         if ($storage->size($destination) !== $storage->size($path)) {
