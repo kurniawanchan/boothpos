@@ -7,6 +7,8 @@ import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -22,10 +24,18 @@ const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listCategories);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listCategories);
 const allCategories = ref([]); // for the parent picker + hierarchy column, unpaginated
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
+function onSearchInput(value) {
+  search.value = value;
+  debouncedSearch();
+}
+function resetFilters() {
+  search.value = '';
+  setFilter({ search: undefined });
+}
 
 async function loadAllCategories() {
   allCategories.value = (await listCategories({ per_page: 100 })).data;
@@ -210,20 +220,9 @@ async function performDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <div class="relative flex min-w-[230px] flex-1 items-center">
-        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="category-search">{{ t('master_data.search_category') }}</label>
-        <input
-          id="category-search"
-          v-model="search"
-          :placeholder="t('master_data.search_category_placeholder')"
-          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-          @input="debouncedSearch"
-        />
-      </div>
-      <template v-if="auth.canAccessMenu('categories')">
+  <div>
+    <PageHeader :title="t('nav.categories')" :description="t('nav.categories_subtitle')">
+      <template v-if="auth.canAccessMenu('categories')" #actions>
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('common.export_xlsx') }}
@@ -237,15 +236,31 @@ async function performDelete() {
           {{ t('master_data.new_category') }}
         </BaseButton>
       </template>
-    </div>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_categories')">
+    <div class="mx-[26px] mb-10 overflow-hidden border-2 border-line bg-white">
+      <FilterBar
+        :search="search"
+        :placeholder="t('master_data.search_category_placeholder')"
+        :search-label="t('master_data.search_category')"
+        :count="loading && !items.length ? null : meta.total"
+        :active="!!search"
+        @update:search="onSearchInput"
+        @reset="resetFilters"
+      />
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('master_data.no_categories')"
+        @retry="load"
+      >
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
         <template #cell-parent_id="{ row }">{{ row.parent_id ? nameById[row.parent_id] ?? `#${row.parent_id}` : '—' }}</template>
         <template #cell-product_count="{ row }">{{ row.product_count ?? 0 }}</template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'success' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div v-if="auth.canAccessMenu('categories')" class="flex justify-end gap-2">

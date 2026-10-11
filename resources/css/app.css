@@ -12,85 +12,114 @@
   --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono: ui-monospace, Menlo, monospace;
 
-  /* Brand (primary green) */
-  --color-brand: #2f9e6e;
-  --color-brand-hover: #268159;
-  --color-brand-active: #1e6b4b;
+  /* 041-back-office-ui-redesign — nilai di bawah ini diambil dari desain "Warkop WJM Back Office"
+     (specs/041-back-office-ui-redesign/design-tokens.md): skala slate untuk netral, indigo untuk aksen,
+     sudut 0. Nama token LAMA dipertahankan (puluhan komponen memakainya); hanya nilainya berpindah.
+     Folder design/_ds/modernist-* adalah sistem desain lain dan TIDAK dipakai. */
 
-  /* Near-black ink (text, dark panels/sidebar-footer, dark CTA) */
-  --color-ink: #14201b;
-  --color-ink-hover: #22332b;
+  /* Brand / aksen (indigo). Hover & active = darken(20/40) seperti utils/theme.js, sehingga nilai bawaan
+     dan penimpaan warna tema saat runtime konsisten. Tetap ditimpa oleh pengaturan warna tema toko. */
+  --color-brand: #4f46e5;
+  --color-brand-hover: #3b32d1;
+  --color-brand-active: #271ebd;
 
-  /* Backdrops */
-  --color-canvas: #eef2f0;
-  --color-surface: #f7f9f8;
-  --color-surface-soft: #fbfdfc;
-  --color-surface-subtle: #fafcfb;
+  /* Tinta (teks, panel gelap) */
+  --color-ink: #0f172a;
+  --color-ink-hover: #1e293b;
 
-  /* Mint (success / active / light-green accents) */
-  --color-mint-100: #e4f3ec;
-  --color-mint-50: #f2f8f5;
-  --color-mint-200: #d4ede1;
-  --color-mint-border: #dcede4;
-  --color-mint-accent: #8fc9ae;
+  /* Latar */
+  --color-canvas: #f1f5f9;
+  --color-surface: #f8fafc;
+  --color-surface-soft: #ffffff;
+  --color-surface-subtle: #f8fafc;
 
-  /* Neutral borders — mockup uses several near-identical greys by role */
-  --color-line: #e0e8e4;
-  --color-line-2: #e6ece9;
-  --color-line-3: #eff4f2;
-  --color-line-4: #f1f5f3;
-  --color-line-5: #f2f6f4;
-  --color-line-6: #f3f7f5;
-  --color-line-7: #f0f5f3;
-  --color-track: #eef3f1;
+  /* "Mint" = nama lama untuk tint aksen lembut (terpilih/aktif). Kini tint indigo; keberhasilan memakai
+     token --color-success-* di bawah. */
+  --color-mint-100: #e0e7ff;
+  --color-mint-50: #eef2ff;
+  --color-mint-200: #c7d2fe;
+  --color-mint-border: #e0e7ff;
+  --color-mint-accent: #818cf8;
 
-  /* Muted text, darkest to lightest */
-  --color-muted: #6e7f77;
-  --color-muted-2: #7e8e86;
-  --color-muted-3: #8a9a92;
-  --color-muted-4: #4a5a53;
-  --color-muted-5: #3c4c45;
+  /* Garis / pembatas */
+  --color-line: #e2e8f0;
+  --color-line-2: #e2e8f0;
+  --color-line-3: #f1f5f9;
+  --color-line-4: #f1f5f9;
+  --color-line-5: #f1f5f9;
+  --color-line-6: #f8fafc;
+  --color-line-7: #f1f5f9;
+  --color-track: #f1f5f9;
 
-  /* Disabled */
-  --color-disabled: #c3d3cb;
-  --color-disabled-2: #c7d6cf;
+  /* Teks redup, dari yang paling gelap ke paling terang */
+  --color-muted: #64748b;
+  --color-muted-2: #64748b;
+  --color-muted-3: #94a3b8;
+  --color-muted-4: #475569;
+  --color-muted-5: #334155;
 
-  /* Warning (amber tier-notice, cash-change banner) */
-  --color-warn-text: #8a6a1e;
-  --color-warn-bg: #fbf7ec;
-  --color-warn-border: #f0e4c8;
-  --color-warn-border-strong: #e0cfa4;
+  /* Nonaktif */
+  --color-disabled: #cbd5e1;
+  --color-disabled-2: #cbd5e1;
 
-  /* Danger */
-  --color-danger-text: #a2534b;
-  --color-danger-bg: #fbedec;
-  --color-danger-border: #f3d6d3;
-  --color-danger-border-hover: #c9756c;
+  /* Peringatan */
+  --color-warn-text: #92400e;
+  --color-warn-bg: #fef3c7;
+  --color-warn-border: #fde68a;
+  --color-warn-border-strong: #fcd34d;
 
-  /* Chip colours untuk kartu varian (037): SKU = sky, margin = violet. Pasangan teks/latar
-     diukur >= 4.5:1 (sky 5.92, violet 6.80); markup memakai mint, biaya BOM memakai warn. */
-  --color-sky-text: #1f5f8b;
-  --color-sky-bg: #e6f0f7;
-  --color-violet-text: #5b3f99;
-  --color-violet-bg: #efeaf8;
+  /* Bahaya */
+  --color-danger-text: #b91c1c;
+  --color-danger-bg: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-danger-border-hover: #dc2626;
 
-  /* Dark-panel accents (login hero, product-code generator panel) */
-  --color-dark-muted: #93a79d;
-  --color-dark-muted-2: #6e8579;
+  /* Chip warna untuk kartu varian (037): SKU = sky, margin = violet. */
+  --color-sky-text: #0369a1;
+  --color-sky-bg: #e0f2fe;
+  --color-violet-text: #6d28d9;
+  --color-violet-bg: #ede9fe;
 
-  --color-scrollbar: #d8e2dd;
+  /* Aksen panel gelap (hero login, panel generator kode produk) */
+  --color-dark-muted: #94a3b8;
+  --color-dark-muted-2: #64748b;
 
-  /* Product-code generator panel chip (dark-on-dark), from the mockup's
-     "Kode produk otomatis" block. */
-  --color-code-chip: #1f2e27;
-  --color-code-chip-border: #2c3e35;
+  --color-scrollbar: #cbd5e1;
 
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 9px;
-  --radius-lg: 11px;
-  --radius-card: 13px;
-  --radius-modal: 18px;
+  /* Chip gelap-di-atas-gelap pada blok "Kode produk otomatis". */
+  --color-code-chip: #1e293b;
+  --color-code-chip-border: #334155;
+
+  /* Kerangka aplikasi (rel navigasi gelap) */
+  --color-rail: #0f172a;
+  --color-rail-active: #1e293b;
+  --color-rail-indicator: #848cf6;
+  --color-rail-text: #cbd5e1;
+  --color-page: #f1f5f9;
+
+  /* Penanda semantik (kartu KPI, titik status) */
+  --color-marker-info: #0284c7;
+  --color-marker-accent: #4f46e5;
+  --color-marker-success: #059669;
+  --color-marker-warning: #d97706;
+  --color-marker-danger: #dc2626;
+  --color-marker-neutral: #94a3b8;
+
+  /* Keberhasilan (chip hijau) */
+  --color-success-text: #186d54;
+  --color-success-bg: #d1fae5;
+
+  /* Desain memakai sudut siku di mana-mana */
+  --radius-xs: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-card: 0px;
+  --radius-modal: 0px;
+
+  /* Bayangan keras dari desain */
+  --shadow-panel: 2px 0 0 #e2e8f0, 0 2px 0 #e2e8f0;
+  --shadow-drawer: 0 12px 32px rgba(15, 23, 42, 0.14);
 }
 
 html,
@@ -106,12 +135,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-a {
-  color: var(--color-brand-active);
-  text-decoration: none;
-}
-a:hover {
-  color: var(--color-brand);
+/* BUG YANG DITEMUKAN & DIPERBAIKI (041): aturan `a { color }` ini tanpa @layer mengalahkan SEMUA kelas utilitas
+   Tailwind (yang berada di @layer utilities), sehingga `text-white`/`text-rail-text`/`text-muted` pada <a>
+   atau <RouterLink> diam-diam diabaikan — item navigasi pada rel gelap tampil indigo-di-atas-gelap dan nyaris tak
+   terbaca. Di @layer base ia tetap menjadi warna bawaan tautan, tetapi kelas utilitas kini menang. */
+@layer base {
+  a {
+    color: var(--color-brand-active);
+    text-decoration: none;
+  }
+  a:hover {
+    color: var(--color-brand);
+  }
 }
 
 ::selection {

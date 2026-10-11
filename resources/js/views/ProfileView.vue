@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
+import PageHeader from '../components/page/PageHeader.vue';
 
 const { t } = useI18n();
 const auth = useAuthStore();
@@ -63,9 +64,11 @@ async function submitPasswordChange() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5 px-[26px] pb-10 pt-[22px]">
+  <PageHeader :title="t('nav.profile')" :description="t('nav.profile_subtitle')" />
+
+  <div class="flex flex-col gap-5 px-[26px] pb-10">
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
+      <div class="flex flex-col gap-4 border-2 border-line bg-white p-5">
         <span class="text-[14.5px] font-bold">{{ t('profile.photo') }}</span>
         <div class="flex items-center gap-4">
           <img
@@ -88,7 +91,7 @@ async function submitPasswordChange() {
           <input ref="photoInput" type="file" accept="image/jpeg,image/png" class="hidden" @change="onPhotoSelected" />
         </div>
 
-        <div class="mt-2 flex flex-col gap-3 border-t border-line-6 pt-4">
+        <div class="mt-2 flex flex-col gap-3 border-t-2 border-line-3 pt-4">
           <div class="flex flex-col gap-0.5">
             <span class="text-[11.5px] font-semibold text-muted-3">{{ t('profile.name') }}</span>
             <span class="text-[14px] font-semibold">{{ auth.user?.name }}</span>
@@ -104,7 +107,7 @@ async function submitPasswordChange() {
         </div>
       </div>
 
-      <form class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5" @submit.prevent="submitPasswordChange">
+      <form class="flex flex-col gap-3.5 border-2 border-line bg-white p-5" @submit.prevent="submitPasswordChange">
         <span class="text-[14.5px] font-bold">{{ t('profile.change_password') }}</span>
         <BaseInput
           v-model="passwordForm.current_password"

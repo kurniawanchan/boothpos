@@ -51,8 +51,8 @@ async function openBySeller({ rows = ROWS, subtotals = SUBTOTALS } = {}) {
   const { default: userEvent } = await import('@testing-library/user-event');
   const user = userEvent.setup();
 
-  await user.click(await screen.findByRole('button', { name: 'Pre-order' }));
-  await user.click(await screen.findByRole('button', { name: 'Per Penjual' }));
+  await user.click(await screen.findByRole('tab', { name: 'Pre-order' }));
+  await user.click(await screen.findByRole('tab', { name: 'Per Penjual' }));
   if (rows.length) await screen.findAllByText('tofynx');
 
   return user;

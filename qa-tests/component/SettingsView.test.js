@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/vue';
+import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createI18n } from 'vue-i18n';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import SettingsView from '../../resources/js/views/SettingsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listSettings, updateSettings, uploadStoreLogo, featureFlags } from '../../resources/js/api/settings';
@@ -34,13 +35,20 @@ function imageFile(name = 'logo.png', type = 'image/png') {
   return new File(['fake-bytes'], name, { type });
 }
 
-function renderSettings() {
+// 041-back-office-ui-redesign: Pengaturan kini menampilkan SATU bagian per kali dan menyimpan bagian aktif di
+// address bar (?section=), jadi view butuh router. Tes yang dulu menemukan semua kartu di satu halaman kini
+// membuka bagian terkait lewat query yang sama dengan yang dipakai pengguna (tautan/refresh).
+async function renderSettings(section) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
   auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'settings'] };
   const i18n = createI18n({ legacy: false, locale: 'id', messages: { id, en } });
-  return render(SettingsView, { global: { plugins: [pinia, i18n] } });
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/settings', component: SettingsView }] });
+  router.push(section ? { path: '/settings', query: { section } } : '/settings');
+  await router.isReady();
+  const view = render(SettingsView, { global: { plugins: [pinia, i18n, router] } });
+  return { ...view, router };
 }
 
 describe('SettingsView — profil toko (US3)', () => {
@@ -66,7 +74,7 @@ describe('SettingsView — profil toko (US3)', () => {
   });
 
   it('renders the persisted store-profile fields and current logo', async () => {
-    renderSettings();
+    await await renderSettings();
 
     expect(await screen.findByDisplayValue('Jl. Merdeka No. 1')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Budi')).toBeInTheDocument();
@@ -79,7 +87,7 @@ describe('SettingsView — profil toko (US3)', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     updateSettings.mockResolvedValue({ data: [] });
-    renderSettings();
+    await renderSettings();
 
     await screen.findByDisplayValue('Jl. Merdeka No. 1');
     await user.clear(screen.getByDisplayValue('toko@contoh.com'));
@@ -92,7 +100,7 @@ describe('SettingsView — profil toko (US3)', () => {
   });
 
   it('rejects a non-image file client-side without calling the logo upload API', async () => {
-    renderSettings();
+    await renderSettings();
     await screen.findByDisplayValue('Jl. Merdeka No. 1');
 
     const input = screen.getByLabelText(/logo toko/i);
@@ -111,7 +119,7 @@ describe('SettingsView — profil toko (US3)', () => {
       data: { key: 'store_logo_path', value: 'store-logo/new.png' },
       store_logo_url: 'http://localhost/storage/store-logo/new.png',
     });
-    renderSettings();
+    await renderSettings();
     await screen.findByDisplayValue('Jl. Merdeka No. 1');
 
     const input = screen.getByLabelText(/logo toko/i);
@@ -135,9 +143,9 @@ describe('SettingsView — mode DEMO/LIVE (003-seed-demo-live US2)', () => {
     featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, system_mode: 'live' });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSettings();
+    await renderSettings('mode');
 
-    await screen.findByText('Mode sistem');
+    expect(await screen.findByRole('heading', { name: 'Mode sistem' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'DEMO' }));
 
     expect(screen.getByText(/Pindah ke mode DEMO\?/)).toBeInTheDocument();
@@ -149,9 +157,9 @@ describe('SettingsView — mode DEMO/LIVE (003-seed-demo-live US2)', () => {
     updateSettings.mockResolvedValue({ data: [] });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSettings();
+    await renderSettings('mode');
 
-    await screen.findByText('Mode sistem');
+    expect(await screen.findByRole('heading', { name: 'Mode sistem' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'DEMO' }));
     await user.click(screen.getByRole('button', { name: 'Ya, lanjutkan' }));
 
@@ -164,9 +172,9 @@ describe('SettingsView — mode DEMO/LIVE (003-seed-demo-live US2)', () => {
     featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, system_mode: 'live' });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSettings();
+    await renderSettings('mode');
 
-    await screen.findByText('Mode sistem');
+    expect(await screen.findByRole('heading', { name: 'Mode sistem' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'LIVE' }));
 
     expect(screen.queryByText(/Pindah ke mode/)).not.toBeInTheDocument();
@@ -190,7 +198,7 @@ describe('SettingsView — payment channel deletion (024 US6)', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     deletePaymentChannel.mockResolvedValue({});
-    renderSettings();
+    await renderSettings('channels');
 
     await screen.findByText('BCA');
     await user.click(screen.getByText('Hapus'));
@@ -207,7 +215,7 @@ describe('SettingsView — payment channel deletion (024 US6)', () => {
     const { useToastStore } = await import('../../resources/js/stores/toast');
     const user = userEvent.setup();
     deletePaymentChannel.mockRejectedValue(new Error('Cannot delete'));
-    renderSettings();
+    await renderSettings('channels');
 
     await screen.findByText('BCA');
     await user.click(screen.getByText('Hapus'));
@@ -233,7 +241,7 @@ describe('SettingsView — nama aplikasi', () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     updateSettings.mockResolvedValue({ data: [] });
-    renderSettings();
+    await renderSettings('app');
 
     const input = await screen.findByLabelText('Nama aplikasi');
     expect(input).toHaveValue('BoothPOS');
@@ -248,7 +256,7 @@ describe('SettingsView — nama aplikasi', () => {
   });
 
   it('caps the input at 50 characters, matching the server rule', async () => {
-    renderSettings();
+    await renderSettings('app');
 
     const input = await screen.findByLabelText('Nama aplikasi');
 
@@ -266,10 +274,84 @@ describe('SettingsView — cadangan & pemulihan', () => {
   });
 
   it('offers the database backup & restore section on the settings screen', async () => {
-    renderSettings();
+    await renderSettings('backup');
 
     expect(await screen.findByText('Cadangan & pemulihan database')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Buat cadangan sekarang' })).toBeInTheDocument();
     await waitFor(() => expect(listBackups).toHaveBeenCalled());
+  });
+});
+
+describe('SettingsView — struktur halaman (041)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 1, artist_limit_reached: false, app_name: 'BoothPOS' });
+    listPaymentChannels.mockResolvedValue({ data: [] });
+    listSettings.mockResolvedValue({ data: [], store_logo_url: null });
+    listBackups.mockResolvedValue({ data: [] });
+  });
+
+  it('memakai PageHeader: satu h1 berisi judul dan deskripsi halaman', async () => {
+    await renderSettings();
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('General');
+    expect(screen.getByText('Lisensi, kanal pembayaran, identitas toko')).toBeInTheDocument();
+  });
+
+  it('menyediakan semua pengaturan lama sebagai bagian yang bisa dipilih', async () => {
+    await renderSettings();
+
+    const nav = screen.getByRole('navigation', { name: 'Bagian pengaturan' });
+    for (const label of ['Identitas toko', 'Tampilan Struk', 'Kanal pembayaran', 'Nama aplikasi', 'Tema', 'Mode sistem', 'Tingkat lisensi', 'Cadangan & pemulihan']) {
+      expect(within(nav).getByRole('button', { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it('bagian bawaan adalah identitas toko dan hanya satu bagian dirender', async () => {
+    await renderSettings();
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Identitas toko' })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
+    expect(screen.queryByRole('heading', { name: 'Mode sistem' })).not.toBeInTheDocument();
+  });
+
+  it('berpindah bagian dan menyalinnya ke address bar (?section=)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const { router } = await renderSettings();
+
+    await user.click(within(screen.getByRole('navigation', { name: 'Bagian pengaturan' })).getByRole('button', { name: 'Tema' }));
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Tema' })).toBeInTheDocument();
+    await waitFor(() => expect(router.currentRoute.value.query.section).toBe('theme'));
+  });
+
+  it('nilai ?section= yang tidak dikenal jatuh ke bagian pertama, bukan halaman kosong', async () => {
+    await renderSettings('tidak-ada');
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Identitas toko' })).toBeInTheDocument();
+  });
+
+  it('menandai bagian aktif dengan aria-current', async () => {
+    await renderSettings('app');
+
+    const nav = screen.getByRole('navigation', { name: 'Bagian pengaturan' });
+    expect(within(nav).getByRole('button', { name: 'Nama aplikasi' })).toHaveAttribute('aria-current', 'page');
+    expect(within(nav).getByRole('button', { name: 'Identitas toko' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('mengganti tingkat lisensi lewat PUT /settings multi_artist_enabled', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    updateSettings.mockResolvedValue({ data: [] });
+    await renderSettings('tier');
+
+    await screen.findByRole('heading', { level: 2, name: 'Tingkat lisensi' });
+    await user.click(screen.getByRole('button', { name: /master/i }));
+
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenCalledWith([{ key: 'multi_artist_enabled', value: true, type: 'boolean', group: 'licensing' }]),
+    );
   });
 });

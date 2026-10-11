@@ -996,7 +996,9 @@
     "bulk_download_shipping_slip": "Download shipping slips (ZIP)",
     "bulk_download_payment_slip": "Download payment invoices (ZIP)",
     "save_shipment_changes": "Save shipment changes",
-    "edit_shipment": "Edit shipment"
+    "edit_shipment": "Edit shipment",
+    "summary_paid": "Paid",
+    "summary_excl_cancelled": "Excludes cancelled"
   },
   "reports": {
     "void_action": "Void transaction",
@@ -1240,7 +1242,12 @@
     "delete_channel": "Delete payment channel",
     "delete_channel_confirm": "Delete {provider}? This cannot be undone.",
     "channel_deleted": "Payment channel deleted.",
-    "channel_delete_failed": "Failed to delete this payment channel."
+    "channel_delete_failed": "Failed to delete this payment channel.",
+    "group_store": "Store",
+    "group_appearance": "Appearance",
+    "group_system": "System",
+    "nav_backup": "Backup & restore",
+    "sections_aria": "Settings sections"
   },
   "users": {
     "all_roles": "All roles",
@@ -1467,7 +1474,10 @@
     "price": "Price",
     "payment_type": "Payment Type",
     "payment_type_one_time": "One Time",
-    "payment_type_subscription": "Subscription"
+    "payment_type_subscription": "Subscription",
+    "page_subtitle": "License catalogue (Pro/Master) with price and payment type",
+    "search_placeholder": "Search license name…",
+    "search_label": "Search licenses"
   },
   "invoices": {
     "new_invoice_btn": "Create Invoice",
@@ -1517,7 +1527,8 @@
     "import_success": "Import succeeded: {created} created, {updated} updated.",
     "import_failed": "Failed to import invoices.",
     "import_row_error": "Row {row}: {error}",
-    "import_more_rows_failed": " (and {count} more row(s) failed)"
+    "import_more_rows_failed": " (and {count} more row(s) failed)",
+    "page_subtitle": "License billing per company: create, mark paid, download, import, and export"
   },
   "settings_payment": {
     "title": "Invoice Payment Information",
@@ -1786,5 +1797,65 @@
     "st_deleted": "Station deleted.",
     "st_delete": "Delete station",
     "st_delete_confirm": "Delete station {name}? A station that is still in use or has received tickets cannot be deleted — deactivate it instead."
+  },
+  "frame": {
+    "rail_aria": "Main navigation",
+    "rail_collapse": "Collapse navigation",
+    "rail_expand": "Expand navigation",
+    "breadcrumb_aria": "Breadcrumb",
+    "home": "Home",
+    "skip_to_content": "Skip to content",
+    "group_overview": "Overview",
+    "group_operations": "Operations",
+    "group_inventory": "Inventory & purchasing",
+    "group_people": "Customers & sellers",
+    "group_insight": "Reports",
+    "group_config": "Configuration",
+    "search_label": "Search",
+    "search_placeholder": "Search order no., table, customer…",
+    "search_hint": "Press Ctrl+K to search",
+    "search_minimum": "Type at least 2 letters",
+    "search_empty": "No results for \"{q}\"",
+    "search_loading": "Searching…",
+    "search_unavailable": "Search is not available yet",
+    "notifications": "Notifications",
+    "notifications_empty": "Nothing needs your attention",
+    "notifications_count": "{count} need action",
+    "outlet_label": "Outlet",
+    "outlet_all": "All outlets",
+    "user_menu": "User menu",
+    "profile": "Profile",
+    "language": "Language",
+    "status_dot": "Something needs attention",
+    "live": "LIVE",
+    "demo": "DEMO"
+  },
+  "page": {
+    "data_count": "{count} items",
+    "showing": "Showing {from}–{to} of {total}",
+    "showing_none": "No data",
+    "loading": "Loading…",
+    "load_failed": "Could not load data",
+    "retry": "Try again",
+    "empty_default": "No data yet",
+    "unavailable": "Unavailable",
+    "reset_filters": "Reset filters",
+    "select_all": "Select all on this page",
+    "select_row": "Select row",
+    "selected_count": "{count} selected",
+    "bulk_actions": "Bulk actions",
+    "clear_selection": "Clear selection",
+    "close": "Close",
+    "realtime": "Real-time",
+    "updated_at": "Updated {time}",
+    "reason_label": "Reason",
+    "reason_placeholder": "Choose a reason",
+    "reason_note": "Note (optional)",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "business_types": {
+    "search_placeholder": "Search business type name…",
+    "search_label": "Search business types"
   }
 }

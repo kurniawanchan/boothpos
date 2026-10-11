@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
 import LicensesView from '../../resources/js/views/LicensesView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listLicenses, createLicense, deleteLicense } from '../../resources/js/api/licenses';
@@ -12,12 +13,23 @@ vi.mock('../../resources/js/api/licenses', () => ({
   deleteLicense: vi.fn(),
 }));
 
-function renderLicenses() {
+
+// 041-back-office-ui-redesign — filter/tab kini dicerminkan ke address bar (useQueryState), jadi view
+// butuh router; router memori dengan satu rute cukup (tidak ada navigasi sungguhan di tes ini).
+async function makeRouter(path = '/') {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
+  await router.push(path);
+  await router.isReady();
+  return router;
+}
+
+async function renderLicenses(path = '/') {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
   auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'licenses'] };
-  return render(LicensesView, { global: { plugins: [pinia] } });
+  const router = await makeRouter(path);
+  return { router, ...render(LicensesView, { global: { plugins: [pinia, router] } }) };
 }
 
 describe('LicensesView', () => {
@@ -41,16 +53,17 @@ describe('LicensesView', () => {
   });
 
   it('lists licenses from the API', async () => {
-    renderLicenses();
+    await renderLicenses();
     expect(await screen.findByText('Paket Pro')).toBeInTheDocument();
-    expect(screen.getByText('150000.00')).toBeInTheDocument();
+    // 041: harga kini diformat Rupiah (formatIDR) — dulu string mentah '150000.00'. Datanya sama.
+    expect(screen.getByText('Rp 150.000')).toBeInTheDocument();
   });
 
   it('creates a license via the form', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     createLicense.mockResolvedValue({ id: 2, name: 'Master', license_tier: 'master' });
-    renderLicenses();
+    await renderLicenses();
 
     await screen.findByText('Paket Pro');
     await user.click(screen.getByRole('button', { name: /tambah lisensi/i }));
@@ -70,12 +83,42 @@ describe('LicensesView', () => {
       isConflict: true,
     });
     deleteLicense.mockRejectedValue(conflictError);
-    renderLicenses();
+    await renderLicenses();
 
     await screen.findByText('Paket Pro');
     await user.click(screen.getByRole('button', { name: 'Hapus' }));
     await user.click(screen.getByRole('button', { name: /ya, hapus/i }));
 
     await waitFor(() => expect(deleteLicense).toHaveBeenCalledWith(1));
+  });
+
+  // --- 041-back-office-ui-redesign (struktur halaman baru) ---
+
+  it('memakai PageHeader dengan judul, deskripsi, dan tombol tambah di kanan', async () => {
+    await renderLicenses();
+    expect(screen.getByRole('heading', { level: 1, name: 'Lisensi' })).toBeInTheDocument();
+    expect(screen.getByText(/katalog lisensi/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /tambah lisensi/i })).toBeInTheDocument();
+  });
+
+  it('penghitung "N data" = total dari server dan pencarian dikirim sebagai parameter search', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderLicenses();
+    await screen.findByText('Paket Pro');
+    expect(screen.getByTestId('data-count')).toHaveTextContent('1 data');
+
+    await user.type(screen.getByRole('searchbox'), 'pro');
+    await waitFor(() => expect(listLicenses).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'pro' })));
+  });
+
+  it('gagal memuat menampilkan keadaan galat dengan coba lagi', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    listLicenses.mockRejectedValueOnce(new Error('network'));
+    await renderLicenses();
+    expect(await screen.findByText('Gagal memuat data')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /coba lagi/i }));
+    expect(await screen.findByText('Paket Pro')).toBeInTheDocument();
   });
 });

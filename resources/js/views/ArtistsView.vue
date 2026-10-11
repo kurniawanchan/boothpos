@@ -17,15 +17,28 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 
 const auth = useAuthStore();
 const { t } = useI18n();
 const settings = useSettingsStore();
 const toast = useToastStore();
 
-const { items, meta, params, loading, load, setPage, setFilter } = usePaginatedList(listArtists);
+const { items, meta, params, loading, error, load, setPage, setFilter } = usePaginatedList(listArtists);
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
+
+function onSearch(value) {
+  search.value = value;
+  debouncedSearch();
+}
+// 041 — FilterBar menampilkan "Atur ulang filter" hanya saat pencarian terpasang; hasilnya sama dengan
+// mengosongkan kolom cari (satu-satunya filter halaman ini).
+function resetFilters() {
+  search.value = '';
+  setFilter({ search: undefined });
+}
 
 onMounted(async () => {
   await settings.load();
@@ -147,36 +160,29 @@ async function performDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <div class="relative flex min-w-[230px] flex-1 items-center">
-        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="artist-search">{{ t('master_data.search_artist') }}</label>
-        <input
-          id="artist-search"
-          v-model="search"
-          :placeholder="t('master_data.search_artist_placeholder')"
-          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-          @input="debouncedSearch"
-        />
-      </div>
-      <template v-if="auth.canAccessMenu('artists')">
-        <BaseButton variant="secondary" :loading="exporting" @click="doExport">
-          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          {{ t('common.export_xlsx') }}
-        </BaseButton>
-        <BaseButton variant="secondary" @click="showImportModal = true">
-          <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
-          {{ t('common.bulk_import') }}
+  <div class="pb-10">
+    <!-- 041 — judul/deskripsi/tindakan tingkat-halaman dari PageHeader. Tombol Tambah tetap NONAKTIF (bukan
+         disembunyikan) saat kuota Pro habis, persis seperti sebelumnya: banner di bawah menjelaskan alasannya. -->
+    <PageHeader :title="t('nav.artists')" :description="t('nav.artists_subtitle')">
+      <template #actions>
+        <template v-if="auth.canAccessMenu('artists')">
+          <BaseButton variant="secondary" :loading="exporting" @click="doExport">
+            <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+            {{ t('common.export_xlsx') }}
+          </BaseButton>
+          <BaseButton variant="secondary" @click="showImportModal = true">
+            <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
+            {{ t('common.bulk_import') }}
+          </BaseButton>
+        </template>
+        <BaseButton :disabled="!canCreate()" @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('master_data.add_artist') }}
         </BaseButton>
       </template>
-      <BaseButton :disabled="!canCreate()" @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('master_data.add_artist') }}
-      </BaseButton>
-    </div>
+    </PageHeader>
 
-    <div v-if="!settings.multiArtistEnabled && settings.artistLimitReached" class="flex items-start gap-3 rounded-card border border-warn-border bg-warn-bg px-4 py-3.5">
+    <div v-if="!settings.multiArtistEnabled && settings.artistLimitReached" class="mx-[26px] mb-4 flex items-start gap-3 rounded-card border border-warn-border bg-warn-bg px-4 py-3.5">
       <i class="ph-duotone ph-lock-key text-[19px] text-warn-text" aria-hidden="true"></i>
       <div class="flex flex-1 flex-col gap-0.5">
         <span class="text-[13px] font-bold text-warn-text">{{ t('master_data.pro_license_one_artist') }}</span>
@@ -190,8 +196,24 @@ async function performDelete() {
       </RouterLink>
     </div>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_artists')">
+    <section class="mx-[26px] border-2 border-line bg-white">
+      <FilterBar
+        :search="search"
+        :placeholder="t('master_data.search_artist_placeholder')"
+        :search-label="t('master_data.search_artist')"
+        :count="meta.total"
+        :active="!!search"
+        @update:search="onSearch"
+        @reset="resetFilters"
+      />
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? (error.message || t('page.load_failed')) : ''"
+        :empty-message="t('master_data.no_artists')"
+        @retry="load"
+      >
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
         <template #cell-contact="{ row }">
           <div class="flex flex-col gap-0.5 text-[12.5px] text-muted-4">
@@ -210,7 +232,7 @@ async function performDelete() {
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
-    </div>
+    </section>
 
     <BaseModal :open="showForm" :title="editingArtist ? t('master_data.edit_artist') : t('master_data.new_artist')" max-width-class="max-w-[480px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveArtist">

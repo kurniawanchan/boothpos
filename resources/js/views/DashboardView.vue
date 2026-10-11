@@ -11,6 +11,8 @@ import { listPreorders } from '../api/preorders';
 import { formatIDR, parseMoney } from '../utils/money';
 import StatusPill from '../components/ui/StatusPill.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import KpiStrip from '../components/page/KpiStrip.vue';
 
 // 005-ux-enhancements-dashboard (US2) — chart.js dynamically ends up in
 // this view's own code-split chunk (this is the only importer in the
@@ -18,7 +20,23 @@ import EmptyState from '../components/ui/EmptyState.vue';
 // pieces actually used are registered, not the auto-registration bundle.
 Chart.register(BarElement, ArcElement, CategoryScale, LinearScale, Tooltip, Legend);
 
-const CHART_COLORS = ['#2f9e6b', '#f0a63f', '#4f7ac9', '#c463c9', '#e2695c', '#3fb0c9', '#9a8f3f', '#7a6fd6'];
+// 041 — warna grafik diambil dari token CSS (bukan hex mentah) supaya ikut tema toko (utils/theme.js menimpa
+// --color-brand saat berjalan). Kanvas chart.js tidak bisa memakai kelas Tailwind, jadi nilainya dibaca sekali
+// dari :root begitu data tiba (komponen sudah ter-mount).
+const CHART_TOKENS = [
+  '--color-brand',
+  '--color-marker-warning',
+  '--color-marker-info',
+  '--color-marker-success',
+  '--color-marker-danger',
+  '--color-brand-active',
+  '--color-marker-neutral',
+  '--color-warn-text',
+];
+function chartColors() {
+  const style = getComputedStyle(document.documentElement);
+  return CHART_TOKENS.map((name) => style.getPropertyValue(name).trim() || 'currentColor');
+}
 
 const auth = useAuthStore();
 const { t } = useI18n();
@@ -29,6 +47,8 @@ const sales = ref(null);
 const profit = ref(null);
 const settlements = ref([]);
 const lowStockItems = ref([]);
+// 041 — beda antara "belum/gagal dimuat" (KPI tampil —) dan "dimuat, nol item" (KPI tampil 0).
+const lowStockLoaded = ref(false);
 const preorderAlerts = ref([]);
 const pendingPreorderCount = ref(0);
 
@@ -46,7 +66,7 @@ const eventReport = ref(null);
 const customerReport = ref(null);
 
 // US2 (FR-007) — shortcut aksi umum, digerbang menu_keys yang sama persis
-// dengan yang sudah dipakai AppSidebar.vue (Constitution IV: server sudah
+// dengan yang sudah dipakai RailNav.vue (Constitution IV: server sudah
 // jadi gerbang sebenarnya lewat endpoint masing-masing tindakan; ini
 // murni kenyamanan navigasi, sama seperti sidebar).
 const SHORTCUTS = [
@@ -107,7 +127,10 @@ onMounted(async () => {
     const tasks = [
       loadSalesPanel(),
       loadBreakdownCharts(),
-      lowStock().then((r) => (lowStockItems.value = r.data)),
+      lowStock().then((r) => {
+        lowStockItems.value = r.data;
+        lowStockLoaded.value = true;
+      }),
       listPreorders({ status: 'dp_paid', per_page: 5 }).then((r) => {
         preorderAlerts.value = r.data;
         pendingPreorderCount.value = r.meta?.total ?? r.data.length;
@@ -131,6 +154,52 @@ watch([dateFrom, dateTo], () => {
   if (auth.canAccessMenu('reports')) loadCustomerPanel();
 });
 
+// 041 — empat angka ringkasan dari data yang SAMA seperti sebelumnya (tidak ada panggilan API baru). Angka yang
+// belum/gagal dimuat tampil "—", bukan 0. Tanpa catatan "vs kemarin": datanya belum ada (endpoint dashboard
+// datang di fase lain).
+const kpiItems = computed(() => {
+  const totals = sales.value?.totals;
+  const canReports = auth.canAccessMenu('reports');
+  return [
+    {
+      key: 'net_sales',
+      tone: 'accent',
+      label: t('dashboard.net_sales'),
+      value: totals ? formatIDR(totals.net_sales ?? 0) : null,
+      note: activeEvent.value?.name ?? t('dashboard.all_events'),
+    },
+    {
+      key: 'transactions',
+      tone: 'info',
+      label: t('dashboard.transactions'),
+      value: totals ? (totals.order_count ?? 0) : null,
+      note: totals ? t('dashboard.units_sold', { count: totals.unit_count ?? 0 }) : '',
+    },
+    canReports
+      ? {
+          key: 'gross_profit',
+          tone: 'success',
+          label: t('dashboard.gross_profit'),
+          value: profit.value ? formatIDR(profit.value.gross_profit ?? 0) : null,
+          note: t('dashboard.after_cost_before_event_expense'),
+        }
+      : {
+          key: 'discount_given',
+          tone: 'neutral',
+          label: t('dashboard.discount_given'),
+          value: totals ? formatIDR(totals.discount_total ?? 0) : null,
+          note: t('dashboard.total_transaction_discount'),
+        },
+    {
+      key: 'low_stock',
+      tone: 'warning',
+      label: t('dashboard.low_stock'),
+      value: lowStockLoaded.value ? lowStockItems.value.length : null,
+      note: t('dashboard.variants_below_threshold'),
+    },
+  ];
+});
+
 const maxDayAmount = computed(() => Math.max(1, ...(sales.value?.rows ?? []).map((r) => parseMoney(r.amount))));
 const maxSettlement = computed(() => Math.max(1, ...settlements.value.map((s) => parseMoney(s.total_sales))));
 
@@ -138,12 +207,13 @@ const outOfStockCount = computed(() => lowStockItems.value.filter((i) => i.curre
 
 function chartDataFromRows(rows) {
   const list = rows ?? [];
+  const colors = chartColors();
   return {
     labels: list.map((r) => r.label),
     datasets: [
       {
         data: list.map((r) => parseMoney(r.amount)),
-        backgroundColor: list.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+        backgroundColor: list.map((_, i) => colors[i % colors.length]),
         borderWidth: 0,
       },
     ],
@@ -160,12 +230,13 @@ const eventChartData = computed(() => chartDataFromRows(eventReport.value?.rows)
 // pembeli walk-in (LEFT JOIN customers), bukan baris yang harus hilang.
 const customerChartData = computed(() => {
   const list = customerReport.value?.rows ?? [];
+  const colors = chartColors();
   return {
     labels: list.map((r) => r.customer_name ?? t('dashboard.customer_walk_in')),
     datasets: [
       {
         data: list.map((r) => parseMoney(r.total_amount)),
-        backgroundColor: list.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]),
+        backgroundColor: list.map((_, i) => colors[i % colors.length]),
         borderWidth: 0,
       },
     ],
@@ -185,53 +256,33 @@ const doughnutOptions = {
 </script>
 
 <template>
-  <div class="flex flex-col gap-5 px-[26px] pb-10 pt-[22px]">
-    <div v-if="!loading && !activeEvent" class="flex items-center gap-3 rounded-card border border-warn-border bg-warn-bg px-4 py-3.5 text-[13px] text-warn-text">
+  <div class="pb-10">
+    <PageHeader :title="t('nav.dashboard')" :description="t('nav.dashboard_subtitle')">
+      <!-- US2 (FR-007) — shortcut ke tindakan yang paling sering dipakai, kini tombol di kepala halaman (yang
+           pertama terisi). Digerbang menu_keys yang sama persis dengan RailNav.vue (Constitution IV: server
+           sudah jadi gerbang sebenarnya lewat endpoint masing-masing tindakan; ini murni kenyamanan navigasi). -->
+      <template v-if="shortcuts.length" #actions>
+        <RouterLink
+          v-for="(s, i) in shortcuts"
+          :key="s.key"
+          :to="{ name: s.route }"
+          class="inline-flex h-10 items-center gap-2 border px-3.5 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-mint-100"
+          :class="i === 0 ? 'border-transparent bg-brand text-white hover:bg-brand-hover' : 'border-line bg-white text-muted-5 hover:border-brand hover:text-brand-active'"
+        >
+          <i class="ph-duotone text-[16px]" :class="s.icon" aria-hidden="true"></i>
+          {{ t(`dashboard.shortcut_${s.key}`) }}
+        </RouterLink>
+      </template>
+    </PageHeader>
+
+    <div v-if="!loading && !activeEvent" class="mx-[26px] mb-5 flex items-center gap-3 border border-warn-border bg-warn-bg px-4 py-3.5 text-[13px] text-warn-text">
       <i class="ph-duotone ph-info text-[19px]" aria-hidden="true"></i>
       {{ t('dashboard.no_active_event') }}
     </div>
 
-    <!-- US2 (FR-007) — shortcut ke tindakan yang paling sering dipakai. -->
-    <div v-if="shortcuts.length" class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-      <RouterLink
-        v-for="s in shortcuts"
-        :key="s.key"
-        :to="{ name: s.route }"
-        class="flex flex-col items-center gap-2 rounded-card border border-line-2 bg-white p-4 text-center transition-colors hover:border-brand hover:bg-mint-100"
-      >
-        <i class="ph-duotone text-[22px] text-brand" :class="s.icon" aria-hidden="true"></i>
-        <span class="text-[12px] font-bold">{{ t(`dashboard.shortcut_${s.key}`) }}</span>
-      </RouterLink>
-    </div>
+    <KpiStrip :items="kpiItems" />
 
-    <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
-      <div class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-chart-line-up text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.net_sales') }}</span></div>
-        <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.net_sales ?? 0) }}</span>
-        <span class="text-[11.5px] text-muted-3">{{ activeEvent?.name ?? t('dashboard.all_events') }}</span>
-      </div>
-      <div class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-receipt text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.transactions') }}</span></div>
-        <span class="text-[26px] font-extrabold tracking-tight">{{ sales?.totals?.order_count ?? 0 }}</span>
-        <span class="text-[11.5px] text-muted-3">{{ t('dashboard.units_sold', { count: sales?.totals?.unit_count ?? 0 }) }}</span>
-      </div>
-      <div v-if="auth.canAccessMenu('reports')" class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-vault text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.gross_profit') }}</span></div>
-        <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(profit?.gross_profit ?? 0) }}</span>
-        <span class="text-[11.5px] text-muted-3">{{ t('dashboard.after_cost_before_event_expense') }}</span>
-      </div>
-      <div v-else class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-tag text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.discount_given') }}</span></div>
-        <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.discount_total ?? 0) }}</span>
-        <span class="text-[11.5px] text-muted-3">{{ t('dashboard.total_transaction_discount') }}</span>
-      </div>
-      <div class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-[17px]">
-        <div class="flex items-center gap-2"><i class="ph-duotone ph-warning text-[18px] text-brand" aria-hidden="true"></i><span class="text-[12px] font-semibold text-muted-2">{{ t('dashboard.low_stock') }}</span></div>
-        <span class="text-[26px] font-extrabold tracking-tight">{{ lowStockItems.length }}</span>
-        <span class="text-[11.5px] text-muted-3">{{ t('dashboard.variants_below_threshold') }}</span>
-      </div>
-    </div>
-
+    <div class="flex flex-col gap-5 px-[26px]">
     <!-- US2 (FR-013) — statistik tambahan: stok habis total & pre-order menunggu. -->
     <div class="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
       <div class="flex items-center justify-between gap-3 rounded-card border border-line-2 bg-white p-[17px]">
@@ -380,5 +431,6 @@ const doughnutOptions = {
         <RouterLink :to="{ name: 'preorders' }" class="self-start text-[12px] font-semibold text-brand-active hover:underline">{{ t('dashboard.view_preorders') }} →</RouterLink>
       </div>
     </div>
+  </div>
   </div>
 </template>

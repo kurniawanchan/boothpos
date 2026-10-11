@@ -154,7 +154,7 @@ async function performRestore() {
 </script>
 
 <template>
-  <section class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
+  <section class="flex flex-col gap-4 p-5">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="flex flex-col gap-1">
         <span class="text-[15px] font-bold tracking-tight">{{ t('backup.title') }}</span>

@@ -151,4 +151,37 @@ describe('RolesView', () => {
     // benar-benar disurfacekan sebagai pesan yang berbeda, bukan generik.
     expect(conflictError.message).toContain('peran terakhir');
   });
+
+  // 041-back-office-ui-redesign — struktur halaman baru.
+  it('memakai PageHeader dan penghitung FilterBar sama dengan total dari server', async () => {
+    renderRoles();
+    await screen.findByText('Kasir Event A');
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Peran');
+    expect(screen.getByText('Akses menu per peran, bebas dikonfigurasi')).toBeInTheDocument();
+    expect(screen.getByTestId('data-count')).toHaveTextContent('1 data');
+  });
+
+  it('tombol tambah peran disembunyikan (bukan dinonaktifkan) bila pengguna tak punya menu roles', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useAuthStore().user = { id: 2, role: 'Admin', name: 'Admin', menu_keys: ['dashboard'] };
+    render(RolesView, { global: { plugins: [pinia] } });
+    await screen.findByText('Kasir Event A');
+
+    expect(screen.queryByRole('button', { name: /tambah peran/i })).not.toBeInTheDocument();
+  });
+
+  it('galat memuat menampilkan keadaan galat dan coba lagi memuat ulang daftar', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    listRoles.mockRejectedValueOnce(new Error('Server tidak merespons'));
+    renderRoles();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Server tidak merespons');
+    await user.click(screen.getByRole('button', { name: /coba lagi/i }));
+
+    expect(await screen.findByText('Kasir Event A')).toBeInTheDocument();
+  });
 });

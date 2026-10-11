@@ -186,4 +186,49 @@ describe('UsersView', () => {
     const fileInput = document.querySelector('input[type="file"]');
     expect(fileInput.getAttribute('accept')).toBe('image/jpeg,image/png');
   });
+
+  // 041-back-office-ui-redesign — struktur halaman baru (PageHeader + FilterBar + keadaan galat).
+  it('memakai PageHeader: satu h1 dengan judul dan deskripsi, tombol tambah ada di kepala', async () => {
+    renderUsers();
+    await screen.findByText('Kasir Satu');
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Pengguna');
+    expect(screen.getByText('Akun, peran, dan akses menu tiap pengguna')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /tambah pengguna/i })).toHaveLength(1);
+  });
+
+  it('penghitung FilterBar sama dengan total hasil dari server', async () => {
+    renderUsers();
+    await screen.findByText('Kasir Satu');
+
+    expect(screen.getByTestId('data-count')).toHaveTextContent('2 data');
+  });
+
+  it('atur ulang filter hanya muncul saat ada pencarian, dan mengosongkan filter server', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderUsers();
+    await screen.findByText('Kasir Satu');
+    expect(screen.queryByRole('button', { name: /atur ulang filter/i })).not.toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText(/cari nama atau username/i), 'kasir');
+    await user.click(await screen.findByRole('button', { name: /atur ulang filter/i }));
+
+    await waitFor(() => expect(listUsers).toHaveBeenLastCalledWith(expect.objectContaining({ search: undefined, role_id: undefined, is_active: undefined, page: 1 })));
+    expect(screen.getByPlaceholderText(/cari nama atau username/i)).toHaveValue('');
+  });
+
+  it('galat memuat menampilkan keadaan galat dan tombol coba lagi memuat ulang', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    listUsers.mockRejectedValueOnce(new Error('Jaringan terputus'));
+    renderUsers();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Jaringan terputus');
+    await user.click(screen.getByRole('button', { name: /coba lagi/i }));
+
+    expect(await screen.findByText('Kasir Satu')).toBeInTheDocument();
+    expect(listUsers).toHaveBeenCalledTimes(2);
+  });
 });

@@ -5,7 +5,7 @@ import { useAuthStore } from '../../stores/auth';
 /**
  * Toggle dua-opsi sederhana, bukan BaseSelect — dua pilihan tetap
  * (id/en) tidak butuh dropdown penuh, dan ini dipasang di topbar yang
- * ruangnya sempit. Dipasang langsung di AppTopbar.vue (bukan lewat slot
+ * ruangnya sempit. Dipasang di UserMenu.vue (topbar) (bukan lewat slot
  * per-view) supaya benar-benar tersedia dari layar mana pun setelah
  * login (FR-003/FR-004), bukan opt-in per halaman.
  */

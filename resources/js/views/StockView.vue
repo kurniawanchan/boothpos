@@ -17,7 +17,8 @@ import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
-import EmptyState from '../components/ui/EmptyState.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 import { MOVEMENT_TYPES, movementTypeLabelKey, movementTypeVariant } from '../utils/stockMovements';
@@ -26,7 +27,7 @@ const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listMovements);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listMovements);
 onMounted(load);
 
 const exporting = ref(false);
@@ -89,8 +90,21 @@ const columns = computed(() => [
   { key: 'created_at', label: t('master_data.col_time') },
 ]);
 
+// 041 — tanggal kini terikat (v-model) supaya "Atur ulang filter" dan penanda filter aktif bisa dihitung;
+// parameter yang dikirim ke server tetap sama persis (type/date_from/date_to, kosong = tidak dikirim).
+const dateFrom = ref('');
+const dateTo = ref('');
+const filtersActive = computed(() => !!(typeFilter.value || dateFrom.value || dateTo.value));
+
 function applyFilters(patch) {
   setFilter(patch);
+}
+
+function resetFilters() {
+  typeFilter.value = '';
+  dateFrom.value = '';
+  dateTo.value = '';
+  setFilter({ type: undefined, date_from: undefined, date_to: undefined });
 }
 
 // --- Adjustment dialog -----------------------------------------------
@@ -155,19 +169,9 @@ async function submitAdjustment() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <BaseSelect
-        v-model="typeFilter"
-        class="w-52"
-        :placeholder="t('master_data.all_types')"
-        :options="typeOptions"
-        @update:model-value="(v) => applyFilters({ type: v || undefined })"
-      />
-      <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
-      <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_to: v || undefined })" />
-      <span class="flex-1"></span>
-      <template v-if="auth.canAccessMenu('stock')">
+  <div class="pb-10">
+    <PageHeader :title="t('nav.stock_page_title')" :description="t('nav.stock_subtitle')">
+      <template v-if="auth.canAccessMenu('stock')" #actions>
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('common.export_xlsx') }}
@@ -181,10 +185,29 @@ async function submitAdjustment() {
           {{ t('master_data.stock_adjustment') }}
         </BaseButton>
       </template>
-    </div>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_stock_movements')">
+    <section class="mx-[26px] border-2 border-line bg-white">
+      <FilterBar :searchable="false" :count="loading || error ? null : meta.total" :active="filtersActive" @reset="resetFilters">
+        <BaseSelect
+          v-model="typeFilter"
+          class="w-52"
+          :placeholder="t('master_data.all_types')"
+          :options="typeOptions"
+          @update:model-value="(v) => applyFilters({ type: v || undefined })"
+        />
+        <BaseInput v-model="dateFrom" type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
+        <BaseInput v-model="dateTo" type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_to: v || undefined })" />
+      </FilterBar>
+
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('master_data.no_stock_movements')"
+        @retry="load"
+      >
         <template #cell-sku="{ row }">
           <button
             v-if="canOpenProduct"
@@ -208,7 +231,7 @@ async function submitAdjustment() {
         <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
-    </div>
+    </section>
 
     <ProductDetailModal :open="detailProductId !== null" :product-id="detailProductId" :highlight-variant-id="detailVariantId" @close="closeDetail" />
 

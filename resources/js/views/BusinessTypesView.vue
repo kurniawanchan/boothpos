@@ -4,6 +4,9 @@ import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listBusinessTypes, createBusinessType, updateBusinessType, deleteBusinessType } from '../api/businessTypes';
 import { useToastStore } from '../stores/toast';
+import { useUrlSearchFilter } from '../composables/useUrlSearchFilter';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -15,7 +18,10 @@ import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage } = usePaginatedList(listBusinessTypes);
+// Pencarian nama (sisi-server, ?search=) mengikuti pola Company; dicerminkan ke address bar.
+const search = useUrlSearchFilter();
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listBusinessTypes, search.initialParams());
+search.onCommitted((value) => setFilter({ search: value || undefined }));
 onMounted(load);
 
 const columns = computed(() => [
@@ -93,20 +99,38 @@ async function performDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center justify-end gap-2.5">
-      <BaseButton @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('companies.new_business_type_btn') }}
-      </BaseButton>
-    </div>
+  <div class="pb-10">
+    <PageHeader :title="t('nav.business_types')" :description="t('nav.business_types_subtitle')">
+      <template #actions>
+        <BaseButton @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('companies.new_business_type_btn') }}
+        </BaseButton>
+      </template>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('companies.no_business_types')">
+    <div class="mx-[26px] border-2 border-line bg-white">
+      <FilterBar
+        :search="search.input.value"
+        :placeholder="t('business_types.search_placeholder')"
+        :search-label="t('business_types.search_label')"
+        :count="loading || error ? null : meta.total"
+        :active="search.input.value !== ''"
+        @update:search="search.onInput"
+        @reset="search.reset"
+      />
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('companies.no_business_types')"
+        @retry="load"
+      >
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
         <template #cell-company_count="{ row }">{{ row.company_count ?? 0 }}</template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'success' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">

@@ -44,7 +44,7 @@ export const useAuthStore = defineStore('auth', {
       syncLocale(updated);
     },
     // 005-ux-enhancements-dashboard (US3) — dipakai ProfileView setelah
-    // ganti password/foto supaya avatar di header (AppSidebar) langsung
+    // ganti password/foto supaya avatar di header (UserMenu) langsung
     // ikut berubah tanpa perlu reload penuh.
     async changePassword(payload) {
       return authApi.updatePassword(payload);

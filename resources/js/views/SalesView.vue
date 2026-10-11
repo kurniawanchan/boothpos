@@ -8,17 +8,22 @@ import { verifyOrderPayments } from '../api/payments';
 import { useToastStore } from '../stores/toast';
 import { useSalesFilters } from '../composables/useSalesFilters';
 import { formatIDR } from '../utils/money';
+import { formatCount } from '../utils/formatters';
 import { formatDateTime, toLocalDateKey } from '../utils/date';
 import { paymentMethodLabel } from '../utils/paymentMethods';
 import { saveBlob } from '../utils/saveBlob';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
-import BaseModal from '../components/ui/BaseModal.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 import DataTable from '../components/ui/DataTable.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import KpiStrip from '../components/page/KpiStrip.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
+import ShiftSummaryPanel from '../components/sales/ShiftSummaryPanel.vue';
+import CustomerQuickDetailModal from '../components/sales/CustomerQuickDetailModal.vue';
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
@@ -38,6 +43,9 @@ const events = ref([]);
 const eventId = ref('');
 const sales = ref(null);
 const loading = ref(false);
+// 041 — kegagalan memuat ditampilkan di tabel (dengan "Coba lagi"), bukan area kosong. Pesan spesifik
+// (403/422/…) tetap ditoast oleh interceptor global; ini hanya jalan keluar yang jelas bagi pengguna.
+const loadError = ref('');
 
 const transactions = computed(() => sales.value?.transactions ?? []);
 const sessions = computed(() => sales.value?.sessions ?? []);
@@ -67,6 +75,7 @@ watch(includeVoided, () => { if (restored) load(); }, { flush: 'sync' });
 
 async function load() {
   loading.value = true;
+  loadError.value = '';
   try {
     // group_by tidak dikirim (009 US2): hanya daftar transaksi yang dipakai. Transaksi
     // batal diminta ke SERVER — tidak ikut angka ringkasan, dan sengaja tidak dimuat
@@ -75,6 +84,10 @@ async function load() {
       event_id: eventId.value || undefined,
       include_voided: includeVoided.value ? 1 : undefined,
     });
+  } catch {
+    // Data lama dibuang: angka KPI & baris dari pemuatan sebelumnya tak boleh tampak seolah masih berlaku.
+    sales.value = null;
+    loadError.value = t('page.load_failed');
   } finally {
     loading.value = false;
   }
@@ -144,6 +157,8 @@ function applyPreset(p) {
 }
 
 // --- tabel -------------------------------------------------------------------------
+// Kolom pilih tetap dirender di sini (bukan DataTable `selectable`): label per baris "Pilih {nomor}" jauh
+// lebih jelas bagi pembaca layar daripada "Pilih baris" generik, dan tes/perilaku pilihan bergantung padanya.
 const columns = computed(() => [
   { key: 'select', label: '' },
   { key: 'order_number', label: t('reports.col_transaction_no'), sortable: true },
@@ -158,6 +173,25 @@ const columns = computed(() => [
   { key: 'total_amount', label: t('reports.col_total'), sortable: true },
   { key: 'actions', label: '' },
 ]);
+
+// --- strip empat angka ------------------------------------------------------------------
+// Angka = transaksi dari POS saja, sama dengan daftar di bawahnya. Angka laporan bersama
+// (unit_count/gross_sales/net_sales) memuat pendapatan pre-order dan dipakai Dashboard/Laporan;
+// halaman ini memakai pos_* (dengan cadangan ke angka bersama untuk respons lama yang belum punya pos_*).
+// Belum termuat / gagal memuat → "—" (unavailable), bukan 0.
+const kpiItems = computed(() => {
+  const totals = sales.value?.totals ?? null;
+  const missing = totals === null;
+  return [
+    { key: 'transactions', label: t('reports.transactions'), tone: 'info', unavailable: missing, value: missing ? null : formatCount(totals.order_count ?? 0) },
+    { key: 'units', label: t('reports.units_sold'), tone: 'accent', unavailable: missing, value: missing ? null : formatCount(totals.pos_unit_count ?? totals.unit_count ?? 0) },
+    { key: 'gross', label: t('reports.gross_sales'), tone: 'warning', unavailable: missing, value: missing ? null : formatIDR(totals.pos_gross_sales ?? totals.gross_sales ?? 0) },
+    { key: 'net', label: t('reports.net_sales'), tone: 'success', unavailable: missing, value: missing ? null : formatIDR(totals.pos_net_sales ?? totals.net_sales ?? 0) },
+  ];
+});
+
+// Gaya kotak isian tanggal/angka — token kit (siku, border-2), seragam dengan FilterBar.
+const inputClass = 'h-10 border-2 border-line bg-white px-3 text-[12.5px] outline-none focus:border-brand';
 
 const isVoided = (row) => row.status === 'voided';
 const rowClass = (row) => (isVoided(row) ? 'opacity-60' : '');
@@ -298,122 +332,103 @@ function showCustomerDetail(row) {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
-      <span class="flex-1"></span>
-      <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
-        <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
-        {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
-      </BaseButton>
-      <BaseButton variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
-        <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-        {{ exportLabel }}
-      </BaseButton>
-    </div>
+  <div class="pb-10">
+    <PageHeader :title="t('nav.sales')" :description="t('nav.sales_subtitle')">
+      <template #actions>
+        <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
+        <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
+          <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
+          {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
+        </BaseButton>
+        <BaseButton variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
+          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+          {{ exportLabel }}
+        </BaseButton>
+      </template>
+    </PageHeader>
 
-    <!-- Kartu ringkasan = transaksi dari POS saja, sama dengan daftar di bawahnya. Angka laporan
-         bersama (unit_count/gross_sales/net_sales) memuat pendapatan pre-order dan dipakai
-         Dashboard/Laporan; halaman ini memakai pos_* (dengan cadangan ke angka bersama untuk
-         respons lama yang belum punya pos_*). -->
-    <div data-testid="kpi-cards" class="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.transactions') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ sales?.totals?.order_count ?? 0 }}</span></div>
-      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.units_sold') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ sales?.totals?.pos_unit_count ?? sales?.totals?.unit_count ?? 0 }}</span></div>
-      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.gross_sales') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.pos_gross_sales ?? sales?.totals?.gross_sales ?? 0) }}</span></div>
-      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.net_sales') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.pos_net_sales ?? sales?.totals?.net_sales ?? 0) }}</span></div>
-    </div>
+    <KpiStrip data-testid="kpi-cards" :items="kpiItems" />
 
-    <div class="flex flex-col gap-2">
-      <!-- Filter lengkap: pencarian teks + tanggal (dengan pintasan) + tipe + kasir + shift +
-           penjual + pembayaran + status bayar + jenis pelanggan + rentang total. Semua bekerja
-           langsung (tanpa memuat ulang) dan tersimpan di URL. -->
-      <div class="flex flex-col gap-2.5 rounded-card border border-line-2 bg-white p-3.5">
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button
-            v-for="p in datePresets"
-            :key="p.id"
-            type="button"
-            :aria-pressed="isPresetActive(p)"
-            class="rounded-full border px-3 py-1 text-[12px] font-semibold transition-colors"
-            :class="isPresetActive(p) ? 'border-transparent bg-brand text-white' : 'border-line-2 bg-white text-muted-4 hover:border-brand'"
-            @click="applyPreset(p)"
-          >{{ p.label }}</button>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-          <div class="relative col-span-2">
-            <i class="ph-duotone ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-muted-3" aria-hidden="true"></i>
-            <input
-              v-model="search"
-              type="search"
-              :placeholder="t('reports.search_transaction_placeholder')"
-              class="h-10 w-full rounded-lg border border-line-2 bg-white py-2 pl-8 pr-3 text-[12.5px] outline-none focus:border-brand-active"
-              :aria-label="t('reports.search_transaction')"
-            />
+    <section class="mx-[26px] border-2 border-line bg-white">
+      <!-- Filter lengkap: pencarian teks + tanggal (dengan pintasan) + kasir + shift + penjual + pembayaran +
+           status bayar + jenis pelanggan + rentang total. Semua bekerja langsung (tanpa memuat ulang) dan
+           tersimpan di URL. "N data" = baris yang benar-benar tampil setelah filter. -->
+      <FilterBar
+        v-model:search="search"
+        :placeholder="t('reports.search_transaction_placeholder')"
+        :search-label="t('reports.search_transaction')"
+        :count="filtered.length"
+        :active="activeCount > 0"
+        @reset="reset"
+      >
+        <span v-if="activeCount > 0" class="text-[12px] font-semibold text-brand-active">{{ t('reports.filters_active', { count: activeCount }) }}</span>
+        <div class="flex w-full flex-col gap-2.5">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button
+              v-for="p in datePresets"
+              :key="p.id"
+              type="button"
+              :aria-pressed="isPresetActive(p)"
+              class="border-2 px-3 py-1 text-[12px] font-semibold transition-colors"
+              :class="isPresetActive(p) ? 'border-brand bg-brand text-white' : 'border-line bg-white text-muted-4 hover:border-brand'"
+              @click="applyPreset(p)"
+            >{{ p.label }}</button>
           </div>
-          <input v-model="filters.dateFrom" type="date" :aria-label="t('reports.filter_date_from')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
-          <input v-model="filters.dateTo" type="date" :aria-label="t('reports.filter_date_to')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
 
-          <BaseMultiSelect v-model="filters.cashiers" :options="cashierOptions" :all-label="t('reports.filter_cashier_all')" />
-          <BaseMultiSelect v-model="filters.sessions" :options="sessionOptions" :all-label="t('reports.filter_session_all')" />
-          <BaseMultiSelect v-model="filters.sellers" :options="sellerOptions" :all-label="t('reports.filter_seller_all')" />
+          <div class="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+            <input v-model="filters.dateFrom" type="date" :aria-label="t('reports.filter_date_from')" :class="inputClass" />
+            <input v-model="filters.dateTo" type="date" :aria-label="t('reports.filter_date_to')" :class="inputClass" />
 
-          <BaseMultiSelect v-model="filters.payments" :options="paymentOptions" :all-label="t('reports.filter_payment_all')" />
-          <BaseSelect v-model="filters.paymentState" :placeholder="t('reports.filter_paystate_all')" :options="paymentStateOptions" />
-          <BaseSelect v-model="filters.customerType" :placeholder="t('reports.filter_customer_all')" :options="customerTypeOptions" />
-          <BaseSelect v-model="filters.settlement" data-testid="filter-settlement" :placeholder="t('payment_ledger.filter_all')" :options="settlementOptions" />
+            <BaseMultiSelect v-model="filters.cashiers" :options="cashierOptions" :all-label="t('reports.filter_cashier_all')" />
+            <BaseMultiSelect v-model="filters.sessions" :options="sessionOptions" :all-label="t('reports.filter_session_all')" />
+            <BaseMultiSelect v-model="filters.sellers" :options="sellerOptions" :all-label="t('reports.filter_seller_all')" />
 
-          <input v-model="filters.minTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_min_total')" :placeholder="t('reports.filter_min_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
-          <input v-model="filters.maxTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_max_total')" :placeholder="t('reports.filter_max_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
-          <label class="flex h-10 items-center gap-2 text-[12.5px] font-semibold text-muted-4">
-            <input v-model="includeVoided" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
-            {{ t('reports.filter_show_voided') }}
-          </label>
-          <div class="flex items-center justify-end gap-3">
-            <span v-if="activeCount > 0" class="text-[12px] font-semibold text-brand-active">{{ t('reports.filters_active', { count: activeCount }) }}</span>
-            <BaseButton v-if="activeCount > 0" variant="secondary" size="sm" @click="reset">{{ t('reports.filters_reset') }}</BaseButton>
+            <BaseMultiSelect v-model="filters.payments" :options="paymentOptions" :all-label="t('reports.filter_payment_all')" />
+            <BaseSelect v-model="filters.paymentState" :placeholder="t('reports.filter_paystate_all')" :options="paymentStateOptions" />
+            <BaseSelect v-model="filters.customerType" :placeholder="t('reports.filter_customer_all')" :options="customerTypeOptions" />
+            <BaseSelect v-model="filters.settlement" data-testid="filter-settlement" :placeholder="t('payment_ledger.filter_all')" :options="settlementOptions" />
+
+            <input v-model="filters.minTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_min_total')" :placeholder="t('reports.filter_min_total')" :class="inputClass" />
+            <input v-model="filters.maxTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_max_total')" :placeholder="t('reports.filter_max_total')" :class="inputClass" />
+            <label class="flex h-10 items-center gap-2 text-[12.5px] font-semibold text-muted-4">
+              <input v-model="includeVoided" type="checkbox" class="h-4 w-4 border-line accent-brand" />
+              {{ t('reports.filter_show_voided') }}
+            </label>
           </div>
         </div>
-      </div>
+      </FilterBar>
 
-      <div class="flex flex-wrap items-baseline justify-between gap-2">
+      <div class="flex flex-wrap items-baseline justify-between gap-2 border-t-2 border-line px-5 py-3">
         <span class="text-[13px] font-bold tracking-tight">{{ t('reports.transaction_list', { count: filtered.length }) }}</span>
         <span class="text-[12px] text-muted-3">{{ summaryText }}</span>
       </div>
 
       <!-- Ringkasan kas satu shift — hanya saat TEPAT satu shift dipilih. -->
-      <div v-if="shiftSummary" data-testid="shift-summary" class="flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-card border border-line-2 bg-white px-4 py-3 text-[12.5px]">
-        <span class="font-bold">{{ t('reports.shift_summary_title') }}</span>
-        <span><span class="text-muted-3">{{ t('reports.shift_opening_cash') }}</span> <strong>{{ formatIDR(shiftSummary.opening) }}</strong></span>
-        <span><span class="text-muted-3">{{ t('reports.shift_cash_sales') }}</span> <strong>{{ formatIDR(shiftSummary.cashSales) }}</strong></span>
-        <span><span class="text-muted-3">{{ t('reports.shift_expected_cash') }}</span> <strong>{{ formatIDR(shiftSummary.expected) }}</strong></span>
-        <template v-if="shiftSummary.counted !== null">
-          <span><span class="text-muted-3">{{ t('reports.shift_counted_cash') }}</span> <strong>{{ formatIDR(shiftSummary.counted) }}</strong></span>
-          <span><span class="text-muted-3">{{ t('reports.shift_difference') }}</span> <strong :class="shiftSummary.difference === 0 ? '' : 'text-danger-text'">{{ formatIDR(shiftSummary.difference) }}</strong></span>
-        </template>
-      </div>
+      <ShiftSummaryPanel v-if="shiftSummary" :summary="shiftSummary" />
 
-      <label class="flex w-fit items-center gap-2 text-[12px] font-semibold text-muted-4">
-        <input type="checkbox" class="h-4 w-4 rounded border-line accent-brand" :checked="allVisibleSelected" @change="toggleAllVisible" />
+      <label class="flex w-fit items-center gap-2 border-t-2 border-line px-5 py-2.5 text-[12px] font-semibold text-muted-4">
+        <input type="checkbox" class="h-4 w-4 border-line accent-brand" :checked="allVisibleSelected" @change="toggleAllVisible" />
         {{ t('reports.select_all') }}
       </label>
 
-      <div class="overflow-hidden rounded-card border border-line-2 bg-white">
+      <div class="border-t-2 border-line">
         <DataTable
           :columns="columns"
           :rows="sorted"
           row-key="key"
           :loading="loading"
+          :error="loadError"
           :sort-key="sortKey"
           :sort-dir="sortDir"
           :row-class="rowClass"
           :empty-message="hasFilterOtherThanSearch ? t('reports.no_matching_filters') : search ? t('reports.no_matching_transactions') : t('reports.no_transactions')"
           @sort="sortBy"
+          @retry="load"
         >
           <template #cell-select="{ row }">
             <input
               type="checkbox"
-              class="h-4 w-4 rounded border-line accent-brand"
+              class="h-4 w-4 border-line accent-brand"
               :aria-label="t('reports.select_row', { number: row.order_number })"
               :checked="selected.has(row.key)"
               @change="toggleRow(row.key)"
@@ -457,15 +472,15 @@ function showCustomerDetail(row) {
           <template #cell-payment_methods="{ row }">
             <div class="flex flex-col items-start gap-1">
               <span v-if="(row.payment_methods ?? []).length" class="flex flex-wrap gap-1">
-                <span v-for="method in row.payment_methods" :key="method" class="whitespace-nowrap rounded-full bg-line-7 px-2 py-0.5 text-[11px] font-semibold text-muted-4">{{ paymentLabel(method) }}</span>
+                <span v-for="method in row.payment_methods" :key="method" class="whitespace-nowrap bg-line-7 px-2 py-0.5 text-[11px] font-semibold text-muted-4">{{ paymentLabel(method) }}</span>
               </span>
               <span v-else class="text-muted-3">—</span>
               <!-- 028 — penjualan yang belum lunas ditandai langsung di daftar, lengkap dengan sisa tagihannya. -->
-              <StatusPill v-if="row.payment_status === 'partially_paid'" variant="warn" data-testid="row-partial">
+              <StatusPill v-if="row.payment_status === 'partially_paid'" variant="warning" data-testid="row-partial">
                 {{ t('payment_ledger.status_partially_paid') }} · {{ formatIDR(row.balance_amount) }}
               </StatusPill>
               <StatusPill v-else-if="row.payment_status === 'unpaid'" variant="danger" data-testid="row-unpaid">{{ t('payment_ledger.status_unpaid') }}</StatusPill>
-              <StatusPill v-if="row.payment_state === 'pending'" variant="warn">{{ t('reports.payment_state_pending') }}</StatusPill>
+              <StatusPill v-if="row.payment_state === 'pending'" variant="warning">{{ t('reports.payment_state_pending') }}</StatusPill>
               <StatusPill v-else-if="row.payment_state === 'rejected'" variant="danger">{{ t('reports.payment_state_rejected') }}</StatusPill>
             </div>
           </template>
@@ -486,7 +501,7 @@ function showCustomerDetail(row) {
           </template>
         </DataTable>
       </div>
-    </div>
+    </section>
 
     <ConfirmDialog
       :open="showBulkVerify"
@@ -500,22 +515,6 @@ function showCustomerDetail(row) {
 
     <TransactionItemsModal :open="showItems" :order-id="itemsOrderId" @close="showItems = false" @changed="load" />
     <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" @close="showReceipt = false" />
-
-    <BaseModal :open="detailCustomer !== null" :title="t('reports.customer_detail')" max-width-class="max-w-[360px]" @close="detailCustomer = null">
-      <div v-if="detailCustomer" class="flex flex-col gap-2.5 px-6 py-5 text-[13.5px]">
-        <div class="flex flex-col gap-0.5">
-          <span class="text-[11.5px] font-semibold text-muted-3">{{ t('reports.col_customer') }}</span>
-          <span class="font-semibold">{{ detailCustomer.name }}</span>
-        </div>
-        <div v-if="detailCustomer.phone" class="flex flex-col gap-0.5">
-          <span class="text-[11.5px] font-semibold text-muted-3">{{ t('settings.phone') }}</span>
-          <span>{{ detailCustomer.phone }}</span>
-        </div>
-        <div v-if="detailCustomer.email" class="flex flex-col gap-0.5">
-          <span class="text-[11.5px] font-semibold text-muted-3">{{ t('settings.email') }}</span>
-          <span>{{ detailCustomer.email }}</span>
-        </div>
-      </div>
-    </BaseModal>
+    <CustomerQuickDetailModal :customer="detailCustomer" @close="detailCustomer = null" />
   </div>
 </template>

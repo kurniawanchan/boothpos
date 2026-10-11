@@ -54,7 +54,7 @@ export const useSettingsStore = defineStore('settings', {
       }
     },
 
-    /** Owner/admin only server-side (SettingPolicy) — see AppSidebar/RolesView for the same canAccessMenu('settings') gate used to hide the control itself. */
+    /** Owner/admin only server-side (SettingPolicy) — see utils/navigation.js/RolesView for the same canAccessMenu('settings') gate used to hide the control itself. */
     async setSystemMode(mode) {
       await updateSettings([{ key: 'system_mode', value: mode, type: 'string', group: 'system' }]);
       this.systemMode = mode;

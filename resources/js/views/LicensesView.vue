@@ -3,7 +3,11 @@ import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listLicenses, createLicense, updateLicense, deleteLicense } from '../api/licenses';
+import { formatIDR } from '../utils/formatters';
 import { useToastStore } from '../stores/toast';
+import { useUrlSearchFilter } from '../composables/useUrlSearchFilter';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -17,12 +21,15 @@ import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 // 019-billing-system — layar mandiri baru untuk `License` (menggantikan
 // `PackagesView.vue`, yang dihapus di komit yang sama). License sekarang
 // punya menu key sendiri ('licenses', lihat MenuKeys::ALL &
-// AppSidebar.vue's NAV_DEFS) — tidak lagi menumpang menu key 'companies'.
+// utils/navigation.js's NAV_SECTIONS) — tidak lagi menumpang menu key 'companies'.
 
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage } = usePaginatedList(listLicenses);
+// Pencarian nama (sisi-server, ?search=) mengikuti pola Company; dicerminkan ke address bar.
+const search = useUrlSearchFilter();
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listLicenses, search.initialParams());
+search.onCommitted((value) => setFilter({ search: value || undefined }));
 onMounted(load);
 
 const licenseTierOptions = computed(() => [
@@ -124,23 +131,41 @@ async function performDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center justify-end gap-2.5">
-      <BaseButton @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('licenses.new_license_btn') }}
-      </BaseButton>
-    </div>
+  <div class="pb-10">
+    <PageHeader :title="t('nav.licenses')" :description="t('licenses.page_subtitle')">
+      <template #actions>
+        <BaseButton @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('licenses.new_license_btn') }}
+        </BaseButton>
+      </template>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('licenses.no_licenses')">
+    <div class="mx-[26px] border-2 border-line bg-white">
+      <FilterBar
+        :search="search.input.value"
+        :placeholder="t('licenses.search_placeholder')"
+        :search-label="t('licenses.search_label')"
+        :count="loading || error ? null : meta.total"
+        :active="search.input.value !== ''"
+        @update:search="search.onInput"
+        @reset="search.reset"
+      />
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('licenses.no_licenses')"
+        @retry="load"
+      >
         <template #cell-license_tier="{ row }">
-          <StatusPill variant="mint">{{ t(`licenses.license_tier_${row.license_tier}`) }}</StatusPill>
+          <StatusPill variant="accent">{{ t(`licenses.license_tier_${row.license_tier}`) }}</StatusPill>
         </template>
-        <template #cell-price="{ row }">{{ row.price }}</template>
+        <template #cell-price="{ row }">{{ formatIDR(row.price) }}</template>
         <template #cell-payment_type="{ row }">{{ t(`licenses.payment_type_${row.payment_type}`) }}</template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'success' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">

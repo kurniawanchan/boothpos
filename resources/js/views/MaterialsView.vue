@@ -15,6 +15,8 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 import MaterialVendorPricesModal from '../components/masterData/MaterialVendorPricesModal.vue';
 
@@ -22,9 +24,21 @@ const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listMaterials);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listMaterials);
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
+
+// 041 — FilterBar memancarkan nilai kolom cari; pencarian tetap di-debounce 300 ms dan dikirim sebagai `search`
+// ke server persis seperti sebelumnya. "Atur ulang" langsung memuat ulang tanpa menunggu debounce.
+function onSearchInput(value) {
+  search.value = value;
+  debouncedSearch();
+}
+
+function resetSearch() {
+  search.value = '';
+  setFilter({ search: undefined });
+}
 
 onMounted(load);
 
@@ -141,41 +155,49 @@ async function performDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <div class="relative flex min-w-[230px] flex-1 items-center">
-        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="material-search">{{ t('vendors_materials.search_material') }}</label>
-        <input
-          id="material-search"
-          v-model="search"
-          :placeholder="t('vendors_materials.search_material_placeholder')"
-          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-          @input="debouncedSearch"
-        />
-      </div>
-      <template v-if="auth.canAccessMenu('materials')">
-        <BaseButton variant="secondary" :loading="exporting" @click="doExport">
-          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          {{ t('common.export_xlsx') }}
-        </BaseButton>
-        <BaseButton variant="secondary" @click="showImportModal = true">
-          <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
-          {{ t('common.bulk_import') }}
+  <div class="pb-10">
+    <PageHeader :title="t('nav.materials')" :description="t('nav.materials_subtitle')">
+      <template #actions>
+        <template v-if="auth.canAccessMenu('materials')">
+          <BaseButton variant="secondary" :loading="exporting" @click="doExport">
+            <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+            {{ t('common.export_xlsx') }}
+          </BaseButton>
+          <BaseButton variant="secondary" @click="showImportModal = true">
+            <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
+            {{ t('common.bulk_import') }}
+          </BaseButton>
+        </template>
+        <BaseButton @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('vendors_materials.new_material_btn') }}
         </BaseButton>
       </template>
-      <BaseButton @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('vendors_materials.new_material_btn') }}
-      </BaseButton>
-    </div>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('vendors_materials.no_materials')">
+    <section class="mx-[26px] border-2 border-line bg-white">
+      <FilterBar
+        :search="search"
+        :placeholder="t('vendors_materials.search_material_placeholder')"
+        :search-label="t('vendors_materials.search_material')"
+        :count="loading || error ? null : meta.total"
+        :active="!!search"
+        @update:search="onSearchInput"
+        @reset="resetSearch"
+      />
+
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('vendors_materials.no_materials')"
+        @retry="load"
+      >
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
         <template #cell-vendor_price_count="{ row }">{{ row.vendor_price_count ?? 0 }}</template>
         <template #cell-is_active="{ row }">
-          <StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
+          <StatusPill :variant="row.is_active ? 'success' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
@@ -186,7 +208,7 @@ async function performDelete() {
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
-    </div>
+    </section>
 
     <BaseModal :open="showForm" :title="editingMaterial ? t('vendors_materials.edit_material') : t('vendors_materials.new_material')" max-width-class="max-w-[480px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveMaterial">

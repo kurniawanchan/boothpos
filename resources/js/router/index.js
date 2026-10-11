@@ -282,7 +282,7 @@ router.beforeEach(async (to) => {
   // Screens we can predict will 403 for the current role are hidden from
   // nav entirely AND guarded here, so a typed-in URL doesn't crash into a
   // raw 403 — redirect somewhere useful instead. Cosmetic only, exactly
-  // like AppSidebar.vue's nav filter — the API is the real gate.
+  // like RailNav.vue's nav filter — the API is the real gate.
   if (to.meta.menuKey && !auth.canAccessMenu(to.meta.menuKey)) {
     return { name: 'dashboard' };
   }

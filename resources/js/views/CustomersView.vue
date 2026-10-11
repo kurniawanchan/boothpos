@@ -15,6 +15,8 @@ import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import DataTable from '../components/ui/DataTable.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
@@ -43,10 +45,23 @@ const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || 
 // total, bukan ditampilkan lalu ditolak 403).
 const canBulkManageCustomers = computed(() => ['owner', 'admin', 'inventory'].includes((auth.role || '').toLowerCase()));
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listCustomers);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listCustomers);
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
 onMounted(load);
+
+// 041 — FilterBar memegang kotak cari; semantik pencarian TETAP: server-side, ditunda 300 ms, kembali ke halaman 1.
+function onSearchInput(value) {
+  search.value = value;
+  debouncedSearch();
+}
+// "Atur ulang" memuat seketika (bukan menunggu debounce) — pengguna baru saja meminta daftar penuh.
+function resetSearch() {
+  search.value = '';
+  setFilter({ search: undefined });
+}
+// Galat memuat tampil di tabel dengan "Coba lagi"; pesan HTTP spesifik tetap ditoast interceptor global.
+const loadError = computed(() => (error.value ? t('page.load_failed') : ''));
 
 // No "Transaksi / Pre-order / Total belanja" columns here — verified
 // against CustomerResource, which only ever returns identity/contact
@@ -273,50 +288,55 @@ const isImportDone = computed(() => !!previewResult.value?.applied);
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <div class="relative flex min-w-[230px] flex-1 items-center">
-        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="customer-search">{{ t('events_sessions.search_customer') }}</label>
-        <input
-          id="customer-search"
-          v-model="search"
-          :placeholder="t('events_sessions.search_customer_placeholder')"
-          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-          @input="debouncedSearch"
-        />
-      </div>
-      <template v-if="canBulkManageCustomers">
-        <BaseButton variant="secondary" :loading="exporting" @click="doExportCustomers">
-          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          {{ t('events_sessions.export_customers_action') }}
-        </BaseButton>
-        <BaseButton variant="secondary" @click="openImport">
-          <i class="ph-duotone ph-upload-simple text-[16px]" aria-hidden="true"></i>
-          {{ t('events_sessions.import_customers_action') }}
+  <div class="pb-10">
+    <PageHeader :title="t('nav.customers')" :description="t('nav.customers_subtitle')">
+      <template #actions>
+        <template v-if="canBulkManageCustomers">
+          <BaseButton variant="secondary" :loading="exporting" @click="doExportCustomers">
+            <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+            {{ t('events_sessions.export_customers_action') }}
+          </BaseButton>
+          <BaseButton variant="secondary" @click="openImport">
+            <i class="ph-duotone ph-upload-simple text-[16px]" aria-hidden="true"></i>
+            {{ t('events_sessions.import_customers_action') }}
+          </BaseButton>
+        </template>
+        <BaseButton @click="openCreate">
+          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
+          {{ t('events_sessions.new_customer') }}
         </BaseButton>
       </template>
-      <BaseButton @click="openCreate">
-        <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-        {{ t('events_sessions.new_customer') }}
-      </BaseButton>
-    </div>
+    </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('events_sessions.no_customers')">
-        <template #cell-phone="{ row }">{{ row.phone || '—' }}</template>
-        <template #cell-email="{ row }">{{ row.email || '—' }}</template>
-        <template #cell-social_handle="{ row }">{{ row.social_handle || '—' }}</template>
-        <template #cell-actions="{ row }">
-          <div class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openTransactions(row)">{{ t('events_sessions.view_transactions') }}</button>
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
-            <button v-if="isOwnerOrAdmin" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
-          </div>
-        </template>
-      </DataTable>
-      <TablePagination :meta="meta" @change="setPage" />
-    </div>
+    <!-- Tanpa strip KPI: CustomerResource hanya mengembalikan identitas/kontak, jadi satu-satunya angka jujur
+         adalah total daftar (sudah menjadi penghitung "N data" di bawah). Tidak ada empat angka yang bisa
+         diturunkan tanpa panggilan API baru. -->
+    <section class="mx-[26px] border-2 border-line bg-white">
+      <FilterBar
+        :search="search"
+        :placeholder="t('events_sessions.search_customer_placeholder')"
+        :search-label="t('events_sessions.search_customer')"
+        :count="meta.total"
+        :active="search !== ''"
+        @update:search="onSearchInput"
+        @reset="resetSearch"
+      />
+      <div class="border-t-2 border-line">
+        <DataTable :columns="columns" :rows="items" :loading="loading" :error="loadError" :empty-message="t('events_sessions.no_customers')" @retry="load">
+          <template #cell-phone="{ row }">{{ row.phone || '—' }}</template>
+          <template #cell-email="{ row }">{{ row.email || '—' }}</template>
+          <template #cell-social_handle="{ row }">{{ row.social_handle || '—' }}</template>
+          <template #cell-actions="{ row }">
+            <div class="flex justify-end gap-2">
+              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openTransactions(row)">{{ t('events_sessions.view_transactions') }}</button>
+              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+              <button v-if="isOwnerOrAdmin" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
+            </div>
+          </template>
+        </DataTable>
+        <TablePagination :meta="meta" @change="setPage" />
+      </div>
+    </section>
 
     <BaseModal :open="showForm" :title="editingCustomer ? t('events_sessions.edit_customer') : t('events_sessions.new_customer')" max-width-class="max-w-[460px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveCustomer">

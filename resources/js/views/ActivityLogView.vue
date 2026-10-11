@@ -7,6 +7,8 @@ import { formatDateTime } from '../utils/date';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 
 /**
  * 006-purchase-order-and-ops (US8) — the backend endpoint already existed
@@ -15,7 +17,7 @@ import BaseInput from '../components/ui/BaseInput.vue';
  */
 const { t } = useI18n();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listActivityLogs);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listActivityLogs);
 const filters = reactive({ action: '', entity_type: '', date_from: '', date_to: '' });
 
 onMounted(load);
@@ -29,6 +31,15 @@ function applyFilters() {
   });
 }
 
+// 041 — "Aksi" memakai kolom cari FilterBar (tetap penyaring teks `action`); semua penyaring baru diterapkan saat
+// `change` (kolom kehilangan fokus / tanggal dipilih), BUKAN tiap ketukan — sama seperti sebelumnya. Peristiwa
+// `change` naik (bubble) dari input mana pun ke akar FilterBar, jadi satu pendengar cukup untuk keempat penyaring.
+const filtersActive = computed(() => Object.values(filters).some((v) => v));
+function resetFilters() {
+  Object.assign(filters, { action: '', entity_type: '', date_from: '', date_to: '' });
+  applyFilters();
+}
+
 const columns = computed(() => [
   { key: 'created_at', label: t('activity_log.col_when') },
   { key: 'user_name', label: t('activity_log.col_who') },
@@ -39,16 +50,32 @@ const columns = computed(() => [
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-      <BaseInput v-model="filters.action" :label="t('activity_log.filter_action')" @change="applyFilters" />
-      <BaseInput v-model="filters.entity_type" :label="t('activity_log.filter_entity_type')" @change="applyFilters" />
-      <BaseInput v-model="filters.date_from" type="date" :label="t('activity_log.filter_date_from')" @change="applyFilters" />
-      <BaseInput v-model="filters.date_to" type="date" :label="t('activity_log.filter_date_to')" @change="applyFilters" />
-    </div>
+  <div class="pb-10">
+    <PageHeader :title="t('nav.activity_log')" :description="t('nav.activity_log_subtitle')" />
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('activity_log.no_logs')">
+    <div class="mx-[26px] border-2 border-line bg-white">
+      <FilterBar
+        v-model:search="filters.action"
+        :search-label="t('activity_log.filter_action')"
+        :placeholder="t('activity_log.filter_action')"
+        :count="loading || error ? null : meta.total"
+        :active="filtersActive"
+        @change="applyFilters"
+        @reset="resetFilters"
+      >
+        <BaseInput v-model="filters.entity_type" :label="t('activity_log.filter_entity_type')" />
+        <BaseInput v-model="filters.date_from" type="date" :label="t('activity_log.filter_date_from')" />
+        <BaseInput v-model="filters.date_to" type="date" :label="t('activity_log.filter_date_to')" />
+      </FilterBar>
+
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? t('page.load_failed') : ''"
+        :empty-message="t('activity_log.no_logs')"
+        @retry="load"
+      >
         <template #cell-created_at="{ row }"><span class="whitespace-nowrap text-[12px] text-muted-3">{{ formatDateTime(row.created_at) }}</span></template>
         <template #cell-user_name="{ row }">{{ row.user_name || '—' }}</template>
         <template #cell-action="{ row }"><span class="font-mono text-[12px] font-bold text-brand-active">{{ row.action }}</span></template>

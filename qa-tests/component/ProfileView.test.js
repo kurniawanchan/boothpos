@@ -117,4 +117,14 @@ describe('ProfileView', () => {
     await screen.findByText('Tipe berkas tidak didukung.');
     expect(auth.user.photo_url).toBeNull();
   });
+
+  // 041-back-office-ui-redesign — judul halaman kini dari PageHeader.
+  it('memakai PageHeader: satu h1 (Profil Saya) dengan deskripsi halaman', () => {
+    const { pinia } = renderProfile();
+    render(ProfileView, { global: { plugins: [pinia] } });
+
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Profil Saya');
+    expect(screen.getByText(/detail akun/i)).toBeInTheDocument();
+  });
 });

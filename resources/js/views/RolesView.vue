@@ -12,6 +12,8 @@ import StatusPill from '../components/ui/StatusPill.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
+import PageHeader from '../components/page/PageHeader.vue';
+import FilterBar from '../components/page/FilterBar.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import RoleMenuPicker from '../components/settings/RoleMenuPicker.vue';
 
@@ -19,11 +21,20 @@ const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listRoles);
+const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listRoles);
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
 
 onMounted(load);
+
+function onSearchInput(value) {
+  search.value = value;
+  debouncedSearch();
+}
+function resetFilters() {
+  search.value = '';
+  setFilter({ search: undefined });
+}
 
 const columns = computed(() => [
   { key: 'name', label: t('roles.col_role_name') },
@@ -108,34 +119,42 @@ async function performDelete() {
 </script>
 
 <template>
-  <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
-    <div class="flex flex-wrap items-center gap-2.5">
-      <div class="relative flex min-w-[230px] flex-1 items-center">
-        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
-        <label class="sr-only" for="role-search">{{ t('roles.search_role') }}</label>
-        <input
-          id="role-search"
-          v-model="search"
-          :placeholder="t('roles.search_role_placeholder')"
-          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-          @input="debouncedSearch"
-        />
-      </div>
+  <PageHeader :title="t('nav.roles')" :description="t('nav.roles_subtitle')">
+    <template #actions>
       <BaseButton v-if="auth.canAccessMenu('roles')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('roles.add_role') }}
       </BaseButton>
-    </div>
+    </template>
+  </PageHeader>
 
-    <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('roles.no_roles')">
+  <div class="px-[26px] pb-10">
+    <section class="overflow-hidden border-2 border-line bg-white">
+      <FilterBar
+        :search="search"
+        :placeholder="t('roles.search_role_placeholder')"
+        :search-label="t('roles.search_role')"
+        :count="meta.total"
+        :active="Boolean(search)"
+        @update:search="onSearchInput"
+        @reset="resetFilters"
+      />
+
+      <DataTable
+        :columns="columns"
+        :rows="items"
+        :loading="loading"
+        :error="error ? error.message || t('page.load_failed') : ''"
+        :empty-message="t('roles.no_roles')"
+        @retry="load"
+      >
         <template #cell-name="{ row }"><span class="font-semibold">{{ row.name }}</span></template>
         <template #cell-menu_keys="{ row }">
           <span class="text-[12.5px] text-muted-4">{{ t('roles.menu_count', { count: row.menu_keys.length }) }}</span>
         </template>
         <template #cell-user_count="{ row }">{{ t('roles.user_count', { count: row.user_count }) }}</template>
         <template #cell-is_system_default="{ row }">
-          <StatusPill :variant="row.is_system_default ? 'neutral' : 'mint'">{{ row.is_system_default ? t('roles.default_type') : t('roles.custom_type') }}</StatusPill>
+          <StatusPill :variant="row.is_system_default ? 'neutral' : 'accent'">{{ row.is_system_default ? t('roles.default_type') : t('roles.custom_type') }}</StatusPill>
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
@@ -145,27 +164,27 @@ async function performDelete() {
         </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
-    </div>
-
-    <BaseModal :open="showForm" :title="editingRole ? t('roles.edit_role') : t('roles.new_role')" max-width-class="max-w-[560px]" @close="showForm = false">
-      <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveRole">
-        <BaseInput v-model="form.name" :label="t('roles.role_name')" required maxlength="50" :error="formErrors.name" />
-        <RoleMenuPicker v-model="form.menu_keys" :error="formErrors['menu_keys.0'] || formErrors.menu_keys" />
-        <div class="mt-1 flex justify-end gap-2">
-          <BaseButton type="button" variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
-          <BaseButton type="submit" :loading="saving">{{ t('common.save') }}</BaseButton>
-        </div>
-      </form>
-    </BaseModal>
-
-    <ConfirmDialog
-      :open="showDelete"
-      :title="t('roles.delete_role')"
-      :message="t('roles.delete_role_confirm', { name: deleteTarget?.name })"
-      :confirm-label="t('vendors_materials.yes_delete')"
-      :loading="deleting"
-      @close="showDelete = false"
-      @confirm="performDelete"
-    />
+    </section>
   </div>
+
+  <BaseModal :open="showForm" :title="editingRole ? t('roles.edit_role') : t('roles.new_role')" max-width-class="max-w-[560px]" @close="showForm = false">
+    <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveRole">
+      <BaseInput v-model="form.name" :label="t('roles.role_name')" required maxlength="50" :error="formErrors.name" />
+      <RoleMenuPicker v-model="form.menu_keys" :error="formErrors['menu_keys.0'] || formErrors.menu_keys" />
+      <div class="mt-1 flex justify-end gap-2">
+        <BaseButton type="button" variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
+        <BaseButton type="submit" :loading="saving">{{ t('common.save') }}</BaseButton>
+      </div>
+    </form>
+  </BaseModal>
+
+  <ConfirmDialog
+    :open="showDelete"
+    :title="t('roles.delete_role')"
+    :message="t('roles.delete_role_confirm', { name: deleteTarget?.name })"
+    :confirm-label="t('vendors_materials.yes_delete')"
+    :loading="deleting"
+    @close="showDelete = false"
+    @confirm="performDelete"
+  />
 </template>

@@ -996,7 +996,9 @@
     "bulk_download_shipping_slip": "Unduh surat jalan (ZIP)",
     "bulk_download_payment_slip": "Unduh invoice pembayaran (ZIP)",
     "save_shipment_changes": "Simpan perubahan pengiriman",
-    "edit_shipment": "Edit pengiriman"
+    "edit_shipment": "Edit pengiriman",
+    "summary_paid": "Sudah dibayar",
+    "summary_excl_cancelled": "Tidak termasuk yang dibatalkan"
   },
   "reports": {
     "void_action": "Batalkan transaksi",
@@ -1240,7 +1242,12 @@
     "delete_channel": "Hapus kanal pembayaran",
     "delete_channel_confirm": "Hapus {provider}? Tindakan ini tidak dapat dibatalkan.",
     "channel_deleted": "Kanal pembayaran dihapus.",
-    "channel_delete_failed": "Gagal menghapus kanal pembayaran ini."
+    "channel_delete_failed": "Gagal menghapus kanal pembayaran ini.",
+    "group_store": "Toko",
+    "group_appearance": "Tampilan",
+    "group_system": "Sistem",
+    "nav_backup": "Cadangan & pemulihan",
+    "sections_aria": "Bagian pengaturan"
   },
   "users": {
     "all_roles": "Semua peran",
@@ -1467,7 +1474,10 @@
     "price": "Harga",
     "payment_type": "Tipe Pembayaran",
     "payment_type_one_time": "Sekali Bayar",
-    "payment_type_subscription": "Langganan"
+    "payment_type_subscription": "Langganan",
+    "page_subtitle": "Katalog lisensi (Pro/Master) beserta harga dan tipe pembayarannya",
+    "search_placeholder": "Cari nama lisensi…",
+    "search_label": "Cari lisensi"
   },
   "invoices": {
     "new_invoice_btn": "Buat Invoice",
@@ -1517,7 +1527,8 @@
     "import_success": "Impor berhasil: {created} invoice dibuat, {updated} diperbarui.",
     "import_failed": "Gagal mengimpor invoice.",
     "import_row_error": "Baris {row}: {error}",
-    "import_more_rows_failed": " (dan {count} baris lainnya gagal)"
+    "import_more_rows_failed": " (dan {count} baris lainnya gagal)",
+    "page_subtitle": "Tagihan lisensi per company: buat, tandai lunas, unduh, impor, dan ekspor"
   },
   "settings_payment": {
     "title": "Informasi Pembayaran Invoice",
@@ -1786,5 +1797,65 @@
     "st_deleted": "Stasiun dihapus.",
     "st_delete": "Hapus stasiun",
     "st_delete_confirm": "Hapus stasiun {name}? Stasiun yang masih dipakai atau pernah menerima tiket tidak bisa dihapus — nonaktifkan saja."
+  },
+  "frame": {
+    "rail_aria": "Navigasi utama",
+    "rail_collapse": "Ciutkan navigasi",
+    "rail_expand": "Perluas navigasi",
+    "breadcrumb_aria": "Jejak halaman",
+    "home": "Beranda",
+    "skip_to_content": "Lewati ke konten",
+    "group_overview": "Ringkasan",
+    "group_operations": "Operasional",
+    "group_inventory": "Inventori & pembelian",
+    "group_people": "Pelanggan & penjual",
+    "group_insight": "Laporan",
+    "group_config": "Konfigurasi",
+    "search_label": "Cari",
+    "search_placeholder": "Cari no. order, meja, pelanggan…",
+    "search_hint": "Tekan Ctrl+K untuk mencari",
+    "search_minimum": "Ketik minimal 2 huruf",
+    "search_empty": "Tidak ada hasil untuk \"{q}\"",
+    "search_loading": "Mencari…",
+    "search_unavailable": "Pencarian belum tersedia",
+    "notifications": "Notifikasi",
+    "notifications_empty": "Tidak ada yang perlu ditindaklanjuti",
+    "notifications_count": "{count} perlu tindakan",
+    "outlet_label": "Outlet",
+    "outlet_all": "Semua outlet",
+    "user_menu": "Menu pengguna",
+    "profile": "Profil",
+    "language": "Bahasa",
+    "status_dot": "Ada yang perlu ditindaklanjuti",
+    "live": "LIVE",
+    "demo": "DEMO"
+  },
+  "page": {
+    "data_count": "{count} data",
+    "showing": "Menampilkan {from}–{to} dari {total}",
+    "showing_none": "Tidak ada data",
+    "loading": "Memuat…",
+    "load_failed": "Gagal memuat data",
+    "retry": "Coba lagi",
+    "empty_default": "Belum ada data",
+    "unavailable": "Tidak tersedia",
+    "reset_filters": "Atur ulang filter",
+    "select_all": "Pilih semua di halaman ini",
+    "select_row": "Pilih baris",
+    "selected_count": "{count} dipilih",
+    "bulk_actions": "Tindakan massal",
+    "clear_selection": "Batalkan pilihan",
+    "close": "Tutup",
+    "realtime": "Real-time",
+    "updated_at": "Diperbarui {time}",
+    "reason_label": "Alasan",
+    "reason_placeholder": "Pilih alasan",
+    "reason_note": "Catatan (opsional)",
+    "confirm": "Konfirmasi",
+    "cancel": "Batal"
+  },
+  "business_types": {
+    "search_placeholder": "Cari nama jenis bisnis…",
+    "search_label": "Cari jenis bisnis"
   }
 }

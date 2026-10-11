@@ -1,13 +1,13 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { isColorTooLight } from '../../utils/theme';
+import { DEFAULT_ACCENT_COLOR, isColorTooLight } from '../../utils/theme';
 
-const props = defineProps({ modelValue: { type: String, default: '#2f9e6e' } });
+const props = defineProps({ modelValue: { type: String, default: DEFAULT_ACCENT_COLOR } });
 const emit = defineEmits(['update:modelValue']);
 
 const { t } = useI18n();
-const value = ref(props.modelValue || '#2f9e6e');
+const value = ref(props.modelValue || DEFAULT_ACCENT_COLOR);
 watch(() => props.modelValue, (v) => { if (v) value.value = v; });
 
 function onInput(e) {
