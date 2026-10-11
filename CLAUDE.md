@@ -358,7 +358,25 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/040-recap-pos-transactions-only/plan.md`
+Active feature plan: `specs/041-back-office-ui-redesign/plan.md`
+(branch `041-back-office-ui-redesign`, on top of `028-restaurant-dine-in-ordering`) — umbrella plan to bring the
+whole product to the "Warkop WJM Back Office" design (`design/screens/`, product-owner decisions Q1 = build every
+capability the design shows, Q2 = new visual system on ALL screens incl. cashier-facing). Ten ordered phases, each a
+future sub-feature: (1) frame + tokens + page kit + restyle of every view — presentation only, allowed today;
+(2a) outlets, business date, action-level permissions + outlet scope, reason codes, ONE approval path, tax/payment
+methods; (2b) shared-server hardening; (3) menu/recipes + stock by location; (4) purchase-to-pay; (5) sales
+records/returns/cash/EOD; (6) dashboard/search/bell; (7) loyalty/reports/users; (8) devices/sync/releases;
+(9) settings completion. **Phases 2a–9 are gated on a constitution amendment** (Stack section: one organisation, one or
+more outlets, single machine OR one shared server; still no multi-tenancy across customers) — do NOT start outlet work
+before it is ratified and the PRD/CLAUDE.md dated notes are added. Key design rules: outlet scope is a second global
+scope beside `DataModeScope` (raw `DB::table()` queries bypass it — use the planned `OutletFilter`); `outlet_id` and
+`business_date` are stamped server-side, never client-supplied; `StockService::applyMovement` stays the only stock
+write path (balances per location, `current_stock` kept as a total); one `ApprovalService` (requester ≠ approver);
+permissions are added next to `menu_keys`, not instead of them. The design bundle's `_ds/modernist-…` folder is a
+different design system — never use it for tokens; sample tokens from the captures. See research.md (Decisions 1–20),
+data-model.md, contracts/, quickstart.md.
+
+Previous feature: `specs/040-recap-pos-transactions-only/plan.md`
 (branch `040-recap-pos-transactions-only`, from `develop` after PR #33) — the Seller Recap becomes POS-ONLY
 (product-owner decision: whole recap, not just the detail list). `SettlementService` aggregates completed POS
 order items only (the 033 pre-order aggregation/breakdown is deleted, `salesBreakdownForEvent` → `posSalesForEvent`),
