@@ -497,3 +497,10 @@ Di Docker dev: `docker compose exec app php artisan app:clone-live-to-demo ...`
   lebih dulu.
 - Hentikan pemakaian aplikasi saat menjalankan: bila data LIVE berubah di tengah
   proses, perintah membatalkan dirinya.
+- Memulihkan cadangan pengaman mengembalikan baris DEMO, tetapi TIDAK berkas
+  gambar yang sudah dihapus dari disk publik (`app:backup` tidak mengarsipkannya).
+- `app:restore` juga memulihkan `license_activations`: bila dump berasal dari mesin
+  lain atau dibuat sebelum aktivasi, aplikasi bisa terkunci (423) sampai
+  diaktivasi ulang dengan kunci lisensi (lihat catatan restore di CLAUDE.md).
+- Simulasi (tanpa `--force`) TIDAK memeriksa baris LIVE yang merujuk baris DEMO;
+  pembatalan karena rujukan lintas mode itu hanya terjadi saat `--force`.
