@@ -34,7 +34,7 @@ The fingerprint also covers the two tables that a demo wipe can reach through fo
 
 `php artisan app:clone-live-to-demo [--force] [--yes]`
 
-- **Default = dry run**: prints per-table "demo rows to delete / live rows to clone", the number and total size of files to copy, and the artist/category code mapping; writes nothing.
+- **Default = dry run**: prints per-table "demo rows to delete / live rows to clone", and the number and total size of files to copy; writes nothing. *(Amended 2026-10-11: an earlier draft also said it would print the artist/category code mapping; that needs the allocator, which only runs after the demo wipe, so the mapping is not previewed — it is part of the run report data. The dry run also does not check for LIVE rows that reference DEMO rows; that abort happens under `--force`.)*
 - `--force` required to write. A confirmation prompt shows the counts first (skippable with `--yes`; a plain `--no-interaction` run without `--yes` aborts).
 - **Guards** (abort before anything is written): LIVE has zero rows to clone (nothing to mirror — would only wipe demo); the safety backup fails. *(Corrected 2026-10-11: an earlier draft refused to run when the DB name contains `test`; that is wrong — the feature tests must run this command on `boothpos_test`. The protection against wiping the wrong database is the dry-run default, `--force`, the confirmation and the backup.)*
 - **Error output never contains row values.** A `QueryException` message embeds SQL bindings, which for `customers` are PII, so the command prints only the exception class and SQLSTATE; `CloneException` messages name table/column/id only.
