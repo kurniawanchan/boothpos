@@ -1718,7 +1718,7 @@ git commit -m "feat(demo-clone): cloner inti — hapus DEMO, salin LIVE beruruta
 
 **Interfaces:**
 - Consumes: Task 5's cloner and `afterClone()` seam, Task 2's `LiveFingerprint`, `App\Services\ActivityLogger::log(?int $userId, string $action, string $entityType, ?int $entityId, ?string $description, ?array $old, ?array $new)`.
-- Produces: `run()` now also (inside the transaction) captures the LIVE fingerprint first, verifies integrity + files after the copy, re-captures and aborts on any LIVE difference, writes one `activity_logs` row (`action='cloned_live_to_demo'`), and AFTER commit deletes wiped demo files that no row in either mode references.
+- Produces: `run()` now also (inside the transaction) captures the LIVE fingerprint first, then aborts (before anything is deleted) if any LIVE row points at a DEMO row (`assertNoLiveReferencesToDemo()`, because `ON DELETE SET NULL`/`CASCADE` FKs would otherwise silently rewrite or delete LIVE rows during the wipe), verifies integrity + files after the copy, re-captures and aborts on any LIVE difference, writes one `activity_logs` row (`action='cloned_live_to_demo'`), and AFTER commit deletes wiped demo files that no row in either mode references.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1829,6 +1829,49 @@ class LiveToDemoClonerSafetyTest extends TestCase
         $this->expectException(CloneException::class);
 
         $cloner->run();
+    }
+
+    public function test_a_live_row_pointing_at_a_demo_row_aborts_before_anything_is_wiped(): void
+    {
+        // orders.customer_id adalah ON DELETE SET NULL: tanpa cek awal, menghapus DEMO
+        // akan diam-diam menulis NULL ke pesanan LIVE ini.
+        $demoCustomer = $this->oldDemo['customer'];
+        DB::table('orders')->where('id', $this->live['order'])->update(['customer_id' => $demoCustomer]);
+        $before = LiveFingerprint::capture();
+
+        try {
+            (new LiveToDemoCloner)->run();
+            $this->fail('Seharusnya CloneException');
+        } catch (CloneException $e) {
+            $this->assertStringContainsString('orders.customer_id', $e->getMessage());
+            $this->assertStringContainsString('tidak ada yang diubah', $e->getMessage());
+        }
+
+        $this->assertSame([], LiveFingerprint::diff($before, LiveFingerprint::capture()));
+        $this->assertSame($demoCustomer, (int) DB::table('orders')->where('id', $this->live['order'])->value('customer_id'));
+        $this->assertTrue(DB::table('customers')->where('id', $demoCustomer)->exists());
+        $this->assertTrue(DB::table('artists')->where('code', 'DMO')->exists(), 'DEMO tidak boleh dihapus');
+    }
+
+    public function test_a_live_pos_draft_pointing_at_a_demo_event_aborts_before_anything_is_wiped(): void
+    {
+        // pos_drafts tidak disalin, tapi event_id-nya ON DELETE SET NULL dari events.
+        $draft = $this->row('pos_drafts', [
+            'data_mode' => 'live', 'user_id' => $this->live['user'], 'event_id' => $this->oldDemo['event'],
+            'cart_snapshot' => '[]',
+        ]);
+        $before = LiveFingerprint::capture();
+
+        try {
+            (new LiveToDemoCloner)->run();
+            $this->fail('Seharusnya CloneException');
+        } catch (CloneException $e) {
+            $this->assertStringContainsString('pos_drafts.event_id', $e->getMessage());
+        }
+
+        $this->assertSame([], LiveFingerprint::diff($before, LiveFingerprint::capture()));
+        $this->assertSame($this->oldDemo['event'], (int) DB::table('pos_drafts')->where('id', $draft)->value('event_id'));
+        $this->assertTrue(DB::table('artists')->where('code', 'DMO')->exists(), 'DEMO tidak boleh dihapus');
     }
 
     public function test_failure_after_copy_restores_demo_and_removes_copied_files(): void
@@ -1969,6 +2012,8 @@ In `app/Services/DemoClone/LiveToDemoCloner.php` add imports `use App\Services\A
             $report = DB::transaction(function () use ($copier, &$stale) {
                 $before = LiveFingerprint::capture();
 
+                $this->assertNoLiveReferencesToDemo();
+
                 $stale = $this->demoFiles();
                 $deleted = $this->wipeDemo();
                 $codes = new CodeAllocator;
@@ -2078,10 +2123,7 @@ and add these private methods:
 
             foreach (CloneRegistry::references($table) as $column => $parent) {
                 foreach ([['demo', 'live'], ['live', 'demo']] as [$childMode, $parentMode]) {
-                    $bad = DB::table($table)
-                        ->whereRaw(CloneRegistry::scope($table, $childMode))
-                        ->whereRaw("`{$column}` IN (SELECT id FROM `{$parent}` WHERE ".CloneRegistry::scope($parent, $parentMode).')')
-                        ->count();
+                    $bad = $this->crossModeCount($table, $column, $parent, $childMode, $parentMode);
 
                     if ($bad > 0) {
                         throw new CloneException("{$table}.{$column}: {$bad} baris {$childMode} menunjuk induk {$parentMode} (lintas mode).");
@@ -2149,6 +2191,46 @@ and add these private methods:
         }
 
         return $out;
+    }
+
+    /** Jumlah baris mode $childMode di $table yang kolom $column-nya menunjuk baris mode $parentMode di $parent. */
+    private function crossModeCount(string $table, string $column, string $parent, string $childMode, string $parentMode): int
+    {
+        return DB::table($table)
+            ->whereRaw(CloneRegistry::scope($table, $childMode))
+            ->whereRaw("`{$column}` IN (SELECT id FROM `{$parent}` WHERE ".CloneRegistry::scope($parent, $parentMode).')')
+            ->count();
+    }
+
+    /**
+     * Dijalankan SEBELUM DEMO dihapus. FK dengan ON DELETE SET NULL / CASCADE
+     * (orders.customer_id, preorders.event_id, payments.session_id,
+     * product_variant_bom_lines.product_variant_id, session_opening_cash_entries.session_id, …)
+     * akan DIAM-DIAM mengubah atau menghapus baris LIVE yang menunjuk baris DEMO
+     * saat DEMO dihapus. Sidik jari LIVE memang akan menangkapnya lalu membatalkan,
+     * tetapi dengan pesan umum; cek ini berhenti lebih awal dan menyebut tabel/kolom/jumlah.
+     * pos_drafts tidak disalin, tapi event_id-nya SET NULL dari events, jadi ikut dicek.
+     */
+    private function assertNoLiveReferencesToDemo(): void
+    {
+        foreach (CloneRegistry::tables() as $table => $_) {
+            foreach (CloneRegistry::references($table) as $column => $parent) {
+                $count = $this->crossModeCount($table, $column, $parent, 'live', 'demo');
+
+                if ($count > 0) {
+                    throw new CloneException("{$table}.{$column}: {$count} baris LIVE menunjuk induk {$parent} milik DEMO; data lintas mode harus dibereskan dulu, tidak ada yang diubah.");
+                }
+            }
+        }
+
+        $drafts = DB::table('pos_drafts')
+            ->where('data_mode', 'live')
+            ->whereIn('event_id', DB::table('events')->where('data_mode', 'demo')->select('id'))
+            ->count();
+
+        if ($drafts > 0) {
+            throw new CloneException("pos_drafts.event_id: {$drafts} baris LIVE menunjuk events milik DEMO; data lintas mode harus dibereskan dulu, tidak ada yang diubah.");
+        }
     }
 
     /** @return list<string> */
@@ -2730,4 +2812,4 @@ Re-run the read-only count query from the survey; every `live=` count must equal
 
 **Type consistency:** `CloneRegistry::scope/references/spec/tables`, `LiveFingerprint::capture/diff`, `CodeAllocator::artist/category/productPrefix/sku/suffixed/mapping`, `FileCopier::copy/discardCopies/measure` and counters `copied/bytes/missing`, `LiveToDemoCloner::plan/run/afterClone`, `SafeError::describe`, `CloneLiveToDemo::CONFIRM_QUESTION` are used with identical names/signatures across tasks. Report keys (`deleted, cloned, skipped, files{copied,bytes,missing}, references_dropped, codes`) match between Task 5, Task 6 and Task 7's `renderReport`.
 
-**Known limits stated, not hidden:** concurrent writers during the run abort it (spec §2); no test forces a `CloneException` from `mapForeignKey` because a LIVE row pointing at a DEMO parent is blocked earlier by the wipe's FK restriction (covered instead by the cross-mode integrity check test); `FileCopier` dedupes proofs too (identical to live behavior).
+**Known limits stated, not hidden:** concurrent writers during the run abort it (spec §2); `FileCopier` dedupes proofs too (identical to live behavior). *(Corrected after the Task 5 review: an earlier version of this plan claimed a LIVE row pointing at a DEMO row would be blocked by the wipe's FK restriction. Wrong — many of those FKs are `ON DELETE SET NULL` or `CASCADE`, so the database would silently alter or delete the LIVE row. Task 6 therefore checks for such references BEFORE the wipe and aborts, and tests it for an orders FK and for `pos_drafts`.)*

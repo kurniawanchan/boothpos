@@ -45,7 +45,7 @@ The fingerprint also covers the two tables that a demo wipe can reach through fo
 
 Everything in one DB transaction, except file copies (compensated on failure, see §6).
 
-1. Capture LIVE fingerprints (§2.2).
+1. Capture LIVE fingerprints (§2.2). Then **abort if any LIVE row references a DEMO row** (every registry FK, plus `pos_drafts.event_id`): the wipe would otherwise let `ON DELETE SET NULL` / `CASCADE` foreign keys (e.g. `orders.customer_id`, `preorders.event_id`, `payments.session_id`, `product_variant_bom_lines.product_variant_id`) silently rewrite or delete those LIVE rows. The error names table/column/count and nothing has been changed. *(Added 2026-10-11 after the Task 5 review.)*
 2. **Wipe DEMO** in reverse FK order, always `WHERE data_mode = 'demo'`: `payment_proofs` (and their demo files), `payments`, `shipments`, `order_items`, `orders`, `preorder_items`, `preorders`, `product_variant_bom_lines`, `purchase_order_items` (via demo POs), `purchase_orders`, `session_opening_cash_entries`, `cashier_sessions`, `artist_settlements`, `stock_movements`, `material_stock_movements`, `vendor_material_prices`, `product_variants`, `products`, `materials`, `vendors`, `customers`, `categories`, `artists`, `events`.
 3. **Clone LIVE → DEMO** in FK order, keeping an in-memory map `oldId → newId` per table and rewriting every FK column through it:
 
