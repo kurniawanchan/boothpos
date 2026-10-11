@@ -82,6 +82,14 @@ const routes = [
         component: () => import('../views/ProductsView.vue'),
         meta: { titleKey: 'nav.products_page_title', subtitleKey: 'nav.products_subtitle', menuKey: 'products' },
       },
+      // 043 — halaman satu item (bagian-bagiannya datang di tugas berikutnya). Digerbang menu `products` yang sama
+      // dengan daftarnya; judul diambil PageHeader milik halaman, bukan meta.
+      {
+        path: 'products/:id(\\d+)',
+        name: 'product-detail',
+        component: () => import('../views/ProductDetailView.vue'),
+        meta: { titleKey: 'nav.products', menuKey: 'products' },
+      },
       {
         path: 'artists',
         name: 'artists',

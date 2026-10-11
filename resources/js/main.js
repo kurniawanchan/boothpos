@@ -9,7 +9,7 @@ import App from './App.vue';
 import router from './router';
 import { useAuthStore } from './stores/auth';
 import { useLicenseStore } from './stores/license';
-import { i18n } from './i18n';
+import { i18n, loadLocale } from './i18n';
 
 const app = createApp(App);
 app.use(createPinia());
@@ -23,6 +23,7 @@ const auth = useAuthStore();
 // mounts, for the same reason: without this, the router's first
 // navigation could resolve before the license status is known.
 const license = useLicenseStore();
-Promise.all([auth.restore(), license.restore()]).finally(() => {
+// 043 — 'id' dimuat sebelum mount (layar login, tamu, dan fallback); 'en' hanya bila pengguna memakainya (auth.restore).
+Promise.all([auth.restore(), license.restore(), loadLocale('id')]).finally(() => {
   app.mount('#app');
 });

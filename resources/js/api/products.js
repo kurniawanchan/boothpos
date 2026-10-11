@@ -4,6 +4,14 @@ export function listProducts(params = {}) {
   return client.get('/products', { params }).then((r) => r.data);
 }
 
+/**
+ * 043 — angka kepala halaman Produk (menu item aktif, 86 hari ini, belum dirilis, kualitas data).
+ * Satu panggilan; tiap angka dihitung server dari data yang sama dengan daftar (SC-001).
+ */
+export function productSummary() {
+  return client.get('/products/summary').then((r) => r.data);
+}
+
 export function getProduct(id) {
   return client.get(`/products/${id}`).then((r) => r.data);
 }
@@ -51,4 +59,42 @@ export function uploadVariantImage(id, file) {
  */
 export function lookupVariants(q, limit = 20) {
   return client.get('/variants/lookup', { params: { q, limit } }).then((r) => r.data);
+}
+
+// --- 043-products-page-redesign: tindakan item (kontrak api-products.md) ---------------------------------------
+// Semua izin ditegakkan server; pembungkus ini hanya mengirim. 409 (sudah 86, sudah diskontinu) dan 422 (alasan
+// kosong) ditangani handler galat pusat.
+
+/** POST /products/{id}/sold-out — { reason_code_id (wajib), note? }. */
+export function soldOut(id, payload) {
+  return client.post(`/products/${id}/sold-out`, payload).then((r) => r.data);
+}
+
+/** DELETE /products/{id}/sold-out — batalkan 86 aktif. */
+export function undoSoldOut(id) {
+  return client.delete(`/products/${id}/sold-out`).then((r) => r.data);
+}
+
+/** POST /products/{id}/discontinue — { reason_code_id, note? }; bila rilis aktif, mengembalikan perubahan tertunda. */
+export function discontinueProduct(id, payload) {
+  return client.post(`/products/${id}/discontinue`, payload).then((r) => r.data);
+}
+
+export function reactivateProduct(id, payload = {}) {
+  return client.post(`/products/${id}/reactivate`, payload).then((r) => r.data);
+}
+
+/** GET /products/{id}/price-history — terbaru dulu, berpaginasi. */
+export function priceHistory(id, params = {}) {
+  return client.get(`/products/${id}/price-history`, { params }).then((r) => r.data);
+}
+
+/** PUT /products/{id}/variants — batch seluruh varian (semua-atau-tidak-sama-sekali); respons { applied, pending }. */
+export function saveVariants(id, payload) {
+  return client.put(`/products/${id}/variants`, payload).then((r) => r.data);
+}
+
+/** PUT /products/{id}/modifier-links — { links: [{ group_id, is_required, min_select, max_select, display_order }] }. */
+export function saveModifierLinks(id, links) {
+  return client.put(`/products/${id}/modifier-links`, { links }).then((r) => r.data);
 }

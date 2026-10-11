@@ -1,14 +1,17 @@
 import { defineStore } from 'pinia';
 import * as authApi from '../api/auth';
 import { getToken, setToken, clearToken } from '../utils/storage';
-import { i18n } from '../i18n';
+import { i18n, loadLocale } from '../i18n';
 
 // Satu-satunya tempat locale FRONTEND diputuskan dari data user (cermin
 // dari SetLocaleFromUser di backend) — dipanggil setiap kali `user`
 // berubah lewat login/restore/me, supaya tidak ada jalur kedua yang
 // menyetel i18n.global.locale secara independen (Constitution Principle I).
-function syncLocale(user) {
+// 043 — async: pesan bahasa dimuat DULU (chunk terpisah) baru locale dipindah, supaya layar tidak sempat
+// menampilkan teks fallback. Pemanggil menunggunya SEBELUM menyimpan `user`.
+async function syncLocale(user) {
   if (user?.language) {
+    await loadLocale(user.language);
     i18n.global.locale.value = user.language;
   }
 }
@@ -30,18 +33,24 @@ export const useAuthStore = defineStore('auth', {
      * this feature — see specs/001-user-store-settings).
      */
     canAccessMenu: (state) => (menuKey) => (state.user?.menu_keys ?? []).includes(menuKey),
+    /**
+     * 043 — cermin kosmetik hak aksi (mis. 'menu.item.86') dari `user.permissions` yang dikirim login/me.
+     * Hanya untuk menyembunyikan kendali; server tetap yang menolak. Tanpa daftar (peran lama / respons lama) = false,
+     * jadi kendali tersembunyi, bukan terbuka. Halaman item lebih mengandalkan objek `can` dari GET /products/{id}.
+     */
+    hasPermission: (state) => (key) => (state.user?.permissions ?? []).includes(key),
   },
   actions: {
     async login(username, password) {
       const { token, user } = await authApi.login(username, password);
       setToken(token);
+      await syncLocale(user);
       this.user = user;
-      syncLocale(user);
     },
     async setLanguage(language) {
       const updated = await authApi.updateLanguage(language);
+      await syncLocale(updated);
       this.user = updated;
-      syncLocale(updated);
     },
     // 005-ux-enhancements-dashboard (US3) — dipakai ProfileView setelah
     // ganti password/foto supaya avatar di header (UserMenu) langsung
@@ -83,8 +92,9 @@ export const useAuthStore = defineStore('auth', {
           return;
         }
         try {
-          this.user = await authApi.me();
-          syncLocale(this.user);
+          const me = await authApi.me();
+          await syncLocale(me);
+          this.user = me;
         } catch {
           clearToken();
           this.user = null;

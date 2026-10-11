@@ -3,6 +3,8 @@ import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/vue';
 import { config } from '@vue/test-utils';
 import { i18n } from '../resources/js/i18n';
+import idMessages from '../resources/js/locales/id.json';
+import enMessages from '../resources/js/locales/en.json';
 
 // 002-language-toggle — @testing-library/vue v8 delegates to @vue/test-utils'
 // mount() under the hood, so pushing plugins onto VTU's global config here
@@ -10,6 +12,10 @@ import { i18n } from '../resources/js/i18n';
 // ~20 test files that call render() with their own `global.plugins` array
 // (those per-file arrays — mostly just Pinia — still work identically
 // alongside this).
+// 043 — pesan dipasang SINKRON di sini (produksi memuatnya per-chunk lewat loadLocale), supaya ratusan tes yang
+// membaca teks seketika tidak perlu menunggu import dinamis.
+i18n.global.setLocaleMessage('id', idMessages);
+i18n.global.setLocaleMessage('en', enMessages);
 config.global.plugins.push(i18n);
 
 // The ~20 pre-existing component test files assert Indonesian literal

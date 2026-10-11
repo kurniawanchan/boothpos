@@ -9,6 +9,7 @@ use App\Models\Event;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Services\SettlementService;
+use App\Services\SalesFigures;
 use App\Support\ModeGate;
 use App\Support\PreorderSellerSubtotals;
 use App\Support\ReportSplit;
@@ -54,33 +55,14 @@ class ReportController extends Controller
             $groupBy = 'product';
         }
 
-        $base = DB::table('order_items')
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->join('product_variants', 'product_variants.id', '=', 'order_items.variant_id')
-            ->join('products', 'products.id', '=', 'product_variants.product_id')
-            // BUG YANG DITEMUKAN & DIPERBAIKI — 'categories' sebelumnya
-            // tidak pernah di-join, padahal group_by=category memakai
-            // products.category_id sebagai label (lihat komentar
-            // "disederhanakan" yang dibuang di sini). Hasilnya, baris
-            // laporan untuk pengelompokan kategori menampilkan ID mentah
-            // sebagai label, bukan nama kategori — dan sebelumnya bahkan
-            // selectRaw() TIDAK punya cabang 'category' sama sekali,
-            // sehingga otomatis jatuh ke default 'products.name' dan
-            // diam-diam mengelompokkan per PRODUK, bukan per KATEGORI,
-            // walau parameter group_by=category diterima tanpa galat.
-            ->join('categories', 'categories.id', '=', 'products.category_id')
-            ->join('artists', 'artists.id', '=', 'order_items.artist_id')
-            ->join('events', 'events.id', '=', 'orders.event_id')
-            ->where('orders.status', 'completed')
-            // 003-seed-demo-live (US3/FR-010) — query hand-rolled DB::table
-            // TIDAK ikut Eloquent global scope (DataModeScope); tanpa filter
-            // eksplisit ini, laporan tanpa event_id (mis. lihat SEMUA event)
-            // akan menjumlahkan order DEMO dan LIVE sekaligus. Lihat
-            // ReportDataModeIsolationTest.
-            ->where('order_items.data_mode', ModeGate::current())
-            ->when($request->filled('event_id'), fn ($q) => $q->where('orders.event_id', $request->integer('event_id')))
-            ->when($request->filled('date_from'), fn ($q) => $q->whereDate('orders.created_at', '>=', $request->date('date_from')))
-            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('orders.created_at', '<=', $request->date('date_to')));
+        // 042-dashboard-revamp — dasar query POS (order `completed` ⨝ item, filter data_mode eksplisit,
+        // event, dan tanggal BISNIS) hidup di SalesFigures supaya Dashboard memakai angka yang sama
+        // persis. Catatan lama tentang join 'categories' dan filter DEMO/LIVE ada di sana.
+        $base = SalesFigures::posBase([
+            'event_id' => $request->filled('event_id') ? $request->integer('event_id') : null,
+            'date_from' => $request->filled('date_from') ? $request->date('date_from')->toDateString() : null,
+            'date_to' => $request->filled('date_to') ? $request->date('date_to')->toDateString() : null,
+        ]);
 
         // Task 1 — setiap baris agregat kini membawa entity_id (product_id/
         // category_id/artist_id) di samping label, supaya frontend bisa
@@ -91,7 +73,7 @@ class ReportController extends Controller
             'category' => ['categories.id', 'categories.name', 'category_id'],
             'artist' => ['artists.id', 'artists.name', 'artist_id'],
             'event' => ['events.id', 'events.name', 'event_id'],
-            'day' => ['DATE(orders.created_at)', 'DATE(orders.created_at)', null],
+            'day' => ['orders.business_date', 'orders.business_date', null],
             default => ['products.id', 'products.name', 'product_id'],
         };
 
@@ -227,13 +209,7 @@ class ReportController extends Controller
         // `else` yang menimpanya dihapus, bukan diperbaiki, karena computation-nya
         // memang duplikat dari yang sudah dilakukan di atas.
 
-        $totals = (clone $base)->selectRaw('
-            COUNT(DISTINCT orders.id) as order_count,
-            SUM(order_items.qty) as unit_count,
-            SUM(order_items.line_total + order_items.discount_amount) as gross_sales,
-            SUM(order_items.discount_amount) as discount_total,
-            SUM(order_items.line_total) as net_sales
-        ')->first();
+        $totals = SalesFigures::totals($base);
 
         $preorderTotals = (clone $preorderBase)->selectRaw("
             SUM(preorder_items.qty * ({$fraction})) as unit_count,

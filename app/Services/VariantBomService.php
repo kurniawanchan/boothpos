@@ -439,6 +439,11 @@ class VariantBomService
                 return $locked;
             }
 
+            // 043 — satu varian, satu sumber biaya: varian yang digerakkan resep tidak boleh BOM-selesai.
+            if (app(RecipeService::class)->isRecipeDriven($locked)) {
+                throw new BomRuleException(__('products.recipe_conflict_recipe'), 'cost_source_conflict');
+            }
+
             $lines = $locked->bomLines()->with(['material', 'purchaseOrderItem.purchaseOrder'])->get();
 
             if ($lines->isEmpty()) {

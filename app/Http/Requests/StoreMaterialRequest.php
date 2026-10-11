@@ -31,6 +31,9 @@ class StoreMaterialRequest extends FormRequest
             ],
             'name' => ['required', 'string', 'max:150'],
             'unit' => ['required', 'string', 'max:20'],
+            // 043 (Q2 = B) — jenis bahan dan biaya standar (untuk bahan setengah jadi tanpa harga vendor).
+            'kind' => ['sometimes', 'in:ingredient,semi_finished,packaging'],
+            'standard_cost' => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
         ];

@@ -73,6 +73,10 @@ class KitchenService
                         'order_item_id' => $line->id,
                         'name_snapshot' => $line->name_snapshot,
                         'qty' => $line->qty,
+                        // 042 — nilai baris saat dikirim (sudah termasuk modifier dan diskon baris), disalin
+                        // karena baris order dihapus bila dibatalkan sesudah dikirim; dipakai Dashboard
+                        // "Void setelah fire". Dibagi qty agar `qty × unit_price` = nilai baris.
+                        'unit_price' => $line->qty > 0 ? round((float) $line->line_total / (int) $line->qty, 2) : null,
                         'modifiers' => $line->modifiers,
                         'note' => $line->note,
                         // Tanpa stasiun → tidak ada yang memasak: langsung siap saji.

@@ -74,6 +74,12 @@ class User extends Authenticatable
         return in_array($menuKey, $this->role?->menu_keys ?? [], true);
     }
 
+    /** 043 — izin tingkat-aksi; lihat App\Support\PermissionCatalog dan Role::allows(). */
+    public function hasPermission(string $permission): bool
+    {
+        return $this->role?->allows($permission) ?? false;
+    }
+
     /**
      * Sama seperti canAccessMenu() tapi untuk gerbang gabungan yang
      * menyentuh beberapa menu sekaligus (mis. impor/ekspor data master

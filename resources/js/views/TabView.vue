@@ -14,6 +14,7 @@ import { buildProductCards } from '../utils/posProductCards';
 import { formatIDR } from '../utils/money';
 import { uuid } from '../utils/uuid';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
+import { useMenuAvailability } from '../composables/useMenuAvailability';
 import TabLinesList from '../components/restaurant/TabLinesList.vue';
 import TabPaymentModal from '../components/restaurant/TabPaymentModal.vue';
 import ProductVariantPickerModal from '../components/pos/ProductVariantPickerModal.vue';
@@ -117,6 +118,10 @@ const categoryOptions = computed(() => categories.value.map((c) => ({ value: c.i
 // Hidangan made-to-order (track_stock = false) tidak punya stok fisik: tidak boleh tampil "habis".
 const isUnavailable = (card) => card.variants.every((v) => v.track_stock !== false ? v.current_stock <= 0 : false);
 
+// 043 (US3) — item yang ditandai 86 / didiskontinu (poll ~5 dtk). Berbeda dari `isUnavailable` (stok): kartu 86 tidak
+// `disabled` agar ketukan tetap sampai ke onPickCard dan kasir mendapat toast alasan; server tetap penjaganya (409).
+const availability = useMenuAvailability();
+
 // Grup modifier efektif per produk (dari GET /products?with_modifiers=1).
 const groupsByProduct = computed(() => Object.fromEntries(products.value.map((p) => [p.id, p.modifier_groups ?? []])));
 
@@ -138,6 +143,10 @@ async function run(action) {
 }
 
 function onPickCard(card) {
+  if (isOpen.value && availability.isUnavailable(card)) {
+    toast.warning(availability.unavailableReason(card) === 'discontinued' ? t('pos.item_discontinued') : t('pos.item_sold_out'));
+    return;
+  }
   if (!isOpen.value || busy.value || isUnavailable(card)) return;
   if (card.variants.length === 1) startAdd(card, card.variants[0]);
   else pickerCard.value = card;
@@ -364,6 +373,8 @@ async function performCloseEmpty() {
             :key="card.product_id"
             type="button"
             class="flex flex-col gap-1.5 rounded-card border border-line bg-white p-3 text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-50"
+            :class="availability.isUnavailable(card) ? 'opacity-50 grayscale' : ''"
+            :aria-disabled="availability.isUnavailable(card) ? 'true' : undefined"
             :disabled="!isOpen || busy || isUnavailable(card)"
             :data-testid="`menu-${card.product_id}`"
             @click="onPickCard(card)"
@@ -373,7 +384,8 @@ async function performCloseEmpty() {
             <span class="text-[12.5px] font-semibold text-brand-active">
               {{ card.min_price === card.max_price ? formatIDR(card.min_price) : `${formatIDR(card.min_price)} – ${formatIDR(card.max_price)}` }}
             </span>
-            <StatusPill v-if="isUnavailable(card)" variant="danger">{{ t('floor.tab.sold_out') }}</StatusPill>
+            <StatusPill v-if="availability.isUnavailable(card)" variant="danger" data-testid="card-86">{{ t('pos.sold_out_86') }}</StatusPill>
+            <StatusPill v-else-if="isUnavailable(card)" variant="danger">{{ t('floor.tab.sold_out') }}</StatusPill>
           </button>
         </div>
       </section>

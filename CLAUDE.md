@@ -351,6 +351,33 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **Rows of one seller must be contiguous.** `preordersByArtist()` orders by `artists.name` THEN `preorder_items.artist_id` — two sellers with the same name used to interleave their rows (found in 039), which would have put a subtotal in the middle of another seller's block.
 - The seller filter on the screen hides rows and their seller's subtotal together; the filtered subtotal/Grand Total still equal the visible rows. The default (summary) and drill-down shapes of `GET /reports/preorders` are untouched; the Summary sheet of the export is untouched.
 
+## Dashboard and business day (feature 042, 2026-10-11)
+
+- **Business date is stored, not derived.** `orders.completed_at`, `orders.business_date`, `payments.business_date` and `cashier_sessions.business_date` are stamped by the model hook `App\Models\Concerns\StampsBusinessDay` (one place, every code path; none of these columns is fillable, so a request body can never set them). `App\Support\BusinessDay` is the only class that turns an instant into a business date or a date into UTC bounds, from the settings `store_timezone` (default `Asia/Jakarta`) and `business_day_cutoff` (default `00:00`). `config('app.timezone')` stays `UTC`. A tab is stamped when it is SETTLED (opened 23:30, paid 00:20 → the later day); a voided order keeps its last date. Changing the timezone/cut-off only affects rows stamped afterwards.
+- **One sales-figures implementation.** `App\Services\SalesFigures` (completed orders only, net = `SUM(order_items.line_total)`, order-level discounts NOT deducted — owner decision O3) feeds `GET /reports/sales` (`pos_*` totals) and the Dashboard. Report dates (`date_from`/`date_to`, `group_by=day`) are business dates. Pre-order revenue still joins only the shared totals, never `pos_*`. `SalesTotalsCharacterizationTest` pins the inherited behaviour.
+- **Dashboard endpoints** (`DashboardController`, menu `dashboard`): `/dashboard/summary` (cache ≤ 30 s keyed by mode+period+day+timezone+cut-off, `computed_at` always returned; "today" compares with yesterday up to the same elapsed time, hourly cumulative series, the comparison drawn as a full-width series; 7d/30d compare with the equal preceding period), `/dashboard/attention` (always every kind; `severity ok` = all clear; `link` null when the caller cannot open the destination; describes the CURRENT business date, not the period), `/dashboard/orders` (+ `/export`) and `/dashboard/export` (synchronous CSV with BOM). "Total order" counts every status; the average divides by COMPLETED orders.
+- **Attention definitions:** payments awaiting verification = POS/tab ORDERS with a pending non-cash payment and no rejected one (counts orders so the Sales-page filter shows the same rows); void after fire = cancelled `kitchen_ticket_items` today, counted per line, value = `qty × unit_price` where `unit_price` is the per-unit line value copied when the ticket is sent (older cancellations show "amount unknown"; a whole-tab void has no per-item log row); cash difference = shifts closed today with `abs(cash_difference)` above `cash_difference_tolerance`; low stock = the `/stock/low` definition, organisation-wide.
+- **Tabs of "Order terbaru"** (one per order): voided → `cancelled`; `open` → `open`; completed and not fully paid → `partial`; else `paid`. "Pre-bill dicetak" and "Ditutup" are listed in `hidden_tabs` until their data exists. The payment state in SQL lives next to `PaymentSummary::for()` (`orderRemainingSql()` etc.) and is parity-tested — never write a second formula.
+- **Low-stock history** comes from `stock_movements.stock_after` (`LowStockHistory`), no snapshot table.
+- **Not built yet (Stage B, needs the constitution amendment in `specs/042-dashboard-revamp/constitution-amendment.md`):** outlets and outlet scope, device registry/heartbeat, per-outlet limits. The web POS has no offline queue, so a device would only ever report online/offline.
+
+## Products module redesign (feature 043, 2026-10-11)
+
+`/products` (grid/table) and `/products/:id` (item page) follow the Back Office design. Stage A (single outlet) is built; per-outlet availability/price/release (Stage B, tasks T085–T095) is **gated** on the constitution amendment of feature 042 (T001) — do not start it before that is ratified.
+
+- **Status is DERIVED, never stored separately:** `Product::status` = draft (`published_at` NULL) / discontinued (`discontinued_at` set) / active; `is_active` stays the "orderable" flag and the model hooks (`booted()`) keep both consistent. Write lifecycle changes only through `ProductLifecycleService`.
+- **One "can this be ordered" rule:** `App\Support\MenuAvailability` (used by `OrderService`, `TabService`, the POS list and the 86 poll). An inactive parent product is NOT orderable (this closed an inherited gap — a test was changed on purpose).
+- **86 = `item_availability_marks`**, expiring at the end of the business day, written only by `AvailabilityService`; terminals poll `GET /menu/availability` (~5 s, etag/304). The server rejects the order regardless of what a terminal shows.
+- **`PriceService` is the ONLY writer of `product_variants.sell_price`** (and `price_history`): edits, variant creation, Excel import (`source: import`), bulk change, release apply. `cost_price` stays out of it. Future `effective_from` changes are applied lazily by `ReleaseService::publishDueCached()` (no scheduler) — called from the POS list, order/tab creation and the product list.
+- **Release engine is OFF by default** (`menu_release_enabled`): off = every change applies immediately; on = changes become `menu_changes` (price, item publish/discontinue/reactivate, `modifier_link`) released in versions (`menu_releases`), with ONE approval path (`ApprovalService`, requester ≠ approver, permission `menu.price.approve`, threshold default 15 %). New items are created as drafts and published by a change when releases are on.
+- **Action permissions** live in `App\Support\PermissionCatalog` + `roles.permissions` (JSON); `NULL` = defaults by role name (owner/admin all; inventory item.manage/86/recipe.edit). Enforcement is `User::hasPermission()` server-side; the SPA only hides (`auth.hasPermission`). They sit NEXT TO `menu_keys`, not instead of them.
+- **Bulk price** (`BulkPriceService`, `/price-changes[/preview]`): set-based preview, recomputed on apply, all-or-nothing, one `price_change_batches` row.
+- **Modifier links carry per-item rules** (`modifier_group_product.has_rules` + required/min/max/order). `ModifierResolver` uses the link rule over the group rule; `max_select` NULL on a rules-carrying link = unlimited. `PUT /products/{id}/modifier-links` replaces ALL links of the item (`ModifierLinkService`); group contents are still edited on the restaurant Setup screen.
+- **Recipes are versioned and sit BESIDE the PO-based BOM:** `recipes`/`recipe_variants`/`recipe_lines`, a version is immutable (save = next version); active version per variant = latest `effective_from ≤ today`. Formula in ONE place, `RecipeCost` (`qty ÷ (1 − shrink) × unit_cost`, portion = Σ ÷ yield; a line with no cost makes the result `incomplete`, never zero). A variant has ONE cost source: recipe-driven XOR BOM-complete (`409 cost_source_conflict` both ways; `409 cost_price_locked_by_recipe`). `RecipeService` is the only writer of `cost_price` for recipe-driven variants (on effectivity — lazily via `applyDueCached()` — and "Hitung ulang biaya"). **Ingredient stock deduction and unit conversion are NOT built.** Cost fields are visible only with the recipe permission.
+- **Excel products sheet** gained `short_name, tax_category, prep_minutes, is_retail, status` at the END; `status` is export-only (derived).
+- **Switching an item off is ONLY "Discontinue" on the item page** (reason required, follows the release mode). The list's old instant "Nonaktifkan" row action was removed on 2026-10-11 (owner decision); `DELETE /products/{id}` still exists in the API.
+- **Locale files are lazy chunks (2026-10-11):** `resources/js/i18n.js` starts with no messages; `loadLocale(lang)` imports `locales/{id,en}.json` as separate chunks. `main.js` loads `id` before mount (login screen, guests, fallback), the auth store loads the user's language BEFORE it stores `user` (`syncLocale` is async), `en` is only downloaded for users who use it. `qa-tests/setup.js` installs both synchronously so tests stay synchronous. The main chunk went 435 → 240 kB. Never `import` a locale JSON from app code again.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -358,7 +385,29 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/041-back-office-ui-redesign/plan.md`
+Active feature plan: `specs/043-products-page-redesign/plan.md`
+(branch `043-products-page-redesign`, on top of `042-dashboard-revamp`) — the Products screen becomes the design's Produk
+module: grid/table list with four figures and item-type tabs, a dedicated item page (variants and prices, per-item modifier
+rules, availability, versioned recipe with cost and margin, price history), mark sold out (86), discontinue, bulk price change,
+and — per Q1 = C — a menu release engine with approval for large price differences and per-outlet availability/prices.
+Staged: **A** (no gate) builds everything on the single default outlet including the release/approval engine behind the
+setting `menu_release_enabled` (default off, so booth installs keep immediate edits); **B** (blocked on the 042 constitution
+amendment and 042 Phase 7 outlet foundation, which it reuses) adds the outlet dimension. Key rules: one `PriceService` writes
+`sell_price` + `price_history`; one `MenuAvailability` answers "can this be ordered" (orders, tabs, POS, 86 poll); status is
+derived (`is_active` + `published_at` + `discontinued_at`); recipes are versioned beside the legacy BOM (one cost source per
+variant); releases write through to the live columns and due ones are published lazily (no scheduler). See research.md D1–D18.
+
+Previous feature: `specs/042-dashboard-revamp/plan.md`
+(branch `042-dashboard-revamp`, on top of `041-back-office-ui-redesign`) — the Dashboard is rebuilt to the design's
+Dashboard (period switch, four KPI cards with change and trend, "Perlu tindakan", "Order terbaru"); the old event
+charts stay below it as "Per event". Q1 = B pulls the minimum outlet/device foundations into this feature: **Stage A**
+(no gate) stamps `orders.completed_at`/`business_date` (store timezone + cut-off settings, backfilled), shares ONE
+sales-figures implementation with the Sales page, and adds `/dashboard/summary|attention|orders|export`; **Stage B**
+(blocked until the constitution amendment in `specs/042-dashboard-revamp/constitution-amendment.md` is ratified)
+adds outlets + `OutletScope`/`OutletFilter`, a device registry with activation and heartbeat (device figures are
+advisory only), per-outlet limits. The web POS has no offline queue, so it reports online/offline only. See research.md D1–D15.
+
+Previous feature: `specs/041-back-office-ui-redesign/plan.md`
 (branch `041-back-office-ui-redesign`, on top of `028-restaurant-dine-in-ordering`) — umbrella plan to bring the
 whole product to the "Warkop WJM Back Office" design (`design/screens/`, product-owner decisions Q1 = build every
 capability the design shows, Q2 = new visual system on ALL screens incl. cashier-facing). Ten ordered phases, each a

@@ -4,7 +4,7 @@ import { formatCount } from '../../utils/formatters';
 
 /**
  * 041-back-office-ui-redesign (US2) — baris filter di atas tabel: kolom cari, filter (slot), dan penghitung
- * "N data" untuk HASIL yang sedang difilter. `active` menandai ada filter/pencarian terpasang; hanya saat itu
+ * "N data" untuk HASIL yang sedang difilter (kelompok kanan; slot `trailing` opsional menambah kendali di sebelahnya). `active` menandai ada filter/pencarian terpasang; hanya saat itu
  * tombol "Atur ulang filter" muncul. Sinkronisasi ke address bar dilakukan pemanggil lewat useQueryState —
  * komponen ini tidak tahu soal URL.
  */
@@ -43,6 +43,11 @@ const { t } = useI18n();
     >
       {{ t('page.reset_filters') }}
     </button>
-    <span v-if="count !== null" class="ml-auto text-[12.5px] font-semibold text-muted" data-testid="data-count">{{ t('page.data_count', { count: formatCount(count) }) }}</span>
+    <!-- Hitungan hasil selalu di kanan; slot `trailing` (opsional, mis. saklar Grid|Tabel dan tombol tambah) ikut di
+         kelompok kanan yang sama, SESUDAH hitungan, supaya urutannya "N data · saklar · tombol". -->
+    <div v-if="count !== null || $slots.trailing" class="ml-auto flex items-center gap-3">
+      <span v-if="count !== null" class="text-[12.5px] font-semibold text-muted" data-testid="data-count">{{ t('page.data_count', { count: formatCount(count) }) }}</span>
+      <slot name="trailing" />
+    </div>
   </div>
 </template>

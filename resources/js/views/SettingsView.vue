@@ -13,6 +13,9 @@ import AppNameSection from './settings/AppNameSection.vue';
 import ThemeSection from './settings/ThemeSection.vue';
 import SystemModeSection from './settings/SystemModeSection.vue';
 import LicenseTierSection from './settings/LicenseTierSection.vue';
+import BusinessDaySection from './settings/BusinessDaySection.vue';
+import ReasonCodesSection from './settings/ReasonCodesSection.vue';
+import MenuReleaseSection from './settings/MenuReleaseSection.vue';
 
 /**
  * 041-back-office-ui-redesign (US2) — Pengaturan dipecah dari satu halaman 8 kartu menjadi daftar bagian di kiri
@@ -36,6 +39,9 @@ const SECTIONS = {
   theme: ThemeSection,
   mode: SystemModeSection,
   tier: LicenseTierSection,
+  business_day: BusinessDaySection,
+  reasons: ReasonCodesSection,
+  menu_release: MenuReleaseSection,
   backup: BackupRestoreSection,
 };
 
@@ -63,6 +69,11 @@ const groups = computed(() => [
     items: [
       { key: 'mode', label: t('settings.system_mode_section_title') },
       { key: 'tier', label: t('settings.license_tier') },
+      { key: 'business_day', label: t('settings.business_day_section_title') },
+      // 043 — kode alasan (86, diskontinu, tolak persetujuan) diatur admin; dibaca dialog alasan di halaman Produk.
+      { key: 'reasons', label: t('settings.reasons_section_title') },
+      // 043 — saklar rilis menu, ambang persetujuan harga, pembulatan bawaan ubah harga massal.
+      { key: 'menu_release', label: t('settings.menu_release_section_title') },
       { key: 'backup', label: t('settings.nav_backup') },
     ],
   },

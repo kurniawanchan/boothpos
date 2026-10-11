@@ -124,15 +124,16 @@ class TabService
      */
     public function addLine(Order $tab, array $data, User $user): Order
     {
+        // 043 — rilis/harga berjadwal yang jatuh tempo diterapkan di titik masuk ini (tanpa penjadwal).
+        app(\App\Services\ReleaseService::class)->publishDueCached();
+        app(\App\Services\RecipeService::class)->applyDueCached();
+
         return DB::transaction(function () use ($tab, $data, $user) {
             $order = $this->lockOpen($tab);
 
             $variant = ProductVariant::with('product')->lockForUpdate()->findOrFail($data['variant_id']);
-            if (! $variant->is_active) {
-                throw ValidationException::withMessages([
-                    'variant_id' => __('orders_payments.variant_inactive', ['sku' => $variant->sku]),
-                ]);
-            }
+            // 043 — satu aturan "bisa dipesan" (varian, produk/diskontinu, tanda 86): App\Support\MenuAvailability.
+            \App\Support\MenuAvailability::assertOrderable($variant, 'variant_id');
 
             $qty = (int) $data['qty'];
             $note = $this->cleanNote($data['note'] ?? null);

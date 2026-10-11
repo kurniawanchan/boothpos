@@ -40,7 +40,46 @@ class Product extends Model
         'preorder_eta',
         'is_active',
         'station_id',
+        // 043 — fakta item. `published_at`/`discontinued_at` SENGAJA tidak di sini: hanya
+        // ProductLifecycleService yang menulisnya (forceFill), tidak pernah dari input klien.
+        'short_name',
+        'tax_category',
+        'prep_minutes',
+        'is_retail',
     ];
+
+    public const STATUS_DRAFT = 'draft';
+
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_DISCONTINUED = 'discontinued';
+
+    /**
+     * 043 — menjaga status turunan tetap selaras dengan `is_active` APA PUN penulisnya (form, impor,
+     * layanan siklus hidup), sehingga tidak ada jalur yang bisa menghasilkan produk "aktif tapi draft":
+     *  - dibuat aktif → langsung terbit; dibuat nonaktif → draft (belum terbit);
+     *  - aktif → nonaktif → diskontinu (`discontinued_at`), nonaktif → aktif → terbit lagi (diskontinu dicabut).
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Product $p) {
+            if ($p->published_at === null && $p->is_active) {
+                $p->published_at = now();
+            }
+        });
+
+        static::updating(function (Product $p) {
+            if (! $p->isDirty('is_active')) {
+                return;
+            }
+            if ($p->is_active) {
+                $p->discontinued_at = null;
+                $p->published_at ??= now();
+            } elseif ($p->published_at !== null && $p->discontinued_at === null) {
+                $p->discontinued_at = now();
+            }
+        });
+    }
 
     protected function casts(): array
     {
@@ -48,7 +87,25 @@ class Product extends Model
             'is_preorder' => 'boolean',
             'is_active' => 'boolean',
             'preorder_eta' => 'date',
+            'is_retail' => 'boolean',
+            'prep_minutes' => 'integer',
+            'published_at' => 'datetime',
+            'discontinued_at' => 'datetime',
         ];
+    }
+
+    /**
+     * 043 — status TURUNAN (research.md D5): draft = belum pernah diterbitkan; discontinued = punya
+     * `discontinued_at`; selain itu active. `is_active` tetap penanda "bisa dipesan" dan dijaga
+     * ProductLifecycleService agar selaras dengan status ini.
+     */
+    protected function status(): \Illuminate\Database\Eloquent\Casts\Attribute
+    {
+        return \Illuminate\Database\Eloquent\Casts\Attribute::get(fn () => match (true) {
+            $this->discontinued_at !== null => self::STATUS_DISCONTINUED,
+            $this->published_at === null => self::STATUS_DRAFT,
+            default => self::STATUS_ACTIVE,
+        });
     }
 
     public function artist(): BelongsTo
@@ -75,6 +132,18 @@ class Product extends Model
     /** 028 — grup modifier yang dilampirkan langsung ke sini (lihat ModifierResolver::effectiveGroups). */
     public function modifierGroups(): BelongsToMany
     {
-        return $this->belongsToMany(ModifierGroup::class, 'modifier_group_product');
+        return $this->belongsToMany(ModifierGroup::class, 'modifier_group_product')
+            ->withPivot(['has_rules', 'is_required', 'min_select', 'max_select', 'display_order']);
+    }
+
+    /** 043 — tanda 86 (semua, termasuk yang sudah berakhir; pakai `->active()` untuk yang berlaku). */
+    public function availabilityMarks(): HasMany
+    {
+        return $this->hasMany(ItemAvailabilityMark::class);
+    }
+
+    public function recipes(): HasMany
+    {
+        return $this->hasMany(Recipe::class)->orderByDesc('version');
     }
 }

@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import RolesView from '../../resources/js/views/RolesView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listRoles, createRole, deleteRole } from '../../resources/js/api/roles';
+import { listRoles, createRole, updateRole, deleteRole, listPermissionCatalog } from '../../resources/js/api/roles';
 
 vi.mock('../../resources/js/api/roles', () => ({
   listRoles: vi.fn(),
@@ -11,6 +11,12 @@ vi.mock('../../resources/js/api/roles', () => ({
   createRole: vi.fn(),
   updateRole: vi.fn(),
   deleteRole: vi.fn(),
+  listPermissionCatalog: vi.fn().mockResolvedValue({
+    data: [
+      { key: 'menu.item.86', label: 'Menandai item habis (86)' },
+      { key: 'menu.price.bulk', label: 'Mengubah harga massal' },
+    ],
+  }),
   listMenuKeys: vi.fn().mockResolvedValue({
     data: [
       { key: 'pos', label: 'Kasir' },
@@ -183,5 +189,60 @@ describe('RolesView', () => {
     await user.click(screen.getByRole('button', { name: /coba lagi/i }));
 
     expect(await screen.findByText('Kasir Event A')).toBeInTheDocument();
+  });
+
+  // 043 (T020) — blok "Izin aksi": izin tingkat-aksi di samping akses menu, dimuat dari GET /permission-catalog.
+  describe('action permissions (043)', () => {
+    async function openEditDialog() {
+      const { default: userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      listRoles.mockResolvedValue({
+        data: [{ id: 1, name: 'Kasir Event A', menu_keys: ['pos', 'session'], permissions: ['menu.item.86'], is_system_default: false, user_count: 3 }],
+        meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 },
+      });
+      renderRoles();
+      await screen.findByText('Kasir Event A');
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+      const dialog = await screen.findByRole('dialog', { name: /ubah peran/i });
+      await waitFor(() => expect(within(dialog).queryByText(/memuat daftar izin/i)).not.toBeInTheDocument());
+      return { user, dialog };
+    }
+
+    it('shows the catalog as checkboxes, checked from the role\'s effective permissions', async () => {
+      const { dialog } = await openEditDialog();
+
+      expect(within(dialog).getByText('Izin aksi')).toBeInTheDocument();
+      expect(within(dialog).getByRole('checkbox', { name: 'Menandai item habis (86)' })).toBeChecked();
+      expect(within(dialog).getByRole('checkbox', { name: 'Mengubah harga massal' })).not.toBeChecked();
+      expect(listPermissionCatalog).toHaveBeenCalled();
+    });
+
+    it('sends the chosen permissions together with the menu keys on save', async () => {
+      updateRole.mockResolvedValue({ id: 1 });
+      const { user, dialog } = await openEditDialog();
+
+      await user.click(within(dialog).getByRole('checkbox', { name: 'Mengubah harga massal' }));
+      await user.click(within(dialog).getByRole('checkbox', { name: 'Menandai item habis (86)' }));
+      await user.click(within(dialog).getByRole('button', { name: /^simpan$/i }));
+
+      await waitFor(() =>
+        expect(updateRole).toHaveBeenCalledWith(1, { name: 'Kasir Event A', menu_keys: ['pos', 'session'], permissions: ['menu.price.bulk'] })
+      );
+    });
+
+    it('still lets the role be saved when the permission list cannot be loaded', async () => {
+      listPermissionCatalog.mockRejectedValueOnce(new Error('network'));
+      updateRole.mockResolvedValue({ id: 1 });
+      const { default: userEvent } = await import('@testing-library/user-event');
+      const user = userEvent.setup();
+      renderRoles();
+      await screen.findByText('Kasir Event A');
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+      const dialog = await screen.findByRole('dialog', { name: /ubah peran/i });
+
+      expect(await within(dialog).findByText(/gagal memuat daftar izin/i)).toBeInTheDocument();
+      await user.click(within(dialog).getByRole('button', { name: /^simpan$/i }));
+      await waitFor(() => expect(updateRole).toHaveBeenCalled());
+    });
   });
 });

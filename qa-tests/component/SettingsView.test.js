@@ -17,6 +17,7 @@ vi.mock('../../resources/js/api/settings', () => ({
   updateSettings: vi.fn(),
   uploadStoreLogo: vi.fn(),
 }));
+vi.mock('../../resources/js/api/reasons', () => ({ listReasonCodes: vi.fn().mockResolvedValue({ data: [] }), createReasonCode: vi.fn(), updateReasonCode: vi.fn() }));
 vi.mock('../../resources/js/api/backups', () => ({
   listBackups: vi.fn(() => Promise.resolve({ data: [] })),
   createBackup: vi.fn(),
@@ -353,5 +354,21 @@ describe('SettingsView — struktur halaman (041)', () => {
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith([{ key: 'multi_artist_enabled', value: true, type: 'boolean', group: 'licensing' }]),
     );
+  });
+});
+
+// 043 (T020) — bagian "Kode alasan" terdaftar di grup Sistem dan bisa dibuka lewat ?section=reasons.
+describe('SettingsView — reason codes section (043)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 1, artist_limit_reached: false });
+    listSettings.mockResolvedValue({ data: [] });
+    listPaymentChannels.mockResolvedValue({ data: [] });
+  });
+
+  it('lists "Kode alasan" in the navigation and opens it from the address', async () => {
+    await renderSettings('reasons');
+    expect(await screen.findByRole('heading', { level: 2, name: 'Kode alasan' })).toBeInTheDocument();
+    expect(await screen.findByRole('tab', { name: 'Habis (86)' })).toBeInTheDocument();
   });
 });

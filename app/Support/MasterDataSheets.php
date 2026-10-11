@@ -94,6 +94,9 @@ final class MasterDataSheets
                 // semua variannya). Baris manapun boleh membawanya; menunjuk
                 // varian baris itu sendiri, bukan seluruh produk.
                 'variant_image_filename',
+                // 043 — fakta item, DITAMBAHKAN di akhir supaya berkas lama tetap bisa diimpor. `status` hanya EKSPOR
+                // (turunan: draft/active/discontinued); status diubah lewat aksi diskontinu/aktifkan, bukan lewat impor.
+                'short_name', 'tax_category', 'prep_minutes', 'is_retail', 'status',
             ],
             self::STOCK => [
                 'sku', 'current_stock', 'reason',
@@ -194,6 +197,11 @@ final class MasterDataSheets
                 // PRODUKnya (dipakai bersama semua varian). Sama-sama
                 // kosong = tidak ada gambar diikutsertakan.
                 'variant_image_filename' => '',
+                'short_name' => '',
+                'tax_category' => '',
+                'prep_minutes' => '',
+                'is_retail' => 0,
+                'status' => '',
             ],
             self::STOCK => [
                 'sku' => 'RYU-KY-SAK-001',

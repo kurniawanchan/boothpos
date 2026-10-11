@@ -35,6 +35,16 @@ class ModifierResolver
                 $copy = $g->replicate()->setRelation('options', $g->options->where('is_active', true)->values());
                 $copy->id = $g->id;
 
+                // 043 — tautan item↔grup yang membawa aturannya sendiri MENIMPA aturan grup (wajib/min/maks/urutan).
+                // `max_select` NULL pada tautan = tanpa batas atas. Grup yang datang dari kategori tidak punya aturan tautan.
+                if ($g->pivot && (bool) ($g->pivot->has_rules ?? false)) {
+                    $copy->is_required = (bool) $g->pivot->is_required;
+                    $copy->min_select = (int) $g->pivot->min_select;
+                    $copy->max_select = $g->pivot->max_select;
+                    $copy->display_order = (int) ($g->pivot->display_order ?? $g->display_order);
+                    $copy->setAttribute('link_override', true);
+                }
+
                 return $copy;
             })
             ->filter(fn (ModifierGroup $g) => $g->options->isNotEmpty())
@@ -108,6 +118,13 @@ class ModifierResolver
     /** @return array{0: int, 1: int|null} [min, max] — max null = tanpa batas atas */
     private function range(ModifierGroup $group): array
     {
+        // 043 — aturan tautan berlaku apa adanya, terlepas dari jenis pilihan grup.
+        if ($group->getAttribute('link_override')) {
+            $min = $group->is_required ? max(1, (int) $group->min_select) : (int) $group->min_select;
+
+            return [$min, $group->max_select === null ? null : (int) $group->max_select];
+        }
+
         if ($group->selection_type === ModifierGroup::SINGLE) {
             return [$group->is_required ? 1 : 0, 1];
         }

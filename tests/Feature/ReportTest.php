@@ -812,7 +812,8 @@ class ReportTest extends TestCase
             'items' => [['variant_id' => $variant->id, 'qty' => 5]],
             'payments' => [['method' => 'cash', 'amount' => 50000]],
         ], $cashier);
-        $outOfRange->forceFill(['created_at' => now()->subDays(10)])->save();
+        // 042: laporan memakai tanggal BISNIS tersimpan — geser keduanya, bukan hanya created_at.
+        $outOfRange->forceFill(['created_at' => now()->subDays(10), 'business_date' => now()->subDays(10)->toDateString()])->save();
 
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');

@@ -22,7 +22,9 @@ class ModifierGroupController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $this->ensureSetupAccess($request);
+        // 043 — DAFTAR (baca saja) juga terbuka untuk menu `products`: penyunting item perlu memilih grup untuk ditautkan.
+        // Menulis dan membaca satu grup tetap hanya `dining_setup`.
+        abort_unless($request->user()?->canAccessAnyMenu(['dining_setup', 'products']), 403, __('restaurant.forbidden'));
 
         $groups = ModifierGroup::query()
             ->with(['options', 'products:id', 'categories:id'])

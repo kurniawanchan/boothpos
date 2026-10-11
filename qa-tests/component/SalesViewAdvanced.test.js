@@ -478,6 +478,21 @@ describe('SalesView — partially paid sales (028 US5)', () => {
     expect(order()).toEqual(['ORD-305']);
   });
 
+  // 042-dashboard-revamp (T032) — tujuan butir "Pembayaran menunggu verifikasi": /sales?pstate=pending menampilkan
+  // persis transaksi yang status pembayarannya menunggu verifikasi (R2 saja; R1/R3 terverifikasi).
+  it('restores ?pstate=pending from the address so only transactions awaiting verification are listed', async () => {
+    await setup({ url: '/sales?pstate=pending', data: WITHOUT_VOIDED, ready: 'ORD-302' });
+
+    expect(order()).toEqual(['ORD-302']);
+    expect(router.currentRoute.value.query.pstate).toBe('pending');
+  });
+
+  it('ignores an unknown ?pstate value instead of filtering everything out', async () => {
+    await setup({ url: '/sales?pstate=whatever', data: WITHOUT_VOIDED });
+
+    expect(order()).toEqual(['ORD-303', 'ORD-302', 'ORD-301']);
+  });
+
   it('uses the shift cash received (including later payments) for the open shift panel', async () => {
     const sessions = [
       { id: 12, cashier_name: 'Kasir B', opened_at: '2026-09-02T02:00:00Z', closed_at: null, status: 'open', opening_cash: '50000.00', closing_cash: null, expected_cash: null, cash_received: '340000.00' },

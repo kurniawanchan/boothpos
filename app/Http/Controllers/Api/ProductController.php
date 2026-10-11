@@ -37,6 +37,16 @@ class ProductController extends Controller
     {
         $this->authorize('viewAny', Product::class);
 
+        // 043 — harga/rilis berjadwal yang jatuh tempo diterapkan di titik masuk ini (daftar POS dan daftar Produk).
+        app(\App\Services\ReleaseService::class)->publishDueCached();
+        app(\App\Services\RecipeService::class)->applyDueCached();
+
+        // 043 — MODE KATALOG (layar Produk baru): aktif bila `tab` dikirim. Tanpa `tab`, perilaku lama
+        // (POS, pre-order, dst.) tetap persis seperti sebelumnya.
+        if ($request->has('tab')) {
+            return $this->catalog(app(\App\Http\Requests\ProductCatalogRequest::class));
+        }
+
         $perPage = min((int) $request->integer('per_page', 25), 100);
 
         // ?with_variants=1 — OPT-IN, bukan selalu aktif. Dua alasan:
@@ -95,6 +105,28 @@ class ProductController extends Controller
         ]);
     }
 
+    /** 043 — GET /products?tab=…: baris katalog + jumlah tab; lihat ProductCatalogQuery dan contracts/api-products.md. */
+    private function catalog(\App\Http\Requests\ProductCatalogRequest $request): JsonResponse
+    {
+        $query = app(\App\Services\ProductCatalogQuery::class);
+        $filters = $request->validated();
+        $page = $query->page($filters, $request->user());
+
+        return response()->json([
+            'data' => $page->items(),
+            'meta' => ['current_page' => $page->currentPage(), 'per_page' => $page->perPage(), 'total' => $page->total(), 'last_page' => $page->lastPage()],
+            'counts' => $query->counts(),
+        ]);
+    }
+
+    /** 043 — GET /products/summary: empat angka header (sama dengan baris di bawahnya). */
+    public function summary(): JsonResponse
+    {
+        $this->authorize('viewAny', Product::class);
+
+        return response()->json(app(\App\Services\ProductCatalogQuery::class)->summary());
+    }
+
     public function store(StoreProductRequest $request): JsonResponse
     {
         $data = $request->validated();
@@ -116,7 +148,14 @@ class ProductController extends Controller
                 'description' => $data['description'] ?? null,
                 'is_preorder' => $data['is_preorder'] ?? false,
                 'preorder_eta' => $data['preorder_eta'] ?? null,
-                'is_active' => $data['is_active'] ?? true,
+                // 043 — dengan rilis menu AKTIF, item baru berstatus draft (belum terbit) sampai rilis berikutnya;
+                // dengan rilis mati perilaku lama: langsung aktif.
+                'is_active' => \App\Support\MenuSettings::releaseEnabled() ? false : ($data['is_active'] ?? true),
+                // 043 — fakta item.
+                'short_name' => $data['short_name'] ?? null,
+                'tax_category' => $data['tax_category'] ?? null,
+                'prep_minutes' => $data['prep_minutes'] ?? null,
+                'is_retail' => $data['is_retail'] ?? false,
             ]);
 
             foreach ($data['variants'] as $variantInput) {
@@ -132,6 +171,11 @@ class ProductController extends Controller
                 ]);
             }
 
+            // 043 — dengan rilis AKTIF, penerbitan item baru menunggu rilis berikutnya (menu_change item_publish).
+            if (\App\Support\MenuSettings::releaseEnabled()) {
+                app(\App\Services\ProductLifecycleService::class)->requestPublish($product, request()->user());
+            }
+
             return $product;
         });
 
@@ -142,7 +186,47 @@ class ProductController extends Controller
     {
         $this->authorize('view', $product);
 
-        return response()->json(new ProductResource($product->load(['artist', 'category', ...$this->variantRelations($request)])));
+        // json_decode(json_encode()) = mengurai resource bersarang persis seperti yang dilihat klien (tanpa pembungkus 'data').
+        $payload = json_decode(json_encode(new ProductResource($product->load(['artist', 'category', ...$this->variantRelations($request)]))), true);
+
+        // 043 — halaman item: fakta, stasiun, tautan modifier efektif, ketersediaan, rilis, `can`.
+        $payload = array_merge($payload, app(\App\Services\ProductDetailService::class)->extras($product, $request->user()));
+
+        // Biaya hanya untuk pengguna yang boleh melihatnya (menu products/reports) — pemanggil lain (mis. kasir) tidak.
+        if (! ($request->user()->canAccessMenu('products') || $request->user()->canAccessMenu('reports'))) {
+            $payload['variants'] = array_map(fn ($v) => array_diff_key($v, array_flip(['cost_price', 'has_bom', 'bom_cost'])), $payload['variants'] ?? []);
+        }
+
+        return response()->json($payload);
+    }
+
+    /** 043 — GET /products/{id}/price-history: riwayat harga dasar semua varian, terbaru dulu; baris terakhir = pembuatan. */
+    public function priceHistory(Request $request, Product $product): JsonResponse
+    {
+        $this->authorize('view', $product);
+
+        $rows = \App\Models\PriceHistory::query()
+            ->whereIn('variant_id', $product->variants()->withTrashed()->pluck('id'))
+            ->with(['variant:id,variant_name', 'user:id,name', 'approver:id,name'])
+            ->orderByDesc('effective_at')->orderByDesc('id')
+            ->paginate(min((int) $request->integer('per_page', 25), 100));
+
+        $versions = \App\Models\MenuRelease::query()->whereIn('id', $rows->pluck('release_id')->filter())->pluck('version', 'id');
+
+        return response()->json([
+            'data' => $rows->map(fn ($h) => [
+                'at' => $h->effective_at->toIso8601String(),
+                'variant' => $h->variant?->variant_name,
+                'old_price' => $h->old_price === null ? null : number_format((float) $h->old_price, 2, '.', ''),
+                'new_price' => number_format((float) $h->new_price, 2, '.', ''),
+                'source' => $h->source,
+                'by' => $h->user?->name,
+                'approved_by' => $h->approver?->name,
+                'release_version' => $h->release_id ? ($versions[$h->release_id] ?? null) : null,
+                'note' => $h->note,
+            ])->values(),
+            'meta' => ['current_page' => $rows->currentPage(), 'per_page' => $rows->perPage(), 'total' => $rows->total(), 'last_page' => $rows->lastPage()],
+        ]);
     }
 
     /**
@@ -267,14 +351,37 @@ class ProductController extends Controller
             ], 409);
         }
 
+        // 043 — sama untuk varian yang digerakkan RESEP: biaya mengikuti resep aktifnya.
+        if ($request->has('cost_price')
+            && ReportSplit::cents($request->validated('cost_price')) !== ReportSplit::cents($variant->cost_price)
+            && app(\App\Services\RecipeService::class)->isRecipeDriven($variant)) {
+            return response()->json([
+                'message' => __('products.recipe_cost_locked'),
+                'code' => 'cost_price_locked_by_recipe',
+            ], 409);
+        }
+
         // F13.4 — "ubah harga" (price_changed): satu-satunya endpoint yang
         // menyentuh cost_price/sell_price. Snapshot ditulis apa adanya
         // (bukan hanya diff kolom harga) supaya operator bisa melihat
         // konteks lengkap perubahan, bukan cuma angka harga saja.
-        DB::transaction(function () use ($request, $variant) {
-            $before = $variant->only($variant->getFillable());
+        // 043 — harga dasar HANYA ditulis lewat PriceService (riwayat harga + mode rilis/persetujuan). Bidang
+        // lain tetap lewat update biasa; baris audit `price_changed` lama dipertahankan apa adanya.
+        $price = ['changed' => false, 'applied' => false, 'pending' => false, 'requires_approval' => false, 'change' => null];
 
-            $variant->update($request->validated());
+        DB::transaction(function () use ($request, $variant, &$price) {
+            $before = $variant->only($variant->getFillable());
+            $data = $request->validated();
+            $hasPrice = array_key_exists('sell_price', $data);
+            $newPrice = $data['sell_price'] ?? null;
+            unset($data['sell_price']);
+
+            $variant->update($data);
+            if ($hasPrice) {
+                $price = app(\App\Services\PriceService::class)->setBasePrice($variant, $newPrice, $request->user(), 'edit', [
+                    'audit' => false, 'effective_from' => $request->input('effective_from'),
+                ]);
+            }
 
             $this->activityLogger->log(
                 userId: $request->user()?->id,
@@ -283,11 +390,17 @@ class ProductController extends Controller
                 entityId: $variant->id,
                 description: "Mengubah varian {$variant->sku}.",
                 oldValues: $before,
-                newValues: $variant->only($variant->getFillable()),
+                newValues: $variant->fresh()->only($variant->getFillable()),
             );
         });
 
-        return response()->json(new ProductVariantResource($variant->fresh()));
+        $payload = json_decode(json_encode(new ProductVariantResource($variant->fresh())), true);
+        if ($price['pending']) {
+            // Rilis aktif / tanggal berlaku di depan: harga BELUM berubah; kembalikan perubahan yang menunggu.
+            $payload['pending_change'] = ['id' => $price['change']->id, 'status' => $price['change']->status, 'new_price' => number_format((float) $price['change']->payload['new_price'], 2, '.', '')];
+        }
+
+        return response()->json($payload);
     }
 
     /**
@@ -368,6 +481,8 @@ class ProductController extends Controller
         $variants = ProductVariant::query()
             ->with(['product.artist', 'product.category'])
             ->where('is_active', true)
+            // 043 — produk yang didiskontinu tidak lagi bisa dipilih (mis. untuk pre-order baru).
+            ->whereHas('product', fn ($p) => $p->where('is_active', true))
             ->when($term !== '', fn ($q) => $q->where(function ($q) use ($term) {
                 $q->where('sku', 'like', "%{$term}%")
                   ->orWhere('variant_name', 'like', "%{$term}%")

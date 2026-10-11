@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Support\BusinessDay;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -34,6 +35,12 @@ class ActivityLogController extends Controller
             ->when($request->filled('entity_id'), fn ($q) => $q->where('entity_id', $request->integer('entity_id')))
             ->when($request->filled('user_id'), fn ($q) => $q->where('user_id', $request->integer('user_id')))
             ->when($request->filled('action'), fn ($q) => $q->where('action', $request->string('action')))
+            // 042 — satu HARI BISNIS (zona waktu toko, bukan UTC), dipakai tautan Dashboard "Void setelah fire".
+            ->when($request->filled('date'), function ($q) use ($request) {
+                [$start, $end] = BusinessDay::bounds($request->date('date')->toDateString());
+
+                return $q->where('created_at', '>=', $start)->where('created_at', '<', $end);
+            })
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
             ->when($request->filled('date_to'), fn ($q) => $q->whereDate('created_at', '<=', $request->date('date_to')))
             ->orderByDesc('created_at')

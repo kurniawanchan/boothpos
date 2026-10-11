@@ -39,6 +39,9 @@ class UpdateRoleRequest extends FormRequest
             ],
             'menu_keys' => ['sometimes', 'required', 'array'],
             'menu_keys.*' => [Rule::in(MenuKeys::keys())],
+            // 043 — izin tingkat-aksi (opsional); kunci tak dikenal ditolak 422, sama seperti menu_keys.
+            'permissions' => ['sometimes', 'nullable', 'array'],
+            'permissions.*' => [Rule::in(\App\Support\PermissionCatalog::keys())],
         ];
     }
 

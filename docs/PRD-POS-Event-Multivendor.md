@@ -246,6 +246,16 @@ Atas permintaan pemilik produk, pembayaran menjadi buku besar (ledger) yang disi
 
 Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/028-partial-split-payment/`.
 
+**Catatan perubahan pasca-MVP — 2026-10-11 (Dashboard baru dan tanggal bisnis)**
+
+Atas permintaan pemilik produk, Dashboard dibangun ulang mengikuti desain "Warkop WJM Back Office" (periode Hari ini/7 hari/30 hari, empat angka dengan pembanding dan tren, daftar "Perlu tindakan", tabel "Order terbaru"); panel lama berbasis event dipertahankan di bawahnya sebagai "Per event".
+
+- **Perubahan perilaku yang disengaja:** laporan penjualan dan daftar transaksi kini mengelompokkan dan menyaring menurut **tanggal bisnis** (zona waktu toko, default `Asia/Jakarta`, dengan jam batas hari yang dapat diatur), bukan tanggal UTC dari `created_at`. Penjualan antara 00.00 dan 07.00 WIB karena itu pindah ke hari lokal yang benar. Tanggal bisnis disimpan pada order/pembayaran/shift saat dibuat atau diselesaikan, dan baris yang sudah ada diisi ulang lewat migrasi (didahului laporan kering `php artisan app:business-date-dry-run`).
+- Angka penjualan Dashboard dan halaman Sales berasal dari satu implementasi (`SalesFigures`). Definisi "penjualan bersih" tetap jumlah total baris item dan **tidak** memotong diskon tingkat-order (keputusan pemilik; koreksinya perubahan terpisah).
+- Tahap lanjutan fitur ini (outlet, registri perangkat, batas kas offline) bergantung pada amandemen konstitusi dan dicatat tersendiri setelah diratifikasi.
+
+Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/042-dashboard-revamp/`.
+
 ### 7.3 Artist management
 
 **Model lisensi (v1.6):** BoothPOS dijual dalam dua tingkat harga. **Pro** — satu artist saja (toko itu sendiri), tanpa konsinyasi. **Master** — multi-artist dengan rekap hasil dan bagi hasil per artist. Perbedaan ini ditegakkan lewat satu pengaturan (`multi_artist_enabled`), bukan build kode terpisah — satu basis kode untuk kedua tingkat harga.

@@ -36,6 +36,9 @@ class StoreRoleRequest extends FormRequest
             // juga, bukan menemukan izin yang tidak pernah berfungsi.
             'menu_keys' => ['required', 'array'],
             'menu_keys.*' => [Rule::in(MenuKeys::keys())],
+            // 043 — izin tingkat-aksi (opsional); kunci tak dikenal ditolak 422, sama seperti menu_keys.
+            'permissions' => ['sometimes', 'nullable', 'array'],
+            'permissions.*' => [Rule::in(\App\Support\PermissionCatalog::keys())],
         ];
     }
 

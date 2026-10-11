@@ -25,7 +25,7 @@ class KitchenTicketItem extends Model
     public const UNFINISHED = [self::NEW, self::PREPARING, self::READY];
 
     protected $fillable = [
-        'kitchen_ticket_id', 'order_item_id', 'name_snapshot', 'qty', 'modifiers', 'note', 'status',
+        'kitchen_ticket_id', 'order_item_id', 'name_snapshot', 'qty', 'unit_price', 'modifiers', 'note', 'status',
         'preparing_at', 'ready_at', 'served_at', 'cancelled_at',
         'preparing_by', 'ready_by', 'served_by', 'cancelled_by', 'cancel_reason',
     ];
@@ -35,7 +35,7 @@ class KitchenTicketItem extends Model
     protected function casts(): array
     {
         return [
-            'qty' => 'integer', 'modifiers' => 'array',
+            'qty' => 'integer', 'unit_price' => 'decimal:2', 'modifiers' => 'array',
             'preparing_at' => 'datetime', 'ready_at' => 'datetime', 'served_at' => 'datetime', 'cancelled_at' => 'datetime',
         ];
     }

@@ -1,8 +1,9 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute, useRouter } from 'vue-router';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listMovements, createAdjustment } from '../api/stock';
+import { listMovements, createAdjustment, lowStock } from '../api/stock';
 import { lookupVariants } from '../api/products';
 import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
@@ -28,7 +29,46 @@ const { t } = useI18n();
 const toast = useToastStore();
 
 const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listMovements);
-onMounted(load);
+
+// 042-dashboard-revamp — butir "Item stok menipis" di Dashboard membuka layar ini dengan `?low=1`. Layar ini adalah
+// buku besar pergerakan (bukan daftar stok), jadi `low=1` menampilkan DAFTAR VARIAN yang menipis dari
+// GET /stock/low — predikat yang sama dengan yang dihitung Dashboard (is_active, low_stock_alert terisi,
+// current_stock <= low_stock_alert) — sehingga jumlah baris = angka di butir itu. Chip "Hanya stok menipis"
+// melepas filter dan kembali ke buku besar. Tanpa `?low` perilaku layar tidak berubah sama sekali.
+const route = useRoute();
+const router = useRouter();
+const lowOnly = computed(() => {
+  const raw = route?.query?.low;
+  return ['1', 'true'].includes(String(Array.isArray(raw) ? raw[0] : raw));
+});
+const lowItems = ref([]);
+const lowLoading = ref(false);
+const lowError = ref(false);
+async function loadLow() {
+  lowLoading.value = true;
+  lowError.value = false;
+  try {
+    lowItems.value = (await lowStock()).data ?? [];
+  } catch {
+    lowItems.value = [];
+    lowError.value = true;
+  } finally {
+    lowLoading.value = false;
+  }
+}
+function clearLowFilter() {
+  const rest = { ...route.query };
+  delete rest.low;
+  router.replace({ query: rest });
+}
+const lowColumns = computed(() => [
+  { key: 'product_name', label: t('dashboard.link_stock_low_col_product') },
+  { key: 'sku', label: t('dashboard.link_stock_low_col_sku') },
+  { key: 'current_stock', label: t('dashboard.link_stock_low_col_stock') },
+  { key: 'low_stock_alert', label: t('dashboard.link_stock_low_col_alert') },
+]);
+onMounted(() => (lowOnly.value ? loadLow() : load()));
+watch(lowOnly, (on) => (on ? loadLow() : load()));
 
 const exporting = ref(false);
 const showImportModal = ref(false);
@@ -187,7 +227,35 @@ async function submitAdjustment() {
       </template>
     </PageHeader>
 
-    <section class="mx-[26px] border-2 border-line bg-white">
+    <section v-if="lowOnly" class="mx-[26px] border-2 border-line bg-white" data-testid="stock-low-section">
+      <div class="flex flex-wrap items-center gap-3 px-5 py-4">
+        <button
+          type="button"
+          data-testid="low-chip"
+          class="inline-flex items-center gap-1.5 border-2 border-line bg-white px-2 py-0.5 text-[12px] font-semibold text-muted-5 transition-colors hover:border-brand focus-visible:outline-none focus-visible:border-brand"
+          :aria-label="t('dashboard.orders_chip_remove', { label: t('dashboard.link_stock_low_chip') })"
+          @click="clearLowFilter"
+        >
+          {{ t('dashboard.link_stock_low_chip') }}
+          <i class="ph-duotone ph-x text-[12px]" aria-hidden="true"></i>
+        </button>
+        <span v-if="!lowLoading && !lowError" class="ml-auto text-[12.5px] font-semibold text-muted" data-testid="data-count">{{ t('page.data_count', { count: lowItems.length }) }}</span>
+      </div>
+      <DataTable
+        :columns="lowColumns"
+        :rows="lowItems"
+        row-key="variant_id"
+        :loading="lowLoading"
+        :error="lowError ? t('dashboard.link_stock_low_failed') : ''"
+        :empty-message="t('dashboard.link_stock_low_empty')"
+        @retry="loadLow"
+      >
+        <template #cell-sku="{ row }"><span class="font-mono text-[12px] font-semibold">{{ row.sku }}</span></template>
+        <template #cell-current_stock="{ row }"><span class="font-mono text-[13px] font-bold text-danger-text">{{ row.current_stock }}</span></template>
+      </DataTable>
+    </section>
+
+    <section v-else class="mx-[26px] border-2 border-line bg-white">
       <FilterBar :searchable="false" :count="loading || error ? null : meta.total" :active="filtersActive" @reset="resetFilters">
         <BaseSelect
           v-model="typeFilter"

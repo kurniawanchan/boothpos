@@ -3,13 +3,15 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\StampsBusinessDay;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Payment extends Model
 {
-    use HasDataMode;
+    use HasDataMode, StampsBusinessDay;
 
     protected $fillable = [
         'order_id', 'preorder_id', 'purchase_order_id', 'channel_id', 'method', 'purpose', 'amount',
@@ -20,6 +22,12 @@ class Payment extends Model
     protected function casts(): array
     {
         return ['amount' => 'decimal:2', 'verified_at' => 'datetime', 'paid_at' => 'datetime'];
+    }
+
+    /** Hari bisnis sebuah pembayaran = hari uangnya diterima. */
+    protected function businessInstant(): CarbonInterface
+    {
+        return $this->getAttribute('paid_at') ?? $this->getAttribute('created_at') ?? now();
     }
 
     public function order(): BelongsTo { return $this->belongsTo(Order::class); }

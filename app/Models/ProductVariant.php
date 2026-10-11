@@ -28,6 +28,12 @@ class ProductVariant extends Model
      * $product->variants() menyuntikkan foreign key lewat setAttribute()
      * langsung, di luar mekanisme $fillable sama sekali.
      */
+    /** 043 — setiap varian baru memulai riwayat harganya ("Item dibuat"); lewat PriceService, bukan menulis tabel langsung. */
+    protected static function booted(): void
+    {
+        static::created(fn (ProductVariant $v) => app(\App\Services\PriceService::class)->recordCreated($v));
+    }
+
     protected $fillable = [
         'sku',
         'image_path',

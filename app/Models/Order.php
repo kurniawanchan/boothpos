@@ -3,13 +3,15 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\StampsBusinessDay;
+use App\Support\BusinessDay;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
 {
-    use HasDataMode;
+    use HasDataMode, StampsBusinessDay;
 
     // 028 — gunakan konstanta ini di kode baru. `cashier_sessions.status`
     // juga memakai literal 'open', jadi mencari string 'open' mencampur dua
@@ -42,7 +44,29 @@ class Order extends Model
             'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2',
             'total_amount' => 'decimal:2', 'total_cost' => 'decimal:2',
             'paid_amount' => 'decimal:2', 'change_amount' => 'decimal:2',
+            'completed_at' => 'datetime',
         ];
+    }
+
+    /**
+     * 042-dashboard-revamp — saat order MENJADI penjualan (dibuat langsung `completed`, atau tab yang
+     * dilunasi/dipecah), catat instannya dan tetapkan ulang tanggal bisnisnya. Tab yang dibuka 23.30
+     * dan dilunasi 00.20 dihitung pada hari pelunasan, sama seperti laporan menghitung penjualan
+     * saat selesai. Order yang di-void mempertahankan tanggal terakhirnya.
+     */
+    public function stampCompletion(): void
+    {
+        if ($this->getAttribute('status') !== self::STATUS_COMPLETED || $this->getAttribute('completed_at') !== null) {
+            return;
+        }
+
+        if ($this->exists && ! $this->isDirty('status')) {
+            return; // baris lama yang sudah completed tanpa completed_at diisi oleh backfill, bukan di sini
+        }
+
+        $at = $this->exists ? now() : ($this->getAttribute('created_at') ?? now());
+        $this->setAttribute('completed_at', $at);
+        $this->setAttribute('business_date', BusinessDay::dateFor($at));
     }
 
     public function items(): HasMany { return $this->hasMany(OrderItem::class); }

@@ -26,6 +26,11 @@ class UpdateProductRequest extends FormRequest
             'name' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string'],
             'is_preorder' => ['sometimes', 'boolean'],
+            // 043 — fakta item (tidak dibatasi rilis: berlaku seketika).
+            'short_name' => ['sometimes', 'nullable', 'string', 'max:24'],
+            'tax_category' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'prep_minutes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:600'],
+            'is_retail' => ['sometimes', 'boolean'],
             'preorder_eta' => ['nullable', 'date'],
             'is_active' => ['sometimes', 'boolean'],
             'station_id' => ['sometimes', 'nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) {

@@ -1,28 +1,50 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { getProduct, createProduct, updateProduct, addVariant, updateVariant, uploadProductImage, uploadVariantImage } from '../../api/products';
+import { getProduct, createProduct, updateProduct, addVariant, updateVariant, uploadProductImage, uploadVariantImage, saveVariants, saveModifierLinks } from '../../api/products';
 import { createAdjustment } from '../../api/stock';
 import { listStations } from '../../api/stations';
+import { listModifierGroups } from '../../api/modifierGroups';
 import { useAuthStore } from '../../stores/auth';
+import { useSettingsStore } from '../../stores/settings';
 import { useToastStore } from '../../stores/toast';
 import { toMoneyString } from '../../utils/money';
 import { imageFileError } from './imageGuard';
 import BaseButton from '../../components/ui/BaseButton.vue';
 import BaseDrawer from '../../components/ui/BaseDrawer.vue';
 import BaseInput from '../../components/ui/BaseInput.vue';
-import BaseSelect from '../../components/ui/BaseSelect.vue';
-import BaseTextarea from '../../components/ui/BaseTextarea.vue';
 import ImageLightbox from '../../components/ui/ImageLightbox.vue';
 import VariantBomModal from '../../components/product/VariantBomModal.vue';
-import ProductCodePreview from './ProductCodePreview.vue';
-import ProductVariantCard from './ProductVariantCard.vue';
+import ProductFormBlock from './ProductFormBlock.vue';
+import ProductField from './ProductField.vue';
+import ProductVariantsTable from './ProductVariantsTable.vue';
+import ProductCreateModifiers from './ProductCreateModifiers.vue';
+import { controlClass, textareaClass, borderOf } from './formStyle';
+import { blankLinkRow, validateRows, toLinksPayload } from './modifierLinkRows';
+import { modifierRuleText } from '../../utils/itemDetail';
 
 /**
- * Drawer tambah/ubah produk beserta varian-variannya — dipecah utuh dari ProductsView (perilaku identik;
- * hanya lokasi kode yang berpindah). Drawer memegang seluruh keadaan formulir dan alur simpan; halaman hanya
- * memanggil `openCreate()` / `openEdit(product)` (defineExpose) dan menyegarkan daftar saat `saved`.
+ * Drawer tambah/ubah produk beserta varian-variannya — dipecah utuh dari ProductsView. Drawer memegang seluruh
+ * keadaan formulir dan alur simpan; halaman hanya memanggil `openCreate()` / `openEdit(product)` (defineExpose)
+ * dan menyegarkan daftar saat `saved` (payload `{ id, created }` — ADITIF, pemanggil lama boleh mengabaikannya).
  * Daftar artist/kategori dipinjam dari halaman (sudah dimuat untuk filter) supaya tidak ada panggilan ganda.
+ *
+ * 043 — tampilan mengikuti desain "Menu item": bagian rata (Informasi dasar, Harga & pajak, Varian & harga,
+ * Modifier, Dapur, Ketersediaan) dipisah garis tipis, kontrol natif bergaris tipis.
+ * - MODE BUAT: seluruh tata letak baru. "Harga dasar" item = harga varian PERTAMA (satu nilai, dua tampilan:
+ *   `basePrice` menulis ke `variantRows[0]`). Setelah `POST /products` (yang tidak menerima is_active/stok per
+ *   varian maupun tautan modifier) formulir menjalankan LANJUTAN terpisah: nonaktifkan varian tak dicentang
+ *   (`PUT /products/{id}/variants`), tautkan modifier (`PUT /products/{id}/modifier-links`), lalu stok awal
+ *   (`POST /stock/adjustments`). Item SUDAH ada saat lanjutan gagal, jadi kegagalannya hanya menampilkan galat dan
+ *   formulir tetap ditutup + `saved` dipancarkan — jangan mengulang POST (akan menggandakan item).
+ * - MODE UBAH: FORMULIR YANG SAMA dengan mode buat (bagian, urutan, tabel, kepala/kaki, lebar) — hanya Status yang
+ *   tidak ada (status item yang sudah ada berubah lewat Hentikan/Aktifkan di halaman item) dan segmen kode yang
+ *   terkunci (server tidak pernah menerimanya saat ubah). Tabel varian SAMA (`ProductVariantsTable`) dengan kolom
+ *   tambahan (harga modal bila boleh melihat biaya, stok saat ini) dan aksi baris (BOM, markup, duplikat). Tabel
+ *   Modifier dibenihi dari tautan tingkat-PRODUK item (`modifier_links` dengan `source: 'product'`); tautan
+ *   dari KATEGORI hanya ditampilkan (cadangan di server — mengirimnya akan mengubahnya diam-diam menjadi tautan
+ *   produk, sama seperti ModifierLinksDrawer) dan hanya dikirim bila barisnya BERUBAH. Alur simpan lama
+ *   (updateProduct → per-varian → stok → gambar) tidak berubah urutannya; tautan modifier ditambahkan sesudah varian.
  */
 const props = defineProps({
   artists: { type: Array, default: () => [] },
@@ -33,13 +55,26 @@ const emit = defineEmits(['saved']);
 const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
+const settings = useSettingsStore();
 
 const emptyVariant = () => ({ id: null, copy_bom_from: '', variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, track_stock: true, image_file: null, image_error: '' });
 
+// Varian baru di formulir BUAT: nama & harga kosong (placeholder desain), stok awal kosong.
+const createVariant = () => ({ ...emptyVariant(), variant_name: '', sell_price: '', current_stock: '', original_stock: 0 });
+// Baris tunggal tanpa nama memakai nama bawaan lama ("Standard") — server mewajibkan nama varian.
+const DEFAULT_VARIANT_NAME = 'Standard';
+
 const showDrawer = ref(false);
 const editingProduct = ref(null);
+const isCreate = computed(() => !editingProduct.value);
+// Rilis menu aktif: server memaksa item baru berstatus draft, jadi pilihan status tidak ditawarkan.
+const releaseOn = computed(() => settings.menuReleaseEnabled === true);
 const saving = ref(false);
 const markupPercent = ref(150);
+// Biaya hanya untuk pengguna dengan menu products/reports — cermin aturan server (`ProductController::show` membuang
+// cost_price/has_bom/bom_cost dari payload selain itu). Tanpa izin: kolom modal disembunyikan dan cost_price tidak
+// dikirim saat ubah (mengirim nilai kosong akan menimpa modal sungguhan dengan 0).
+const canSeeCost = computed(() => auth.canAccessMenu('products') || auth.canAccessMenu('reports'));
 
 // 028 — daftar stasiun untuk dropdown; 403 (peran tanpa `dining_setup`/`kitchen`) = dropdown disembunyikan.
 const stations = ref([]);
@@ -51,6 +86,11 @@ onMounted(async () => {
   }
 });
 
+// 043 — fakta item baru: nama pendek, kategori pajak, estimasi persiapan, penanda item ritel. Kunci kategori pajak
+// SAMA dengan yang disimpan server; label tampilannya ada di terjemahan (`products.tax_*`).
+const TAX_CATEGORIES = ['restaurant_food_beverage', 'retail', 'other'];
+const taxOptions = computed(() => TAX_CATEGORIES.map((k) => ({ value: k, label: t(`products.tax_${k}`) })));
+
 const productForm = reactive({
   artist_id: '',
   category_id: '',
@@ -61,9 +101,40 @@ const productForm = reactive({
   preorder_eta: '',
   is_active: true,
   station_id: '',
+  short_name: '',
+  tax_category: '',
+  prep_minutes: '',
+  is_retail: false,
 });
-const variantRows = ref([emptyVariant()]);
+const variantRows = ref([createVariant()]);
 const formErrors = reactive({});
+
+// "Harga dasar" item = harga varian pertama; menulis di sini atau di tabel varian mengubah nilai yang sama.
+const basePrice = computed({
+  get: () => variantRows.value[0]?.sell_price ?? '',
+  set: (v) => {
+    if (variantRows.value[0]) variantRows.value[0].sell_price = v;
+  },
+});
+
+// Tautan modifier (buat DAN ubah): grup dari GET /modifier-groups; gagal/403 -> bagian disembunyikan, bukan dinonaktifkan.
+const modifierRows = ref([blankLinkRow()]);
+// Mode ubah: tautan dari KATEGORI (hanya tampil) dan potret payload awal untuk mendeteksi perubahan.
+const inheritedLinks = ref([]);
+const modifierBaseline = ref('[]');
+const modifierGroups = ref([]);
+const modifierErrors = ref({});
+const groupsReady = ref(false);
+const groupById = computed(() => new Map(modifierGroups.value.map((g) => [g.id, g])));
+async function loadModifierGroups() {
+  groupsReady.value = false;
+  try {
+    modifierGroups.value = (await listModifierGroups())?.data ?? [];
+    groupsReady.value = true;
+  } catch {
+    modifierGroups.value = [];
+  }
+}
 
 // Stok diedit per baris (row.current_stock vs snapshot original_stock), tetapi ditulis lewat
 // POST /stock/adjustments sebagai satu batch dengan satu alasan bersama, sesuai kontrak StockAdjustmentRequest.
@@ -71,15 +142,6 @@ const stockAdjustmentReason = ref('');
 const hasStockChanges = computed(() =>
   variantRows.value.some((row) => Number(row.current_stock) !== Number(row.original_stock ?? 0))
 );
-
-function deriveSegment(name) {
-  const letters = (name || '').replace(/[^A-Za-z]/g, '').toUpperCase();
-  return letters.slice(0, 3).padEnd(3, 'X');
-}
-const effectiveSegment = computed(() => (productForm.product_segment || deriveSegment(productForm.name)).toUpperCase().slice(0, 3).padEnd(3, 'X'));
-const artistCode = computed(() => props.artists.find((a) => a.id === Number(productForm.artist_id))?.code ?? '···');
-const categoryCode = computed(() => props.categories.find((c) => c.id === Number(productForm.category_id))?.code ?? '··');
-const codePreview = computed(() => `${artistCode.value}-${categoryCode.value}-${effectiveSegment.value}-001`);
 
 // Lightbox milik drawer: gambar produk yang sedang diedit dan gambar per-varian. (Thumbnail di tabel punya
 // lightbox sendiri di halaman — dua lightbox tidak pernah terbuka bersamaan.)
@@ -122,11 +184,13 @@ function resetImageAndReason() {
   if (productImageInputEl.value) productImageInputEl.value.value = '';
 }
 
-function openCreate() {
+// `defaults` memungkinkan tab "Item ritel" membuka formulir dengan penanda ritel sudah dicentang.
+function openCreate(defaults = {}) {
   editingProduct.value = null;
   Object.assign(productForm, {
     artist_id: props.artists[0]?.id ?? '',
-    category_id: props.categories[0]?.id ?? '',
+    // Kategori sengaja kosong ("Pilih…" seperti desain): wajib dipilih, bukan ditebak.
+    category_id: '',
     product_segment: '',
     name: '',
     description: '',
@@ -134,11 +198,25 @@ function openCreate() {
     preorder_eta: '',
     is_active: true,
     station_id: '',
+    short_name: '',
+    tax_category: '',
+    prep_minutes: '',
+    is_retail: defaults.is_retail === true,
   });
-  variantRows.value = [emptyVariant()];
+  variantRows.value = [createVariant()];
+  modifierRows.value = [blankLinkRow()];
+  inheritedLinks.value = [];
+  modifierBaseline.value = '[]';
+  modifierErrors.value = {};
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   resetImageAndReason();
   showDrawer.value = true;
+  loadModifierGroups();
+}
+
+// API mengirim uang sebagai "15000.00"; di kolom angka itu tampil "15000,00" menurut locale dan terpotong. Tampilkan angka polos.
+function plainNumber(value) {
+  return value === null || value === undefined || value === '' ? value : String(Number(value));
 }
 
 async function openEdit(product) {
@@ -155,12 +233,31 @@ async function openEdit(product) {
     preorder_eta: full.preorder_eta ?? '',
     is_active: full.is_active,
     station_id: full.station_id ?? '',
+    short_name: full.short_name ?? '',
+    tax_category: full.tax_category ?? '',
+    prep_minutes: full.prep_minutes ?? '',
+    is_retail: full.is_retail === true,
   });
   variantRows.value = full.variants.length
-    ? full.variants.map((v) => ({ ...v, low_stock_alert: v.low_stock_alert ?? '', original_stock: v.current_stock, image_file: null, image_error: '' }))
+    ? full.variants.map((v) => ({ ...v, cost_price: plainNumber(v.cost_price), sell_price: plainNumber(v.sell_price), low_stock_alert: v.low_stock_alert ?? '', original_stock: v.current_stock, image_file: null, image_error: '' }))
     : [emptyVariant()];
+  // Tautan modifier: hanya baris tingkat-PRODUK yang dapat diubah; `source: 'category'` dibawa terpisah (hanya tampil).
+  const links = full.modifier_links ?? [];
+  const own = links
+    .filter((l) => l.source !== 'category')
+    .map((l) => ({
+      group_id: l.group_id,
+      is_required: !!l.is_required,
+      min: String(l.min_select ?? 0),
+      max: l.max_select === null || l.max_select === undefined ? '' : String(l.max_select),
+    }));
+  modifierRows.value = own.length ? own : [blankLinkRow()];
+  modifierBaseline.value = JSON.stringify(toLinksPayload(modifierRows.value));
+  inheritedLinks.value = links.filter((l) => l.source === 'category');
+  modifierErrors.value = {};
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showDrawer.value = true;
+  loadModifierGroups();
 }
 defineExpose({ openCreate, openEdit });
 
@@ -200,7 +297,7 @@ async function refreshBomState() {
 }
 
 function addVariantRow() {
-  variantRows.value.push(emptyVariant());
+  variantRows.value.push(isCreate.value ? createVariant() : emptyVariant());
 }
 
 // 037 — Duplikat varian: kartu BELUM TERSIMPAN tepat di bawah sumbernya, dibenihi dari sumber (nama + penanda
@@ -238,17 +335,63 @@ function removeVariantRow(index) {
   variantRows.value.splice(index, 1);
 }
 
+// Fakta item (043): dikirim apa adanya pada buat DAN ubah; kosong -> null supaya nilai lama bisa dihapus.
+function factsPayload() {
+  return {
+    short_name: productForm.short_name.trim() || null,
+    tax_category: productForm.tax_category || null,
+    prep_minutes: productForm.prep_minutes === '' || productForm.prep_minutes === null ? null : Number(productForm.prep_minutes),
+    is_retail: productForm.is_retail,
+  };
+}
+
+// Validasi klien khusus mode BUAT (server tetap pemutus akhir). Galat memakai kunci yang sama dengan 422 server
+// (`name`, `variants.0.sell_price`, …) supaya kedua sumber tampil di tempat yang sama.
+// Aturan modifier yang sama dengan server (lihat modifierLinkRows) — dipakai buat dan ubah.
+function validateModifierRules() {
+  modifierErrors.value = validateRows(modifierRows.value, (id) => groupById.value.get(id)?.selection_type === 'single', {
+    min: t('products.ml_err_min'),
+    max: t('products.ml_err_max'),
+    single: t('products.ml_err_single'),
+  });
+  return Object.keys(modifierErrors.value).length === 0;
+}
+
+// Mode ubah: hanya diperiksa bila bagian modifier bisa diedit (daftar grup terbaca) — kalau tidak, tautan tidak disentuh.
+function validateModifiers() {
+  return !groupsReady.value || validateModifierRules();
+}
+
+function validateCreate() {
+  const required = t('products.f_required');
+  if (!productForm.name.trim()) formErrors.name = required;
+  if (productForm.artist_id === '' || productForm.artist_id === null) formErrors.artist_id = required;
+  if (productForm.category_id === '' || productForm.category_id === null) formErrors.category_id = required;
+  variantRows.value.forEach((row, i) => {
+    if (!row.variant_name.trim() && variantRows.value.length > 1) formErrors[`variants.${i}.variant_name`] = t('products.f_variant_name_required');
+    const price = String(row.sell_price).trim();
+    if (price === '' || Number.isNaN(Number(price)) || Number(price) < 0) formErrors[`variants.${i}.sell_price`] = t('products.f_price_invalid');
+  });
+  validateModifierRules();
+  return Object.keys(formErrors).length === 0 && Object.keys(modifierErrors.value).length === 0;
+}
+
 async function saveProduct() {
+  Object.keys(formErrors).forEach((k) => delete formErrors[k]);
+  modifierErrors.value = {};
+  if (isCreate.value && !validateCreate()) return;
+  if (!isCreate.value && !validateModifiers()) return;
+
   // Stok tidak pernah ditulis langsung (meniru jalur impor master-data) — baris stock_movements sungguhan
   // dibuat lewat POST /stock/adjustments yang sama (StockService::applyMovement), jadi alasan yang diminta
-  // wajib di sini juga, diperiksa di awal sebelum panggilan simpan apa pun berjalan.
-  if (hasStockChanges.value && !stockAdjustmentReason.value.trim()) {
+  // wajib di sini juga, diperiksa di awal sebelum panggilan simpan apa pun berjalan. Formulir BUAT memakai alasan
+  // tetap ("Stok awal item baru") — tidak ada stok sebelumnya yang perlu dijelaskan.
+  if (!isCreate.value && hasStockChanges.value && !stockAdjustmentReason.value.trim()) {
     formErrors.stock_adjustment_reason = t('master_data.stock_adjustment_reason_required');
     return;
   }
 
   saving.value = true;
-  Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   let productId = editingProduct.value?.id ?? null;
   // Pasangan { variantId, file } dikumpulkan saat varian dibuat/diubah, diunggah baru setelah SEMUA varian
   // punya id sungguhan (baris baru tidak punya id sampai panggilan create-nya kembali).
@@ -259,6 +402,7 @@ async function saveProduct() {
     const delta = Number(row.current_stock) - Number(row.original_stock ?? 0);
     if (delta !== 0) pendingStockAdjustments.push({ variant_id: variantId, qty_change: delta });
   }
+  let created = false;
   try {
     if (editingProduct.value) {
       await updateProduct(editingProduct.value.id, {
@@ -270,11 +414,12 @@ async function saveProduct() {
         preorder_eta: productForm.is_preorder ? productForm.preorder_eta || null : null,
         is_active: productForm.is_active,
         station_id: productForm.station_id || null,
+        ...factsPayload(),
       });
       for (const row of variantRows.value) {
         const payload = {
           variant_name: row.variant_name,
-          cost_price: toMoneyString(row.cost_price),
+          ...(canSeeCost.value ? { cost_price: toMoneyString(row.cost_price) } : {}),
           sell_price: toMoneyString(row.sell_price),
           low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
           is_active: row.is_active,
@@ -286,8 +431,27 @@ async function saveProduct() {
         queueStockAdjustment(row, variantId);
       }
       toast.success(t('master_data.product_updated'));
+      // Tautan modifier: hanya bila bagian itu terbaca DAN barisnya berubah (PUT mengganti seluruh tautan produk,
+      // jadi tanpa perubahan tidak ada alasan menyentuhnya). Gagal di sini tidak membatalkan simpan: item sudah berubah.
+      const links = toLinksPayload(modifierRows.value);
+      if (groupsReady.value && JSON.stringify(links) !== modifierBaseline.value) {
+        try {
+          const result = await saveModifierLinks(productId, links);
+          if (result?.applied === false) toast.push(t('products.ml_pending'));
+        } catch {
+          toast.error(t('products.f_links_failed'));
+        }
+      }
     } else {
-      const created = await createProduct({
+      // Baris tunggal tanpa nama -> nama bawaan; beberapa baris sudah dicek `validateCreate` (nama wajib).
+      const variantsToSend = variantRows.value.map((row) => ({
+        variant_name: row.variant_name.trim() || DEFAULT_VARIANT_NAME,
+        cost_price: toMoneyString(row.cost_price),
+        sell_price: toMoneyString(row.sell_price),
+        low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
+        track_stock: row.track_stock !== false,
+      }));
+      const createdProduct = await createProduct({
         artist_id: Number(productForm.artist_id),
         category_id: Number(productForm.category_id),
         product_segment: productForm.product_segment || null,
@@ -295,26 +459,45 @@ async function saveProduct() {
         description: productForm.description || null,
         is_preorder: productForm.is_preorder,
         preorder_eta: productForm.is_preorder ? productForm.preorder_eta || null : null,
+        // Rilis aktif: server memaksa draft apa pun nilainya; dikirim apa adanya supaya perilaku rilis-mati tetap sama.
         is_active: productForm.is_active,
         station_id: productForm.station_id || null,
-        variants: variantRows.value.map((row) => ({
-          variant_name: row.variant_name,
-          cost_price: toMoneyString(row.cost_price),
-          sell_price: toMoneyString(row.sell_price),
-          low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
-          track_stock: row.track_stock !== false,
-        })),
+        ...factsPayload(),
+        variants: variantsToSend,
       });
-      productId = created.id;
+      created = true;
+      productId = createdProduct.id;
       // POST /products membuat varian secara inline (tanpa respons per-baris), jadi varian produk yang
       // dikembalikan — selalu dalam urutan pembuatan — dicocokkan ke variantRows lewat indeks.
+      const toDeactivate = [];
       variantRows.value.forEach((row, idx) => {
-        const variantId = created.variants?.[idx]?.id;
+        const variantId = createdProduct.variants?.[idx]?.id;
         if (!variantId) return;
         if (row.image_file) pendingVariantImages.push({ variantId, file: row.image_file });
         queueStockAdjustment(row, variantId);
+        if (!row.is_active) {
+          toDeactivate.push({ id: variantId, variant_name: variantsToSend[idx].variant_name, sell_price: variantsToSend[idx].sell_price, is_active: false });
+        }
       });
       toast.success(t('master_data.product_created'));
+
+      // LANJUTAN pasca-buat (lihat docblock): masing-masing berdiri sendiri, gagalnya satu tidak membatalkan yang lain.
+      if (toDeactivate.length) {
+        try {
+          await saveVariants(productId, { variants: toDeactivate });
+        } catch {
+          toast.error(t('products.f_inactive_failed'));
+        }
+      }
+      const links = toLinksPayload(modifierRows.value);
+      if (links.length) {
+        try {
+          const result = await saveModifierLinks(productId, links);
+          if (result?.applied === false) toast.push(t('products.ml_pending'));
+        } catch {
+          toast.error(t('products.f_links_failed'));
+        }
+      }
     }
     if (productImageFile.value && productId) {
       uploadingProductImage.value = true;
@@ -335,13 +518,14 @@ async function saveProduct() {
     }
     if (pendingStockAdjustments.length) {
       try {
-        await createAdjustment({ reason: stockAdjustmentReason.value.trim(), items: pendingStockAdjustments });
+        const reason = isCreate.value ? t('products.f_initial_stock_reason') : stockAdjustmentReason.value.trim();
+        await createAdjustment({ reason, items: pendingStockAdjustments });
       } catch {
         toast.error(t('master_data.stock_adjustment_failed'));
       }
     }
     showDrawer.value = false;
-    emit('saved');
+    emit('saved', { id: productId, created });
   } catch (err) {
     if (err.isValidation) Object.assign(formErrors, Object.fromEntries(Object.entries(err.errors).map(([k, v]) => [k, v[0]])));
   } finally {
@@ -353,35 +537,187 @@ async function saveProduct() {
 <template>
   <BaseDrawer
     :open="showDrawer"
-    max-width-class="max-w-[1040px]"
-    :title="editingProduct ? editingProduct.name : t('master_data.new_product')"
-    :subtitle="editingProduct ? editingProduct.code_prefix : t('master_data.code_generated_by_server')"
+    flush
+    max-width-class="max-w-[1000px]"
+    :title="isCreate ? t('products.f_menu_item') : editingProduct.name"
     @close="showDrawer = false"
   >
-    <div class="flex flex-col gap-[18px]">
-      <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
-        <span class="text-[14.5px] font-bold">{{ t('master_data.product_identity') }}</span>
+    <!-- Kepala desain: label kecil redup ("Baru"/"Ubah") di atas judul tebal; tombol × tetap milik BaseDrawer. -->
+    <template #header>
+      <div class="flex flex-col gap-0.5">
+        <p class="text-[12px] text-muted">{{ isCreate ? t('products.f_kicker_new') : t('products.f_kicker_edit') }}</p>
+        <h2 class="text-[19px] font-bold tracking-tight">{{ isCreate ? t('products.f_menu_item') : editingProduct.name }}</h2>
+      </div>
+    </template>
+
+    <div class="flex flex-col" data-testid="product-form">
+      <!-- INFORMASI DASAR -->
+      <ProductFormBlock :title="t('products.f_sec_basic')">
+        <ProductField v-slot="{ id }" :label="t('products.f_item_name')" required :error="formErrors.name">
+          <input :id="id" v-model="productForm.name" type="text" maxlength="150" :placeholder="t('products.f_item_name_ph')" :class="[controlClass, borderOf(formErrors.name)]" />
+        </ProductField>
         <div class="grid grid-cols-2 gap-3.5">
-          <BaseSelect v-model="productForm.artist_id" :label="t('master_data.owner_artist')" required :options="artists.map((a) => ({ value: a.id, label: a.name }))" :error="formErrors.artist_id" />
-          <BaseSelect v-model="productForm.category_id" :label="t('master_data.category')" required :options="categories.map((c) => ({ value: c.id, label: c.name }))" :error="formErrors.category_id" />
-          <!-- 028 — stasiun persiapan khusus produk ini (menang atas stasiun kategorinya). Hanya tampil bila
-               peran boleh membaca daftar stasiun; kosong = ikut kategori. -->
-          <BaseSelect v-if="stations.length" v-model="productForm.station_id" :label="t('master_data.station')" :placeholder="t('master_data.station_follow_category')" :options="stations.map((s) => ({ value: s.id, label: s.name }))" :hint="t('master_data.station_hint')" :error="formErrors.station_id" />
+          <ProductField v-slot="{ id }" :label="t('products.f_short_name')" :hint="t('products.f_short_name_hint')" :error="formErrors.short_name">
+            <input :id="id" v-model="productForm.short_name" type="text" maxlength="24" :class="[controlClass, borderOf(formErrors.short_name)]" />
+          </ProductField>
+          <ProductField v-slot="{ id }" :label="t('products.f_menu_category')" required :error="formErrors.category_id">
+            <select :id="id" v-model="productForm.category_id" :class="[controlClass, borderOf(formErrors.category_id)]">
+              <option value="">{{ t('common.select_placeholder') }}</option>
+              <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </ProductField>
         </div>
-        <div class="grid grid-cols-[2fr_1fr] gap-3.5">
-          <BaseInput v-model="productForm.name" :label="t('master_data.product_name')" required maxlength="150" :error="formErrors.name" />
-          <BaseInput v-model="productForm.product_segment" :label="t('master_data.segment_3')" maxlength="3" :placeholder="t('master_data.auto')" :error="formErrors.product_segment" />
+        <!-- Penjual wajib (artist_id) dan segmen kode: dua kolom biasa, bukan blok khusus. -->
+        <div class="grid grid-cols-2 gap-3.5">
+          <ProductField v-slot="{ id }" :label="t('master_data.owner_artist')" required :error="formErrors.artist_id">
+            <select :id="id" v-model="productForm.artist_id" :class="[controlClass, borderOf(formErrors.artist_id)]">
+              <option v-for="a in artists" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+          </ProductField>
+          <ProductField v-slot="{ id }" :label="t('master_data.segment_3')" :error="formErrors.product_segment">
+            <input :id="id" v-model="productForm.product_segment" type="text" maxlength="3" :disabled="!isCreate" :placeholder="t('master_data.auto')" :class="[controlClass, borderOf(formErrors.product_segment)]" />
+          </ProductField>
         </div>
-        <BaseTextarea v-model="productForm.description" :label="t('master_data.description')" :rows="2" />
+        <ProductField v-slot="{ id }" :label="t('master_data.description')">
+          <textarea :id="id" v-model="productForm.description" rows="3" :class="[textareaClass, borderOf('')]"></textarea>
+        </ProductField>
+        <p v-if="isCreate" class="text-[11.5px] text-muted-3" data-testid="code-note">{{ t('products.f_code_note') }}</p>
+      </ProductFormBlock>
+
+      <!-- HARGA & PAJAK. "Harga dasar" = harga varian pertama (satu nilai, dua tampilan) di KEDUA mode; saat ubah, harga
+           varian tetap lewat jalur simpan per-varian (dan jalur rilis/persetujuan bila aktif). -->
+      <ProductFormBlock
+        :title="t('products.f_sec_price')"
+        :description="releaseOn ? `${t('products.f_sec_price_desc')} ${t('products.f_sec_price_desc_release')}` : t('products.f_sec_price_desc')"
+      >
+        <div class="grid grid-cols-2 gap-3.5">
+          <ProductField v-slot="{ id }" :label="t('products.f_base_price')" required :error="formErrors['variants.0.sell_price']">
+            <div class="flex">
+              <span class="flex h-9 flex-none items-center border border-r-0 border-line bg-surface-subtle px-3 text-[12.5px] font-semibold text-muted">{{ t('products.f_currency') }}</span>
+              <input :id="id" v-model="basePrice" type="number" min="0" step="any" :class="[controlClass, borderOf(formErrors['variants.0.sell_price'])]" />
+            </div>
+          </ProductField>
+          <ProductField v-slot="{ id }" :label="t('products.tax_category')" :error="formErrors.tax_category">
+            <select :id="id" v-model="productForm.tax_category" :class="[controlClass, borderOf(formErrors.tax_category)]">
+              <option value="">{{ t('common.select_placeholder') }}</option>
+              <option v-for="o in taxOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+            </select>
+          </ProductField>
+        </div>
+      </ProductFormBlock>
+
+      <!-- VARIAN & HARGA — SATU tabel untuk buat dan ubah. Markup (mode ubah, hanya bila boleh melihat biaya) ada di
+           kepala bagian, seperti drawer lama. -->
+      <ProductFormBlock :title="t('products.f_sec_variants')" :description="t('products.f_sec_variants_desc')">
+        <template v-if="!isCreate && canSeeCost" #actions>
+          <label class="flex items-center gap-2 text-[12.5px] text-muted">
+            {{ t('master_data.markup') }}
+            <input v-model.number="markupPercent" type="number" class="h-8 w-[70px] border border-line px-2.5 text-right text-[13px] outline-none focus:border-brand focus:ring-2 focus:ring-mint-100" />
+            %
+          </label>
+        </template>
+        <ProductVariantsTable
+          :rows="variantRows"
+          :errors="formErrors"
+          :mode="isCreate ? 'create' : 'edit'"
+          :can-see-cost="canSeeCost"
+          :markup-percent="markupPercent"
+          :can-copy-bom-on-create="canCopyBomOnCreate"
+          :copy-source-options="copySourceOptions"
+          @add="addVariantRow"
+          @remove="removeVariantRow"
+          @duplicate="duplicateVariantRow"
+          @open-bom="openBomFor"
+          @enlarge-image="openVariantImageLightbox"
+        />
+        <!-- Stok tidak pernah ditulis langsung — perubahan di sini menjadi baris stock_movements sungguhan
+             lewat POST /stock/adjustments (jalur StockService::applyMovement yang sama dengan impor
+             master-data), jadi satu alasan bersama wajib untuk seluruh batch. -->
+        <BaseInput
+          v-if="!isCreate && hasStockChanges"
+          v-model="stockAdjustmentReason"
+          :label="t('master_data.stock_adjustment_reason')"
+          required
+          :error="formErrors.stock_adjustment_reason"
+        />
+      </ProductFormBlock>
+
+      <!-- MODIFIER — buat DAN ubah; hanya bila daftar grup bisa dibaca (tanpa izin: bagian disembunyikan). Saat ubah, tabel
+           berisi tautan tingkat-produk; tautan dari kategori ditampilkan di bawahnya, hanya-baca dan tidak dikirim. -->
+      <ProductFormBlock v-if="groupsReady" :title="t('products.f_sec_modifier')">
+        <ProductCreateModifiers :rows="modifierRows" :groups="modifierGroups" :errors="modifierErrors" @add="modifierRows.push(blankLinkRow())" @remove="(i) => modifierRows.splice(i, 1)" />
+        <div v-if="!isCreate && inheritedLinks.length" class="flex flex-col gap-1" data-testid="inherited-links">
+          <p class="text-[11.5px] font-semibold text-muted-5">{{ t('products.ml_from_category') }}</p>
+          <ul class="flex flex-col gap-0.5 text-[12.5px] text-muted-4">
+            <li v-for="l in inheritedLinks" :key="l.group_id" class="flex items-center gap-2">
+              <span class="font-medium text-ink">{{ l.name }}</span>
+              <span class="text-muted-3">{{ modifierRuleText(l, t) }}</span>
+            </li>
+          </ul>
+        </div>
+      </ProductFormBlock>
+
+      <!-- DAPUR. Stasiun hanya tampil bila peran boleh membaca daftar stasiun; kosong = ikut kategori. -->
+      <ProductFormBlock :title="t('products.f_sec_kitchen')">
+        <div class="grid grid-cols-2 gap-3.5">
+          <ProductField v-if="stations.length" v-slot="{ id }" :label="t('products.f_station')" :error="formErrors.station_id">
+            <select :id="id" v-model="productForm.station_id" :class="[controlClass, borderOf(formErrors.station_id)]">
+              <option value="">{{ t('master_data.station_follow_category') }}</option>
+              <option v-for="s in stations" :key="s.id" :value="s.id">{{ s.name }}</option>
+            </select>
+          </ProductField>
+          <ProductField v-slot="{ id }" :label="t('products.f_prep')" :error="formErrors.prep_minutes">
+            <div class="flex">
+              <input :id="id" v-model="productForm.prep_minutes" type="number" min="0" max="600" step="1" :class="[controlClass, borderOf(formErrors.prep_minutes), 'min-w-0 flex-1']" />
+              <span class="flex h-9 flex-none items-center border border-l-0 border-line bg-surface-subtle px-3 text-[12.5px] text-muted">{{ t('products.f_minutes') }}</span>
+            </div>
+          </ProductField>
+        </div>
+        <label class="flex items-center gap-2.5 text-[13px] font-medium text-muted-5">
+          <input v-model="productForm.is_retail" type="checkbox" class="h-4 w-4 accent-brand" />
+          {{ t('products.is_retail') }}
+        </label>
+      </ProductFormBlock>
+
+      <!-- KETERSEDIAAN — hanya Status (desain juga memuat outlet/channel/kuota: belum ada backend, sengaja tidak dibangun). -->
+      <ProductFormBlock v-if="isCreate" :title="t('products.f_sec_availability')">
+        <div class="flex flex-col gap-1.5">
+          <span class="text-[12.5px] font-semibold text-muted-5">{{ t('products.f_status') }}</span>
+          <p v-if="releaseOn" class="text-[13px] text-muted-5" data-testid="status-release-note">{{ t('products.f_status_release') }}</p>
+          <div v-else class="inline-flex self-start" role="group" :aria-label="t('products.f_status')" data-testid="status-toggle">
+            <button
+              type="button"
+              :aria-pressed="!productForm.is_active"
+              class="h-9 border px-4 text-[13px] font-semibold"
+              :class="!productForm.is_active ? 'border-brand bg-brand text-white' : 'border-line bg-white text-muted-5 hover:bg-surface-subtle'"
+              @click="productForm.is_active = false"
+            >
+              {{ t('products.f_status_draft') }}
+            </button>
+            <button
+              type="button"
+              :aria-pressed="productForm.is_active"
+              class="h-9 border border-l-0 px-4 text-[13px] font-semibold"
+              :class="productForm.is_active ? 'border-brand bg-brand text-white' : 'border-line bg-white text-muted-5 hover:bg-surface-subtle'"
+              @click="productForm.is_active = true"
+            >
+              {{ t('products.f_status_active') }}
+            </button>
+          </div>
+          <p v-if="!releaseOn" class="text-[11.5px] text-muted-3">{{ t('products.f_status_hint') }}</p>
+        </div>
+      </ProductFormBlock>
+
+      <!-- LAINNYA — yang tetap dibutuhkan API tetapi tidak ada di desain: pre-order dan gambar produk. -->
+      <ProductFormBlock :title="t('products.f_sec_other')">
         <div class="flex items-center gap-5">
-          <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
-            <input v-model="productForm.is_preorder" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
+          <label class="flex items-center gap-2.5 text-[13px] font-medium text-muted-5">
+            <input v-model="productForm.is_preorder" type="checkbox" class="h-4 w-4 accent-brand" />
             {{ t('master_data.preorder_product') }}
           </label>
-          <BaseInput v-if="productForm.is_preorder" v-model="productForm.preorder_eta" type="date" :label="t('master_data.eta')" class="flex-1" />
+          <BaseInput v-if="productForm.is_preorder" v-model="productForm.preorder_eta" type="date" :label="t('master_data.eta')" :error="formErrors.preorder_eta" class="flex-1" />
         </div>
-        <div class="flex flex-col gap-1.5">
-          <label class="text-[12.5px] font-semibold text-muted-4" for="product-image">{{ t('master_data.product_image') }}</label>
+        <ProductField v-slot="{ id }" :label="t('master_data.product_image')">
           <div class="flex items-center gap-3">
             <button
               v-if="editingProduct?.image_url && !productImageFile"
@@ -390,71 +726,25 @@ async function saveProduct() {
               :aria-label="t('master_data.enlarge_product_image', { name: editingProduct.name })"
               @click="openEditingImageLightbox"
             >
-              <img
-                :src="editingProduct.image_url"
-                :alt="t('master_data.current_product_image')"
-                class="h-16 w-16 rounded-lg border border-line-2 object-cover"
-              />
+              <img :src="editingProduct.image_url" :alt="t('master_data.current_product_image')" class="h-16 w-16 rounded-lg border border-line-2 object-cover" />
             </button>
             <input
-              id="product-image"
+              :id="id"
               ref="productImageInputEl"
               type="file"
               accept="image/*"
-              class="flex-1 rounded-lg border border-line bg-white px-3.5 py-2.5 text-[13px] file:mr-3 file:rounded-md file:border-0 file:bg-mint-100 file:px-3 file:py-1.5 file:text-[12.5px] file:font-bold file:text-brand-active"
+              class="min-w-0 flex-1 border border-line bg-white px-3 py-1.5 text-[13px] file:mr-3 file:border-0 file:bg-mint-100 file:px-3 file:py-1 file:text-[12.5px] file:font-bold file:text-brand-active"
               @change="onProductImageChange"
             />
           </div>
           <p v-if="productImageError" class="text-[12px] font-semibold text-danger-text">{{ productImageError }}</p>
-        </div>
-      </div>
-
-      <ProductCodePreview :artist-code="artistCode" :category-code="categoryCode" :segment="effectiveSegment" :preview="codePreview" />
-
-      <!-- 037: baki abu-abu muda + kartu putih bergaris tipis dan bayangan lembut, jarak antar-kartu lega —
-           batas antar-varian jelas tanpa blok warna berat. -->
-      <div class="flex flex-col gap-5 rounded-card border border-line-2 bg-surface-subtle p-5">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <span class="text-[14.5px] font-bold">{{ t('master_data.variants_and_prices') }}</span>
-          <label class="flex items-center gap-2 text-[12.5px] text-muted">
-            {{ t('master_data.markup') }}
-            <input v-model.number="markupPercent" type="number" class="w-[70px] rounded-md border border-line px-2.5 py-1.5 text-right text-[13px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100" />
-            %
-          </label>
-        </div>
-
-        <ProductVariantCard
-          v-for="(row, idx) in variantRows"
-          :key="idx"
-          :row="row"
-          :markup-percent="markupPercent"
-          :can-copy-bom-on-create="canCopyBomOnCreate"
-          :copy-source-options="copySourceOptions"
-          @open-bom="openBomFor"
-          @remove="removeVariantRow(idx)"
-          @duplicate="duplicateVariantRow(idx)"
-          @enlarge-image="openVariantImageLightbox"
-        />
-        <button type="button" class="flex h-11 items-center justify-center gap-2 rounded-lg border border-dashed border-disabled-2 text-[13.5px] font-bold text-muted-5 hover:border-brand hover:text-brand-active" @click="addVariantRow">
-          <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
-          {{ t('master_data.add_variant') }}
-        </button>
-        <!-- Stok tidak pernah ditulis langsung — perubahan di sini menjadi baris stock_movements sungguhan
-             lewat POST /stock/adjustments (jalur StockService::applyMovement yang sama dengan impor
-             master-data), jadi satu alasan bersama wajib untuk seluruh batch. -->
-        <BaseInput
-          v-if="hasStockChanges"
-          v-model="stockAdjustmentReason"
-          :label="t('master_data.stock_adjustment_reason')"
-          required
-          :error="formErrors.stock_adjustment_reason"
-        />
-      </div>
+        </ProductField>
+      </ProductFormBlock>
     </div>
 
     <template #footer>
       <BaseButton variant="secondary" @click="showDrawer = false">{{ t('common.cancel') }}</BaseButton>
-      <BaseButton :loading="saving" @click="saveProduct">{{ t('master_data.save_product') }}</BaseButton>
+      <BaseButton :loading="saving" @click="saveProduct">{{ t('products.f_save_item') }}</BaseButton>
     </template>
   </BaseDrawer>
 

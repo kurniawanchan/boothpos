@@ -3,7 +3,7 @@ import { computed } from 'vue';
 
 const props = defineProps({
   variant: { type: String, default: 'primary' }, // primary | secondary | danger | dark | plain
-  size: { type: String, default: 'md' }, // sm | md | lg | icon
+  size: { type: String, default: 'md' }, // xs | sm | md | lg | icon
   type: { type: String, default: 'button' },
   disabled: { type: Boolean, default: false },
   loading: { type: Boolean, default: false },
@@ -22,6 +22,7 @@ const variants = {
 };
 
 const sizes = {
+  xs: 'h-8 px-3 text-[12.5px]', // toolbar daftar yang ringkas (tinggi 32 px)
   sm: 'h-9 px-3 text-[12.5px]',
   md: 'h-[46px] px-4 text-[14px]',
   lg: 'h-12 px-5 text-[15px]',

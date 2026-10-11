@@ -39,6 +39,7 @@ Method: three read-only code surveys (frontend shell and components, backend cov
 - **Rationale**: keeps every existing install valid and makes the new capability additive. Version level is a governance call (the section is materially expanded → MINOR; if the owner considers the "no multi-tenancy" rule a principle → MAJOR); recorded as open for the owner.
 - **Also update, in dated notes (not rewritten history)**: PRD §1/§9.2/§10.2, `CLAUDE.md` (single-store statements), RUNBOOK deployment sections.
 - **Alternatives rejected**: ignoring the conflict (silently violates the document that "supersedes ad hoc practice"); one installation per outlet with sync between them (a distributed-systems project, see Decision 3).
+- **Superseded 2026-10-11:** the amendment wording is now maintained in `specs/042-dashboard-revamp/constitution-amendment.md` (adds registered devices and the rule that device-reported data is advisory). Version level (MINOR vs MAJOR) is still the owner's call.
 
 ## Decision 3 — One shared server for outlets, not per-outlet installs with replication
 

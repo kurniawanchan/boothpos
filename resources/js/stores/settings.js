@@ -26,8 +26,18 @@ export const useSettingsStore = defineStore('settings', {
     receiptShowLogo: true,
     storeName: '',
     appName: DEFAULT_APP_NAME,
+    // 042-dashboard-revamp — zona waktu toko dan jam pergantian hari bisnis, hanya untuk MEMFORMAT tanggal bisnis
+    // di layar. Penentuan hari bisnis sebuah transaksi tetap dilakukan server (App\Support\BusinessDay).
+    storeTimezone: 'Asia/Jakarta',
+    businessDayCutoff: '00:00',
     // 035-po-row-actions — hanya true untuk owner/admin saat database tertinggal; server yang menentukan.
     schemaUpdateRequired: false,
+    // 043 — rilis menu aktif? Hanya menampilkan/menyembunyikan banner rilis, angka "Belum dirilis" dan kendali
+    // persetujuan; server tetap menolak tulis dengan 409 release_disabled. Bawaan false = alur langsung berlaku.
+    menuReleaseEnabled: false,
+    // 043 — pembulatan bawaan ubah harga massal ('none' | '500'); hanya nilai awal saklar di drawer, server tetap
+    // menghitung ulang dan memvalidasi.
+    priceRoundingDefault: '500',
     loaded: false,
   }),
   getters: {
@@ -47,7 +57,11 @@ export const useSettingsStore = defineStore('settings', {
         this.receiptShowLogo = data.receipt_show_logo ?? true;
         this.storeName = data.store_name ?? '';
         this.appName = resolveAppName(data.app_name);
+        this.storeTimezone = data.store_timezone || 'Asia/Jakarta';
+        this.businessDayCutoff = data.business_day_cutoff || '00:00';
         this.schemaUpdateRequired = data.schema_update_required === true;
+        this.menuReleaseEnabled = data.menu_release_enabled === true;
+        this.priceRoundingDefault = data.price_rounding_default === 'none' ? 'none' : '500';
         applyThemeAccentColor(this.themeAccentColor);
       } finally {
         this.loaded = true;
@@ -76,6 +90,36 @@ export const useSettingsStore = defineStore('settings', {
       const trimmed = (name ?? '').trim();
       await updateSettings([{ key: 'app_name', value: trimmed || null, type: 'string', group: 'general' }]);
       this.appName = resolveAppName(trimmed);
+    },
+
+    /**
+     * 042 — empat pengaturan hari bisnis disimpan dalam SATU permintaan massal (server memvalidasi tiap kunci;
+     * satu nilai salah menolak semuanya, jadi tidak pernah tersimpan setengah-setengah). Zona waktu dan jam
+     * batas ikut menyegarkan state layar; toleransi kas dan batas offline hanya dibaca server.
+     */
+    async setBusinessDay({ storeTimezone, businessDayCutoff, cashDifferenceTolerance, deviceOfflineAfterMinutes }) {
+      await updateSettings([
+        { key: 'store_timezone', value: storeTimezone, type: 'string', group: 'business_day' },
+        { key: 'business_day_cutoff', value: businessDayCutoff, type: 'string', group: 'business_day' },
+        { key: 'cash_difference_tolerance', value: cashDifferenceTolerance, type: 'decimal', group: 'business_day' },
+        { key: 'device_offline_after_minutes', value: deviceOfflineAfterMinutes, type: 'integer', group: 'business_day' },
+      ]);
+      this.storeTimezone = storeTimezone;
+      this.businessDayCutoff = businessDayCutoff;
+    },
+
+    /**
+     * 043 — pengaturan rilis menu dalam SATU permintaan massal (satu nilai salah menolak semuanya). Hanya
+     * `menu_release_enabled` hidup di state layar (menggerbang banner/persetujuan); ambang dan pembulatan dibaca server.
+     */
+    async setMenuRelease({ enabled, thresholdPct, roundingDefault }) {
+      await updateSettings([
+        { key: 'menu_release_enabled', value: enabled, type: 'boolean', group: 'menu' },
+        { key: 'price_approval_threshold_pct', value: thresholdPct, type: 'decimal', group: 'menu' },
+        { key: 'price_rounding_default', value: roundingDefault, type: 'string', group: 'menu' },
+      ]);
+      this.menuReleaseEnabled = enabled === true;
+      this.priceRoundingDefault = roundingDefault === 'none' ? 'none' : '500';
     },
 
     /** US7 */

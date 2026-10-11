@@ -164,6 +164,8 @@ docs/openapi-pos-mvp.yaml        # updated with every route change
 
 **Proposed amendment text (for P0-1)**: replace the first paragraph of "Stack & Environment Constraints" with: *"BoothPOS runs for one organisation, which may have one or more outlets. It runs either entirely on one local machine (the original deployment, unchanged) or on one shared server reachable by all outlets over HTTPS. Multi-tenancy across unrelated customers remains out of scope. Architectural decisions MUST work in the single-machine case and MUST NOT assume more than one server."* Add the MySQL, git and documentation bullets unchanged. Version 1.1.0 (MINOR) unless the owner treats the old wording as a principle (then 2.0.0).
 
+> **Superseded 2026-10-11:** the amendment text above was rewritten for feature 042 (`specs/042-dashboard-revamp/constitution-amendment.md`), which adds registered devices and the rule for client-reported data. Use that file; this paragraph is kept as history.
+
 ## Open decisions (need the product owner)
 
 1. Ratify the constitution amendment and its version level (P0-1).

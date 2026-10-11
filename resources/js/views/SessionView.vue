@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute, useRouter } from 'vue-router';
 import { currentSession, openSession, closeSession, sessionSummary } from '../api/sessions';
 import { listEvents } from '../api/events';
 import { listArtists } from '../api/artists';
@@ -64,7 +65,52 @@ const METHOD_LABELS = computed(() => ({
 }));
 const METHOD_ICONS = { cash: 'ph-money', bank_transfer: 'ph-bank', qr_ewallet: 'ph-qr-code' };
 
-onMounted(load);
+// 042-dashboard-revamp — butir "Selisih kas shift" di Dashboard membuka layar ini dengan `?id=<shift>`. Layar ini
+// hanya mengenal shift yang SEDANG BERJALAN, sedangkan selisih kas dihitung dari shift yang sudah TUTUP, jadi
+// `?id=` menampilkan kartu rincian shift itu (hanya-baca, dari GET /sessions/{id}/summary yang sudah menjaga
+// kepemilikan: kasir hanya shift sendiri, owner/admin semuanya) di atas layar. Kartu bisa ditutup; tanpa `?id`
+// layar tidak berubah. Shift yang kebetulan sedang berjalan tidak diberi kartu (layar utamanya sudah
+// menampilkannya).
+const route = useRoute();
+const router = useRouter();
+const focusedId = computed(() => {
+  const raw = route?.query?.id;
+  const n = Number(Array.isArray(raw) ? raw[0] : raw);
+  return Number.isInteger(n) && n > 0 ? n : null;
+});
+const focused = ref(null); // { session, order_count, total_sales } dari ringkasan
+const focusedState = ref('idle'); // idle | loading | ready | error
+async function loadFocused() {
+  focused.value = null;
+  if (focusedId.value === null) {
+    focusedState.value = 'idle';
+    return;
+  }
+  focusedState.value = 'loading';
+  try {
+    focused.value = await sessionSummary(focusedId.value);
+    focusedState.value = 'ready';
+  } catch {
+    focusedState.value = 'error';
+  }
+}
+function dismissFocused() {
+  const rest = { ...route.query };
+  delete rest.id;
+  router.replace({ query: rest });
+}
+watch(focusedId, loadFocused);
+// Shift yang sedang berjalan sudah tampil di layar utama — kartu hanya untuk shift lain.
+const showFocused = computed(() => focusedState.value !== 'idle' && !(session.value && session.value.id === focusedId.value));
+const focusedDifference = computed(() => {
+  const d = focused.value?.session?.cash_difference;
+  return d === null || d === undefined ? null : parseMoney(d);
+});
+
+onMounted(() => {
+  loadFocused();
+  load();
+});
 
 async function load() {
   loading.value = true;
@@ -148,6 +194,37 @@ async function handleClose() {
 
 <template>
   <div class="px-[26px] pb-10 pt-[22px]">
+    <section v-if="showFocused" class="mx-auto mb-[18px] flex max-w-[860px] flex-col gap-3 border-2 border-line bg-white p-5" data-testid="focused-shift" :aria-label="t('dashboard.link_shift_title', { id: focusedId })">
+      <div class="flex items-start justify-between gap-3">
+        <h2 class="text-[15px] font-bold tracking-tight">{{ t('dashboard.link_shift_title', { id: focusedId }) }}</h2>
+        <button type="button" class="text-[12.5px] font-bold text-brand-active underline decoration-dotted hover:text-brand" data-testid="focused-shift-dismiss" @click="dismissFocused">{{ t('dashboard.link_shift_dismiss') }}</button>
+      </div>
+      <p v-if="focusedState === 'loading'" class="text-[13px] text-muted-3" role="status">{{ t('events_sessions.loading') }}</p>
+      <p v-else-if="focusedState === 'error'" role="alert" class="text-[13px] text-danger-text">{{ t('dashboard.link_shift_failed') }}</p>
+      <template v-else-if="focused">
+        <p v-if="focused.session?.closed_at" class="text-[12.5px] text-muted">{{ t('dashboard.link_shift_closed_at', { time: formatDateTime(focused.session.closed_at) }) }}</p>
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div class="flex flex-col gap-1 border border-line-3 bg-surface-subtle p-3.5">
+            <span class="text-[11.5px] font-semibold text-muted-2">{{ t('dashboard.link_shift_opening') }}</span>
+            <span class="text-[17px] font-extrabold tracking-tight">{{ formatIDR(focused.session?.opening_cash ?? 0) }}</span>
+          </div>
+          <div class="flex flex-col gap-1 border border-line-3 bg-surface-subtle p-3.5">
+            <span class="text-[11.5px] font-semibold text-muted-2">{{ t('dashboard.link_shift_expected') }}</span>
+            <span class="text-[17px] font-extrabold tracking-tight">{{ formatIDR(focused.session?.expected_cash ?? 0) }}</span>
+          </div>
+          <div class="flex flex-col gap-1 border border-line-3 bg-surface-subtle p-3.5">
+            <span class="text-[11.5px] font-semibold text-muted-2">{{ t('dashboard.link_shift_counted') }}</span>
+            <span class="text-[17px] font-extrabold tracking-tight">{{ formatIDR(focused.session?.closing_cash ?? 0) }}</span>
+          </div>
+          <div class="flex flex-col gap-1 border p-3.5" :class="focusedDifference ? 'border-danger-border bg-danger-bg' : 'border-line-3 bg-surface-subtle'">
+            <span class="text-[11.5px] font-semibold" :class="focusedDifference ? 'text-danger-text' : 'text-muted-2'">{{ t('dashboard.link_shift_difference') }}</span>
+            <span class="text-[17px] font-extrabold tracking-tight" :class="focusedDifference ? 'text-danger-text' : ''" data-testid="focused-shift-difference">{{ focusedDifference === null ? '—' : `${focusedDifference < 0 ? '−' : focusedDifference > 0 ? '+' : ''}${formatIDR(Math.abs(focusedDifference))}` }}</span>
+          </div>
+        </div>
+        <p v-if="focused.session?.notes" class="text-[12.5px] text-muted-4">{{ focused.session.notes }}</p>
+      </template>
+    </section>
+
     <div v-if="loading" class="py-14 text-center text-[13px] text-muted-3">{{ t('events_sessions.loading') }}</div>
 
     <!-- No open session — designed fresh, no mockup reference for this state. -->

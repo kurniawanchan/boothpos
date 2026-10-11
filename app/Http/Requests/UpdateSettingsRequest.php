@@ -79,10 +79,37 @@ class UpdateSettingsRequest extends FormRequest
                         $fail('Nama aplikasi maksimal '.AppName::MAX_LENGTH.' karakter.');
                     }
 
+                    // 043 — pengaturan menu (rilis, ambang persetujuan, pembulatan bawaan).
+                    if ($key === 'menu_release_enabled' && filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === null) {
+                        $fail('Pengaturan rilis menu harus berupa true atau false.');
+                    }
+                    if ($key === 'price_approval_threshold_pct' && (! is_numeric($value) || (float) $value < 0 || (float) $value > 100)) {
+                        $fail('Ambang persetujuan harga harus berupa angka 0–100.');
+                    }
+                    if ($key === 'price_rounding_default' && ! in_array((string) $value, ['none', '500'], true)) {
+                        $fail('Pembulatan harga bawaan harus none atau 500.');
+                    }
+
                     // 006-purchase-order-and-ops (US6) — pola closure yang
                     // sama seperti store_contact_email/system_mode di atas:
                     // theme_accent_color adalah baris settings biasa, tidak
                     // butuh endpoint baru, hanya validasi formatnya sendiri.
+                    // 042-dashboard-revamp — hari bisnis. Pola closure yang sama: baris settings
+                    // biasa, tanpa endpoint baru. Nilai ngawur akan membuat BusinessDay jatuh ke
+                    // default, jadi ditolak di sini agar admin tahu, bukan diam-diam diabaikan.
+                    if ($key === 'store_timezone' && ! in_array($value, \DateTimeZone::listIdentifiers(), true)) {
+                        $fail('Zona waktu toko tidak dikenal (contoh: Asia/Jakarta).');
+                    }
+                    if ($key === 'business_day_cutoff' && ! (is_string($value) && preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $value))) {
+                        $fail('Jam batas hari harus berformat HH:MM (00:00–23:59).');
+                    }
+                    if ($key === 'cash_difference_tolerance' && (! is_numeric($value) || (float) $value < 0)) {
+                        $fail('Toleransi selisih kas harus berupa angka ≥ 0.');
+                    }
+                    if ($key === 'device_offline_after_minutes' && (! is_numeric($value) || (int) $value != $value || (int) $value < 1 || (int) $value > 1440)) {
+                        $fail('Batas perangkat offline harus bilangan bulat 1–1440 menit.');
+                    }
+
                     if ($key === 'theme_accent_color' && $value !== null && $value !== '' && ! preg_match('/^#[0-9a-fA-F]{6}$/', $value)) {
                         $fail('Warna tema harus berupa kode hex 6 digit, mis. #2f9e6e.');
                     }

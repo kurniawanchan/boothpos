@@ -30,6 +30,10 @@ class OrderService
      */
     public function create(array $data, User $cashier): Order
     {
+        // 043 — rilis/harga berjadwal yang jatuh tempo diterapkan di titik masuk ini (tanpa penjadwal).
+        app(\App\Services\ReleaseService::class)->publishDueCached();
+        app(\App\Services\RecipeService::class)->applyDueCached();
+
         // Idempotensi — dicek DI LUAR transaksi lock supaya permintaan
         // yang benar-benar duplikat langsung dikembalikan tanpa membuka
         // transaksi baru sama sekali.
@@ -85,11 +89,8 @@ class OrderService
             foreach ($data['items'] as $itemInput) {
                 $variant = ProductVariant::with('product')->lockForUpdate()->findOrFail($itemInput['variant_id']);
 
-                if (! $variant->is_active) {
-                    throw ValidationException::withMessages([
-                        'items' => __('orders_payments.variant_inactive', ['sku' => $variant->sku]),
-                    ]);
-                }
+                // 043 — satu aturan "bisa dipesan" (varian, produk/diskontinu, tanda 86): App\Support\MenuAvailability.
+                \App\Support\MenuAvailability::assertOrderable($variant, 'items');
 
                 $qty = (int) $itemInput['qty'];
                 $discount = (float) ($itemInput['discount_amount'] ?? 0);

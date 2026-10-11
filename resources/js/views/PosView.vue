@@ -12,6 +12,7 @@ import { uuid } from '../utils/uuid';
 import { formatIDR, toMoneyString } from '../utils/money';
 import { buildProductCards, buildSearchCards, toCartItem } from '../utils/posProductCards';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
+import { useMenuAvailability } from '../composables/useMenuAvailability';
 import PosCartPanel from '../components/pos/PosCartPanel.vue';
 import PosPaymentModal from '../components/payment/PosPaymentModal.vue';
 import ProductVariantPickerModal from '../components/pos/ProductVariantPickerModal.vue';
@@ -26,6 +27,8 @@ import { savePosDraft, resumePosDraft } from '../api/posDrafts';
 const cart = usePosCartStore();
 const toast = useToastStore();
 const { t } = useI18n();
+// 043 (US3) — item 86 / diskontinu redup dan ditolak di sini dalam ~5 dtk; penjaga sebenarnya tetap server (409).
+const availability = useMenuAvailability();
 
 const session = ref(null);
 const sessionChecked = ref(false);
@@ -134,12 +137,20 @@ const searchCards = computed(() => buildSearchCards(searchResults.value));
 // empty-state check across both modes.
 const cards = computed(() => (searchResults.value !== null ? searchCards.value : browseCards.value));
 
+// Kartu 86 sengaja TIDAK memakai atribut `disabled`: klik/ketuk harus tetap sampai ke sini supaya kasir diberi tahu
+// MENGAPA item tak masuk keranjang (toast), bukan diam. Habis-stok tetap `disabled` seperti sebelumnya.
+function refuseUnavailable(entry) {
+  toast.warning(availability.unavailableReason(entry) === 'discontinued' ? t('pos.item_discontinued') : t('pos.item_sold_out'));
+}
+
 function addToCart(item) {
+  if (availability.isUnavailable(item)) return refuseUnavailable(item);
   if (item.current_stock <= 0) return;
   cart.add(item);
 }
 
 function selectProductCard(card) {
+  if (availability.isUnavailable(card)) return refuseUnavailable(card);
   if (card.out_of_stock) return;
   if (card.variant_count === 1) {
     // No pointless second click for a product that only has one variant.
@@ -315,6 +326,8 @@ async function resumeDraft(draftId) {
             :key="card.variant_id"
             type="button"
             :disabled="card.current_stock <= 0"
+            :aria-disabled="availability.isUnavailable(card) ? 'true' : undefined"
+            :class="availability.isUnavailable(card) ? 'opacity-50 grayscale' : ''"
             class="flex flex-col overflow-hidden rounded-card border border-line-2 bg-white text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-60"
             @click="addToCart(card)"
           >
@@ -323,7 +336,8 @@ async function resumeDraft(draftId) {
               <span v-else-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
               <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
               <span class="absolute bottom-1.5 left-2 rounded bg-white/85 px-1.5 py-0.5 font-mono text-[9.5px] text-muted-5">{{ card.sku }}</span>
-              <span v-if="card.current_stock <= 0" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>
+              <span v-if="availability.isUnavailable(card)" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text" data-testid="card-86">{{ t('pos.sold_out_86') }}</span>
+              <span v-else-if="card.current_stock <= 0" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>
             </div>
             <div class="flex flex-col gap-1 px-3 py-2.5">
               <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
@@ -346,6 +360,8 @@ async function resumeDraft(draftId) {
             :key="card.product_id"
             type="button"
             :disabled="card.out_of_stock"
+            :aria-disabled="availability.isUnavailable(card) ? 'true' : undefined"
+            :class="availability.isUnavailable(card) ? 'opacity-50 grayscale' : ''"
             class="flex flex-col overflow-hidden rounded-card border border-line-2 bg-white text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-60"
             @click="selectProductCard(card)"
           >
@@ -354,7 +370,8 @@ async function resumeDraft(draftId) {
               <span v-else-if="card.category_code" class="text-[22px] font-extrabold tracking-tight opacity-55">{{ card.category_code }}</span>
               <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
               <span v-if="card.variant_count > 1" class="absolute left-2 top-2 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-bold text-muted-5">{{ t('pos.variant_count', { count: card.variant_count }) }}</span>
-              <span v-if="card.out_of_stock" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>
+              <span v-if="availability.isUnavailable(card)" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text" data-testid="card-86">{{ t('pos.sold_out_86') }}</span>
+              <span v-else-if="card.out_of_stock" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>
             </div>
             <div class="flex flex-col gap-1 px-3 py-2.5">
               <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>

@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\StampsBusinessDay;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CashierSession extends Model
 {
-    use HasDataMode, HasFactory;
+    use HasDataMode, HasFactory, StampsBusinessDay;
 
     protected $fillable = [
         'event_id', 'user_id', 'opened_at', 'closed_at', 'opening_cash',
@@ -27,6 +29,12 @@ class CashierSession extends Model
             'expected_cash' => 'decimal:2',
             'cash_difference' => 'decimal:2',
         ];
+    }
+
+    /** Hari bisnis sebuah shift = hari shift dibuka. */
+    protected function businessInstant(): CarbonInterface
+    {
+        return $this->getAttribute('opened_at') ?? $this->getAttribute('created_at') ?? now();
     }
 
     public function event(): BelongsTo
