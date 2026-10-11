@@ -5,11 +5,16 @@ namespace Tests\Feature\DemoClone;
 use App\Console\Commands\CloneLiveToDemo;
 use App\Services\Backup\DatabaseDumper;
 use App\Services\DemoClone\CloneRegistry;
+use App\Services\DemoClone\LiveFingerprint;
+use App\Services\DemoClone\LiveToDemoCloner;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Tests\Support\BuildsCloneFixtures;
+use PDOException;
 use Tests\Support\FakeDatabaseDumper;
 use Tests\TestCase;
 
@@ -121,5 +126,64 @@ class CloneLiveToDemoCommandTest extends TestCase
 
         $this->assertTrue($this->demoUntouched());
         $this->assertSame([], $this->dumper->calls);
+    }
+
+    public function test_the_report_shows_the_artist_and_category_code_mapping(): void
+    {
+        // Kode artis/kategori DEMO diganti (kolomnya terlalu sempit untuk akhiran);
+        // pengguna harus bisa melihat padanannya LIVE → DEMO.
+        $this->artisan('app:clone-live-to-demo --force --yes')
+            ->expectsOutputToContain('LIV → ZLI')
+            ->expectsOutputToContain('LC → ZL')
+            ->assertSuccessful();
+    }
+
+    public function test_a_cleanup_failure_after_commit_is_reported_as_a_warning_not_a_rollback(): void
+    {
+        $this->app->instance(LiveToDemoCloner::class, new class extends LiveToDemoCloner
+        {
+            protected function deleteUnreferencedFiles(array $stale): void
+            {
+                throw new \RuntimeException('disk penuh');
+            }
+        });
+
+        $this->artisan('app:clone-live-to-demo --force --yes')
+            ->expectsOutputToContain('pembersihan berkas DEMO lama gagal')
+            ->doesntExpectOutputToContain('dibatalkan')
+            ->assertSuccessful();
+
+        $this->assertFalse($this->demoUntouched(), 'DEMO sudah diganti');
+    }
+
+    public function test_a_database_failure_never_prints_or_logs_a_pii_value(): void
+    {
+        // Spec §9: keluaran galat tidak boleh memuat nilai baris pelanggan.
+        $pdo = new PDOException("SQLSTATE[23000]: Duplicate entry 'SENTINEL-PHONE-999' for key 'customers.x'");
+        $pdo->errorInfo = ['23000', 1062, "Duplicate entry 'SENTINEL-PHONE-999'"];
+
+        $this->app->instance(LiveToDemoCloner::class, new class($pdo) extends LiveToDemoCloner
+        {
+            public function __construct(private PDOException $pdo) {}
+
+            public function run(): array
+            {
+                throw new QueryException('mysql', 'insert into `customers` (`phone`) values (?)', ['SENTINEL-PHONE-999'], $this->pdo);
+            }
+        });
+
+        Log::spy();
+        $before = LiveFingerprint::capture();
+
+        $this->artisan('app:clone-live-to-demo --force --yes')
+            ->expectsOutputToContain('Gagal')
+            ->doesntExpectOutputToContain('SENTINEL-PHONE-999')
+            ->assertFailed();
+
+        Log::shouldHaveReceived('error')->once()->withArgs(
+            fn ($message) => str_contains($message, 'customers') && ! str_contains($message, 'SENTINEL'),
+        );
+        $this->assertTrue($this->demoUntouched());
+        $this->assertSame([], LiveFingerprint::diff($before, LiveFingerprint::capture()));
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\DemoClone;
 
+use App\Services\DemoClone\CloneException;
 use App\Services\DemoClone\FileCopier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -69,6 +70,29 @@ class FileCopierTest extends TestCase
         $this->assertNull($copier->copy('public', 'products/gone.jpg'));
         $this->assertSame(0, $copier->copied);
         $this->assertSame(1, $copier->missing);
+    }
+
+    public function test_a_failed_copy_throws_a_clear_exception_without_path_or_values(): void
+    {
+        $fs = \Mockery::mock();
+        $fs->shouldReceive('exists')->with('products/secret-name.jpg')->andReturn(true);
+        $fs->shouldReceive('copy')->once()->andReturn(false);
+        // Ukuran "kebetulan sama": tanpa pemeriksaan hasil copy(), kegagalan itu lolos
+        // diam-diam dan baris DEMO akan menunjuk berkas yang tidak pernah ada.
+        $fs->shouldReceive('size')->andReturn(10);
+        Storage::shouldReceive('disk')->with('public')->andReturn($fs);
+
+        $copier = new FileCopier;
+
+        try {
+            $copier->copy('public', 'products/secret-name.jpg');
+            $this->fail('Seharusnya CloneException');
+        } catch (CloneException $e) {
+            $this->assertSame('Gagal menyalin berkas di disk public.', $e->getMessage());
+            $this->assertStringNotContainsString('secret-name', $e->getMessage());
+        }
+
+        $this->assertSame(0, $copier->copied);
     }
 
     public function test_discard_removes_only_the_copies(): void

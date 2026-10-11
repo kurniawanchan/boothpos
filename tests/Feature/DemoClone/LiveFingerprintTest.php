@@ -78,6 +78,9 @@ class LiveFingerprintTest extends TestCase
 
         foreach (CloneRegistry::tables() as $table => $spec) {
             foreach (CloneRegistry::references($table) as $col => $parent) {
+                // Tanpa ini, induk yang hilang dari registry (false) lolos diam-diam: false <= n.
+                $this->assertNotFalse(array_search($table, $tables, true), "{$table} tidak ada di registry");
+                $this->assertNotFalse(array_search($parent, $tables, true), "{$table}.{$col} menunjuk {$parent} yang tidak terdaftar di registry");
                 $this->assertLessThanOrEqual(
                     array_search($table, $tables, true),
                     array_search($parent, $tables, true),

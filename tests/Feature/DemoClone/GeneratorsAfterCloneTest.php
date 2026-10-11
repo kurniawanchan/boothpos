@@ -27,6 +27,10 @@ class GeneratorsAfterCloneTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        // Bekukan jam SEBELUM graf dibangun: created_at fixture, $ymd, dan hitungan
+        // "hari ini" harus memakai hari yang sama walau test berjalan lewat tengah
+        // malam. Carbon test-now direset otomatis oleh tearDown TestCase.
+        $this->travelTo(now()->setTime(12, 0));
         Storage::fake('public');
         Storage::fake('local');
         $this->buildGraph('live');

@@ -495,8 +495,19 @@ Di Docker dev: `docker compose exec app php artisan app:clone-live-to-demo ...`
   perintah dibatalkan SEBELUM menghapus apa pun (data lintas mode akan diubah
   diam-diam oleh foreign key `ON DELETE SET NULL/CASCADE`). Perbaiki rujukan itu
   lebih dulu.
-- Hentikan pemakaian aplikasi saat menjalankan: bila data LIVE berubah di tengah
-  proses, perintah membatalkan dirinya.
+- Hentikan pemakaian aplikasi saat menjalankan. Perintah berjalan dalam satu
+  transaksi (REPEATABLE READ), jadi tulisan dari koneksi LAIN selama proses TIDAK
+  terlihat olehnya dan TIDAK terdeteksi: pemeriksaan sidik jari LIVE hanya
+  membuktikan bahwa proses ini sendiri tidak menulis ke LIVE. Untuk itu pemakaian
+  aplikasi (kasir, impor, tab lain) harus dihentikan selama menjalankannya.
+- Bila proses mati mendadak (galat fatal / Ctrl-C) di tengah jalan, DB kembali
+  sendiri (rollback; LIVE tak terpengaruh), tetapi salinan gambar/bukti bayar yang
+  sempat dibuat dapat tertinggal di disk dengan nama UUID acak. Tidak dipakai baris
+  mana pun; aman dihapus manual, atau dibiarkan.
+- Bila pembersihan berkas DEMO lama gagal SESUDAH penggantian selesai, perintah
+  tetap berhasil dan mencetak peringatan (DEMO sudah diganti; berkas lama mungkin
+  tersisa di disk). Itu bukan rollback.
+- Laporan akhir mencetak pemetaan kode artist/kategori LIVE → DEMO (`Kode Artis: VLC → ZVL`).
 - Memulihkan cadangan pengaman mengembalikan baris DEMO, tetapi TIDAK berkas
   gambar yang sudah dihapus dari disk publik (`app:backup` tidak mengarsipkannya).
 - `app:restore` juga memulihkan `license_activations`: bila dump berasal dari mesin

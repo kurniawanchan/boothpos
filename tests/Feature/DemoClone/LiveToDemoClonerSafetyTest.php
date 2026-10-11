@@ -96,14 +96,23 @@ class LiveToDemoClonerSafetyTest extends TestCase
 
     public function test_a_cross_mode_reference_aborts(): void
     {
-        $cloner = $this->clonerWithHook(function () {
-            $demoCustomer = DB::table('customers')->where('data_mode', 'demo')->value('id');
-            DB::table('orders')->where('id', $this->live['order'])->update(['customer_id' => $demoCustomer]);
+        // Hanya baris DEMO baru yang diubah (menunjuk pelanggan LIVE). Sidik jari LIVE
+        // tidak berubah, jadi HANYA cek integritas lintas mode yang bisa melempar.
+        $liveCustomer = $this->live['customer'];
+        $cloner = $this->clonerWithHook(function () use ($liveCustomer) {
+            DB::table('orders')->where('data_mode', 'demo')->update(['customer_id' => $liveCustomer]);
         });
+        $before = LiveFingerprint::capture();
 
-        $this->expectException(CloneException::class);
+        try {
+            $cloner->run();
+            $this->fail('Seharusnya CloneException');
+        } catch (CloneException $e) {
+            $this->assertStringContainsString('orders.customer_id', $e->getMessage());
+            $this->assertStringContainsString('lintas mode', $e->getMessage());
+        }
 
-        $cloner->run();
+        $this->assertSame([], LiveFingerprint::diff($before, LiveFingerprint::capture()));
     }
 
     public function test_a_live_row_pointing_at_a_demo_row_aborts_before_anything_is_wiped(): void
@@ -153,6 +162,9 @@ class LiveToDemoClonerSafetyTest extends TestCase
     {
         $filesBefore = $this->files();
         $demoArtistBefore = DB::table('artists')->where('data_mode', 'demo')->first();
+        $fingerprintBefore = LiveFingerprint::capture();
+        $liveProductBytes = Storage::disk('public')->get('products/live-product.jpg');
+        $liveProofBytes = Storage::disk('local')->get('payment-proofs/live-proof.jpg');
         $cloner = $this->clonerWithHook(fn () => throw new \RuntimeException('boom'));
 
         try {
@@ -165,6 +177,55 @@ class LiveToDemoClonerSafetyTest extends TestCase
         $this->assertEquals($demoArtistBefore, DB::table('artists')->where('data_mode', 'demo')->first());
         $this->assertSame($filesBefore, $this->files(), 'salinan berkas harus dihapus saat gagal');
         Storage::disk('public')->assertExists('products/demo-product.jpg');
+        // Spec §2.3: LIVE (baris DAN berkas) tidak boleh berubah sedikit pun oleh run yang gagal.
+        $this->assertSame([], LiveFingerprint::diff($fingerprintBefore, LiveFingerprint::capture()));
+        $this->assertSame($liveProductBytes, Storage::disk('public')->get('products/live-product.jpg'));
+        $this->assertSame($liveProofBytes, Storage::disk('local')->get('payment-proofs/live-proof.jpg'));
+    }
+
+    public function test_a_failure_while_deleting_old_demo_files_after_commit_does_not_fail_the_run(): void
+    {
+        // Pembersihan berkas lama terjadi SESUDAH commit: kegagalannya tidak boleh
+        // tampil sebagai "dibatalkan" karena DEMO sudah terlanjur diganti.
+        $cloner = new class extends LiveToDemoCloner
+        {
+            protected function deleteUnreferencedFiles(array $stale): void
+            {
+                throw new \RuntimeException('disk penuh SENTINEL-PATH-123');
+            }
+        };
+
+        $report = $cloner->run();
+
+        $this->assertTrue($report['files_cleanup_failed']);
+        $this->assertSame('ZLI', DB::table('artists')->where('data_mode', 'demo')->value('code'));
+        $this->assertFalse(DB::table('artists')->where('code', 'DMO')->exists());
+    }
+
+    public function test_a_normal_run_reports_no_cleanup_failure(): void
+    {
+        $report = (new LiveToDemoCloner)->run();
+
+        $this->assertFalse($report['files_cleanup_failed']);
+    }
+
+    public function test_a_failing_discard_does_not_hide_the_original_exception(): void
+    {
+        // Sesudah penyalinan, disk "rusak" lalu proses gagal: discardCopies() ikut
+        // melempar, tetapi yang harus sampai ke pemanggil adalah galat ASLI.
+        $cloner = $this->clonerWithHook(function () {
+            Storage::shouldReceive('disk')->andThrow(new \LogicException('disk rusak'));
+
+            throw new \RuntimeException('boom');
+        });
+
+        try {
+            $cloner->run();
+            $this->fail('Seharusnya melempar');
+        } catch (\Throwable $e) {
+            $this->assertInstanceOf(\RuntimeException::class, $e);
+            $this->assertSame('boom', $e->getMessage());
+        }
     }
 
     public function test_copied_images_and_proofs_are_independent_files(): void
