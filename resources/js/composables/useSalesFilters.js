@@ -195,7 +195,7 @@ export function useSalesFilters({ transactions, sessions }) {
     const cashSales = session.cash_received !== undefined && session.cash_received !== null
       ? num(session.cash_received)
       : all.value
-        .filter((tx) => tx.session_id == session.id && !isVoided(tx))
+        .filter((tx) => tx.session_id == session.id && isCounted(tx))
         .reduce((acc, tx) => acc + num(tx.cash_amount), 0);
     const opening = num(session.opening_cash);
     const closed = session.status === 'closed' && session.expected_cash !== null && session.closing_cash !== null;

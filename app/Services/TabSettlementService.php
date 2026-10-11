@@ -36,7 +36,7 @@ class TabSettlementService
 
             // Idempotensi: pengiriman ulang (jaringan putus) dengan client_ref
             // yang sama TIDAK mencatat apa pun lagi — kembalikan keadaan terkini.
-            if (Payment::where('order_id', $order->id)->where('client_ref', $ref)->exists()) {
+            if (Payment::where('order_id', $order->id)->where('submission_ref', $ref)->exists()) {
                 return $this->tabs->loaded($order);
             }
 
@@ -67,7 +67,9 @@ class TabSettlementService
                 // 'full' hanya untuk pembayaran yang menuntaskan tab; sebelumnya uang muka.
                 $input['purpose'] = $completes ? 'full' : 'down_payment';
                 $payment = $this->paymentRecorder->record($input, $order->id, null);
-                $payment->forceFill(['client_ref' => $ref])->save();
+                // Kunci per-PENGIRIMAN: `client_ref` milik ledger UNIQUE per baris dan tak bisa dipakai bersama
+                // oleh beberapa baris dalam satu pengiriman (lihat migrasi 2026_10_31_000009).
+                $payment->forceFill(['submission_ref' => $ref])->save();
             }
 
             $update = ['paid_amount' => $paidTotal];
@@ -115,7 +117,7 @@ class TabSettlementService
 
             // Idempotensi: pengiriman ulang dengan client_ref yang sama tidak memisah dua kali.
             $existing = Order::where('split_from_order_id', $order->id)
-                ->whereHas('payments', fn ($q) => $q->where('client_ref', $ref))
+                ->whereHas('payments', fn ($q) => $q->where('submission_ref', $ref))
                 ->first();
             if ($existing) {
                 return ['paid_order' => $this->tabs->loaded($existing), 'tab' => $this->tabs->loaded($order), 'replayed' => true];
@@ -205,7 +207,7 @@ class TabSettlementService
             foreach ($data['payments'] as $input) {
                 $input['purpose'] = 'full';
                 $payment = $this->paymentRecorder->record($input, $paid->id, null);
-                $payment->forceFill(['client_ref' => $ref])->save();
+                $payment->forceFill(['submission_ref' => $ref])->save();
             }
 
             $change = round(max(0, $paidAmount - $total), 2);

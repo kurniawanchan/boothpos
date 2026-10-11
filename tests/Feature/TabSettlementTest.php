@@ -78,14 +78,29 @@ class TabSettlementTest extends TestCase
         $this->assertDatabaseHas('payments', ['order_id' => $this->tab, 'purpose' => 'full', 'method' => 'qr_ewallet']);
     }
 
-    public function test_a_non_cash_payment_without_a_proof_is_refused_and_records_nothing(): void
+    // 031-optional-payment-proof — bukti bayar tidak lagi wajib untuk penjualan: pembayaran
+    // non-tunai tanpa bukti dicatat, dan konfirmasinya boleh menyusul dari detail transaksi.
+    // (Versi awal tes ini menuntut penolakan 409 tanpa bukti; aturan itu sudah dicabut 031.)
+    public function test_a_non_cash_payment_without_a_proof_is_recorded(): void
     {
         $channel = PaymentChannel::factory()->create(['type' => 'qr_ewallet']);
 
         $this->apiPay($this->tab, [
             ['method' => 'cash', 'amount' => 10000],
             ['method' => 'qr_ewallet', 'channel_id' => $channel->id, 'amount' => 40000],
-        ])->assertStatus(409);
+        ])->assertOk()->assertJsonPath('status', 'completed');
+
+        $this->assertSame(2, Payment::where('order_id', $this->tab)->count());
+    }
+
+    // Yang tetap berlaku sesudah 031: non-tunai wajib punya kanal; kalau tidak, seluruh pengiriman
+    // ditolak dan tidak ada baris yang tercatat (termasuk baris tunai di depannya).
+    public function test_a_non_cash_payment_without_a_channel_is_refused_and_records_nothing(): void
+    {
+        $this->apiPay($this->tab, [
+            ['method' => 'cash', 'amount' => 10000],
+            ['method' => 'qr_ewallet', 'amount' => 40000],
+        ])->assertStatus(409); // endpoint tab memetakan aturan bisnis ke 409 (HandlesTabErrors)
 
         $this->assertSame(0, Payment::where('order_id', $this->tab)->count());
         $this->assertSame('0.00', Order::find($this->tab)->paid_amount);

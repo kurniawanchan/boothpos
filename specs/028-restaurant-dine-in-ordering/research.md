@@ -115,7 +115,7 @@ Two quirks recorded, **not** fixed here (out of scope, FR-041): the Session clos
 - **Split is refused (409) when the tab already has any payment** — there is no sane rule for apportioning an earlier partial payment across the items being split off (identical stance and wording as feature 027's pre-order split). Split takes its own payments in the same request and completes the split-off sale at once.
 - Removing/reducing lines that would push `total_amount` below `paid_amount` is a 409 (no refund workflow — out of scope).
 - Voiding a tab with any payment is a 409.
-- **Idempotency** (FR-010): `payments.client_ref` (char(36), UNIQUE — created by the ledger migration `2026_10_31_000001_add_ledger_columns_to_payments_table`, not by feature 028). A repeated `client_ref` for the same order returns the current state with nothing re-recorded. Tab opening is idempotent through the **existing** unique `orders.local_ref`.
+- **Idempotency** (FR-010): `payments.submission_ref` (char(36), indexed, NOT unique — one key per submission shared by every payment row of that submission; migration `2026_10_31_000009`). The ledger's own `payments.client_ref` is UNIQUE per payment row and cannot hold a per-submission key, so it is left untouched. The API field stays `client_ref`. A repeated `client_ref` for the same order returns the current state with nothing re-recorded. Tab opening is idempotent through the **existing** unique `orders.local_ref`.
 
 **Concurrency**: every tab mutation runs in a DB transaction that first `lockForUpdate()`s the order row, so two waiters adding at once serialise (neither loses an item), and two simultaneous settles serialise (the second sees `completed` and gets 409). Stock rows are additionally locked inside `applyMovement()`.
 

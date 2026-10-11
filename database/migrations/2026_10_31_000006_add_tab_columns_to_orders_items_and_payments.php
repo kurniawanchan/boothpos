@@ -51,8 +51,10 @@ return new class extends Migration
         // "Duplicate column name 'client_ref'" di database baru. Karena DDL MySQL
         // tidak ikut transaksi, kegagalan itu meninggalkan kolom orders/order_items
         // yang sudah terpasang tapi migrasi tak tercatat, dan percobaan ulang
-        // berikutnya patah lebih awal di 'service_type'. Kunci idempotensi tab
-        // memakai kolom milik ledger itu (UNIQUE sudah cukup).
+        // berikutnya patah lebih awal di 'service_type'. Kolom ledger itu UNIQUE
+        // per BARIS pembayaran, jadi tidak bisa dipakai untuk kunci per
+        // PENGIRIMAN tab (satu kunci, banyak baris): itu disimpan di
+        // `payments.submission_ref` oleh migrasi 2026_10_31_000009.
     }
 
     public function down(): void

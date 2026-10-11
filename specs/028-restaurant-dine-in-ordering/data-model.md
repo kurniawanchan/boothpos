@@ -139,7 +139,7 @@ Cancelled lines are **deleted** from `order_items` (their kitchen snapshot and t
 
 | Change | Detail |
 |---|---|
-| `client_ref` | char(36) NULL, UNIQUE (existing column from the ledger migration — feature 028 adds nothing here) — idempotency key of one settle/split submission (FR-010). A repeated submission finds payments carrying the same `client_ref` for that order and returns the current result instead of recording again. |
+| `submission_ref` | char(36) NULL, indexed, not unique (migration `2026_10_31_000009`; the ledger's per-row UNIQUE `client_ref` is a different column) — idempotency key of one settle/split submission (FR-010). A repeated submission finds payments carrying the same `client_ref` for that order and returns the current result instead of recording again. |
 
 ### `product_variants`
 

@@ -76,7 +76,7 @@ database/migrations/                                  # new, continuing after 20
 ├── 2026_10_31_000003_add_station_id_to_categories_and_products.php
 ├── 2026_10_31_000004_create_modifier_groups_options_and_pivots.php
 ├── 2026_10_31_000005_add_track_stock_to_product_variants.php
-├── 2026_10_31_000006_add_tab_columns_to_orders_items_and_payments.php   # enum MODIFY, service_type, table_id, tab_label, split_from_order_id, open_table_key (generated+unique), modifiers/note/sent_at (payments.client_ref already exists from the ledger migration)
+├── 2026_10_31_000006_add_tab_columns_to_orders_items_and_payments.php   # enum MODIFY, service_type, table_id, tab_label, split_from_order_id, open_table_key (generated+unique), modifiers/note/sent_at (per-submission key is `payments.submission_ref`, migration 000009; the ledger's `client_ref` is per row and UNIQUE)
 ├── 2026_10_31_000007_create_kitchen_tickets_and_items_tables.php
 └── 2026_10_31_000008_add_restaurant_menu_keys_to_default_roles.php
 

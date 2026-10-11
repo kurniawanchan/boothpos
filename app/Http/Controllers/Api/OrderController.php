@@ -221,6 +221,7 @@ class OrderController extends Controller
         }
 
         $order->load(['items.artist', 'payments', 'cashier', 'event', 'customer', 'table', 'splitFrom']);
+        $summary = PaymentSummary::for($order);
 
         return response()->json([
             // 003-seed-demo-live follow-up — nama toko DEMO dan LIVE
