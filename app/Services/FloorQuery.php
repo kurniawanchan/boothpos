@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\DiningTable;
 use App\Models\Order;
+use App\Support\PaymentSummary;
 
 /**
  * 028 US1 — data lantai untuk GET /floor: semua meja aktif per area, status
@@ -16,23 +17,32 @@ use App\Models\Order;
  * menghasilkan token berbeda, jadi layar yang polling tidak pernah melewatkan
  * perubahan. Field yang berubah-ubah menurut jam (mis. lama menunggu) sengaja
  * TIDAK ada di payload ini supaya token stabil saat tidak ada perubahan nyata.
+ *
+ * 044 — papan Meja di halaman Sales memakai snapshot yang SAMA: tiap order terbuka kini membawa `paid_amount`
+ * (total terbayar turunan, rumus tunggal PaymentSummary::orderPaidSql — satu kolom di query yang ada, bukan satu
+ * query per order), dan meja NONAKTIF yang masih memegang order terbuka tetap dicantumkan supaya uang yang
+ * sedang berjalan tidak hilang dari layar. Meja nonaktif tanpa order tetap disembunyikan.
  */
 class FloorQuery
 {
     public function build(): array
     {
         $tabs = Order::query()
+            ->select(['id', 'order_number', 'table_id', 'tab_label', 'service_type', 'total_amount', 'session_id', 'created_at'])
+            ->selectRaw('GREATEST(0, '.PaymentSummary::orderPaidSql('orders').') as paid_total')
             ->where('status', Order::STATUS_OPEN)
             ->withCount([
                 'items as unsent_count' => fn ($q) => $q->whereNull('sent_at'),
                 // Item yang sudah siap disajikan, belum diantar (subquery — tetap satu query).
                 'ticketItems as ready_count' => fn ($q) => $q->where('kitchen_ticket_items.status', 'ready'),
             ])
-            ->get(['id', 'order_number', 'table_id', 'tab_label', 'service_type', 'total_amount', 'session_id', 'created_at']);
+            ->get();
 
         $byTable = $tabs->whereNotNull('table_id')->keyBy('table_id');
 
-        $tables = DiningTable::query()->where('is_active', true)->get()
+        $tables = DiningTable::query()
+            ->where(fn ($q) => $q->where('is_active', true)->orWhereIn('id', $byTable->keys()))
+            ->get()
             // Urut manual (display_order) dulu, lalu nama secara alami: "2" sebelum "10".
             ->sort(fn ($a, $b) => $a->display_order <=> $b->display_order ?: strnatcasecmp($a->name, $b->name));
 
@@ -72,6 +82,7 @@ class FloorQuery
             'id' => $order->id,
             'order_number' => $order->order_number,
             'total_amount' => number_format((float) $order->total_amount, 2, '.', ''),
+            'paid_amount' => number_format((float) $order->paid_total, 2, '.', ''),
             'opened_at' => $order->created_at?->toIso8601String(),
             'session_id' => $order->session_id,
             'ready_count' => (int) $order->ready_count,

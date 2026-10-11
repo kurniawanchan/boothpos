@@ -378,14 +378,35 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **Switching an item off is ONLY "Discontinue" on the item page** (reason required, follows the release mode). The list's old instant "Nonaktifkan" row action was removed on 2026-10-11 (owner decision); `DELETE /products/{id}` still exists in the API.
 - **Locale files are lazy chunks (2026-10-11):** `resources/js/i18n.js` starts with no messages; `loadLocale(lang)` imports `locales/{id,en}.json` as separate chunks. `main.js` loads `id` before mount (login screen, guests, fallback), the auth store loads the user's language BEFORE it stores `user` (`syncLocale` is async), `en` is only downloaded for users who use it. `qa-tests/setup.js` installs both synchronously so tests stay synchronous. The main chunk went 435 → 240 kB. Never `import` a locale JSON from app code again.
 
+## Sales page: Tables view (feature 044, 2026-10-11)
+
+`/sales` has a toggle *Daftar order / Meja* (*Order list / Tables*, URL `?view=tables`). The Tables view is a **read-only live board** of the floor; clicking an occupied tile opens a read-only detail of its open order. Rules:
+
+- **Built by reuse, no new endpoint, no migration, no write path.** Data = `GET /floor` through `useFloorStore` + `usePolling`; detail = `GET /tabs/{id}`. Both are gated by the `floor` menu server-side; the toggle is rendered only with that menu (hidden otherwise; a `?view=tables` deep link without it falls back to the list). The order list's script state stays in `SalesView`, so switching views loses no filters.
+- **Additive backend:** every open order in the floor snapshot carries `paid_amount` (derived through `PaymentSummary::orderPaidSql`, one column in the existing query — keep the query count constant); inactive tables that still hold an open order are listed (`is_active:false`) so running money never disappears; `TabResource` carries `opened_by` (loaded by `TabService::loaded()` — the relationLoaded trap: a caller that does not load `cashier` simply omits it). The floor payload must stay free of clock-dependent values (its `version` hash must be stable).
+- **ONE place computes the figures and tile states: `resources/js/utils/floorBoard.js` (`buildBoard`).** Figures: open orders, occupied/total tables (+%), tables over 45 minutes (strictly > 45, table tiles only, real elapsed time not business date), open value (integer cents). Partially paid ⇔ `0 < paid < total`. Never recompute these in a component. The 45-minute limit is a constant, not a setting.
+- **Not built (image 27 shows them, no data exists):** pre-bill state, guest counts, outlet grouping/selector — tiles group by table AREA. Do not fake them.
+- The detail never offers an action that changes the order; a paid order links to the existing completed-sale popup, a voided/merged one answers 404 ("no longer open").
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
 - Seeded dev accounts (`php artisan db:seed`): `owner`, `admin`, `kasir01`, `kasir02`, `inventory` — all `password123`, local only.
-- No git remote is configured; nothing is pushed.
+- A remote `origin` (github.com/kurniawanchan/boothpos) exists (dated note 2026-10-11; the earlier "no remote" line was outdated), but **pushing and opening PRs need the developer's explicit per-instance authorization** (constitution; the harness may also deny them) — never push on your own initiative.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/043-products-page-redesign/plan.md`
+Active feature plan: `specs/044-sales-table-view/plan.md`
+(branch `044-sales-table-view`, from `develop-warkop-wjm` after PR #36) — the Sales page gets a toggle
+*Daftar order / Meja* (*Order list / Tables*). The Tables view is a read-only live board of the floor (four figures:
+open orders, occupied tables, tables over 45 min, open order value; tiles grouped by area, takeaway orders apart) and
+clicking an occupied tile opens a read-only detail of its open order. Built by REUSE: data from `GET /floor` +
+`useFloorStore`, detail from `GET /tabs/{id}`, both already gated by the `floor` menu (the toggle is hidden for other
+roles); additive backend only (`paid_amount` per open order, inactive tables that still hold an open order, `opened_by`
+on the tab payload), no migration, no write path. The four figures and tile states come from ONE pure front-end function
+(`utils/floorBoard.js`) so figures can never drift from tiles; the order list stays untouched. Not built: pre-bill state,
+guest counts, outlet grouping (image 27 shows them; no data). See research.md D1–D12.
+
+Previous feature: `specs/043-products-page-redesign/plan.md`
 (branch `043-products-page-redesign`, on top of `042-dashboard-revamp`) — the Products screen becomes the design's Produk
 module: grid/table list with four figures and item-type tabs, a dedicated item page (variants and prices, per-item modifier
 rules, availability, versioned recipe with cost and margin, price history), mark sold out (86), discontinue, bulk price change,

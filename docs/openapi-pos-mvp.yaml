@@ -5902,6 +5902,11 @@ paths:
         Dipanggil polling ±3 detik. Isi respons dihash menjadi `version`; bila klien mengirim
         `?version=` yang sama, server membalas kerangka kecil `{unchanged: true, version}`.
         Jumlah query konstan (tidak bergantung jumlah meja). Hanya data mode DEMO/LIVE yang aktif.
+
+        044-sales-table-view — dipakai juga oleh papan **Meja** di halaman Sales (baca-saja): tiap order terbuka
+        membawa `paid_amount` (total terbayar turunan), dan meja NONAKTIF yang masih memegang order terbuka
+        ikut dicantumkan (`is_active: false`, `state: occupied`) supaya uang yang berjalan tidak hilang dari
+        layar; meja nonaktif tanpa order tetap disembunyikan. Tidak ada nilai yang bergantung jam di respons ini.
       parameters:
         - { name: version, in: query, schema: { type: string }, description: Token `version` dari respons sebelumnya. }
       responses:
@@ -5974,7 +5979,9 @@ paths:
     get:
       tags: [Restaurant]
       summary: Detail tab (menu `floor`)
-      description: Tab `open` atau `completed`. Penjualan ritel dan tab yang dibatalkan/digabung → `404` (pakai `GET /orders/{id}`).
+      description: |
+        Tab `open` atau `completed`. Penjualan ritel dan tab yang dibatalkan/digabung → `404` (pakai `GET /orders/{id}`).
+        Tanpa field biaya/margin. `opened_by` = nama kasir yang membuka tab (044, dipakai detail baca-saja di papan Meja).
       responses:
         '200':
           description: Berhasil
@@ -8249,6 +8256,7 @@ components:
         id: { type: integer }
         order_number: { type: string, example: TRX-20261003-0012 }
         total_amount: { type: string, example: "250000.00" }
+        paid_amount: { type: string, example: "100000.00", description: "Total terbayar turunan (pembayaran bukan `rejected`, dikurangi kembalian). Tidak pernah negatif." }
         opened_at: { type: string, format: date-time }
         session_id: { type: integer }
         ready_count: { type: integer, description: Item yang sudah siap disajikan (dapur). }
@@ -8336,6 +8344,7 @@ components:
         service_type: { type: string, enum: [dine_in, takeaway] }
         table: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string }, area: { type: string } } }
         tab_label: { type: string, nullable: true }
+        opened_by: { type: string, nullable: true, description: Nama kasir yang membuka tab (044). }
         session_id: { type: integer }
         customer_id: { type: integer, nullable: true }
         subtotal: { type: string }

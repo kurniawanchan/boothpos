@@ -1,12 +1,14 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, nextTick, defineAsyncComponent } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { listEvents } from '../api/events';
 import { salesReport, exportSalesTransactions } from '../api/reports';
 import { verifyOrderPayments } from '../api/payments';
 import { useToastStore } from '../stores/toast';
+import { useAuthStore } from '../stores/auth';
 import { useSalesFilters } from '../composables/useSalesFilters';
+import { useQueryState } from '../composables/useQueryState';
 import { formatIDR } from '../utils/money';
 import { formatCount } from '../utils/formatters';
 import { formatDateTime, toLocalDateKey } from '../utils/date';
@@ -20,11 +22,17 @@ import StatusPill from '../components/ui/StatusPill.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import PageHeader from '../components/page/PageHeader.vue';
 import KpiStrip from '../components/page/KpiStrip.vue';
+import ViewToggle from '../components/page/ViewToggle.vue';
 import FilterBar from '../components/page/FilterBar.vue';
 import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
 import ShiftSummaryPanel from '../components/sales/ShiftSummaryPanel.vue';
 import CustomerQuickDetailModal from '../components/sales/CustomerQuickDetailModal.vue';
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
+import OpenOrderDetail from '../components/sales/OpenOrderDetail.vue';
+
+// 044 — papan Meja dimuat malas: kodenya (dan polling lantai) hanya dibutuhkan pengguna yang membuka tampilan
+// Meja, jadi tak ikut membebani chunk utama maupun pemuatan awal daftar order.
+const FloorBoard = defineAsyncComponent(() => import('../components/sales/FloorBoard.vue'));
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
@@ -38,6 +46,19 @@ const toast = useToastStore();
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter(); // undefined bila tak ada router (mis. test lama) — sinkron URL dilewati
+const auth = useAuthStore();
+
+// --- saklar Daftar order | Meja (044-sales-table-view) -----------------------------------------
+// Pilihan tersimpan di URL (?view=tables; kosong = daftar). Saklar HANYA ada bagi pengguna dengan akses lantai
+// (disembunyikan, bukan dinonaktifkan); URL yang meminta Meja tanpa akses, atau nilai tak dikenal, jatuh ke daftar.
+// Server tetap penjaga sebenarnya (GET /floor & /tabs/{id} menolak peran tanpa menu `floor`).
+const { state: viewState, set: setViewState } = useQueryState({ view: 'list' });
+const canSeeTables = computed(() => auth.canAccessMenu('floor'));
+const view = computed(() => (viewState.view === 'tables' && canSeeTables.value ? 'tables' : 'list'));
+const viewOptions = computed(() => [
+  { value: 'list', label: t('sales.view_list'), icon: 'ph-list-bullets' },
+  { value: 'tables', label: t('sales.view_tables'), icon: 'ph-squares-four' },
+]);
 
 const events = ref([]);
 const eventId = ref('');
@@ -329,27 +350,65 @@ function showCustomerDetail(row) {
   if (!row.customer_name) return;
   detailCustomer.value = { name: row.customer_name, phone: row.customer_phone, email: row.customer_email };
 }
+
+// --- detail order terbuka dari papan Meja (044, US3) --------------------------------------------
+// Hanya-baca. Elemen pembuka (ubin) disimpan di sini: BaseDrawer memulihkan fokus ke `document.activeElement` saat
+// dibuka, tetapi Safari tidak memberi fokus pada tombol yang diklik — jadi fokus dikembalikan ke ubin secara eksplisit.
+const openOrderId = ref(null);
+const openOrderTile = ref(null);
+let openOrderOpener = null;
+
+function openOrderDetail(orderId, opener, tile) {
+  openOrderOpener = opener ?? null;
+  openOrderTile.value = tile ?? null;
+  openOrderId.value = orderId;
+}
+
+async function closeOrderDetail({ restoreFocus = true } = {}) {
+  openOrderId.value = null;
+  openOrderTile.value = null;
+  const opener = openOrderOpener;
+  openOrderOpener = null;
+  if (!restoreFocus || !opener) return;
+  await nextTick();
+  if (opener.isConnected) opener.focus();
+}
+
+// Pindah ke daftar saat panel terbuka (mis. tombol back/URL) → panel dilepas; jangan terbuka lagi sendiri nanti.
+watch(view, (v) => { if (v !== 'tables') closeOrderDetail({ restoreFocus: false }); });
+
+// Order ternyata sudah dibayar: tutup panel lalu buka popup transaksi selesai yang sudah ada (order yang sama).
+function viewFinishedTransaction(orderId) {
+  closeOrderDetail({ restoreFocus: false });
+  openDetail({ id: orderId });
+}
 </script>
 
 <template>
   <div class="pb-10">
     <PageHeader :title="t('nav.sales')" :description="t('nav.sales_subtitle')">
       <template #actions>
-        <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
-        <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
-          <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
-          {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
-        </BaseButton>
-        <BaseButton variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
-          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          {{ exportLabel }}
-        </BaseButton>
+        <ViewToggle v-if="canSeeTables" :model-value="view" :options="viewOptions" :label="t('sales.view_aria')" @update:model-value="(v) => setViewState({ view: v })" />
+        <!-- Tindakan khusus daftar (event, verifikasi massal, ekspor) tak berlaku di tampilan Meja. -->
+        <template v-if="view === 'list'">
+          <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
+          <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
+            <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
+            {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
+          </BaseButton>
+          <BaseButton variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
+            <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+            {{ exportLabel }}
+          </BaseButton>
+        </template>
       </template>
     </PageHeader>
 
-    <KpiStrip data-testid="kpi-cards" :items="kpiItems" />
+    <!-- Daftar order. v-if (bukan v-show): templatnya dilepas saat Meja aktif, tetapi seluruh KEADAAN (filter, urutan,
+         pilihan, data termuat) hidup di setup() di atas, jadi kembali ke daftar tidak kehilangan apa pun dan tak memuat ulang. -->
+    <KpiStrip v-if="view === 'list'" data-testid="kpi-cards" :items="kpiItems" />
 
-    <section class="mx-[26px] border-2 border-line bg-white">
+    <section v-if="view === 'list'" class="mx-[26px] border-2 border-line bg-white">
       <!-- Filter lengkap: pencarian teks + tanggal (dengan pintasan) + kasir + shift + penjual + pembayaran +
            status bayar + jenis pelanggan + rentang total. Semua bekerja langsung (tanpa memuat ulang) dan
            tersimpan di URL. "N data" = baris yang benar-benar tampil setelah filter. -->
@@ -502,6 +561,7 @@ function showCustomerDetail(row) {
         </DataTable>
       </div>
     </section>
+    <FloorBoard v-else @select-order="openOrderDetail" />
 
     <ConfirmDialog
       :open="showBulkVerify"
@@ -511,6 +571,14 @@ function showCustomerDetail(row) {
       :loading="bulkVerifying"
       @close="showBulkVerify = false"
       @confirm="doBulkVerify"
+    />
+
+    <OpenOrderDetail
+      v-if="view === 'tables'"
+      :order-id="openOrderId"
+      :tile="openOrderTile"
+      @close="closeOrderDetail()"
+      @view-transaction="viewFinishedTransaction"
     />
 
     <TransactionItemsModal :open="showItems" :order-id="itemsOrderId" @close="showItems = false" @changed="load" />
