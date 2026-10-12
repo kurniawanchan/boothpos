@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Event;
 use App\Models\Material;
@@ -33,7 +33,7 @@ class VariantBomCompleteTest extends TestCase
 
     private User $owner;
 
-    private Artist $sellerA;
+    private Outlet $sellerA;
 
     private array $tempFiles = [];
 
@@ -43,7 +43,7 @@ class VariantBomCompleteTest extends TestCase
 
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->owner, 'sanctum');
-        $this->sellerA = Artist::factory()->create(['name' => 'Seller A']);
+        $this->sellerA = Outlet::factory()->create(['name' => 'Seller A']);
     }
 
     protected function tearDown(): void
@@ -125,7 +125,7 @@ class VariantBomCompleteTest extends TestCase
         $this->complete($invalid)->assertStatus(409)->assertJsonPath('code', 'invalid_row');
 
         $other = $this->variantWithBom();
-        $other->product->update(['artist_id' => Artist::factory()->create()->id]);
+        $other->product->update(['home_outlet_id' => Outlet::factory()->create()->id]);
         $this->complete($other)->assertStatus(409)->assertJsonPath('code', 'invalid_row');
 
         foreach ([$empty, $withLegacy, $invalid, $other] as $v) {

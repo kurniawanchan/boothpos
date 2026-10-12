@@ -30,7 +30,10 @@ const { t } = useI18n();
       </template>
       <template v-for="(a, i) in availability" :key="a.outlet_id ?? `all-${i}`">
         <tr data-testid="availability-row">
-          <td class="font-semibold">{{ a.outlet_code || t('products.scope_all') }}</td>
+          <td class="font-semibold">
+            {{ a.outlet_code || t('products.scope_all') }}
+            <span v-if="a.outlet_name" class="ml-1 font-normal text-muted-4" data-testid="availability-outlet-name">{{ a.outlet_name }}</span>
+          </td>
           <td><AvailabilityChips :availability="[a]" /></td>
           <td class="tabular-nums text-muted-4">{{ a.daily_quota ?? '—' }}</td>
           <td class="text-muted-4">{{ a.channels || '—' }}</td>

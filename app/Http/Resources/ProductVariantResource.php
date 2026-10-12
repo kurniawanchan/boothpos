@@ -23,7 +23,12 @@ class ProductVariantResource extends JsonResource
             'variant_name' => $this->variant_name,
             'cost_price' => number_format((float) $this->cost_price, 2, '.', ''),
             'sell_price' => number_format((float) $this->sell_price, 2, '.', ''),
+            // 045 Stage 3 — harga KHUSUS di outlet tunggal yang berlaku (null = mengikuti harga dasar). Terpisah dari
+            // `sell_price` supaya editor produk tidak menulis balik harga outlet sebagai harga dasar.
+            'outlet_price' => ($p = app(\App\Support\OutletPriceBook::class)->forCurrentOutlet($this->id)) === null ? null : number_format($p, 2, '.', ''),
             'current_stock' => $this->current_stock,
+            // 045 Stage 5 — saldo di outlet pemesanan (hanya untuk `pos=1`); `current_stock` tetap total.
+            'outlet_stock' => app(\App\Support\OutletPriceBook::class)->orderingStockOrNull($this->id),
             'low_stock_alert' => $this->low_stock_alert,
             'is_low_stock' => $this->isLowStock(),
             'is_active' => $this->is_active,

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Material;
 use App\Models\Product;
@@ -25,8 +25,8 @@ class BomSchemaTest extends TestCase
 
     private function variant(): ProductVariant
     {
-        $artist = Artist::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => Category::factory()->create()->id]);
+        $artist = Outlet::factory()->create();
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => Category::factory()->create()->id]);
 
         return $product->variants()->create(['sku' => 'SCH'.fake()->unique()->numerify('######'), 'sell_price' => 10000, 'cost_price' => 0, 'current_stock' => 0]);
     }
@@ -94,12 +94,12 @@ class BomSchemaTest extends TestCase
 
     public function test_eligible_scope_only_returns_the_sellers_ordered_received_or_paid_lines(): void
     {
-        $seller = Artist::factory()->create();
-        $other = Artist::factory()->create();
+        $seller = Outlet::factory()->create();
+        $other = Outlet::factory()->create();
         $material = Material::factory()->create();
 
-        $make = function (Artist $artist, string $status) use ($material) {
-            $po = PurchaseOrder::factory()->create(['artist_id' => $artist->id, 'status' => $status]);
+        $make = function (Outlet $artist, string $status) use ($material) {
+            $po = PurchaseOrder::factory()->create(['outlet_id' => $artist->id, 'status' => $status]);
 
             return $po->items()->create(['line_type' => 'material', 'material_id' => $material->id, 'qty' => 1, 'unit_price' => 1, 'line_total' => 1]);
         };
@@ -111,7 +111,7 @@ class BomSchemaTest extends TestCase
         PurchaseOrder::factory()->legacy()->create(['status' => 'ordered'])->items()
             ->create(['line_type' => 'material', 'material_id' => $material->id, 'qty' => 1, 'unit_price' => 1, 'line_total' => 1]);
 
-        $ids = PurchaseOrderItem::eligibleForSeller($seller->id)->pluck('id')->sort()->values()->all();
+        $ids = PurchaseOrderItem::eligibleForOutlet($seller->id)->pluck('id')->sort()->values()->all();
 
         $this->assertSame(collect($ok)->pluck('id')->sort()->values()->all(), $ids);
     }

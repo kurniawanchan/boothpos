@@ -18,11 +18,13 @@ class ProductAvailabilityController extends Controller
 {
     public function store(SoldOutRequest $request, Product $product, AvailabilityService $service): JsonResponse
     {
-        $mark = $service->mark($product, $request->user(), (int) $request->input('reason_code_id'), $request->input('note'));
+        $outletIds = $this->targetOutlets($request);
+        $mark = $service->mark($product, $request->user(), (int) $request->input('reason_code_id'), $request->input('note'), $outletIds);
 
         return response()->json([
             'product_id' => $product->id,
             'state' => 'sold_out',
+            'outlet_ids' => $outletIds,
             'reason' => $mark->reason?->label(),
             'note' => $mark->note,
             'marked_at' => $mark->marked_at->toIso8601String(),
@@ -34,8 +36,33 @@ class ProductAvailabilityController extends Controller
     {
         abort_unless($request->user()->hasPermission(PermissionCatalog::ITEM_86), 403, __('reports.not_authorized_generic'));
 
-        $service->undo($product, $request->user());
+        $outletIds = $this->targetOutlets($request);
+        $context = app(\App\Support\OutletContext::class);
+        foreach ($outletIds ?? [] as $id) {
+            if (! $context->isPermitted($id)) {
+                return response()->json(['message' => __('outlets.forbidden'), 'code' => 'outlet_forbidden'], 403);
+            }
+        }
+
+        $service->undo($product, $request->user(), $outletIds);
 
         return response()->json(['product_id' => $product->id, 'state' => 'available']);
+    }
+
+    /**
+     * 045 Stage 3 — outlet yang dituju: `outlet_ids` eksplisit; tanpa itu, outlet yang DIPILIH (X-Outlet-Id) bila ada;
+     * selain itu null = tanda GLOBAL (semua outlet, perilaku lama dan instalasi satu outlet).
+     *
+     * @return list<int>|null
+     */
+    private function targetOutlets(Request $request): ?array
+    {
+        if ($request->has('outlet_ids')) {
+            return array_map('intval', (array) $request->input('outlet_ids'));
+        }
+
+        $selected = app(\App\Support\OutletContext::class)->selectedId();
+
+        return $selected === null ? null : [$selected];
     }
 }

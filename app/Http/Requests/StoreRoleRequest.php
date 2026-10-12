@@ -39,6 +39,9 @@ class StoreRoleRequest extends FormRequest
             // 043 — izin tingkat-aksi (opsional); kunci tak dikenal ditolak 422, sama seperti menu_keys.
             'permissions' => ['sometimes', 'nullable', 'array'],
             'permissions.*' => [Rule::in(\App\Support\PermissionCatalog::keys())],
+            // 045 — peran yang melihat SEMUA outlet tanpa penugasan. Hanya pemegang cakupan penuh yang boleh mengubahnya
+            // (ditegakkan di RoleController); di sini hanya bentuknya.
+            'all_outlets' => ['sometimes', 'boolean'],
         ];
     }
 

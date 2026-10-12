@@ -12,15 +12,22 @@ import { parseMoney } from './money';
  * product management screens keep seeing the full set), but nothing
  * inactive should ever be sellable at the register.
  */
+// 045 Stage 3 — harga yang DITAMPILKAN di kasir: harga khusus outlet bila ada (`outlet_price`), selain itu harga dasar.
+// Hanya tampilan: server selalu menghitung ulang dengan harga outlet shift (PriceService::applyOutletPrice).
+/** 045 Stage 5 — saldo di outlet shift bila server mengirimnya (`pos=1`), selain itu total tersimpan. */
+export const onHand = (v) => v.outlet_stock ?? v.current_stock;
+
+export const shownPrice = (v) => v.outlet_price ?? v.sell_price;
+
 export function buildProductCards(products, categoryCodeById = {}, categoryNameById = {}) {
   return (products || []).map((p) => {
     const variants = (p.variants || []).filter((v) => v.is_active);
-    const prices = variants.map((v) => parseMoney(v.sell_price));
-    const totalStock = variants.reduce((sum, v) => sum + (v.current_stock ?? 0), 0);
+    const prices = variants.map((v) => parseMoney(shownPrice(v)));
+    const totalStock = variants.reduce((sum, v) => sum + (onHand(v) ?? 0), 0);
     return {
       product_id: p.id,
       name: p.name,
-      artist_name: p.artist_name,
+      home_outlet_name: p.home_outlet_name,
       category_code: categoryCodeById[p.category_id] ?? null,
       category_name: categoryNameById[p.category_id] ?? null,
       variant_count: variants.length,
@@ -51,9 +58,9 @@ export function toCartItem(card, variant) {
     variant_id: variant.id,
     sku: variant.sku,
     name: card.variant_count > 1 ? `${card.name} — ${variant.variant_name}` : card.name,
-    artist_name: card.artist_name,
-    sell_price: variant.sell_price,
-    current_stock: variant.current_stock,
+    home_outlet_name: card.home_outlet_name,
+    sell_price: shownPrice(variant),
+    current_stock: onHand(variant),
     // Falls back to the product's own image when this variant has none of
     // its own — mirrors the same fallback used by GET /variants/lookup.
     image_url: variant.image_url ?? card.image_url ?? null,
@@ -84,9 +91,9 @@ export function buildSearchCards(results) {
     variant_id: v.variant_id,
     sku: v.sku,
     name: v.label,
-    artist_name: v.artist_name,
-    sell_price: v.sell_price,
-    current_stock: v.current_stock,
+    home_outlet_name: v.home_outlet_name,
+    sell_price: shownPrice(v),
+    current_stock: onHand(v),
     category_code: null,
     category_name: v.category_name ?? null,
     image_url: v.image_url ?? null,

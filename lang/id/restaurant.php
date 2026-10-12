@@ -13,6 +13,7 @@ return [
     'local_ref_not_a_tab' => 'Referensi ini milik penjualan, bukan tab.',
     'table_inactive' => 'Meja ini nonaktif dan tidak bisa menerima tab baru.',
     'table_occupied' => 'Meja ini sudah punya tab yang terbuka.',
+    'outlet_mismatch' => 'Meja ini milik outlet lain; tab tidak bisa dipindahkan antar-outlet.',
     'tab_not_open' => 'Tab ini sudah tidak terbuka.',
     'tab_not_empty' => 'Tab ini masih berisi item. Hapus itemnya, atau batalkan tab.',
     'empty_tab_reason' => 'Tab kosong ditutup',

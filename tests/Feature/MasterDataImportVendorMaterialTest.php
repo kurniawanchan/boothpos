@@ -155,10 +155,10 @@ class MasterDataImportVendorMaterialTest extends TestCase
         Material::factory()->create(['code' => 'AC3']);
 
         $file = $this->workbook([
-            'artists' => ['rows' => [['code' => 'RYU', 'name' => 'Ryu', 'is_active' => 1]]],
+            'outlets' => ['rows' => [['code' => 'RYU', 'name' => 'Ryu', 'is_active' => 1]]],
             'categories' => ['rows' => [['code' => 'KY', 'name' => 'Keychain', 'is_active' => 1]]],
             'products' => ['rows' => [[
-                'artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
+                'home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
                 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard',
                 'sell_price' => 25000, 'initial_stock' => 10,
             ]]],

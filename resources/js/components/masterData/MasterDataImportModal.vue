@@ -7,7 +7,7 @@ import { importMasterData, downloadImportTemplate } from '../../api/masterData';
 import { useToastStore } from '../../stores/toast';
 
 /**
- * One shared import flow reused on /products, /artists, /categories, and
+ * One shared import flow reused on /products, /outlets, /categories, and
  * /stock (PRD 7.15) — a single .xlsx carries all four sheets, so the modal
  * itself has no notion of "which screen opened it"; every screen just
  * listens for `imported` and refreshes its own list.
@@ -29,7 +29,7 @@ const { t } = useI18n();
 const MAX_BYTES = 10 * 1024 * 1024;
 
 const SHEET_LABEL = computed(() => ({
-  artists: t('master_data.sheet_artists'),
+  outlets: t('master_data.sheet_artists'),
   categories: t('master_data.sheet_categories'),
   products: t('master_data.sheet_products'),
   stock: t('master_data.sheet_stock'),
@@ -37,6 +37,8 @@ const SHEET_LABEL = computed(() => ({
   materials: t('master_data.sheet_materials'),
   vendor_prices: t('master_data.sheet_vendor_prices'),
   bom: t('master_data.sheet_bom'),
+  outlet_items: t('master_data.sheet_outlet_items'),
+  outlet_prices: t('master_data.sheet_outlet_prices'),
   roles: t('master_data.sheet_roles'),
   users: t('master_data.sheet_users'),
 }));

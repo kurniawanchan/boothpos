@@ -35,7 +35,7 @@ const tab = (over) => ({
   balance: '50000.00', lines: [line()], payments: [], ...over,
 });
 const variant = (over) => ({ id: 5, sku: 'S1', variant_name: 'Standard', sell_price: '25000.00', current_stock: 10, is_active: true, track_stock: true, ...over });
-const product = (over) => ({ id: 1, name: 'Es Kopi', category_id: 1, artist_name: 'Restoran', image_url: null, variants: [variant()], ...over });
+const product = (over) => ({ id: 1, name: 'Es Kopi', category_id: 1, home_outlet_name: 'Restoran', image_url: null, variants: [variant()], ...over });
 
 async function renderTab(initialTab = tab(), menuKeys = ['floor']) {
   getTab.mockResolvedValue(initialTab);

@@ -25,38 +25,54 @@ class AvailabilityService
     /**
      * @throws ValidationException 422 alasan tidak valid; 409 item sudah didiskontinu / sudah ditandai
      */
-    public function mark(Product $product, User $by, int $reasonCodeId, ?string $note = null): ItemAvailabilityMark
+    /**
+     * @param  list<int>|null  $outletIds  null = tanda GLOBAL satu baris (perilaku lama); daftar = satu tanda per outlet
+     */
+    public function mark(Product $product, User $by, int $reasonCodeId, ?string $note = null, ?array $outletIds = null): ItemAvailabilityMark
     {
+        if ($outletIds !== null && $outletIds === []) {
+            throw ValidationException::withMessages(['outlet_ids' => __('products.outlet_ids_required')]);
+        }
+
         $reason = ReasonCode::query()->active()->where('category', ReasonCode::SOLD_OUT)->find($reasonCodeId);
         if ($reason === null) {
             throw ValidationException::withMessages(['reason_code_id' => __('products.reason_invalid')]);
         }
 
-        return DB::transaction(function () use ($product, $by, $reason, $note) {
+        return DB::transaction(function () use ($product, $by, $reason, $note, $outletIds) {
             $product = Product::query()->lockForUpdate()->findOrFail($product->id);
 
             if ($product->discontinued_at !== null) {
                 throw ValidationException::withMessages(['product' => __('products.sold_out_discontinued')])->status(409);
             }
-            if (ItemAvailabilityMark::query()->active()->where('product_id', $product->id)->exists()) {
-                throw ValidationException::withMessages(['product' => __('products.already_sold_out')])->status(409);
+            $targets = $outletIds === null ? [null] : array_values(array_unique(array_map('intval', $outletIds)));
+            foreach ($targets as $target) {
+                // Global menandai semua outlet, jadi bentrok dengan tanda apa pun; tanda outlet hanya dengan yang berlaku di outlet itu.
+                if (ItemAvailabilityMark::query()->active()->appliesTo($target)->where('product_id', $product->id)->exists()) {
+                    throw ValidationException::withMessages(['product' => __('products.already_sold_out')])->status(409);
+                }
             }
 
             [, $dayEnd] = BusinessDay::bounds(BusinessDay::today());
 
-            $mark = ItemAvailabilityMark::create([
-                'product_id' => $product->id,
-                'reason_code_id' => $reason->id,
-                'note' => $note !== null && trim($note) !== '' ? trim($note) : null,
-                'marked_by' => $by->id,
-                'marked_at' => now(),
-                'expires_at' => $dayEnd,
-            ]);
+            $mark = null;
+            foreach ($targets as $target) {
+                $created = ItemAvailabilityMark::create([
+                    'product_id' => $product->id,
+                    'outlet_id' => $target,
+                    'reason_code_id' => $reason->id,
+                    'note' => $note !== null && trim($note) !== '' ? trim($note) : null,
+                    'marked_by' => $by->id,
+                    'marked_at' => now(),
+                    'expires_at' => $dayEnd,
+                ]);
+                $mark ??= $created;
+            }
 
             $this->log->log(
                 userId: $by->id, action: 'item_sold_out', entityType: 'Product', entityId: $product->id,
                 description: "Item {$product->name} ditandai habis (86): {$reason->code}.",
-                newValues: ['reason' => $reason->code, 'note' => $mark->note, 'expires_at' => $dayEnd->toIso8601String()],
+                newValues: ['reason' => $reason->code, 'note' => $mark->note, 'expires_at' => $dayEnd->toIso8601String(), 'outlet_ids' => $outletIds],
             );
 
             return $mark->load('reason');
@@ -68,10 +84,13 @@ class AvailabilityService
      *
      * @throws ValidationException 409 bila tidak ada tanda aktif
      */
-    public function undo(Product $product, User $by): int
+    /** @param  list<int>|null  $outletIds  null = semua tanda aktif; daftar = hanya tanda outlet-outlet itu (tanda global tidak disentuh) */
+    public function undo(Product $product, User $by, ?array $outletIds = null): int
     {
-        return DB::transaction(function () use ($product, $by) {
-            $marks = ItemAvailabilityMark::query()->active()->where('product_id', $product->id)->lockForUpdate()->get();
+        return DB::transaction(function () use ($product, $by, $outletIds) {
+            $marks = ItemAvailabilityMark::query()->active()->where('product_id', $product->id)
+                ->when($outletIds !== null, fn ($q) => $q->whereIn('outlet_id', array_map('intval', $outletIds) ?: [0]))
+                ->lockForUpdate()->get();
             if ($marks->isEmpty()) {
                 throw ValidationException::withMessages(['product' => __('products.not_sold_out')])->status(409);
             }

@@ -13,6 +13,8 @@ class RoleResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'menu_keys' => $this->menu_keys,
+            // 045 Stage 2 — peran ini melihat semua outlet; formulir pengguna menyembunyikan penugasan untuknya.
+            'all_outlets' => (bool) $this->all_outlets,
             // 043 — izin yang BERLAKU (bawaan menurut nama peran bila belum diatur), bukan nilai mentah kolom.
             'permissions' => array_values(array_filter(\App\Support\PermissionCatalog::keys(), fn ($k) => $this->resource->allows($k))),
             'is_system_default' => $this->is_system_default,

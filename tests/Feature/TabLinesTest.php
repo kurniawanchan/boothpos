@@ -54,7 +54,7 @@ class TabLinesTest extends TestCase
         $item = OrderItem::first();
         $this->assertEquals(25000, $item->sell_price);
         $this->assertEquals(12500, $item->cost_price);
-        $this->assertSame($v->product->artist_id, $item->artist_id);
+        $this->assertSame($v->product->home_outlet_id, $item->home_outlet_id);
         $this->assertSame($v->sku, $item->sku_snapshot);
     }
 

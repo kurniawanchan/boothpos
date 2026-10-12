@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { useOutletStore } from '../../resources/js/stores/outlet';
 import ReceiptModal from '../../resources/js/components/receipt/ReceiptModal.vue';
 import { formatDate } from '../../resources/js/utils/date';
 
@@ -10,7 +12,7 @@ const baseReceipt = {
   created_at: '2026-09-01T10:00:00Z',
   cashier_name: 'Budi',
   items: [
-    { qty: 1, name: 'Keychain Akatsuki', price: '50000.00', line_total: '50000.00', artist_name: 'Artist A' },
+    { qty: 1, name: 'Keychain Akatsuki', price: '50000.00', line_total: '50000.00', home_outlet_name: 'Outlet A' },
   ],
   subtotal: '50000.00',
   discount_amount: '0.00',
@@ -29,9 +31,12 @@ vi.mock('../../resources/js/stores/toast', () => ({
   useToastStore: () => ({ error: vi.fn(), success: vi.fn() }),
 }));
 
-function renderModal(receiptOverrides) {
+function renderModal(receiptOverrides, { multiOutlet = false } = {}) {
   mockReceipt.value = { ...baseReceipt, ...receiptOverrides };
-  return render(ReceiptModal, { props: { open: true, orderId: 1 } });
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  useOutletStore().multi = multiOutlet;
+  return render(ReceiptModal, { props: { open: true, orderId: 1 }, global: { plugins: [pinia] } });
 }
 
 /**
@@ -113,5 +118,19 @@ describe('ReceiptModal — partially paid sale (028)', () => {
     await screen.findByText('Toko Sakana Fridge');
     expect(screen.queryByTestId('receipt-balance')).not.toBeInTheDocument();
     expect(screen.queryByTestId('receipt-status')).not.toBeInTheDocument();
+  });
+});
+
+// 045 Stage 2 — outlet di struk: hanya bila instalasi punya lebih dari satu outlet.
+describe('ReceiptModal outlet line (045)', () => {
+  it('prints the selling outlet with several outlets', async () => {
+    renderModal({ outlet_name: 'Warkop WJM 2' }, { multiOutlet: true });
+    expect(await screen.findByTestId('receipt-outlet')).toHaveTextContent('Warkop WJM 2');
+  });
+
+  it('prints nothing extra at a single outlet', async () => {
+    renderModal({ outlet_name: 'Warkop WJM 1' });
+    await screen.findByText('ORD-0001');
+    expect(screen.queryByTestId('receipt-outlet')).toBeNull();
   });
 });

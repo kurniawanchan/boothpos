@@ -188,7 +188,8 @@ class DashboardSummaryTest extends TestCase
         $s = $this->summary();
 
         $this->assertSame(1, $s['kpis']['low_stock']['value']);
-        $this->assertSame('organisation', $s['kpis']['low_stock']['scope']);
+        // 045 Stage 5: stok menipis mengikuti outlet yang berlaku (bukan lagi seluruh organisasi).
+        $this->assertSame('outlet', $s['kpis']['low_stock']['scope']);
         $this->assertArrayHasKey('change_abs', $s['kpis']['low_stock']);
         $this->assertSame($low->id, \App\Models\ProductVariant::where('low_stock_alert', 5)->whereColumn('current_stock', '<=', 'low_stock_alert')->value('id'));
     }

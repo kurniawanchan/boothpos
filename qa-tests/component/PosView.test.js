@@ -5,22 +5,22 @@ import PosView from '../../resources/js/views/PosView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { currentSession } from '../../resources/js/api/sessions';
 import { listCategories } from '../../resources/js/api/categories';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { listProducts, lookupVariants } from '../../resources/js/api/products';
 
 vi.mock('../../resources/js/api/sessions', () => ({ currentSession: vi.fn(), openSession: vi.fn(), closeSession: vi.fn() }));
 vi.mock('../../resources/js/api/categories', () => ({ listCategories: vi.fn() }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ listProducts: vi.fn(), lookupVariants: vi.fn() }));
 vi.mock('../../resources/js/api/orders', () => ({ createOrder: vi.fn() }));
 
 const PRODUCTS = [
   {
-    id: 1, name: 'Keychain A', artist_name: 'Artist A', category_id: 1, image_url: 'https://example.test/a.png',
+    id: 1, name: 'Keychain A', home_outlet_name: 'Outlet A', category_id: 1, image_url: 'https://example.test/a.png',
     variants: [{ id: 11, sku: 'SKU-A-1', variant_name: 'Standard', sell_price: '25000.00', current_stock: 5, is_active: true }],
   },
   {
-    id: 2, name: 'Keychain B', artist_name: 'Artist B', category_id: 1, image_url: null,
+    id: 2, name: 'Keychain B', home_outlet_name: 'Outlet B', category_id: 1, image_url: null,
     variants: [{ id: 21, sku: 'SKU-B-1', variant_name: 'Standard', sell_price: '30000.00', current_stock: 5, is_active: true }],
   },
 ];
@@ -34,13 +34,19 @@ function renderPos() {
 }
 
 // 004-sidebar-menu-reorg US4/US5
-describe('PosView — product images & clickable artist filter', () => {
+describe('PosView — product images & clickable outlet filter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     currentSession.mockResolvedValue(null);
     listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
-    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A' }, { id: 2, name: 'Artist B' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A' }, { id: 2, name: 'Outlet B' }] });
     listProducts.mockResolvedValue({ data: PRODUCTS });
+  });
+
+  it('045: browses the menu of the shift outlet (pos=1) so non-carried items are never offered', async () => {
+    renderPos();
+    await screen.findByText('Keychain A');
+    expect(listProducts).toHaveBeenCalledWith(expect.objectContaining({ pos: 1, with_variants: 1 }));
   });
 
   it('renders a product image for a card that has one and a placeholder for one that does not', async () => {
@@ -53,35 +59,35 @@ describe('PosView — product images & clickable artist filter', () => {
   });
 
   // 005-ux-enhancements-dashboard (US1) — chip rows replaced by a
-  // searchable multi-select dropdown (BaseMultiSelect.vue); the artist
+  // searchable multi-select dropdown (BaseMultiSelect.vue); the outlet
   // dropdown is the first of the two on this screen.
-  it('filters via the searchable artist dropdown and refetches with artist_id', async () => {
+  it('filters via the searchable outlet dropdown and refetches with home_outlet_id', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderPos();
     await screen.findByText('Keychain A');
 
-    const artistTrigger = screen.getByText('Semua penjual');
-    await user.click(artistTrigger);
-    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
+    const outletTrigger = screen.getByText('Semua outlet');
+    await user.click(outletTrigger);
+    await user.click(await screen.findByRole('option', { name: 'Outlet A' }));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ home_outlet_id: [1] })));
   });
 
-  it('returns to showing all artists when "All" is re-selected in the dropdown', async () => {
+  it('returns to showing all outlets when "All" is re-selected in the dropdown', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderPos();
     await screen.findByText('Keychain A');
 
-    const artistTrigger = screen.getByText('Semua penjual');
-    await user.click(artistTrigger);
-    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
+    const outletTrigger = screen.getByText('Semua outlet');
+    await user.click(outletTrigger);
+    await user.click(await screen.findByRole('option', { name: 'Outlet A' }));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ home_outlet_id: [1] })));
 
     // The panel stays open after a selection (multi-select) — pick "All"
     // directly to clear the selection back to unfiltered.
-    await user.click(await screen.findByRole('option', { name: 'Semua penjual' }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.not.objectContaining({ artist_id: expect.anything() })));
+    await user.click(await screen.findByRole('option', { name: 'Semua outlet' }));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.not.objectContaining({ home_outlet_id: expect.anything() })));
   });
 });
 
@@ -96,7 +102,7 @@ describe('PosView — product photo on search results (030)', () => {
     variant_id: 31,
     sku: 'SPF-PI-MCY-014',
     label: 'MCYT — Slippery',
-    artist_name: 'Artist A',
+    home_outlet_name: 'Outlet A',
     category_name: 'Pin',
     sell_price: '15000.00',
     current_stock: 20,
@@ -118,7 +124,7 @@ describe('PosView — product photo on search results (030)', () => {
     vi.clearAllMocks();
     currentSession.mockResolvedValue(null);
     listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
-    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A' }] });
     listProducts.mockResolvedValue({ data: PRODUCTS });
   });
 
@@ -147,7 +153,7 @@ describe('PosView — product photo on search results (030)', () => {
     await searchFor('MCY-014');
 
     expect(await screen.findByAltText('MCYT — Slippery')).toHaveAttribute('src', PHOTO);
-    expect(lookupVariants).toHaveBeenLastCalledWith('MCY-014', 40);
+    expect(lookupVariants).toHaveBeenLastCalledWith('MCY-014', 40, { pos: true });
   });
 
   it('keeps the placeholder icon and no <img> for a hit that has no photo, and each card keeps its own photo', async () => {
@@ -191,13 +197,13 @@ describe('PosView — product photo on search results (030)', () => {
     expect(screen.getByAltText('Keychain A')).toHaveAttribute('src', 'https://example.test/a.png');
   });
 
-  it('keeps the photos on the result cards when the seller filter is changed while results are shown', async () => {
+  it('keeps the photos on the result cards when the outlet filter is changed while results are shown', async () => {
     lookupVariants.mockResolvedValue({ data: [hit()] });
     const user = await searchFor('slippery');
     await screen.findByAltText('MCYT — Slippery');
 
-    await user.click(screen.getByText('Semua penjual'));
-    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await user.click(screen.getByText('Semua outlet'));
+    await user.click(await screen.findByRole('option', { name: 'Outlet A' }));
 
     expect(await screen.findByAltText('MCYT — Slippery')).toHaveAttribute('src', PHOTO);
   });

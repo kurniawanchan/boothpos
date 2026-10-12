@@ -57,6 +57,7 @@ return [
     'dispatch_status_cancelled' => 'Pre-order yang dibatalkan tidak lagi memiliki invoice atau pengiriman aktif untuk dilacak.',
 
     // 027-preorder-duplicate-split
+    'item_not_carried' => 'Item :sku tidak dijual di outlet ini.',
     'duplicate_item_unavailable' => 'Barang ":item" sudah tidak bisa dijual (dihapus atau nonaktif), sehingga pre-order ini tidak diduplikasi.',
     'duplicate_not_found' => 'Pre-order tidak ditemukan.',
 
@@ -67,7 +68,7 @@ return [
     'split_qty_exceeds_line' => 'Tidak bisa memindahkan lebih dari :qty unit ":item" pada pre-order ini.',
     'split_must_move_and_keep' => 'Minimal satu unit harus pindah ke pre-order baru dan minimal satu unit harus tetap di pre-order ini.',
     'split_discount_exceeds_remaining' => 'Setelah dipisah, diskon pre-order ini akan lebih besar dari sisa tagihannya. Turunkan diskonnya dulu, lalu pisahkan lagi.',
-    'split_single_seller' => 'Semua barang di pre-order ini milik penjual yang sama, jadi tidak ada yang bisa dipisah per penjual.',
+    'split_single_seller' => 'Semua barang di pre-order ini milik outlet yang sama, jadi tidak ada yang bisa dipisah per outlet.',
 
     // Hapus pembayaran pre-order
     'payment_delete_not_allowed_status' => 'Pembayaran pada pre-order berstatus "Diserahkan" atau "Dibatalkan" tidak bisa dihapus lagi — transaksinya sudah ditutup.',

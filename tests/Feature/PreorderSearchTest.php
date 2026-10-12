@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
@@ -19,9 +19,9 @@ class PreorderSearchTest extends TestCase
 
     private function makePreorderFor(string $customerName, string $status = 'ordered'): void
     {
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true]);
         $variant = $product->variants()->create(['sku' => strtoupper(substr(md5($customerName), 0, 12)), 'sell_price' => 100000, 'cost_price' => 50000, 'current_stock' => 0]);
         $customer = Customer::factory()->create(['name' => $customerName]);
 

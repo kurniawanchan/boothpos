@@ -63,7 +63,7 @@ class VariantBomController extends Controller
     /**
      * Baris PO yang boleh dipilih untuk BOM varian ini: hanya milik seller
      * varian ini dan berstatus ordered/received/paid (scope tunggal
-     * PurchaseOrderItem::eligibleForSeller). `in_bom` menandai baris yang
+     * PurchaseOrderItem::eligibleForOutlet). `in_bom` menandai baris yang
      * sudah dipakai BOM varian INI supaya tidak ditambahkan dua kali.
      */
     public function eligibleLines(Request $request, ProductVariant $variant): JsonResponse
@@ -86,7 +86,7 @@ class VariantBomController extends Controller
         $perPage = min((int) ($filters['per_page'] ?? 25), 100);
 
         $lines = PurchaseOrderItem::query()
-            ->eligibleForSeller((int) $variant->product->artist_id)
+            ->eligibleForOutlet((int) $variant->product->home_outlet_id)
             ->with(['purchaseOrder.vendor', 'material'])
             ->when($filters['line_type'] ?? null, fn ($q, $type) => $q->where('line_type', $type))
             ->when($filters['q'] ?? null, fn ($q, $term) => $q->where(fn ($q) => $q

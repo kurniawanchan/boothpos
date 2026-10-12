@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Event;
@@ -33,7 +33,7 @@ class PreorderDuplicateTest extends TestCase
 
     private Customer $customer;
 
-    private Artist $artist;
+    private Outlet $artist;
 
     private Category $category;
 
@@ -45,15 +45,15 @@ class PreorderDuplicateTest extends TestCase
         $this->user = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($this->user, 'sanctum');
 
-        $this->artist = Artist::factory()->create();
+        $this->homeOutlet = Outlet::factory()->create();
         $this->category = Category::factory()->create();
         $this->customer = Customer::factory()->create();
     }
 
-    private function variant(float $price = 100000, ?Artist $artist = null, array $overrides = []): ProductVariant
+    private function variant(float $price = 100000, ?Outlet $artist = null, array $overrides = []): ProductVariant
     {
         $product = Product::factory()->create([
-            'artist_id' => ($artist ?? $this->artist)->id,
+            'home_outlet_id' => ($artist ?? $this->homeOutlet)->id,
             'category_id' => $this->category->id,
             'is_preorder' => true,
         ]);

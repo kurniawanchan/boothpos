@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -20,9 +20,9 @@ class CategoryDeleteGuardTest extends TestCase
         $user = User::factory()->create(['role' => 'owner']);
         $this->actingAs($user, 'sanctum');
 
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'is_active' => true]);
+        Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'is_active' => true]);
 
         $this->deleteJson("/api/v1/categories/{$category->id}")->assertStatus(409);
     }

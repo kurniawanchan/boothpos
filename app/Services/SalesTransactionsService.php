@@ -41,7 +41,7 @@ class SalesTransactionsService
             : null;
 
         $orders = ($ids === []) ? collect() : Order::query()
-            ->with(['cashier', 'customer', 'items.artist', 'payments', 'session.user'])
+            ->with(['cashier', 'customer', 'items.homeOutlet', 'payments', 'session.user', 'outlet:id,code,name'])
             ->withCount('items')
             ->whereIn('status', filter_var($filters['include_voided'] ?? false, FILTER_VALIDATE_BOOLEAN) ? ['completed', 'voided'] : ['completed'])
             ->when(! empty($filters['event_id']), fn ($q) => $q->where('event_id', (int) $filters['event_id']))
@@ -105,6 +105,9 @@ class SalesTransactionsService
             'created_at' => $order->created_at?->toIso8601String(),
             'cashier_id' => $order->user_id,
             'cashier_name' => $order->cashier?->name,
+            // 045 Stage 4 — outlet TEMPAT penjualan terjadi (outlet shift), beda dari `outlet_names` (outlet asal item).
+            'sold_at_name' => $order->outlet?->name,
+            'sold_at_code' => $order->outlet?->code,
             'customer_id' => $order->customer_id,
             'customer_name' => $order->customer?->name,
             // Popover detail pelanggan di Sales memakai data ini (FR-022).
@@ -118,7 +121,7 @@ class SalesTransactionsService
             'payment_methods' => $order->payments->pluck('method')->unique()->values(),
             'payment_state' => $this->paymentState($order->payments),
             'channel' => $order->channel,
-            'artist_names' => $items->pluck('artist.name')->filter()->unique()->values(),
+            'outlet_names' => $items->pluck('homeOutlet.name')->filter()->unique()->values(),
             'items_preview' => $top->take(2)->map(fn ($i) => ['name' => $i->name_snapshot, 'qty' => (float) $i->qty])->values(),
             'items_more' => max(0, $items->count() - 2),
             'total_amount' => $this->money($order->total_amount),

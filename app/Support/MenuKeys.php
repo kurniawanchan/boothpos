@@ -27,7 +27,7 @@ class MenuKeys
         'session' => 'Sesi Kasir',
         'events' => 'Event',
         'products' => 'Produk',
-        'artists' => 'Artist',
+        'outlets' => 'Outlet',
         'categories' => 'Kategori',
         'stock' => 'Stok',
         'vendors' => 'Vendor',

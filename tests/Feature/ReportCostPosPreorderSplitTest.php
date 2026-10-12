@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -30,7 +30,7 @@ use Tests\TestCase;
  */
 class ReportCostPosPreorderSplitTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, \Tests\Support\TreatsOrdersAsLegacy;
 
     private User $owner;
 
@@ -59,11 +59,11 @@ class ReportCostPosPreorderSplitTest extends TestCase
 
     // ----- fixtures -----------------------------------------------------
 
-    /** @return array{0: Artist, 1: ProductVariant} */
+    /** @return array{0: Outlet, 1: ProductVariant} */
     private function seller(string $code, float $price = 10000, float $cost = 4000, ?string $name = null): array
     {
-        $artist = Artist::factory()->create(['code' => $code, 'name' => $name ?? "Seller {$code}"]);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $this->category->id]);
+        $artist = Outlet::factory()->create(['code' => $code, 'name' => $name ?? "Seller {$code}"]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $this->category->id]);
         $variant = $product->variants()->create([
             'sku' => $code.'KYAAA0001', 'sell_price' => $price, 'cost_price' => $cost, 'current_stock' => 1000,
         ]);
@@ -104,12 +104,12 @@ class ReportCostPosPreorderSplitTest extends TestCase
 
     private function recapRows(): \Illuminate\Support\Collection
     {
-        $response = $this->getJson("/api/v1/reports/artist-settlements?event_id={$this->event->id}")->assertOk();
+        $response = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$this->event->id}")->assertOk();
 
-        return collect($response->json('data'))->keyBy('artist_id');
+        return collect($response->json('data'))->keyBy('outlet_id');
     }
 
-    private function exportSheet(string $report = 'artist-settlements'): array
+    private function exportSheet(string $report = 'outlet-settlements'): array
     {
         $response = $this->get("/api/v1/reports/{$report}/export?event_id={$this->event->id}");
         $response->assertOk();
@@ -134,7 +134,7 @@ class ReportCostPosPreorderSplitTest extends TestCase
 
     private function sellerCostRows(): \Illuminate\Support\Collection
     {
-        return collect($this->getJson("/api/v1/reports/artist-profit?event_id={$this->event->id}")->assertOk()->json('data'));
+        return collect($this->getJson("/api/v1/reports/outlet-profit?event_id={$this->event->id}")->assertOk()->json('data'));
     }
 
     private function assertCentsAdd(string $total, string $pos, string $pre, string $what): void
@@ -220,8 +220,8 @@ class ReportCostPosPreorderSplitTest extends TestCase
 
         $rows = $this->sellerCostRows();
 
-        $this->assertSame(['Aaa Seller', 'Bbb Seller', 'Ccc Seller'], $rows->pluck('artist_name')->all(), 'urut nama, seller pre-order-saja ikut tampil');
-        $byId = $rows->keyBy('artist_id');
+        $this->assertSame(['Aaa Seller', 'Bbb Seller', 'Ccc Seller'], $rows->pluck('outlet_name')->all(), 'urut nama, seller pre-order-saja ikut tampil');
+        $byId = $rows->keyBy('outlet_id');
 
         $this->assertSame('30000.00', $byId[$a->id]['sales_pos']);
         $this->assertSame('5000.00', $byId[$a->id]['sales_preorder']);
@@ -241,9 +241,9 @@ class ReportCostPosPreorderSplitTest extends TestCase
         $this->assertSame('6000.00', $byId[$c->id]['gross_profit_preorder']);
 
         foreach ($rows as $row) {
-            $this->assertCentsAdd($row['total_sales'], $row['sales_pos'], $row['sales_preorder'], 'sales '.$row['artist_name']);
-            $this->assertCentsAdd($row['modal'], $row['modal_pos'], $row['modal_preorder'], 'modal '.$row['artist_name']);
-            $this->assertCentsAdd($row['gross_profit'], $row['gross_profit_pos'], $row['gross_profit_preorder'], 'gross '.$row['artist_name']);
+            $this->assertCentsAdd($row['total_sales'], $row['sales_pos'], $row['sales_preorder'], 'sales '.$row['outlet_name']);
+            $this->assertCentsAdd($row['modal'], $row['modal_pos'], $row['modal_preorder'], 'modal '.$row['outlet_name']);
+            $this->assertCentsAdd($row['gross_profit'], $row['gross_profit_pos'], $row['gross_profit_preorder'], 'gross '.$row['outlet_name']);
         }
     }
 
@@ -260,7 +260,7 @@ class ReportCostPosPreorderSplitTest extends TestCase
         $this->preorder([[$vb, 2]], paid: 7000);
 
         $recap = $this->recapRows();
-        $cost = $this->sellerCostRows()->keyBy('artist_id');
+        $cost = $this->sellerCostRows()->keyBy('outlet_id');
 
         $this->assertNotEmpty($cost);
         foreach ($cost as $artistId => $row) {
@@ -285,7 +285,7 @@ class ReportCostPosPreorderSplitTest extends TestCase
         ModeGate::runAs('demo', function () use ($artist) {
             $event = Event::factory()->create(['status' => 'active']);
             $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
-            $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $this->category->id]);
+            $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $this->category->id]);
             $demo = $product->variants()->create(['sku' => 'SRKKYDEM0001', 'sell_price' => 999999, 'cost_price' => 1, 'current_stock' => 100]);
             $this->posSale([[$demo, 1]], $event, $session);
             $this->preorder([[$demo, 1]], paid: 888888, event: $event);
@@ -299,7 +299,7 @@ class ReportCostPosPreorderSplitTest extends TestCase
     {
         foreach (['cashier', 'inventory'] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]), 'sanctum');
-            foreach (['profit', 'artist-profit', 'profit/export', 'artist-profit/export'] as $path) {
+            foreach (['profit', 'outlet-profit', 'profit/export', 'outlet-profit/export'] as $path) {
                 $url = str_contains($path, 'export') ? "/api/v1/reports/{$path}" : "/api/v1/reports/{$path}";
                 $this->get("{$url}?event_id={$this->event->id}")->assertForbidden();
             }
@@ -321,7 +321,7 @@ class ReportCostPosPreorderSplitTest extends TestCase
         $this->assertEqualsWithDelta(30000.0, (float) $row['revenue_pos'], 0.001);
         $this->assertEqualsWithDelta(5000.0, (float) $row['revenue_preorder'], 0.001);
 
-        $cost = $this->exportSheet('artist-profit');
+        $cost = $this->exportSheet('outlet-profit');
         $headings = $cost[0];
         foreach (['sales_pos', 'sales_preorder', 'modal_pos', 'modal_preorder', 'gross_profit_pos', 'gross_profit_preorder'] as $key) {
             $this->assertContains($key, $headings, $key);

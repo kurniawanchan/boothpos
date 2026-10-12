@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/vue';
 import { renderDrawerHost } from './productFormDrawerHost';
 import { listProducts, getProduct, addVariant, updateVariant, updateProduct } from '../../resources/js/api/products';
 import { createAdjustment } from '../../resources/js/api/stock';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { listCategories } from '../../resources/js/api/categories';
 import id from '../../resources/js/locales/id.json';
 
@@ -12,7 +12,7 @@ vi.mock('../../resources/js/api/products', () => ({
   addVariant: vi.fn(), updateVariant: vi.fn(), uploadProductImage: vi.fn(), uploadVariantImage: vi.fn(),
 }));
 vi.mock('../../resources/js/api/stock', () => ({ createAdjustment: vi.fn(), listMovements: vi.fn() }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/categories', () => ({ listCategories: vi.fn() }));
 vi.mock('../../resources/js/api/masterData', () => ({ exportMasterData: vi.fn(), importMasterData: vi.fn(), downloadImportTemplate: vi.fn() }));
 vi.mock('../../resources/js/api/materials', () => ({ listBomLines: vi.fn(), copyBomFrom: vi.fn(), copyBomOut: vi.fn(), saveBomQuantities: vi.fn() }));
@@ -22,7 +22,7 @@ vi.mock('../../resources/js/api/modifierGroups', () => ({ listModifierGroups: vi
 
 const M = id.master_data;
 const PRODUCT = {
-  id: 2, artist_id: 1, category_id: 1, name: 'MCYT', code_prefix: 'SPF-KC-MCY', description: null, is_preorder: false, is_active: true, image_url: null,
+  id: 2, home_outlet_id: 1, category_id: 1, name: 'MCYT', code_prefix: 'SPF-KC-MCY', description: null, is_preorder: false, is_active: true, image_url: null,
   variants: [
     { id: 10, sku: 'SPF-KC-MCY-001', variant_name: 'Red', cost_price: '1000.00', sell_price: '2500.00', current_stock: 6, low_stock_alert: 4, is_active: true, has_bom: true, bom_cost: '397.00', bom_complete: false, image_url: 'https://example.test/red.png' },
     { id: 11, sku: 'SPF-KC-MCY-002', variant_name: 'Blue', cost_price: '1000.00', sell_price: '2500.00', current_stock: 9, low_stock_alert: null, is_active: false, has_bom: false, bom_cost: null, bom_complete: false, image_url: null },
@@ -53,9 +53,9 @@ const value = (row, field) => cell(row, field).value;
 describe('Duplicate variant in the Edit item drawer (037, table rows since 043)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listProducts.mockResolvedValue({ data: [{ id: 2, code_prefix: 'SPF-KC-MCY', name: 'MCYT', artist_name: 'A', category_name: 'K', is_preorder: false, is_active: true, image_url: null, variants: [] }], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
+    listProducts.mockResolvedValue({ data: [{ id: 2, code_prefix: 'SPF-KC-MCY', name: 'MCYT', home_outlet_name: 'A', category_name: 'K', is_preorder: false, is_active: true, image_url: null, variants: [] }], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
     getProduct.mockResolvedValue(PRODUCT);
-    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A', code: 'ART' }] });
     listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
     updateProduct.mockResolvedValue({});
     updateVariant.mockImplementation(async (variantId) => ({ id: variantId }));

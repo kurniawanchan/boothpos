@@ -23,8 +23,8 @@ class PurchaseOrderController extends Controller
         $perPage = min((int) $request->integer('per_page', 25), 100);
 
         $orders = PurchaseOrder::query()
-            ->with(['vendor', 'artist'])
-            ->when($request->filled('artist_id'), fn ($q) => $q->where('artist_id', $request->integer('artist_id')))
+            ->with(['vendor', 'outlet'])
+            ->when($request->filled('outlet_id'), fn ($q) => $q->where('outlet_id', $request->integer('outlet_id')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('vendor_id'), fn ($q) => $q->where('vendor_id', $request->integer('vendor_id')))
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
@@ -54,7 +54,7 @@ class PurchaseOrderController extends Controller
     {
         $this->authorize('view', $purchaseOrder);
 
-        return response()->json($this->present($purchaseOrder->load(['items' => fn ($q) => $q->withCount('bomLines'), 'items.material', 'items.product', 'vendor', 'artist', 'payments'])));
+        return response()->json($this->present($purchaseOrder->load(['items' => fn ($q) => $q->withCount('bomLines'), 'items.material', 'items.product', 'vendor', 'outlet', 'payments'])));
     }
 
     public function update(UpdatePurchaseOrderRequest $request, PurchaseOrder $purchaseOrder): JsonResponse
@@ -131,7 +131,7 @@ class PurchaseOrderController extends Controller
     {
         $this->authorize('view', $purchaseOrder);
 
-        return response()->json($this->present($purchaseOrder->load(['items' => fn ($q) => $q->withCount('bomLines'), 'items.material', 'items.product', 'vendor', 'artist', 'payments'])));
+        return response()->json($this->present($purchaseOrder->load(['items' => fn ($q) => $q->withCount('bomLines'), 'items.material', 'items.product', 'vendor', 'outlet', 'payments'])));
     }
 
     private function present(PurchaseOrder $po): array
@@ -144,8 +144,8 @@ class PurchaseOrderController extends Controller
             // 034-seller-po-bom — null = PO lama tanpa seller (tidak pernah
             // ditawarkan sebagai sumber BOM). 'artist' ikut di-eager-load
             // oleh pemanggil; relationLoaded() mencegah N+1 diam-diam.
-            'artist_id' => $po->artist_id,
-            'artist_name' => $po->relationLoaded('artist') ? $po->artist?->name : null,
+            'outlet_id' => $po->outlet_id,
+            'outlet_name' => $po->relationLoaded('outlet') ? $po->outlet?->name : null,
             'status' => $po->status,
             'ordered_at' => $po->ordered_at?->toIso8601String(),
             'received_at' => $po->received_at?->toIso8601String(),

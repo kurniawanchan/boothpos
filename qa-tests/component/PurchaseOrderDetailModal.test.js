@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import PurchaseOrderDetailModal from '../../resources/js/components/purchaseOrders/PurchaseOrderDetailModal.vue';
 import { getPurchaseOrder } from '../../resources/js/api/purchaseOrders';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { ApiError } from '../../resources/js/utils/errors';
 
 vi.mock('../../resources/js/api/purchaseOrders', () => ({
@@ -11,10 +11,10 @@ vi.mock('../../resources/js/api/purchaseOrders', () => ({
   updatePurchaseOrder: vi.fn(),
   recordPurchaseOrderPayment: vi.fn(),
 }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 
 const OUTDATED = new ApiError('Database perlu diperbarui. Minta administrator menerapkan pembaruan yang tertunda, lalu coba lagi.', { status: 503, code: 'schema_outdated' });
-const PO = { id: 7, po_number: 'PO-7', vendor_name: 'Vendor X', artist_id: 1, artist_name: 'Seller A', status: 'ordered', total_amount: '5000.00', paid_amount: '0.00', items: [], payments: [], created_at: '2026-09-01T10:00:00+00:00' };
+const PO = { id: 7, po_number: 'PO-7', vendor_name: 'Vendor X', outlet_id: 1, outlet_name: 'Outlet A', status: 'ordered', total_amount: '5000.00', paid_amount: '0.00', items: [], payments: [], created_at: '2026-09-01T10:00:00+00:00' };
 
 function renderModal() {
   const pinia = createPinia();
@@ -26,7 +26,7 @@ function renderModal() {
 describe('PurchaseOrderDetailModal — load failure (035)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: [] });
+    listOutlets.mockResolvedValue({ data: [] });
   });
 
   it('shows the friendly error with a Retry button instead of a blank dialog', async () => {
@@ -47,6 +47,6 @@ describe('PurchaseOrderDetailModal — load failure (035)', () => {
 
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
     expect(getPurchaseOrder).toHaveBeenCalledTimes(2);
-    expect(await screen.findByText('Seller A')).toBeInTheDocument();
+    expect(await screen.findByText('Outlet A')).toBeInTheDocument();
   });
 });

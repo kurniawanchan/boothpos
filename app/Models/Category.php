@@ -51,7 +51,7 @@ class Category extends Model
     }
 
     /**
-     * BUG YANG DITEMUKAN & DIPERBAIKI — sama seperti Artist::products():
+     * BUG YANG DITEMUKAN & DIPERBAIKI — sama seperti Outlet::products():
      * CategoryController::index()/show() memanggil withCount('products')/
      * loadCount('products') tapi relasinya tidak pernah ditulis, membuat
      * kedua endpoint itu fatal error 500.

@@ -82,7 +82,7 @@ class VendorController extends Controller
         // di vendor_material_prices) tidak boleh dihapus diam-diam —
         // menghapusnya akan membuat baris harga itu yatim dan mengubah
         // perhitungan bom_cost produk lain tanpa jejak. Konsisten dengan pola
-        // ArtistController/CategoryController: guard manual karena FK
+        // OutletController/CategoryController: guard manual karena FK
         // restrictOnDelete tidak berlaku untuk soft delete.
         if ($vendor->materialPrices()->exists()) {
             return response()->json([

@@ -100,7 +100,7 @@ class ProductLifecycleTest extends TestCase
     {
         $base = $this->product();
         $payload = fn (string $name) => [
-            'artist_id' => $base->artist_id, 'category_id' => $base->category_id, 'name' => $name,
+            'home_outlet_id' => $base->home_outlet_id, 'category_id' => $base->category_id, 'name' => $name,
             'variants' => [['variant_name' => 'Reguler', 'sell_price' => 10000]],
         ];
 

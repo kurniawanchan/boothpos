@@ -35,8 +35,8 @@ class AttentionService
     public function items(User $user): array
     {
         $today = BusinessDay::today();
-        // Cache per mode+hari+zona (data yang sama untuk semua peran); tautan dihitung per pemanggil di luar cache.
-        $key = implode(':', ['dashboard.attention', ModeGate::current(), $today, BusinessDay::timezone(), BusinessDay::cutoff(), $this->tolerance()]);
+        // Cache per mode+hari+zona+outlet yang berlaku (angka mengikuti outlet pengguna); tautan dihitung per pemanggil di luar cache.
+        $key = implode(':', ['dashboard.attention', ModeGate::current(), $today, BusinessDay::timezone(), BusinessDay::cutoff(), $this->tolerance(), 'outlets='.\App\Support\OutletFilter::cacheKey()]);
 
         $data = Cache::remember($key, self::CACHE_SECONDS, fn () => $this->compute($today));
 

@@ -59,20 +59,20 @@ class SettingsTest extends TestCase
         // Ini gap yang secara eksplisit disebut README — sebelumnya hanya
         // bisa lewat Setting::updateOrCreate() langsung (tinker/seeder).
         Setting::updateOrCreate(
-            ['key' => 'multi_artist_enabled'],
+            ['key' => 'multi_outlet_enabled'],
             ['value' => '0', 'type' => 'boolean', 'group' => 'licensing']
         );
-        $this->assertFalse(LicenseGate::multiArtistEnabled());
+        $this->assertFalse(LicenseGate::multiOutletEnabled());
 
         $this->actingAsRole('admin');
 
         $this->putJson('/api/v1/settings', [
             'settings' => [
-                ['key' => 'multi_artist_enabled', 'value' => true, 'type' => 'boolean', 'group' => 'licensing'],
+                ['key' => 'multi_outlet_enabled', 'value' => true, 'type' => 'boolean', 'group' => 'licensing'],
             ],
         ])->assertOk();
 
-        $this->assertTrue(LicenseGate::multiArtistEnabled());
+        $this->assertTrue(LicenseGate::multiOutletEnabled());
     }
 
     public function test_cashier_cannot_update_settings(): void

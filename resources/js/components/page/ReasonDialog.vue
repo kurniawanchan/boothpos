@@ -25,6 +25,8 @@ const props = defineProps({
   reasons: { type: Array, default: () => [] },
   danger: { type: Boolean, default: true },
   submitting: { type: Boolean, default: false },
+  // Slot `extra` (mis. pilihan outlet 045) bisa ikut menahan tombol konfirmasi lewat prop ini.
+  extraValid: { type: Boolean, default: true },
 });
 const emit = defineEmits(['close', 'confirm']);
 const { t } = useI18n();
@@ -43,7 +45,7 @@ watch(
     }
   }
 );
-const ready = computed(() => (coded.value ? choice.value !== '' : free.value.trim() !== ''));
+const ready = computed(() => props.extraValid && (coded.value ? choice.value !== '' : free.value.trim() !== ''));
 
 function submit() {
   if (!ready.value) return;
@@ -77,6 +79,8 @@ function submit() {
         {{ t('page.reason_label') }}
         <textarea v-model="free" rows="3" maxlength="255" data-autofocus class="border-2 border-line bg-white px-3 py-2.5 text-[13.5px] font-normal outline-none focus:border-brand"></textarea>
       </label>
+
+      <slot name="extra" />
     </div>
     <template #footer>
       <div class="flex justify-end gap-2.5">

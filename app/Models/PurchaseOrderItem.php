@@ -52,10 +52,10 @@ class PurchaseOrderItem extends Model
      * (HasDataMode) ikut berlaku — PurchaseOrderItem sendiri tidak
      * memakainya.
      */
-    public function scopeEligibleForSeller(Builder $query, int $artistId): Builder
+    public function scopeEligibleForOutlet(Builder $query, int $outletId): Builder
     {
         return $query->whereHas('purchaseOrder', fn ($po) => $po
-            ->where('artist_id', $artistId)
+            ->where('outlet_id', $outletId)
             ->whereIn('status', ['ordered', 'received', 'paid']));
     }
 }

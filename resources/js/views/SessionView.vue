@@ -4,8 +4,9 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { currentSession, openSession, closeSession, sessionSummary } from '../api/sessions';
 import { listEvents } from '../api/events';
-import { listArtists } from '../api/artists';
+import { listOutlets } from '../api/outlets';
 import { useToastStore } from '../stores/toast';
+import { useOutletStore } from '../stores/outlet';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDateTime } from '../utils/date';
 import BaseButton from '../components/ui/BaseButton.vue';
@@ -22,20 +23,25 @@ const session = ref(null);
 const summary = ref(null);
 const activeEvents = ref([]);
 
-const openForm = reactive({ event_id: '', opening_cash: '0', notes: '' });
+const outletStore = useOutletStore();
+// 045 Stage 2 — outlet shift. Tampil hanya bila pengguna melihat lebih dari satu outlet (disembunyikan, bukan
+// dinonaktifkan, di satu outlet); bawaannya outlet yang dipilih di topbar. Server yang memutuskan: tanpa nilai
+// dan lebih dari satu outlet, ia menjawab 422 errors.outlet_id.
+const openForm = reactive({ event_id: '', outlet_id: outletStore.selected ?? '', opening_cash: '0', notes: '' });
+watch(() => outletStore.selected, (id) => { if (id != null && !openForm.outlet_id) openForm.outlet_id = id; });
 const openErrors = reactive({});
 const opening = ref(false);
 
-// 006-purchase-order-and-ops (US5) — rincian kas awal per artist, aditif
+// 006-purchase-order-and-ops (US5) — rincian kas awal per outlet, aditif
 // terhadap opening_cash di atas (lihat komentar
 // CashierSessionController::store()). Baris kosong = fitur tidak dipakai
 // sama sekali, opening_cash tetap dikirim sendirian seperti sebelumnya.
-const artists = ref([]);
+const outlets = ref([]);
 const openingCashEntries = ref([]);
-const useOpeningCashPerArtist = ref(false);
+const useOpeningCashPerOutlet = ref(false);
 
 function addOpeningCashEntryRow() {
-  openingCashEntries.value.push({ artist_id: '', amount: '0' });
+  openingCashEntries.value.push({ outlet_id: '', amount: '0' });
 }
 function removeOpeningCashEntryRow(idx) {
   openingCashEntries.value.splice(idx, 1);
@@ -45,10 +51,10 @@ const openingCashEntriesTotal = computed(() =>
 );
 // The server rejects a mismatch (Constitution IV — never trust a client
 // total independent of its parts), so opening_cash is kept in lockstep
-// with the entries total while per-artist mode is on, rather than
+// with the entries total while per-outlet mode is on, rather than
 // letting the two drift and surfacing a 422 only after submit.
 watch(openingCashEntriesTotal, (total) => {
-  if (useOpeningCashPerArtist.value) openForm.opening_cash = toMoneyString(total);
+  if (useOpeningCashPerOutlet.value) openForm.opening_cash = toMoneyString(total);
 });
 
 const closingCash = ref(0);
@@ -123,7 +129,7 @@ async function load() {
       const res = await listEvents({ status: 'active', per_page: 50 });
       activeEvents.value = res.data;
       if (activeEvents.value[0]) openForm.event_id = activeEvents.value[0].id;
-      artists.value = (await listArtists({ per_page: 100, is_active: true })).data;
+      outlets.value = (await listOutlets({ per_page: 100, is_active: true })).data;
     }
   } catch {
     // Object-level 403 (not this cashier's session) is already toasted by
@@ -141,8 +147,9 @@ async function handleOpen() {
       event_id: Number(openForm.event_id),
       opening_cash: toMoneyString(openForm.opening_cash),
       notes: openForm.notes || null,
-      ...(useOpeningCashPerArtist.value && openingCashEntries.value.length
-        ? { opening_cash_entries: openingCashEntries.value.map((e) => ({ artist_id: e.artist_id ? Number(e.artist_id) : null, amount: toMoneyString(e.amount) })) }
+      ...(openForm.outlet_id ? { outlet_id: Number(openForm.outlet_id) } : {}),
+      ...(useOpeningCashPerOutlet.value && openingCashEntries.value.length
+        ? { opening_cash_entries: openingCashEntries.value.map((e) => ({ outlet_id: e.outlet_id ? Number(e.outlet_id) : null, amount: toMoneyString(e.amount) })) }
         : {}),
     });
     toast.success(t('events_sessions.session_opened'));
@@ -246,16 +253,24 @@ async function handleClose() {
           :options="activeEvents.map((e) => ({ value: e.id, label: e.name }))"
           :error="openErrors.event_id"
         />
-        <BaseInput v-model="openForm.opening_cash" :label="t('events_sessions.opening_cash_rp')" type="number" min="0" required :disabled="useOpeningCashPerArtist" :error="openErrors.opening_cash" />
+        <BaseSelect
+          v-if="outletStore.multi"
+          v-model="openForm.outlet_id"
+          :label="t('frame.outlet_label')"
+          required
+          :options="outletStore.outlets.map((o) => ({ value: o.id, label: o.name }))"
+          :error="openErrors.outlet_id"
+        />
+        <BaseInput v-model="openForm.opening_cash" :label="t('events_sessions.opening_cash_rp')" type="number" min="0" required :disabled="useOpeningCashPerOutlet" :error="openErrors.opening_cash" />
 
         <label class="flex items-center gap-2.5 text-[12.5px] font-semibold text-muted-4">
-          <input v-model="useOpeningCashPerArtist" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" @change="openingCashEntries.length === 0 && addOpeningCashEntryRow()" />
+          <input v-model="useOpeningCashPerOutlet" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" @change="openingCashEntries.length === 0 && addOpeningCashEntryRow()" />
           {{ t('events_sessions.opening_cash_per_artist_toggle') }}
         </label>
 
-        <div v-if="useOpeningCashPerArtist" class="flex flex-col gap-2.5 rounded-lg border border-line-3 bg-surface-subtle p-3">
+        <div v-if="useOpeningCashPerOutlet" class="flex flex-col gap-2.5 rounded-lg border border-line-3 bg-surface-subtle p-3">
           <div v-for="(entry, idx) in openingCashEntries" :key="idx" class="flex items-end gap-2">
-            <BaseSelect v-model="entry.artist_id" class="flex-1" :label="idx === 0 ? t('events_sessions.artist') : ''" :options="artists.map((a) => ({ value: a.id, label: a.name }))" />
+            <BaseSelect v-model="entry.outlet_id" class="flex-1" :label="idx === 0 ? t('events_sessions.artist') : ''" :options="outlets.map((a) => ({ value: a.id, label: a.name }))" />
             <BaseInput v-model="entry.amount" class="w-32" :label="idx === 0 ? t('events_sessions.amount') : ''" type="number" min="0" />
             <button type="button" class="mb-[11px] flex h-[46px] w-[38px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('common.delete')" @click="removeOpeningCashEntryRow(idx)">
               <i class="ph-duotone ph-trash text-[15px]" aria-hidden="true"></i>
@@ -285,6 +300,7 @@ async function handleClose() {
           <div class="flex flex-col gap-1">
             <span class="text-[16px] font-bold tracking-tight">{{ t('events_sessions.session_number', { id: session.id, user: session.user_name }) }}</span>
             <span class="text-[12.5px] text-muted-2">{{ t('events_sessions.opened_at', { time: formatDateTime(session.opened_at), event: session.event_name }) }}</span>
+            <span v-if="outletStore.multi && session.outlet" class="text-[12.5px] font-semibold text-muted-4" data-testid="session-outlet">{{ t('events_sessions.session_outlet', { outlet: session.outlet.name }) }}</span>
           </div>
           <StatusPill variant="mint"><span class="h-1.5 w-1.5 rounded-full bg-brand"></span>{{ t('events_sessions.open_status') }}</StatusPill>
         </div>
@@ -311,7 +327,7 @@ async function handleClose() {
         <div v-if="summary?.opening_cash_entries?.length" class="flex flex-col gap-2">
           <span class="text-[13px] font-bold">{{ t('events_sessions.opening_cash_per_artist_toggle') }}</span>
           <div v-for="(e, idx) in summary.opening_cash_entries" :key="idx" class="flex items-center justify-between border-b border-line-6 py-2 last:border-b-0 text-[12.5px]">
-            <span>{{ e.artist_name || t('events_sessions.unattributed') }}</span>
+            <span>{{ e.outlet_name || t('events_sessions.unattributed') }}</span>
             <span class="font-bold">{{ formatIDR(e.amount) }}</span>
           </div>
         </div>

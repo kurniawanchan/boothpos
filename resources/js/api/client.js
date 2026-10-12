@@ -2,6 +2,7 @@ import axios from 'axios';
 import { getToken, clearToken } from '../utils/storage';
 import { normalizeAxiosError } from '../utils/errors';
 import { useToastStore } from '../stores/toast';
+import { selectedOutletId } from '../utils/outletSelection';
 
 // Relative base URL — the built SPA is served by this same Laravel app
 // (PRD §9), so no cross-origin base URL / CORS config is ever needed in
@@ -16,6 +17,11 @@ client.interceptors.request.use((config) => {
   const token = getToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  // 045 Stage 2 — pilihan outlet hanya MENYEMPITKAN di server; header dikirim hanya bila pengguna memilih.
+  const outletId = selectedOutletId();
+  if (outletId != null) {
+    config.headers['X-Outlet-Id'] = String(outletId);
   }
   return config;
 });
@@ -59,7 +65,7 @@ client.interceptors.response.use(
 
     // 403 on an object-level check we couldn't predict client-side
     // (session close/summary ownership, etc.) — surface it instead of
-    // crashing. Predictable 403s (profit report, stock adjust, artist
+    // crashing. Predictable 403s (profit report, stock adjust, outlet
     // quota) should already have hidden the trigger, so this mostly fires
     // for the unpredictable cases the brief calls out.
     if (apiError.isForbidden) {

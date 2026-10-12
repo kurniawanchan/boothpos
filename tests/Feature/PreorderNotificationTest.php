@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Mail\PreorderStatusMail;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Preorder;
@@ -26,9 +26,9 @@ class PreorderNotificationTest extends TestCase
         $cashier = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($cashier, 'sanctum');
 
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true]);
         $variant = $product->variants()->create(['sku' => 'NOTKYNOT0001', 'sell_price' => 100000, 'cost_price' => 50000, 'current_stock' => 0]);
         $customer = Customer::factory()->create(['email' => $customerEmail]);
 

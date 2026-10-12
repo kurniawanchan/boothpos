@@ -4,6 +4,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import ProductsView from '../../resources/js/views/ProductsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { useSettingsStore } from '../../resources/js/stores/settings';
+import { useOutletStore } from '../../resources/js/stores/outlet';
 
 // 043 — bantuan bersama tes halaman Produk (Grid/Tabel/Struktur). vi.mock tetap di tiap berkas tes (di-hoist).
 export const ROW = (id, extra = {}) => ({
@@ -23,11 +24,13 @@ export const SUMMARY = {
 };
 export const META = (total = 24, page = 1) => ({ current_page: page, per_page: 15, total, last_page: Math.max(1, Math.ceil(total / 15)) });
 
-export async function renderProducts({ menus = ['dashboard', 'products'], url = '/products', userId = 1 } = {}) {
+export async function renderProducts({ menus = ['dashboard', 'products'], url = '/products', userId = 1, scope = null } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   useAuthStore().user = { id: userId, role: 'Owner', name: 'Owner', menu_keys: menus };
   useSettingsStore().menuReleaseEnabled = false;
+  // 045 Stage 3 — cakupan outlet opsional: { outlets, selected, multi }.
+  if (scope) Object.assign(useOutletStore(), { outlets: scope.outlets, selected: scope.selected ?? null, multi: scope.multi ?? scope.outlets.length > 1 });
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [

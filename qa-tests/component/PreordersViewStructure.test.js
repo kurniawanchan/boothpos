@@ -6,7 +6,7 @@ import PreordersView from '../../resources/js/views/PreordersView.vue';
 import PreorderSummaryStrip from '../../resources/js/views/preorders/PreorderSummaryStrip.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listPreorders, getPreorderSummary } from '../../resources/js/api/preorders';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { listEvents } from '../../resources/js/api/events';
 import { customHeaderCount } from '../../resources/js/composables/usePageHeader';
 
@@ -35,7 +35,7 @@ vi.mock('../../resources/js/api/preorders', () => ({
   deletePreorderPayment: vi.fn(),
   createPreorderPayment: vi.fn(),
 }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/shipments', () => ({ createShipment: vi.fn(), updateShipment: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ lookupVariants: vi.fn() }));
 vi.mock('../../resources/js/api/customers', () => ({ listCustomers: vi.fn(), createCustomer: vi.fn(), getCustomer: vi.fn() }));
@@ -76,7 +76,7 @@ async function renderPreorders(role = 'Owner') {
 beforeEach(() => {
   vi.clearAllMocks();
   customHeaderCount.value = 0;
-  listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A' }] });
+  listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A' }] });
   listEvents.mockResolvedValue({ data: [] });
   listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
   getPreorderSummary.mockResolvedValue(SUMMARY);

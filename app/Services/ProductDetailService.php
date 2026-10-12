@@ -3,9 +3,13 @@
 namespace App\Services;
 
 use App\Models\MenuRelease;
+use App\Models\Outlet;
+use App\Models\OutletItemSetting;
+use App\Models\VariantOutletPrice;
 use App\Models\Product;
 use App\Models\User;
 use App\Support\MenuSettings;
+use App\Support\OutletContext;
 use App\Support\PermissionCatalog;
 
 /**
@@ -25,8 +29,6 @@ class ProductDetailService
         ]);
 
         $station = $product->station ?? $product->category?->station;
-        $mark = $product->availabilityMarks->first();
-
         return [
             'short_name' => $product->short_name,
             'tax_category' => $product->tax_category,
@@ -40,17 +42,8 @@ class ProductDetailService
                 ? ['version' => (int) (MenuRelease::query()->where('status', MenuRelease::PUBLISHED)->max('version') ?? 0), 'outlets_active' => 1]
                 : null,
             'modifier_links' => $this->links($product),
-            'availability' => [[
-                'outlet_id' => null,
-                'state' => $mark ? 'sold_out' : 'available',
-                'reason' => $mark?->reason?->label(),
-                'note' => $mark?->note,
-                'marked_by' => $mark?->marker?->name,
-                'marked_at' => $mark?->marked_at?->toIso8601String(),
-                'expires_at' => $mark?->expires_at?->toIso8601String(),
-                'daily_quota' => null,
-                'channels' => null,
-            ]],
+            'availability' => $this->availabilityRows($product),
+            'outlet_prices' => $this->outletPrices($product),
             'recipe' => $this->recipeSummary($product, $user),
             'can' => [
                 'edit' => $user->can('update', $product),
@@ -59,6 +52,78 @@ class ProductDetailService
                 'bulk_price' => $user->hasPermission(PermissionCatalog::PRICE_BULK),
                 'edit_recipe' => $user->hasPermission(PermissionCatalog::RECIPE_EDIT),
             ],
+        ];
+    }
+
+
+    /**
+     * Ketersediaan per outlet yang terlihat (045 Stage 3): satu baris per outlet — `not_carried`, `sold_out`
+     * (tanda 86 outlet itu ATAU global) atau `available`. Satu outlet terlihat → bentuk lama (satu baris tanpa
+     * outlet), supaya instalasi satu outlet tidak berubah.
+     *
+     * @return list<array<string,mixed>>
+     */
+    private function availabilityRows(Product $product): array
+    {
+        $ids = app(OutletContext::class)->effectiveIds();
+        $outlets = count($ids) > 1 ? Outlet::query()->whereIn('id', $ids)->orderBy('id')->get(['id', 'code', 'name']) : collect();
+
+        $row = fn ($mark, ?Outlet $o, string $state) => [
+            'outlet_id' => $o?->id,
+            'outlet_code' => $o?->code,
+            'outlet_name' => $o?->name,
+            'state' => $state,
+            'reason' => $state === 'sold_out' ? $mark?->reason?->label() : null,
+            'note' => $state === 'sold_out' ? $mark?->note : null,
+            'marked_by' => $state === 'sold_out' ? $mark?->marker?->name : null,
+            'marked_at' => $state === 'sold_out' ? $mark?->marked_at?->toIso8601String() : null,
+            'expires_at' => $state === 'sold_out' ? $mark?->expires_at?->toIso8601String() : null,
+            'daily_quota' => null,
+            'channels' => null,
+        ];
+
+        if ($outlets->isEmpty()) {
+            $mark = $product->availabilityMarks->first();
+
+            return [$row($mark, null, $mark ? 'sold_out' : 'available')];
+        }
+
+        $notCarried = OutletItemSetting::query()->where('product_id', $product->id)->where('is_carried', false)
+            ->pluck('outlet_id')->map(fn ($id) => (int) $id)->all();
+
+        return $outlets->map(function (Outlet $o) use ($product, $notCarried, $row) {
+            if (in_array($o->id, $notCarried, true)) {
+                return $row(null, $o, 'not_carried');
+            }
+            $mark = $product->availabilityMarks->first(fn ($m) => $m->outlet_id === null || (int) $m->outlet_id === $o->id);
+
+            return $row($mark, $o, $mark ? 'sold_out' : 'available');
+        })->values()->all();
+    }
+
+    /**
+     * Harga per outlet untuk tabel varian (045 Stage 3). Hanya bila lebih dari satu outlet terlihat; null = bentuk
+     * lama. Hanya harga KHUSUS yang dikirim — varian/outlet tanpa baris mengikuti harga dasar.
+     *
+     * @return array{outlets: list<array<string,mixed>>, by_variant: array<int, array<int,string>>}|null
+     */
+    private function outletPrices(Product $product): ?array
+    {
+        $ids = app(OutletContext::class)->effectiveIds();
+        if (count($ids) < 2) {
+            return null;
+        }
+
+        $variantIds = $product->variants->pluck('id')->all();
+        $byVariant = [];
+        foreach (VariantOutletPrice::query()->whereIn('variant_id', $variantIds)->whereIn('outlet_id', $ids)->get() as $row) {
+            $byVariant[(int) $row->variant_id][(int) $row->outlet_id] = number_format((float) $row->price, 2, '.', '');
+        }
+
+        return [
+            'outlets' => Outlet::query()->whereIn('id', $ids)->orderBy('id')->get(['id', 'code', 'name'])
+                ->map(fn (Outlet $o) => ['id' => $o->id, 'code' => $o->code, 'name' => $o->name])->values()->all(),
+            'by_variant' => $byVariant,
         ];
     }
 

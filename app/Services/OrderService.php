@@ -90,7 +90,9 @@ class OrderService
                 $variant = ProductVariant::with('product')->lockForUpdate()->findOrFail($itemInput['variant_id']);
 
                 // 043 — satu aturan "bisa dipesan" (varian, produk/diskontinu, tanda 86): App\Support\MenuAvailability.
-                \App\Support\MenuAvailability::assertOrderable($variant, 'items');
+                \App\Support\MenuAvailability::assertOrderable($variant, 'items', $session->outlet_id);
+                // 045 Stage 3 — harga yang berlaku di outlet shift (harga khusus outlet bila ada, selain itu dasar).
+                app(PriceService::class)->applyOutletPrice($variant, $session->outlet_id);
 
                 $qty = (int) $itemInput['qty'];
                 $discount = (float) ($itemInput['discount_amount'] ?? 0);
@@ -198,7 +200,7 @@ class OrderService
 
                 $order->items()->create([
                     'variant_id' => $variant->id,
-                    'artist_id' => $variant->product->artist_id,
+                    'home_outlet_id' => $variant->product->home_outlet_id,
                     'sku_snapshot' => $variant->sku,
                     'name_snapshot' => $variant->product->name.' — '.$variant->variant_name,
                     'qty' => $line['qty'],
@@ -210,6 +212,7 @@ class OrderService
 
                 $this->stockService->applyMovementIfTracked(
                     variant: $variant,
+                    outletId: (int) $order->outlet_id,
                     type: 'sale',
                     qtyChange: -$line['qty'],
                     referenceType: 'order_item',
@@ -254,6 +257,7 @@ class OrderService
                 $variant = ProductVariant::lockForUpdate()->findOrFail($item->variant_id);
                 $this->stockService->applyMovementIfTracked(
                     variant: $variant,
+                    outletId: (int) $order->outlet_id,
                     type: 'return',
                     qtyChange: $item->qty, // dikembalikan
                     referenceType: 'order_item',
@@ -292,7 +296,7 @@ class OrderService
     public function generateOrderNumber(): string
     {
         $today = now()->format('Ymd');
-        $countToday = Order::withoutGlobalScope(DataModeScope::class)
+        $countToday = Order::withoutGlobalScopes()
             ->whereDate('created_at', now()->toDateString())
             ->count();
 

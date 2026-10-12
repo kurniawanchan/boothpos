@@ -21,9 +21,11 @@ import { usePolling } from './usePolling';
  * pencarian); `id` polos sengaja TIDAK ditebak karena bisa id produk atau id varian — pakai
  * `isProductUnavailable(id)` / `isVariantUnavailable(id)` untuk itu.
  *
- * @param {{ interval?: number, autoStart?: boolean }} [opts]
+ * 045 Stage 4: `pos: true` (POS dan tab) meminta tanda 86 menurut outlet SHIFT pengguna, bukan pilihan header.
+ *
+ * @param {{ interval?: number, autoStart?: boolean, pos?: boolean }} [opts]
  */
-export function useMenuAvailability({ interval = 5000, autoStart = true } = {}) {
+export function useMenuAvailability({ interval = 5000, autoStart = true, pos = false } = {}) {
   const etag = ref(null);
   const menuVersion = ref(0);
   const soldOutProductIds = ref([]);
@@ -36,7 +38,8 @@ export function useMenuAvailability({ interval = 5000, autoStart = true } = {}) 
   const discontinued = computed(() => new Set(discontinuedIds.value));
 
   async function fetchOnce({ full = false } = {}) {
-    const res = await pollAvailability(full ? null : etag.value);
+    const since = full ? null : etag.value;
+    const res = await (pos ? pollAvailability(since, { pos: true }) : pollAvailability(since));
     if (res.notModified) return;
     etag.value = res.etag ?? null;
     menuVersion.value = res.menu_version ?? 0;

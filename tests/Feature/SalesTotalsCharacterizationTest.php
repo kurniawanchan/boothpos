@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -48,8 +48,8 @@ class SalesTotalsCharacterizationTest extends TestCase
         $this->session = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->owner->id, 'status' => 'open']);
 
         $category = Category::factory()->create();
-        $artist = Artist::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $artist = Outlet::factory()->create();
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $this->variantA = $product->variants()->create(['sku' => 'CHRA0001', 'variant_name' => 'A', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 500]);
         $this->variantB = $product->variants()->create(['sku' => 'CHRB0001', 'variant_name' => 'B', 'sell_price' => 20000, 'cost_price' => 8000, 'current_stock' => 500]);
     }

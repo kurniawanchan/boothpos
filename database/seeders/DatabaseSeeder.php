@@ -83,9 +83,9 @@ class DatabaseSeeder extends Seeder
             // (yang sudah dibangun sejak awal proyek) tetap bisa dites end-to-end
             // tanpa hambatan. Instalasi produksi untuk pembeli Basic HARUS
             // di-set eksplisit ke false saat provisioning, bukan mengandalkan
-            // default ini — lihat LicenseGate::multiArtistEnabled() yang
+            // default ini — lihat LicenseGate::multiOutletEnabled() yang
             // fallback ke false bila key ini tidak ada sama sekali.
-            ['key' => 'multi_artist_enabled', 'value' => '1', 'type' => 'boolean', 'group' => 'licensing'],
+            ['key' => 'multi_outlet_enabled', 'value' => '1', 'type' => 'boolean', 'group' => 'licensing'],
         ];
 
         foreach ($settings as $setting) {

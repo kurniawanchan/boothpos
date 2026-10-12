@@ -6,7 +6,7 @@ import { useAuthStore } from '../../resources/js/stores/auth';
 import { listPurchaseOrders, getPurchaseOrder, deletePurchaseOrder, updatePurchaseOrder } from '../../resources/js/api/purchaseOrders';
 import { listVendors } from '../../resources/js/api/vendors';
 import { listMaterials } from '../../resources/js/api/materials';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 
 vi.mock('../../resources/js/api/purchaseOrders', () => ({
   listPurchaseOrders: vi.fn(),
@@ -20,10 +20,10 @@ vi.mock('../../resources/js/api/purchaseOrders', () => ({
 }));
 vi.mock('../../resources/js/api/vendors', () => ({ listVendors: vi.fn() }));
 vi.mock('../../resources/js/api/materials', () => ({ listMaterials: vi.fn() }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 
 const PO = (id, number, status, extra = {}) => ({
-  id, po_number: number, vendor_id: 5, vendor_name: 'Vendor X', artist_id: 1, artist_name: 'Seller A',
+  id, po_number: number, vendor_id: 5, vendor_name: 'Vendor X', outlet_id: 1, outlet_name: 'Outlet A',
   status, total_amount: '5000.00', paid_amount: '0.00', notes: null, items: [], payments: [], ...extra,
 });
 const ROWS = [
@@ -57,7 +57,7 @@ describe('PurchaseOrdersView — row actions (035)', () => {
     getPurchaseOrder.mockImplementation((id) => Promise.resolve(FULL(ROWS.find((r) => r.id === id))));
     listVendors.mockResolvedValue({ data: [{ id: 5, name: 'Vendor X' }] });
     listMaterials.mockResolvedValue({ data: [{ id: 3, name: 'Ball Chain' }] });
-    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Seller A' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A' }] });
   });
 
   it('shows Detail, Edit and Delete on the row of EVERY status', async () => {
@@ -138,7 +138,7 @@ describe('PurchaseOrdersView — Edit at any status (035)', () => {
     updatePurchaseOrder.mockResolvedValue({});
     listVendors.mockResolvedValue({ data: [{ id: 5, name: 'Vendor X' }] });
     listMaterials.mockResolvedValue({ data: [{ id: 3, name: 'Ball Chain' }] });
-    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Seller A' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A' }] });
   });
 
   async function openEditFor(number) {
@@ -151,7 +151,7 @@ describe('PurchaseOrdersView — Edit at any status (035)', () => {
     return { user, dialog };
   }
 
-  it('Edit on a PAID order shows the existing lines read-only with the explanation and saves only vendor/seller/notes', async () => {
+  it('Edit on a PAID order shows the existing lines read-only with the explanation and saves only vendor/outlet/notes', async () => {
     const { user, dialog } = await openEditFor('PO-PAID');
 
     expect(getPurchaseOrder).toHaveBeenCalledWith(4);
@@ -164,7 +164,7 @@ describe('PurchaseOrdersView — Edit at any status (035)', () => {
     await waitFor(() => expect(updatePurchaseOrder).toHaveBeenCalled());
     const [id, payload] = updatePurchaseOrder.mock.calls[0];
     expect(id).toBe(4);
-    expect(payload).toMatchObject({ vendor_id: 5, artist_id: 1 });
+    expect(payload).toMatchObject({ vendor_id: 5, outlet_id: 1 });
     expect(payload).not.toHaveProperty('items');
   });
 
@@ -197,13 +197,13 @@ describe('PurchaseOrdersView — Edit at any status (035)', () => {
     expect(updatePurchaseOrder.mock.calls[0][1].items).toHaveLength(1);
   });
 
-  it('shows the server\'s seller-lock message under the Seller field and keeps the drawer open', async () => {
-    updatePurchaseOrder.mockRejectedValue({ isConflict: true, isValidation: false, message: 'konflik', errors: { artist_id: ['Seller tidak bisa diubah karena baris sudah dipakai BOM.'] } });
+  it('shows the server\'s outlet-lock message under the Outlet field and keeps the drawer open', async () => {
+    updatePurchaseOrder.mockRejectedValue({ isConflict: true, isValidation: false, message: 'konflik', errors: { outlet_id: ['Outlet tidak bisa diubah karena baris sudah dipakai BOM.'] } });
     const { user, dialog } = await openEditFor('PO-ORD');
 
     await user.click(within(dialog).getByRole('button', { name: 'Simpan' }));
 
-    expect(await within(dialog).findByText(/seller tidak bisa diubah karena baris sudah dipakai bom/i)).toBeInTheDocument();
+    expect(await within(dialog).findByText(/outlet tidak bisa diubah karena baris sudah dipakai bom/i)).toBeInTheDocument();
     expect(screen.getByRole('dialog', { name: /edit purchase order/i })).toBeInTheDocument();
   });
 });
@@ -216,7 +216,7 @@ describe('PurchaseOrdersView — Delete (035)', () => {
     deletePurchaseOrder.mockResolvedValue(undefined);
     listVendors.mockResolvedValue({ data: [{ id: 5, name: 'Vendor X' }] });
     listMaterials.mockResolvedValue({ data: [] });
-    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Seller A' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A' }] });
   });
 
   async function openDelete() {

@@ -6,7 +6,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import PreordersView from '../../resources/js/views/PreordersView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listPreorders, getPreorder, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices, bulkPreorderInvoices, updatePreorderDispatchStatus, getPreorderInvoice, duplicatePreorders, splitPreorder, deletePreorderPayment, createPreorderPayment } from '../../resources/js/api/preorders';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { listCustomers, getCustomer } from '../../resources/js/api/customers';
 import { lookupVariants } from '../../resources/js/api/products';
 import { listEvents } from '../../resources/js/api/events';
@@ -15,10 +15,10 @@ import id from '../../resources/js/locales/id.json';
 import en from '../../resources/js/locales/en.json';
 
 /**
- * 013-preorder-list-filters-receipt (US1, T012) — seller filter on
- * PreordersView.vue (BaseSelect fed by listArtists) plus the new "Penjual"
- * column, which must render every seller on a row (not just the first) and
- * degrade gracefully (em-dash) when a row has no sellers at all.
+ * 013-preorder-list-filters-receipt (US1, T012) — outlet filter on
+ * PreordersView.vue (BaseSelect fed by listOutlets) plus the new "Outlet"
+ * column, which must render every outlet on a row (not just the first) and
+ * degrade gracefully (em-dash) when a row has no outlets at all.
  */
 
 vi.mock('../../resources/js/api/preorders', () => ({
@@ -64,7 +64,7 @@ vi.mock('jspdf', () => ({
     output() { return new Blob(['pdf']); }
   },
 }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/shipments', () => ({ createShipment: vi.fn(), updateShipment: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ lookupVariants: vi.fn() }));
 vi.mock('../../resources/js/api/customers', () => ({ listCustomers: vi.fn(), createCustomer: vi.fn(), getCustomer: vi.fn() }));
@@ -78,9 +78,9 @@ vi.mock('../../resources/js/api/payments', () => ({
   verifyPayment: vi.fn(),
 }));
 
-const ARTISTS = [
-  { id: 1, name: 'Artist A' },
-  { id: 2, name: 'Artist B' },
+const OUTLETS = [
+  { id: 1, name: 'Outlet A' },
+  { id: 2, name: 'Outlet B' },
 ];
 
 const ROWS = [
@@ -92,7 +92,7 @@ const ROWS = [
     fulfillment: 'pickup',
     total_amount: '100000.00',
     outstanding: '100000.00',
-    sellers: [{ id: 1, name: 'Artist A' }, { id: 2, name: 'Artist B' }],
+    sellers: [{ id: 1, name: 'Outlet A' }, { id: 2, name: 'Outlet B' }],
   },
   {
     id: 11,
@@ -125,20 +125,20 @@ async function renderPreorders(role = 'Owner') {
   return render(PreordersView, { global: { plugins: [pinia, i18n, router] } });
 }
 
-describe('PreordersView — seller filter and column (013 US1)', () => {
+describe('PreordersView — outlet filter and column (013 US1)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
   });
 
-  it('renders all seller names for a row with multiple sellers, joined by comma', async () => {
+  it('renders all outlet names for a row with multiple outlets, joined by comma', async () => {
     await renderPreorders();
-    expect(await screen.findByText('Artist A, Artist B')).toBeInTheDocument();
+    expect(await screen.findByText('Outlet A, Outlet B')).toBeInTheDocument();
   });
 
-  it('renders an em-dash placeholder for a row with no sellers, not a blank or "undefined" cell', async () => {
+  it('renders an em-dash placeholder for a row with no outlets, not a blank or "undefined" cell', async () => {
     await renderPreorders();
     await screen.findByText('PO-0011');
     const row = screen.getByText('PO-0011').closest('tr');
@@ -146,26 +146,26 @@ describe('PreordersView — seller filter and column (013 US1)', () => {
     expect(row).not.toHaveTextContent('undefined');
   });
 
-  it('calls listPreorders with the selected seller id when a seller is chosen from the filter', async () => {
+  it('calls listPreorders with the selected outlet id when an outlet is chosen from the filter', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     await renderPreorders();
     await screen.findByText('PO-0010');
 
-    await waitFor(() => expect(listArtists).toHaveBeenCalled());
+    await waitFor(() => expect(listOutlets).toHaveBeenCalled());
 
-    // The seller BaseSelect has no explicit label prop, so locate it by its
-    // placeholder text "Semua penjual" instead.
-    const trigger = screen.getByText('Semua penjual');
+    // The outlet BaseSelect has no explicit label prop, so locate it by its
+    // placeholder text "Semua outlet" instead.
+    const trigger = screen.getByText('Semua outlet');
     await user.click(trigger);
-    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await user.click(await screen.findByRole('option', { name: 'Outlet A' }));
 
     // 024-invoice-layout-shipping-slip follow-up — this filter is now a
     // BaseMultiSelect (combinable, multi-value, see PreordersView.vue's
     // applyPreorderFilters()), so a single pick sends a one-element array,
     // not a bare scalar.
     await waitFor(() =>
-      expect(listPreorders).toHaveBeenCalledWith(expect.objectContaining({ artist_id: [1] })),
+      expect(listPreorders).toHaveBeenCalledWith(expect.objectContaining({ home_outlet_id: [1] })),
     );
   });
 
@@ -211,7 +211,7 @@ describe('PreordersView — summary panel (013 US5)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
     getPreorderSummary.mockResolvedValue(SUMMARY);
@@ -234,14 +234,14 @@ describe('PreordersView — summary panel (013 US5)', () => {
     await screen.findByText('PO-0010');
 
     await waitFor(() => expect(getPreorderSummary).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(listArtists).toHaveBeenCalled());
+    await waitFor(() => expect(listOutlets).toHaveBeenCalled());
 
-    const trigger = screen.getByText('Semua penjual');
+    const trigger = screen.getByText('Semua outlet');
     await user.click(trigger);
-    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await user.click(await screen.findByRole('option', { name: 'Outlet A' }));
 
     await waitFor(() =>
-      expect(getPreorderSummary).toHaveBeenCalledWith(expect.objectContaining({ artist_id: [1] })),
+      expect(getPreorderSummary).toHaveBeenCalledWith(expect.objectContaining({ home_outlet_id: [1] })),
     );
     expect(getPreorderSummary.mock.calls.length).toBeGreaterThan(1);
   });
@@ -255,7 +255,7 @@ describe('PreordersView — summary panel (013 US5)', () => {
 describe('PreordersView — inline customer dropdown & quantity direct-entry (021 US1)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } });
     listCustomers.mockResolvedValue({ data: [{ id: 5, name: 'Siti Aminah', phone: '0812' }] });
@@ -317,7 +317,7 @@ describe('PreordersView — edit/delete row actions (022 US1)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: GATED_ROWS, meta: { current_page: 1, per_page: 25, total: 4, last_page: 1 } });
   });
@@ -418,7 +418,7 @@ describe('PreordersView — edit/delete row actions (022 US1)', () => {
 describe('PreordersView — customer picker default list (022 US6)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } });
     listCustomers.mockResolvedValue({ data: [{ id: 5, name: 'Siti Aminah', phone: '0812' }] });
@@ -445,7 +445,7 @@ describe('PreordersView — customer picker default list (022 US6)', () => {
 describe('PreordersView — bulk select and email (022 US5)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
   });
@@ -523,7 +523,7 @@ describe('PreordersView — missing-shipping-info flag and customer info (post-0
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: FLAGGED_ROWS, meta: { current_page: 1, per_page: 25, total: 3, last_page: 1 } });
   });
@@ -603,7 +603,7 @@ describe('PreordersView — dispatch status & print menu in detail', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
     getPreorder.mockResolvedValue(DETAIL);
@@ -813,7 +813,7 @@ describe('PreordersView — duplicate one pre-order (027 US1)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: DUP_ROWS, meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
     getPreorderSummary.mockResolvedValue({ transaction_count: 1 });
@@ -898,7 +898,7 @@ describe('PreordersView — duplicate selected (027 US2)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: BULK_ROWS, meta: { current_page: 1, per_page: 25, total: 3, last_page: 1 } });
     getPreorderSummary.mockResolvedValue({ transaction_count: 3 });
@@ -967,7 +967,7 @@ describe('PreordersView — split action (027 US3)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: SPLIT_ROWS, meta: { current_page: 1, per_page: 25, total: 4, last_page: 1 } });
     getPreorderSummary.mockResolvedValue({ transaction_count: 4 });
@@ -1078,7 +1078,7 @@ describe('PreordersView — delete payment (detail panel)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [ROW], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
     getPreorderSummary.mockResolvedValue({ transaction_count: 1 });
@@ -1143,7 +1143,7 @@ describe('PreordersView — customer & fulfillment card in the detail panel', ()
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [ROW], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
     getPreorderSummary.mockResolvedValue({ transaction_count: 1 });
@@ -1209,7 +1209,7 @@ describe('PreordersView — payment summary and Add Payment (028 US1)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [ROW], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
     getPreorderSummary.mockResolvedValue({ transaction_count: 1 });
@@ -1326,7 +1326,7 @@ describe('PreordersView — bulk invoice download renders each invoice with its 
     vi.clearAllMocks();
     bulk.captures.length = 0;
     bulk.zipFiles.length = 0;
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
     bulkPreorderInvoices.mockResolvedValue({ data: [invoiceFor(10, 'PO-0010'), invoiceFor(11, 'PO-0011')] });
@@ -1421,7 +1421,7 @@ describe('PreordersView — payment confirmation (031 US3)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [ROW], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
     getPreorderSummary.mockResolvedValue({ transaction_count: 1 });
@@ -1535,7 +1535,7 @@ describe('PreordersView — mark payment verified (032)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listArtists.mockResolvedValue({ data: ARTISTS });
+    listOutlets.mockResolvedValue({ data: OUTLETS });
     listEvents.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [ROW], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
     getPreorderSummary.mockResolvedValue({ transaction_count: 1 });

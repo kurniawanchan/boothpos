@@ -46,8 +46,11 @@ class PurchaseOrderStockReceivingTest extends TestCase
             'material_id' => $material->id,
             'type' => 'purchase',
             'qty_change' => 10,
-            'stock_before' => 5,
-            'stock_after' => 15,
+            // 045 Stage 5 — penerimaan masuk ke saldo outlet PO (bukan outlet tempat stok awal 5 dibukukan): 0 → 10;
+            // total tersimpan tetap 5 + 10.
+            'stock_before' => 0,
+            'stock_after' => 10,
+            'outlet_id' => $po->outlet_id,
         ]);
     }
 

@@ -23,7 +23,8 @@ class CashierSessionController extends Controller
             return response()->json(['message' => __('events_sessions.no_open_session')], 404);
         }
 
-        return response()->json($session);
+        // 045: header shift menyebut outletnya.
+        return response()->json($session->load('outlet:id,code,name'));
     }
 
     public function store(Request $request): JsonResponse
@@ -32,12 +33,14 @@ class CashierSessionController extends Controller
             'event_id' => ['required', 'integer', 'exists:events,id'],
             'opening_cash' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
+            // 045 Stage 2 — outlet shift. Opsional: tanpa nilai, dipakai outlet tunggal yang berlaku (D7).
+            'outlet_id' => ['nullable', 'integer'],
             // 006-purchase-order-and-ops (US5) — ADITIF, opsional. Server
             // merekonsiliasi jumlahnya terhadap opening_cash di atas
             // (bukan mempercayai keduanya independen dari klien,
             // Constitution IV) — lihat research.md R9.
             'opening_cash_entries' => ['sometimes', 'array'],
-            'opening_cash_entries.*.artist_id' => ['nullable', 'integer', 'exists:artists,id'],
+            'opening_cash_entries.*.outlet_id' => ['nullable', 'integer', 'exists:outlets,id'],
             'opening_cash_entries.*.amount' => ['required_with:opening_cash_entries', 'numeric', 'min:0'],
         ]);
 
@@ -56,6 +59,14 @@ class CashierSessionController extends Controller
             return response()->json(['message' => __('events_sessions.session_only_on_active_event')], 409);
         }
 
+        // 045 Stage 2 — outlet shift ditentukan SERVER (D7): body hanya boleh memilih dari outlet yang
+        // boleh dilihat pengguna; tidak pernah memperluasnya. Setelah ini, order/pembayaran/tiket di
+        // shift ini mewarisi outletnya.
+        $outletId = $this->shiftOutletFor($request, $validated['outlet_id'] ?? null);
+        if ($outletId instanceof JsonResponse) {
+            return $outletId;
+        }
+
         $entries = $validated['opening_cash_entries'] ?? [];
         if ($entries) {
             $entriesSum = round(array_sum(array_column($entries, 'amount')), 2);
@@ -67,8 +78,8 @@ class CashierSessionController extends Controller
             }
         }
 
-        $session = DB::transaction(function () use ($validated, $entries, $request, $event) {
-            $session = CashierSession::create([
+        $session = DB::transaction(function () use ($validated, $entries, $request, $event, $outletId) {
+            $session = new CashierSession([
                 'event_id' => $event->id,
                 'user_id' => $request->user()->id,
                 'opened_at' => now(),
@@ -76,10 +87,13 @@ class CashierSessionController extends Controller
                 'notes' => $validated['notes'] ?? null,
                 'status' => 'open',
             ]);
+            // outlet_id tidak ada di $fillable: diset langsung dari keputusan server di atas.
+            $session->outlet_id = $outletId;
+            $session->save();
 
             foreach ($entries as $entry) {
                 $session->openingCashEntries()->create([
-                    'artist_id' => $entry['artist_id'] ?? null,
+                    'outlet_id' => $entry['outlet_id'] ?? null,
                     'amount' => $entry['amount'],
                     'created_at' => now(),
                 ]);
@@ -88,7 +102,7 @@ class CashierSessionController extends Controller
             return $session;
         });
 
-        return response()->json($session->load('openingCashEntries'), 201);
+        return response()->json($session->load(['openingCashEntries', 'outlet:id,code,name']), 201);
     }
 
     public function close(Request $request, CashierSession $session): JsonResponse
@@ -190,15 +204,60 @@ class CashierSessionController extends Controller
             ->get();
 
         return response()->json([
-            'session' => $session,
+            'session' => $session->load('outlet:id,code,name'),
             'order_count' => $orders->count(),
             'total_sales' => $orders->sum('total_amount'),
             'by_method' => $byMethod,
-            'opening_cash_entries' => $session->openingCashEntries()->with('artist:id,name')->get()->map(fn ($e) => [
-                'artist_id' => $e->artist_id,
-                'artist_name' => $e->artist?->name,
+            'opening_cash_entries' => $session->openingCashEntries()->with('outlet:id,name')->get()->map(fn ($e) => [
+                'outlet_id' => $e->outlet_id,
+                'outlet_name' => $e->outlet?->name,
                 'amount' => number_format((float) $e->amount, 2, '.', ''),
             ]),
         ]);
+    }
+
+    /**
+     * 045 Stage 2 — outlet untuk shift baru. Mengembalikan id outlet, atau respons galat:
+     *  - outlet dipilih tapi di luar daftar yang boleh dilihat → 403 outlet_forbidden;
+     *  - tidak dipilih, dan tepat satu yang berlaku → outlet itu;
+     *  - tidak dipilih, lebih dari satu → 422 errors.outlet_id;
+     *  - pengguna tanpa penugasan (bukan admin) → 409 outlet_unassigned;
+     *  - admin tanpa outlet sama sekali (instalasi baru) → outlet bawaan.
+     */
+    private function shiftOutletFor(Request $request, ?int $requested): int|JsonResponse
+    {
+        $context = app(\App\Support\OutletContext::class);
+
+        if ($requested !== null) {
+            if (! $context->isPermitted($requested)) {
+                return response()->json(['message' => __('outlets.forbidden'), 'code' => 'outlet_forbidden'], 403);
+            }
+
+            return $requested;
+        }
+
+        $single = $context->singleId();
+        if ($single !== null) {
+            return $single;
+        }
+
+        // Instalasi baru tanpa outlet sama sekali: shift pertama membuat outlet bawaan (berlaku untuk
+        // siapa pun yang login, bukan hanya admin), lalu pengguna ini ikut ditugaskan ke sana.
+        if ($context->effectiveIds() === [] && ! \App\Models\Outlet::query()->where('is_active', true)->exists()) {
+            return \App\Support\OutletDefaults::forNewRecord();
+        }
+
+        if (count($context->effectiveIds()) > 1) {
+            return response()->json([
+                'message' => __('outlets.choose_outlet'),
+                'errors' => ['outlet_id' => [__('outlets.choose_outlet')]],
+            ], 422);
+        }
+
+        if (! $request->user()->hasAllOutlets()) {
+            return response()->json(['message' => __('outlets.unassigned'), 'code' => 'outlet_unassigned'], 409);
+        }
+
+        return \App\Support\OutletDefaults::forNewRecord();
     }
 }

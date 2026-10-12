@@ -62,7 +62,7 @@ function openImageLightbox(item) {
         <div class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-[13.5px] font-semibold leading-tight">{{ item.name }}</span>
           <span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span>
-          <span v-if="item.artist_name" class="text-[10.5px] text-muted-3">{{ item.artist_name }}</span>
+          <span v-if="item.home_outlet_name" class="text-[10.5px] text-muted-3">{{ item.home_outlet_name }}</span>
           <span class="text-[12px] text-muted">{{ formatIDR(item.sell_price) }}</span>
         </div>
         <div class="flex flex-col items-end gap-1.5">

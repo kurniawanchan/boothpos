@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\ProductVariant;
 use App\Models\ProductVariantBomLine;
 use App\Models\Role;
@@ -24,7 +24,7 @@ class VariantBomCopySelectedTest extends TestCase
 
     private User $owner;
 
-    private Artist $seller;
+    private Outlet $seller;
 
     /** @var ProductVariant[] [0] = sumber (2 baris BOM), [1..5] = target */
     private array $v;
@@ -34,7 +34,7 @@ class VariantBomCopySelectedTest extends TestCase
         parent::setUp();
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->owner, 'sanctum');
-        $this->seller = Artist::factory()->create();
+        $this->seller = Outlet::factory()->create();
 
         $source = $this->variantFor($this->seller);
         $this->v = [$source];

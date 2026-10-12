@@ -13,7 +13,7 @@ use Tests\TestCase;
 
 // 009-ui-ux-refinements (US4, T032) — guarded delete for Customer: hanya
 // boleh dihapus bila belum pernah punya order/pre-order (status apa pun),
-// mengikuti pola guard hapus Artist/Category. Lihat catatan PII di
+// mengikuti pola guard hapus Outlet/Category. Lihat catatan PII di
 // Customer model (L10-14) — response 409 di sini hanya berisi pesan
 // generik, tidak menyertakan phone/email/social_handle.
 class CustomerDeleteTest extends TestCase

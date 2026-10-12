@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Event;
@@ -40,7 +40,7 @@ class SakanaFridgeDemoSeederTest extends TestCase
 
         ModeGate::runAs('demo', function () {
             $this->assertSame(1, Event::where('status', 'active')->count());
-            $this->assertSame(3, Artist::count());
+            $this->assertSame(3, Outlet::count());
             $this->assertSame(3, Category::count());
             $this->assertSame(9, Product::count());
             $this->assertSame(27, ProductVariant::count());
@@ -63,7 +63,7 @@ class SakanaFridgeDemoSeederTest extends TestCase
         $this->runSeeders();
 
         $tables = [
-            Event::class, Artist::class, Category::class, Product::class, ProductVariant::class,
+            Event::class, Outlet::class, Category::class, Product::class, ProductVariant::class,
             Customer::class, Vendor::class, Material::class, VendorMaterialPrice::class,
             ProductVariantBomLine::class, Order::class, Preorder::class,
         ];
@@ -80,7 +80,7 @@ class SakanaFridgeDemoSeederTest extends TestCase
 
         $counts = ModeGate::runAs('demo', fn () => [
             'events' => Event::count(),
-            'artists' => Artist::count(),
+            'outlets' => Outlet::count(),
             'categories' => Category::count(),
             'products' => Product::count(),
             'variants' => ProductVariant::count(),
@@ -95,7 +95,7 @@ class SakanaFridgeDemoSeederTest extends TestCase
 
         $countsAfterRerun = ModeGate::runAs('demo', fn () => [
             'events' => Event::count(),
-            'artists' => Artist::count(),
+            'outlets' => Outlet::count(),
             'categories' => Category::count(),
             'products' => Product::count(),
             'variants' => ProductVariant::count(),

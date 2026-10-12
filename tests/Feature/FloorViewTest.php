@@ -89,6 +89,88 @@ class FloorViewTest extends TestCase
         $this->assertSame('free', $tables[0]['state']);
     }
 
+    // --- 044: papan Meja di halaman Sales --------------------------------------------------------------------
+
+    public function test_every_open_order_carries_its_derived_paid_amount(): void
+    {
+        $unpaid = $this->tab(DiningTable::factory()->create(['name' => 'unpaid']), ['total_amount' => 100000]);
+        $partial = $this->tab(DiningTable::factory()->create(['name' => 'partial']), ['total_amount' => 100000]);
+        $this->addCashPaymentTo($partial, 40000);
+        $session = $unpaid->session;
+        $takeaway = $this->makeOpenOrder($session, $this->cashier, ['service_type' => 'takeaway', 'tab_label' => 'Budi', 'total_amount' => 50000]);
+        $this->addCashPaymentTo($takeaway, 20000);
+
+        $json = $this->getJson('/api/v1/floor')->assertOk()->json();
+        $tabs = collect($json['areas'][0]['tables'])->keyBy('name');
+
+        $this->assertSame('0.00', $tabs['unpaid']['tab']['paid_amount']);
+        $this->assertSame('40000.00', $tabs['partial']['tab']['paid_amount']);
+        $this->assertSame('20000.00', $json['takeaway_tabs'][0]['paid_amount']);
+    }
+
+    public function test_a_rejected_payment_does_not_count_and_a_tendered_cash_change_is_subtracted(): void
+    {
+        $table = DiningTable::factory()->create(['name' => 'T']);
+        $order = $this->tab($table, ['total_amount' => 100000, 'change_amount' => 5000]);
+        $this->addCashPaymentTo($order, 105000);                                   // diserahkan 105.000, kembalian 5.000
+        $order->payments()->create(['method' => 'cash', 'purpose' => 'full', 'amount' => 30000, 'verification' => 'rejected', 'paid_at' => now()]);
+
+        $this->assertSame('100000.00', $this->getJson('/api/v1/floor')->json('areas.0.tables.0.tab.paid_amount'));
+    }
+
+    public function test_the_version_token_changes_when_a_payment_is_recorded(): void
+    {
+        $order = $this->tab(DiningTable::factory()->create(), ['total_amount' => 100000]);
+        $before = $this->getJson('/api/v1/floor')->json('version');
+
+        $this->addCashPaymentTo($order, 25000);
+
+        $this->assertNotSame($before, $this->getJson('/api/v1/floor')->json('version'));
+    }
+
+    public function test_an_inactive_table_that_still_holds_an_open_order_stays_on_the_board(): void
+    {
+        $inactive = DiningTable::factory()->inactive()->create(['name' => 'closed-but-busy']);
+        $this->tab($inactive, ['total_amount' => 70000]);
+        DiningTable::factory()->inactive()->create(['name' => 'closed-and-empty']);
+
+        $tables = collect($this->getJson('/api/v1/floor')->json('areas.0.tables'));
+
+        $this->assertSame(['closed-but-busy'], $tables->pluck('name')->all());
+        $this->assertFalse($tables[0]['is_active']);
+        $this->assertSame('occupied', $tables[0]['state']);
+        $this->assertSame('70000.00', $tables[0]['tab']['total_amount']);
+    }
+
+    public function test_the_query_count_stays_constant_with_payments_and_inactive_tables_with_orders(): void
+    {
+        $queries = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $this->getJson('/api/v1/floor')->assertOk();
+            $n = count(DB::getQueryLog());
+            DB::disableQueryLog();
+
+            return $n;
+        };
+        $queries();   // pemanasan (lihat catatan pada tes jumlah query di atas)
+
+        foreach (range(1, 3) as $i) {
+            $order = $this->tab(DiningTable::factory()->create(['name' => "a$i"]), ['total_amount' => 10000]);
+            $this->addCashPaymentTo($order, 4000);
+        }
+        $this->tab(DiningTable::factory()->inactive()->create(['name' => 'ia']), ['total_amount' => 9000]);
+        $small = $queries();
+
+        foreach (range(1, 30) as $i) {
+            $order = $this->tab(DiningTable::factory()->create(['name' => "b$i"]), ['total_amount' => 10000]);
+            $this->addCashPaymentTo($order, 4000);
+            $this->tab(DiningTable::factory()->inactive()->create(['name' => "ib$i"]), ['total_amount' => 9000]);
+        }
+
+        $this->assertSame($small, $queries());
+    }
+
     public function test_takeaway_tabs_are_listed_separately(): void
     {
         $session = $this->makeShift($this->cashier);

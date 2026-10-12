@@ -7,7 +7,7 @@ import BaseInput from '../ui/BaseInput.vue';
 import BaseSelect from '../ui/BaseSelect.vue';
 import StatusPill from '../ui/StatusPill.vue';
 import { getPurchaseOrder, recordPurchaseOrderPayment, updatePurchaseOrder } from '../../api/purchaseOrders';
-import { listArtists } from '../../api/artists';
+import { listOutlets } from '../../api/outlets';
 import { formatIDR } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { downloadElementAsPdf } from '../../utils/pdfCapture';
@@ -55,38 +55,38 @@ async function load() {
 
 watch(() => [props.open, props.purchaseOrderId], ([open]) => { if (open) load(); }, { immediate: true });
 
-// --- 034-seller-po-bom: PO lama tanpa seller bisa ditetapkan di sini -------
-// Tanpa seller, PO tidak pernah ditawarkan sebagai sumber BOM. Penetapan
-// pertama selalu diizinkan server; MENGUBAH seller yang sudah ada tidak
+// --- 034-seller-po-bom: PO lama tanpa outlet bisa ditetapkan di sini -------
+// Tanpa outlet, PO tidak pernah ditawarkan sebagai sumber BOM. Penetapan
+// pertama selalu diizinkan server; MENGUBAH outlet yang sudah ada tidak
 // ditawarkan di sini (ditolak server bila sudah dipakai BOM).
-const artists = ref([]);
-const assignArtistId = ref('');
-const assigningSeller = ref(false);
-const canAssignSeller = computed(() => po.value && po.value.artist_id === null && po.value.status !== 'cancelled');
-const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+const outlets = ref([]);
+const assignOutletId = ref('');
+const assigningOutlet = ref(false);
+const canAssignOutlet = computed(() => po.value && po.value.outlet_id === null && po.value.status !== 'cancelled');
+const outletOptions = computed(() => outlets.value.map((a) => ({ value: a.id, label: a.name })));
 
-watch(canAssignSeller, async (can) => {
-  if (can && !artists.value.length) {
+watch(canAssignOutlet, async (can) => {
+  if (can && !outlets.value.length) {
     try {
-      artists.value = (await listArtists({ per_page: 100 })).data;
+      outlets.value = (await listOutlets({ per_page: 100 })).data;
     } catch (err) {
       toast.error(err.message);
     }
   }
 }, { immediate: true });
 
-async function assignSeller() {
-  if (!assignArtistId.value) return;
-  assigningSeller.value = true;
+async function assignOutlet() {
+  if (!assignOutletId.value) return;
+  assigningOutlet.value = true;
   try {
-    po.value = await updatePurchaseOrder(props.purchaseOrderId, { artist_id: Number(assignArtistId.value) });
+    po.value = await updatePurchaseOrder(props.purchaseOrderId, { outlet_id: Number(assignOutletId.value) });
     toast.success(t('purchase_orders.seller_assigned'));
-    assignArtistId.value = '';
+    assignOutletId.value = '';
     emit('changed');
   } catch (err) {
     toast.error(err.message);
   } finally {
-    assigningSeller.value = false;
+    assigningOutlet.value = false;
   }
 }
 
@@ -148,18 +148,18 @@ async function submitPayment() {
         </BaseButton>
       </div>
 
-      <!-- Di luar invoiceEl: seller tidak ikut tercetak pada faktur PDF. -->
+      <!-- Di luar invoiceEl: outlet tidak ikut tercetak pada faktur PDF. -->
       <div class="flex flex-col gap-2 rounded-lg border border-line-3 bg-surface-subtle px-3.5 py-3">
         <div class="flex items-center justify-between gap-3 text-[13px]">
           <span class="text-muted">{{ t('purchase_orders.seller') }}</span>
-          <span v-if="po.artist_name" class="font-semibold">{{ po.artist_name }}</span>
+          <span v-if="po.outlet_name" class="font-semibold">{{ po.outlet_name }}</span>
           <span v-else class="text-[12.5px] italic text-muted-3">{{ t('purchase_orders.no_seller') }}</span>
         </div>
-        <form v-if="canAssignSeller" class="flex items-end gap-2" @submit.prevent="assignSeller">
+        <form v-if="canAssignOutlet" class="flex items-end gap-2" @submit.prevent="assignOutlet">
           <div class="flex-1">
-            <BaseSelect v-model="assignArtistId" :options="artistOptions" :placeholder="t('purchase_orders.seller_placeholder')" />
+            <BaseSelect v-model="assignOutletId" :options="outletOptions" :placeholder="t('purchase_orders.seller_placeholder')" />
           </div>
-          <BaseButton size="sm" :loading="assigningSeller" :disabled="!assignArtistId" @click="assignSeller">{{ t('purchase_orders.assign_seller') }}</BaseButton>
+          <BaseButton size="sm" :loading="assigningOutlet" :disabled="!assignOutletId" @click="assignOutlet">{{ t('purchase_orders.assign_seller') }}</BaseButton>
         </form>
       </div>
 

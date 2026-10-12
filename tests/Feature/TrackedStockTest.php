@@ -24,7 +24,7 @@ class TrackedStockTest extends TestCase
     {
         $variant = $this->makeVariant(stock: 10);
 
-        $movement = app(StockService::class)->applyMovementIfTracked($variant, 'adjustment', -3, reason: 'uji');
+        $movement = app(StockService::class)->applyMovementIfTracked($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'adjustment', -3, reason: 'uji');
 
         $this->assertNotNull($movement);
         $this->assertSame(7, $variant->fresh()->current_stock);
@@ -37,7 +37,7 @@ class TrackedStockTest extends TestCase
 
         $this->expectException(ValidationException::class);
         try {
-            app(StockService::class)->applyMovementIfTracked($variant, 'sale', -5);
+            app(StockService::class)->applyMovementIfTracked($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'sale', -5);
         } finally {
             $this->assertSame(2, $variant->fresh()->current_stock);
             $this->assertDatabaseMissing('stock_movements', ['variant_id' => $variant->id, 'type' => 'sale']);
@@ -48,7 +48,7 @@ class TrackedStockTest extends TestCase
     {
         $variant = $this->makeVariant(stock: 0, variantOverrides: ['track_stock' => false]);
 
-        $result = app(StockService::class)->applyMovementIfTracked($variant, 'sale', -4);
+        $result = app(StockService::class)->applyMovementIfTracked($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'sale', -4);
 
         $this->assertNull($result);
         $this->assertSame(0, $variant->fresh()->current_stock);

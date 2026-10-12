@@ -1,12 +1,14 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, nextTick, defineAsyncComponent } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { listEvents } from '../api/events';
 import { salesReport, exportSalesTransactions } from '../api/reports';
 import { verifyOrderPayments } from '../api/payments';
 import { useToastStore } from '../stores/toast';
+import { useAuthStore } from '../stores/auth';
 import { useSalesFilters } from '../composables/useSalesFilters';
+import { useQueryState } from '../composables/useQueryState';
 import { formatIDR } from '../utils/money';
 import { formatCount } from '../utils/formatters';
 import { formatDateTime, toLocalDateKey } from '../utils/date';
@@ -20,15 +22,22 @@ import StatusPill from '../components/ui/StatusPill.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import PageHeader from '../components/page/PageHeader.vue';
 import KpiStrip from '../components/page/KpiStrip.vue';
+import ViewToggle from '../components/page/ViewToggle.vue';
 import FilterBar from '../components/page/FilterBar.vue';
 import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
+import { useOutletStore } from '../stores/outlet';
 import ShiftSummaryPanel from '../components/sales/ShiftSummaryPanel.vue';
 import CustomerQuickDetailModal from '../components/sales/CustomerQuickDetailModal.vue';
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
+import OpenOrderDetail from '../components/sales/OpenOrderDetail.vue';
+
+// 044 — papan Meja dimuat malas: kodenya (dan polling lantai) hanya dibutuhkan pengguna yang membuka tampilan
+// Meja, jadi tak ikut membebani chunk utama maupun pemuatan awal daftar order.
+const FloorBoard = defineAsyncComponent(() => import('../components/sales/FloorBoard.vue'));
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
-// Rekap Artist/Modal & Untung/Modal Artist di halaman Laporan yang
+// Rekap Outlet/Modal & Untung/Modal Outlet di halaman Laporan yang
 // sengaja dibatasi owner/admin saja (PRD 7.13). Menggabungkannya dalam
 // satu halaman membuat kasir melihat tab kosong tak berguna sebelum ini.
 //
@@ -38,6 +47,20 @@ const toast = useToastStore();
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter(); // undefined bila tak ada router (mis. test lama) — sinkron URL dilewati
+const auth = useAuthStore();
+const outletStore = useOutletStore();
+
+// --- saklar Daftar order | Meja (044-sales-table-view) -----------------------------------------
+// Pilihan tersimpan di URL (?view=tables; kosong = daftar). Saklar HANYA ada bagi pengguna dengan akses lantai
+// (disembunyikan, bukan dinonaktifkan); URL yang meminta Meja tanpa akses, atau nilai tak dikenal, jatuh ke daftar.
+// Server tetap penjaga sebenarnya (GET /floor & /tabs/{id} menolak peran tanpa menu `floor`).
+const { state: viewState, set: setViewState } = useQueryState({ view: 'list' });
+const canSeeTables = computed(() => auth.canAccessMenu('floor'));
+const view = computed(() => (viewState.view === 'tables' && canSeeTables.value ? 'tables' : 'list'));
+const viewOptions = computed(() => [
+  { value: 'list', label: t('sales.view_list'), icon: 'ph-list-bullets' },
+  { value: 'tables', label: t('sales.view_tables'), icon: 'ph-squares-four' },
+]);
 
 const events = ref([]);
 const eventId = ref('');
@@ -51,7 +74,7 @@ const transactions = computed(() => sales.value?.transactions ?? []);
 const sessions = computed(() => sales.value?.sessions ?? []);
 const {
   search, filters, includeVoided, sortKey, sortDir,
-  cashierOptions, sellerOptions, paymentMethods,
+  cashierOptions, outletOptions, paymentMethods,
   filtered, sorted, summary, shiftSummary, hasMargin,
   activeCount, hasFilterOtherThanSearch,
   reset, sortBy, toQuery, applyQuery,
@@ -94,7 +117,7 @@ async function load() {
 }
 
 // --- filter tersimpan di URL (bisa di-bookmark / dibagikan) -----------------------
-const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'seller', 'pay', 'session', 'cust', 'pstate', 'min', 'max', 'voided', 'sort', 'dir'];
+const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'outlet', 'pay', 'session', 'cust', 'pstate', 'min', 'max', 'voided', 'sort', 'dir'];
 watch(() => JSON.stringify(toQuery()), (json) => {
   if (!restored || !router) return;
   const others = Object.fromEntries(Object.entries(route.query).filter(([k]) => !OUR_QUERY_KEYS.includes(k)));
@@ -163,9 +186,11 @@ const columns = computed(() => [
   { key: 'select', label: '' },
   { key: 'order_number', label: t('reports.col_transaction_no'), sortable: true },
   { key: 'customer_name', label: t('reports.col_customer'), sortable: true },
-  { key: 'artist_names', label: t('reports.col_artist'), sortable: true },
+  { key: 'outlet_names', label: t('reports.col_artist'), sortable: true },
   { key: 'created_at', label: t('reports.col_time'), sortable: true },
   { key: 'cashier_name', label: t('reports.col_cashier'), sortable: true },
+  // 045 Stage 4 — outlet tempat penjualan (outlet shift); hanya bila ada lebih dari satu outlet.
+  ...(outletStore.multi ? [{ key: 'sold_at_name', label: t('reports.col_sold_at'), sortable: true }] : []),
   { key: 'item_count', label: t('reports.col_item'), sortable: true },
   { key: 'payment_methods', label: t('reports.col_payment'), sortable: true },
   // Kolom margin HANYA ada bila server mengirimnya (owner/admin) — bukan disembunyikan di sini.
@@ -318,8 +343,8 @@ function openReceipt(row) {
   showReceipt.value = true;
 }
 
-// Follow-up 2 (FR-023) — klik nama artist adalah pintasan mengisi kotak pencarian.
-function searchByArtist(name) {
+// Follow-up 2 (FR-023) — klik nama outlet adalah pintasan mengisi kotak pencarian.
+function searchByOutlet(name) {
   search.value = name;
 }
 
@@ -329,28 +354,66 @@ function showCustomerDetail(row) {
   if (!row.customer_name) return;
   detailCustomer.value = { name: row.customer_name, phone: row.customer_phone, email: row.customer_email };
 }
+
+// --- detail order terbuka dari papan Meja (044, US3) --------------------------------------------
+// Hanya-baca. Elemen pembuka (ubin) disimpan di sini: BaseDrawer memulihkan fokus ke `document.activeElement` saat
+// dibuka, tetapi Safari tidak memberi fokus pada tombol yang diklik — jadi fokus dikembalikan ke ubin secara eksplisit.
+const openOrderId = ref(null);
+const openOrderTile = ref(null);
+let openOrderOpener = null;
+
+function openOrderDetail(orderId, opener, tile) {
+  openOrderOpener = opener ?? null;
+  openOrderTile.value = tile ?? null;
+  openOrderId.value = orderId;
+}
+
+async function closeOrderDetail({ restoreFocus = true } = {}) {
+  openOrderId.value = null;
+  openOrderTile.value = null;
+  const opener = openOrderOpener;
+  openOrderOpener = null;
+  if (!restoreFocus || !opener) return;
+  await nextTick();
+  if (opener.isConnected) opener.focus();
+}
+
+// Pindah ke daftar saat panel terbuka (mis. tombol back/URL) → panel dilepas; jangan terbuka lagi sendiri nanti.
+watch(view, (v) => { if (v !== 'tables') closeOrderDetail({ restoreFocus: false }); });
+
+// Order ternyata sudah dibayar: tutup panel lalu buka popup transaksi selesai yang sudah ada (order yang sama).
+function viewFinishedTransaction(orderId) {
+  closeOrderDetail({ restoreFocus: false });
+  openDetail({ id: orderId });
+}
 </script>
 
 <template>
   <div class="pb-10">
     <PageHeader :title="t('nav.sales')" :description="t('nav.sales_subtitle')">
       <template #actions>
-        <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
-        <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
-          <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
-          {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
-        </BaseButton>
-        <BaseButton variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
-          <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
-          {{ exportLabel }}
-        </BaseButton>
+        <ViewToggle v-if="canSeeTables" :model-value="view" :options="viewOptions" :label="t('sales.view_aria')" @update:model-value="(v) => setViewState({ view: v })" />
+        <!-- Tindakan khusus daftar (event, verifikasi massal, ekspor) tak berlaku di tampilan Meja. -->
+        <template v-if="view === 'list'">
+          <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
+          <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
+            <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
+            {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
+          </BaseButton>
+          <BaseButton variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
+            <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
+            {{ exportLabel }}
+          </BaseButton>
+        </template>
       </template>
     </PageHeader>
 
-    <KpiStrip data-testid="kpi-cards" :items="kpiItems" />
+    <!-- Daftar order. v-if (bukan v-show): templatnya dilepas saat Meja aktif, tetapi seluruh KEADAAN (filter, urutan,
+         pilihan, data termuat) hidup di setup() di atas, jadi kembali ke daftar tidak kehilangan apa pun dan tak memuat ulang. -->
+    <KpiStrip v-if="view === 'list'" data-testid="kpi-cards" :items="kpiItems" />
 
-    <section class="mx-[26px] border-2 border-line bg-white">
-      <!-- Filter lengkap: pencarian teks + tanggal (dengan pintasan) + kasir + shift + penjual + pembayaran +
+    <section v-if="view === 'list'" class="mx-[26px] border-2 border-line bg-white">
+      <!-- Filter lengkap: pencarian teks + tanggal (dengan pintasan) + kasir + shift + outlet + pembayaran +
            status bayar + jenis pelanggan + rentang total. Semua bekerja langsung (tanpa memuat ulang) dan
            tersimpan di URL. "N data" = baris yang benar-benar tampil setelah filter. -->
       <FilterBar
@@ -381,7 +444,7 @@ function showCustomerDetail(row) {
 
             <BaseMultiSelect v-model="filters.cashiers" :options="cashierOptions" :all-label="t('reports.filter_cashier_all')" />
             <BaseMultiSelect v-model="filters.sessions" :options="sessionOptions" :all-label="t('reports.filter_session_all')" />
-            <BaseMultiSelect v-model="filters.sellers" :options="sellerOptions" :all-label="t('reports.filter_seller_all')" />
+            <BaseMultiSelect v-model="filters.outlets" :options="outletOptions" :all-label="t('reports.filter_seller_all')" />
 
             <BaseMultiSelect v-model="filters.payments" :options="paymentOptions" :all-label="t('reports.filter_payment_all')" />
             <BaseSelect v-model="filters.paymentState" :placeholder="t('reports.filter_paystate_all')" :options="paymentStateOptions" />
@@ -449,11 +512,11 @@ function showCustomerDetail(row) {
             >{{ row.customer_name }}</button>
             <span v-else class="text-muted-3">{{ t('reports.walkin') }}</span>
           </template>
-          <template #cell-artist_names="{ row }">
+          <template #cell-outlet_names="{ row }">
             <span class="flex flex-wrap gap-x-1 text-[12.5px] text-muted-4">
-              <template v-if="(row.artist_names ?? []).length">
-                <span v-for="(name, i) in row.artist_names" :key="name">
-                  <button type="button" class="underline decoration-dotted hover:text-brand-active" @click="searchByArtist(name)">{{ name }}</button><template v-if="i < row.artist_names.length - 1">,</template>
+              <template v-if="(row.outlet_names ?? []).length">
+                <span v-for="(name, i) in row.outlet_names" :key="name">
+                  <button type="button" class="underline decoration-dotted hover:text-brand-active" @click="searchByOutlet(name)">{{ name }}</button><template v-if="i < row.outlet_names.length - 1">,</template>
                 </span>
               </template>
               <span v-else>—</span>
@@ -502,6 +565,7 @@ function showCustomerDetail(row) {
         </DataTable>
       </div>
     </section>
+    <FloorBoard v-else @select-order="openOrderDetail" />
 
     <ConfirmDialog
       :open="showBulkVerify"
@@ -511,6 +575,14 @@ function showCustomerDetail(row) {
       :loading="bulkVerifying"
       @close="showBulkVerify = false"
       @confirm="doBulkVerify"
+    />
+
+    <OpenOrderDetail
+      v-if="view === 'tables'"
+      :order-id="openOrderId"
+      :tile="openOrderTile"
+      @close="closeOrderDetail()"
+      @view-transaction="viewFinishedTransaction"
     />
 
     <TransactionItemsModal :open="showItems" :order-id="itemsOrderId" @close="showItems = false" @changed="load" />

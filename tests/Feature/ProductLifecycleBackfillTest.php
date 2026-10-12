@@ -54,7 +54,7 @@ class ProductLifecycleBackfillTest extends TestCase
     {
         $base = $this->makeVariant(stock: 1)->product;
         $new = fn (bool $active) => Product::create([
-            'artist_id' => $base->artist_id, 'category_id' => $base->category_id, 'code_prefix' => 'ZZ'.random_int(100000, 999999),
+            'home_outlet_id' => $base->home_outlet_id, 'category_id' => $base->category_id, 'code_prefix' => 'ZZ'.random_int(100000, 999999),
             'product_segment' => 'ZZZ', 'name' => 'Baru', 'is_active' => $active,
         ])->fresh();
 

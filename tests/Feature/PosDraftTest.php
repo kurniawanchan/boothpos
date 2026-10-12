@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -23,9 +23,9 @@ class PosDraftTest extends TestCase
 
     private function makeVariant(): \App\Models\ProductVariant
     {
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
 
         return $product->variants()->create([
             'sku' => 'DRAFT0001', 'sell_price' => 25000, 'cost_price' => 10000, 'current_stock' => 10, 'is_active' => true,

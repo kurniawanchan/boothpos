@@ -95,6 +95,7 @@ async function loadMenu() {
     const res = await listProducts({
       with_variants: 1,
       with_modifiers: 1,
+      pos: 1, // 045: menu menurut outlet shift
       per_page: 100,
       search: search.value || undefined,
       category_id: categoryId.value ? [categoryId.value] : undefined,
@@ -116,11 +117,11 @@ const cards = computed(() =>
 const categoryOptions = computed(() => categories.value.map((c) => ({ value: c.id, label: c.name })));
 
 // Hidangan made-to-order (track_stock = false) tidak punya stok fisik: tidak boleh tampil "habis".
-const isUnavailable = (card) => card.variants.every((v) => v.track_stock !== false ? v.current_stock <= 0 : false);
+const isUnavailable = (card) => card.variants.every((v) => v.track_stock !== false ? (v.outlet_stock ?? v.current_stock) <= 0 : false);
 
 // 043 (US3) — item yang ditandai 86 / didiskontinu (poll ~5 dtk). Berbeda dari `isUnavailable` (stok): kartu 86 tidak
 // `disabled` agar ketukan tetap sampai ke onPickCard dan kasir mendapat toast alasan; server tetap penjaganya (409).
-const availability = useMenuAvailability();
+const availability = useMenuAvailability({ pos: true });
 
 // Grup modifier efektif per produk (dari GET /products?with_modifiers=1).
 const groupsByProduct = computed(() => Object.fromEntries(products.value.map((p) => [p.id, p.modifier_groups ?? []])));

@@ -9,13 +9,13 @@ import PreorderReportDetailModal from '../../components/report/PreorderReportDet
 import { sumRows } from './sumRows';
 
 // 010-split-payment-preorder-reports (US6) — satu baris per kombinasi status × payment_completeness, persis
-// bentuk agregasi API (research.md R6). 012 (US2) — toggle ringkasan vs per-penjual; `view` dipegang induk
-// (v-model:view) karena induk yang memuat breakdown secara lazy dan menampilkan filter penjual hanya di
-// tampilan "Per Penjual". `byArtist` sudah difilter penjual oleh induk.
+// bentuk agregasi API (research.md R6). 012 (US2) — toggle ringkasan vs per-outlet; `view` dipegang induk
+// (v-model:view) karena induk yang memuat breakdown secara lazy dan menampilkan filter outlet hanya di
+// tampilan "Per Outlet". `byOutlet` sudah difilter outlet oleh induk.
 const props = defineProps({
-  view: { type: String, default: 'summary' }, // 'summary' | 'artist'
+  view: { type: String, default: 'summary' }, // 'summary' | 'outlet'
   stats: { type: Array, default: null },
-  byArtist: { type: Array, default: null },
+  byOutlet: { type: Array, default: null },
   subtotals: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
 });
@@ -42,26 +42,26 @@ const COMPLETENESS_TONE = { unpaid: 'danger', partial: 'warning', paid: 'success
 
 const viewTabs = computed(() => [
   { key: 'summary', label: t('reports.preorder_view_summary') },
-  { key: 'artist', label: t('reports.preorder_view_by_artist') },
+  { key: 'outlet', label: t('reports.preorder_view_by_artist') },
 ]);
 
 const summaryTotals = computed(() => sumRows(props.stats ?? [], ['total_order_value', 'total_collected', 'total_outstanding'], ['preorder_count']));
-const byArtistTotals = computed(() => sumRows(props.byArtist ?? [], ['total_order_value', 'total_collected', 'total_outstanding'], ['preorder_count']));
+const byOutletTotals = computed(() => sumRows(props.byOutlet ?? [], ['total_order_value', 'total_collected', 'total_outstanding'], ['preorder_count']));
 
-// 039 — baris yang DITAMPILKAN pada tabel Per Penjual: baris data (sesudah filter penjual) dengan satu baris
-// Subtotal sintetis disisipkan tepat sesudah baris terakhir tiap penjual (server menjamin baris satu penjual
+// 039 — baris yang DITAMPILKAN pada tabel Per Outlet: baris data (sesudah filter outlet) dengan satu baris
+// Subtotal sintetis disisipkan tepat sesudah baris terakhir tiap outlet (server menjamin baris satu outlet
 // berurutan). Baris sintetis TIDAK pernah dipakai Grand Total (membaca baris data saja) maupun drill-down
 // Detail (tombolnya disembunyikan untuk baris Subtotal).
-const byArtistDisplayRows = computed(() => {
-  const rows = props.byArtist ?? [];
-  const bySeller = new Map(props.subtotals.map((s) => [String(s.artist_id), s]));
+const byOutletDisplayRows = computed(() => {
+  const rows = props.byOutlet ?? [];
+  const byOutlet = new Map(props.subtotals.map((s) => [String(s.outlet_id), s]));
   const out = [];
   rows.forEach((row, i) => {
     out.push(row);
     const next = rows[i + 1];
-    if (next && String(next.artist_id) === String(row.artist_id)) return;
-    const sub = bySeller.get(String(row.artist_id));
-    if (sub) out.push({ ...sub, id: `subtotal__${sub.artist_id}`, _subtotal: true });
+    if (next && String(next.outlet_id) === String(row.outlet_id)) return;
+    const sub = byOutlet.get(String(row.outlet_id));
+    if (sub) out.push({ ...sub, id: `subtotal__${sub.outlet_id}`, _subtotal: true });
   });
   return out;
 });
@@ -76,7 +76,7 @@ const summaryColumns = computed(() => [
   { key: 'total_outstanding', label: t('reports.preorder_col_outstanding') },
   { key: 'actions', label: '' },
 ]);
-const artistColumns = computed(() => [{ key: 'artist_name', label: t('reports.col_artist') }, ...summaryColumns.value]);
+const outletColumns = computed(() => [{ key: 'outlet_name', label: t('reports.col_artist') }, ...summaryColumns.value]);
 
 // 012 (US3, T016) — drill-down ke daftar pre-order individual, dipicu HANYA saat baris diklik.
 const showDetail = ref(false);
@@ -120,16 +120,16 @@ function openDetail(row) {
   </DataTable>
   <DataTable
     v-else
-    :columns="artistColumns"
-    :rows="byArtistDisplayRows"
+    :columns="outletColumns"
+    :rows="byOutletDisplayRows"
     :row-class="rowClass"
     :loading="loading"
     :empty-message="t('reports.no_preorder_report_data')"
   >
-    <!-- 039: baris Subtotal (sintetis) — label di kolom penjual, sel status/kelengkapan kosong, tanpa Detail. -->
-    <template #cell-artist_name="{ row }">
-      <span v-if="row._subtotal" class="font-bold">{{ t('reports.subtotal') }} — {{ row.artist_name }}</span>
-      <template v-else>{{ row.artist_name }}</template>
+    <!-- 039: baris Subtotal (sintetis) — label di kolom outlet, sel status/kelengkapan kosong, tanpa Detail. -->
+    <template #cell-outlet_name="{ row }">
+      <span v-if="row._subtotal" class="font-bold">{{ t('reports.subtotal') }} — {{ row.outlet_name }}</span>
+      <template v-else>{{ row.outlet_name }}</template>
     </template>
     <template #cell-status="{ row }"><StatusPill v-if="!row._subtotal" :variant="STATUS_TONE[row.status] ?? 'neutral'">{{ STATUS_LABEL[row.status] ?? row.status }}</StatusPill></template>
     <template #cell-payment_completeness="{ row }"><StatusPill v-if="!row._subtotal" :variant="COMPLETENESS_TONE[row.payment_completeness] ?? 'neutral'">{{ COMPLETENESS_LABEL[row.payment_completeness] ?? row.payment_completeness }}</StatusPill></template>
@@ -144,10 +144,10 @@ function openDetail(row) {
     <template #footer>
       <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
         <td class="px-4 py-3 text-[13px]" colspan="3">{{ t('reports.grand_total') }}</td>
-        <td class="px-4 py-3 text-[13px]">{{ byArtistTotals.preorder_count }}</td>
-        <td class="px-4 py-3 text-[13px]">{{ formatIDR(byArtistTotals.total_order_value) }}</td>
-        <td class="px-4 py-3 text-[13px]">{{ formatIDR(byArtistTotals.total_collected) }}</td>
-        <td class="px-4 py-3 text-[13px]">{{ formatIDR(byArtistTotals.total_outstanding) }}</td>
+        <td class="px-4 py-3 text-[13px]">{{ byOutletTotals.preorder_count }}</td>
+        <td class="px-4 py-3 text-[13px]">{{ formatIDR(byOutletTotals.total_order_value) }}</td>
+        <td class="px-4 py-3 text-[13px]">{{ formatIDR(byOutletTotals.total_collected) }}</td>
+        <td class="px-4 py-3 text-[13px]">{{ formatIDR(byOutletTotals.total_outstanding) }}</td>
         <td class="px-4 py-3"></td>
       </tr>
     </template>
@@ -157,7 +157,7 @@ function openDetail(row) {
     :open="showDetail"
     :status="target?.status"
     :payment-completeness="target?.payment_completeness"
-    :artist-id="target?.artist_id"
+    :outlet-id="target?.outlet_id"
     @close="showDetail = false"
   />
 </template>

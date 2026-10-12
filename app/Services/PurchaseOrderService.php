@@ -42,7 +42,7 @@ class PurchaseOrderService
             $po = PurchaseOrder::create([
                 'po_number' => $this->generatePoNumber(),
                 'vendor_id' => $data['vendor_id'],
-                'artist_id' => $data['artist_id'],
+                'outlet_id' => $data['outlet_id'],
                 'status' => 'draft',
                 'subtotal' => $subtotal,
                 'total_amount' => $subtotal,
@@ -118,7 +118,7 @@ class PurchaseOrderService
                 $po->update(['subtotal' => $subtotal, 'total_amount' => $subtotal]);
             }
 
-            $po->update(array_intersect_key($data, array_flip(['vendor_id', 'notes', 'artist_id'])));
+            $po->update(array_intersect_key($data, array_flip(['vendor_id', 'notes', 'outlet_id'])));
 
             $vendorChanged = array_key_exists('vendor_id', $data) && (int) $data['vendor_id'] !== (int) $before['vendor_id'];
 
@@ -158,7 +158,7 @@ class PurchaseOrderService
         return $po->fresh(array_filter([
             'items' => fn ($q) => $q->withCount('bomLines'),
             'vendor',
-            'artist',
+            'outlet',
             $withPayments ? 'payments' : null,
         ]));
     }
@@ -174,32 +174,32 @@ class PurchaseOrderService
      */
     private function applySellerChange(PurchaseOrder $po, array $data, ?User $user): void
     {
-        if (! array_key_exists('artist_id', $data) || (int) $data['artist_id'] === (int) $po->artist_id) {
+        if (! array_key_exists('outlet_id', $data) || (int) $data['outlet_id'] === (int) $po->outlet_id) {
             return;
         }
 
-        $oldArtistId = $po->artist_id;
+        $oldOutletId = $po->outlet_id;
 
-        if ($oldArtistId !== null) {
+        if ($oldOutletId !== null) {
             $inUse = ProductVariantBomLine::withoutGlobalScopes()
                 ->whereIn('purchase_order_item_id', $po->items()->select('id'))
                 ->exists();
 
             if ($inUse) {
                 throw ValidationException::withMessages([
-                    'artist_id' => __('bom.purchase_order_seller_in_use'),
+                    'outlet_id' => __('bom.purchase_order_seller_in_use'),
                 ]);
             }
         }
 
         $this->activityLogger->log(
             userId: $user?->id,
-            action: $oldArtistId === null ? 'purchase_order_seller_assigned' : 'purchase_order_seller_changed',
+            action: $oldOutletId === null ? 'purchase_order_seller_assigned' : 'purchase_order_seller_changed',
             entityType: 'PurchaseOrder',
             entityId: $po->id,
-            description: "Seller purchase order {$po->po_number}: ".($oldArtistId ?? 'kosong')." -> {$data['artist_id']}.",
-            oldValues: ['artist_id' => $oldArtistId],
-            newValues: ['artist_id' => (int) $data['artist_id']],
+            description: "Seller purchase order {$po->po_number}: ".($oldOutletId ?? 'kosong')." -> {$data['outlet_id']}.",
+            oldValues: ['outlet_id' => $oldOutletId],
+            newValues: ['outlet_id' => (int) $data['outlet_id']],
         );
     }
 
@@ -260,6 +260,8 @@ class PurchaseOrderService
                     $material = Material::lockForUpdate()->findOrFail($item->material_id);
                     $this->materialStockService->applyMovement(
                         material: $material,
+                        // 045 Stage 5 — penerimaan masuk ke outlet PO (PO lama tanpa outlet: outlet pertama).
+                        outletId: (int) ($po->outlet_id ?? \App\Support\OutletStockSync::firstOutlet()),
                         type: 'purchase',
                         qtyChange: (float) $item->qty,
                         referenceType: 'purchase_order_item',
@@ -326,7 +328,7 @@ class PurchaseOrderService
     private function generatePoNumber(): string
     {
         $today = now()->format('Ymd');
-        $countToday = PurchaseOrder::withoutGlobalScope(DataModeScope::class)
+        $countToday = PurchaseOrder::withoutGlobalScopes()
             ->whereDate('created_at', now()->toDateString())
             ->count();
 

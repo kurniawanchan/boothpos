@@ -25,6 +25,13 @@ class PermissionCatalog
 
     public const RECIPE_EDIT = 'menu.recipe.edit';
 
+    /** 045 Stage 6 — transfer stok antar outlet: tiga aksi terpisah (selain penugasan outlet). */
+    public const TRANSFER_DISPATCH = 'stock.transfer.dispatch';
+
+    public const TRANSFER_RECEIVE = 'stock.transfer.receive';
+
+    public const TRANSFER_CANCEL = 'stock.transfer.cancel';
+
     /** key => label manusiawi (Indonesia). */
     public const ALL = [
         self::ITEM_MANAGE => 'Mengelola item (diskontinu, aktifkan kembali)',
@@ -33,7 +40,16 @@ class PermissionCatalog
         self::PRICE_APPROVE => 'Menyetujui perubahan harga',
         self::RELEASE_PUBLISH => 'Menerbitkan rilis menu',
         self::RECIPE_EDIT => 'Mengubah resep',
+        self::TRANSFER_DISPATCH => 'Mengirim transfer stok antar outlet',
+        self::TRANSFER_RECEIVE => 'Menerima transfer stok antar outlet',
+        self::TRANSFER_CANCEL => 'Membatalkan transfer stok yang belum diterima',
     ];
+
+    /** @return list<string> */
+    public static function transferKeys(): array
+    {
+        return [self::TRANSFER_DISPATCH, self::TRANSFER_RECEIVE, self::TRANSFER_CANCEL];
+    }
 
     /** @return list<string> */
     public static function keys(): array
@@ -50,7 +66,7 @@ class PermissionCatalog
     {
         return match (mb_strtolower(trim($roleName))) {
             'owner', 'admin' => self::keys(),
-            'inventory' => [self::ITEM_MANAGE, self::ITEM_86, self::RECIPE_EDIT],
+            'inventory' => [self::ITEM_MANAGE, self::ITEM_86, self::RECIPE_EDIT, self::TRANSFER_DISPATCH, self::TRANSFER_RECEIVE],
             default => [],
         };
     }

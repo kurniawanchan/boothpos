@@ -16,7 +16,7 @@ class UpdateVendorRequest extends FormRequest
     {
         return [
             // code TIDAK bisa diubah lewat update — konsisten dengan
-            // Artist/Category (kode adalah identitas stabil untuk referensi
+            // Outlet/Category (kode adalah identitas stabil untuk referensi
             // Excel, mengubahnya diam-diam merusak baris impor lama).
             'name' => ['sometimes', 'required', 'string', 'max:150'],
             'contact_phone' => ['nullable', 'string', 'max:30'],

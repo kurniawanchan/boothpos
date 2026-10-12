@@ -28,7 +28,7 @@ class Vendor extends Model
         ];
     }
 
-    /** Kode selalu uppercase, konsisten dengan Artist::code(). */
+    /** Kode selalu uppercase, konsisten dengan Outlet::code(). */
     protected function code(): \Illuminate\Database\Eloquent\Casts\Attribute
     {
         return \Illuminate\Database\Eloquent\Casts\Attribute::make(

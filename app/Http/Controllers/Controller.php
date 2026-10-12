@@ -9,7 +9,7 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
  * `laravel/laravel` sejak Laravel 11 menghasilkan base Controller KOSONG
  * (tanpa trait apa pun) — bawaan lama yang menyertakan AuthorizesRequests
  * sudah dihapus dari stub resmi. Controller-controller hasil sesi
- * sebelumnya (ArtistController, CategoryController, ProductController,
+ * sebelumnya (OutletController, CategoryController, ProductController,
  * EventController, PaymentProofController) ditulis memakai
  * `$this->authorize(...)`, method yang HANYA ada lewat trait ini. Tanpa
  * baris ini, seluruh controller tersebut fatal error "Call to undefined

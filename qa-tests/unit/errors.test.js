@@ -43,7 +43,7 @@ describe('normalizeAxiosError', () => {
       message: 'Impor dibatalkan: ada baris yang tidak valid. Tidak ada data yang diubah.',
       applied: false,
       dry_run: false,
-      sheets: { artists: { rows: 2, created: 1, updated: 1, unchanged: 0 } },
+      sheets: { outlets: { rows: 2, created: 1, updated: 1, unchanged: 0 } },
       ignored_sheets: [],
       errors: [{ sheet: 'products', row: 12, column: 'category_code', message: "Kategori dengan kode 'ZZ' tidak ditemukan." }],
     };

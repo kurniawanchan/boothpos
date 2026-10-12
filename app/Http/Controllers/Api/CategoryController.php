@@ -109,7 +109,7 @@ class CategoryController extends Controller
             ], 409);
         }
 
-        // Guard 2 — sama seperti Artist, ditunda sampai modul Product ada.
+        // Guard 2 — sama seperti Outlet, ditunda sampai modul Product ada.
         if (Schema::hasTable('products')) {
             $hasActiveProducts = DB::table('products')
                 ->where('category_id', $category->id)

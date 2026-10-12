@@ -6,7 +6,7 @@ const variant = (overrides = {}) => ({
   variant_id: 1,
   sku: 'RYUKYSAK0007',
   name: 'Keychain Sakura',
-  artist_name: 'Ryuuka Studio',
+  home_outlet_name: 'Ryuuka Studio',
   sell_price: '45000.00',
   current_stock: 10,
   ...overrides,

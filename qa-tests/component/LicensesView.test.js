@@ -40,7 +40,7 @@ describe('LicensesView', () => {
         {
           id: 1,
           name: 'Paket Pro',
-          description: 'Fitur multi-artist',
+          description: 'Fitur multi-outlet',
           license_tier: 'pro',
           price: '150000.00',
           payment_type: 'subscription',

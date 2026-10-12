@@ -435,7 +435,7 @@ class PreorderExportImportService
                     $variant = $item['variant'];
                     $preorder->items()->create([
                         'variant_id' => $variant->id,
-                        'artist_id' => $variant->product->artist_id,
+                        'home_outlet_id' => $variant->product->home_outlet_id,
                         'sku_snapshot' => $variant->sku,
                         'name_snapshot' => $variant->product->name.' — '.$variant->variant_name,
                         'qty' => $item['qty'],

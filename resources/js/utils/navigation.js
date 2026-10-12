@@ -73,7 +73,7 @@ export const NAV_SECTIONS = [
     label: 'frame.group_people',
     items: [
       { name: 'customers', label: 'nav.customers', icon: 'ph-address-book', menuKey: 'customers' },
-      { name: 'artists', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'artists' },
+      { name: 'outlets', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'outlets' },
     ],
   },
   {

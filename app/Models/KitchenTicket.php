@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOutlet;
 use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -13,6 +14,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class KitchenTicket extends Model
 {
+    use BelongsToOutlet;
+
     use HasDataMode;
 
     protected $fillable = ['order_id', 'station_id', 'round_no', 'sent_by', 'sent_at'];
@@ -26,4 +29,14 @@ class KitchenTicket extends Model
     public function station(): BelongsTo { return $this->belongsTo(Station::class); }
     public function sender(): BelongsTo { return $this->belongsTo(User::class, 'sent_by'); }
     public function items(): HasMany { return $this->hasMany(KitchenTicketItem::class); }
+
+    protected function outletFromParent(): ?int
+    {
+        // Tiket dapur mengikuti order-nya.
+        if ($this->order_id === null) {
+            return null;
+        }
+
+        return Order::withoutGlobalScopes()->whereKey($this->order_id)->value('outlet_id');
+    }
 }

@@ -15,7 +15,7 @@ use Maatwebsite\Excel\Concerns\WithMultipleSheets;
  *
  * Kunci sheets() sengaja diisi nama sheet APA ADANYA dari berkas pengguna
  * (bukan nama kanonik), karena PhpSpreadsheet mencari sheet berdasarkan
- * nama persis. Pemetaan ke nama kanonik ('artists', 'categories',
+ * nama persis. Pemetaan ke nama kanonik ('outlets', 'categories',
  * 'products', 'stock') dilakukan pemanggil lewat
  * MasterDataSheets::canonicalName(), sehingga "Products" atau " stock "
  * tetap dikenali.

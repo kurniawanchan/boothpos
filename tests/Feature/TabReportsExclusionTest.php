@@ -67,13 +67,13 @@ class TabReportsExclusionTest extends TestCase
         $profit = $this->getJson("/api/v1/reports/profit?event_id={$event}")->assertOk()->json();
         $this->assertEquals(0, $profit['revenue'] ?? $profit['totals']['revenue'] ?? 0);
 
-        $settlements = $this->getJson("/api/v1/reports/artist-settlements?event_id={$event}")->assertOk()->json('data');
+        $settlements = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$event}")->assertOk()->json('data');
         foreach ($settlements as $row) {
             $this->assertEquals(0, $row['total_sales'], 'settlement penjual menghitung tab yang belum dibayar');
         }
 
-        $artistProfit = $this->getJson("/api/v1/reports/artist-profit?event_id={$event}")->assertOk()->json();
-        $this->assertSame([], $artistProfit['data'] ?? []);
+        $outletProfit = $this->getJson("/api/v1/reports/outlet-profit?event_id={$event}")->assertOk()->json();
+        $this->assertSame([], $outletProfit['data'] ?? []);
     }
 
     public function test_an_unpaid_tab_is_not_in_the_shift_summary_or_customer_history_or_order_list(): void
@@ -96,7 +96,7 @@ class TabReportsExclusionTest extends TestCase
         // benar: kunci-kunci yang SAMA harus terisi begitu tab lunas.
         $profit = $this->getJson("/api/v1/reports/profit?event_id={$event}")->assertOk()->json();
         $this->assertEquals(50000, $profit['revenue'] ?? $profit['totals']['revenue'] ?? null);
-        $settlement = collect($this->getJson("/api/v1/reports/artist-settlements?event_id={$event}")->json('data'))->firstWhere('total_sales', '!=', 0);
+        $settlement = collect($this->getJson("/api/v1/reports/outlet-settlements?event_id={$event}")->json('data'))->firstWhere('total_sales', '!=', 0);
         $this->assertEquals(50000, $settlement['total_sales'] ?? null);
 
         $sales = $this->getJson("/api/v1/reports/sales?event_id={$event}")->assertOk()->json();
@@ -154,7 +154,7 @@ class TabReportsExclusionTest extends TestCase
         $this->assertEquals(0, $sales['totals']['unit_count']);
         $this->assertEquals(0, $sales['totals']['gross_sales']);
         $this->assertSame([], $sales['transactions'] ?? []);
-        foreach ($this->getJson("/api/v1/reports/artist-settlements?event_id={$event}")->json('data') as $row) {
+        foreach ($this->getJson("/api/v1/reports/outlet-settlements?event_id={$event}")->json('data') as $row) {
             $this->assertEquals(0, $row['total_sales']);
         }
         $this->assertCount(0, $this->exportedRows());

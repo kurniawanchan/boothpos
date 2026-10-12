@@ -16,6 +16,11 @@ export function updateMaterial(id, payload) {
   return client.put(`/materials/${id}`, payload).then((r) => r.data);
 }
 
+/** 045 Stage 5 — koreksi stok bahan di satu outlet ({ outlet_id?, qty_change, reason }). */
+export function adjustMaterialStock(id, payload) {
+  return client.post(`/materials/${id}/adjustments`, payload).then((r) => r.data);
+}
+
 export function deleteMaterial(id) {
   return client.delete(`/materials/${id}`);
 }

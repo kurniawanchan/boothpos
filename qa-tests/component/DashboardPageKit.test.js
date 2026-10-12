@@ -5,13 +5,13 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import DashboardView from '../../resources/js/views/DashboardView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listEvents } from '../../resources/js/api/events';
-import { salesReport, profitReport, artistSettlements } from '../../resources/js/api/reports';
+import { salesReport, profitReport, outletSettlements } from '../../resources/js/api/reports';
 import { lowStock } from '../../resources/js/api/stock';
 import { listPreorders } from '../../resources/js/api/preorders';
 import { summary } from '../../resources/js/api/dashboard';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
-vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), artistSettlements: vi.fn() }));
+vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), outletSettlements: vi.fn() }));
 vi.mock('../../resources/js/api/stock', () => ({ lowStock: vi.fn() }));
 vi.mock('../../resources/js/api/preorders', () => ({ listPreorders: vi.fn() }));
 vi.mock('../../resources/js/api/dashboard', () => ({ summary: vi.fn(), exportDashboard: vi.fn() }));
@@ -60,7 +60,7 @@ describe('DashboardView — page structure (042)', () => {
     lowStock.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [], meta: { total: 0 } });
     profitReport.mockResolvedValue({ gross_profit: '400000.00' });
-    artistSettlements.mockResolvedValue({ data: [] });
+    outletSettlements.mockResolvedValue({ data: [] });
   });
 
   it('has ONE page heading (h1) and the Per-event section as an h2', async () => {

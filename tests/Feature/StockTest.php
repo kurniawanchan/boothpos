@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -26,9 +26,9 @@ class StockTest extends TestCase
 
     private function makeVariant(int $stock = 10): ProductVariant
     {
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
 
         $sequence = str_pad((string) ++self::$variantSequence, 4, '0', STR_PAD_LEFT);
 
@@ -42,10 +42,10 @@ class StockTest extends TestCase
         $variant = $this->makeVariant(10);
         $service = app(StockService::class);
 
-        $service->applyMovement($variant, 'purchase', 5);
+        $service->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'purchase', 5);
         $this->assertSame(15, $variant->fresh()->current_stock);
 
-        $service->applyMovement($variant, 'sale', -3);
+        $service->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'sale', -3);
         $this->assertSame(12, $variant->fresh()->current_stock);
     }
 
@@ -55,7 +55,7 @@ class StockTest extends TestCase
         $service = app(StockService::class);
 
         $this->expectException(ValidationException::class);
-        $service->applyMovement($variant, 'sale', -5);
+        $service->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'sale', -5);
 
         // Stok tidak boleh berubah sama sekali saat ditolak.
         $this->assertSame(2, $variant->fresh()->current_stock);
@@ -64,7 +64,7 @@ class StockTest extends TestCase
     public function test_every_movement_writes_an_audit_row(): void
     {
         $variant = $this->makeVariant(10);
-        app(StockService::class)->applyMovement($variant, 'adjustment', 3, reason: 'Koreksi stok awal');
+        app(StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'adjustment', 3, reason: 'Koreksi stok awal');
 
         $this->assertDatabaseHas('stock_movements', [
             'variant_id' => $variant->id, 'type' => 'adjustment',

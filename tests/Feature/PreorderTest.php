@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Event;
@@ -25,10 +25,10 @@ class PreorderTest extends TestCase
         $user = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($user, 'sanctum');
 
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
         $product = Product::factory()->create([
-            'artist_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true,
         ]);
         $this->variant = $product->variants()->create([
             'sku' => 'RYUKYFIG0001', 'sell_price' => 300000, 'cost_price' => 150000, 'current_stock' => 0,
@@ -413,12 +413,12 @@ class PreorderTest extends TestCase
      * dari artist yang berbeda dengan $this->variant, supaya tes bisa
      * membuat preorder lintas-penjual.
      */
-    private function createVariantForNewArtist(): ProductVariant
+    private function createVariantForNewOutlet(): ProductVariant
     {
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
         $product = Product::factory()->create([
-            'artist_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true,
         ]);
 
         return $product->variants()->create([
@@ -430,16 +430,16 @@ class PreorderTest extends TestCase
     {
         $matching = $this->createPreorder();
 
-        $otherVariant = $this->createVariantForNewArtist();
+        $otherVariant = $this->createVariantForNewOutlet();
         $nonMatching = $this->postJson('/api/v1/preorders', [
             'customer_id' => $this->customer->id,
             'fulfillment' => 'pickup',
             'items' => [['variant_id' => $otherVariant->id, 'qty' => 1]],
         ])->json();
 
-        $artistId = $this->variant->product->artist_id;
+        $artistId = $this->variant->product->home_outlet_id;
 
-        $response = $this->getJson("/api/v1/preorders?artist_id={$artistId}");
+        $response = $this->getJson("/api/v1/preorders?home_outlet_id={$artistId}");
         $response->assertOk();
 
         $ids = collect($response->json('data'))->pluck('id');
@@ -450,21 +450,21 @@ class PreorderTest extends TestCase
     public function test_artist_id_filter_combines_with_status_filter(): void
     {
         $preorder = $this->createPreorder();
-        $artistId = $this->variant->product->artist_id;
+        $artistId = $this->variant->product->home_outlet_id;
 
         // preorder baru tanpa pembayaran masih berstatus 'ordered'
-        $matchingOrdered = $this->getJson("/api/v1/preorders?artist_id={$artistId}&status=ordered");
+        $matchingOrdered = $this->getJson("/api/v1/preorders?home_outlet_id={$artistId}&status=ordered");
         $matchingOrdered->assertOk();
         $this->assertTrue(collect($matchingOrdered->json('data'))->pluck('id')->contains($preorder['id']));
 
-        $matchingDpPaid = $this->getJson("/api/v1/preorders?artist_id={$artistId}&status=dp_paid");
+        $matchingDpPaid = $this->getJson("/api/v1/preorders?home_outlet_id={$artistId}&status=dp_paid");
         $matchingDpPaid->assertOk();
         $this->assertFalse(collect($matchingDpPaid->json('data'))->pluck('id')->contains($preorder['id']));
     }
 
     // Requested: filters should combine (AND across status/fulfillment/
     // seller) AND support selecting multiple values per filter (OR within
-    // one filter), matching ProductsView's artist_id[]/category_id[]
+    // one filter), matching ProductsView's home_outlet_id[]/category_id[]
     // convention (005-ux-enhancements-dashboard).
     public function test_status_filter_accepts_multiple_values(): void
     {
@@ -497,15 +497,15 @@ class PreorderTest extends TestCase
     public function test_artist_id_filter_accepts_multiple_values_and_combines_with_fulfillment(): void
     {
         $matching = $this->createPreorder();
-        $otherVariant = $this->createVariantForNewArtist();
-        $otherArtistId = $otherVariant->product->artist_id;
+        $otherVariant = $this->createVariantForNewOutlet();
+        $otherOutletId = $otherVariant->product->home_outlet_id;
         $matchingOther = $this->postJson('/api/v1/preorders', [
             'customer_id' => $this->customer->id, 'fulfillment' => 'pickup',
             'items' => [['variant_id' => $otherVariant->id, 'qty' => 1]],
         ])->json();
-        $artistId = $this->variant->product->artist_id;
+        $artistId = $this->variant->product->home_outlet_id;
 
-        $response = $this->getJson("/api/v1/preorders?artist_id[]={$artistId}&artist_id[]={$otherArtistId}&fulfillment[]=pickup");
+        $response = $this->getJson("/api/v1/preorders?home_outlet_id[]={$artistId}&home_outlet_id[]={$otherOutletId}&fulfillment[]=pickup");
         $response->assertOk();
         $ids = collect($response->json('data'))->pluck('id');
         $this->assertTrue($ids->contains($matching['id']));
@@ -573,9 +573,9 @@ class PreorderTest extends TestCase
             ],
         ])->json();
 
-        $artistId = $this->variant->product->artist_id;
+        $artistId = $this->variant->product->home_outlet_id;
 
-        $response = $this->getJson("/api/v1/preorders?artist_id={$artistId}");
+        $response = $this->getJson("/api/v1/preorders?home_outlet_id={$artistId}");
         $response->assertOk();
 
         $matching = collect($response->json('data'))->filter(fn ($row) => $row['id'] === $preorder['id']);
@@ -585,7 +585,7 @@ class PreorderTest extends TestCase
     public function test_list_and_detail_responses_include_sellers(): void
     {
         $preorder = $this->createPreorder();
-        $artist = $this->variant->product->artist;
+        $artist = $this->variant->product->homeOutlet;
 
         $listResponse = $this->getJson('/api/v1/preorders');
         $listResponse->assertOk();
@@ -597,8 +597,8 @@ class PreorderTest extends TestCase
         $detailResponse = $this->getJson("/api/v1/preorders/{$preorder['id']}");
         $detailResponse->assertOk();
         $detailResponse->assertJsonPath('sellers', [['id' => $artist->id, 'name' => $artist->name]]);
-        $detailResponse->assertJsonPath('items.0.artist_id', $artist->id);
-        $detailResponse->assertJsonPath('items.0.artist_name', $artist->name);
+        $detailResponse->assertJsonPath('items.0.home_outlet_id', $artist->id);
+        $detailResponse->assertJsonPath('items.0.home_outlet_name', $artist->name);
     }
 
     public function test_list_includes_customer_id_for_the_customer_info_lookup(): void
@@ -725,7 +725,7 @@ class PreorderTest extends TestCase
 
     public function test_preorder_with_items_from_two_different_artists_shows_both_in_sellers(): void
     {
-        $otherVariant = $this->createVariantForNewArtist();
+        $otherVariant = $this->createVariantForNewOutlet();
 
         $preorder = $this->postJson('/api/v1/preorders', [
             'customer_id' => $this->customer->id,
@@ -736,23 +736,23 @@ class PreorderTest extends TestCase
             ],
         ])->json();
 
-        $firstArtist = $this->variant->product->artist;
-        $secondArtist = $otherVariant->product->artist;
+        $firstOutlet = $this->variant->product->homeOutlet;
+        $secondOutlet = $otherVariant->product->homeOutlet;
 
         $detailResponse = $this->getJson("/api/v1/preorders/{$preorder['id']}");
         $detailResponse->assertOk();
 
         $sellerIds = collect($detailResponse->json('sellers'))->pluck('id');
         $this->assertCount(2, $sellerIds);
-        $this->assertTrue($sellerIds->contains($firstArtist->id));
-        $this->assertTrue($sellerIds->contains($secondArtist->id));
+        $this->assertTrue($sellerIds->contains($firstOutlet->id));
+        $this->assertTrue($sellerIds->contains($secondOutlet->id));
 
         $listResponse = $this->getJson('/api/v1/preorders');
         $row = collect($listResponse->json('data'))->firstWhere('id', $preorder['id']);
         $listSellerIds = collect($row['sellers'])->pluck('id');
         $this->assertCount(2, $listSellerIds);
-        $this->assertTrue($listSellerIds->contains($firstArtist->id));
-        $this->assertTrue($listSellerIds->contains($secondArtist->id));
+        $this->assertTrue($listSellerIds->contains($firstOutlet->id));
+        $this->assertTrue($listSellerIds->contains($secondOutlet->id));
     }
 
     private function createProofToken(): string
@@ -864,7 +864,7 @@ class PreorderTest extends TestCase
     }
 
     /**
-     * FR-013 — filter yang sama (artist_id, status, fulfillment) yang
+     * FR-013 — filter yang sama (home_outlet_id, status, fulfillment) yang
      * dipakai index() harus mempersempit summary() secara identik, lewat
      * applyFilters() yang sama (research.md R4).
      */
@@ -872,22 +872,22 @@ class PreorderTest extends TestCase
     {
         $matching = $this->createPreorder();
 
-        $otherVariant = $this->createVariantForNewArtist();
+        $otherVariant = $this->createVariantForNewOutlet();
         $this->postJson('/api/v1/preorders', [
             'customer_id' => $this->customer->id,
             'fulfillment' => 'pickup',
             'items' => [['variant_id' => $otherVariant->id, 'qty' => 1]],
         ])->assertCreated();
 
-        $artistId = $this->variant->product->artist_id;
+        $artistId = $this->variant->product->home_outlet_id;
 
-        $response = $this->getJson("/api/v1/preorders/summary?artist_id={$artistId}&status=ordered&fulfillment=pickup");
+        $response = $this->getJson("/api/v1/preorders/summary?home_outlet_id={$artistId}&status=ordered&fulfillment=pickup");
         $response->assertOk();
 
         $this->assertEquals(1, $response->json('transaction_count'));
         $this->assertEquals('300000.00', $response->json('grand_total'));
 
-        $mismatchedStatus = $this->getJson("/api/v1/preorders/summary?artist_id={$artistId}&status=dp_paid");
+        $mismatchedStatus = $this->getJson("/api/v1/preorders/summary?home_outlet_id={$artistId}&status=dp_paid");
         $mismatchedStatus->assertOk();
         $this->assertEquals(0, $mismatchedStatus->json('transaction_count'));
         $this->assertEquals('0.00', $mismatchedStatus->json('grand_total'));
@@ -905,10 +905,10 @@ class PreorderTest extends TestCase
 
         \App\Support\ModeGate::runAs('demo', function () {
             $demoCustomer = Customer::factory()->create();
-            $demoArtist = Artist::factory()->create();
+            $demoOutlet = Outlet::factory()->create();
             $demoCategory = Category::factory()->create();
             $demoProduct = Product::factory()->create([
-                'artist_id' => $demoArtist->id, 'category_id' => $demoCategory->id, 'is_preorder' => true,
+                'home_outlet_id' => $demoOutlet->id, 'category_id' => $demoCategory->id, 'is_preorder' => true,
             ]);
             $demoVariant = $demoProduct->variants()->create([
                 'sku' => 'DEMOFIG0001', 'sell_price' => 300000, 'cost_price' => 150000, 'current_stock' => 0,

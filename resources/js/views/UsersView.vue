@@ -2,9 +2,10 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listUsers, createUser, updateUser, deleteUser, uploadUserPhoto } from '../api/users';
+import { listUsers, createUser, updateUser, deleteUser, uploadUserPhoto, setUserOutlets } from '../api/users';
 import { listRoles } from '../api/roles';
 import { useAuthStore } from '../stores/auth';
+import { useOutletStore } from '../stores/outlet';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import DataTable from '../components/ui/DataTable.vue';
@@ -26,6 +27,7 @@ const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedLi
 const search = ref('');
 const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value || undefined }), 300);
 
+const outletStore = useOutletStore();
 const roleOptions = ref([]);
 const roleFilterOptions = computed(() => [{ value: '', label: t('users.all_roles') }, ...roleOptions.value]);
 const statusFilterOptions = computed(() => [
@@ -39,7 +41,7 @@ const statusFilter = ref('');
 async function loadRoles() {
   try {
     const res = await listRoles({ per_page: 100 });
-    roleOptions.value = (res.data ?? []).map((r) => ({ value: r.id, label: r.name }));
+    roleOptions.value = (res.data ?? []).map((r) => ({ value: r.id, label: r.name, allOutlets: r.all_outlets === true }));
   } catch {
     // Gagal memuat daftar peran tidak boleh meng-crash layar pengguna —
     // dropdown peran kosong, form tetap bisa dibuka untuk field lain.
@@ -75,14 +77,18 @@ function onStatusFilterChange(value) {
   setFilter({ is_active: value === '' ? undefined : value });
 }
 
+// 045 Stage 2 — kolom Outlet hanya bila ada lebih dari satu outlet (di satu outlet disembunyikan, bukan dinonaktifkan).
 const columns = computed(() => [
   { key: 'name', label: t('users.col_name') },
   { key: 'username', label: t('users.col_username') },
   { key: 'role', label: t('users.col_role') },
+  ...(outletStore.multi ? [{ key: 'outlets', label: t('users.col_outlets') }] : []),
   { key: 'last_login_at', label: t('users.col_last_access') },
   { key: 'is_active', label: t('users.col_status') },
   { key: 'actions', label: '' },
 ]);
+
+const outletCodes = (row) => (row.outlet_ids ?? []).map((id) => outletStore.outlets.find((o) => o.id === id)?.code).filter(Boolean).join(', ');
 
 function formatLastAccess(value) {
   if (!value) return t('users.never_accessed');
@@ -91,7 +97,10 @@ function formatLastAccess(value) {
 
 const showForm = ref(false);
 const editingUser = ref(null);
-const form = reactive({ name: '', username: '', password: '', role_id: '', is_active: true });
+const form = reactive({ name: '', username: '', password: '', role_id: '', is_active: true, outlet_ids: [] });
+// 045 Stage 2 — penugasan outlet hanya relevan bila ada lebih dari satu outlet dan peran bukan Owner/Admin
+// (peran ber-flag all_outlets melihat semuanya). Di satu outlet kolomnya disembunyikan, bukan dinonaktifkan.
+const showOutlets = computed(() => outletStore.multi && form.role_id !== '' && !roleOptions.value.find((r) => r.value === form.role_id)?.allOutlets);
 const formErrors = reactive({});
 const saving = ref(false);
 const photoFile = ref(null);
@@ -110,7 +119,7 @@ function isSelf(row) {
 
 function openCreate() {
   editingUser.value = null;
-  Object.assign(form, { name: '', username: '', password: '', role_id: '', is_active: true });
+  Object.assign(form, { name: '', username: '', password: '', role_id: '', is_active: true, outlet_ids: [] });
   photoFile.value = null;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
@@ -124,6 +133,7 @@ function openEdit(user) {
     password: '',
     role_id: user.role?.id ?? '',
     is_active: user.is_active,
+    outlet_ids: [...(user.outlet_ids ?? [])],
   });
   photoFile.value = null;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
@@ -173,6 +183,15 @@ async function saveUser() {
       } catch (photoErr) {
         if (photoErr.isValidation) toast.error(photoErr.errors?.image?.[0] || t('users.photo_upload_failed'));
         else toast.error(photoErr.message || t('users.photo_upload_failed'));
+      }
+    }
+
+    // Penugasan outlet disimpan terpisah (endpoint sendiri); kegagalannya tidak menahan modal, hanya toast.
+    if (showOutlets.value && saved?.id) {
+      try {
+        await setUserOutlets(saved.id, form.outlet_ids);
+      } catch (outletErr) {
+        toast.error(outletErr.message || t('users.save_failed'));
       }
     }
 
@@ -256,6 +275,11 @@ async function performDelete() {
           </div>
         </template>
         <template #cell-role="{ row }">{{ row.role?.name ?? '—' }}</template>
+        <template #cell-outlets="{ row }">
+          <span v-if="row.all_outlets" class="text-[12.5px] font-semibold text-muted-5" data-testid="user-outlets-all">{{ t('users.outlets_all') }}</span>
+          <span v-else-if="!(row.outlet_ids ?? []).length" class="text-[12.5px] text-danger-text" data-testid="user-outlets-none">{{ t('users.outlets_none') }}</span>
+          <span v-else class="text-[12.5px] text-muted-5" data-testid="user-outlets-codes">{{ outletCodes(row) }}</span>
+        </template>
         <template #cell-last_login_at="{ row }">
           <span class="text-[12.5px] text-muted-4">{{ formatLastAccess(row.last_login_at) }}</span>
         </template>
@@ -301,6 +325,13 @@ async function performDelete() {
         :hint="isSelf(editingUser ?? {}) ? t('users.cannot_change_own_role') : ''"
         :error="formErrors.role_id"
       />
+      <fieldset v-if="showOutlets" class="flex flex-col gap-1.5" data-testid="user-outlets">
+        <legend class="text-[12.5px] font-semibold text-muted-4">{{ t('frame.outlet_label') }}</legend>
+        <label v-for="o in outletStore.outlets" :key="o.id" class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
+          <input v-model="form.outlet_ids" type="checkbox" :value="o.id" class="h-4 w-4 rounded border-line accent-brand" />
+          {{ o.name }}
+        </label>
+      </fieldset>
       <div class="flex flex-col gap-1.5">
         <span class="text-[12.5px] font-semibold text-muted-4">{{ t('users.photo') }}</span>
         <input type="file" accept="image/jpeg,image/png" class="text-[12.5px]" @change="onPhotoChange" />

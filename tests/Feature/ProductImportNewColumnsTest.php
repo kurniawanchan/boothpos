@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -22,7 +22,7 @@ class ProductImportNewColumnsTest extends TestCase
     {
         parent::setUp();
         $this->actingAs(User::factory()->create(['role' => 'owner']), 'sanctum');
-        Artist::factory()->create(['code' => 'RYU']);
+        Outlet::factory()->create(['code' => 'RYU']);
         Category::factory()->create(['code' => 'KY']);
     }
 

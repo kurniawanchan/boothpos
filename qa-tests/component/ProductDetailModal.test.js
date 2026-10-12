@@ -16,7 +16,7 @@ vi.mock('../../resources/js/api/materials', () => ({
 vi.mock('../../resources/js/api/vendors', () => ({ listVendors: vi.fn().mockResolvedValue({ data: [] }) }));
 
 const PRODUCT = {
-  id: 2, name: 'MCYT', code_prefix: 'SPF-KC-MCY', artist_name: 'sapphirefiless', category_name: 'KEYCHAIN', is_active: true, is_preorder: false, description: null,
+  id: 2, name: 'MCYT', code_prefix: 'SPF-KC-MCY', home_outlet_name: 'sapphirefiless', category_name: 'KEYCHAIN', is_active: true, is_preorder: false, description: null,
   variants: [
     { id: 10, sku: 'SPF-KC-MCY-001', variant_name: 'Red', sell_price: '20000.00', current_stock: 5, is_active: true, image_url: null },
     { id: 11, sku: 'SPF-KC-MCY-002', variant_name: 'Blue', sell_price: '20000.00', current_stock: 9, is_active: true, image_url: null },

@@ -2,11 +2,12 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { listProducts, productSummary } from '../api/products';
-import { listArtists } from '../api/artists';
+import { listOutlets } from '../api/outlets';
 import { listCategories } from '../api/categories';
 import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
+import { useOutletStore } from '../stores/outlet';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { useQueryState } from '../composables/useQueryState';
@@ -115,8 +116,12 @@ const error = ref(false);
 const selected = ref([]);
 let requestSeq = 0;
 
+// 045 Stage 3 — outlet terpilih di topbar menyaring daftar ke item yang DIBAWA outlet itu (memilih memuat ulang halaman).
+const outletStore = useOutletStore();
+
 function listParams() {
   return {
+    outlet_id: outletStore.selected != null ? [outletStore.selected] : undefined,
     tab: tab.value,
     page: page.value,
     per_page: PER_PAGE,
@@ -167,13 +172,13 @@ watch(tab, () => {
 watch(() => JSON.stringify([tab.value, page.value, state.q, categoryFilter.value, statusFilter.value, quality.value, availability.value, sort.value]), loadList);
 
 // --- referensi untuk filter dan formulir ----------------------------------------------------------------------
-const artists = ref([]);
+const outlets = ref([]);
 const categories = ref([]);
 const categoryOptions = computed(() => categories.value.map((c) => ({ value: c.id, label: c.name })));
 const statusOptions = computed(() => STATUSES.map((s) => ({ value: s, label: t(`products.status_${s}`) })));
 
 async function loadReferences() {
-  artists.value = (await listArtists({ per_page: 100 })).data;
+  outlets.value = (await listOutlets({ per_page: 100 })).data;
   categories.value = (await listCategories({ per_page: 100 })).data;
 }
 
@@ -293,7 +298,7 @@ async function afterImport() {
   // Segarkan di latar tetapi biarkan modal terbuka — modal masih menampilkan ringkasan yang diterapkan
   // (jumlah per sheet, sheet yang diabaikan); menutupnya begitu request selesai akan menyembunyikan satu-satunya
   // konfirmasi bahwa penulisan massal benar-benar sesuai pratinjau. Pengguna menutupnya sendiri lewat "Tutup".
-  // Impor produk juga bisa menyentuh artist/kategori yang dirujuknya.
+  // Impor produk juga bisa menyentuh outlet/kategori yang dirujuknya.
   await Promise.all([refreshAll(), loadReferences()]);
   materialsTable.value?.reload();
 }
@@ -426,7 +431,7 @@ const emptyMessage = computed(() => (filtersActive.value ? t('products.empty_fil
       </div>
     </div>
 
-    <ProductFormDrawer ref="drawer" :artists="artists" :categories="categories" @saved="afterSaved" />
+    <ProductFormDrawer ref="drawer" :outlets="outlets" :categories="categories" @saved="afterSaved" />
 
     <BulkPriceDrawer
       :open="bulkOpen"

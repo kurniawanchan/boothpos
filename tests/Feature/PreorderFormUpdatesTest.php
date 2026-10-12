@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Event;
@@ -30,10 +30,10 @@ class PreorderFormUpdatesTest extends TestCase
         $user = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($user, 'sanctum');
 
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
         $product = Product::factory()->create([
-            'artist_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true,
         ]);
         $this->variant = $product->variants()->create([
             'sku' => 'RYUKYFIG0001', 'sell_price' => 300000, 'cost_price' => 150000, 'current_stock' => 0,

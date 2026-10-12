@@ -7,21 +7,21 @@ import { usePosCartStore } from '../../resources/js/stores/posCart';
 import { useToastStore } from '../../resources/js/stores/toast';
 import { currentSession } from '../../resources/js/api/sessions';
 import { listCategories } from '../../resources/js/api/categories';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { listProducts, lookupVariants } from '../../resources/js/api/products';
 import { pollAvailability } from '../../resources/js/api/menu';
 
 vi.mock('../../resources/js/api/sessions', () => ({ currentSession: vi.fn(), openSession: vi.fn(), closeSession: vi.fn() }));
 vi.mock('../../resources/js/api/categories', () => ({ listCategories: vi.fn() }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ listProducts: vi.fn(), lookupVariants: vi.fn() }));
 vi.mock('../../resources/js/api/orders', () => ({ createOrder: vi.fn() }));
 vi.mock('../../resources/js/api/menu', () => ({ pollAvailability: vi.fn() }));
 
 const variant = (id, name) => ({ id, sku: `SKU-${id}`, variant_name: name, sell_price: '25000.00', current_stock: 5, is_active: true });
 const PRODUCTS = [
-  { id: 1, name: 'Kopi Susu', artist_name: 'Restoran', category_id: 1, image_url: null, variants: [variant(11, 'Standard')] },
-  { id: 2, name: 'Es Jeruk', artist_name: 'Restoran', category_id: 1, image_url: null, variants: [variant(21, 'Standard')] },
+  { id: 1, name: 'Kopi Susu', home_outlet_name: 'Restoran', category_id: 1, image_url: null, variants: [variant(11, 'Standard')] },
+  { id: 2, name: 'Es Jeruk', home_outlet_name: 'Restoran', category_id: 1, image_url: null, variants: [variant(21, 'Standard')] },
 ];
 
 // Item 2 sedang 86; item 3 didiskontinu (tidak ada di daftar browse, hanya relevan di pencarian lewat variant_id).
@@ -44,7 +44,7 @@ describe('PosView — menu availability (043)', () => {
     vi.clearAllMocks();
     currentSession.mockResolvedValue({ id: 1 });
     listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Minuman', code: 'MN' }] });
-    listArtists.mockResolvedValue({ data: [] });
+    listOutlets.mockResolvedValue({ data: [] });
     listProducts.mockResolvedValue({ data: PRODUCTS });
     pollAvailability.mockResolvedValue(AVAILABILITY);
   });
@@ -77,8 +77,8 @@ describe('PosView — menu availability (043)', () => {
   it('search results are checked by variant_id as well', async () => {
     lookupVariants.mockResolvedValue({
       data: [
-        { variant_id: 21, sku: 'SKU-21', label: 'Es Jeruk — Standard', artist_name: 'Restoran', category_name: 'Minuman', sell_price: '25000.00', current_stock: 5, image_url: null },
-        { variant_id: 11, sku: 'SKU-11', label: 'Kopi Susu — Standard', artist_name: 'Restoran', category_name: 'Minuman', sell_price: '25000.00', current_stock: 5, image_url: null },
+        { variant_id: 21, sku: 'SKU-21', label: 'Es Jeruk — Standard', home_outlet_name: 'Restoran', category_name: 'Minuman', sell_price: '25000.00', current_stock: 5, image_url: null },
+        { variant_id: 11, sku: 'SKU-11', label: 'Kopi Susu — Standard', home_outlet_name: 'Restoran', category_name: 'Minuman', sell_price: '25000.00', current_stock: 5, image_url: null },
       ],
     });
     const user = await userEv();

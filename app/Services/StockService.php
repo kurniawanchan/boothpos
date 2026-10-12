@@ -2,14 +2,22 @@
 
 namespace App\Services;
 
+use App\Models\Outlet;
 use App\Models\ProductVariant;
 use App\Models\StockMovement;
+use App\Models\VariantOutletStock;
+use App\Support\OutletStockSync;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Satu-satunya jalur sah untuk mengubah stok. Dipakai oleh: penyesuaian
  * manual, transaksi penjualan, dan alur pre-order (arrived/handed_over).
+ *
+ * 045 Stage 5 — stok adalah SALDO PER OUTLET (`variant_outlet_stock`): setiap pergerakan WAJIB menyebut outlet
+ * (argumen `$outletId` tanpa nilai bawaan — memanggil tanpa outlet adalah galat pemrograman, dijaga tes pemindai
+ * sumber). Dalam SATU transaksi: kunci varian, kunci saldo (varian, outlet), tulis riwayat (stock_before/after = saldo
+ * outlet itu), perbarui saldo DAN total tersimpan `product_variants.current_stock` (Σ saldo outlet).
  *
  * Dijadikan service terpisah (bukan logic tersebar di tiap controller)
  * karena dipakai oleh lebih dari satu modul — ambang batas DRY yang wajar
@@ -36,6 +44,7 @@ class StockService
      */
     public function applyMovementIfTracked(
         ProductVariant $variant,
+        int $outletId,
         string $type,
         int $qtyChange,
         ?string $referenceType = null,
@@ -47,7 +56,7 @@ class StockService
             return null;
         }
 
-        return $this->applyMovement($variant, $type, $qtyChange, $referenceType, $referenceId, $reason, $userId);
+        return $this->applyMovement($variant, $outletId, $type, $qtyChange, $referenceType, $referenceId, $reason, $userId);
     }
 
     /**
@@ -55,6 +64,7 @@ class StockService
      */
     public function applyMovement(
         ProductVariant $variant,
+        int $outletId,
         string $type,
         int $qtyChange,
         ?string $referenceType = null,
@@ -66,35 +76,45 @@ class StockService
             throw new \InvalidArgumentException('qty_change tidak boleh nol.');
         }
 
-        return DB::transaction(function () use ($variant, $type, $qtyChange, $referenceType, $referenceId, $reason, $userId) {
-            // Row lock — mencegah dua transaksi bersamaan membaca
-            // current_stock yang sama lalu sama-sama menuliskan hasil yang
-            // salah (race condition klasik saat antrean kasir padat).
-            $locked = ProductVariant::where('id', $variant->id)->lockForUpdate()->firstOrFail();
+        return DB::transaction(function () use ($variant, $outletId, $type, $qtyChange, $referenceType, $referenceId, $reason, $userId) {
+            return OutletStockSync::internally(function () use ($variant, $outletId, $type, $qtyChange, $referenceType, $referenceId, $reason, $userId) {
+                // Row lock varian DULU (urutan kunci tetap: varian → saldo) — mencegah dua transaksi bersamaan membaca
+                // angka yang sama lalu menuliskan hasil yang salah (race condition klasik saat antrean kasir padat).
+                $locked = ProductVariant::where('id', $variant->id)->lockForUpdate()->firstOrFail();
 
-            $stockBefore = $locked->current_stock;
-            $stockAfter = $stockBefore + $qtyChange;
+                $balance = VariantOutletStock::query()->where('variant_id', $locked->id)->where('outlet_id', $outletId)->lockForUpdate()->first();
+                if ($balance === null) {
+                    // Saldo outlet ini belum pernah ada (varian baru / outlet baru): mulai dari nol, lalu kunci barisnya.
+                    VariantOutletStock::query()->insertOrIgnore(['variant_id' => $locked->id, 'outlet_id' => $outletId, 'current_stock' => 0, 'created_at' => now(), 'updated_at' => now()]);
+                    $balance = VariantOutletStock::query()->where('variant_id', $locked->id)->where('outlet_id', $outletId)->lockForUpdate()->firstOrFail();
+                }
 
-            if ($stockAfter < 0) {
-                throw ValidationException::withMessages([
-                    'qty_change' => __('master_data.insufficient_stock', ['sku' => $locked->sku, 'available' => $stockBefore]),
+                $stockBefore = (int) $balance->current_stock;
+                $stockAfter = $stockBefore + $qtyChange;
+
+                if ($stockAfter < 0) {
+                    $outletName = Outlet::withTrashed()->whereKey($outletId)->value('name');
+                    throw ValidationException::withMessages([
+                        'qty_change' => __('master_data.insufficient_stock', ['sku' => $locked->sku, 'available' => $stockBefore]).' ('.$outletName.')',
+                    ]);
+                }
+
+                $movement = StockMovement::create([
+                    'variant_id' => $locked->id,
+                    'outlet_id' => $outletId,
+                    'type' => $type,
+                    'qty_change' => $qtyChange,
+                    'stock_before' => $stockBefore,
+                    'stock_after' => $stockAfter,
+                    'reference_type' => $referenceType,
+                    'reference_id' => $referenceId,
+                    'reason' => $reason,
+                    'user_id' => $userId,
+                    'created_at' => now(),
                 ]);
-            }
 
-            $movement = StockMovement::create([
-                'variant_id' => $locked->id,
-                'type' => $type,
-                'qty_change' => $qtyChange,
-                'stock_before' => $stockBefore,
-                'stock_after' => $stockAfter,
-                'reference_type' => $referenceType,
-                'reference_id' => $referenceId,
-                'reason' => $reason,
-                'user_id' => $userId,
-                'created_at' => now(),
-            ]);
-
-            $locked->update(['current_stock' => $stockAfter]);
+                $balance->update(['current_stock' => $stockAfter]);
+                $locked->update(['current_stock' => $locked->current_stock + $qtyChange]);
 
             // F13.4 — hanya penyesuaian MANUAL yang dianggap "tindakan
             // sensitif" per PRD 7.13, bukan setiap pergerakan stok (jual/
@@ -116,6 +136,7 @@ class StockService
             }
 
             return $movement;
+            });
         });
     }
 }

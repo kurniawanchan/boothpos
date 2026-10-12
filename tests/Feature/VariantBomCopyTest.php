@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Material;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -27,7 +27,7 @@ class VariantBomCopyTest extends TestCase
 
     private User $owner;
 
-    private Artist $seller;
+    private Outlet $seller;
 
     protected function setUp(): void
     {
@@ -35,7 +35,7 @@ class VariantBomCopyTest extends TestCase
 
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->owner, 'sanctum');
-        $this->seller = Artist::factory()->create();
+        $this->seller = Outlet::factory()->create();
     }
 
     /** Produk dengan tiga varian (Red/Blue/Green); Red punya BOM contoh (500 + 300 bahan, 1.000 jasa). */
@@ -238,7 +238,7 @@ class VariantBomCopyTest extends TestCase
     public function test_copy_never_touches_the_other_data_mode(): void
     {
         [$red, $blue] = $this->product();
-        $demoVariantId = ModeGate::runAs('demo', fn () => $this->variantFor(Artist::factory()->create())->id);
+        $demoVariantId = ModeGate::runAs('demo', fn () => $this->variantFor(Outlet::factory()->create())->id);
 
         $this->copyFrom(ProductVariant::withoutGlobalScopes()->findOrFail($demoVariantId), $red)->assertNotFound();
         $this->assertSame(0, ProductVariantBomLine::withoutGlobalScopes()->where('product_variant_id', $demoVariantId)->count());

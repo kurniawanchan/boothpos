@@ -26,7 +26,7 @@ class CustomerController extends Controller
     /**
      * 020-customer-data-import-export — gerbangnya SAMA PERSIS dengan
      * bulk master-data lain (MasterDataExportController, ImportMasterDataRequest):
-     * canAccessAnyMenu(['artists', 'categories', 'products', 'stock',
+     * canAccessAnyMenu(['outlets', 'categories', 'products', 'stock',
      * 'vendors', 'materials', 'roles', 'users']) — bukan isOwnerOrAdmin().
      * CATATAN: 'customers' SENGAJA tidak dimasukkan ke daftar menu_keys ini
      * — kalau dimasukkan, kasir (yang juga punya menu_keys 'customers'
@@ -177,7 +177,7 @@ class CustomerController extends Controller
         $this->authorize('delete', $customer);
 
         // Guard — pelanggan yang pernah punya order/pre-order (status apa
-        // pun) tidak boleh dihapus, mengikuti pola guard hapus Artist/
+        // pun) tidak boleh dihapus, mengikuti pola guard hapus Outlet/
         // Category (lihat plan 009-ui-ux-refinements R6). CATATAN: Order/
         // Preorder TIDAK memakai trait SoftDeletes (tidak ada kolom
         // deleted_at) — lihat catatan yang sama di EventController::destroy().
@@ -217,7 +217,7 @@ class CustomerController extends Controller
     private function authorizedForBulkOperation(Request $request): bool
     {
         return $request->user()?->canAccessAnyMenu([
-            'artists', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users',
+            'outlets', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users',
         ]) ?? false;
     }
 }

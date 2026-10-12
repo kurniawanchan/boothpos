@@ -11,7 +11,7 @@ use App\Models\User;
  * aturan bisnis ("apakah tindakan ini terhadap akun saya sendiri?"), jadi
  * jawabannya harus 409 bukan 403. isSelfLockout() disediakan sebagai
  * primitif yang dipanggil manual oleh UserController, meniru pola guard
- * bisnis 409 lain di kodebase ini (mis. ArtistController::destroy()'s
+ * bisnis 409 lain di kodebase ini (mis. OutletController::destroy()'s
  * cek produk aktif).
  */
 class UserPolicy

@@ -111,7 +111,7 @@ describe('MasterDataImportModal', () => {
       message: 'Pratinjau impor: tidak ada galat. Belum ada data yang diubah.',
       applied: false,
       dry_run: true,
-      sheets: { artists: { rows: 2, created: 1, updated: 1, unchanged: 0 } },
+      sheets: { outlets: { rows: 2, created: 1, updated: 1, unchanged: 0 } },
       ignored_sheets: ['Catatan Toko'],
       errors: [],
     });
@@ -120,7 +120,7 @@ describe('MasterDataImportModal', () => {
     await fireEvent.click(screen.getByRole('button', { name: /pratinjau/i }));
 
     expect(await screen.findByText(/belum ada data yang diubah/i)).toBeInTheDocument();
-    expect(screen.getByText('Penjual')).toBeInTheDocument();
+    expect(screen.getByText('Outlet')).toBeInTheDocument();
     expect(screen.getByText('+1 baru')).toBeInTheDocument();
     expect(screen.getByText(/catatan toko/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /terapkan impor/i })).toBeInTheDocument();
@@ -132,7 +132,7 @@ describe('MasterDataImportModal', () => {
         message: 'Pratinjau impor: tidak ada galat. Belum ada data yang diubah.',
         applied: false,
         dry_run: true,
-        sheets: { artists: { rows: 1, created: 1, updated: 0, unchanged: 0 } },
+        sheets: { outlets: { rows: 1, created: 1, updated: 0, unchanged: 0 } },
         ignored_sheets: [],
         errors: [],
       })
@@ -140,7 +140,7 @@ describe('MasterDataImportModal', () => {
         message: 'Impor berhasil.',
         applied: true,
         dry_run: false,
-        sheets: { artists: { rows: 1, created: 1, updated: 0, unchanged: 0 } },
+        sheets: { outlets: { rows: 1, created: 1, updated: 0, unchanged: 0 } },
         ignored_sheets: [],
         errors: [],
       });

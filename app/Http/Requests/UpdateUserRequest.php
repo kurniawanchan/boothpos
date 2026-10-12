@@ -16,7 +16,7 @@ class UpdateUserRequest extends FormRequest
         // sengaja TIDAK dilempar di sini — itu bukan soal hak akses
         // (permission problem) melainkan konflik aturan bisnis, jadi
         // dicek manual di UserController::update() dan dijawab 409,
-        // konsisten dengan pola ArtistController/CategoryController untuk
+        // konsisten dengan pola OutletController/CategoryController untuk
         // guard bisnis lain di kodebase ini.
         return $this->user()?->can('update', $this->route('user')) ?? false;
     }

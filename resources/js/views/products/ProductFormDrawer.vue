@@ -7,6 +7,7 @@ import { listStations } from '../../api/stations';
 import { listModifierGroups } from '../../api/modifierGroups';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
+import { useOutletStore } from '../../stores/outlet';
 import { useToastStore } from '../../stores/toast';
 import { toMoneyString } from '../../utils/money';
 import { imageFileError } from './imageGuard';
@@ -27,7 +28,7 @@ import { modifierRuleText } from '../../utils/itemDetail';
  * Drawer tambah/ubah produk beserta varian-variannya — dipecah utuh dari ProductsView. Drawer memegang seluruh
  * keadaan formulir dan alur simpan; halaman hanya memanggil `openCreate()` / `openEdit(product)` (defineExpose)
  * dan menyegarkan daftar saat `saved` (payload `{ id, created }` — ADITIF, pemanggil lama boleh mengabaikannya).
- * Daftar artist/kategori dipinjam dari halaman (sudah dimuat untuk filter) supaya tidak ada panggilan ganda.
+ * Daftar outlet/kategori dipinjam dari halaman (sudah dimuat untuk filter) supaya tidak ada panggilan ganda.
  *
  * 043 — tampilan mengikuti desain "Menu item": bagian rata (Informasi dasar, Harga & pajak, Varian & harga,
  * Modifier, Dapur, Ketersediaan) dipisah garis tipis, kontrol natif bergaris tipis.
@@ -47,7 +48,7 @@ import { modifierRuleText } from '../../utils/itemDetail';
  *   (updateProduct → per-varian → stok → gambar) tidak berubah urutannya; tautan modifier ditambahkan sesudah varian.
  */
 const props = defineProps({
-  artists: { type: Array, default: () => [] },
+  outlets: { type: Array, default: () => [] },
   categories: { type: Array, default: () => [] },
 });
 const emit = defineEmits(['saved']);
@@ -91,8 +92,12 @@ onMounted(async () => {
 const TAX_CATEGORIES = ['restaurant_food_beverage', 'retail', 'other'];
 const taxOptions = computed(() => TAX_CATEGORIES.map((k) => ({ value: k, label: t(`products.tax_${k}`) })));
 
+// 045 Stage 3 — outlet yang menjual item (dicentang semua bawaannya). Tampil hanya bila beberapa outlet terlihat.
+const outletStore = useOutletStore();
+
 const productForm = reactive({
-  artist_id: '',
+  outlet_ids: [],
+  home_outlet_id: '',
   category_id: '',
   product_segment: '',
   name: '',
@@ -188,7 +193,8 @@ function resetImageAndReason() {
 function openCreate(defaults = {}) {
   editingProduct.value = null;
   Object.assign(productForm, {
-    artist_id: props.artists[0]?.id ?? '',
+    outlet_ids: outletStore.outlets.map((o) => o.id),
+    home_outlet_id: props.outlets[0]?.id ?? '',
     // Kategori sengaja kosong ("Pilih…" seperti desain): wajib dipilih, bukan ditebak.
     category_id: '',
     product_segment: '',
@@ -224,7 +230,8 @@ async function openEdit(product) {
   editingProduct.value = full;
   resetImageAndReason();
   Object.assign(productForm, {
-    artist_id: full.artist_id,
+    outlet_ids: (full.outlets ?? []).filter((o) => o.carried).map((o) => o.id),
+    home_outlet_id: full.home_outlet_id,
     category_id: full.category_id,
     product_segment: full.product_segment ?? '',
     name: full.name,
@@ -365,7 +372,7 @@ function validateModifiers() {
 function validateCreate() {
   const required = t('products.f_required');
   if (!productForm.name.trim()) formErrors.name = required;
-  if (productForm.artist_id === '' || productForm.artist_id === null) formErrors.artist_id = required;
+  if (productForm.home_outlet_id === '' || productForm.home_outlet_id === null) formErrors.home_outlet_id = required;
   if (productForm.category_id === '' || productForm.category_id === null) formErrors.category_id = required;
   variantRows.value.forEach((row, i) => {
     if (!row.variant_name.trim() && variantRows.value.length > 1) formErrors[`variants.${i}.variant_name`] = t('products.f_variant_name_required');
@@ -406,7 +413,8 @@ async function saveProduct() {
   try {
     if (editingProduct.value) {
       await updateProduct(editingProduct.value.id, {
-        artist_id: Number(productForm.artist_id),
+        ...(outletStore.multi ? { outlet_ids: productForm.outlet_ids } : {}),
+        home_outlet_id: Number(productForm.home_outlet_id),
         category_id: Number(productForm.category_id),
         name: productForm.name,
         description: productForm.description || null,
@@ -452,7 +460,8 @@ async function saveProduct() {
         track_stock: row.track_stock !== false,
       }));
       const createdProduct = await createProduct({
-        artist_id: Number(productForm.artist_id),
+        ...(outletStore.multi ? { outlet_ids: productForm.outlet_ids } : {}),
+        home_outlet_id: Number(productForm.home_outlet_id),
         category_id: Number(productForm.category_id),
         product_segment: productForm.product_segment || null,
         name: productForm.name,
@@ -567,17 +576,25 @@ async function saveProduct() {
             </select>
           </ProductField>
         </div>
-        <!-- Penjual wajib (artist_id) dan segmen kode: dua kolom biasa, bukan blok khusus. -->
+        <!-- Outlet wajib (home_outlet_id) dan segmen kode: dua kolom biasa, bukan blok khusus. -->
         <div class="grid grid-cols-2 gap-3.5">
-          <ProductField v-slot="{ id }" :label="t('master_data.owner_artist')" required :error="formErrors.artist_id">
-            <select :id="id" v-model="productForm.artist_id" :class="[controlClass, borderOf(formErrors.artist_id)]">
-              <option v-for="a in artists" :key="a.id" :value="a.id">{{ a.name }}</option>
+          <ProductField v-slot="{ id }" :label="t('master_data.owner_artist')" required :error="formErrors.home_outlet_id">
+            <select :id="id" v-model="productForm.home_outlet_id" :class="[controlClass, borderOf(formErrors.home_outlet_id)]">
+              <option v-for="a in outlets" :key="a.id" :value="a.id">{{ a.name }}</option>
             </select>
           </ProductField>
           <ProductField v-slot="{ id }" :label="t('master_data.segment_3')" :error="formErrors.product_segment">
             <input :id="id" v-model="productForm.product_segment" type="text" maxlength="3" :disabled="!isCreate" :placeholder="t('master_data.auto')" :class="[controlClass, borderOf(formErrors.product_segment)]" />
           </ProductField>
         </div>
+        <fieldset v-if="outletStore.multi" class="flex flex-col gap-1.5" data-testid="active-outlets">
+          <legend class="text-[12.5px] font-semibold text-muted-4">{{ t('products.f_active_outlets') }}</legend>
+          <p class="text-[11.5px] text-muted-3">{{ t('products.f_active_outlets_hint') }}</p>
+          <label v-for="o in outletStore.outlets" :key="o.id" class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
+            <input v-model="productForm.outlet_ids" type="checkbox" :value="o.id" class="h-4 w-4 rounded border-line accent-brand" />
+            {{ o.name }}
+          </label>
+        </fieldset>
         <ProductField v-slot="{ id }" :label="t('master_data.description')">
           <textarea :id="id" v-model="productForm.description" rows="3" :class="[textareaClass, borderOf('')]"></textarea>
         </ProductField>

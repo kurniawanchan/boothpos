@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { previewPriceChange, applyPriceChange } from '../../api/menu';
 import { useSettingsStore } from '../../stores/settings';
+import { useOutletStore } from '../../stores/outlet';
 import { useToastStore } from '../../stores/toast';
 import { toLocalDateKey } from '../../utils/date';
 import { formatIDR } from '../../utils/formatters';
@@ -26,6 +27,10 @@ import ErrorState from '../ui/ErrorState.vue';
  *
  * Cakupan server adalah KATEGORI (beserta turunannya), bukan item. Bila dibuka dari baris terpilih, `fromSelection`
  * memunculkan catatan jujur bahwa seluruh item di kategori itu ikut berubah.
+ *
+ * 045 Stage 3: dengan lebih dari satu outlet terlihat muncul bagian "Harga yang diubah" — harga dasar (bawaan),
+ * semua outlet, atau outlet terpilih. Saat rilis menu aktif harga outlet
+ * menjadi perubahan tertunda seperti harga dasar; instalasi satu outlet tidak melihat bagian ini sama sekali.
  */
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -37,10 +42,11 @@ const emit = defineEmits(['close', 'saved']);
 const { t } = useI18n();
 const settings = useSettingsStore();
 const toast = useToastStore();
+const outletStore = useOutletStore();
 
 const PREVIEW_DELAY = 400;
 
-const form = reactive({ categoryIds: [], type: 'percent', value: '', rounding: '500', effectiveFrom: '' });
+const form = reactive({ categoryIds: [], type: 'percent', value: '', rounding: '500', effectiveFrom: '', priceScope: 'base', outletIds: [] });
 const fieldErrors = ref({});
 const preview = ref(null); // { items, count, warnings } dari server
 const previewState = ref('idle'); // idle | loading | ready | error
@@ -50,12 +56,14 @@ let seq = 0;
 let timer = null;
 
 const releaseMode = computed(() => settings.menuReleaseEnabled);
+const showOutletScope = computed(() => outletStore.multi);
 const submitLabel = computed(() => (releaseMode.value ? t('products.bulk_submit_release') : t('products.bulk_submit_apply')));
 
 const valueNumber = computed(() => (form.value === '' || form.value === null ? NaN : Number(form.value)));
 // Masukan yang cukup untuk meminta pratinjau: ada kategori dan nilai angka bukan nol. Selebihnya (tanggal lampau,
 // harga <= 0) sengaja diserahkan ke server supaya aturannya tidak ditulis dua kali.
-const inputComplete = computed(() => form.categoryIds.length > 0 && Number.isFinite(valueNumber.value) && valueNumber.value !== 0 && !!form.effectiveFrom);
+const scopeComplete = computed(() => !showOutletScope.value || form.priceScope !== 'outlets' || form.outletIds.length > 0);
+const inputComplete = computed(() => scopeComplete.value && form.categoryIds.length > 0 && Number.isFinite(valueNumber.value) && valueNumber.value !== 0 && !!form.effectiveFrom);
 
 function payload() {
   return {
@@ -64,6 +72,9 @@ function payload() {
     value: valueNumber.value,
     rounding: form.rounding,
     effective_from: form.effectiveFrom,
+    ...(showOutletScope.value && form.priceScope !== 'base'
+      ? { price_scope: form.priceScope, ...(form.priceScope === 'outlets' ? { outlet_ids: form.outletIds } : {}) }
+      : {}),
   };
 }
 
@@ -113,7 +124,7 @@ function schedulePreview() {
   timer = setTimeout(runPreview, PREVIEW_DELAY);
 }
 
-watch(() => [form.categoryIds.slice(), form.type, form.value, form.rounding, form.effectiveFrom], schedulePreview);
+watch(() => [form.categoryIds.slice(), form.type, form.value, form.rounding, form.effectiveFrom, form.priceScope, form.outletIds.slice()], schedulePreview);
 
 // Setiap pembukaan memulai dari keadaan bersih; cakupan awal berasal dari pemanggil (filter kategori / baris terpilih).
 watch(
@@ -127,6 +138,8 @@ watch(
     form.value = '';
     form.rounding = settings.priceRoundingDefault === 'none' ? 'none' : '500';
     form.effectiveFrom = toLocalDateKey(new Date());
+    form.priceScope = 'base';
+    form.outletIds = [];
     fieldErrors.value = {};
     preview.value = null;
     previewState.value = 'idle';
@@ -146,6 +159,13 @@ function toggleCategory(id, checked) {
 }
 function toggleAll(checked) {
   form.categoryIds = checked ? props.categories.map((c) => c.id) : [];
+}
+
+function toggleOutlet(id, checked) {
+  const set = new Set(form.outletIds);
+  if (checked) set.add(id);
+  else set.delete(id);
+  form.outletIds = outletStore.outlets.map((o) => o.id).filter((x) => set.has(x));
 }
 
 const hasPreview = computed(() => previewState.value === 'ready' && preview.value?.count > 0);
@@ -252,6 +272,23 @@ async function submit() {
       <p v-if="releaseMode" class="text-[12px] leading-relaxed text-muted-4" data-testid="bulk-release-note">{{ t('products.bulk_release_note') }}</p>
     </FormSection>
 
+    <FormSection v-if="showOutletScope" :title="t('products.bulk_price_scope')" :description="t('products.bulk_price_scope_desc')">
+      <div role="radiogroup" :aria-label="t('products.bulk_price_scope')" class="flex flex-col gap-2" data-testid="bulk-price-scope">
+        <label v-for="opt in ['base', 'all_outlets', 'outlets']" :key="opt" class="flex cursor-pointer items-center gap-2.5 text-[13px] font-semibold">
+          <input v-model="form.priceScope" type="radio" name="bulk-price-scope" class="h-4 w-4 accent-brand" :value="opt" />
+          {{ t(`products.bulk_scope_${opt}`) }}
+        </label>
+      </div>
+      <div v-if="form.priceScope === 'outlets'" class="max-h-[160px] overflow-y-auto border-2 border-line bg-white" data-testid="bulk-outlets">
+        <label v-for="o in outletStore.outlets" :key="o.id" class="flex cursor-pointer items-center gap-2.5 border-b border-line-5 px-3 py-2 text-[13px] last:border-b-0 hover:bg-line-7">
+          <input type="checkbox" class="h-4 w-4 accent-brand" :checked="form.outletIds.includes(o.id)" @change="toggleOutlet(o.id, $event.target.checked)" />
+          {{ o.code }} · {{ o.name }}
+        </label>
+      </div>
+      <p v-if="errorOf('outlet_ids')" role="alert" class="text-[12px] font-semibold text-danger-text">{{ errorOf('outlet_ids') }}</p>
+      <p v-if="errorOf('price_scope')" role="alert" class="text-[12px] font-semibold text-danger-text">{{ errorOf('price_scope') }}</p>
+    </FormSection>
+
     <FormSection :title="t('products.bulk_preview')">
       <ul v-if="valueErrors.length > 1" role="alert" class="list-disc pl-5 text-[12px] font-semibold text-danger-text" data-testid="bulk-value-errors">
         <li v-for="(m, i) in valueErrors" :key="i">{{ m }}</li>
@@ -275,10 +312,11 @@ async function submit() {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in preview.items" :key="row.variant_id" class="border-t border-line-5" data-testid="bulk-preview-row">
+                <tr v-for="row in preview.items" :key="`${row.variant_id}:${row.outlet_id ?? 'base'}`" class="border-t border-line-5" data-testid="bulk-preview-row">
                   <td class="px-3 py-2">
                     <span class="font-semibold">{{ row.product }}</span>
                     <span class="text-muted-3"> · {{ row.variant }}</span>
+                    <span v-if="row.outlet_code" class="ml-1 font-semibold text-brand-active" data-testid="bulk-preview-outlet">@ {{ row.outlet_code }}</span>
                   </td>
                   <td class="px-3 py-2 text-right tabular-nums text-muted-4">{{ formatIDR(row.old_price) }}</td>
                   <td class="px-3 py-2 text-right font-bold tabular-nums">{{ formatIDR(row.new_price) }}</td>

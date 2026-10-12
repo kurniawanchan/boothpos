@@ -46,4 +46,5 @@ return [
     'local_ref_belongs_to_open_tab' => 'Referensi ini milik tab yang masih terbuka, bukan penjualan yang sudah selesai.',
     'cannot_void_open_tab' => 'Tab terbuka tidak bisa dibatalkan sebagai penjualan. Gunakan "Batalkan tab".',
     'receipt_unavailable_for_open_tab' => 'Struk belum bisa dicetak untuk tab yang belum dibayar.',
+    'unavailable_not_carried' => 'tidak dijual di outlet ini',
 ];

@@ -8,6 +8,8 @@ import StatusPill from '../ui/StatusPill.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseInput from '../ui/BaseInput.vue';
+import BaseSelect from '../ui/BaseSelect.vue';
+import { useOutletStore } from '../../stores/outlet';
 import ConfirmDialog from '../ui/ConfirmDialog.vue';
 
 /**
@@ -39,7 +41,8 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editing = ref(null);
-const form = reactive({ name: '', display_order: 0, is_active: true });
+const outletStore = useOutletStore();
+const form = reactive({ name: '', display_order: 0, is_active: true, outlet_id: '' });
 const formErrors = reactive({});
 const saving = ref(false);
 const deleteTarget = ref(null);
@@ -49,7 +52,7 @@ const clearErrors = () => Object.keys(formErrors).forEach((k) => delete formErro
 
 function openCreate() {
   editing.value = null;
-  Object.assign(form, { name: '', display_order: rows.value.length, is_active: true });
+  Object.assign(form, { name: '', display_order: rows.value.length, is_active: true, outlet_id: outletStore.selected ?? '' });
   clearErrors();
   showForm.value = true;
 }
@@ -64,7 +67,13 @@ function openEdit(station) {
 async function save() {
   saving.value = true;
   clearErrors();
-  const payload = { name: form.name, display_order: Number(form.display_order) || 0, is_active: form.is_active };
+  const payload = {
+    name: form.name,
+    display_order: Number(form.display_order) || 0,
+    is_active: form.is_active,
+    // 045 Stage 2 — outlet hanya dikirim saat membuat.
+    ...(!editing.value && form.outlet_id ? { outlet_id: Number(form.outlet_id) } : {}),
+  };
   try {
     if (editing.value) {
       await updateStation(editing.value.id, payload);
@@ -122,6 +131,14 @@ async function performDelete() {
 
     <BaseModal :open="showForm" :title="editing ? t('dining_setup.st_edit') : t('dining_setup.st_new')" max-width-class="max-w-[420px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="save">
+        <BaseSelect
+          v-if="outletStore.multi && !editing"
+          v-model="form.outlet_id"
+          :label="t('frame.outlet_label')"
+          required
+          :options="outletStore.outlets.map((o) => ({ value: o.id, label: o.name }))"
+          :error="formErrors.outlet_id"
+        />
         <BaseInput v-model="form.name" :label="t('dining_setup.st_name')" required maxlength="60" :error="formErrors.name" />
         <BaseInput v-model="form.display_order" type="number" :label="t('dining_setup.st_order')" :error="formErrors.display_order" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">

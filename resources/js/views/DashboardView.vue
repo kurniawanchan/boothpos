@@ -6,6 +6,7 @@ import { useDashboardPeriod, DASHBOARD_PERIODS } from '../composables/useDashboa
 import { useAutoRefresh } from '../composables/useAutoRefresh';
 import { useSettingsStore } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
+import { useOutletStore } from '../stores/outlet';
 import { formatBusinessDate, formatClock, todayInZone } from '../utils/dashboardDates';
 import PageHeader from '../components/page/PageHeader.vue';
 import DashboardKpis from '../components/dashboard/DashboardKpis.vue';
@@ -24,6 +25,13 @@ import LoadingState from '../components/ui/LoadingState.vue';
 const { t } = useI18n();
 const settings = useSettingsStore();
 const toast = useToastStore();
+const outletStore = useOutletStore();
+// 045 Stage 2 — baris cakupan: outlet terpilih, atau "Semua outlet · N". Hanya bila ada lebih dari satu outlet.
+const scopeText = computed(() => {
+  if (!outletStore.multi) return '';
+  const chosen = outletStore.outlets.find((o) => o.id === outletStore.selected);
+  return chosen ? t('dashboard.scope_outlet', { outlet: chosen.name }) : t('dashboard.scope_all', { count: outletStore.outlets.length });
+});
 const { period, setPeriod } = useDashboardPeriod();
 
 // "Per event" memuat chart.js dan enam panggilan API sendiri. defineAsyncComponent menjaga chart.js di luar
@@ -134,6 +142,7 @@ async function onExport() {
     <PageHeader :title="t('nav.dashboard')">
       <template #meta>
         <span data-testid="business-date">{{ businessDateText }} · {{ t('dashboard.business_date_note') }}</span>
+        <span v-if="scopeText" class="inline-flex items-center gap-1.5 border-l border-line pl-3 font-semibold" data-testid="dashboard-scope">{{ scopeText }}</span>
         <span v-if="updatedText" class="inline-flex items-center gap-1.5 border-l border-line pl-3" data-testid="updated-at">
           <span class="h-2 w-2 bg-marker-success" aria-hidden="true"></span>{{ updatedText }}
         </span>
@@ -167,8 +176,8 @@ async function onExport() {
       </template>
     </PageHeader>
 
-    <!-- Stage A: belum ada pemilih outlet, jadi catatan "seluruh organisasi" pada kartu stok belum pernah tampil. -->
-    <DashboardKpis :summary="data" :state="state" :outlet-selected="false" @retry="loadSummary()" />
+    <!-- 045: dengan satu outlet terpilih, kartu stok (seluruh organisasi) memberi catatannya. -->
+    <DashboardKpis :summary="data" :state="state" :outlet-selected="outletStore.selected !== null" @retry="loadSummary()" />
 
     <!-- Cakupan satu outlet: "Seluruh toko" (Stage B menggantinya dengan nama outlet / "Semua outlet"). -->
     <AttentionPanel

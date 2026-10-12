@@ -15,7 +15,8 @@ class StoreProductRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'artist_id' => ['required', 'integer', 'exists:artists,id'],
+            ...\App\Support\OutletCarriedRule::rules(),
+            'home_outlet_id' => ['required', 'integer', 'exists:outlets,id'],
             'category_id' => ['required', 'integer', 'exists:categories,id'],
             'product_segment' => ['nullable', 'string', 'size:3', 'alpha'],
             'name' => ['required', 'string', 'max:150'],

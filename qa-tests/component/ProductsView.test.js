@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/vue';
 import { renderDrawerHost } from './productFormDrawerHost';
 import { listProducts, productSummary, getProduct, createProduct, updateProduct, updateVariant, addVariant, uploadVariantImage } from '../../resources/js/api/products';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { listCategories } from '../../resources/js/api/categories';
 import { ROW, COUNTS, SUMMARY, META, renderProducts as renderProductsPage } from './productsViewHarness';
 
@@ -18,7 +18,7 @@ vi.mock('../../resources/js/api/products', () => ({
   uploadProductImage: vi.fn(),
   uploadVariantImage: vi.fn(),
 }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/categories', () => ({ listCategories: vi.fn() }));
 vi.mock('../../resources/js/api/stations', () => ({ listStations: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../resources/js/api/materials', () => ({ listMaterials: vi.fn().mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } }), createMaterial: vi.fn(), updateMaterial: vi.fn(), deleteMaterial: vi.fn() }));
@@ -46,7 +46,7 @@ function seedList() {
   localStorage.clear();
   listProducts.mockResolvedValue({ data: [ROW(1, { name: 'Keychain A' }), ROW(2, { name: 'Keychain B' })], meta: META(2), counts: COUNTS });
   productSummary.mockResolvedValue(SUMMARY);
-  listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+  listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A', code: 'ART' }] });
   listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
 }
 
@@ -58,7 +58,7 @@ describe('ProductsView — edit drawer (variants, markup, variant image)', () =>
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     getProduct.mockResolvedValue({
-      id: 1, artist_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
+      id: 1, home_outlet_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
       description: '', is_preorder: false, preorder_eta: null, is_active: true, image_url: null,
       variants: [{ id: 10, sku: 'ART-KY-001-001', variant_name: 'Standard', cost_price: '20000.00', sell_price: '30000.00', low_stock_alert: null, is_active: true, image_url: null }],
     });
@@ -79,7 +79,7 @@ describe('ProductsView — edit drawer (variants, markup, variant image)', () =>
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     getProduct.mockResolvedValue({
-      id: 1, artist_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
+      id: 1, home_outlet_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
       description: '', is_preorder: false, preorder_eta: null, is_active: true, image_url: null,
       variants: [{ id: 10, sku: 'ART-KY-001-001', variant_name: 'Standard', cost_price: '10000.00', sell_price: '20000.00', current_stock: 5, low_stock_alert: null, is_active: true, image_url: null }],
     });
@@ -107,7 +107,7 @@ describe('ProductsView — edit drawer (variants, markup, variant image)', () =>
 // 034-seller-po-bom (US4) — varian dengan BOM selesai: harga modal mengikuti BOM.
 describe('ProductsView — variants with a completed BOM (034)', () => {
   const PRODUCT = (variant) => ({
-    id: 1, artist_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
+    id: 1, home_outlet_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
     description: '', is_preorder: false, preorder_eta: null, is_active: true, image_url: null,
     variants: [{ id: 10, sku: 'ART-KY-001-001', variant_name: 'Standard', sell_price: '30000.00', current_stock: 5, low_stock_alert: null, is_active: true, image_url: null, ...variant }],
   });
@@ -193,7 +193,7 @@ describe('ProductsView — variants with a completed BOM (034)', () => {
 // 043 (T035) — fakta item baru di drawer: nama pendek, kategori pajak, estimasi persiapan, penanda ritel.
 describe('ProductsView — item facts in the form drawer (043)', () => {
   const FULL = (extra = {}) => ({
-    id: 1, artist_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
+    id: 1, home_outlet_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
     description: '', is_preorder: false, preorder_eta: null, is_active: true, image_url: null,
     short_name: 'Kopi', tax_category: 'restaurant_food_beverage', prep_minutes: 3, is_retail: false,
     variants: [{ id: 10, sku: 'ART-KY-001-001', variant_name: 'Standard', cost_price: '1000.00', sell_price: '3000.00', current_stock: 5, low_stock_alert: null, is_active: true, image_url: null }],

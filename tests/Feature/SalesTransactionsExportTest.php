@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Exports\GenericArrayExport;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -47,7 +47,7 @@ class SalesTransactionsExportTest extends TestCase
 
         $this->event = Event::factory()->create(['status' => 'active']);
         $this->session = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
-        $product = Product::factory()->create(['artist_id' => Artist::factory()->create(['name' => 'Nekoyama Studio'])->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Akatsuki Keychain', 'is_preorder' => true]);
+        $product = Product::factory()->create(['home_outlet_id' => Outlet::factory()->create(['name' => 'Nekoyama Studio'])->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Akatsuki Keychain', 'is_preorder' => true]);
         $this->variant = $product->variants()->create(['sku' => 'NEKKYAKT0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
     }
 
@@ -135,9 +135,9 @@ class SalesTransactionsExportTest extends TestCase
 
     public function test_every_line_is_listed_not_just_the_two_shown_in_the_preview(): void
     {
-        $extra = Product::factory()->create(['artist_id' => Artist::factory()->create()->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Poster'])
+        $extra = Product::factory()->create(['home_outlet_id' => Outlet::factory()->create()->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Poster'])
             ->variants()->create(['sku' => 'POSTER0001', 'sell_price' => 5000, 'cost_price' => 1000, 'current_stock' => 50]);
-        $third = Product::factory()->create(['artist_id' => Artist::factory()->create()->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Pin'])
+        $third = Product::factory()->create(['home_outlet_id' => Outlet::factory()->create()->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Pin'])
             ->variants()->create(['sku' => 'PIN0001', 'sell_price' => 2000, 'cost_price' => 500, 'current_stock' => 50]);
         $order = $this->makeOrder(['items' => [
             ['variant_id' => $this->variant->id, 'qty' => 3], ['variant_id' => $extra->id, 'qty' => 1], ['variant_id' => $third->id, 'qty' => 2],

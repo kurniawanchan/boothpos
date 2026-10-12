@@ -8,6 +8,7 @@ import { resolveAppName } from '../../utils/appName';
 import { formatDate, formatDateTime, formatDateRange } from '../../utils/date';
 import { downloadElementAsPdf, downloadElementAsPng } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
+import { useOutletStore } from '../../stores/outlet';
 
 /**
  * 002-language-toggle FR-009 — labels in this component's template
@@ -36,6 +37,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const toast = useToastStore();
+const outletStore = useOutletStore(); // 045: nama outlet di struk hanya bila ada lebih dari satu outlet
 const receipt = ref(null);
 const appName = computed(() => resolveAppName(receipt.value?.app_name));
 const loading = ref(false);
@@ -119,6 +121,7 @@ watch(
         />
         <span class="text-[17px] font-extrabold tracking-tight">{{ receipt.store_name }}</span>
         <span v-if="receipt.store_address" class="max-w-[300px] text-[11.5px] leading-snug text-muted-3">{{ receipt.store_address }}</span>
+        <span v-if="outletStore.multi && receipt.outlet_name" class="text-[12.5px] font-semibold text-muted-4" data-testid="receipt-outlet">{{ receipt.outlet_name }}</span>
         <span class="text-[12.5px] text-muted-2">{{ receipt.event_name }}</span>
         <span class="mt-1.5 font-mono text-[13px] font-semibold">{{ receipt.order_number }}</span>
         <!-- 028 — penjualan dari tab: tampilkan meja atau label takeaway. -->
@@ -154,7 +157,7 @@ watch(
             <span class="text-[14.5px] font-semibold leading-snug">{{ item.name }}</span>
             <span class="text-[12px] text-muted-3">
               {{ formatIDR(item.price) }}
-              <template v-if="item.artist_name"> · {{ item.artist_name }}</template>
+              <template v-if="item.home_outlet_name"> · {{ item.home_outlet_name }}</template>
             </span>
             <!-- 028 — pilihan modifier & catatan (struk selalu Bahasa Indonesia, lihat FR-009 fitur 002). -->
             <span v-if="item.modifiers?.length" class="text-[12px] text-muted-4">{{ item.modifiers.map((m) => m.option).join(', ') }}</span>

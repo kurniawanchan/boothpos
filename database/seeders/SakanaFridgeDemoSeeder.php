@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -77,7 +77,7 @@ class SakanaFridgeDemoSeeder extends Seeder
 
             $event = $this->seedEvent();
             $categories = $this->seedCategories();
-            $artists = $this->seedArtists();
+            $artists = $this->seedOutlets();
             $variantsByLabel = $this->seedProductsAndVariants($artists, $categories);
             $customers = $this->seedCustomers();
             $vendors = $this->seedVendors();
@@ -159,8 +159,8 @@ class SakanaFridgeDemoSeeder extends Seeder
         return $categories;
     }
 
-    /** @return array<string,Artist> keyed by 3-huruf code */
-    private function seedArtists(): array
+    /** @return array<string,Outlet> keyed by 3-huruf code */
+    private function seedOutlets(): array
     {
         $rows = [
             'NEK' => 'Nekoyama Studio',
@@ -170,7 +170,7 @@ class SakanaFridgeDemoSeeder extends Seeder
 
         $artists = [];
         foreach ($rows as $code => $name) {
-            $artists[$code] = Artist::firstOrCreate(
+            $artists[$code] = Outlet::firstOrCreate(
                 ['code' => $code],
                 [
                     'name' => $name,
@@ -187,13 +187,13 @@ class SakanaFridgeDemoSeeder extends Seeder
      * 9 produk (3 per artist x kategori KY/AC/PN), 3 varian per produk
      * dengan stok awal via StockService (movement type 'initial').
      *
-     * @param  array<string,Artist>  $artists
+     * @param  array<string,Outlet>  $artists
      * @param  array<string,Category>  $categories
      * @return array<string,ProductVariant[]> varian dikelompokkan per label produk, dipakai seedBomLines/seedSales/seedPreorders
      */
     private function seedProductsAndVariants(array $artists, array $categories): array
     {
-        // [artist_code, category_code, segment 3-huruf, nama produk, [harga_modal, harga_jual, stok] per 3 varian]
+        // [home_outlet_code, category_code, segment 3-huruf, nama produk, [harga_modal, harga_jual, stok] per 3 varian]
         $definitions = [
             ['NEK', 'KY', 'MIK', 'Gantungan Kunci Neko Mikael', [15000, 35000, 60], [17000, 39000, 45], [20000, 45000, 25]],
             ['NEK', 'AC', 'WAR', 'Standee Akrilik Neko Warrior', [22000, 55000, 40], [25000, 62000, 30], [30000, 75000, 15]],
@@ -219,7 +219,7 @@ class SakanaFridgeDemoSeeder extends Seeder
 
             if ($isNewProduct) {
                 $product = Product::create([
-                    'artist_id' => $artist->id,
+                    'home_outlet_id' => $artist->id,
                     'category_id' => $category->id,
                     'code_prefix' => $prefix,
                     'product_segment' => $segment,
@@ -247,6 +247,8 @@ class SakanaFridgeDemoSeeder extends Seeder
 
                     $this->stockService->applyMovement(
                         variant: $variant,
+                        // 045 Stage 5 — stok contoh di outlet bawaan, tempat shift contoh (bawaan) menjual.
+                        outletId: (int) \App\Support\OutletStockSync::defaultOutlet(),
                         type: 'initial',
                         qtyChange: $stock,
                         reason: 'Stok awal data contoh (SakanaFridgeDemoSeeder).',

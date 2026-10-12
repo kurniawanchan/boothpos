@@ -37,7 +37,7 @@ const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || 
 
 // 020-customer-data-import-export — cermin kosmetik saja dari gerbang
 // server-side sesungguhnya (CustomerController::authorizedForBulkOperation(),
-// canAccessAnyMenu(['artists','categories','products','stock','vendors',
+// canAccessAnyMenu(['outlets','categories','products','stock','vendors',
 // 'materials','roles','users'])). Owner/admin punya SELURUH menu_keys,
 // inventory punya persis daftar itu, kasir tidak — jadi tiga peran ini
 // (bukan hanya isOwnerOrAdmin di atas) yang dicerminkan di sini, per

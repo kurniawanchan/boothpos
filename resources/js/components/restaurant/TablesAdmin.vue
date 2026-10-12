@@ -8,6 +8,8 @@ import StatusPill from '../ui/StatusPill.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseInput from '../ui/BaseInput.vue';
+import BaseSelect from '../ui/BaseSelect.vue';
+import { useOutletStore } from '../../stores/outlet';
 import ConfirmDialog from '../ui/ConfirmDialog.vue';
 
 /**
@@ -42,7 +44,8 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editing = ref(null);
-const form = reactive({ name: '', area: '', seats: 4, display_order: 0, is_active: true });
+const outletStore = useOutletStore();
+const form = reactive({ name: '', area: '', seats: 4, display_order: 0, is_active: true, outlet_id: '' });
 const formErrors = reactive({});
 const saving = ref(false);
 
@@ -56,7 +59,7 @@ function clearErrors() {
 
 function openCreate() {
   editing.value = null;
-  Object.assign(form, { name: '', area: '', seats: 4, display_order: 0, is_active: true });
+  Object.assign(form, { name: '', area: '', seats: 4, display_order: 0, is_active: true, outlet_id: outletStore.selected ?? '' });
   clearErrors();
   showForm.value = true;
 }
@@ -77,6 +80,8 @@ async function save() {
     seats: Number(form.seats) || 1,
     display_order: Number(form.display_order) || 0,
     is_active: form.is_active,
+    // 045 Stage 2 — outlet hanya dikirim saat membuat; server menolak yang di luar outlet pengguna.
+    ...(!editing.value && form.outlet_id ? { outlet_id: Number(form.outlet_id) } : {}),
   };
   try {
     if (editing.value) {
@@ -146,6 +151,14 @@ async function performDelete() {
 
     <BaseModal :open="showForm" :title="editing ? t('dining_setup.edit_table') : t('dining_setup.new_table')" max-width-class="max-w-[460px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="save">
+        <BaseSelect
+          v-if="outletStore.multi && !editing"
+          v-model="form.outlet_id"
+          :label="t('frame.outlet_label')"
+          required
+          :options="outletStore.outlets.map((o) => ({ value: o.id, label: o.name }))"
+          :error="formErrors.outlet_id"
+        />
         <BaseInput v-model="form.name" :label="t('dining_setup.table_name')" required maxlength="60" :error="formErrors.name" />
         <BaseInput v-model="form.area" :label="t('dining_setup.table_area')" maxlength="60" :hint="t('dining_setup.table_area_hint')" :error="formErrors.area" />
         <BaseInput v-model="form.seats" type="number" min="1" max="99" :label="t('dining_setup.table_seats')" :error="formErrors.seats" />

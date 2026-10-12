@@ -13,9 +13,21 @@ class MaterialStockMovement extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'material_id', 'type', 'qty_change', 'stock_before', 'stock_after',
+        'material_id', 'outlet_id', 'type', 'qty_change', 'stock_before', 'stock_after',
         'reference_type', 'reference_id', 'user_id', 'created_at',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (MaterialStockMovement $m) {
+            $m->outlet_id ??= \App\Support\OutletStockSync::defaultOutlet();
+        });
+    }
+
+    public function outlet(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Outlet::class);
+    }
 
     protected function casts(): array
     {

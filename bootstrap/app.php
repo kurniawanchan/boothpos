@@ -21,6 +21,13 @@ return Application::configure(basePath: dirname(__DIR__))
         // ditolak sedini mungkin, sebelum middleware lain (mis. auth)
         // sempat memproses apa pun.
         $middleware->api(prepend: [EnsureInstallationIsActivated::class]);
+
+        // 045 Stage 2 — konteks outlet HARUS terisi sebelum route-model binding, kalau tidak {order}/{session}
+        // dst. di-resolve tanpa OutletScope dan kasir bisa membuka record outlet lain lewat id.
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            prepend: \App\Http\Middleware\ResolveOutletContext::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

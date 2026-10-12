@@ -6,7 +6,7 @@ import { useToastStore } from '../../stores/toast';
 import { updateSettings } from '../../api/settings';
 import SettingsSection from './SettingsSection.vue';
 
-// Pro vs Master = satu setting `multi_artist_enabled` (lihat LicenseGate di backend).
+// Pro vs Master = satu setting `multi_outlet_enabled` (lihat LicenseGate di backend).
 const settings = useSettingsStore();
 const { t } = useI18n();
 const toast = useToastStore();
@@ -14,10 +14,10 @@ const toast = useToastStore();
 const changingTier = ref(false);
 
 async function pickTier(enabled) {
-  if (enabled === settings.multiArtistEnabled) return;
+  if (enabled === settings.multiOutletEnabled) return;
   changingTier.value = true;
   try {
-    await updateSettings([{ key: 'multi_artist_enabled', value: enabled, type: 'boolean', group: 'licensing' }]);
+    await updateSettings([{ key: 'multi_outlet_enabled', value: enabled, type: 'boolean', group: 'licensing' }]);
     toast.success(t('settings.switched_to', { tier: enabled ? t('settings.master') : t('settings.pro') }));
     await settings.load();
   } catch (err) {
@@ -34,11 +34,11 @@ async function pickTier(enabled) {
       <button
         type="button"
         class="flex items-start gap-3 border-2 px-4 py-3.5 text-left transition-colors"
-        :class="!settings.multiArtistEnabled ? 'border-brand bg-mint-50' : 'border-line hover:border-brand'"
+        :class="!settings.multiOutletEnabled ? 'border-brand bg-mint-50' : 'border-line hover:border-brand'"
         :disabled="changingTier"
         @click="pickTier(false)"
       >
-        <span class="mt-1 h-2.5 w-2.5 flex-none rounded-full" :class="!settings.multiArtistEnabled ? 'bg-brand' : 'bg-line-2'"></span>
+        <span class="mt-1 h-2.5 w-2.5 flex-none rounded-full" :class="!settings.multiOutletEnabled ? 'bg-brand' : 'bg-line-2'"></span>
         <span class="flex flex-col gap-0.5">
           <span class="text-[13.5px] font-bold">{{ t('settings.pro') }}</span>
           <span class="text-[12px] leading-relaxed text-muted-3">{{ t('settings.pro_desc') }}</span>
@@ -47,11 +47,11 @@ async function pickTier(enabled) {
       <button
         type="button"
         class="flex items-start gap-3 border-2 px-4 py-3.5 text-left transition-colors"
-        :class="settings.multiArtistEnabled ? 'border-brand bg-mint-50' : 'border-line hover:border-brand'"
+        :class="settings.multiOutletEnabled ? 'border-brand bg-mint-50' : 'border-line hover:border-brand'"
         :disabled="changingTier"
         @click="pickTier(true)"
       >
-        <span class="mt-1 h-2.5 w-2.5 flex-none rounded-full" :class="settings.multiArtistEnabled ? 'bg-brand' : 'bg-line-2'"></span>
+        <span class="mt-1 h-2.5 w-2.5 flex-none rounded-full" :class="settings.multiOutletEnabled ? 'bg-brand' : 'bg-line-2'"></span>
         <span class="flex flex-col gap-0.5">
           <span class="text-[13.5px] font-bold">{{ t('settings.master') }}</span>
           <span class="text-[12px] leading-relaxed text-muted-3">{{ t('settings.master_desc') }}</span>

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { getFloor } from '../api/floor';
 import { getTab } from '../api/tabs';
+import { normalizeFloor } from '../utils/floorShape';
 
 /**
  * 028 — keadaan lantai restoran. Server adalah satu-satunya sumber kebenaran
@@ -11,6 +12,8 @@ export const useFloorStore = defineStore('floor', {
   state: () => ({
     areas: [],
     takeawayTabs: [],
+    // null = satu outlet (bentuk lama); daftar {id, code, name} bila beberapa outlet berlaku.
+    outlets: null,
     version: null,
     loaded: false,
     // Tab yang sedang dibuka di layar TabView. Server-owned: seluruh isinya
@@ -33,8 +36,10 @@ export const useFloorStore = defineStore('floor', {
         this.version = data.version;
         return;
       }
-      this.areas = data.areas ?? [];
-      this.takeawayTabs = data.takeaway_tabs ?? [];
+      const shape = normalizeFloor(data);
+      this.areas = shape.areas;
+      this.takeawayTabs = shape.takeaway_tabs;
+      this.outlets = shape.outlets;
       this.version = data.version;
       this.loaded = true;
     },

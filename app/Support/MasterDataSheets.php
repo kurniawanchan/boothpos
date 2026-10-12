@@ -18,7 +18,7 @@ namespace App\Support;
  */
 final class MasterDataSheets
 {
-    public const ARTISTS = 'artists';
+    public const OUTLETS = 'outlets';
 
     public const CATEGORIES = 'categories';
 
@@ -30,7 +30,7 @@ final class MasterDataSheets
      * Vendor/bahan baku/BOM — ditambahkan pasca-MVP 2026-09-01 (lihat
      * catatan bertanggal di CLAUDE.md/README.md/PRD). "vendor_prices" dan
      * "bom" mereferensikan vendor/bahan/varian lewat KODE, bukan id
-     * database, mengikuti pola persis artist_code/category_code pada sheet
+     * database, mengikuti pola persis home_outlet_code/category_code pada sheet
      * 'products' — supaya berkas hasil ekspor tetap portabel antar
      * instalasi dan tidak bergantung pada urutan insert.
      */
@@ -46,10 +46,20 @@ final class MasterDataSheets
      * Role/User — ditambahkan pasca-MVP 2026-09-02 (User Story 4, fitur
      * 001-user-store-settings). Diproses PALING TERAKHIR: 'users'
      * mereferensikan 'roles' lewat NAMA (Role.name adalah kolom unik
-     * peran — Role TIDAK punya kolom `code` seperti artist/kategori/vendor/
+     * peran — Role TIDAK punya kolom `code` seperti outlet/kategori/vendor/
      * bahan, jadi mengikuti kunci alami yang sudah ada, bukan menambah
      * kolom baru hanya demi seragam dengan sheet lain).
      */
+    /**
+     * 045 Stage 3 — menu per outlet. `outlet_items`: item mana dibawa outlet mana (kunci outlet_code + product_code,
+     * product_code = `code_prefix` produk). `outlet_prices`: harga khusus varian di sebuah outlet (kunci sku +
+     * outlet_code; sel price berisi angka, atau kata `base` untuk menghapus harga khusus = kembali mengikuti dasar).
+     * Diproses setelah products/outlets, sebelum roles/users.
+     */
+    public const OUTLET_ITEMS = 'outlet_items';
+
+    public const OUTLET_PRICES = 'outlet_prices';
+
     public const ROLES = 'roles';
 
     public const USERS = 'users';
@@ -65,8 +75,9 @@ final class MasterDataSheets
      * berkas.
      */
     public const ORDER = [
-        self::ARTISTS, self::CATEGORIES, self::PRODUCTS, self::STOCK,
+        self::OUTLETS, self::CATEGORIES, self::PRODUCTS, self::STOCK,
         self::VENDORS, self::MATERIALS, self::VENDOR_PRICES, self::BOM,
+        self::OUTLET_ITEMS, self::OUTLET_PRICES,
         self::ROLES, self::USERS,
     ];
 
@@ -77,14 +88,14 @@ final class MasterDataSheets
     public static function headings(string $sheet): array
     {
         return match ($sheet) {
-            self::ARTISTS => [
+            self::OUTLETS => [
                 'code', 'name', 'contact_phone', 'contact_email', 'notes', 'is_active',
             ],
             self::CATEGORIES => [
                 'code', 'name', 'parent_code', 'display_order', 'is_active', 'image_filename',
             ],
             self::PRODUCTS => [
-                'sku', 'artist_code', 'category_code', 'product_segment', 'product_name',
+                'sku', 'home_outlet_code', 'category_code', 'product_segment', 'product_name',
                 'description', 'is_preorder', 'preorder_eta', 'product_is_active',
                 'variant_name', 'cost_price', 'sell_price', 'low_stock_alert',
                 'variant_is_active', 'initial_stock', 'image_filename',
@@ -98,8 +109,10 @@ final class MasterDataSheets
                 // (turunan: draft/active/discontinued); status diubah lewat aksi diskontinu/aktifkan, bukan lewat impor.
                 'short_name', 'tax_category', 'prep_minutes', 'is_retail', 'status',
             ],
+            // 045 Stage 5 — `outlet_code` di AKHIR (berkas lama tetap terbaca): stok adalah saldo per outlet; wajib bila
+            // ada beberapa outlet.
             self::STOCK => [
-                'sku', 'current_stock', 'reason',
+                'sku', 'current_stock', 'reason', 'outlet_code',
             ],
             self::VENDORS => [
                 'code', 'name', 'contact_phone', 'contact_email', 'notes', 'is_active',
@@ -113,6 +126,8 @@ final class MasterDataSheets
             self::BOM => [
                 'sku', 'material_code', 'qty_needed', 'notes',
             ],
+            self::OUTLET_ITEMS => ['outlet_code', 'product_code', 'is_carried'],
+            self::OUTLET_PRICES => ['sku', 'outlet_code', 'price'],
             // menu_keys: daftar kunci menu dipisah koma dalam SATU sel,
             // pola yang sama seperti "comma in a cell" pada kolom lain di
             // kodebase ini (belum ada sebelumnya di sheet manapun, tapi
@@ -155,7 +170,7 @@ final class MasterDataSheets
     public static function exampleRow(string $sheet): array
     {
         return match ($sheet) {
-            self::ARTISTS => [
+            self::OUTLETS => [
                 'code' => 'RYU',
                 'name' => 'Ryu Illustration',
                 'contact_phone' => '',
@@ -173,7 +188,7 @@ final class MasterDataSheets
             ],
             self::PRODUCTS => [
                 'sku' => '',
-                'artist_code' => 'RYU',
+                'home_outlet_code' => 'RYU',
                 'category_code' => 'KY',
                 'product_segment' => 'SAK',
                 'product_name' => 'Keychain Sakura',
@@ -207,6 +222,7 @@ final class MasterDataSheets
                 'sku' => 'RYU-KY-SAK-001',
                 'current_stock' => 20,
                 'reason' => 'Isi jumlah AKHIR yang diinginkan, bukan selisih. Contoh alasan: stok opname 1 Oktober.',
+                'outlet_code' => 'RYU',
             ],
             self::VENDORS => [
                 'code' => 'VNAKR',
@@ -238,6 +254,16 @@ final class MasterDataSheets
                 'qty_needed' => '1.0000',
                 'notes' => '',
             ],
+            self::OUTLET_ITEMS => [
+                'outlet_code' => 'RYU',
+                'product_code' => 'RYU-KY-SAK',
+                'is_carried' => 1,
+            ],
+            self::OUTLET_PRICES => [
+                'sku' => 'RYU-KY-SAK-001',
+                'outlet_code' => 'RYU',
+                'price' => '27000.00',
+            ],
             self::ROLES => [
                 'name' => 'Kasir Cabang Contoh',
                 'menu_keys' => 'pos,session',
@@ -265,7 +291,28 @@ final class MasterDataSheets
     public static function canonicalName(string $rawSheetName): ?string
     {
         $normalized = strtolower(trim($rawSheetName));
+        $normalized = self::LEGACY_SHEET_NAMES[$normalized] ?? $normalized;
 
         return in_array($normalized, self::ORDER, true) ? $normalized : null;
     }
+
+    /**
+     * Judul kolom lama (sebelum fitur 045: seller → outlet) yang masih
+     * diterima SAAT IMPOR, dipetakan ke nama baru. Sengaja hanya di pintu
+     * masuk impor: ekspor dan template selalu memakai nama baru, dan
+     * berkas lama yang dibawa pemilik toko tetap terbaca. Satu-satunya
+     * tempat alias ini didefinisikan.
+     */
+    public static function legacyColumn(string $sheet, string $column): string
+    {
+        return self::LEGACY_COLUMNS[$sheet][$column] ?? $column;
+    }
+
+    /** Nama sheet lama → nama kanonik. Lihat catatan di legacyColumn(). */
+    private const LEGACY_SHEET_NAMES = ['artists' => self::OUTLETS];
+
+    /** Sheet → (judul kolom lama → judul kolom baru). Lihat legacyColumn(). */
+    private const LEGACY_COLUMNS = [
+        self::PRODUCTS => ['artist_code' => 'home_outlet_code'],
+    ];
 }

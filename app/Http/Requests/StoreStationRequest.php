@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Station;
+use App\Support\OutletDefaults;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -30,6 +31,8 @@ class StoreStationRequest extends FormRequest
             'name' => ['required', 'string', 'max:60'],
             'display_order' => ['sometimes', 'integer', 'min:-32768', 'max:32767'],
             'is_active' => ['sometimes', 'boolean'],
+            // 045 Stage 2 — outlet stasiun, hanya saat membuat; wajib termasuk outlet yang boleh dilihat.
+            'outlet_id' => ['sometimes', 'nullable', 'integer'],
         ];
     }
 
@@ -41,8 +44,15 @@ class StoreStationRequest extends FormRequest
             }
 
             $current = $this->route('station');
-            $taken = Station::query()
+            $outletId = $current?->outlet_id ?? ($this->filled('outlet_id') ? $this->integer('outlet_id') : OutletDefaults::peekForNewRecord());
+            if ($outletId === null) {
+                return;
+            }
+
+            // Sama dengan indeks database uniq_stations_outlet_name: per outlet, lintas mode data.
+            $taken = Station::withoutGlobalScopes()
                 ->where('name', $this->input('name'))
+                ->where('outlet_id', $outletId)
                 ->when($current, fn ($q) => $q->where('id', '!=', $current->id))
                 ->exists();
 

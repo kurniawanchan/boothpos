@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\CashierSession;
 use App\Models\Event;
@@ -30,13 +30,14 @@ class OrderTest extends TestCase
         $this->actingAs($this->cashier, 'sanctum');
 
         $event = Event::factory()->create(['status' => 'active']);
+        // 045 Stage 5 — stok per outlet: shift di outlet ASAL produk, supaya penjualan memakai saldo yang ada.
+        $artist = Outlet::factory()->create();
         $this->session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $this->cashier->id, 'status' => 'open',
+            'event_id' => $event->id, 'user_id' => $this->cashier->id, 'status' => 'open', 'outlet_id' => $artist->id,
         ]);
 
-        $artist = Artist::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $this->variant = $product->variants()->create([
             'sku' => 'RYUKYSAK0001', 'sell_price' => 25000, 'cost_price' => 10000, 'current_stock' => 10,
         ]);

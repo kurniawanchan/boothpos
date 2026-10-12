@@ -15,7 +15,7 @@ class PreorderSellerSubtotalsTest extends TestCase
     private function row(int $artistId, string $name, string $status, string $completeness, int $count, string $value, string $collected, string $outstanding): array
     {
         return [
-            'artist_id' => $artistId, 'artist_name' => $name, 'status' => $status, 'payment_completeness' => $completeness,
+            'outlet_id' => $artistId, 'outlet_name' => $name, 'status' => $status, 'payment_completeness' => $completeness,
             'preorder_count' => $count, 'total_order_value' => $value, 'total_collected' => $collected, 'total_outstanding' => $outstanding,
         ];
     }
@@ -35,7 +35,7 @@ class PreorderSellerSubtotalsTest extends TestCase
         $subtotals = PreorderSellerSubtotals::fromRows($this->sapphire());
 
         $this->assertSame([[
-            'artist_id' => 3, 'artist_name' => 'sapphirefiless', 'preorder_count' => 28,
+            'outlet_id' => 3, 'outlet_name' => 'sapphirefiless', 'preorder_count' => 28,
             'total_order_value' => '1920000.00', 'total_collected' => '1239000.00', 'total_outstanding' => '935000.00',
         ]], $subtotals);
     }
@@ -61,7 +61,7 @@ class PreorderSellerSubtotalsTest extends TestCase
 
         $subtotals = PreorderSellerSubtotals::fromRows($rows);
 
-        $this->assertSame([3, 9, 12], array_column($subtotals, 'artist_id'));
+        $this->assertSame([3, 9, 12], array_column($subtotals, 'outlet_id'));
         $this->assertSame(4, $subtotals[1]['preorder_count']);
         $this->assertSame('140000.00', $subtotals[1]['total_order_value']);
     }
@@ -105,7 +105,7 @@ class PreorderSellerSubtotalsTest extends TestCase
         $this->assertSame([], PreorderSellerSubtotals::fromRows([]));
 
         $keys = array_keys(PreorderSellerSubtotals::fromRows($this->sapphire())[0]);
-        $this->assertSame(['artist_id', 'artist_name', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'], $keys);
+        $this->assertSame(['outlet_id', 'outlet_name', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'], $keys);
     }
 
     public function test_the_subtotals_add_up_to_the_sum_of_all_rows(): void

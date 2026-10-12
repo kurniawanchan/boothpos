@@ -25,7 +25,7 @@ class BusinessType extends Model
         ];
     }
 
-    /** Kode selalu uppercase, konsisten dengan Vendor::code()/Artist::code(). */
+    /** Kode selalu uppercase, konsisten dengan Vendor::code()/Outlet::code(). */
     protected function code(): Attribute
     {
         return Attribute::make(

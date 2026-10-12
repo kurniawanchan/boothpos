@@ -56,14 +56,17 @@ class DiningTablesTest extends TestCase
         $this->postJson('/api/v1/dining-tables', ['name' => str_repeat('a', 61)])->assertStatus(422)->assertJsonValidationErrors(['name']);
     }
 
-    public function test_a_duplicate_name_in_the_same_area_is_rejected_but_another_area_is_fine(): void
+    /** 045 Stage 2 (D17): nama meja unik PER OUTLET, bukan per area — area lain di outlet yang sama tetap bentrok. */
+    public function test_a_duplicate_name_in_the_same_outlet_is_rejected_even_in_another_area(): void
     {
         DiningTable::factory()->inArea('Indoor')->create(['name' => '1']);
 
         $this->postJson('/api/v1/dining-tables', ['name' => '1', 'area' => 'Indoor'])
             ->assertStatus(422)->assertJsonValidationErrors(['name']);
-        $this->postJson('/api/v1/dining-tables', ['name' => '1', 'area' => 'Terrace'])->assertCreated();
-        $this->assertSame(2, DiningTable::where('name', '1')->count());
+        $this->postJson('/api/v1/dining-tables', ['name' => '1', 'area' => 'Terrace'])
+            ->assertStatus(422)->assertJsonValidationErrors(['name']);
+        $this->postJson('/api/v1/dining-tables', ['name' => '2', 'area' => 'Terrace'])->assertCreated();
+        $this->assertSame(1, DiningTable::where('name', '1')->count());
     }
 
     public function test_the_same_name_may_exist_in_demo_and_live_mode(): void

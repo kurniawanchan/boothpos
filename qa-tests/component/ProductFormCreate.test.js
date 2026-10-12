@@ -77,7 +77,7 @@ describe('ProductFormDrawer — create mode follows the Menu item design (043)',
     await openCreate();
     const form = screen.getByTestId('product-form');
 
-    for (const text of [/harga terbuka/i, /aktif di outlet/i, /wjm/i, /channel/i, /dine-in|takeaway|gofood|grabfood|qr self/i, /kuota harian/i, /porsi/i, /outlet/i]) {
+    for (const text of [/harga terbuka/i, /aktif di outlet/i, /wjm/i, /channel/i, /dine-in|takeaway|gofood|grabfood|qr self/i, /kuota harian/i, /porsi/i, /per outlet|harga outlet|outlet price/i]) {
       expect(within(form).queryByText(text)).not.toBeInTheDocument();
     }
     // tabel varian: hanya kolom yang punya backend
@@ -85,10 +85,10 @@ describe('ProductFormDrawer — create mode follows the Menu item design (043)',
     expect(headers).toEqual([P.f_col_variant, P.f_col_sku, P.f_col_image, P.f_col_price, P.f_col_stock, P.f_col_active]);
   });
 
-  it('keeps what the API needs: seller, segment, retail and pre-order checkboxes, product image', async () => {
+  it('keeps what the API needs: outlet, segment, retail and pre-order checkboxes, product image', async () => {
     const { user } = await openCreate();
 
-    expect(screen.getByLabelText(new RegExp(`^${id.master_data.owner_artist}`))).toHaveValue('1'); // satu-satunya penjual dipilih
+    expect(screen.getByLabelText(new RegExp(`^${id.master_data.owner_artist}`))).toHaveValue('1'); // satu-satunya outlet dipilih
     expect(screen.getByLabelText(id.master_data.segment_3)).toBeEnabled();
     expect(screen.getByLabelText(/item ritel/i)).toBeInTheDocument();
     expect(screen.getByLabelText(id.master_data.product_image)).toBeInTheDocument();
@@ -96,7 +96,7 @@ describe('ProductFormDrawer — create mode follows the Menu item design (043)',
     expect(screen.getByLabelText(id.master_data.eta)).toBeInTheDocument();
   });
 
-  it('sends name, short name, category, seller, tax, prep minutes, station and the first-variant price', async () => {
+  it('sends name, short name, category, outlet, tax, prep minutes, station and the first-variant price', async () => {
     const { user } = await openCreate();
     await fillMinimum(user);
     await user.type(screen.getByLabelText(/^nama pendek/i), 'Kopsu Pandan');
@@ -108,7 +108,7 @@ describe('ProductFormDrawer — create mode follows the Menu item design (043)',
 
     await waitFor(() => expect(createProduct).toHaveBeenCalledTimes(1));
     expect(createProduct.mock.calls[0][0]).toMatchObject({
-      name: 'Kopi Susu Pandan', short_name: 'Kopsu Pandan', category_id: 1, artist_id: 1,
+      name: 'Kopi Susu Pandan', short_name: 'Kopsu Pandan', category_id: 1, home_outlet_id: 1,
       tax_category: 'restaurant_food_beverage', prep_minutes: 6, station_id: 3, description: 'Dingin', is_retail: false, is_active: true,
     });
     expect(createProduct.mock.calls[0][0].variants).toEqual([
@@ -439,7 +439,7 @@ describe('ProductFormDrawer — edit mode is the same form as create mode (043)'
     { group_id: 8, name: 'Ukuran', source: 'category', has_rules: false, is_required: true, min_select: 1, max_select: 1, display_order: 2 },
   ];
   const FULL = (extra = {}) => ({
-    id: 1, artist_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001', product_segment: 'KEY', description: '',
+    id: 1, home_outlet_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001', product_segment: 'KEY', description: '',
     is_preorder: false, preorder_eta: null, is_active: true, image_url: null, short_name: null, tax_category: null, prep_minutes: null, is_retail: false,
     variants: [{ id: 10, sku: 'ART-KY-001-001', variant_name: 'Standard', cost_price: '1000.00', sell_price: '3000.00', current_stock: 5, low_stock_alert: null, is_active: true, track_stock: true, image_url: null }],
     modifier_links: LINKS,

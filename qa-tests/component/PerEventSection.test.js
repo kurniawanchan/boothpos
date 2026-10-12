@@ -5,7 +5,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import PerEventSection from '../../resources/js/components/dashboard/PerEventSection.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listEvents } from '../../resources/js/api/events';
-import { salesReport, profitReport, artistSettlements } from '../../resources/js/api/reports';
+import { salesReport, profitReport, outletSettlements } from '../../resources/js/api/reports';
 import { lowStock } from '../../resources/js/api/stock';
 import { listPreorders } from '../../resources/js/api/preorders';
 
@@ -13,7 +13,7 @@ vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({
   salesReport: vi.fn(),
   profitReport: vi.fn(),
-  artistSettlements: vi.fn(),
+  outletSettlements: vi.fn(),
 }));
 vi.mock('../../resources/js/api/stock', () => ({ lowStock: vi.fn() }));
 vi.mock('../../resources/js/api/preorders', () => ({ listPreorders: vi.fn() }));
@@ -58,7 +58,7 @@ describe('PerEventSection — shortcuts, day filter, charts, links (moved from D
     lowStock.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [], meta: { total: 0 } });
     profitReport.mockResolvedValue({ gross_profit: '0.00' });
-    artistSettlements.mockResolvedValue({ data: [] });
+    outletSettlements.mockResolvedValue({ data: [] });
   });
 
   it('shows only the shortcuts the current role has menu access to', async () => {
@@ -85,10 +85,10 @@ describe('PerEventSection — shortcuts, day filter, charts, links (moved from D
     );
   });
 
-  it('renders an empty state for the category/artist/event charts when there is no data', async () => {
+  it('renders an empty state for the category/outlet/event charts when there is no data', async () => {
     await renderSection(['dashboard']);
     await screen.findByText('Penjualan per kategori');
-    expect(screen.getByText('Penjualan per penjual')).toBeInTheDocument();
+    expect(screen.getByText('Penjualan per outlet')).toBeInTheDocument();
     expect(screen.getByText('Penjualan per event')).toBeInTheDocument();
 
     await waitFor(() => expect(screen.getAllByText(/belum ada penjualan tercatat/i).length).toBeGreaterThanOrEqual(3));
@@ -114,7 +114,7 @@ describe('PerEventSection — per-event KPI strip (moved from the 041 Dashboard 
     lowStock.mockResolvedValue({ data: [{ variant_id: 1, product_name: 'P', sku: 'S1', current_stock: 0, low_stock_alert: 3 }, { variant_id: 2, product_name: 'Q', sku: 'S2', current_stock: 2, low_stock_alert: 3 }] });
     listPreorders.mockResolvedValue({ data: [], meta: { total: 0 } });
     profitReport.mockResolvedValue({ gross_profit: '400000.00' });
-    artistSettlements.mockResolvedValue({ data: [] });
+    outletSettlements.mockResolvedValue({ data: [] });
   });
 
   it('has exactly four KPI cells whose values match the loaded data', async () => {

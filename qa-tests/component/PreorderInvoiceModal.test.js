@@ -12,7 +12,7 @@ import en from '../../resources/js/locales/en.json';
  * heading badge. These tests prove the status pill is driven by
  * `invoice.status`, independently of `document_type` — not a duplicate of
  * the heading badge, and not hardcoded — and that item rows show
- * `artist_name` when present without leaking a stray "null" when absent.
+ * `home_outlet_name` when present without leaking a stray "null" when absent.
  */
 
 const arrivedInvoice = vi.hoisted(() => ({
@@ -25,8 +25,8 @@ const arrivedInvoice = vi.hoisted(() => ({
   outstanding: '100000.00',
   customer: { name: 'Siti Aminah' },
   items: [
-    { id: 1, name_snapshot: 'Keychain Akatsuki', qty: 1, sell_price: '50000.00', line_total: '50000.00', artist_name: 'Some Seller' },
-    { id: 2, name_snapshot: 'Poster Naruto', qty: 2, sell_price: '50000.00', line_total: '100000.00', artist_name: null },
+    { id: 1, name_snapshot: 'Keychain Akatsuki', qty: 1, sell_price: '50000.00', line_total: '50000.00', home_outlet_name: 'Some Outlet' },
+    { id: 2, name_snapshot: 'Poster Naruto', qty: 2, sell_price: '50000.00', line_total: '100000.00', home_outlet_name: null },
   ],
 }));
 
@@ -40,7 +40,7 @@ const cancelledInvoice = vi.hoisted(() => ({
   outstanding: '75000.00',
   customer: { name: 'Budi Santoso' },
   items: [
-    { id: 3, name_snapshot: 'Kaos Anime', qty: 1, sell_price: '75000.00', line_total: '75000.00', artist_name: null },
+    { id: 3, name_snapshot: 'Kaos Anime', qty: 1, sell_price: '75000.00', line_total: '75000.00', home_outlet_name: null },
   ],
 }));
 
@@ -87,12 +87,12 @@ describe('PreorderInvoiceModal', () => {
     expect(screen.getAllByText(id.events_sessions.status_cancelled).length).toBe(2);
   });
 
-  it('renders artist_name on an item row when present, and no stray "null" when absent', async () => {
+  it('renders home_outlet_name on an item row when present, and no stray "null" when absent', async () => {
     getPreorderInvoiceMock.mockResolvedValue(arrivedInvoice);
     renderModal({ open: true, preorderId: 1 });
 
     await screen.findAllByText('PO-0001');
-    expect(screen.getByText(/Some Seller/)).toBeInTheDocument();
+    expect(screen.getByText(/Some Outlet/)).toBeInTheDocument();
     expect(screen.queryByText(/null/)).not.toBeInTheDocument();
   });
 

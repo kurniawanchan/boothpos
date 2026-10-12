@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -28,14 +28,14 @@ class ActivityLogTest extends TestCase
     public function test_deleting_an_artist_writes_an_activity_log(): void
     {
         $owner = $this->actingAsRole('owner');
-        $artist = Artist::factory()->create(['code' => 'RYU']);
+        $artist = Outlet::factory()->create(['code' => 'RYU']);
 
-        $this->deleteJson("/api/v1/artists/{$artist->id}")->assertStatus(204);
+        $this->deleteJson("/api/v1/outlets/{$artist->id}")->assertStatus(204);
 
         $this->assertDatabaseHas('activity_logs', [
             'user_id' => $owner->id,
             'action' => 'deleted',
-            'entity_type' => 'Artist',
+            'entity_type' => 'Outlet',
             'entity_id' => $artist->id,
         ]);
     }
@@ -45,14 +45,14 @@ class ActivityLogTest extends TestCase
         // Guard menolak SEBELUM transaksi delete+log berjalan — tidak boleh
         // ada jejak "deleted" untuk sesuatu yang sebenarnya tidak terhapus.
         $this->actingAsRole('owner');
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'is_active' => true]);
+        Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'is_active' => true]);
 
-        $this->deleteJson("/api/v1/artists/{$artist->id}")->assertStatus(409);
+        $this->deleteJson("/api/v1/outlets/{$artist->id}")->assertStatus(409);
 
         $this->assertDatabaseMissing('activity_logs', [
-            'entity_type' => 'Artist', 'entity_id' => $artist->id,
+            'entity_type' => 'Outlet', 'entity_id' => $artist->id,
         ]);
     }
 
@@ -74,9 +74,9 @@ class ActivityLogTest extends TestCase
     public function test_deleting_a_product_writes_an_activity_log(): void
     {
         $owner = $this->actingAsRole('owner');
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
 
         $this->deleteJson("/api/v1/products/{$product->id}")->assertStatus(204);
 
@@ -91,9 +91,9 @@ class ActivityLogTest extends TestCase
     public function test_changing_variant_price_writes_a_price_changed_log_with_snapshots(): void
     {
         $owner = $this->actingAsRole('owner');
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create([
             'sku' => 'AAAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 10,
         ]);
@@ -113,9 +113,9 @@ class ActivityLogTest extends TestCase
     public function test_manual_stock_adjustment_writes_a_stock_adjusted_log(): void
     {
         $owner = $this->actingAsRole('owner');
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create([
             'sku' => 'AAAKYAAA0002', 'sell_price' => 10000, 'current_stock' => 10,
         ]);
@@ -136,10 +136,10 @@ class ActivityLogTest extends TestCase
     public function test_owner_can_list_activity_logs_filtered_by_entity(): void
     {
         $owner = $this->actingAsRole('owner');
-        $artist = Artist::factory()->create();
-        $this->deleteJson("/api/v1/artists/{$artist->id}")->assertStatus(204);
+        $artist = Outlet::factory()->create();
+        $this->deleteJson("/api/v1/outlets/{$artist->id}")->assertStatus(204);
 
-        $response = $this->getJson("/api/v1/activity-logs?entity_type=Artist&entity_id={$artist->id}");
+        $response = $this->getJson("/api/v1/activity-logs?entity_type=Outlet&entity_id={$artist->id}");
 
         $response->assertOk();
         $this->assertCount(1, $response->json('data'));
@@ -159,14 +159,14 @@ class ActivityLogTest extends TestCase
         // F13.4 secara spesifik menyasar PENYESUAIAN manual, bukan setiap
         // pergerakan stok — penjualan normal lewat StockService::
         // applyMovement(type: 'sale') tidak boleh membanjiri activity_logs.
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create([
             'sku' => 'AAAKYAAA0003', 'sell_price' => 10000, 'current_stock' => 10,
         ]);
 
-        app(\App\Services\StockService::class)->applyMovement($variant, 'sale', -2);
+        app(\App\Services\StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'sale', -2);
 
         $this->assertDatabaseMissing('activity_logs', [
             'entity_type' => 'ProductVariant', 'entity_id' => $variant->id,

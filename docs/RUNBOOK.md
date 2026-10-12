@@ -519,3 +519,27 @@ pengaturan ini hanya menambah proses, bukan mengubah arsitektur.
   pembayaran atau (untuk satu item) hapus baris selama total tidak turun di bawah yang sudah dibayar.
 - Menjalankan test di dalam container: **selalu**
   `docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test app php artisan test`.
+
+## 12. Outlet (fitur 045): migrasi bertahap, rehearsal, dan backup
+
+**Dated note — 2026-10-11 (konstitusi 2.0.0).** Fitur 045 menambah outlet (penjual yang diganti nama). Migrasinya dijalankan per tahap; setiap tahap wajib direhearsal di salinan data sebelum dirilis ke toko sungguhan.
+
+Langkah sebelum setiap tahap:
+
+1. `docker compose exec app php artisan app:backup` — catat folder cadangan yang dicetak.
+2. `docker compose exec app php artisan outlets:reconcile --before` — cuplikan keadaan sebelum migrasi.
+3. Jalankan migrasi (`php artisan migrate --force`) — di dev, lalu rehearsal (langkah 5).
+4. `docker compose exec app php artisan outlets:reconcile --after` lalu `--compare`. Kode keluar ≠ 0 berarti ada selisih: **jangan rilis** — pulihkan dari cadangan dan periksa.
+5. Rehearsal di salinan: `specs/045-outlets-per-outlet-menu/rehearse.sh`. Skrip hanya menulis ke basis data `warkop_wjm_rehearsal` (dibuat ulang setiap kali, lalu dihapus), tidak pernah ke `warkop_wjm` atau `warkop_wjm_test`.
+
+Pemulihan: langkah yang bisa dibalik (ganti nama tabel/kolom, penambahan kolom nullable) dicatat per migrasi di `specs/045-outlets-per-outlet-menu/release-notes.md`; untuk migrasi yang menulis saldo stok atau tabel baru, pemulihan = `app:restore` dari cadangan langkah 1.
+
+Peran dan akses outlet: setiap pengguna bisa dibatasi ke satu atau beberapa outlet; administrator selalu melihat semua outlet. Instalasi satu outlet tidak menampilkan kendali outlet sama sekali.
+
+### 12.1 Tahap lanjutan (stok per outlet, transfer, laporan) — dicatat 2026-10-12
+
+- Urutan migrasi 045: `…_12_01` ganti nama penjual→outlet, `…_12_02` penugasan + `outlet_id` operasional, `…_12_03` menu per outlet, `…_12_04` saldo stok per outlet, `…_12_05` transfer + izin transfer. Rehearsal penuh dari cadangan sebelum 045 memakan ±14 detik (data demo) dan `outlets:reconcile` hijau (hitungan, uang, saldo, I1/I2).
+- Rehearsal dari **cadangan lama** (`app:backup`) tertahan masalah yang sudah ada sebelumnya: berkas dump memuat kolom `orders.open_table_key` (generated) di `INSERT INTO orders VALUES`, sehingga `app:restore`/`mysql` ke MySQL 8 gagal (error 3105) begitu ada order. Jalan keluar sementara: untuk rehearsal, buang definisi GENERATED pada `open_table_key` di berkas SQL sebelum dimuat; untuk pemulihan nyata, ambil dump dengan `mysqldump` dari kontainer MySQL (bukan klien MariaDB). Perbaikan permanen (`--complete-insert`/lewati kolom generated) dicatat di `release-notes.md`.
+- Demo multi-outlet opsional: `docker compose exec app php artisan db:seed --class=WarkopOutletsDemoSeeder` (setelah `SakanaFridgeDemoSeeder`) — tiga outlet "Warkop WJM", pengguna contoh ditugaskan, meja, saldo per outlet, satu transfer dalam perjalanan. Idempoten.
+- Setelah mengaktifkan lebih dari satu outlet: tinjau penugasan di layar Pengguna (migrasi menugaskan pengguna non-admin ke SEMUA outlet yang ada; persempit sesuai kebutuhan).
+

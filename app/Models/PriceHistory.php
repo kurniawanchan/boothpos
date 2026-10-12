@@ -27,6 +27,8 @@ class PriceHistory extends Model
 
     public function variant(): BelongsTo { return $this->belongsTo(ProductVariant::class, 'variant_id')->withTrashed(); }
 
+    public function outlet(): BelongsTo { return $this->belongsTo(Outlet::class, 'outlet_id'); }
+
     public function user(): BelongsTo { return $this->belongsTo(User::class); }
 
     public function approver(): BelongsTo { return $this->belongsTo(User::class, 'approved_by'); }

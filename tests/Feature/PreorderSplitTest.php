@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Event;
@@ -35,9 +35,9 @@ class PreorderSplitTest extends TestCase
 
     private Customer $customer;
 
-    private Artist $artistA;
+    private Outlet $artistA;
 
-    private Artist $artistB;
+    private Outlet $artistB;
 
     private Category $category;
 
@@ -49,16 +49,16 @@ class PreorderSplitTest extends TestCase
         $this->user = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($this->user, 'sanctum');
 
-        $this->artistA = Artist::factory()->create();
-        $this->artistB = Artist::factory()->create();
+        $this->artistA = Outlet::factory()->create();
+        $this->artistB = Outlet::factory()->create();
         $this->category = Category::factory()->create();
         $this->customer = Customer::factory()->create();
     }
 
-    private function variant(float $price, ?Artist $artist = null): ProductVariant
+    private function variant(float $price, ?Outlet $artist = null): ProductVariant
     {
         $product = Product::factory()->create([
-            'artist_id' => ($artist ?? $this->artistA)->id,
+            'home_outlet_id' => ($artist ?? $this->artistA)->id,
             'category_id' => $this->category->id,
             'is_preorder' => true,
         ]);
@@ -150,7 +150,7 @@ class PreorderSplitTest extends TestCase
         $this->assertSame(1, $moved->qty);
         $this->assertEquals(100000, $moved->line_total);
         $this->assertSame($aItem->variant_id, $moved->variant_id);
-        $this->assertSame($aItem->artist_id, $moved->artist_id);
+        $this->assertSame($aItem->home_outlet_id, $moved->home_outlet_id);
         $this->assertSame($aItem->sku_snapshot, $moved->sku_snapshot);
         $this->assertSame($aItem->name_snapshot, $moved->name_snapshot);
         $this->assertEquals($aItem->cost_price, $moved->cost_price);
@@ -487,7 +487,7 @@ class PreorderSplitTest extends TestCase
 
     public function test_by_seller_creates_one_order_per_extra_seller(): void
     {
-        $artistC = Artist::factory()->create();
+        $artistC = Outlet::factory()->create();
         $a = $this->variant(10000, $this->artistA);
         $b = $this->variant(20000, $this->artistB);
         $c = $this->variant(30000, $artistC);

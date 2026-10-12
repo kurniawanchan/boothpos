@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Preorder;
@@ -30,7 +30,7 @@ class PreorderSourceFieldsTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'cashier']), 'sanctum');
 
         $product = Product::factory()->create([
-            'artist_id' => Artist::factory()->create()->id,
+            'home_outlet_id' => Outlet::factory()->create()->id,
             'category_id' => Category::factory()->create()->id,
             'is_preorder' => true,
         ]);

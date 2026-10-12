@@ -90,7 +90,7 @@ class ModeScopingFollowUpTest extends TestCase
         $owner = $this->actingAsOwner();
         $product = Product::factory()->create();
         $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'sell_price' => 20000]);
-        app(\App\Services\StockService::class)->applyMovement($variant, 'initial', 5);
+        app(\App\Services\StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'initial', 5);
         $session = CashierSession::factory()->create(['user_id' => $owner->id]);
 
         $order = app(OrderService::class)->create([
@@ -99,15 +99,15 @@ class ModeScopingFollowUpTest extends TestCase
             'payments' => [['method' => 'cash', 'amount' => 20000]],
         ], $owner);
 
-        $artistName = $variant->product->artist->name;
+        $artistName = $variant->product->homeOutlet->name;
 
         $sales = $this->getJson('/api/v1/reports/sales')->assertOk();
         $transaction = collect($sales->json('transactions'))->firstWhere('id', $order->id);
         $this->assertNotNull($transaction);
-        $this->assertContains($artistName, $transaction['artist_names']);
+        $this->assertContains($artistName, $transaction['outlet_names']);
 
         $receipt = $this->getJson("/api/v1/orders/{$order->id}/receipt")->assertOk();
-        $this->assertSame($artistName, $receipt->json('items.0.artist_name'));
+        $this->assertSame($artistName, $receipt->json('items.0.home_outlet_name'));
     }
 
     public function test_demo_seeder_creates_demo_users_linked_to_existing_shared_roles(): void
@@ -139,7 +139,7 @@ class ModeScopingFollowUpTest extends TestCase
         $customer = Customer::factory()->create(['name' => 'Citra Maheswari', 'phone' => '0899999999', 'email' => 'citra@contoh.com']);
         $product = Product::factory()->create();
         $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'sell_price' => 15000]);
-        app(\App\Services\StockService::class)->applyMovement($variant, 'initial', 5);
+        app(\App\Services\StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'initial', 5);
         $session = CashierSession::factory()->create(['user_id' => $owner->id]);
 
         $order = app(OrderService::class)->create([
@@ -160,7 +160,7 @@ class ModeScopingFollowUpTest extends TestCase
         $owner = $this->actingAsOwner();
         $product = Product::factory()->create();
         $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'sell_price' => 15000]);
-        app(\App\Services\StockService::class)->applyMovement($variant, 'initial', 5);
+        app(\App\Services\StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'initial', 5);
         $session = CashierSession::factory()->create(['user_id' => $owner->id]);
 
         $order = app(OrderService::class)->create([

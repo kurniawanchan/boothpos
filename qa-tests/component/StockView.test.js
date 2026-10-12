@@ -19,7 +19,7 @@ const MOVEMENT = (id, extra = {}) => ({
   created_at: '2026-10-04T06:29:00+00:00', user_name: 'Chan', variant_name: 'Slippery 5cm', product_id: 2, product_name: 'MCYT', reference: null, ...extra,
 });
 const PRODUCT = {
-  id: 2, name: 'MCYT', code_prefix: 'SPF-KC-MCY', artist_name: 'sapphirefiless', category_name: 'KEYCHAIN', is_active: true, is_preorder: false, description: null,
+  id: 2, name: 'MCYT', code_prefix: 'SPF-KC-MCY', home_outlet_name: 'sapphirefiless', category_name: 'KEYCHAIN', is_active: true, is_preorder: false, description: null,
   variants: [
     { id: 10, sku: 'SPF-KC-MCY-001', variant_name: 'Red', sell_price: '20000.00', current_stock: 5, is_active: true, image_url: null },
     { id: 11, sku: 'SPF-KC-MCY-008', variant_name: 'Slippery 5cm', sell_price: '20000.00', current_stock: 8, is_active: true, image_url: null },

@@ -4,7 +4,7 @@ import ProductVariantPickerModal from '../../resources/js/components/pos/Product
 
 const product = (overrides = {}) => ({
   name: 'LOVE BULLET',
-  artist_name: 'vlaisca',
+  home_outlet_name: 'vlaisca',
   category_name: 'KEYCHAIN',
   image_url: 'https://example.test/product.png',
   variants: [

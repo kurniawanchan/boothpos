@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Support\ModeGate;
+use App\Support\OutletFilter;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -38,10 +39,11 @@ class SalesFigures
             ->join('product_variants', 'product_variants.id', '=', 'order_items.variant_id')
             ->join('products', 'products.id', '=', 'product_variants.product_id')
             ->join('categories', 'categories.id', '=', 'products.category_id')
-            ->join('artists', 'artists.id', '=', 'order_items.artist_id')
+            ->tap(fn ($q) => OutletFilter::joinReportOutlet($q)) // 045 Stage 7: outlet PELAPORAN (lihat OutletFilter::reportOutletSql)
             ->join('events', 'events.id', '=', 'orders.event_id')
             ->where('orders.status', 'completed')
             ->where('order_items.data_mode', ModeGate::current())
+            ->when(true, fn ($q) => OutletFilter::applyReport($q))
             ->when(! empty($filters['event_id']), fn ($q) => $q->where('orders.event_id', (int) $filters['event_id']))
             ->when(! empty($filters['date_from']), fn ($q) => $q->where('orders.business_date', '>=', $filters['date_from']))
             ->when(! empty($filters['date_to']), fn ($q) => $q->where('orders.business_date', '<=', $filters['date_to']));
@@ -61,6 +63,7 @@ class SalesFigures
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->where('orders.status', 'completed')
             ->where('order_items.data_mode', ModeGate::current())
+            ->when(true, fn ($q) => OutletFilter::apply($q, 'orders.outlet_id'))
             ->when(! empty($filters['date_from']), fn ($q) => $q->where('orders.business_date', '>=', $filters['date_from']))
             ->when(! empty($filters['date_to']), fn ($q) => $q->where('orders.business_date', '<=', $filters['date_to']));
     }
@@ -105,6 +108,7 @@ class SalesFigures
     {
         return DB::table('orders')
             ->where('orders.data_mode', ModeGate::current())
+            ->when(true, fn ($q) => OutletFilter::apply($q, 'orders.outlet_id'))
             ->whereBetween('orders.business_date', [$from, $to])
             ->selectRaw('orders.business_date as day, COUNT(*) as n')
             ->groupBy('orders.business_date')
@@ -142,6 +146,7 @@ class SalesFigures
     {
         return DB::table('orders')
             ->where('orders.data_mode', ModeGate::current())
+            ->when(true, fn ($q) => OutletFilter::apply($q, 'orders.outlet_id'))
             ->whereRaw('COALESCE(orders.completed_at, orders.created_at) >= ?', [$start->utc()->format('Y-m-d H:i:s')])
             ->whereRaw('COALESCE(orders.completed_at, orders.created_at) < ?', [$end->utc()->format('Y-m-d H:i:s')])
             ->selectRaw('COALESCE(orders.completed_at, orders.created_at) as at')

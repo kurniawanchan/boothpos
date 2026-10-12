@@ -17,9 +17,25 @@ class StockMovement extends Model
     public $timestamps = false; // hanya created_at, diisi manual di service
 
     protected $fillable = [
-        'variant_id', 'type', 'qty_change', 'stock_before', 'stock_after',
+        'variant_id', 'outlet_id', 'type', 'qty_change', 'stock_before', 'stock_after',
         'reference_type', 'reference_id', 'reason', 'user_id', 'created_at',
     ];
+
+    protected static function booted(): void
+    {
+        // 045 Stage 5 — pergerakan yang dibuat tanpa outlet (data/tes lama; StockService selalu mengisinya) jatuh ke
+        // outlet bawaan, sama dengan penulisan langsung stok (OutletStockSync).
+        static::creating(function (StockMovement $m) {
+            if ($m->outlet_id === null) {
+                $m->outlet_id = \App\Support\OutletStockSync::defaultOutlet();
+            }
+        });
+    }
+
+    public function outlet(): BelongsTo
+    {
+        return $this->belongsTo(Outlet::class);
+    }
 
     public function variant(): BelongsTo
     {

@@ -71,12 +71,12 @@ describe('AddBomItemModal — eligible purchase order lines (034)', () => {
     await waitFor(() => expect(eligibleBomLines).toHaveBeenCalledWith(42, expect.objectContaining({ q: 'chain', page: 1 })), { timeout: 2000 });
   });
 
-  it('explains an empty result for a seller with no eligible purchase orders', async () => {
+  it('explains an empty result for an outlet with no eligible purchase orders', async () => {
     eligibleBomLines.mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 10, total: 0, last_page: 1 } });
     renderModal();
 
     expect(await screen.findByText(/tidak ada baris purchase order yang memenuhi syarat/i)).toBeInTheDocument();
-    expect(screen.getByText(/hanya purchase order seller ini/i)).toBeInTheDocument();
+    expect(screen.getByText(/hanya purchase order outlet ini/i)).toBeInTheDocument();
   });
 
   it('keeps the list and reloads when adding fails (e.g. a line was just used elsewhere)', async () => {

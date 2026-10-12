@@ -26,8 +26,8 @@ class SettingsController extends Controller
     ) {}
 
     /**
-     * Dibaca UI untuk sembunyikan/tampilkan tombol "Tambah Artist", BUKAN
-     * sumber otorisasi. Penegakan sesungguhnya tetap di ArtistPolicy —
+     * Dibaca UI untuk sembunyikan/tampilkan tombol "Tambah Outlet", BUKAN
+     * sumber otorisasi. Penegakan sesungguhnya tetap di OutletPolicy —
      * lihat komentar di endpoint ini pada openapi-pos-mvp.yaml.
      *
      * `system_mode` (003-seed-demo-live, FR-005) sengaja TIDAK digerbang
@@ -39,9 +39,9 @@ class SettingsController extends Controller
     public function features(Request $request): JsonResponse
     {
         return response()->json([
-            'multi_artist_enabled' => LicenseGate::multiArtistEnabled(),
-            'artist_count' => LicenseGate::activeArtistCount(),
-            'artist_limit_reached' => LicenseGate::artistLimitReached(),
+            'multi_outlet_enabled' => LicenseGate::multiOutletEnabled(),
+            'outlet_count' => LicenseGate::activeOutletCount(),
+            'outlet_limit_reached' => LicenseGate::outletLimitReached(),
             'system_mode' => ModeGate::current(),
             // Merek produk yang bisa diganti owner/admin (sidebar, "Powered by").
             'app_name' => AppName::current(),
@@ -99,7 +99,7 @@ class SettingsController extends Controller
 
     /**
      * F14.1/F14.3 dan satu-satunya jalur admin untuk mengubah
-     * `multi_artist_enabled` (upgrade Pro -> Master) — sebelumnya hanya
+     * `multi_outlet_enabled` (upgrade Pro -> Master) — sebelumnya hanya
      * bisa lewat Setting::updateOrCreate() langsung (tinker/seeder), belum
      * ada endpoint. Lihat README bagian "Lisensi Pro vs Master".
      *

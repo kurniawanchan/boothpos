@@ -13,8 +13,8 @@ const PREORDER = {
   shipping_cost: '5000.00',
   discount: '10000.00',
   items: [
-    { id: 101, name_snapshot: 'Poster A', sku_snapshot: 'AAA00001', sell_price: '100000.00', qty: 4, artist_name: 'Artist A' },
-    { id: 102, name_snapshot: 'Stiker B', sku_snapshot: 'BBB00001', sell_price: '25000.00', qty: 2, artist_name: 'Artist A' },
+    { id: 101, name_snapshot: 'Poster A', sku_snapshot: 'AAA00001', sell_price: '100000.00', qty: 4, home_outlet_name: 'Outlet A' },
+    { id: 102, name_snapshot: 'Stiker B', sku_snapshot: 'BBB00001', sell_price: '25000.00', qty: 2, home_outlet_name: 'Outlet A' },
   ],
 };
 
@@ -133,23 +133,23 @@ describe('PreorderSplitModal (027 US3)', () => {
     expect(qtyInput('Poster A')).toHaveValue(0);
   });
 
-  describe('split by seller (027 US4)', () => {
+  describe('split by outlet (027 US4)', () => {
     const MULTI = {
       ...PREORDER,
       items: [
-        { ...PREORDER.items[0], artist_id: 1 },
-        { ...PREORDER.items[1], artist_id: 2 },
+        { ...PREORDER.items[0], home_outlet_id: 1 },
+        { ...PREORDER.items[1], home_outlet_id: 2 },
       ],
     };
 
-    it('offers "Pisah per penjual" only when the order has two or more distinct sellers', () => {
+    it('offers "Pisah per outlet" only when the order has two or more distinct outlets', () => {
       const { unmount } = render(PreorderSplitModal, { props: { open: true, preorder: MULTI } });
-      expect(screen.getByTestId('split-by-seller')).toBeInTheDocument();
+      expect(screen.getByTestId('split-by-outlet')).toBeInTheDocument();
       unmount();
 
-      const single = { ...PREORDER, items: PREORDER.items.map((i) => ({ ...i, artist_id: 1 })) };
+      const single = { ...PREORDER, items: PREORDER.items.map((i) => ({ ...i, home_outlet_id: 1 })) };
       render(PreorderSplitModal, { props: { open: true, preorder: single } });
-      expect(screen.queryByTestId('split-by-seller')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('split-by-outlet')).not.toBeInTheDocument();
     });
 
     it('submits { mode: "by_seller" } without needing any quantity, and emits done', async () => {
@@ -159,7 +159,7 @@ describe('PreorderSplitModal (027 US3)', () => {
       const { emitted } = render(PreorderSplitModal, { props: { open: true, preorder: MULTI } });
 
       expect(screen.getByTestId('split-confirm')).toBeDisabled(); // mode manual tetap butuh unit
-      await user.click(screen.getByTestId('split-by-seller'));
+      await user.click(screen.getByTestId('split-by-outlet'));
 
       await waitFor(() => expect(splitPreorder).toHaveBeenCalledWith(7, { mode: 'by_seller' }));
       await waitFor(() => expect(emitted().done[0]).toEqual([result]));

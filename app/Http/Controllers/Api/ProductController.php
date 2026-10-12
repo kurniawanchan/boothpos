@@ -9,7 +9,7 @@ use App\Http\Requests\UpdateProductRequest;
 use App\Http\Requests\UpdateVariantRequest;
 use App\Http\Resources\ProductResource;
 use App\Http\Resources\ProductVariantResource;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -66,9 +66,16 @@ class ProductController extends Controller
         // grup produk ∪ grup kategorinya, dimuat lewat eager-load supaya tetap konstan.
         $withModifiers = $request->boolean('with_modifiers');
 
+        // 045 Stage 4 — `pos=1` (layar POS/tab): menu menurut outlet SHIFT pengguna. Item yang tidak dibawa outlet itu tidak
+        // ditawarkan, dan harga khusus outlet itu ikut dikirim (`outlet_price`) supaya kartu = yang akan ditagihkan.
+        $orderingOutlet = $request->boolean('pos') ? app(\App\Support\OutletContext::class)->orderingId() : null;
+        app(\App\Support\OutletPriceBook::class)->useOrderingOutlet($orderingOutlet);
+        $notCarriedHere = $orderingOutlet === null ? [] : \App\Models\OutletItemSetting::query()
+            ->where('outlet_id', $orderingOutlet)->where('is_carried', false)->pluck('product_id')->all();
+
         $products = Product::query()
             ->with(array_merge(
-                ['artist', 'category'],
+                ['homeOutlet', 'category'],
                 $withVariants ? ['variants'] : [],
                 $withModifiers ? ['modifierGroups.options', 'category.modifierGroups.options'] : [],
             ))
@@ -80,17 +87,18 @@ class ProductController extends Controller
                            ->orWhere('variant_name', 'like', "%{$term}%"));
                 });
             })
-            // 005-ux-enhancements-dashboard (US1) — artist_id/category_id
+            // 005-ux-enhancements-dashboard (US1) — home_outlet_id/category_id
             // sekarang array (multi-select dropdown di Products/POS),
             // bukan lagi skalar tunggal. $request->array() menormalkan
-            // baik `artist_id[]=1&artist_id[]=2` maupun `artist_id=1` lama
+            // baik `home_outlet_id[]=1&home_outlet_id[]=2` maupun `home_outlet_id=1` lama
             // menjadi array, jadi kompatibel mundur tanpa perubahan pada
             // pemanggil lain. array_filter membuang string kosong supaya
             // whereIn([]) (yang selalu false) tidak diam-diam mengosongkan
             // hasil ketika parameter ada tapi bernilai kosong.
-            ->when(count(array_filter($request->array('artist_id'))) > 0, fn ($q) => $q->whereIn('artist_id', array_filter($request->array('artist_id'))))
+            ->when(count(array_filter($request->array('home_outlet_id'))) > 0, fn ($q) => $q->whereIn('home_outlet_id', array_filter($request->array('home_outlet_id'))))
             ->when(count(array_filter($request->array('category_id'))) > 0, fn ($q) => $q->whereIn('category_id', array_filter($request->array('category_id'))))
             ->when($request->has('is_preorder'), fn ($q) => $q->where('is_preorder', $request->boolean('is_preorder')))
+            ->when($notCarriedHere !== [], fn ($q) => $q->whereNotIn('id', $notCarriedHere))
             ->orderBy('name')
             ->paginate($perPage);
 
@@ -131,15 +139,15 @@ class ProductController extends Controller
     {
         $data = $request->validated();
 
-        $artist = Artist::findOrFail($data['artist_id']);
+        $outlet = Outlet::findOrFail($data['home_outlet_id']);
         $category = Category::findOrFail($data['category_id']);
 
         $segment = $data['product_segment'] ?? $this->codeGenerator->deriveSegmentFromName($data['name']);
-        $codePrefix = $this->codeGenerator->buildCodePrefix($artist->code, $category->code, $segment);
+        $codePrefix = $this->codeGenerator->buildCodePrefix($outlet->code, $category->code, $segment);
 
         $product = DB::transaction(function () use ($data, $segment, $codePrefix) {
             $product = Product::create([
-                'artist_id' => $data['artist_id'],
+                'home_outlet_id' => $data['home_outlet_id'],
                 'category_id' => $data['category_id'],
                 'station_id' => $data['station_id'] ?? null,
                 'code_prefix' => $codePrefix,
@@ -176,10 +184,12 @@ class ProductController extends Controller
                 app(\App\Services\ProductLifecycleService::class)->requestPublish($product, request()->user());
             }
 
+            $this->applyCarried($product, $data);
+
             return $product;
         });
 
-        return response()->json(new ProductResource($product->load(['artist', 'category', ...$this->variantRelations($request)])), 201);
+        return response()->json(new ProductResource($product->load(['homeOutlet', 'category', 'outletItemSettings.outlet', ...$this->variantRelations($request)])), 201);
     }
 
     public function show(Request $request, Product $product): JsonResponse
@@ -187,7 +197,7 @@ class ProductController extends Controller
         $this->authorize('view', $product);
 
         // json_decode(json_encode()) = mengurai resource bersarang persis seperti yang dilihat klien (tanpa pembungkus 'data').
-        $payload = json_decode(json_encode(new ProductResource($product->load(['artist', 'category', ...$this->variantRelations($request)]))), true);
+        $payload = json_decode(json_encode(new ProductResource($product->load(['homeOutlet', 'category', 'outletItemSettings.outlet', ...$this->variantRelations($request)]))), true);
 
         // 043 — halaman item: fakta, stasiun, tautan modifier efektif, ketersediaan, rilis, `can`.
         $payload = array_merge($payload, app(\App\Services\ProductDetailService::class)->extras($product, $request->user()));
@@ -207,7 +217,9 @@ class ProductController extends Controller
 
         $rows = \App\Models\PriceHistory::query()
             ->whereIn('variant_id', $product->variants()->withTrashed()->pluck('id'))
-            ->with(['variant:id,variant_name', 'user:id,name', 'approver:id,name'])
+            // 045: riwayat harga outlet hanya untuk outlet yang boleh dilihat pemanggil (NULL = harga dasar, selalu tampil).
+            ->where(fn ($q) => $q->whereNull('outlet_id')->orWhereIn('outlet_id', app(\App\Support\OutletContext::class)->permittedIds()))
+            ->with(['variant:id,variant_name', 'user:id,name', 'approver:id,name', 'outlet:id,code'])
             ->orderByDesc('effective_at')->orderByDesc('id')
             ->paginate(min((int) $request->integer('per_page', 25), 100));
 
@@ -217,6 +229,8 @@ class ProductController extends Controller
             'data' => $rows->map(fn ($h) => [
                 'at' => $h->effective_at->toIso8601String(),
                 'variant' => $h->variant?->variant_name,
+                'outlet_id' => $h->outlet_id,
+                'outlet_code' => $h->outlet?->code,
                 'old_price' => $h->old_price === null ? null : number_format((float) $h->old_price, 2, '.', ''),
                 'new_price' => number_format((float) $h->new_price, 2, '.', ''),
                 'source' => $h->source,
@@ -252,7 +266,8 @@ class ProductController extends Controller
         DB::transaction(function () use ($request, $product) {
             $before = $product->only($product->getFillable());
 
-            $product->update($request->validated());
+            $product->update(collect($request->validated())->except('outlet_ids')->all());
+            $this->applyCarried($product, $request->validated());
 
             $this->activityLogger->log(
                 userId: $request->user()?->id,
@@ -265,7 +280,26 @@ class ProductController extends Controller
             );
         });
 
-        return response()->json(new ProductResource($product->fresh(['artist', 'category', ...$this->variantRelations($request)])));
+        return response()->json(new ProductResource($product->fresh(['homeOutlet', 'category', 'outletItemSettings.outlet', ...$this->variantRelations($request)])));
+    }
+
+    /**
+     * 045 Stage 3 — `outlet_ids` = outlet yang membawa produk, HANYA di antara outlet yang boleh dilihat pengguna
+     * (outlet lain tidak disentuh). Tanpa `outlet_ids` tidak ada yang berubah.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function applyCarried(Product $product, array $data): void
+    {
+        if (! array_key_exists('outlet_ids', $data)) {
+            return;
+        }
+
+        app(\App\Services\OutletMenuService::class)->setCarried(
+            $product,
+            array_map('intval', $data['outlet_ids']),
+            app(\App\Support\OutletContext::class)->permittedIds(),
+        );
     }
 
     public function destroy(Request $request, Product $product): JsonResponse
@@ -431,7 +465,7 @@ class ProductController extends Controller
 
         $this->imageUploadService->delete($oldPath);
 
-        return response()->json(new ProductResource($product->fresh(['artist', 'category', 'variants'])));
+        return response()->json(new ProductResource($product->fresh(['homeOutlet', 'category', 'variants'])));
     }
 
     /**
@@ -478,9 +512,18 @@ class ProductController extends Controller
         $term = (string) $request->query('q', '');
         $limit = min((int) $request->integer('limit', 20), 50);
 
+        // 045 Stage 4 — `pos=1`: sama dengan daftar POS (outlet shift; item yang tidak dibawa tidak muncul; harga outlet).
+        $orderingOutlet = $request->boolean('pos') ? app(\App\Support\OutletContext::class)->orderingId() : null;
+        // 045 Stage 5 — `stock_outlet` (layar Stok): saldo di outlet itu (harus boleh dilihat) tanpa memfilter menu.
+        $stockOutlet = $request->filled('stock_outlet') && app(\App\Support\OutletContext::class)->isPermitted($request->integer('stock_outlet')) ? $request->integer('stock_outlet') : null;
+        app(\App\Support\OutletPriceBook::class)->useOrderingOutlet($orderingOutlet ?? $stockOutlet);
+        $notCarriedHere = $orderingOutlet === null ? [] : \App\Models\OutletItemSetting::query()
+            ->where('outlet_id', $orderingOutlet)->where('is_carried', false)->pluck('product_id')->all();
+
         $variants = ProductVariant::query()
-            ->with(['product.artist', 'product.category'])
+            ->with(['product.homeOutlet', 'product.category'])
             ->where('is_active', true)
+            ->when($notCarriedHere !== [], fn ($q) => $q->whereNotIn('product_id', $notCarriedHere))
             // 043 — produk yang didiskontinu tidak lagi bisa dipilih (mis. untuk pre-order baru).
             ->whereHas('product', fn ($p) => $p->where('is_active', true))
             ->when($term !== '', fn ($q) => $q->where(function ($q) use ($term) {
@@ -496,13 +539,15 @@ class ProductController extends Controller
             'variant_id' => $v->id,
             'sku' => $v->sku,
             'label' => $v->product->name.' — '.$v->variant_name,
-            'artist_name' => $v->product->artist->name,
+            'home_outlet_name' => $v->product->homeOutlet->name,
             // Requested for the preorder "Add item" dropdown/item list, so
             // staff can tell apart same-named products across categories
             // without opening each one.
             'category_name' => $v->product->category?->name,
             'sell_price' => number_format((float) $v->sell_price, 2, '.', ''),
+            'outlet_price' => ($op = app(\App\Support\OutletPriceBook::class)->forCurrentOutlet($v->id)) === null ? null : number_format($op, 2, '.', ''),
             'current_stock' => $v->current_stock,
+            'outlet_stock' => app(\App\Support\OutletPriceBook::class)->orderingStockOrNull($v->id),
             'is_preorder' => (bool) $v->product->is_preorder,
             // Falls back to the PRODUCT's own image when this variant has
             // none of its own — same accessor ProductVariant::image_url now

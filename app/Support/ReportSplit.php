@@ -7,7 +7,7 @@ namespace App\Support;
  *
  * Bagian pre-order SENGAJA dihitung sebagai SISA dari total yang sudah
  * tampil (total − bagian POS), bukan dibulatkan sendiri-sendiri. Alasannya:
- * total_units di artist_settlements adalah integer hasil pembulatan
+ * total_units di outlet_settlements adalah integer hasil pembulatan
  * (POS bulat + unit pre-order pecahan), dan uang disimpan 2 desimal —
  * membulatkan kedua bagian secara terpisah bisa membuat POS + pre-order
  * berbeda 1 unit / 1 sen dari total (mis. dua pre-order 0,5 unit → 1 + 1 ≠

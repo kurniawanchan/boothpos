@@ -32,7 +32,7 @@ class MenuReleaseController extends Controller
 
         return response()->json($this->present($release) + [
             'changes' => $release->changes->map(fn ($c) => [
-                'id' => $c->id, 'kind' => $c->kind, 'product_name' => $c->payload['product_name'] ?? null, 'variant_name' => $c->payload['variant_name'] ?? null,
+                'id' => $c->id, 'kind' => $c->kind, 'product_name' => $c->payload['product_name'] ?? null, 'variant_name' => $c->payload['variant_name'] ?? null, 'outlet_code' => $c->payload['outlet_code'] ?? null,
                 'old_price' => isset($c->payload['old_price']) ? number_format((float) $c->payload['old_price'], 2, '.', '') : null,
                 'new_price' => isset($c->payload['new_price']) ? number_format((float) $c->payload['new_price'], 2, '.', '') : null,
                 'requested_by' => $c->requester?->name, 'status' => $c->status,

@@ -4,7 +4,8 @@ namespace App\Services;
 
 use App\Exceptions\MasterDataImportRowException;
 use App\Imports\MasterDataSheetsImport;
-use App\Models\Artist;
+use App\Models\Outlet;
+use App\Models\OutletItemSetting;
 use App\Models\Category;
 use App\Models\Material;
 use App\Models\Product;
@@ -18,6 +19,7 @@ use App\Support\LicenseGate;
 use App\Support\MasterDataSheets;
 use App\Support\ReportSplit;
 use App\Support\MenuKeys;
+use App\Support\OutletContext;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -36,8 +38,8 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
  * 1. VALIDASI PENUH DULU, BARU TERAPKAN SEKALIGUS DALAM SATU TRANSAKSI.
  *    Ini menyimpang dari kriteria penerimaan F15.5 di PRD ("simpan 97 baris
  *    valid, laporkan 3 yang gagal"). Alasannya: sheet-sheet ini saling
- *    bergantung (produk menunjuk artist/kategori, stok menunjuk varian).
- *    Menyimpan sebagian berarti bisa berhenti dengan produk yang artistnya
+ *    bergantung (produk menunjuk outlet/kategori, stok menunjuk varian).
+ *    Menyimpan sebagian berarti bisa berhenti dengan produk yang outletnya
  *    tidak jadi dibuat, atau harga separuh terbarui — kondisi yang jauh
  *    lebih sulit dibereskan pemilik toko daripada sekadar memperbaiki
  *    berkasnya lalu mengulang impor. Risiko "impor merusak data massal"
@@ -63,7 +65,7 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
  *      - artists    : kolom unik `code`
  *      - categories : kolom unik `code`
  *      - products   : `sku` bila diisi; bila kosong, produk dicocokkan
- *                     lewat `code_prefix` (= artist_code + "-" +
+ *                     lewat `code_prefix` (= home_outlet_code + "-" +
  *                     category_code + "-" + product_segment, format
  *                     "ART-CA-SEG", kolom unik di tabel products) dan
  *                     variannya lewat `variant_name` di bawah produk itu
@@ -101,6 +103,9 @@ class MasterDataImportService
 
     private array $counts = [];
 
+    /** @var list<int> outlet yang DIBUAT oleh impor ini (belum bisa ditugaskan ke siapa pun). */
+    private array $createdOutletIds = [];
+
     /** @var array<string, UploadedFile> nama berkas asli => berkas terunggah (Task 6). */
     private array $imagesByFilename = [];
 
@@ -129,6 +134,7 @@ class MasterDataImportService
     {
         $this->errors = [];
         $this->counts = [];
+        $this->createdOutletIds = [];
         $this->imagesByFilename = [];
 
         foreach ($images as $image) {
@@ -144,20 +150,21 @@ class MasterDataImportService
         }
 
         // Divalidasi mengikuti URUTAN DEPENDENSI, bukan urutan sheet di
-        // berkas: kode artist/kategori yang baru diperkenalkan berkas ini
+        // berkas: kode outlet/kategori yang baru diperkenalkan berkas ini
         // harus sudah dikenal sebelum sheet products memeriksanya.
         $plan = [
-            MasterDataSheets::ARTISTS => $this->validateArtists($sheets[MasterDataSheets::ARTISTS] ?? []),
+            MasterDataSheets::OUTLETS => $this->validateOutlets($sheets[MasterDataSheets::OUTLETS] ?? []),
             MasterDataSheets::CATEGORIES => $this->validateCategories($sheets[MasterDataSheets::CATEGORIES] ?? []),
         ];
         $plan[MasterDataSheets::PRODUCTS] = $this->validateProducts(
             $sheets[MasterDataSheets::PRODUCTS] ?? [],
-            $plan[MasterDataSheets::ARTISTS],
+            $plan[MasterDataSheets::OUTLETS],
             $plan[MasterDataSheets::CATEGORIES],
         );
         $plan[MasterDataSheets::STOCK] = $this->validateStock(
             $sheets[MasterDataSheets::STOCK] ?? [],
             $plan[MasterDataSheets::PRODUCTS],
+            $plan[MasterDataSheets::OUTLETS],
         );
         $plan[MasterDataSheets::VENDORS] = $this->validateVendors($sheets[MasterDataSheets::VENDORS] ?? []);
         $plan[MasterDataSheets::MATERIALS] = $this->validateMaterials($sheets[MasterDataSheets::MATERIALS] ?? []);
@@ -170,6 +177,16 @@ class MasterDataImportService
             $sheets[MasterDataSheets::BOM] ?? [],
             $plan[MasterDataSheets::PRODUCTS],
             $plan[MasterDataSheets::MATERIALS],
+        );
+        $plan[MasterDataSheets::OUTLET_ITEMS] = $this->validateOutletItems(
+            $sheets[MasterDataSheets::OUTLET_ITEMS] ?? [],
+            $plan[MasterDataSheets::OUTLETS],
+            $plan[MasterDataSheets::PRODUCTS],
+        );
+        $plan[MasterDataSheets::OUTLET_PRICES] = $this->validateOutletPrices(
+            $sheets[MasterDataSheets::OUTLET_PRICES] ?? [],
+            $plan[MasterDataSheets::OUTLETS],
+            $plan[MasterDataSheets::PRODUCTS],
         );
         $plan[MasterDataSheets::ROLES] = $this->validateRoles($sheets[MasterDataSheets::ROLES] ?? []);
         $plan[MasterDataSheets::USERS] = $this->validateUsers(
@@ -236,7 +253,7 @@ class MasterDataImportService
 
         $sheets = [];
         foreach ($wanted as $rawName => $canonical) {
-            $rows = $this->normalizeRows($raw[$rawName] ?? []);
+            $rows = $this->normalizeRows($raw[$rawName] ?? [], $canonical);
 
             // Sheet dengan judul kolom yang tidak dikenali tidak dilanjutkan
             // ke validasi per baris — kalau tidak, satu kesalahan judul
@@ -287,7 +304,7 @@ class MasterDataImportService
      * nomor baris adalah satu-satunya cara pengguna menemukan kembali
      * baris yang bermasalah di berkasnya.
      */
-    private function normalizeRows(array $rows): array
+    private function normalizeRows(array $rows, string $sheet): array
     {
         $normalized = [];
 
@@ -299,7 +316,15 @@ class MasterDataImportService
                     continue;
                 }
 
-                $values[(string) $key] = is_string($value) ? trim($value) : $value;
+                // Judul lama (mis. artist_code) dipetakan ke nama baru. Kalau
+                // baris memuat KEDUA judul, yang baru yang dipakai — judul
+                // lama tidak boleh menimpanya diam-diam.
+                $name = MasterDataSheets::legacyColumn($sheet, (string) $key);
+                if ($name !== (string) $key && array_key_exists($name, (array) $row)) {
+                    continue;
+                }
+
+                $values[$name] = is_string($value) ? trim($value) : $value;
             }
 
             $allBlank = true;
@@ -321,12 +346,12 @@ class MasterDataImportService
     }
 
     // =================================================================
-    // VALIDASI — ARTISTS
+    // VALIDASI — OUTLETS
     // =================================================================
 
-    private function validateArtists(array $rows): array
+    private function validateOutlets(array $rows): array
     {
-        $sheet = MasterDataSheets::ARTISTS;
+        $sheet = MasterDataSheets::OUTLETS;
         $plan = [];
         $seen = [];
         $created = 0;
@@ -339,7 +364,7 @@ class MasterDataImportService
             $code = $this->stringValue($values, 'code');
 
             if ($code === null) {
-                $this->addError($sheet, $row, 'code', 'Kode artist wajib diisi.');
+                $this->addError($sheet, $row, 'code', 'Kode outlet wajib diisi.');
 
                 continue;
             }
@@ -347,26 +372,26 @@ class MasterDataImportService
             $code = strtoupper($code);
 
             if (strlen($code) !== 3 || ! ctype_alpha($code)) {
-                $this->addError($sheet, $row, 'code', "Kode artist '{$code}' harus tepat 3 huruf.");
+                $this->addError($sheet, $row, 'code', "Kode outlet '{$code}' harus tepat 3 huruf.");
 
                 continue;
             }
 
             if (isset($seen[$code])) {
-                $this->addError($sheet, $row, 'code', "Kode artist '{$code}' muncul dua kali di sheet ini (baris {$seen[$code]}).");
+                $this->addError($sheet, $row, 'code', "Kode outlet '{$code}' muncul dua kali di sheet ini (baris {$seen[$code]}).");
 
                 continue;
             }
             $seen[$code] = $row;
 
-            $existing = Artist::where('code', $code)->first();
+            $existing = Outlet::where('code', $code)->first();
 
             // withoutGlobalScope: 'code' UNIQUE lintas DEMO/LIVE di DB (bukan
             // per-mode), jadi row di mode lain (mis. seed demo) juga harus
             // ikut dicek — kalau tidak, INSERT lolos validasi tapi gagal di
             // constraint DB saat apply() (mirrors ProductCodeGenerator R-nya).
-            if ($existing === null && Artist::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code', $code)->exists()) {
-                $this->addError($sheet, $row, 'code', "Kode artist '{$code}' sudah dipakai (di mode data lain, atau oleh artist yang sudah dihapus). Pakai kode lain.");
+            if ($existing === null && Outlet::withTrashed()->withoutGlobalScopes()->where('code', $code)->exists()) {
+                $this->addError($sheet, $row, 'code', "Kode outlet '{$code}' sudah dipakai (di mode data lain, atau oleh outlet yang sudah dihapus). Pakai kode lain.");
 
                 continue;
             }
@@ -376,12 +401,12 @@ class MasterDataImportService
             if ($this->filled($values, 'name')) {
                 $name = $this->stringValue($values, 'name');
                 if (mb_strlen($name) > 100) {
-                    $this->addError($sheet, $row, 'name', 'Nama artist maksimal 100 karakter.');
+                    $this->addError($sheet, $row, 'name', 'Nama outlet maksimal 100 karakter.');
                 } else {
                     $attributes['name'] = $name;
                 }
             } elseif ($existing === null) {
-                $this->addError($sheet, $row, 'name', 'Nama artist wajib diisi untuk artist baru.');
+                $this->addError($sheet, $row, 'name', 'Nama outlet wajib diisi untuk outlet baru.');
             }
 
             if ($this->filled($values, 'contact_phone')) {
@@ -419,7 +444,7 @@ class MasterDataImportService
             ];
         }
 
-        $this->enforceArtistLicenseQuota($plan);
+        $this->enforceOutletLicenseQuota($plan);
 
         $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
 
@@ -428,18 +453,18 @@ class MasterDataImportService
 
     /**
      * Gerbang lisensi Pro/Master TIDAK boleh bisa dilewati lewat impor.
-     * ArtistPolicy::create menegakkannya untuk POST /artists; endpoint impor
+     * OutletPolicy::create menegakkannya untuk POST /artists; endpoint impor
      * tidak lewat policy itu, jadi kuotanya diperiksa eksplisit di sini —
-     * kalau tidak, satu berkas .xlsx berisi 20 artist jadi jalan pintas
+     * kalau tidak, satu berkas .xlsx berisi 20 outlet jadi jalan pintas
      * mengubah instalasi Pro menjadi Master secara gratis.
      */
-    private function enforceArtistLicenseQuota(array $plan): void
+    private function enforceOutletLicenseQuota(array $plan): void
     {
-        if ($plan === [] || LicenseGate::multiArtistEnabled()) {
+        if ($plan === [] || LicenseGate::multiOutletEnabled()) {
             return;
         }
 
-        $activeCodes = Artist::where('is_active', true)->pluck('code')->map(fn ($c) => strtoupper($c))->all();
+        $activeCodes = Outlet::where('is_active', true)->pluck('code')->map(fn ($c) => strtoupper($c))->all();
         $projected = array_flip($activeCodes);
 
         foreach ($plan as $entry) {
@@ -453,7 +478,7 @@ class MasterDataImportService
         // Dua jalan keluar, bukan satu: (a) hasilnya masih dalam kuota, atau
         // (b) instalasi ini MEMANG sudah melebihi kuota sebelum impor
         // (mis. lisensi diturunkan dari Master ke Pro) dan berkas ini tidak
-        // memperburuknya. Menolak impor yang tidak menambah artist aktif
+        // memperburuknya. Menolak impor yang tidak menambah outlet aktif
         // hanya akan mengunci pemilik toko dari mengoreksi datanya sendiri.
         if (count($projected) <= 1 || count($projected) <= count($activeCodes)) {
             return;
@@ -462,11 +487,11 @@ class MasterDataImportService
         $firstRow = $plan[0]['row'] ?? self::FIRST_DATA_ROW;
 
         $this->addError(
-            MasterDataSheets::ARTISTS,
+            MasterDataSheets::OUTLETS,
             $firstRow,
             'is_active',
-            'Instalasi ini memakai lisensi Pro (satu artist aktif). Berkas ini akan menghasilkan '
-                .count($projected).' artist aktif. Upgrade ke Master untuk menambah artist lain.'
+            'Instalasi ini memakai lisensi Pro (satu outlet aktif). Berkas ini akan menghasilkan '
+                .count($projected).' outlet aktif. Upgrade ke Master untuk menambah outlet lain.'
         );
     }
 
@@ -515,7 +540,7 @@ class MasterDataImportService
             // per-mode), jadi row di mode lain (mis. seed demo) juga harus
             // ikut dicek — kalau tidak, INSERT lolos validasi tapi gagal di
             // constraint DB saat apply() (mirrors ProductCodeGenerator R-nya).
-            if ($existing === null && Category::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code', $code)->exists()) {
+            if ($existing === null && Category::withTrashed()->withoutGlobalScopes()->where('code', $code)->exists()) {
                 $this->addError($sheet, $row, 'code', "Kode kategori '{$code}' sudah dipakai (di mode data lain, atau oleh kategori yang sudah dihapus). Pakai kode lain.");
 
                 continue;
@@ -603,7 +628,7 @@ class MasterDataImportService
     // VALIDASI — PRODUCTS (satu baris = satu VARIAN)
     // =================================================================
 
-    private function validateProducts(array $rows, array $artistPlan, array $categoryPlan): array
+    private function validateProducts(array $rows, array $outletPlan, array $categoryPlan): array
     {
         $sheet = MasterDataSheets::PRODUCTS;
         $plan = [];
@@ -612,7 +637,7 @@ class MasterDataImportService
         $created = 0;
         $updated = 0;
 
-        $artistCodesInFile = array_column($artistPlan, 'code');
+        $outletCodesInFile = array_column($outletPlan, 'code');
         $categoryCodesInFile = array_column($categoryPlan, 'code');
 
         foreach ($rows as $entry) {
@@ -635,7 +660,7 @@ class MasterDataImportService
                 }
                 $seenSku[$sku] = $row;
 
-                $variant = ProductVariant::with('product.artist', 'product.category')->where('sku', $sku)->first();
+                $variant = ProductVariant::with('product.homeOutlet', 'product.category')->where('sku', $sku)->first();
 
                 if ($variant === null) {
                     $this->addError($sheet, $row, 'sku', "SKU '{$sku}' tidak ditemukan. Kosongkan kolom sku untuk membuat varian baru — SKU dibuat otomatis oleh sistem.");
@@ -643,12 +668,12 @@ class MasterDataImportService
                     continue;
                 }
 
-                // Kode artist/kategori/segmen membentuk code_prefix yang
+                // Kode outlet/kategori/segmen membentuk code_prefix yang
                 // permanen (F19.4), jadi impor tidak boleh memindahkan
-                // produk ke artist lain diam-diam. Ketidakcocokan
+                // produk ke outlet lain diam-diam. Ketidakcocokan
                 // dilaporkan, bukan diabaikan.
                 foreach ([
-                    'artist_code' => $variant->product->artist->code,
+                    'home_outlet_code' => $variant->product->homeOutlet->code,
                     'category_code' => $variant->product->category->code,
                     'product_segment' => $variant->product->product_segment,
                 ] as $column => $actual) {
@@ -686,18 +711,18 @@ class MasterDataImportService
             // ---------------------------------------------------------
             // Jalur B — baris mendefinisikan produk/varian lewat kode.
             // ---------------------------------------------------------
-            $artistCode = $this->filled($values, 'artist_code') ? strtoupper($this->stringValue($values, 'artist_code')) : null;
+            $outletCode = $this->filled($values, 'home_outlet_code') ? strtoupper($this->stringValue($values, 'home_outlet_code')) : null;
             $categoryCode = $this->filled($values, 'category_code') ? strtoupper($this->stringValue($values, 'category_code')) : null;
             $productName = $this->stringValue($values, 'product_name');
             $variantName = $this->stringValue($values, 'variant_name');
 
             $rowIsBroken = false;
 
-            if ($artistCode === null) {
-                $this->addError($sheet, $row, 'artist_code', 'Kode artist wajib diisi bila kolom sku dikosongkan.');
+            if ($outletCode === null) {
+                $this->addError($sheet, $row, 'home_outlet_code', 'Kode outlet wajib diisi bila kolom sku dikosongkan.');
                 $rowIsBroken = true;
-            } elseif (! in_array($artistCode, $artistCodesInFile, true) && ! Artist::where('code', $artistCode)->exists()) {
-                $this->addError($sheet, $row, 'artist_code', "Artist dengan kode '{$artistCode}' tidak ditemukan.");
+            } elseif (! in_array($outletCode, $outletCodesInFile, true) && ! Outlet::where('code', $outletCode)->exists()) {
+                $this->addError($sheet, $row, 'home_outlet_code', "Outlet dengan kode '{$outletCode}' tidak ditemukan.");
                 $rowIsBroken = true;
             }
 
@@ -741,7 +766,7 @@ class MasterDataImportService
             // bawah tidak pernah menemukan produk yang sudah ada (dibuat lewat
             // buildCodePrefix() pada tahap apply), sehingga baris upsert malah
             // dikira baris produk baru dan menabrak keunikan code_prefix.
-            $codePrefix = $artistCode.'-'.$categoryCode.'-'.$segment;
+            $codePrefix = $outletCode.'-'.$categoryCode.'-'.$segment;
             $variantKey = $codePrefix.'|'.mb_strtolower($variantName);
 
             if (isset($seenVariantKey[$variantKey])) {
@@ -814,7 +839,7 @@ class MasterDataImportService
                 'row' => $row,
                 'mode' => 'variant_by_code',
                 'creates_variant' => $isNewVariant,
-                'artist_code' => $artistCode,
+                'home_outlet_code' => $outletCode,
                 'category_code' => $categoryCode,
                 'segment' => $segment,
                 'code_prefix' => $codePrefix,
@@ -956,7 +981,7 @@ class MasterDataImportService
     // VALIDASI — STOCK
     // =================================================================
 
-    private function validateStock(array $rows, array $productPlan): array
+    private function validateStock(array $rows, array $productPlan, array $outletPlan = []): array
     {
         $sheet = MasterDataSheets::STOCK;
         $plan = [];
@@ -986,12 +1011,37 @@ class MasterDataImportService
                 continue;
             }
 
-            if (isset($seen[$sku])) {
-                $this->addError($sheet, $row, 'sku', "SKU '{$sku}' muncul dua kali di sheet ini (baris {$seen[$sku]}).");
+            // 045 Stage 5 — stok adalah saldo PER OUTLET: `outlet_code` wajib bila ada beberapa outlet; kosong di satu
+            // outlet = satu-satunya outlet itu.
+            $outletCode = $this->filled($values, 'outlet_code') ? strtoupper($this->stringValue($values, 'outlet_code')) : null;
+            // SKU yang tak dikenal dilaporkan lebih dulu (lebih mendasar daripada outletnya).
+            $skuUnknown = ProductVariant::where('sku', $sku)->doesntExist() && ! $fileCreatesVariants;
+            if ($skuUnknown) {
+                $this->addError($sheet, $row, 'sku', "SKU '{$sku}' tidak ditemukan. Untuk varian baru, isi kolom initial_stock di sheet 'products' — SKU dibuat otomatis oleh sistem.");
 
                 continue;
             }
-            $seen[$sku] = $row;
+            if ($outletCode === null) {
+                $permitted = app(OutletContext::class)->permittedIds();
+                if (count($permitted) > 1) {
+                    $this->addError($sheet, $row, 'outlet_code', 'Kode outlet wajib diisi karena ada beberapa outlet (stok dihitung per outlet).');
+
+                    continue;
+                }
+                $outletCode = Outlet::query()->whereIn('id', $permitted ?: [0])->value('code') ?: Outlet::query()->orderBy('id')->value('code');
+            }
+            $outletCode = $this->outletRefError($sheet, $row, $outletCode, $outletPlan);
+            if ($outletCode === null) {
+                continue;
+            }
+
+            $seenKey = $sku.'|'.$outletCode;
+            if (isset($seen[$seenKey])) {
+                $this->addError($sheet, $row, 'sku', "SKU '{$sku}' untuk outlet '{$outletCode}' muncul dua kali di sheet ini (baris {$seen[$seenKey]}).");
+
+                continue;
+            }
+            $seen[$seenKey] = $row;
 
             $variant = ProductVariant::where('sku', $sku)->first();
 
@@ -1020,7 +1070,9 @@ class MasterDataImportService
             // selisih sesungguhnya baru diketahui saat penerapan. Hitungan
             // di sini dipakai HANYA untuk laporan jumlah pada pratinjau,
             // dan sengaja optimistis (dianggap berubah).
-            $delta = $variant === null ? $target : $target - $variant->current_stock;
+            $outletIdNow = Outlet::where('code', $outletCode)->value('id');
+            $balanceNow = ($variant === null || $outletIdNow === null) ? 0 : (int) \App\Models\VariantOutletStock::query()->where('variant_id', $variant->id)->where('outlet_id', $outletIdNow)->value('current_stock');
+            $delta = $variant === null ? $target : $target - $balanceNow;
 
             $reason = $this->stringValue($values, 'reason');
 
@@ -1037,6 +1089,7 @@ class MasterDataImportService
             $plan[] = [
                 'row' => $row,
                 'sku' => $sku,
+                'outlet_code' => $outletCode,
                 'target' => $target,
                 'reason' => $reason,
             ];
@@ -1054,7 +1107,7 @@ class MasterDataImportService
     private function apply(array $plan, User $user, string $originalName): void
     {
         DB::transaction(function () use ($plan, $user, $originalName) {
-            $this->applyArtists($plan[MasterDataSheets::ARTISTS]);
+            $this->applyOutlets($plan[MasterDataSheets::OUTLETS]);
             $this->applyCategories($plan[MasterDataSheets::CATEGORIES]);
             $this->applyProducts($plan[MasterDataSheets::PRODUCTS], $user);
             $this->applyStock($plan[MasterDataSheets::STOCK], $user);
@@ -1062,6 +1115,8 @@ class MasterDataImportService
             $this->applyMaterials($plan[MasterDataSheets::MATERIALS]);
             $this->applyVendorPrices($plan[MasterDataSheets::VENDOR_PRICES]);
             $this->applyBom($plan[MasterDataSheets::BOM]);
+            $this->applyOutletItems($plan[MasterDataSheets::OUTLET_ITEMS]);
+            $this->applyOutletPrices($plan[MasterDataSheets::OUTLET_PRICES], $user);
             $this->applyRoles($plan[MasterDataSheets::ROLES]);
             $this->applyUsers($plan[MasterDataSheets::USERS]);
 
@@ -1081,13 +1136,17 @@ class MasterDataImportService
         });
     }
 
-    private function applyArtists(array $plan): void
+    private function applyOutlets(array $plan): void
     {
         foreach ($plan as $entry) {
-            $artist = Artist::firstOrNew(['code' => $entry['code']]);
-            $artist->fill($entry['attributes']);
-            $artist->code = $entry['code'];
-            $artist->save();
+            $outlet = Outlet::firstOrNew(['code' => $entry['code']]);
+            $isNew = ! $outlet->exists;
+            $outlet->fill($entry['attributes']);
+            $outlet->code = $entry['code'];
+            $outlet->save();
+            if ($isNew) {
+                $this->createdOutletIds[] = $outlet->id; // dipakai pagar hak akses outlet_items/outlet_prices saat apply
+            }
         }
     }
 
@@ -1169,15 +1228,15 @@ class MasterDataImportService
             $product = Product::where('code_prefix', $entry['code_prefix'])->first();
 
             if ($product === null) {
-                $artist = Artist::where('code', $entry['artist_code'])->firstOrFail();
+                $outlet = Outlet::where('code', $entry['home_outlet_code'])->firstOrFail();
                 $category = Category::where('code', $entry['category_code'])->firstOrFail();
 
                 // Jalur pembuatan kode yang sama persis dengan POST /products
                 // — bukan menyusun code_prefix sendiri di sini.
-                $codePrefix = $this->codeGenerator->buildCodePrefix($artist->code, $category->code, $entry['segment']);
+                $codePrefix = $this->codeGenerator->buildCodePrefix($outlet->code, $category->code, $entry['segment']);
 
                 $product = new Product(array_merge([
-                    'artist_id' => $artist->id,
+                    'home_outlet_id' => $outlet->id,
                     'category_id' => $category->id,
                     'code_prefix' => $codePrefix,
                     'product_segment' => $entry['segment'],
@@ -1222,6 +1281,7 @@ class MasterDataImportService
                     // memuat asal-usul setiap unit (F15.8).
                     $this->stockService->applyMovement(
                         variant: $variant,
+                        outletId: (int) $product->home_outlet_id, // stok awal = outlet ASAL produk (045 Stage 5)
                         type: 'adjustment',
                         qtyChange: $entry['initial_stock'],
                         referenceType: 'MasterDataImport',
@@ -1300,7 +1360,13 @@ class MasterDataImportService
                 );
             }
 
-            $delta = $entry['target'] - $variant->current_stock;
+            $outlet = Outlet::where('code', $entry['outlet_code'])->first();
+            if ($outlet === null) {
+                throw new MasterDataImportRowException(MasterDataSheets::STOCK, $entry['row'], 'outlet_code', "Outlet '{$entry['outlet_code']}' tidak ditemukan.");
+            }
+            $this->assertOutletPermitted(MasterDataSheets::STOCK, $entry['row'], $outlet);
+            $balance = (int) \App\Models\VariantOutletStock::query()->where('variant_id', $variant->id)->where('outlet_id', $outlet->id)->value('current_stock');
+            $delta = $entry['target'] - $balance;
 
             // applyMovement menolak qty_change nol (dan memang benar
             // begitu — movement nol bukan riwayat, cuma derau).
@@ -1310,6 +1376,7 @@ class MasterDataImportService
 
             $this->stockService->applyMovement(
                 variant: $variant,
+                outletId: (int) $outlet->id,
                 type: 'adjustment',
                 qtyChange: $delta,
                 referenceType: 'MasterDataImport',
@@ -1364,7 +1431,7 @@ class MasterDataImportService
             // per-mode), jadi row di mode lain (mis. seed demo) juga harus
             // ikut dicek — kalau tidak, INSERT lolos validasi tapi gagal di
             // constraint DB saat apply() (mirrors ProductCodeGenerator R-nya).
-            if ($existing === null && Vendor::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code', $code)->exists()) {
+            if ($existing === null && Vendor::withTrashed()->withoutGlobalScopes()->where('code', $code)->exists()) {
                 $this->addError($sheet, $row, 'code', "Kode vendor '{$code}' sudah dipakai (di mode data lain, atau oleh vendor yang sudah dihapus). Pakai kode lain.");
 
                 continue;
@@ -1462,7 +1529,7 @@ class MasterDataImportService
             // per-mode), jadi row di mode lain (mis. seed demo) juga harus
             // ikut dicek — kalau tidak, INSERT lolos validasi tapi gagal di
             // constraint DB saat apply() (mirrors ProductCodeGenerator R-nya).
-            if ($existing === null && Material::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code', $code)->exists()) {
+            if ($existing === null && Material::withTrashed()->withoutGlobalScopes()->where('code', $code)->exists()) {
                 $this->addError($sheet, $row, 'code', "Kode bahan '{$code}' sudah dipakai (di mode data lain, atau oleh bahan yang sudah dihapus). Pakai kode lain.");
 
                 continue;
@@ -1816,6 +1883,221 @@ class MasterDataImportService
             $line->notes = $entry['notes'];
             $line->material_id = $material->id;
             $line->save();
+        }
+    }
+
+    // =================================================================
+    // 045 Stage 3 — OUTLET_ITEMS / OUTLET_PRICES (menu per outlet)
+    // =================================================================
+
+    /**
+     * Outlet yang boleh disentuh berkas ini: yang dikenal DB dan boleh dilihat pengunggah, atau yang sheet `outlets`
+     * berkas yang sama perkenalkan (outlet baru belum punya hak akses siapa pun selain pengunggah-Owner).
+     */
+    private function outletRefError(string $sheet, int $row, ?string $code, array $outletPlan): ?string
+    {
+        if ($code === null) {
+            $this->addError($sheet, $row, 'outlet_code', 'Kode outlet wajib diisi.');
+
+            return null;
+        }
+
+        // Keputusan hak akses ditentukan oleh DB DULU: sebuah kode yang sudah ada TIDAK boleh lolos hanya karena sheet
+        // `outlets` berkas yang sama juga memuatnya (itu upsert outlet yang ada, bukan outlet baru).
+        $outlet = Outlet::where('code', $code)->first();
+        if ($outlet === null) {
+            if (in_array($code, array_column($outletPlan, 'code'), true)) {
+                return $code; // outlet benar-benar baru yang dibuat berkas ini
+            }
+            $this->addError($sheet, $row, 'outlet_code', "Outlet dengan kode '{$code}' tidak ditemukan.");
+
+            return null;
+        }
+        if (! app(OutletContext::class)->isPermitted((int) $outlet->id)) {
+            $this->addError($sheet, $row, 'outlet_code', "Outlet '{$code}' di luar outlet yang boleh Anda kelola.");
+
+            return null;
+        }
+
+        return $code;
+    }
+
+    /**
+     * Upsert key: (outlet_code, product_code). `product_code` = `code_prefix`; produk baru dari sheet `products`
+     * berkas yang sama boleh dirujuk (diselesaikan saat apply). Sel `is_carried` kosong = baris baru dibawa (1),
+     * baris lama tidak diubah.
+     */
+    private function validateOutletItems(array $rows, array $outletPlan, array $productPlan): array
+    {
+        $sheet = MasterDataSheets::OUTLET_ITEMS;
+        $plan = [];
+        $seen = [];
+        $created = 0;
+        $updated = 0;
+        $prefixesInFile = array_filter(array_column($productPlan, 'code_prefix'));
+
+        foreach ($rows as $entry) {
+            $row = $entry['row'];
+            $values = $entry['values'];
+            $outletCode = $this->filled($values, 'outlet_code') ? strtoupper($this->stringValue($values, 'outlet_code')) : null;
+            $productCode = $this->filled($values, 'product_code') ? strtoupper($this->stringValue($values, 'product_code')) : null;
+
+            $outletCode = $this->outletRefError($sheet, $row, $outletCode, $outletPlan);
+            $broken = $outletCode === null;
+
+            if ($productCode === null) {
+                $this->addError($sheet, $row, 'product_code', 'Kode produk (code_prefix) wajib diisi.');
+                $broken = true;
+            } elseif (! in_array($productCode, array_map('strtoupper', $prefixesInFile), true) && ! Product::where('code_prefix', $productCode)->exists()) {
+                $this->addError($sheet, $row, 'product_code', "Produk dengan kode '{$productCode}' tidak ditemukan.");
+                $broken = true;
+            }
+
+            $carried = null;
+            if ($this->filled($values, 'is_carried')) {
+                $carried = $this->parseBool($sheet, $row, 'is_carried', $values['is_carried']);
+                $broken = $broken || $carried === null;
+            }
+
+            if ($broken) {
+                continue;
+            }
+
+            $key = $outletCode.'|'.$productCode;
+            if (isset($seen[$key])) {
+                $this->addError($sheet, $row, 'product_code', "Pasangan outlet '{$outletCode}' + produk '{$productCode}' muncul dua kali di sheet ini (baris {$seen[$key]}).");
+
+                continue;
+            }
+            $seen[$key] = $row;
+
+            $exists = OutletItemSetting::query()
+                ->whereHas('outlet', fn ($q) => $q->where('code', $outletCode))
+                ->whereHas('product', fn ($q) => $q->where('code_prefix', $productCode))->exists();
+            $exists ? $updated++ : $created++;
+
+            $plan[] = ['row' => $row, 'outlet_code' => $outletCode, 'product_code' => $productCode, 'is_carried' => $carried];
+        }
+
+        $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
+
+        return $plan;
+    }
+
+    /**
+     * Upsert key: (sku, outlet_code). `price` angka ≥ 0 menetapkan harga khusus; kata `base` menghapusnya. SKU yang
+     * dibuat sheet `products` berkas yang sama diselesaikan saat apply (pola yang sama dengan `stock`/`bom`). Dengan rilis
+     * menu aktif tiap harga menjadi `menu_change` menunggu rilis/persetujuan (PriceService).
+     */
+    private function validateOutletPrices(array $rows, array $outletPlan, array $productPlan): array
+    {
+        $sheet = MasterDataSheets::OUTLET_PRICES;
+        $plan = [];
+        $seen = [];
+        $created = 0;
+        $updated = 0;
+        $fileCreatesVariants = collect($productPlan)->contains(fn (array $entry) => $entry['creates_variant'] ?? false);
+
+        foreach ($rows as $entry) {
+            $row = $entry['row'];
+            $values = $entry['values'];
+            $sku = $this->filled($values, 'sku') ? strtoupper($this->stringValue($values, 'sku')) : null;
+            $outletCode = $this->filled($values, 'outlet_code') ? strtoupper($this->stringValue($values, 'outlet_code')) : null;
+
+            $outletCode = $this->outletRefError($sheet, $row, $outletCode, $outletPlan);
+            $broken = $outletCode === null;
+
+            if ($sku === null) {
+                $this->addError($sheet, $row, 'sku', 'SKU varian wajib diisi.');
+                $broken = true;
+            } elseif (ProductVariant::where('sku', $sku)->doesntExist() && ! $fileCreatesVariants) {
+                $this->addError($sheet, $row, 'sku', "SKU '{$sku}' tidak ditemukan.");
+                $broken = true;
+            }
+
+            $price = null; // null = hapus harga khusus (kata `base`)
+            if (! $this->filled($values, 'price')) {
+                $this->addError($sheet, $row, 'price', "Harga wajib diisi (angka, atau 'base' untuk mengikuti harga dasar).");
+                $broken = true;
+            } elseif (strtolower($this->stringValue($values, 'price')) !== 'base') {
+                $price = $this->parseDecimal($sheet, $row, 'price', $values['price']);
+                $broken = $broken || $price === null;
+            }
+
+            if ($broken) {
+                continue;
+            }
+
+            $key = $sku.'|'.$outletCode;
+            if (isset($seen[$key])) {
+                $this->addError($sheet, $row, 'sku', "Pasangan SKU '{$sku}' + outlet '{$outletCode}' muncul dua kali di sheet ini (baris {$seen[$key]}).");
+
+                continue;
+            }
+            $seen[$key] = $row;
+
+            $exists = \App\Models\VariantOutletPrice::query()
+                ->whereHas('variant', fn ($q) => $q->where('sku', $sku))
+                ->whereHas('outlet', fn ($q) => $q->where('code', $outletCode))->exists();
+            $exists ? $updated++ : $created++;
+
+            $plan[] = ['row' => $row, 'sku' => $sku, 'outlet_code' => $outletCode, 'price' => $price];
+        }
+
+        $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
+
+        return $plan;
+    }
+
+    /** Pagar kedua saat apply: outlet yang SUDAH ada sebelum impor tetap harus boleh dikelola pengunggah. */
+    private function assertOutletPermitted(string $sheet, int $row, ?Outlet $outlet): void
+    {
+        if ($outlet !== null && ! in_array($outlet->id, $this->createdOutletIds, true) && ! app(OutletContext::class)->isPermitted((int) $outlet->id)) {
+            throw new MasterDataImportRowException($sheet, $row, 'outlet_code', "Outlet '{$outlet->code}' di luar outlet yang boleh Anda kelola.");
+        }
+    }
+
+    private function applyOutletItems(array $plan): void
+    {
+        foreach ($plan as $entry) {
+            $outlet = Outlet::where('code', $entry['outlet_code'])->first();
+            $product = Product::where('code_prefix', $entry['product_code'])->first();
+            $this->assertOutletPermitted(MasterDataSheets::OUTLET_ITEMS, $entry['row'], $outlet);
+
+            if ($outlet === null || $product === null) {
+                throw new MasterDataImportRowException(
+                    MasterDataSheets::OUTLET_ITEMS, $entry['row'], $outlet === null ? 'outlet_code' : 'product_code',
+                    'Outlet atau produk tidak ditemukan, termasuk setelah sheet outlets/products diterapkan.'
+                );
+            }
+
+            $setting = OutletItemSetting::firstOrNew(['outlet_id' => $outlet->id, 'product_id' => $product->id]);
+            if ($entry['is_carried'] !== null) {
+                $setting->is_carried = $entry['is_carried'];
+            } elseif (! $setting->exists) {
+                $setting->is_carried = true;
+            }
+            $setting->save();
+        }
+    }
+
+    private function applyOutletPrices(array $plan, User $user): void
+    {
+        $prices = app(PriceService::class);
+
+        foreach ($plan as $entry) {
+            $outlet = Outlet::where('code', $entry['outlet_code'])->first();
+            $variant = ProductVariant::where('sku', $entry['sku'])->first();
+            $this->assertOutletPermitted(MasterDataSheets::OUTLET_PRICES, $entry['row'], $outlet);
+
+            if ($variant === null || $outlet === null) {
+                throw new MasterDataImportRowException(
+                    MasterDataSheets::OUTLET_PRICES, $entry['row'], $variant === null ? 'sku' : 'outlet_code',
+                    "SKU '{$entry['sku']}' atau outlet '{$entry['outlet_code']}' tidak ditemukan, termasuk setelah sheet products/outlets diterapkan."
+                );
+            }
+
+            $prices->setOutletPrice($variant, (int) $outlet->id, $entry['price'], $user, 'import');
         }
     }
 

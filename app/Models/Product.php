@@ -29,7 +29,7 @@ class Product extends Model
      * kedua yang malah memblokir jalur internal yang sah.
      */
     protected $fillable = [
-        'artist_id',
+        'home_outlet_id',
         'category_id',
         'code_prefix',
         'product_segment',
@@ -108,9 +108,15 @@ class Product extends Model
         });
     }
 
-    public function artist(): BelongsTo
+    /** 045 Stage 3 — baris relasi outlet × produk (dibawa atau tidak). */
+    public function outletItemSettings(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        return $this->belongsTo(Artist::class);
+        return $this->hasMany(OutletItemSetting::class);
+    }
+
+    public function homeOutlet(): BelongsTo
+    {
+        return $this->belongsTo(Outlet::class, 'home_outlet_id');
     }
 
     public function category(): BelongsTo

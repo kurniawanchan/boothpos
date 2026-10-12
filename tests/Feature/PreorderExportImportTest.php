@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Event;
@@ -32,9 +32,9 @@ class PreorderExportImportTest extends TestCase
 
     private function makeVariant(string $sku, float $sellPrice = 100000): \App\Models\ProductVariant
     {
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true]);
 
         return $product->variants()->create(['sku' => $sku, 'sell_price' => $sellPrice, 'cost_price' => 50000, 'current_stock' => 0]);
     }

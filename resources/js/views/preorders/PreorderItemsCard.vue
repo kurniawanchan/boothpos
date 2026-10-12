@@ -39,7 +39,7 @@ const detailLines = computed(() =>
       <div class="flex flex-1 flex-col gap-0.5">
         <span class="text-[13.5px] font-semibold">{{ line.name_snapshot }}<span v-if="line.category_name" class="font-normal text-muted-3"> · {{ line.category_name }}</span></span>
         <span class="font-mono text-[11px] text-muted-3">{{ line.sku_snapshot }} · {{ formatIDR(line.sell_price) }}</span>
-        <span v-if="line.artist_name" class="text-[10.5px] text-muted-3">{{ line.artist_name }}</span>
+        <span v-if="line.home_outlet_name" class="text-[10.5px] text-muted-3">{{ line.home_outlet_name }}</span>
       </div>
       <span class="text-[13.5px] font-bold">{{ formatIDR(line.line_total) }}</span>
     </div>

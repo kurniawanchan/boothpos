@@ -25,6 +25,8 @@ use Illuminate\Support\Facades\DB;
 
 class MaterialController extends Controller
 {
+    use \App\Http\Controllers\Concerns\ResolvesStockOutlet;
+
     public function __construct(private ActivityLogger $activityLogger, private VariantBomService $bomService) {}
 
     public function index(Request $request): JsonResponse
@@ -35,6 +37,7 @@ class MaterialController extends Controller
 
         $materials = Material::query()
             ->withCount('vendorPrices')
+            ->with(['outletStock' => fn ($q) => \App\Support\OutletFilter::apply($q, 'outlet_id')->with('outlet:id,code,name')->orderBy('outlet_id')])
             ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->string('search').'%'))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
             // 043 (Q2 = B) — tab jenis bahan di layar Produk.
@@ -221,5 +224,46 @@ class MaterialController extends Controller
             'has_legacy' => $breakdown['has_legacy'],
             'lines' => $breakdown['lines'],
         ]);
+    }
+
+    /**
+     * 045 Stage 5 — POST /materials/{material}/adjustments: koreksi stok bahan di SATU outlet (selisih, bukan jumlah
+     * akhir). Outlet wajib bila pengguna melihat beberapa; tidak boleh membuat saldo outlet negatif (409/422 dari
+     * MaterialStockService). Lewat jalur tunggal MaterialStockService, dengan jejak audit.
+     */
+    public function adjustStock(Request $request, Material $material, \App\Services\MaterialStockService $stock): JsonResponse
+    {
+        $this->authorize('update', $material);
+
+        $data = $request->validate([
+            'outlet_id' => ['nullable', 'integer', 'exists:outlets,id'],
+            'qty_change' => ['required', 'numeric', 'not_in:0', 'between:-999999999,999999999'],
+            'reason' => ['required', 'string', 'max:255'],
+        ]);
+
+        $outletId = $this->stockOutlet($request, $data['outlet_id'] ?? null);
+        if ($outletId instanceof JsonResponse) {
+            return $outletId;
+        }
+
+        $movement = DB::transaction(function () use ($stock, $material, $outletId, $data, $request) {
+            $movement = $stock->applyMovement(
+                material: $material, outletId: $outletId, type: 'adjustment', qtyChange: (float) $data['qty_change'],
+                referenceType: 'manual_adjustment', userId: $request->user()->id,
+            );
+            app(ActivityLogger::class)->log(
+                userId: $request->user()->id, action: 'material_stock_adjusted', entityType: 'Material', entityId: $material->id,
+                description: "Penyesuaian stok bahan {$material->name} sebanyak {$data['qty_change']} di outlet #{$outletId}. Alasan: {$data['reason']}.",
+                oldValues: ['stock' => (float) $movement->stock_before], newValues: ['stock' => (float) $movement->stock_after],
+            );
+
+            return $movement;
+        });
+
+        return response()->json([
+            'material_id' => $material->id, 'outlet_id' => $outletId,
+            'stock_before' => number_format((float) $movement->stock_before, 3, '.', ''),
+            'stock_after' => number_format((float) $movement->stock_after, 3, '.', ''),
+        ], 201);
     }
 }

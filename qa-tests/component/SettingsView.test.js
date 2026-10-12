@@ -55,7 +55,7 @@ async function renderSettings(section) {
 describe('SettingsView — profil toko (US3)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 1, artist_limit_reached: false });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 1, outlet_limit_reached: false });
     listPaymentChannels.mockResolvedValue({ data: [] });
     listSettings.mockResolvedValue({
       data: [
@@ -141,7 +141,7 @@ describe('SettingsView — mode DEMO/LIVE (003-seed-demo-live US2)', () => {
   });
 
   it('shows LIVE selected by default and asks for confirmation before switching to DEMO', async () => {
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, system_mode: 'live' });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 0, outlet_limit_reached: false, system_mode: 'live' });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     await renderSettings('mode');
@@ -154,7 +154,7 @@ describe('SettingsView — mode DEMO/LIVE (003-seed-demo-live US2)', () => {
   });
 
   it('calls PUT /settings with the system_mode key once confirmed', async () => {
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, system_mode: 'live' });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 0, outlet_limit_reached: false, system_mode: 'live' });
     updateSettings.mockResolvedValue({ data: [] });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
@@ -170,7 +170,7 @@ describe('SettingsView — mode DEMO/LIVE (003-seed-demo-live US2)', () => {
   });
 
   it('does not prompt when clicking the already-active mode', async () => {
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, system_mode: 'live' });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 0, outlet_limit_reached: false, system_mode: 'live' });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     await renderSettings('mode');
@@ -192,7 +192,7 @@ describe('SettingsView — payment channel deletion (024 US6)', () => {
       data: [],
       store_logo_url: null,
     });
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 0, outlet_limit_reached: false });
   });
 
   it('renders existing channels and allows deleting one with confirmation', async () => {
@@ -233,7 +233,7 @@ describe('SettingsView — payment channel deletion (024 US6)', () => {
 describe('SettingsView — nama aplikasi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 1, artist_limit_reached: false, app_name: 'BoothPOS' });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 1, outlet_limit_reached: false, app_name: 'BoothPOS' });
     listPaymentChannels.mockResolvedValue({ data: [] });
     listSettings.mockResolvedValue({ data: [], store_logo_url: null });
   });
@@ -268,7 +268,7 @@ describe('SettingsView — nama aplikasi', () => {
 describe('SettingsView — cadangan & pemulihan', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 1, artist_limit_reached: false, app_name: 'BoothPOS' });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 1, outlet_limit_reached: false, app_name: 'BoothPOS' });
     listPaymentChannels.mockResolvedValue({ data: [] });
     listSettings.mockResolvedValue({ data: [], store_logo_url: null });
     listBackups.mockResolvedValue({ data: [] });
@@ -286,7 +286,7 @@ describe('SettingsView — cadangan & pemulihan', () => {
 describe('SettingsView — struktur halaman (041)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 1, artist_limit_reached: false, app_name: 'BoothPOS' });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 1, outlet_limit_reached: false, app_name: 'BoothPOS' });
     listPaymentChannels.mockResolvedValue({ data: [] });
     listSettings.mockResolvedValue({ data: [], store_logo_url: null });
     listBackups.mockResolvedValue({ data: [] });
@@ -342,7 +342,7 @@ describe('SettingsView — struktur halaman (041)', () => {
     expect(within(nav).getByRole('button', { name: 'Identitas toko' })).not.toHaveAttribute('aria-current');
   });
 
-  it('mengganti tingkat lisensi lewat PUT /settings multi_artist_enabled', async () => {
+  it('mengganti tingkat lisensi lewat PUT /settings multi_outlet_enabled', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     updateSettings.mockResolvedValue({ data: [] });
@@ -352,7 +352,7 @@ describe('SettingsView — struktur halaman (041)', () => {
     await user.click(screen.getByRole('button', { name: /master/i }));
 
     await waitFor(() =>
-      expect(updateSettings).toHaveBeenCalledWith([{ key: 'multi_artist_enabled', value: true, type: 'boolean', group: 'licensing' }]),
+      expect(updateSettings).toHaveBeenCalledWith([{ key: 'multi_outlet_enabled', value: true, type: 'boolean', group: 'licensing' }]),
     );
   });
 });
@@ -361,7 +361,7 @@ describe('SettingsView — struktur halaman (041)', () => {
 describe('SettingsView — reason codes section (043)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 1, artist_limit_reached: false });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 1, outlet_limit_reached: false });
     listSettings.mockResolvedValue({ data: [] });
     listPaymentChannels.mockResolvedValue({ data: [] });
   });

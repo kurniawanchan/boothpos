@@ -2,7 +2,7 @@
 
 namespace Tests\Support;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Event;
@@ -47,9 +47,9 @@ trait RestaurantFixtures
     protected function makeVariant(int $stock = 10, float $price = 25000, array $variantOverrides = []): ProductVariant
     {
         self::$fixtureSeq++;
-        $artist = Artist::first() ?? Artist::factory()->create();
+        $artist = Outlet::first() ?? Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
 
         return $product->variants()->create(array_merge([
             'sku' => sprintf('RST%09d', self::$fixtureSeq),
@@ -86,7 +86,7 @@ trait RestaurantFixtures
 
         return $order->items()->create([
             'variant_id' => $variant->id,
-            'artist_id' => $variant->product->artist_id,
+            'home_outlet_id' => $variant->product->home_outlet_id,
             'sku_snapshot' => $variant->sku,
             'name_snapshot' => $variant->product->name.' — '.$variant->variant_name,
             'qty' => $qty,
@@ -129,9 +129,9 @@ trait RestaurantFixtures
     protected function makeMenuItem(?Station $categoryStation = null, ?Station $productStation = null, int $stock = 50, float $price = 20000, array $variantOverrides = []): ProductVariant
     {
         self::$fixtureSeq++;
-        $artist = Artist::first() ?? Artist::factory()->create();
+        $artist = Outlet::first() ?? Outlet::factory()->create();
         $category = Category::factory()->create(['station_id' => $categoryStation?->id]);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'station_id' => $productStation?->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'station_id' => $productStation?->id]);
 
         return $product->variants()->create(array_merge([
             'sku' => sprintf('RST%09d', self::$fixtureSeq), 'variant_name' => 'Standard',

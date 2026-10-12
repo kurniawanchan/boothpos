@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import * as authApi from '../api/auth';
 import { getToken, setToken, clearToken } from '../utils/storage';
 import { i18n, loadLocale } from '../i18n';
+import { clearOutletSelection } from '../utils/outletSelection';
 
 // Satu-satunya tempat locale FRONTEND diputuskan dari data user (cermin
 // dari SetLocaleFromUser di backend) — dipanggil setiap kali `user`
@@ -71,6 +72,7 @@ export const useAuthStore = defineStore('auth', {
         // state regardless, logout must always succeed from the user's POV.
       }
       clearToken();
+      clearOutletSelection();
       this.user = null;
     },
     /**

@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * dengan harga (`price`) dan cara bayar (`payment_type`, label
  * deskriptif saja — FR-017, tidak ada billing berulang otomatis).
  * `license_tier` tetap murni deskriptif terhadap company (017 R4,
- * TIDAK PERNAH diterapkan otomatis ke Setting multi_artist_enabled
+ * TIDAK PERNAH diterapkan otomatis ke Setting multi_outlet_enabled
  * instalasi ini).
  */
 class License extends Model

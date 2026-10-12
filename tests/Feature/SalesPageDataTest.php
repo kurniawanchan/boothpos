@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -45,10 +45,10 @@ class SalesPageDataTest extends TestCase
         $this->session = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
 
         $category = Category::factory()->create(['name' => 'Keychain']);
-        $artistA = Artist::factory()->create(['name' => 'Nekoyama Studio']);
-        $artistB = Artist::factory()->create(['name' => 'Yukishiro Works']);
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id, 'name' => 'Akatsuki Keychain']);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id, 'name' => 'Sakura Sticker']);
+        $artistA = Outlet::factory()->create(['name' => 'Nekoyama Studio']);
+        $artistB = Outlet::factory()->create(['name' => 'Yukishiro Works']);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id, 'name' => 'Akatsuki Keychain']);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id, 'name' => 'Sakura Sticker']);
         $this->variantA = $productA->variants()->create(['sku' => 'NEKKYAKT0001', 'variant_name' => 'Blue', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
         $this->variantB = $productB->variants()->create(['sku' => 'YUKSTSAK0001', 'variant_name' => 'Pink', 'sell_price' => 20000, 'cost_price' => 8000, 'current_stock' => 100]);
     }
@@ -163,14 +163,14 @@ class SalesPageDataTest extends TestCase
         $items = collect($this->getJson("/api/v1/orders/{$order->id}")->assertOk()->json('items'))->keyBy('sku_snapshot');
 
         $a = $items['NEKKYAKT0001'];
-        $this->assertSame('Nekoyama Studio', $a['artist_name']);
+        $this->assertSame('Nekoyama Studio', $a['home_outlet_name']);
         $this->assertSame('Keychain', $a['category_name']);
         $this->assertSame('Blue', $a['variant_name']);
         $this->assertSame('0.00', $a['discount_amount']);
         $this->assertArrayHasKey('image_url', $a);
 
         $b = $items['YUKSTSAK0001'];
-        $this->assertSame('Yukishiro Works', $b['artist_name']);
+        $this->assertSame('Yukishiro Works', $b['home_outlet_name']);
         $this->assertSame('2000.00', $b['discount_amount']);
         $this->assertSame('18000.00', $b['line_total']); // 20000 - diskon 2000
     }

@@ -16,6 +16,7 @@ class SoldOutRequest extends FormRequest
     public function rules(): array
     {
         return [
+            ...\App\Support\OutletCarriedRule::rules(),
             'reason_code_id' => ['required', 'integer'],
             'note' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];

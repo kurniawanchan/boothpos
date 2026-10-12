@@ -18,7 +18,7 @@ vi.mock('../../resources/js/api/vendors', () => ({ listVendors: vi.fn() }));
 const M = id.master_data;
 const P = id.products;
 const PRODUCT = {
-  id: 2, artist_id: 1, category_id: 1, name: 'MCYT', code_prefix: 'SPF-KC-MCY', description: null, is_preorder: false, is_active: true, image_url: null,
+  id: 2, home_outlet_id: 1, category_id: 1, name: 'MCYT', code_prefix: 'SPF-KC-MCY', description: null, is_preorder: false, is_active: true, image_url: null,
   variants: [
     { id: 10, sku: 'SPF-KC-MCY-001', variant_name: 'Red', cost_price: '1000.00', sell_price: '2500.00', current_stock: 5, low_stock_alert: null, is_active: true, track_stock: true, has_bom: true, bom_cost: '397.00', bom_complete: false, image_url: null },
     { id: 11, sku: 'SPF-KC-MCY-002', variant_name: 'Blue', cost_price: '1000.00', sell_price: '800.00', current_stock: 9, low_stock_alert: null, is_active: true, track_stock: true, has_bom: false, bom_cost: null, bom_complete: false, image_url: 'https://example.test/blue.png' },

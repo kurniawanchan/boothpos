@@ -31,7 +31,7 @@ class ApprovalController extends Controller
 
             return [
                 'id' => $a->id, 'decision' => $a->decision, 'difference_pct' => (float) $a->difference_pct, 'amount' => number_format((float) $a->amount, 2, '.', ''),
-                'product_name' => $c?->payload['product_name'] ?? null, 'variant_name' => $c?->payload['variant_name'] ?? null,
+                'product_name' => $c?->payload['product_name'] ?? null, 'variant_name' => $c?->payload['variant_name'] ?? null, 'outlet_code' => $c?->payload['outlet_code'] ?? null,
                 'old_price' => isset($c?->payload['old_price']) ? number_format((float) $c->payload['old_price'], 2, '.', '') : null,
                 'new_price' => isset($c?->payload['new_price']) ? number_format((float) $c->payload['new_price'], 2, '.', '') : null,
                 'requested_by' => $a->requester?->name, 'requested_by_id' => $a->requested_by, 'decided_by' => $a->decider?->name, 'decided_at' => $a->decided_at?->toIso8601String(),

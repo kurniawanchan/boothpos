@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Preorder;
@@ -36,7 +36,7 @@ class PreorderDuplicateSplitReportsTest extends TestCase
 
         $category = Category::factory()->create();
         $make = fn (string $sku, float $price) => Product::factory()->create([
-            'artist_id' => Artist::factory()->create()->id, 'category_id' => $category->id, 'is_preorder' => true,
+            'home_outlet_id' => Outlet::factory()->create()->id, 'category_id' => $category->id, 'is_preorder' => true,
         ])->variants()->create(['sku' => $sku, 'sell_price' => $price, 'cost_price' => $price / 2, 'current_stock' => 0]);
 
         $this->a = $make('RPRT0001', 100000);

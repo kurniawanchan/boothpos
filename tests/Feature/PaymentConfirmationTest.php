@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Event;
@@ -46,7 +46,7 @@ class PaymentConfirmationTest extends TestCase
 
         $this->recorder = User::factory()->create(['role' => 'cashier', 'name' => 'Kasir Satu']);
         $product = Product::factory()->create([
-            'artist_id' => Artist::factory()->create()->id,
+            'home_outlet_id' => Outlet::factory()->create()->id,
             'category_id' => Category::factory()->create()->id,
         ]);
         $this->variant = $product->variants()->create(['sku' => 'CNF0001', 'sell_price' => 25000, 'cost_price' => 10000, 'current_stock' => 50]);
@@ -404,7 +404,7 @@ class PaymentConfirmationTest extends TestCase
     {
         $cashier ??= $this->recorder;
         $preVariant = Product::factory()->create([
-            'artist_id' => Artist::factory()->create()->id,
+            'home_outlet_id' => Outlet::factory()->create()->id,
             'category_id' => Category::factory()->create()->id,
             'is_preorder' => true,
         ])->variants()->create(['sku' => 'PRE'.str_pad((string) (++$this->skuCounter), 5, '0', STR_PAD_LEFT), 'sell_price' => 100000, 'cost_price' => 50000, 'current_stock' => 0]);

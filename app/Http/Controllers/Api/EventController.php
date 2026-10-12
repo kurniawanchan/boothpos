@@ -132,7 +132,7 @@ class EventController extends Controller
         $this->authorize('delete', $event);
 
         // Guard — event yang pernah punya order/pre-order (status apa pun)
-        // tidak boleh dihapus, mengikuti pola guard hapus Artist/Category
+        // tidak boleh dihapus, mengikuti pola guard hapus Outlet/Category
         // (lihat plan 009-ui-ux-refinements R6). CATATAN: Order/Preorder
         // TIDAK memakai trait SoftDeletes (dikonfirmasi di kedua model dan
         // migrasinya, tidak ada kolom deleted_at) — ->withTrashed() akan

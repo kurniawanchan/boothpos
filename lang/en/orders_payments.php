@@ -46,4 +46,5 @@ return [
     'local_ref_belongs_to_open_tab' => 'This reference belongs to a tab that is still open, not to a completed sale.',
     'cannot_void_open_tab' => 'An open tab cannot be voided as a sale. Use "Void tab" instead.',
     'receipt_unavailable_for_open_tab' => 'A receipt cannot be issued for a tab that has not been paid yet.',
+    'unavailable_not_carried' => 'not sold at this outlet',
 ];

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -51,10 +51,10 @@ class SalesTransactionsTest extends TestCase
         ]);
 
         $category = Category::factory()->create();
-        $artistA = Artist::factory()->create(['name' => 'Nekoyama Studio']);
-        $artistB = Artist::factory()->create(['name' => 'Yukishiro Works']);
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id, 'name' => 'Akatsuki Keychain', 'is_preorder' => true]);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id, 'name' => 'Sakura Sticker', 'is_preorder' => true]);
+        $artistA = Outlet::factory()->create(['name' => 'Nekoyama Studio']);
+        $artistB = Outlet::factory()->create(['name' => 'Yukishiro Works']);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id, 'name' => 'Akatsuki Keychain', 'is_preorder' => true]);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id, 'name' => 'Sakura Sticker', 'is_preorder' => true]);
         $this->variantA = $productA->variants()->create(['sku' => 'NEKKYAKT0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
         $this->variantB = $productB->variants()->create(['sku' => 'YUKSTSAK0001', 'sell_price' => 50000, 'cost_price' => 20000, 'current_stock' => 100]);
     }
@@ -252,7 +252,7 @@ class SalesTransactionsTest extends TestCase
 
     public function test_rows_preview_the_two_biggest_lines_and_count_the_rest(): void
     {
-        $product = Product::factory()->create(['artist_id' => Artist::factory()->create()->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Poster']);
+        $product = Product::factory()->create(['home_outlet_id' => Outlet::factory()->create()->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Poster']);
         $variantC = $product->variants()->create(['sku' => 'POSTER0001', 'sell_price' => 5000, 'cost_price' => 1000, 'current_stock' => 50]);
         $order = $this->makeOrder(['items' => [
             ['variant_id' => $this->variantA->id, 'qty' => 3],   // 30.000

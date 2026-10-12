@@ -18,7 +18,7 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  * Rute dikelompokkan di bawah /exports/{entity}, bukan /{entity}/export,
  * karena dua alasan: (1) berpasangan simetris dengan /imports/master-data
  * sehingga seluruh permukaan berkas ada di satu tempat, dan (2)
- * /artists/export akan bertabrakan dengan /artists/{artist} dari
+ * /outlets/export akan bertabrakan dengan /outlets/{outlet} dari
  * apiResource kecuali urutan pendaftaran rute dijaga manual — ranjau yang
  * tidak perlu dipasang.
  */
@@ -40,7 +40,7 @@ class MasterDataExportController extends Controller
         // disamakan dengan siapa yang boleh MENGELOLA data ini
         // (owner/admin/inventory), konsisten dengan
         // StockAdjustmentRequest dan ImportMasterDataRequest.
-        if (! $request->user()->canAccessAnyMenu(['artists', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users'])) {
+        if (! $request->user()->canAccessAnyMenu(['outlets', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users'])) {
             return response()->json(['message' => __('master_data_import.not_authorized_export')], 403);
         }
 

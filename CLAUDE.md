@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-BoothPOS — a POS system for event-based multi-artist merchandise booths, sold as a **one-time license installed locally per store**. Laravel API + Vue SPA both run on one machine and are reached over `localhost`; there is no cloud tier, no separate frontend server, and no multi-tenancy. "Production" means a shopkeeper's laptop at an event venue — as of `016-docker-store-deployment` (dated note, 2026-09-05), that laptop MAY run BoothPOS via Docker instead of a native install; both are real, supported production paths, not just feature 015's dev-only tooling. See that feature's plan for the details.
+BoothPOS — a POS system for event-based multi-artist merchandise booths, sold as a **one-time license installed locally per store**. Laravel API + Vue SPA both run on one machine and are reached over `localhost`; there is no cloud tier, no separate frontend server, and no multi-tenancy.
+
+> **Dated note — 2026-10-11 (constitution 2.0.0, feature 045):** one organisation may now run **one or more outlets** (seller records are renamed outlets), on one machine **or** one shared server. Still one server and one database per organisation, and still no multi-tenancy across customers. A single-outlet install is unchanged. See `specs/045-outlets-per-outlet-menu/`. "Production" means a shopkeeper's laptop at an event venue — as of `016-docker-store-deployment` (dated note, 2026-09-05), that laptop MAY run BoothPOS via Docker instead of a native install; both are real, supported production paths, not just feature 015's dev-only tooling. See that feature's plan for the details.
 
 Docs in `docs/` are the spec source of truth: `PRD-POS-Event-Multivendor.md`, `openapi-pos-mvp.yaml`, `schema-pos-mvp.sql`, `wbs-pos-mvp.md`, `uml-pos-mvp.md`. `docs/RUNBOOK.md` is the operational command reference; `README.md` carries the narrative history and the full list of bugs found during execution.
 
@@ -31,6 +33,7 @@ php artisan app:restore <path/database.sql> [--force]
 
 ## Non-negotiable environment constraints
 
+- **Dated note — 2026-10-11 (constitution 2.0.0):** the premise "one machine per store" is extended to one organisation with one or more outlets, on one machine or one shared server (one server, one database per organisation). The bullets below still apply unchanged.
 - **MySQL 8 is required; SQLite hard-fails.** `create_orders_and_payments_tables` and `create_preorders_tables` use raw `DB::statement('ALTER TABLE ... ADD CONSTRAINT ... CHECK (...)')`, which SQLite cannot execute. `phpunit.xml` deliberately does *not* pin `DB_CONNECTION` so that `.env.testing` decides — don't "helpfully" add a sqlite default to it.
 - **`.env.testing` must exist and point at a separate database** (`warkop_wjm_test`). It is gitignored. The suite runs `RefreshDatabase`, so pointing it at the app DB destroys real data.
 - **Running `php artisan test` INSIDE the `app` Docker container is destructive unless you pass explicit `-e` overrides — this has actually wiped the dev database twice (020-customer-data-import-export, and again 2026-09-27).** `docker-compose.yml`'s `app` service uses `env_file: .env`, which injects `DB_DATABASE=warkop_wjm` (the real dev DB) as a real OS-level environment variable inside the container. phpdotenv never overwrites an environment variable that's already set, so `.env.testing` — and even `-e APP_ENV=testing` alone — silently do **nothing**; `RefreshDatabase` then drops and rebuilds `warkop_wjm` itself. The ONLY safe way to run tests inside the container:
@@ -378,14 +381,63 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **Switching an item off is ONLY "Discontinue" on the item page** (reason required, follows the release mode). The list's old instant "Nonaktifkan" row action was removed on 2026-10-11 (owner decision); `DELETE /products/{id}` still exists in the API.
 - **Locale files are lazy chunks (2026-10-11):** `resources/js/i18n.js` starts with no messages; `loadLocale(lang)` imports `locales/{id,en}.json` as separate chunks. `main.js` loads `id` before mount (login screen, guests, fallback), the auth store loads the user's language BEFORE it stores `user` (`syncLocale` is async), `en` is only downloaded for users who use it. `qa-tests/setup.js` installs both synchronously so tests stay synchronous. The main chunk went 435 → 240 kB. Never `import` a locale JSON from app code again.
 
+## Sales page: Tables view (feature 044, 2026-10-11)
+
+`/sales` has a toggle *Daftar order / Meja* (*Order list / Tables*, URL `?view=tables`). The Tables view is a **read-only live board** of the floor; clicking an occupied tile opens a read-only detail of its open order. Rules:
+
+- **Built by reuse, no new endpoint, no migration, no write path.** Data = `GET /floor` through `useFloorStore` + `usePolling`; detail = `GET /tabs/{id}`. Both are gated by the `floor` menu server-side; the toggle is rendered only with that menu (hidden otherwise; a `?view=tables` deep link without it falls back to the list). The order list's script state stays in `SalesView`, so switching views loses no filters.
+- **Additive backend:** every open order in the floor snapshot carries `paid_amount` (derived through `PaymentSummary::orderPaidSql`, one column in the existing query — keep the query count constant); inactive tables that still hold an open order are listed (`is_active:false`) so running money never disappears; `TabResource` carries `opened_by` (loaded by `TabService::loaded()` — the relationLoaded trap: a caller that does not load `cashier` simply omits it). The floor payload must stay free of clock-dependent values (its `version` hash must be stable).
+- **ONE place computes the figures and tile states: `resources/js/utils/floorBoard.js` (`buildBoard`).** Figures: open orders, occupied/total tables (+%), tables over 45 minutes (strictly > 45, table tiles only, real elapsed time not business date), open value (integer cents). Partially paid ⇔ `0 < paid < total`. Never recompute these in a component. The 45-minute limit is a constant, not a setting.
+- **Not built (image 27 shows them, no data exists):** pre-bill state, guest counts, outlet grouping/selector — tiles group by table AREA. Do not fake them.
+- The detail never offers an action that changes the order; a paid order links to the existing completed-sale popup, a voided/merged one answers 404 ("no longer open").
+
+## Outlets (feature 045, 2026-10-12)
+
+> **Dated note.** This section supersedes the "seller/artist" wording elsewhere in this file (history kept above, not rewritten): the seller (`artists`) record is now the **outlet** (`outlets`, `Outlet`, `/outlets`, menu key `outlets`; the licence setting is read as `multi_outlet_enabled`). Specs: `specs/045-outlets-per-outlet-menu/` (plan, research D1–D22, `evidence-stage-1..7.md`, `release-notes.md`).
+
+- **Two meanings of the old `artist_id`:** `home_outlet_id` = the item's owner/home (products, order/pre-order items, item codes, BOM/PO seller rule) and `outlet_id` = where something is sold or operated (shift, order, payment, ticket, table, station, pre-order). Never mix them.
+- **Scope = ONE mechanism:** `OutletContext` (per request, set by `ResolveOutletContext` from header `X-Outlet-Id`; absent = every permitted outlet; a foreign id = 403 `outlet_forbidden`), `OutletScope` + `BelongsToOutlet` on 7 models, `OutletFilter` for raw `DB::table()` queries, `OutletScopeRegistry` (the written list of scoped tables and of every raw-query file; `OutletScopeRegistryTest` fails for an unregistered one). `outlet_id` is **never fillable and never read from the request** — it is stamped server-side (a shift stamps it on its orders/payments/tickets).
+- **Users:** `outlet_user` assignments, role flag `roles.all_outlets` (owner/admin on; only a user who sees all outlets may change it). A non-admin with no assignment cannot open a shift (409 `outlet_unassigned`). The SPA hides every outlet control at one outlet (hidden, not disabled).
+- **Menu per outlet:** `outlet_item_settings` (carried), sparse `variant_outlet_prices` (only `PriceService` writes; with menu releases ON an outlet price becomes a `menu_change` carrying `outlet_id`), per-outlet 86 (`item_availability_marks.outlet_id` NULL = global). One resolver `MenuAvailability` (`not_carried` reason). POS/tab screens ask with `pos=1` (shift outlet's menu, price, balance, 86).
+- **Stock per outlet:** balances `variant_outlet_stock` / `material_outlet_stock`; `product_variants.current_stock` / `materials.current_stock` stay as the **cached total on-hand** (excludes in-transit). `StockService::applyMovement` / `MaterialStockService` take a **required `outletId`** (a source-scan test enforces it), lock the item row then the balance row, refuse a negative outlet balance, write the ledger row with that outlet and update balance + total in one transaction. Direct writes to `current_stock` (factories/seeders) are booked at the default outlet by `OutletStockSync`. Invariants: **I1** balance = last ledger `stock_after` per (item, outlet), **I2** total = Σ balances, **I3** Σ balances + in-transit + recorded shortfalls constant across transfers. `outlets:reconcile` checks I1/I2 and the outlet-column rules.
+- **Transfers:** `StockTransferService` is the only writer (dispatch → in transit → receive/cancel; short receipt needs a reason and is a recorded discrepancy). Permissions `stock.transfer.dispatch|receive|cancel` + outlet entitlement (`OutletContext::isEntitled`, includes deactivated outlets so goods in transit can still be received/cancelled). Lines are processed in one global order (kind, item id) so crossing transfers cannot deadlock.
+- **Reports attribute to the selling outlet:** `OutletFilter::reportOutletSql()` = `orders.outlet_id`, except legacy rows (`orders.outlet_backfilled` / `preorders.outlet_backfilled`) which keep the item's `home_outlet_id`; rows then carry `historical: true`. Used by SalesFigures, the recap, cost & profit, the pre-order report, exports and `SettlementService` (stored snapshot = screen). Order-level counters follow `orders.outlet_id`.
+- **Tests:** suites that characterise the old per-seller figures use `Tests\Support\TreatsOrdersAsLegacy`; multi-outlet fixtures are in `Tests\Support\OutletFixtures` (`stockAt`, `shiftAt`, `orderAt` — `orderAt` tops up stock at the shift outlet).
+- **Operations:** `php artisan outlets:reconcile --before|--after|--compare` around every migration; `specs/045-outlets-per-outlet-menu/rehearse.sh`; optional multi-outlet demo `php artisan db:seed --class=WarkopOutletsDemoSeeder` (after `SakanaFridgeDemoSeeder`). Known, not 045: `app:backup` dumps include the generated column `orders.open_table_key`, which breaks restoring into MySQL 8 once orders exist (see `release-notes.md`).
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
 - Seeded dev accounts (`php artisan db:seed`): `owner`, `admin`, `kasir01`, `kasir02`, `inventory` — all `password123`, local only.
-- No git remote is configured; nothing is pushed.
+- A remote `origin` (github.com/kurniawanchan/boothpos) exists (dated note 2026-10-11; the earlier "no remote" line was outdated), but **pushing and opening PRs need the developer's explicit per-instance authorization** (constitution; the harness may also deny them) — never push on your own initiative.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/043-products-page-redesign/plan.md`
+Active feature plan: `specs/045-outlets-per-outlet-menu/plan.md`
+(branch `045-outlets-per-outlet-menu`, from `044-sales-table-view`) — the seller (`artists`) record **becomes the outlet** (rename in
+place: table, model, `/outlets` page and API, menu key, Excel names, wording; `artist_id` split by meaning into `home_outlet_id`
+(item owner) and `outlet_id` (selling/operational)) and the product becomes outlet-aware end to end (owner decisions Q1 = C, Q2 = B,
+stock and transfers per outlet): users assigned to outlets, a shift belongs to one outlet and stamps it on orders/tabs/payments/
+tickets, tables/floor/Sales board/dashboard/reports scoped by ONE server-side scope (`OutletContext` + `OutletScope` +
+`OutletFilter`, header `X-Outlet-Id`), every product related to every outlet (`outlet_item_settings`, sparse `variant_outlet_prices`,
+per-outlet 86), stock as a balance per outlet for items and materials (`variant_outlet_stock`/`material_outlet_stock`, cached total
+kept, `StockService` still the only writer with a REQUIRED outlet argument), two-step stock transfers with in-transit state, and
+reports re-based on the selling outlet while legacy orders keep their former attribution (`orders.outlet_backfilled`). Delivered in
+8 stages (0 constitution amendment, 1 rename, 2 foundation, 3 menu, 4 ordering, 5 stock, 6 transfers, 7 reports, 8 hardening); each
+stage leaves a single-outlet install unchanged and ends with `outlets:reconcile`. Stage 0 (constitution v2.0.0) is a GATE: no outlet
+behaviour is released before the owner approves its wording. See research.md D1–D22.
+
+Previous feature: `specs/044-sales-table-view/plan.md`
+(branch `044-sales-table-view`, from `develop-warkop-wjm` after PR #36) — the Sales page gets a toggle
+*Daftar order / Meja* (*Order list / Tables*). The Tables view is a read-only live board of the floor (four figures:
+open orders, occupied tables, tables over 45 min, open order value; tiles grouped by area, takeaway orders apart) and
+clicking an occupied tile opens a read-only detail of its open order. Built by REUSE: data from `GET /floor` +
+`useFloorStore`, detail from `GET /tabs/{id}`, both already gated by the `floor` menu (the toggle is hidden for other
+roles); additive backend only (`paid_amount` per open order, inactive tables that still hold an open order, `opened_by`
+on the tab payload), no migration, no write path. The four figures and tile states come from ONE pure front-end function
+(`utils/floorBoard.js`) so figures can never drift from tiles; the order list stays untouched. Not built: pre-bill state,
+guest counts, outlet grouping (image 27 shows them; no data). See research.md D1–D12.
+
+Previous feature: `specs/043-products-page-redesign/plan.md`
 (branch `043-products-page-redesign`, on top of `042-dashboard-revamp`) — the Products screen becomes the design's Produk
 module: grid/table list with four figures and item-type tabs, a dedicated item page (variants and prices, per-item modifier
 rules, availability, versioned recipe with cost and margin, price history), mark sold out (86), discontinue, bulk price change,

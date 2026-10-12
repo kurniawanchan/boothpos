@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOutlet;
 use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /** 028 US4 — stasiun persiapan (Dapur, Bar). */
 class Station extends Model
 {
+    use BelongsToOutlet;
+
     use HasDataMode, HasFactory;
 
     protected $fillable = ['name', 'display_order', 'is_active'];

@@ -74,7 +74,7 @@ watch(
 );
 
 function label(c) {
-  if (c.kind === 'price') return [c.product_name, c.variant_name].filter(Boolean).join(' · ') || t('products.release_kind_price');
+  if (c.kind === 'price') return ([c.product_name, c.variant_name].filter(Boolean).join(' · ') || t('products.release_kind_price')) + (c.outlet_code ? ` @ ${c.outlet_code}` : '');
   return c.product_name || t(`products.release_kind_${c.kind}`);
 }
 function detail(c) {
