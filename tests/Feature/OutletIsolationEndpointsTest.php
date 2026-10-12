@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
-use App\Models\Event;
 use App\Models\Material;
 use App\Models\Outlet;
 use App\Models\Product;
@@ -29,7 +28,6 @@ class OutletIsolationEndpointsTest extends TestCase
 
     private Outlet $c;
 
-    private Event $event;
 
     protected function setUp(): void
     {
@@ -37,7 +35,6 @@ class OutletIsolationEndpointsTest extends TestCase
         $this->a = $this->outletModel()::factory()->create(['code' => 'ALF', 'name' => 'Alfa Outlet']);
         $this->b = $this->outletModel()::factory()->create(['code' => 'ZET', 'name' => 'Zeta Outlet']);
         $this->c = $this->outletModel()::factory()->create(['code' => 'GAM', 'name' => 'Gama Outlet']);
-        $this->event = Event::factory()->create(['status' => 'active']);
 
         $p = Product::factory()->create(['home_outlet_id' => $this->a->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Produk Uji']);
         $variant = $p->variants()->create(['sku' => 'ISO-1', 'variant_name' => 'R', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 0, 'low_stock_alert' => 99]);
@@ -48,7 +45,7 @@ class OutletIsolationEndpointsTest extends TestCase
 
         foreach ([$this->a, $this->b] as $o) {
             $cashier = $this->assignUser(User::factory()->create(['role' => 'cashier']), [$o]);
-            $this->orderAt($this->shiftAt($o, $cashier, ['event_id' => $this->event->id]), $variant, 2);
+            $this->orderAt($this->shiftAt($o, $cashier), $variant, 2);
             $this->tableAt($o, 'Meja '.$o->code);
         }
         // Transfer yang HANYA menyentuh B dan C (tak terlihat oleh pengguna A).
@@ -70,7 +67,6 @@ class OutletIsolationEndpointsTest extends TestCase
     /** @return array<string, string> label => URL */
     private function readEndpoints(): array
     {
-        $e = $this->event->id;
 
         return [
             'orders' => '/api/v1/orders',
@@ -84,9 +80,9 @@ class OutletIsolationEndpointsTest extends TestCase
             'in transit' => '/api/v1/stock/in-transit',
             'discrepancies' => '/api/v1/stock/transfers/discrepancies',
             'materials' => '/api/v1/materials',
-            'report sales' => "/api/v1/reports/sales?event_id={$e}",
-            'report recap' => "/api/v1/reports/outlet-settlements?event_id={$e}",
-            'report profit' => "/api/v1/reports/outlet-profit?event_id={$e}",
+            'report sales' => "/api/v1/reports/sales",
+            'report recap' => "/api/v1/reports/outlet-settlements",
+            'report profit' => "/api/v1/reports/outlet-profit",
             'report stock' => '/api/v1/reports/stock-by-outlet',
             'dashboard summary' => '/api/v1/dashboard/summary?period=today',
             'dashboard attention' => '/api/v1/dashboard/attention',

@@ -6,11 +6,9 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import SalesView from '../../resources/js/views/SalesView.vue';
 import { i18n } from '../../resources/js/i18n';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listEvents } from '../../resources/js/api/events';
 import { salesReport } from '../../resources/js/api/reports';
 import { getFloor } from '../../resources/js/api/floor';
 
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), exportReport: vi.fn(), exportSalesTransactions: vi.fn() }));
 vi.mock('../../resources/js/api/floor', () => ({ getFloor: vi.fn() }));
 vi.mock('../../resources/js/api/tabs', () => ({ getTab: vi.fn() }));
@@ -46,7 +44,7 @@ async function mountSales({ menus = ['sales', 'floor'], url = '/' } = {}) {
   setActivePinia(pinia);
   useAuthStore().user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: menus };
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
-  router.push(url);
+  router.push(/[?&](from|to)=/.test(url) ? url : `${url}${url.includes('?') ? '&' : '?'}from=2000-01-01&to=2099-12-31`);
   await router.isReady();
   render(SalesView, { global: { plugins: [pinia, router] } });
   return { router, user: userEvent.setup() };
@@ -55,7 +53,6 @@ async function mountSales({ menus = ['sales', 'floor'], url = '/' } = {}) {
 describe('SalesView — saklar Daftar order | Meja (044)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     salesReport.mockResolvedValue(DATA);
     getFloor.mockResolvedValue({ areas: [], takeaway_tabs: [], version: 'v0' });
   });

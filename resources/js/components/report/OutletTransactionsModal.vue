@@ -20,7 +20,8 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   outletId: { type: [Number, String, null], default: null },
   outletName: { type: String, default: '' },
-  eventId: { type: [Number, String, null], default: null },
+  dateFrom: { type: String, default: '' },
+  dateTo: { type: String, default: '' },
 });
 const emit = defineEmits(['close']);
 
@@ -30,15 +31,15 @@ const loading = ref(false);
 const transactions = ref([]);
 
 watch(
-  () => [props.open, props.outletId, props.eventId],
-  async ([open, outletId, eventId]) => {
-    if (!open || !outletId || !eventId) {
+  () => [props.open, props.outletId, props.dateFrom, props.dateTo],
+  async ([open, outletId, dateFrom, dateTo]) => {
+    if (!open || !outletId) {
       transactions.value = [];
       return;
     }
     loading.value = true;
     try {
-      const res = await outletSettlementTransactions(outletId, eventId);
+      const res = await outletSettlementTransactions(outletId, { date_from: dateFrom || undefined, date_to: dateTo || undefined });
       transactions.value = res.transactions ?? [];
     } catch (err) {
       toast.error(err.message || t('reports.load_artist_transactions_failed'));

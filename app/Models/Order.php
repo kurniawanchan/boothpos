@@ -28,7 +28,7 @@ class Order extends Model
     public const SERVICE_TAKEAWAY = 'takeaway';
 
     protected $fillable = [
-        'order_number', 'event_id', 'session_id', 'customer_id', 'user_id', 'channel',
+        'order_number', 'session_id', 'customer_id', 'user_id', 'channel',
         'subtotal', 'discount_amount', 'total_amount', 'total_cost', 'paid_amount',
         'change_amount', 'status', 'void_reason', 'local_ref', 'notes',
         'service_type', 'table_id', 'tab_label', 'split_from_order_id',
@@ -74,7 +74,6 @@ class Order extends Model
 
     public function items(): HasMany { return $this->hasMany(OrderItem::class); }
     public function payments(): HasMany { return $this->hasMany(Payment::class); }
-    public function event(): BelongsTo { return $this->belongsTo(Event::class); }
     public function session(): BelongsTo { return $this->belongsTo(CashierSession::class, 'session_id'); }
     public function customer(): BelongsTo { return $this->belongsTo(Customer::class); }
     public function cashier(): BelongsTo { return $this->belongsTo(User::class, 'user_id'); }

@@ -30,7 +30,7 @@ class SalesFigures
      * pengelompokan di laporan penjualan. Join dipertahankan persis agar angkanya identik dengan
      * perilaku sebelumnya.
      *
-     * @param  array{event_id?: int|null, date_from?: string|null, date_to?: string|null}  $filters  tanggal = tanggal BISNIS (Y-m-d)
+     * @param  array{date_from?: string|null, date_to?: string|null}  $filters  tanggal = tanggal BISNIS (Y-m-d)
      */
     public static function posBase(array $filters = []): Builder
     {
@@ -40,20 +40,18 @@ class SalesFigures
             ->join('products', 'products.id', '=', 'product_variants.product_id')
             ->join('categories', 'categories.id', '=', 'products.category_id')
             ->tap(fn ($q) => OutletFilter::joinReportOutlet($q)) // 045 Stage 7: outlet PELAPORAN (lihat OutletFilter::reportOutletSql)
-            ->join('events', 'events.id', '=', 'orders.event_id')
             ->where('orders.status', 'completed')
             ->where('order_items.data_mode', ModeGate::current())
             ->when(true, fn ($q) => OutletFilter::applyReport($q))
-            ->when(! empty($filters['event_id']), fn ($q) => $q->where('orders.event_id', (int) $filters['event_id']))
             ->when(! empty($filters['date_from']), fn ($q) => $q->where('orders.business_date', '>=', $filters['date_from']))
             ->when(! empty($filters['date_to']), fn ($q) => $q->where('orders.business_date', '<=', $filters['date_to']));
     }
 
     /**
      * Versi RINGAN dari `posBase()` untuk angka Dashboard (totalan, deret per hari/jam): hanya order_items ⨝ orders.
-     * Empat join lainnya (varian, produk, kategori, artist) dan `events` tidak memfilter apa pun — semua
+     * Empat join lainnya (varian, produk, kategori, outlet) tidak memfilter apa pun — semua
      * kuncinya `NOT NULL ... RESTRICT`, jadi tiap baris item SELALU punya pasangan — dan hanya dibutuhkan
-     * laporan yang mengelompokkan menurut nama (produk/kategori/artist/event). Hasilnya identik dengan
+     * laporan yang mengelompokkan menurut nama (produk/kategori/outlet). Hasilnya identik dengan
      * `posBase()` (dijaga DashboardSummaryTest::the_headline_sales_equal_the_sales_page...), tetapi jauh lebih
      * murah: join tambahan itu pernah membuat ringkasan "hari ini" lebih dari 6 detik dengan 1.000 order.
      */

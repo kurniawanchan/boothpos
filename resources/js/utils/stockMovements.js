@@ -17,8 +17,10 @@ export function movementTypeVariant(type) {
 }
 
 export function movementTypeLabelKey(type) {
+  // 046: pre-order dihapus dari produk, tetapi baris lama `preorder_handover` tetap ada di buku besar; labelnya netral.
+  if (type === 'preorder_handover') return 'master_data.type_legacy_out';
   return `master_data.type_${type}`;
 }
 
-/** Tipe yang valid untuk filter (urutan tampil). */
-export const MOVEMENT_TYPES = Object.keys(MOVEMENT_TYPE_VARIANT);
+/** Tipe yang valid untuk filter (urutan tampil). Tipe lama `preorder_handover` tidak lagi ditawarkan sebagai filter. */
+export const MOVEMENT_TYPES = Object.keys(MOVEMENT_TYPE_VARIANT).filter((t) => t !== 'preorder_handover');

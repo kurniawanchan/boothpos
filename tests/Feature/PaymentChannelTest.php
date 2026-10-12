@@ -193,27 +193,18 @@ class PaymentChannelTest extends TestCase
             'provider' => 'BCA',
         ]);
 
-        // Buat preorder + payment yang merujuk channel ini — cukup channel_id
-        // terpakai pada tabel payments agar delete diblokir (409). Tidak ada
-        // PaymentFactory, jadi masukkan lewat DB::table() langsung.
+        // Buat order + payment yang merujuk channel ini — cukup channel_id terpakai pada tabel payments agar
+        // delete diblokir (409). Tidak ada PaymentFactory, jadi masukkan lewat DB::table() langsung.
         $user = User::factory()->create(['role' => 'cashier']);
-        $event = \App\Models\Event::factory()->create();
-        $customer = \App\Models\Customer::factory()->create();
-        $preorder = \App\Models\Preorder::create([
-            'event_id' => $event->id,
-            'customer_id' => $customer->id,
-            'user_id' => $user->id,
-            'preorder_number' => 'PO-TEST-001',
-            'fulfillment' => 'pickup',
-            'total_amount' => 100000,
-            'paid_amount' => 100000,
-            'status' => 'handed_over',
+        $session = \App\Models\CashierSession::factory()->create(['user_id' => $user->id]);
+        $order = \App\Models\Order::create([
+            'order_number' => 'TRX-CH-0001', 'session_id' => $session->id, 'user_id' => $user->id,
+            'subtotal' => 100000, 'total_amount' => 100000, 'paid_amount' => 100000, 'status' => 'completed',
         ]);
 
         \Illuminate\Support\Facades\DB::table('payments')->insert([
-            'order_id' => null,
-            'preorder_id' => $preorder->id,
-            'outlet_id' => $preorder->outlet_id,
+            'order_id' => $order->id,
+            'outlet_id' => $order->outlet_id,
             'channel_id' => $channel->id,
             'method' => 'bank_transfer',
             'purpose' => 'full',

@@ -84,7 +84,6 @@ class TabService
         try {
             $order = DB::transaction(fn () => Order::create([
                 'order_number' => $this->orderService->generateOrderNumber(),
-                'event_id' => $session->event_id,
                 'session_id' => $session->id,
                 'customer_id' => $data['customer_id'] ?? null,
                 'user_id' => $user->id,
@@ -419,7 +418,7 @@ class TabService
 
             if ($target->id !== $order->session_id) {
                 $from = $order->session_id;
-                $order->update(['session_id' => $target->id, 'event_id' => $target->event_id]);
+                $order->update(['session_id' => $target->id]);
 
                 $this->activityLogger->log(
                     userId: $user->id,

@@ -10,7 +10,7 @@ class PosDraft extends Model
 {
     use HasDataMode;
 
-    protected $fillable = ['user_id', 'event_id', 'customer_id', 'cart_snapshot', 'label'];
+    protected $fillable = ['user_id', 'customer_id', 'cart_snapshot', 'label'];
 
     protected function casts(): array
     {

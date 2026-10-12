@@ -90,7 +90,7 @@ class SettingsController extends Controller
             // 023-event-availability-invoice-redesign (US4, research.md
             // Decision 8) — URL DISELESAIKAN DI SINI lewat ImageUploadService,
             // konvensi yang sama persis dengan setiap gambar lain di produk
-            // ini (OrderController::receipt(), BuildsInvoiceDocument,
+            // ini (OrderController::receipt(),
             // PaymentChannelController, dst) — bukan ditebak ulang di
             // frontend dari path mentah.
             'store_logo_url' => $this->imageUploadService->url(Setting::get('store_logo_path')),

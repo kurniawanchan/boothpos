@@ -3,19 +3,10 @@
 namespace App\Support;
 
 /**
- * Pembantu pemisahan POS vs pre-order pada laporan (feature 033).
+ * Pembantu hitungan uang dalam sen (integer) — dipakai laporan dan perhitungan biaya BOM.
  *
- * Bagian pre-order SENGAJA dihitung sebagai SISA dari total yang sudah
- * tampil (total − bagian POS), bukan dibulatkan sendiri-sendiri. Alasannya:
- * total_units di outlet_settlements adalah integer hasil pembulatan
- * (POS bulat + unit pre-order pecahan), dan uang disimpan 2 desimal —
- * membulatkan kedua bagian secara terpisah bisa membuat POS + pre-order
- * berbeda 1 unit / 1 sen dari total (mis. dua pre-order 0,5 unit → 1 + 1 ≠
- * round(1,0) = 1). Dengan sisa, penjumlahan SELALU persis sama dengan
- * total tanpa mengubah angka total yang sudah ada (research.md Decision 2).
- *
- * Seluruh hitungan uang dilakukan dalam sen (integer) agar tidak terkena
- * jebakan float (0,1 + 0,2).
+ * 046: pemisahan POS vs pre-order (feature 033) sudah hilang bersama modul Pre-order; yang tersisa hanya
+ * konversi sen ↔ string uang 2 desimal, supaya penjumlahan tidak terkena jebakan float (0,1 + 0,2).
  */
 final class ReportSplit
 {

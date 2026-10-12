@@ -22,7 +22,7 @@ class ModeGate
      * SakanaFridgeDemoSeeder) supaya penulisan data bisa dipaksa ke satu
      * mode TANPA bergantung pada `system_mode` yang sedang tersimpan, dan
      * TANPA perlu mengubah signature service manapun (OrderService,
-     * PreorderService, StockService tetap tidak tahu apa-apa soal
+     * StockService tetap tidak tahu apa-apa soal
      * DEMO/LIVE — lihat research.md Decision 2).
      *
      * @var list<string>

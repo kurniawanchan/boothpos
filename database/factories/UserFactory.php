@@ -26,21 +26,21 @@ class UserFactory extends Factory
      */
     private const LEGACY_ROLE_MENU_KEYS = [
         'owner' => ['name' => 'Owner', 'all_outlets' => true, 'menu_keys' => [
-            'dashboard', 'pos', 'session', 'events', 'products', 'outlets', 'categories',
-            'stock', 'vendors', 'materials', 'customers', 'preorders', 'sales', 'reports',
+            'dashboard', 'pos', 'session', 'products', 'outlets', 'categories',
+            'stock', 'vendors', 'materials', 'customers', 'sales', 'reports',
             'users', 'roles', 'settings',
         ]],
         'admin' => ['name' => 'Admin', 'all_outlets' => true, 'menu_keys' => [
-            'dashboard', 'pos', 'session', 'events', 'products', 'outlets', 'categories',
-            'stock', 'vendors', 'materials', 'customers', 'preorders', 'sales', 'reports',
+            'dashboard', 'pos', 'session', 'products', 'outlets', 'categories',
+            'stock', 'vendors', 'materials', 'customers', 'sales', 'reports',
             'users', 'roles', 'settings',
         ]],
         'cashier' => ['name' => 'Kasir', 'menu_keys' => [
-            'dashboard', 'pos', 'session', 'events', 'customers', 'preorders', 'sales',
+            'dashboard', 'pos', 'session', 'customers', 'sales',
         ]],
         'inventory' => ['name' => 'Inventory', 'menu_keys' => [
-            'dashboard', 'pos', 'session', 'events', 'products', 'outlets', 'categories',
-            'stock', 'vendors', 'materials', 'customers', 'preorders', 'sales',
+            'dashboard', 'pos', 'session', 'products', 'outlets', 'categories',
+            'stock', 'vendors', 'materials', 'customers', 'sales',
         ]],
     ];
 

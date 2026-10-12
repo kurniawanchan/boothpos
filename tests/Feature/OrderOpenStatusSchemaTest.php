@@ -44,7 +44,7 @@ class OrderOpenStatusSchemaTest extends TestCase
         // tidak boleh berubah perilakunya: default DB tetap 'completed'.
         $order = Order::create([
             'order_number' => 'TRX-TEST-DEFAULT',
-            'event_id' => $session->event_id, 'session_id' => $session->id, 'user_id' => $this->cashier->id,
+            'session_id' => $session->id, 'user_id' => $this->cashier->id,
             'channel' => 'offline', 'subtotal' => 0, 'total_amount' => 0, 'total_cost' => 0,
             'paid_amount' => 0, 'change_amount' => 0,
         ]);

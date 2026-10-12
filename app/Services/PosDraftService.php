@@ -27,7 +27,6 @@ class PosDraftService
     {
         return PosDraft::create([
             'user_id' => $user->id,
-            'event_id' => $data['event_id'] ?? null,
             'customer_id' => $data['customer_id'] ?? null,
             'cart_snapshot' => [
                 'items' => $data['items'],

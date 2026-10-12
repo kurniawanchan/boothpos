@@ -22,8 +22,6 @@ class ProductResource extends JsonResource
             'image_path' => $this->image_path,
             // URL siap-pakai (Task 5), sama dengan CategoryResource.
             'image_url' => $this->image_path ? Storage::disk('public')->url($this->image_path) : null,
-            'is_preorder' => $this->is_preorder,
-            'preorder_eta' => $this->preorder_eta?->toDateString(),
             'is_active' => $this->is_active,
             'station_id' => $this->station_id,
             // 045 Stage 3 — outlet yang boleh dilihat pengguna dan apakah masing-masing membawa produk ini. Hanya ada bila

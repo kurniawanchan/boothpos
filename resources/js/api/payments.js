@@ -61,21 +61,20 @@ export function getPaymentProofBlobUrl(proofId) {
 
 /**
  * 031-optional-payment-proof — tambah / ubah / ganti konfirmasi (bukti, referensi,
- * catatan) satu pembayaran yang sudah tercatat. `kind` = 'orders' (penjualan POS) atau
- * 'preorders'. Payload hanya berisi kunci yang berubah (`proof_token`, `reference`,
- * `notes`; `null` mengosongkan). Mengembalikan transaksi terbaru.
+ * catatan) satu pembayaran penjualan POS yang sudah tercatat. Payload hanya berisi kunci yang
+ * berubah (`proof_token`, `reference`, `notes`; `null` mengosongkan). Mengembalikan order terbaru.
  */
-export function updatePaymentConfirmation(kind, targetId, paymentId, payload) {
-  return client.patch(`/${kind}/${targetId}/payments/${paymentId}/confirmation`, payload).then((r) => r.data);
+export function updatePaymentConfirmation(orderId, paymentId, payload) {
+  return client.patch(`/orders/${orderId}/payments/${paymentId}/confirmation`, payload).then((r) => r.data);
 }
 
 /**
- * 032-mark-payment-verified — tandai SATU pembayaran non-tunai terverifikasi (`kind` = 'orders'
- * atau 'preorders'). Satu arah dan final: tidak ada pasangan "batalkan verifikasi". Mengembalikan
- * transaksi terbaru; 403 untuk pencatat pembayaran itu, 409 bila sudah terverifikasi/ditolak/batal.
+ * 032-mark-payment-verified — tandai SATU pembayaran non-tunai terverifikasi. Satu arah dan final:
+ * tidak ada pasangan "batalkan verifikasi". Mengembalikan order terbaru; 403 untuk pencatat
+ * pembayaran itu, 409 bila sudah terverifikasi/ditolak/batal.
  */
-export function verifyPayment(kind, targetId, paymentId) {
-  return client.post(`/${kind}/${targetId}/payments/${paymentId}/verify`).then((r) => r.data);
+export function verifyPayment(orderId, paymentId) {
+  return client.post(`/orders/${orderId}/payments/${paymentId}/verify`).then((r) => r.data);
 }
 
 /**

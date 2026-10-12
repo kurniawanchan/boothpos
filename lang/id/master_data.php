@@ -10,5 +10,5 @@ return [
     'outlet_not_authorized' => 'Anda tidak berhak mengelola outlet.',
     'outlet_license_quota_exceeded' => 'Instalasi ini memakai lisensi Pro (satu outlet). Upgrade ke Master untuk menambah outlet lain.',
     'insufficient_stock' => 'Stok tidak mencukupi untuk varian :sku. Tersedia: :available.',
-    'customer_delete_has_transactions' => 'Pelanggan masih memiliki transaksi (order/pre-order) dan tidak dapat dihapus.',
+    'customer_delete_has_transactions' => 'Pelanggan masih memiliki transaksi (order) dan tidak dapat dihapus.',
 ];

@@ -7,7 +7,6 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
@@ -32,7 +31,6 @@ class SalesTransactionsExportTest extends TestCase
 
     private User $owner;
 
-    private Event $event;
 
     private CashierSession $session;
 
@@ -45,8 +43,7 @@ class SalesTransactionsExportTest extends TestCase
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->cashier, 'sanctum');
 
-        $this->event = Event::factory()->create(['status' => 'active']);
-        $this->session = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
+        $this->session = CashierSession::factory()->create(['user_id' => $this->cashier->id, 'status' => 'open']);
         $product = Product::factory()->create(['home_outlet_id' => Outlet::factory()->create(['name' => 'Nekoyama Studio'])->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Akatsuki Keychain', 'is_preorder' => true]);
         $this->variant = $product->variants()->create(['sku' => 'NEKKYAKT0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
     }
@@ -68,7 +65,7 @@ class SalesTransactionsExportTest extends TestCase
         if ($as) {
             $this->actingAs($as, 'sanctum');
         }
-        $this->postJson(self::URL, array_merge(['event_id' => $this->event->id], $body))->assertOk();
+        $this->postJson(self::URL, $body)->assertOk();
 
         $rows = [];
         Excel::assertDownloaded('transaksi-penjualan.xlsx', function (GenericArrayExport $export) use (&$rows) {
@@ -80,7 +77,7 @@ class SalesTransactionsExportTest extends TestCase
         return $rows;
     }
 
-    public function test_it_exports_the_whole_event_when_no_keys_are_given(): void
+    public function test_it_exports_every_sale_when_no_keys_are_given(): void
     {
         $this->makeOrder();
         $this->makeOrder();
@@ -190,14 +187,18 @@ class SalesTransactionsExportTest extends TestCase
         $this->postJson(self::URL, ['keys' => ['preorder:1']])->assertStatus(422);
     }
 
-    public function test_keys_from_another_event_are_not_leaked_when_an_event_filter_is_given(): void
+    public function test_keys_outside_the_date_filter_are_not_leaked(): void
     {
         $mine = $this->makeOrder();
-        $otherEvent = Event::factory()->create(['status' => 'active']);
-        $otherSession = CashierSession::factory()->create(['event_id' => $otherEvent->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
-        $foreign = $this->makeOrder(['session_id' => $otherSession->id]);
+        $foreign = $this->makeOrder();
+        // 046 — filter periode menggantikan filter event: baris di luar rentang diabaikan walau kuncinya dikirim.
+        \Illuminate\Support\Facades\DB::table('orders')->where('id', $foreign->id)->update(['business_date' => '2020-01-01']);
 
-        $rows = $this->exported(['keys' => ["order:{$mine->id}", "order:{$foreign->id}"]]);
+        $rows = $this->exported([
+            'date_from' => \App\Support\BusinessDay::today(),
+            'date_to' => \App\Support\BusinessDay::today(),
+            'keys' => ["order:{$mine->id}", "order:{$foreign->id}"],
+        ]);
 
         $this->assertCount(1, $rows);
         $this->assertSame($mine->order_number, $rows[0]['transaction_no']);

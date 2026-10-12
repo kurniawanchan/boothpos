@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\CashierSession;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,10 +24,8 @@ class ShiftOutletTest extends TestCase
 
     private function openShift(array $body): \Illuminate\Testing\TestResponse
     {
-        $event = Event::factory()->create(['status' => 'active']);
 
         return $this->postJson('/api/v1/sessions', array_merge([
-            'event_id' => $event->id,
             'opening_cash' => 0,
         ], $body));
     }

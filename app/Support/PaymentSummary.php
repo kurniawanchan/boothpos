@@ -3,12 +3,11 @@
 namespace App\Support;
 
 use App\Models\Order;
-use App\Models\Preorder;
 use Illuminate\Support\Collection;
 
 /**
  * 028-partial-split-payment (research Decision 2) — SATU-SATUNYA rumus ringkasan
- * pembayaran, untuk pre-order dan penjualan POS. Murni (tanpa I/O selain
+ * pembayaran penjualan POS (046: pre-order sudah dihapus). Murni (tanpa I/O selain
  * membaca relasi payments bila koleksinya tak diberikan).
  *
  * Total terbayar SELALU dihitung dari entri pembayaran, tidak dipercaya dari
@@ -31,12 +30,12 @@ class PaymentSummary
     /**
      * @return array{grand_total: string, total_paid: string, remaining: string, status: string, payment_count: int}
      */
-    public static function for(Preorder|Order $target, ?Collection $payments = null): array
+    public static function for(Order $target, ?Collection $payments = null): array
     {
         $counted = ($payments ?? $target->payments)->where('verification', '!=', 'rejected');
 
         $grandTotal = round((float) $target->total_amount, 2);
-        $change = $target instanceof Order ? (float) $target->change_amount : 0.0;
+        $change = (float) $target->change_amount;
         $totalPaid = round((float) $counted->sum('amount') - $change, 2);
         $remaining = round(max(0.0, $grandTotal - $totalPaid), 2);
         $count = $counted->count();

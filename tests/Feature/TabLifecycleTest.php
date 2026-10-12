@@ -209,7 +209,6 @@ class TabLifecycleTest extends TestCase
         $this->actingAs($this->owner, 'sanctum');
         $this->postJson("/api/v1/tabs/{$tab}/handover", ['session_id' => $to->id])
             ->assertOk()->assertJsonPath('session_id', $to->id);
-        $this->assertSame($to->event_id, Order::find($tab)->event_id);
     }
 
     public function test_a_tab_cannot_be_handed_over_to_a_closed_shift(): void

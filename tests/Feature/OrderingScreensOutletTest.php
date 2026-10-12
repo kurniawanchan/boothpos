@@ -146,38 +146,4 @@ class OrderingScreensOutletTest extends TestCase
         $this->postJson('/api/v1/orders', $body($shiftA, 20000))->assertCreated();
     }
 
-    public function test_a_preorder_for_an_item_not_carried_at_the_creating_outlet_is_refused(): void
-    {
-        $customer = Customer::factory()->create();
-        $this->withHeader('X-Outlet-Id', (string) $this->b->id);
-
-        $this->postJson('/api/v1/preorders', [
-            'customer_id' => $customer->id, 'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $this->teh->variants()->first()->id, 'qty' => 1]],
-        ])->assertStatus(422);
-
-        $this->postJson('/api/v1/preorders', [
-            'customer_id' => $customer->id, 'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $this->kopi->variants()->first()->id, 'qty' => 1]],
-        ])->assertCreated();
-    }
-
-    public function test_a_split_preorder_keeps_the_outlet_of_the_original(): void
-    {
-        $customer = Customer::factory()->create();
-        $variants = [$this->kopi->variants()->first()->id];
-        $second = $this->kopi->variants()->create(['sku' => 'ORD-KOPI-2', 'variant_name' => 'Large', 'sell_price' => 25000, 'cost_price' => 9000, 'current_stock' => 5]);
-        $created = $this->withHeader('X-Outlet-Id', (string) $this->b->id)->postJson('/api/v1/preorders', [
-            'customer_id' => $customer->id, 'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $variants[0], 'qty' => 2], ['variant_id' => $second->id, 'qty' => 1]],
-        ])->assertCreated()->json();
-        $items = $this->getJson("/api/v1/preorders/{$created['id']}")->assertOk()->json('items');
-
-        // Dipecah TANPA header (kasir punya dua outlet → konteks akan menstempel outlet pertama, A): pecahan harus tetap di B.
-        $response = $this->postJson("/api/v1/preorders/{$created['id']}/split", ['mode' => 'items', 'items' => [['item_id' => $items[1]['id'], 'qty' => 1]]]);
-        $response->assertSuccessful();
-
-        $outlets = \App\Models\Preorder::withoutGlobalScopes()->pluck('outlet_id')->unique()->values()->all();
-        $this->assertSame([$this->b->id], $outlets);
-    }
 }

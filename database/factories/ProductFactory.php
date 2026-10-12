@@ -20,7 +20,6 @@ class ProductFactory extends Factory
             'code_prefix' => strtoupper(fake()->unique()->lexify('????????')),
             'product_segment' => strtoupper(fake()->lexify('???')),
             'name' => fake()->words(2, true),
-            'is_preorder' => false,
             'is_active' => true,
         ];
     }

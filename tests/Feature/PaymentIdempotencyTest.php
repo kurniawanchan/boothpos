@@ -2,12 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Outlet;
-use App\Models\Category;
-use App\Models\Customer;
 use App\Models\Payment;
-use App\Models\Preorder;
-use App\Models\Product;
 use App\Models\User;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,40 +20,32 @@ class PaymentIdempotencyTest extends TestCase
 
     private User $user;
 
-    private Customer $customer;
-
-    private \App\Models\ProductVariant $variant;
+    private \App\Models\CashierSession $session;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->user = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($this->user, 'sanctum');
-
-        $product = Product::factory()->create([
-            'home_outlet_id' => Outlet::factory()->create()->id,
-            'category_id' => Category::factory()->create()->id,
-            'is_preorder' => true,
-        ]);
-        $this->variant = $product->variants()->create([
-            'sku' => 'IDEM0001', 'sell_price' => 100000, 'cost_price' => 50000, 'current_stock' => 0,
-        ]);
-        $this->customer = Customer::factory()->create();
+        // Pembayaran tunai susulan butuh shift terbuka milik pencatat (028).
+        $this->session = \App\Models\CashierSession::factory()->create(['user_id' => $this->user->id, 'status' => 'open']);
     }
 
-    /** Total 200.000. */
+    /** Penjualan selesai bernilai 200.000, belum dibayar (pembayaran susulan). */
     private function order(): array
     {
-        return $this->postJson('/api/v1/preorders', [
-            'customer_id' => $this->customer->id, 'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $this->variant->id, 'qty' => 2]],
-        ])->assertCreated()->json();
+        $order = \App\Models\Order::create([
+            'order_number' => 'TRX-IDEM-'.uniqid(), 'session_id' => $this->session->id, 'user_id' => $this->user->id,
+            'subtotal' => 200000, 'total_amount' => 200000, 'paid_amount' => 0, 'status' => 'completed',
+        ]);
+
+        return ['id' => $order->id];
     }
 
     private function pay(int $id, float $amount, ?string $ref = null)
     {
-        return $this->postJson("/api/v1/preorders/{$id}/payments", array_filter([
-            'method' => 'cash', 'amount' => $amount, 'purpose' => 'down_payment', 'client_ref' => $ref,
+        return $this->postJson("/api/v1/orders/{$id}/payments", array_filter([
+            'method' => 'cash', 'amount' => $amount, 'purpose' => 'full', 'client_ref' => $ref,
         ], fn ($v) => $v !== null));
     }
 
@@ -104,7 +91,7 @@ class PaymentIdempotencyTest extends TestCase
     {
         $order = $this->order();
         $ref = (string) Str::uuid();
-        $row = ['preorder_id' => $order['id'], 'method' => 'cash', 'purpose' => 'full', 'amount' => 1000, 'verification' => 'verified', 'paid_at' => now(), 'client_ref' => $ref];
+        $row = ['order_id' => $order['id'], 'method' => 'cash', 'purpose' => 'full', 'amount' => 1000, 'verification' => 'verified', 'paid_at' => now(), 'client_ref' => $ref];
         Payment::create($row);
 
         $this->expectException(QueryException::class);
@@ -161,12 +148,10 @@ class PaymentIdempotencyTest extends TestCase
 
     public function test_a_payment_on_a_closed_transaction_is_refused_with_409(): void
     {
-        foreach (['handed_over', 'cancelled'] as $status) {
-            $order = $this->order();
-            Preorder::whereKey($order['id'])->update(['status' => $status]);
+        $order = $this->order();
+        \App\Models\Order::whereKey($order['id'])->update(['status' => 'voided']);
 
-            $this->pay($order['id'], 1000)->assertStatus(409);
-        }
+        $this->pay($order['id'], 1000)->assertStatus(409);
         $this->assertDatabaseCount('payments', 0);
     }
 
@@ -179,6 +164,6 @@ class PaymentIdempotencyTest extends TestCase
 
         $this->assertStringContainsString('50.000', $response->json('errors.amount.0'));
         $this->assertDatabaseCount('payments', 1);
-        $this->assertEquals(150000, Preorder::findOrFail($order['id'])->paid_amount);
+        $this->assertEquals(150000, \App\Models\Order::findOrFail($order['id'])->paid_amount);
     }
 }

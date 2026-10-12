@@ -30,10 +30,9 @@ describe('visibleSections', () => {
   });
 
   it('memberi lencana per badgeKey dan titik status per nama item atau kunci grup', () => {
-    const sections = visibleSections(allowAll, { cart: 3, preorders: 5 }, { sales: true, 'restaurant-group': true });
+    const sections = visibleSections(allowAll, { cart: 3 }, { sales: true, 'restaurant-group': true });
     const items = sections.flatMap((s) => s.items);
     expect(items.find((i) => i.name === 'pos').badge).toBe(3);
-    expect(items.find((i) => i.name === 'preorders').badge).toBe(5);
     expect(items.find((i) => i.name === 'sales').dot).toBe(true);
     expect(items.find((i) => i.name === 'session').dot).toBe(false);
     expect(items.find((i) => i.key === 'restaurant-group').dot).toBe(true);

@@ -3,10 +3,8 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import SalesView from '../../resources/js/views/SalesView.vue';
-import { listEvents } from '../../resources/js/api/events';
 import { salesReport } from '../../resources/js/api/reports';
 
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), exportReport: vi.fn(), exportSalesTransactions: vi.fn() }));
 vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn(), getReceipt: vi.fn(), voidOrder: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ getProduct: vi.fn() }));
@@ -40,6 +38,8 @@ async function mountSales() {
   const pinia = createPinia();
   setActivePinia(pinia);
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
+  // 046: tanpa query ini filter tanggal bawaan = hari ini dan menyembunyikan data uji bertanggal tetap.
+  await router.push('/?from=2000-01-01&to=2099-12-31');
   render(SalesView, { global: { plugins: [pinia, router] } });
   return user;
 }
@@ -47,7 +47,6 @@ async function mountSales() {
 describe('SalesView — struktur halaman (041)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     salesReport.mockResolvedValue(DATA);
   });
 

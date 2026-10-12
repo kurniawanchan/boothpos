@@ -6,7 +6,6 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
@@ -30,7 +29,6 @@ class SalesTotalsCharacterizationTest extends TestCase
 
     private User $owner;
 
-    private Event $event;
 
     private CashierSession $session;
 
@@ -44,8 +42,7 @@ class SalesTotalsCharacterizationTest extends TestCase
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->owner, 'sanctum');
 
-        $this->event = Event::factory()->create(['status' => 'active']);
-        $this->session = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->owner->id, 'status' => 'open']);
+        $this->session = CashierSession::factory()->create(['user_id' => $this->owner->id, 'status' => 'open']);
 
         $category = Category::factory()->create();
         $artist = Outlet::factory()->create();
@@ -92,26 +89,6 @@ class SalesTotalsCharacterizationTest extends TestCase
         $totals = $this->sales();
 
         $this->assertSame('20000.00', $totals['pos_net_sales']);
-    }
-
-    public function test_preorder_revenue_joins_the_shared_totals_but_never_the_pos_totals(): void
-    {
-        $this->order([['variant_id' => $this->variantA->id, 'qty' => 1]]); // 10.000
-
-        $service = app(\App\Services\PreorderService::class);
-        $preorder = $service->create([
-            'event_id' => $this->event->id,
-            'customer_id' => Customer::factory()->create()->id,
-            'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $this->variantB->id, 'qty' => 1]],
-        ], $this->owner);
-        $service->recordPayment($preorder, ['method' => 'cash', 'channel_id' => null, 'purpose' => 'down_payment', 'amount' => 20000]);
-
-        $totals = $this->sales();
-
-        $this->assertSame('10000.00', $totals['pos_net_sales']);
-        $this->assertSame('30000.00', $totals['net_sales']);
-        $this->assertEquals(1, $totals['pos_unit_count']);
     }
 
     public function test_date_filters_follow_the_stored_business_date(): void

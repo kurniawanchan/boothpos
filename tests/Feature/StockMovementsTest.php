@@ -6,7 +6,6 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\StockMovement;
@@ -56,23 +55,13 @@ class StockMovementsTest extends TestCase
 
     private function sell(int $qty = 2): \App\Models\Order
     {
-        $event = Event::factory()->create(['status' => 'active']);
-        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $this->owner->id, 'status' => 'open']);
+        $session = CashierSession::factory()->create(['user_id' => $this->owner->id, 'status' => 'open']);
 
         return app(OrderService::class)->create([
             'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
             'items' => [['variant_id' => $this->variant->id, 'qty' => $qty]],
             'payments' => [['method' => 'cash', 'amount' => 20000 * $qty]],
         ], $this->owner);
-    }
-
-    private function preorder(): array
-    {
-        return $this->postJson('/api/v1/preorders', [
-            'customer_id' => Customer::factory()->create()->id,
-            'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
-        ])->assertCreated()->json();
     }
 
     private function movement(array $attrs): StockMovement
@@ -158,42 +147,6 @@ class StockMovementsTest extends TestCase
         $this->assertSame($order->order_number, $ref['number']);
     }
 
-    public function test_preorder_arrival_and_handover_resolve_to_the_preorder_number(): void
-    {
-        $preorder = $this->preorder();
-        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", ['method' => 'cash', 'amount' => 20000, 'purpose' => 'full'])->assertCreated();
-        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->assertOk();
-        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'settled'])->assertOk();
-        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'handed_over'])->assertOk();
-
-        $rows = collect($this->movements("variant_id={$this->variant->id}")->json('data'));
-
-        $this->assertCount(2, $rows); // tiba + serah terima
-        foreach ($rows as $row) {
-            $this->assertSame(['type' => 'preorder', 'id' => $preorder['id'], 'number' => $preorder['preorder_number']], $row['reference'], $row['type']);
-        }
-    }
-
-    public function test_the_preorder_edit_delta_resolves_but_an_arrival_row_orphaned_by_the_edit_shows_no_reference(): void
-    {
-        $preorder = $this->preorder();
-        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", ['method' => 'cash', 'amount' => 20000, 'purpose' => 'full'])->assertCreated();
-        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->assertOk();
-        // Edit setelah tiba: item pre-order dibangun ulang (id baru) dan selisih qty ditulis sebagai 'purchase'.
-        $this->putJson("/api/v1/preorders/{$preorder['id']}", [
-            'items' => [['id' => $preorder['items'][0]['id'], 'variant_id' => $this->variant->id, 'qty' => 3]],
-        ])->assertOk();
-
-        $byRef = collect($this->movements("variant_id={$this->variant->id}")->json('data'))->keyBy(fn ($r) => $r['qty_change']);
-
-        // Selisih edit (+2) memakai referensi 'preorder' baru -> terselesaikan.
-        $this->assertSame($preorder['preorder_number'], $byRef[2]['reference']['number']);
-        // Baris tiba (+1) menunjuk item yang sudah tidak ada -> null, BUKAN nomor tebakan (keterbatasan yang dicatat).
-        $this->assertNull($byRef[1]['reference']);
-    }
-
-    // --- penjaga: tidak pernah nomor yang salah ---------------------------------
-
     public function test_a_reference_to_an_order_of_another_variant_is_dropped(): void
     {
         $order = $this->sell(); // hanya memuat $this->variant
@@ -202,15 +155,6 @@ class StockMovementsTest extends TestCase
         $row = $this->movements("variant_id={$this->other->id}")->json('data.0');
 
         $this->assertNull($row['reference']);
-    }
-
-    public function test_a_legacy_preorder_item_reference_holding_a_preorder_id_never_shows_a_wrong_number(): void
-    {
-        $preorder = $this->preorder();
-        // Baris lama dari jalur edit: id PRE-ORDER di bawah 'preorder_item'; id yang sama tidak menunjuk item varian ini.
-        $this->movement(['variant_id' => $this->other->id, 'type' => 'purchase', 'reference_type' => 'preorder_item', 'reference_id' => $preorder['id']]);
-
-        $this->assertNull($this->movements("variant_id={$this->other->id}")->json('data.0.reference'));
     }
 
     public function test_adjustment_initial_and_import_movements_have_no_reference(): void
@@ -256,17 +200,15 @@ class StockMovementsTest extends TestCase
     public function test_resolving_references_does_not_add_a_query_per_row(): void
     {
         $order = $this->sell(1);
-        $pre = $this->preorder();
         for ($i = 0; $i < 4; $i++) {
             $this->movement(['type' => 'sale', 'qty_change' => -1, 'reference_type' => 'order_item', 'reference_id' => $order->id]);
         }
         DB::flushQueryLog();
         DB::enableQueryLog();
-        // Halaman kecil harus memuat KEDUA jenis referensi (penjualan dan pre-order), supaya jumlah query
-        // yang dibandingkan memang sama; tanpa ini urutan waktu yang seri membuat halaman kecil hanya
-        // memuat satu jenis.
+        // Halaman kecil harus memuat KEDUA jenis referensi (penjualan dan pergerakan lama yang menunjuk pre-order,
+        // yang kini selalu null), supaya jumlah query yang dibandingkan memang sama.
         $this->movement(['type' => 'sale', 'qty_change' => -1, 'reference_type' => 'order_item', 'reference_id' => $order->id]);
-        $this->movement(['type' => 'purchase', 'reference_type' => 'preorder_item', 'reference_id' => $pre['items'][0]['id']]);
+        $this->movement(['type' => 'purchase', 'reference_type' => 'preorder_item', 'reference_id' => 1]);
         DB::flushQueryLog();
         DB::enableQueryLog();
         $this->movements('per_page=2')->assertOk();
@@ -274,7 +216,7 @@ class StockMovementsTest extends TestCase
 
         for ($i = 0; $i < 12; $i++) {
             $this->movement(['type' => 'sale', 'qty_change' => -1, 'reference_type' => 'order_item', 'reference_id' => $order->id]);
-            $this->movement(['type' => 'purchase', 'reference_type' => 'preorder_item', 'reference_id' => $pre['items'][0]['id']]);
+            $this->movement(['type' => 'purchase', 'reference_type' => 'preorder_item', 'reference_id' => 1]);
         }
         DB::flushQueryLog();
         $this->movements('per_page=25')->assertOk();
@@ -282,5 +224,20 @@ class StockMovementsTest extends TestCase
         DB::disableQueryLog();
 
         $this->assertSame($small, $large, 'jumlah query harus tetap saat baris bertambah');
+    }
+
+    public function test_legacy_preorder_movements_still_list_but_never_carry_a_reference(): void
+    {
+        // 046 — modul pre-order dihapus; baris lama di buku besar tetap ada sebagai riwayat, tanpa tautan.
+        $this->movement(['type' => 'purchase', 'reference_type' => 'preorder_item', 'reference_id' => 7]);
+        $this->movement(['type' => 'preorder_handover', 'qty_change' => -1, 'reference_type' => 'preorder_item', 'reference_id' => 7]);
+
+        $rows = $this->movements("variant_id={$this->variant->id}")->assertOk()->json('data');
+
+        $legacy = collect($rows)->whereIn('type', ['purchase', 'preorder_handover']);
+        $this->assertCount(2, $legacy);
+        foreach ($legacy as $row) {
+            $this->assertNull($row['reference']);
+        }
     }
 }

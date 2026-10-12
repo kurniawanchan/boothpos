@@ -3,7 +3,6 @@
 namespace Tests\Support;
 
 use App\Models\Order;
-use App\Models\Preorder;
 
 /**
  * 045 Stage 7 — suite LAMA yang mengarakterisasi laporan per PENJUAL (atribusi item ke outlet asal) mensimulasikan data
@@ -15,9 +14,8 @@ trait TreatsOrdersAsLegacy
 {
     public function json($method, $uri, array $data = [], array $headers = [], $options = 0)
     {
-        if (str_contains((string) $uri, '/reports') || str_contains((string) $uri, '/events/')) {
+        if (str_contains((string) $uri, '/reports') ) {
             Order::withoutGlobalScopes()->update(['outlet_backfilled' => true]);
-            Preorder::withoutGlobalScopes()->update(['outlet_backfilled' => true]);
         }
 
         return parent::json($method, $uri, $data, $headers, $options);

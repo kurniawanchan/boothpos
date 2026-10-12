@@ -7,13 +7,12 @@ import { useToastStore } from '../../stores/toast';
 import { formatIDR } from '../../utils/money';
 
 /**
- * 028-partial-split-payment — dialog "Tambah pembayaran" untuk pre-order DAN
- * penjualan POS. Menggantikan RecordPaymentModal, yang menahan entri di klien
+ * 028-partial-split-payment — dialog "Tambah pembayaran" untuk penjualan POS. Menggantikan RecordPaymentModal, yang menahan entri di klien
  * sampai jumlahnya menutup tagihan lalu mengirimnya berurutan: sekarang SATU
  * klik menyimpan SATU pembayaran, langsung, berapa pun jumlahnya (≤ sisa).
  *
  * Komponen ini tak tahu soal target transaksi — pemanggil menyuplai `submitFn`
- * (mis. createPreorderPayment / addOrderPayment) yang menerima payload
+ * (mis. addOrderPayment) yang menerima payload
  * pembayaran dan mengembalikan transaksi terbaru. `remaining` datang dari
  * ringkasan server; jumlah bawaan = sisa tagihan, jadi melunasi hanya satu klik.
  */
@@ -61,7 +60,7 @@ async function handleSubmit(entries) {
         ? t('payment_ledger.saved_fully_paid', { amount })
         : remaining != null
           ? t('payment_ledger.saved_remaining', { amount, remaining: formatIDR(remaining) })
-          : t('preorders.payment_saved'),
+          : t('payment_ledger.payment_saved'),
     );
     emit('saved', result);
     emit('close');

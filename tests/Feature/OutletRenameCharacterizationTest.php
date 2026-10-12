@@ -6,7 +6,6 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
@@ -31,7 +30,6 @@ class OutletRenameCharacterizationTest extends TestCase
 
     private User $cashier;
 
-    private Event $event;
 
     private CashierSession $session;
 
@@ -40,8 +38,7 @@ class OutletRenameCharacterizationTest extends TestCase
         parent::setUp();
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->cashier = User::factory()->create(['role' => 'cashier']);
-        $this->event = Event::factory()->create(['status' => 'active']);
-        $this->session = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
+        $this->session = CashierSession::factory()->create(['user_id' => $this->cashier->id, 'status' => 'open']);
         $this->actingAs($this->owner, 'sanctum');
     }
 
@@ -77,13 +74,6 @@ class OutletRenameCharacterizationTest extends TestCase
         $voided = $this->sale([[$va, 5]]);        // dibatalkan: tidak boleh terhitung
         app(OrderService::class)->void($voided, 'salah input', $this->owner);
 
-        $service = app(PreorderService::class);
-        $preorder = $service->create([
-            'event_id' => $this->event->id, 'customer_id' => Customer::factory()->create()->id, 'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $vb->id, 'qty' => 1]],
-        ], $this->owner);
-        $service->recordPayment($preorder, ['method' => 'cash', 'channel_id' => null, 'purpose' => 'down_payment', 'amount' => 10000]);
-
         return [$a, $b, $va, $vb];
     }
 
@@ -91,23 +81,19 @@ class OutletRenameCharacterizationTest extends TestCase
     {
         [$a, $b, $va, $vb] = $this->scenario();
 
-        $recap = collect($this->getJson("/api/v1/reports/outlet-settlements?event_id={$this->event->id}")->assertOk()->json('data'))->keyBy('outlet_id');
-        $profit = collect($this->getJson("/api/v1/reports/outlet-profit?event_id={$this->event->id}")->assertOk()->json('data'))->keyBy('outlet_id');
+        $recap = collect($this->getJson("/api/v1/reports/outlet-settlements")->assertOk()->json('data'))->keyBy('outlet_id');
+        $profit = collect($this->getJson("/api/v1/reports/outlet-profit")->assertOk()->json('data'))->keyBy('outlet_id');
         $stock = collect($this->getJson('/api/v1/reports/stock-by-outlet')->assertOk()->json('data'))->keyBy('outlet_id');
 
-        // Rekap (POS saja — fitur 040): penjualan dibatalkan tidak terhitung; pre-order tidak masuk rekap.
+        // Rekap (POS saja): penjualan dibatalkan tidak terhitung.
         $this->assertSame(['40000.00', 4], [$recap[$a->id]['total_sales'], $recap[$a->id]['total_units']]);
         $this->assertSame(['40000.00', 2], [$recap[$b->id]['total_sales'], $recap[$b->id]['total_units']]);
 
-        // Modal & laba: POS + bagian pre-order yang SUDAH dibayar (10.000 dari 20.000 = 50 %).
-        $this->assertSame(['40000.00', '16000.00', '24000.00', '0.00'], [$profit[$a->id]['total_sales'], $profit[$a->id]['modal'], $profit[$a->id]['gross_profit'], $profit[$a->id]['sales_preorder']]);
-        $this->assertSame(
-            ['50000.00', '22500.00', '27500.00', '40000.00', '10000.00', '18000.00', '4500.00', '22000.00', '5500.00'],
-            [$profit[$b->id]['total_sales'], $profit[$b->id]['modal'], $profit[$b->id]['gross_profit'], $profit[$b->id]['sales_pos'], $profit[$b->id]['sales_preorder'],
-                $profit[$b->id]['modal_pos'], $profit[$b->id]['modal_preorder'], $profit[$b->id]['gross_profit_pos'], $profit[$b->id]['gross_profit_preorder']],
-        );
+        // Modal & laba (046: penjualan selesai saja, tanpa bagian pre-order).
+        $this->assertSame(['40000.00', '16000.00', '24000.00'], [$profit[$a->id]['total_sales'], $profit[$a->id]['modal'], $profit[$a->id]['gross_profit']]);
+        $this->assertSame(['40000.00', '18000.00', '22000.00'], [$profit[$b->id]['total_sales'], $profit[$b->id]['modal'], $profit[$b->id]['gross_profit']]);
 
-        // Stok: A 1000 − 3 − 1 (−5 dikembalikan karena batal); B 1000 − 2; pre-order tidak menyentuh stok.
+        // Stok: A 1000 − 3 − 1 (−5 dikembalikan karena batal); B 1000 − 2.
         // 045 Stage 7: laporan stok membaca saldo PER OUTLET (tempat stok dibukukan), bukan lagi "varian milik penjual";
         // jumlah seluruh outlet tetap sama dengan total tersimpan (996 + 998).
         $this->assertSame(1994, (int) $stock->sum('total_stock'));

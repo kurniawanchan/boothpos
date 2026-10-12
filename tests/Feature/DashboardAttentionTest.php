@@ -146,7 +146,7 @@ class DashboardAttentionTest extends TestCase
     public function test_only_shifts_closed_today_beyond_the_tolerance_count(): void
     {
         $make = fn (float $diff, string $closedAt) => CashierSession::factory()->create([
-            'event_id' => $this->session->event_id, 'user_id' => $this->owner->id, 'status' => 'closed',
+            'user_id' => $this->owner->id, 'status' => 'closed',
             'closed_at' => $closedAt, 'cash_difference' => $diff,
         ]);
         $make(-23500, '2026-10-11 04:00:00');   // di luar toleransi, hari ini
@@ -165,7 +165,7 @@ class DashboardAttentionTest extends TestCase
     {
         Setting::updateOrCreate(['key' => 'cash_difference_tolerance'], ['value' => '1000', 'type' => 'decimal']);
         CashierSession::factory()->create([
-            'event_id' => $this->session->event_id, 'user_id' => $this->owner->id, 'status' => 'closed',
+            'user_id' => $this->owner->id, 'status' => 'closed',
             'closed_at' => '2026-10-11 04:00:00', 'cash_difference' => 3000,
         ]);
 

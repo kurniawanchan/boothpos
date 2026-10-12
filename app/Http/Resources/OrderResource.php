@@ -12,7 +12,6 @@ class OrderResource extends JsonResource
         return [
             'id' => $this->id,
             'order_number' => $this->order_number,
-            'event_id' => $this->event_id,
             'session_id' => $this->session_id,
             'customer_id' => $this->customer_id,
             'subtotal' => number_format((float) $this->subtotal, 2, '.', ''),

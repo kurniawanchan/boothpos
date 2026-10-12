@@ -12,12 +12,11 @@ import UserMenu from './UserMenu.vue';
  *
  * Kendali yang datanya belum ada TIDAK dirender (bukan dinonaktifkan): `search` kosong → tanpa pencarian,
  * `attention` null → tanpa lonceng, ≤ 1 outlet → tanpa pemilih. Saat pemilih outlet tidak tampil, nama toko
- * dan event aktif tetap terlihat sebagai label (perilaku topbar sebelumnya).
+ * tetap terlihat sebagai label (perilaku topbar sebelumnya; 046: tanpa event).
  * SystemModeBadge sengaja berdiri di topbar untuk SEMUA peran: mode DEMO/LIVE tak boleh tersembunyi.
  */
 defineProps({
   storeName: { type: String, default: '' },
-  activeEvent: { type: Object, default: null },
   outlets: { type: Array, default: () => [] },
   outletId: { type: [Number, String, null], default: null },
   search: { type: Function, default: null },
@@ -34,10 +33,8 @@ defineEmits(['logout', 'update:outletId']);
 
     <GlobalSearch :search="search" />
 
-    <p v-if="outlets.length <= 1 && (storeName || activeEvent)" class="hidden min-w-0 max-w-[280px] truncate text-[12px] font-semibold text-muted lg:block" data-testid="store-label">
-      <span v-if="storeName">{{ storeName }}</span>
-      <span v-if="storeName && activeEvent"> · </span>
-      <span v-if="activeEvent">{{ activeEvent.name }}</span>
+    <p v-if="outlets.length <= 1 && storeName" class="hidden min-w-0 max-w-[280px] truncate text-[12px] font-semibold text-muted lg:block" data-testid="store-label">
+      <span>{{ storeName }}</span>
     </p>
 
     <OutletSelector :outlets="outlets" :model-value="outletId" @update:model-value="$emit('update:outletId', $event)" />

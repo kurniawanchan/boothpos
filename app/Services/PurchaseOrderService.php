@@ -308,7 +308,7 @@ class PurchaseOrderService
         }
 
         return DB::transaction(function () use ($po, $input, $user) {
-            $this->paymentRecorder->record($input, null, null, $po->id);
+            $this->paymentRecorder->record($input, null, $po->id);
 
             $paidAmount = (float) $po->paidAmount();
 

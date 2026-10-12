@@ -49,12 +49,12 @@ describe('PaymentHistoryList (028 US3)', () => {
     expect(screen.queryAllByTestId('payment-entry')).toHaveLength(0);
   });
 
-  it('offers View proof only for entries with a proof, and Payment invoice for every entry', () => {
+  it('offers View proof only for entries with a proof, and no per-payment invoice', () => {
     render(PaymentHistoryList, { props: { payments: PAYMENTS, canDelete: false } });
 
     expect(within(rows()[0]).queryByRole('button', { name: /lihat bukti/i })).not.toBeInTheDocument();
     expect(within(rows()[1]).getByRole('button', { name: /lihat bukti/i })).toBeInTheDocument();
-    expect(within(rows()[0]).getByRole('button', { name: /invoice pembayaran/i })).toBeInTheDocument();
+    expect(within(rows()[0]).queryByRole('button', { name: /invoice pembayaran/i })).not.toBeInTheDocument(); // 046: tak ada invoice per pembayaran
   });
 
   it('never offers an edit action, and offers Delete only when canDelete is true', () => {
@@ -68,16 +68,14 @@ describe('PaymentHistoryList (028 US3)', () => {
     expect(screen.getAllByTestId('delete-payment')).toHaveLength(3);
   });
 
-  it('emits view-proof, print and delete with the payment entry', async () => {
+  it('emits view-proof and delete with the payment entry', async () => {
     const user = userEvent.setup();
     const { emitted } = render(PaymentHistoryList, { props: { payments: PAYMENTS, canDelete: true } });
 
     await user.click(within(rows()[1]).getByRole('button', { name: /lihat bukti/i }));
-    await user.click(within(rows()[0]).getByRole('button', { name: /invoice pembayaran/i }));
     await user.click(within(rows()[0]).getByTestId('delete-payment'));
 
     expect(emitted()['view-proof'][0]).toEqual([PAYMENTS[1]]);
-    expect(emitted().print[0]).toEqual([PAYMENTS[0]]);
     expect(emitted().delete[0]).toEqual([PAYMENTS[0]]);
   });
 });

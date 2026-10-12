@@ -13,9 +13,7 @@ use Illuminate\Support\Collection;
  * Daftar transaksi untuk halaman Sales DAN ekspornya — satu sumber, supaya berkas
  * ekspor tidak pernah berbeda dari yang tampil di layar.
  *
- * Satu baris = satu order POS (completed, atau juga voided bila diminta). Pre-order
- * SENGAJA tidak ada di sini: halaman Sales hanya menampilkan transaksi yang dibuat dari
- * POS; pre-order dikelola di layar Pre-orders.
+ * Satu baris = satu order POS (completed, atau juga voided bila diminta).
  *
  * Halaman Sales terbuka untuk semua peran (kasir), jadi modal/margin HANYA ikut
  * bila pengguna boleh melihat laporan (canAccessMenu('reports'), sama dengan
@@ -24,7 +22,7 @@ use Illuminate\Support\Collection;
 class SalesTransactionsService
 {
     /**
-     * @param  array{event_id?:mixed,date_from?:mixed,date_to?:mixed,include_voided?:mixed,keys?:?array}  $filters
+     * @param  array{date_from?:mixed,date_to?:mixed,include_voided?:mixed,keys?:?array}  $filters
      * @param  bool  $detail  true = tambahkan `items_text` (SEMUA baris item) — dipakai ekspor;
      *                         layar hanya butuh pratinjau 2 baris (`items_preview`).
      * @return array{transactions: Collection, sessions: Collection}
@@ -44,7 +42,6 @@ class SalesTransactionsService
             ->with(['cashier', 'customer', 'items.homeOutlet', 'payments', 'session.user', 'outlet:id,code,name'])
             ->withCount('items')
             ->whereIn('status', filter_var($filters['include_voided'] ?? false, FILTER_VALIDATE_BOOLEAN) ? ['completed', 'voided'] : ['completed'])
-            ->when(! empty($filters['event_id']), fn ($q) => $q->where('event_id', (int) $filters['event_id']))
             ->when(! empty($filters['date_from']), fn ($q) => $q->where('business_date', '>=', \Illuminate\Support\Carbon::parse($filters['date_from'])->toDateString()))
             ->when(! empty($filters['date_to']), fn ($q) => $q->where('business_date', '<=', \Illuminate\Support\Carbon::parse($filters['date_to'])->toDateString()))
             ->when($ids !== null, fn ($q) => $q->whereIn('id', $ids))

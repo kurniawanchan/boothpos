@@ -152,17 +152,4 @@ class StockPerOutletTest extends TestCase
         $this->assertSame([$this->b->code], collect($narrowed)->pluck('outlet_code')->unique()->values()->all());
     }
 
-    public function test_a_preorder_arrival_and_handover_use_the_preorders_outlet(): void
-    {
-        $this->actingAs($this->owner, 'sanctum');
-        $customer = Customer::factory()->create();
-        $created = $this->withHeader('X-Outlet-Id', (string) $this->b->id)->postJson('/api/v1/preorders', [
-            'customer_id' => $customer->id, 'fulfillment' => 'pickup', 'items' => [['variant_id' => $this->variant->id, 'qty' => 2]],
-        ])->assertCreated()->json();
-
-        $this->patchJson("/api/v1/preorders/{$created['id']}/status", ['status' => 'dp_paid'])->assertOk();
-        $this->patchJson("/api/v1/preorders/{$created['id']}/status", ['status' => 'arrived'])->assertOk();
-        $this->assertSame(4, $this->balance($this->b));
-        $this->assertSame(5, $this->balance($this->a));
-    }
 }

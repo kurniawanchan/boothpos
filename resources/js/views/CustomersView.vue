@@ -30,7 +30,7 @@ const toast = useToastStore();
 const { t } = useI18n();
 
 // Customer delete is owner/admin only server-side (CustomerPolicy::delete)
-// — mirrors PreordersView's/EventsView's isOwnerOrAdmin computed since
+// — an isOwnerOrAdmin computed since
 // this view has no canAccessMenu gate today (create/edit are open to all
 // roles that can reach the screen).
 const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));

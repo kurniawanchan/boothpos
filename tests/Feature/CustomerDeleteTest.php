@@ -4,9 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\CashierSession;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Order;
-use App\Models\Preorder;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -47,12 +45,10 @@ class CustomerDeleteTest extends TestCase
     {
         $this->actingAsRole('owner');
         $customer = Customer::factory()->create();
-        $event = Event::factory()->create();
-        $session = CashierSession::factory()->create(['event_id' => $event->id]);
+        $session = CashierSession::factory()->create();
 
         Order::create([
             'order_number' => 'ORD-CUST-0001',
-            'event_id' => $event->id,
             'session_id' => $session->id,
             'customer_id' => $customer->id,
             'user_id' => $session->user_id,
@@ -68,46 +64,6 @@ class CustomerDeleteTest extends TestCase
         $this->assertDatabaseHas('customers', ['id' => $customer->id, 'deleted_at' => null]);
         // Guard PII: pesan konflik tidak boleh membocorkan phone/email.
         $response->assertJsonMissingPath('phone')->assertJsonMissingPath('email');
-    }
-
-    public function test_delete_blocked_when_customer_has_preorder(): void
-    {
-        $this->actingAsRole('owner');
-        $customer = Customer::factory()->create();
-        $user = User::factory()->create(['role' => 'cashier']);
-
-        Preorder::create([
-            'preorder_number' => 'PRE-CUST-0001',
-            'customer_id' => $customer->id,
-            'user_id' => $user->id,
-            'status' => 'ordered',
-            'subtotal' => 10000,
-            'total_amount' => 10000,
-        ]);
-
-        $this->deleteJson("/api/v1/customers/{$customer->id}")->assertStatus(409);
-        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'deleted_at' => null]);
-    }
-
-    public function test_delete_blocked_when_customer_has_cancelled_preorder(): void
-    {
-        // Edge case any-status: status non-final ('cancelled') tetap
-        // memblokir hapus — guard tidak memfilter status sama sekali.
-        $this->actingAsRole('owner');
-        $customer = Customer::factory()->create();
-        $user = User::factory()->create(['role' => 'cashier']);
-
-        Preorder::create([
-            'preorder_number' => 'PRE-CUST-0002',
-            'customer_id' => $customer->id,
-            'user_id' => $user->id,
-            'status' => 'cancelled',
-            'subtotal' => 10000,
-            'total_amount' => 10000,
-        ]);
-
-        $this->deleteJson("/api/v1/customers/{$customer->id}")->assertStatus(409);
-        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'deleted_at' => null]);
     }
 
     public function test_cashier_cannot_delete_customer(): void

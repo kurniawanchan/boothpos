@@ -6,7 +6,6 @@ use App\Models\CashierSession;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentProof;
-use App\Models\Preorder;
 use App\Models\User;
 use App\Support\PaymentSummary;
 use Illuminate\Support\Facades\DB;
@@ -15,11 +14,10 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * 028-partial-split-payment (research Decision 1) — SATU tempat yang mencatat
- * dan menghapus pembayaran untuk pre-order DAN penjualan POS. Penulis baris
- * `payments` tetap hanya PaymentRecorder; service ini yang menjaga semua aturan
- * di sekelilingnya: baris target dikunci, status tertutup ditolak, cache
- * paid_amount dihitung ulang dari entri, transisi status pre-order dijalankan,
- * dan jejak audit ditulis DI DALAM transaksi yang sama.
+ * dan menghapus pembayaran untuk penjualan POS (046: pre-order sudah dihapus dari produk, jadi targetnya
+ * selalu Order). Penulis baris `payments` tetap hanya PaymentRecorder; service ini yang menjaga semua
+ * aturan di sekelilingnya: baris target dikunci, status tertutup ditolak, cache paid_amount dihitung ulang
+ * dari entri, dan jejak audit ditulis DI DALAM transaksi yang sama.
  */
 class PaymentService
 {
@@ -29,7 +27,7 @@ class PaymentService
     ) {}
 
     /**
-     * Mencatat satu pembayaran dan mengembalikan target (pre-order/order) yang
+     * Mencatat satu pembayaran dan mengembalikan order yang
      * sudah dimuat ulang lengkap dengan relasi yang dibaca presenter-nya.
      *
      * Urutan pemeriksaan (semuanya SETELAH baris target dikunci, jadi dua
@@ -43,7 +41,7 @@ class PaymentService
      *
      * @param  bool|null  $replayed  diisi true bila ini replay (tak ada baris baru)
      */
-    public function addPayment(Preorder|Order $target, array $input, ?User $user = null, ?bool &$replayed = null): Preorder|Order
+    public function addPayment(Order $target, array $input, ?User $user = null, ?bool &$replayed = null): Order
     {
         $replayed = false;
 
@@ -56,9 +54,7 @@ class PaymentService
                 $existing = Payment::withoutGlobalScopes()->where('client_ref', $input['client_ref'])->first();
 
                 if ($existing) {
-                    $sameTarget = $locked instanceof Order
-                        ? (int) $existing->order_id === (int) $locked->id
-                        : (int) $existing->preorder_id === (int) $locked->id;
+                    $sameTarget = (int) $existing->order_id === (int) $locked->id;
 
                     if (! $sameTarget) {
                         throw ValidationException::withMessages(['client_ref' => __('orders_payments.payment_client_ref_conflict')]);
@@ -89,8 +85,7 @@ class PaymentService
                     'recorded_by' => $user?->id,
                     'session_id' => $this->receivingSessionId($locked, $input['method'], $user),
                 ]),
-                $locked instanceof Order ? $locked->id : null,
-                $locked instanceof Preorder ? $locked->id : null,
+                $locked->id,
             );
 
             $summary = PaymentSummary::for($locked->unsetRelation('payments')->load('payments'));
@@ -99,7 +94,7 @@ class PaymentService
             $this->activityLogger->log(
                 userId: $user?->id,
                 action: 'payment_recorded',
-                entityType: $locked instanceof Order ? 'Order' : 'Preorder',
+                entityType: 'Order',
                 entityId: $locked->id,
                 description: sprintf(
                     'Mencatat pembayaran %s Rp %s pada %s',
@@ -125,11 +120,9 @@ class PaymentService
      * sengaja dibatasi (owner/admin, dijaga controller) dan SELALU diaudit.
      * Entri pembayaran tidak punya jalur ubah; ini satu-satunya cara
      * mengeluarkannya. paid_amount dan status dihitung ULANG dari entri yang
-     * tersisa; status pre-order mundur sejauh yang ditimbulkan pembayaran itu
-     * (settled yang tak lagi lunas → arrived; dp_paid tanpa sisa pembayaran →
-     * ordered; arrived tak pernah mundur ke ordered karena stok sudah masuk).
+     * tersisa.
      */
-    public function deletePayment(Preorder|Order $target, Payment $payment, User $user): Preorder|Order
+    public function deletePayment(Order $target, Payment $payment, User $user): Order
     {
         $filesToDelete = [];
 
@@ -150,7 +143,7 @@ class PaymentService
             }
 
             $before = PaymentSummary::for($locked->load('payments'));
-            $oldStatus = $locked instanceof Preorder ? $locked->status : $before['status'];
+            $oldStatus = $before['status'];
 
             $filesToDelete = $entry->proofs()->pluck('file_path')->all();
             $entry->proofs()->delete(); // payment_proofs.payment_id restrictOnDelete → baris bukti dulu
@@ -159,23 +152,13 @@ class PaymentService
             $summary = PaymentSummary::for($locked->unsetRelation('payments')->load('payments'));
             $locked->update(['paid_amount' => $this->cachedPaid($locked, $summary)]);
 
-            $newStatus = $oldStatus;
-            if ($locked instanceof Preorder) {
-                if ($locked->status === 'settled' && $summary['status'] !== PaymentSummary::FULLY_PAID) {
-                    $newStatus = 'arrived';
-                } elseif ($locked->status === 'dp_paid' && $summary['payment_count'] === 0) {
-                    $newStatus = 'ordered';
-                }
-                $locked->update(['status' => $newStatus]);
-            } else {
-                $newStatus = $summary['status'];
-            }
+            $newStatus = $summary['status'];
 
             // Di dalam transaksi yang sama: menghapus catatan uang adalah tindakan sensitif.
             $this->activityLogger->log(
                 userId: $user->id,
                 action: 'payment_deleted',
-                entityType: $locked instanceof Order ? 'Order' : 'Preorder',
+                entityType: 'Order',
                 entityId: $locked->id,
                 description: sprintf(
                     'Menghapus pembayaran %s Rp %s dari %s',
@@ -221,9 +204,7 @@ class PaymentService
      * Urutan pemeriksaan (semuanya SETELAH baris target dikunci, seperti
      * addPayment/deletePayment):
      *  1. pembayaran milik transaksi ini (404 bila bukan);
-     *  2. transaksi tidak batal: penjualan `voided` / pre-order `cancelled` → 409.
-     *     Pre-order `handed_over` SENGAJA boleh — konfirmasi tak menggerakkan uang,
-     *     dan bukti susulan justru lazim datang untuk pesanan yang sudah selesai;
+     *  2. transaksi tidak batal: penjualan `voided` → 409;
      *  3. bukan tunai (422);   4. pelaku: owner/admin atau pencatat (403);
      *  5. minimal satu dari bukti/referensi/catatan dikirim (422);
      *  6. token bukti valid & belum terpakai (422);
@@ -232,7 +213,7 @@ class PaymentService
      * Mengganti bukti = bukti lama DITANDAI `superseded_at`, TIDAK dihapus (file dan
      * baris tetap ada untuk audit; activity log menunjuk ke keduanya).
      */
-    public function updateConfirmation(Preorder|Order $target, Payment $payment, array $input, User $user): Preorder|Order
+    public function updateConfirmation(Order $target, Payment $payment, array $input, User $user): Order
     {
         return DB::transaction(function () use ($target, $payment, $input, $user) {
             $locked = $this->lock($target);
@@ -240,8 +221,7 @@ class PaymentService
             // Pembayaran milik transaksi lain → 404, bukan diubah diam-diam.
             $entry = $locked->payments()->with('proofs')->whereKey($payment->id)->firstOrFail();
 
-            $closed = $locked instanceof Preorder ? $locked->status === 'cancelled' : $locked->status === 'voided';
-            if ($closed) {
+            if ($locked->status === 'voided') {
                 throw ValidationException::withMessages(['status' => __('orders_payments.payment_confirmation_target_closed')])->status(409);
             }
             if ($entry->method === 'cash') {
@@ -295,7 +275,7 @@ class PaymentService
             $this->activityLogger->log(
                 userId: $user->id,
                 action: 'payment_confirmation_updated',
-                entityType: $locked instanceof Order ? 'Order' : 'Preorder',
+                entityType: 'Order',
                 entityId: $locked->id,
                 description: sprintf(
                     'Mengubah konfirmasi pembayaran %s Rp %s pada %s%s',
@@ -330,12 +310,11 @@ class PaymentService
      * Urutan pemeriksaan (semuanya SETELAH baris target dikunci, seperti mutasi buku besar lain,
      * sehingga dua klik/dua orang serentak berlaku berurutan: yang kedua mendapat 409):
      *  1. pembayaran milik transaksi ini (404 bila bukan);
-     *  2. transaksi tidak batal: penjualan `voided` / pre-order `cancelled` → 409 (pre-order
-     *     `handed_over` boleh — tak ada uang yang bergerak);
+     *  2. transaksi tidak batal: penjualan `voided` → 409;
      *  3. bukan tunai (422);   4. masih `pending` (409: sudah terverifikasi / ditolak);
      *  5. pelaku boleh (403): owner/admin, atau siapa pun KECUALI pencatat pembayaran itu.
      */
-    public function markVerified(Preorder|Order $target, Payment $payment, User $user): Preorder|Order
+    public function markVerified(Order $target, Payment $payment, User $user): Order
     {
         return DB::transaction(function () use ($target, $payment, $user) {
             $locked = $this->lock($target);
@@ -343,8 +322,7 @@ class PaymentService
             // Pembayaran milik transaksi lain → 404, bukan diverifikasi diam-diam.
             $entry = $locked->payments()->whereKey($payment->id)->firstOrFail();
 
-            $closed = $locked instanceof Preorder ? $locked->status === 'cancelled' : $locked->status === 'voided';
-            if ($closed) {
+            if ($locked->status === 'voided') {
                 throw ValidationException::withMessages(['status' => __('orders_payments.payment_verify_target_closed')])->status(409);
             }
             if ($entry->method === 'cash') {
@@ -368,7 +346,7 @@ class PaymentService
             $this->activityLogger->log(
                 userId: $user->id,
                 action: 'payment_verified',
-                entityType: $locked instanceof Order ? 'Order' : 'Preorder',
+                entityType: 'Order',
                 entityId: $locked->id,
                 description: sprintf(
                     'Memverifikasi pembayaran %s Rp %s pada %s',
@@ -440,17 +418,11 @@ class PaymentService
     }
 
     /**
-     * Shift tempat uang ini DITERIMA (research Decision 7). Hanya untuk penjualan
-     * POS: tunai wajib punya shift terbuka milik pencatat (409 bila tidak ada),
-     * non-tunai mencatatnya bila ada. Pembayaran pre-order tak punya shift (null),
-     * persis seperti sebelumnya.
+     * Shift tempat uang ini DITERIMA (research Decision 7): tunai wajib punya shift terbuka milik pencatat
+     * (409 bila tidak ada), non-tunai mencatatnya bila ada.
      */
-    private function receivingSessionId(Preorder|Order $target, string $method, ?User $user): ?int
+    private function receivingSessionId(Order $target, string $method, ?User $user): ?int
     {
-        if (! $target instanceof Order) {
-            return null;
-        }
-
         $session = $user
             ? CashierSession::where('user_id', $user->id)->where('status', 'open')->first()
             : null;
@@ -463,64 +435,42 @@ class PaymentService
     }
 
     /**
-     * Nilai cache `paid_amount`: untuk pre-order = total terbayar; untuk ORDER
-     * cache-nya menyimpan uang yang DISERAHKAN (jumlah entri), jadi kembalian
-     * dikembalikan — pembaca lama (`paid_amount` ≥ `total_amount` untuk order
-     * lunas dengan kembalian) tetap benar.
+     * Nilai cache `paid_amount`: cache ORDER menyimpan uang yang DISERAHKAN (jumlah entri), jadi kembalian
+     * dikembalikan — pembaca lama (`paid_amount` ≥ `total_amount` untuk order lunas dengan kembalian)
+     * tetap benar.
      */
-    private function cachedPaid(Preorder|Order $target, array $summary): float
+    private function cachedPaid(Order $target, array $summary): float
     {
-        return (float) $summary['total_paid'] + ($target instanceof Order ? (float) $target->change_amount : 0.0);
+        return (float) $summary['total_paid'] + (float) $target->change_amount;
     }
 
-    private function lock(Preorder|Order $target): Preorder|Order
+    private function lock(Order $target): Order
     {
         // Query ber-scope DEMO/LIVE: id milik mode lain tidak ditemukan.
         return $target::lockForUpdate()->findOrFail($target->id);
     }
 
     /** 409 — status tertutup membuat pembayaran tak bisa ditambah/dihapus lagi. */
-    private function assertOpen(Preorder|Order $target): void
+    private function assertOpen(Order $target): void
     {
-        $closed = $target instanceof Preorder
-            ? in_array($target->status, ['handed_over', 'cancelled'], true)
-            : $target->status === 'voided';
-
-        if ($closed) {
+        if ($target->status === 'voided') {
             throw ValidationException::withMessages(['status' => __('orders_payments.payment_target_closed')])->status(409);
         }
     }
 
-    /**
-     * Cache paid_amount ditulis ulang dari rumus yang sama (bukan ditambah),
-     * dan lifecycle pre-order dijalankan: pembayaran pertama memindahkan
-     * ordered → dp_paid; pembayaran yang melunasi pre-order yang sudah
-     * "arrived" memindahkannya ke settled.
-     */
-    private function syncCache(Preorder|Order $target, array $summary): void
+    /** Cache paid_amount ditulis ulang dari rumus yang sama (bukan ditambah). */
+    private function syncCache(Order $target, array $summary): void
     {
         $target->update(['paid_amount' => $this->cachedPaid($target, $summary)]);
-
-        if ($target instanceof Preorder) {
-            if ($target->status === 'ordered') {
-                $target->update(['status' => 'dp_paid']);
-            } elseif ($target->status === 'arrived' && $summary['status'] === PaymentSummary::FULLY_PAID) {
-                $target->update(['status' => 'settled']);
-            }
-        }
     }
 
-    private function reload(Preorder|Order $target): Preorder|Order
+    private function reload(Order $target): Order
     {
-        return $target->fresh(
-            $target instanceof Preorder
-                ? PreorderService::PAYLOAD_RELATIONS
-                : ['items', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer'],
-        );
+        return $target->fresh(['items', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer']);
     }
 
-    private function numberOf(Preorder|Order $target): string
+    private function numberOf(Order $target): string
     {
-        return $target instanceof Preorder ? $target->preorder_number : $target->order_number;
+        return $target->order_number;
     }
 }

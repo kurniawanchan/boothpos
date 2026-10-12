@@ -3,12 +3,10 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import SalesView from '../../resources/js/views/SalesView.vue';
-import { listEvents } from '../../resources/js/api/events';
 import { salesReport } from '../../resources/js/api/reports';
 import { getProduct } from '../../resources/js/api/products';
 import { getOrder, getReceipt } from '../../resources/js/api/orders';
 
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), exportReport: vi.fn(), exportSalesTransactions: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ getProduct: vi.fn() }));
 vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn(), getReceipt: vi.fn() }));
@@ -36,11 +34,13 @@ const SALES_RESPONSE = {
   ],
 };
 
-function renderSales() {
+async function renderSales() {
   const pinia = createPinia();
   setActivePinia(pinia);
   // SalesView menyimpan filter di URL (vue-router); tiap render memakai router memori baru.
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
+  // 046: tanpa rentang ini filter tanggal bawaan = hari ini dan menyembunyikan data uji bertanggal tetap.
+  await router.push('/?from=2000-01-01&to=2099-12-31');
   return render(SalesView, { global: { plugins: [pinia, router] } });
 }
 
@@ -50,7 +50,6 @@ function renderSales() {
 describe('SalesView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     salesReport.mockResolvedValue(SALES_RESPONSE);
   });
 
@@ -58,14 +57,14 @@ describe('SalesView', () => {
   // table and its group_by selector are gone; the transaction list is the
   // page's only/primary table now.
   it('renders no product-summary table, only the transaction list', async () => {
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     expect(screen.queryByText('Stiker Holografik')).not.toBeInTheDocument();
     expect(screen.queryByText('Per produk')).not.toBeInTheDocument();
   });
 
   it('renders all real transactions', async () => {
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     expect(screen.getByText(/daftar transaksi \(3\)/i)).toBeInTheDocument();
     expect(screen.getByText('ORD-001')).toBeInTheDocument();
@@ -88,7 +87,7 @@ describe('SalesView', () => {
     });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     // Baris ORD-001 ditunjuk eksplisit — urutan tabel kini "terbaru dulu" (sama seperti dari server).
     await user.click(within(screen.getByText('ORD-001').closest('tr')).getByRole('button', { name: 'Lihat struk' }));
@@ -108,7 +107,7 @@ describe('SalesView', () => {
     });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     await user.click(within(screen.getByText('ORD-001').closest('tr')).getByRole('button', { name: 'Lihat detail' }));
     await waitFor(() => expect(getOrder).toHaveBeenCalledWith(101));
@@ -124,7 +123,7 @@ describe('SalesView', () => {
     });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     await user.click(screen.getByRole('button', { name: 'ORD-001' }));
     await waitFor(() => expect(getOrder).toHaveBeenCalledWith(101));
@@ -151,7 +150,7 @@ describe('SalesView', () => {
     });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     await user.click(screen.getByRole('button', { name: 'ORD-001' }));
     const productLink = await screen.findByRole('button', { name: 'Stiker Holografik' });
@@ -165,14 +164,13 @@ describe('SalesView', () => {
 describe('SalesView — transaction search (F10.6)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     salesReport.mockResolvedValue(SALES_RESPONSE);
   });
 
   it('filters by order number, case-insensitively', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     const input = screen.getByLabelText('Cari transaksi');
     await user.type(input, 'ord-002');
@@ -184,7 +182,7 @@ describe('SalesView — transaction search (F10.6)', () => {
   it('filters by customer name and gracefully skips walk-in (null customer_name) rows instead of erroring', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     const input = screen.getByLabelText('Cari transaksi');
     await user.type(input, 'budi');
@@ -196,7 +194,7 @@ describe('SalesView — transaction search (F10.6)', () => {
   it('filters by cashier name', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     const input = screen.getByLabelText('Cari transaksi');
     await user.type(input, 'kasir b');
@@ -207,7 +205,7 @@ describe('SalesView — transaction search (F10.6)', () => {
   it('filters by outlet name, matching a transaction that has multiple outlets', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     const input = screen.getByLabelText('Cari transaksi');
     await user.type(input, 'hoshizora');
@@ -220,7 +218,7 @@ describe('SalesView — transaction search (F10.6)', () => {
     getOrder.mockResolvedValue({ id: 101, order_number: 'ORD-001', items: [] });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     await user.click(screen.getByRole('button', { name: 'ORD-001' }));
     await waitFor(() => expect(getOrder).toHaveBeenCalledWith(101));
@@ -229,7 +227,7 @@ describe('SalesView — transaction search (F10.6)', () => {
   it('shows a customer detail popover when clicking the customer name', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     await user.click(screen.getByRole('button', { name: 'Budi Santoso' }));
     expect(await screen.findByText('Detail pelanggan')).toBeInTheDocument();
@@ -238,7 +236,7 @@ describe('SalesView — transaction search (F10.6)', () => {
   it('fills the search box when clicking an outlet name', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     await user.click(screen.getAllByRole('button', { name: 'Nekoyama Studio' })[0]);
     expect(screen.getByLabelText('Cari transaksi')).toHaveValue('Nekoyama Studio');
@@ -247,7 +245,7 @@ describe('SalesView — transaction search (F10.6)', () => {
   it('shows a "no match" empty message and does not throw for a null-customer row when searching', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
-    renderSales();
+    await renderSales();
     await screen.findByText('ORD-001');
     const input = screen.getByLabelText('Cari transaksi');
     await user.type(input, 'nomatch-xyz');
@@ -277,8 +275,11 @@ const rowOrder = () => screen.getAllByRole('button', { name: /^ORD-2\d\d$/ }).ma
 async function setupFilters() {
   const { default: userEvent } = await import('@testing-library/user-event');
   const user = userEvent.setup();
-  renderSales();
+  await renderSales();
   await screen.findByText('ORD-201');
+  // 046: halaman dimulai dengan rentang tanggal; uji filter ini mulai dari "semua tanggal" seperti sebelumnya.
+  await user.clear(screen.getByLabelText('Dari tanggal'));
+  await user.clear(screen.getByLabelText('Sampai tanggal'));
 
   return user;
 }
@@ -291,7 +292,6 @@ async function pickOption(user, triggerText, optionName) {
 describe('SalesView — filters', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     salesReport.mockResolvedValue(FILTER_RESPONSE);
   });
 
@@ -416,7 +416,6 @@ describe('SalesView — filters', () => {
 describe('SalesView — column sort order', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     salesReport.mockResolvedValue(FILTER_RESPONSE);
   });
 

@@ -2,7 +2,6 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { formatIDR } from '../../utils/money';
-import EmptyState from '../../components/ui/EmptyState.vue';
 import DataTable from '../../components/ui/DataTable.vue';
 import OutletTransactionsModal from '../../components/report/OutletTransactionsModal.vue';
 import { sumRows } from './sumRows';
@@ -12,7 +11,8 @@ import { sumRows } from './sumRows';
 const props = defineProps({
   rows: { type: Array, required: true },
   loading: { type: Boolean, default: false },
-  eventId: { type: [String, Number], default: '' },
+  dateFrom: { type: String, default: '' },
+  dateTo: { type: String, default: '' },
 });
 const { t } = useI18n();
 
@@ -35,9 +35,7 @@ function openTransactions(row) {
 </script>
 
 <template>
-  <EmptyState v-if="!eventId" icon="ph-calendar-dots" :message="t('reports.pick_event_for_settlement')" />
   <DataTable
-    v-else
     :columns="columns"
     :rows="rows"
     :loading="loading"
@@ -73,7 +71,8 @@ function openTransactions(row) {
     :open="showTransactions"
     :outlet-id="target?.outlet_id"
     :outlet-name="target?.outlet_name"
-    :event-id="eventId"
+    :date-from="dateFrom"
+    :date-to="dateTo"
     @close="showTransactions = false"
   />
 </template>

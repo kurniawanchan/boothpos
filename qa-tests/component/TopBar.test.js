@@ -92,10 +92,11 @@ describe('UserMenu', () => {
 });
 
 describe('TopBar', () => {
-  it('menampilkan nama toko dan event aktif saat tidak ada pemilih outlet', async () => {
-    await setup(TopBar, { props: { storeName: 'Sakana Fridge', activeEvent: { id: 1, name: 'Comic Frontier 2026' } } });
+  it('menampilkan nama toko saja (tanpa event) saat tidak ada pemilih outlet', async () => {
+    await setup(TopBar, { props: { storeName: 'Sakana Fridge' } });
     const label = screen.getByTestId('store-label');
-    expect(label).toHaveTextContent('Sakana Fridge · Comic Frontier 2026');
+    expect(label).toHaveTextContent('Sakana Fridge');
+    expect(label).not.toHaveTextContent('·');
   });
 
   it('tidak merender kendali yang datanya belum ada: pencarian, lonceng, pemilih outlet', async () => {

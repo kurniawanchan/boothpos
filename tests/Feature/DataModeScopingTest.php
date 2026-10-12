@@ -27,7 +27,6 @@ class DataModeScopingTest extends TestCase
 
         return Order::create([
             'order_number' => $orderNumber,
-            'event_id' => $session->event_id,
             'session_id' => $session->id,
             'user_id' => $session->user_id,
         ]);

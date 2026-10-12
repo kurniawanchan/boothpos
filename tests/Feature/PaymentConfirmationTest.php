@@ -6,7 +6,6 @@ use App\Models\ActivityLog;
 use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentChannel;
@@ -70,7 +69,7 @@ class PaymentConfirmationTest extends TestCase
     {
         $cashier ??= $this->recorder;
         $session = CashierSession::factory()->create([
-            'event_id' => Event::factory()->create(['status' => 'active'])->id, 'user_id' => $cashier->id, 'status' => 'open',
+            'user_id' => $cashier->id, 'status' => 'open',
         ]);
         $this->as($cashier);
 
@@ -393,139 +392,5 @@ class PaymentConfirmationTest extends TestCase
 
         $this->assertFalse($entry['can_edit_confirmation']);
         $this->assertFalse($entry['has_proof']);
-    }
-
-    // =================================================================================
-    // US3 — jalur pre-order: PATCH /preorders/{preorder}/payments/{payment}/confirmation
-    // =================================================================================
-
-    /** Pre-order 200.000 dengan SATU pembayaran QRIS 50.000 tanpa bukti, dicatat oleh $cashier. */
-    private function preorder(?User $cashier = null, string $method = 'qr_ewallet'): array
-    {
-        $cashier ??= $this->recorder;
-        $preVariant = Product::factory()->create([
-            'home_outlet_id' => Outlet::factory()->create()->id,
-            'category_id' => Category::factory()->create()->id,
-            'is_preorder' => true,
-        ])->variants()->create(['sku' => 'PRE'.str_pad((string) (++$this->skuCounter), 5, '0', STR_PAD_LEFT), 'sell_price' => 100000, 'cost_price' => 50000, 'current_stock' => 0]);
-
-        $this->as($cashier);
-        $preorder = $this->postJson('/api/v1/preorders', [
-            'customer_id' => \App\Models\Customer::factory()->create()->id, 'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $preVariant->id, 'qty' => 2]],
-        ])->assertCreated()->json();
-
-        $payload = ['method' => $method, 'amount' => 50000, 'purpose' => 'down_payment'];
-        if ($method !== 'cash') {
-            $payload['channel_id'] = $this->channel->id;
-        }
-        $paid = $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", $payload)->assertCreated()->json();
-
-        return ['preorder' => $paid, 'payment_id' => $paid['payments'][0]['id']];
-    }
-
-    private function confirmPreorder(int $preorderId, int $paymentId, array $body)
-    {
-        return $this->patchJson("/api/v1/preorders/{$preorderId}/payments/{$paymentId}/confirmation", $body);
-    }
-
-    public function test_preorder_owner_admin_and_the_recording_cashier_may_add_a_confirmation_but_another_cashier_may_not(): void
-    {
-        foreach ([$this->userWithRole('owner'), $this->userWithRole('admin'), $this->recorder] as $user) {
-            $p = $this->preorder();
-            $this->as($user);
-            $this->confirmPreorder($p['preorder']['id'], $p['payment_id'], ['reference' => 'TRX-'.$user->id])
-                ->assertOk()->assertJsonPath('payments.0.reference', 'TRX-'.$user->id);
-        }
-
-        $p = $this->preorder();
-        $this->as($this->userWithRole('cashier'));
-        $this->confirmPreorder($p['preorder']['id'], $p['payment_id'], ['reference' => 'X'])->assertForbidden();
-    }
-
-    public function test_preorder_proof_reference_and_notes_can_be_added_and_replaced_with_the_old_proof_kept(): void
-    {
-        $p = $this->preorder();
-        $response = $this->confirmPreorder($p['preorder']['id'], $p['payment_id'], ['proof_token' => $this->uploadProof(), 'reference' => 'TRX-1', 'notes' => 'DP via QRIS'])->assertOk();
-
-        $this->assertTrue($response->json('payments.0.has_proof'));
-        $this->assertSame('DP via QRIS', $response->json('payments.0.notes'));
-        $old = PaymentProof::where('payment_id', $p['payment_id'])->firstOrFail();
-
-        $this->confirmPreorder($p['preorder']['id'], $p['payment_id'], ['proof_token' => $this->uploadProof()])->assertOk();
-
-        $this->assertNotNull($old->fresh()->superseded_at);
-        Storage::disk('local')->assertExists($old->file_path);
-        $this->assertSame(1, PaymentProof::where('payment_id', $p['payment_id'])->whereNull('superseded_at')->count());
-        $this->assertSame(2, ActivityLog::where('action', 'payment_confirmation_updated')->where('entity_type', 'Preorder')->count());
-    }
-
-    public function test_a_preorder_confirmation_never_changes_money_status_or_outstanding(): void
-    {
-        $p = $this->preorder();
-        $before = \App\Models\Preorder::findOrFail($p['preorder']['id'])->only(['paid_amount', 'status', 'total_amount', 'discount']);
-        $summaryBefore = $this->getJson("/api/v1/preorders/{$p['preorder']['id']}")->json('payment_summary');
-        $paymentBefore = Payment::find($p['payment_id'])->only(['amount', 'method', 'channel_id', 'purpose', 'verification', 'paid_at']);
-
-        $this->confirmPreorder($p['preorder']['id'], $p['payment_id'], ['proof_token' => $this->uploadProof(), 'reference' => 'TRX-1', 'notes' => 'ok'])->assertOk();
-
-        $this->assertEquals($before, \App\Models\Preorder::findOrFail($p['preorder']['id'])->only(array_keys($before)));
-        $this->assertEquals($summaryBefore, $this->getJson("/api/v1/preorders/{$p['preorder']['id']}")->json('payment_summary'));
-        $this->assertEquals($paymentBefore, Payment::find($p['payment_id'])->only(array_keys($paymentBefore)));
-        $this->assertSame('dp_paid', \App\Models\Preorder::findOrFail($p['preorder']['id'])->status);
-    }
-
-    public function test_a_cancelled_preorder_cannot_be_changed_but_a_handed_over_one_can(): void
-    {
-        $cancelled = $this->preorder();
-        \App\Models\Preorder::whereKey($cancelled['preorder']['id'])->update(['status' => 'cancelled']);
-        $this->confirmPreorder($cancelled['preorder']['id'], $cancelled['payment_id'], ['reference' => 'X'])->assertStatus(409);
-
-        $done = $this->preorder();
-        \App\Models\Preorder::whereKey($done['preorder']['id'])->update(['status' => 'handed_over']);
-        $this->confirmPreorder($done['preorder']['id'], $done['payment_id'], ['reference' => 'SUSULAN'])->assertOk()->assertJsonPath('payments.0.reference', 'SUSULAN');
-    }
-
-    public function test_a_preorder_payment_of_another_preorder_is_not_found_and_cash_and_empty_are_refused(): void
-    {
-        $one = $this->preorder();
-        $two = $this->preorder();
-        $this->confirmPreorder($one['preorder']['id'], $two['payment_id'], ['reference' => 'X'])->assertNotFound();
-
-        $this->confirmPreorder($one['preorder']['id'], $one['payment_id'], [])->assertStatus(422)->assertJsonValidationErrors('confirmation');
-
-        $cash = $this->preorder(method: 'cash');
-        $this->confirmPreorder($cash['preorder']['id'], $cash['payment_id'], ['reference' => 'X'])->assertStatus(422)->assertJsonValidationErrors('method');
-    }
-
-    public function test_the_preorder_payload_carries_the_flags_for_each_viewer(): void
-    {
-        $p = $this->preorder();
-        $owner = $this->userWithRole('owner');
-        $this->as($owner)->confirmPreorder($p['preorder']['id'], $p['payment_id'], ['proof_token' => $this->uploadProof(), 'notes' => 'Catatan'])->assertOk();
-
-        $asOwner = $this->as($owner)->getJson("/api/v1/preorders/{$p['preorder']['id']}")->json('payments.0');
-        $asRecorder = $this->as($this->recorder)->getJson("/api/v1/preorders/{$p['preorder']['id']}")->json('payments.0');
-        $asOther = $this->as($this->userWithRole('cashier'))->getJson("/api/v1/preorders/{$p['preorder']['id']}")->json('payments.0');
-
-        foreach ([$asOwner, $asRecorder] as $entry) {
-            $this->assertTrue($entry['can_edit_confirmation']);
-            $this->assertTrue($entry['can_view_proof']);
-            $this->assertNotNull($entry['proof_id']);
-        }
-        $this->assertFalse($asOther['can_edit_confirmation']);
-        $this->assertFalse($asOther['can_view_proof']);
-        $this->assertSame('Catatan', $asOther['notes']);
-        $this->assertTrue($asOther['has_proof']);
-    }
-
-    public function test_the_recording_cashier_can_open_a_preorder_proof_the_owner_added(): void
-    {
-        $p = $this->preorder();
-        $this->as($this->userWithRole('owner'))->confirmPreorder($p['preorder']['id'], $p['payment_id'], ['proof_token' => $this->uploadProof()])->assertOk();
-        $proof = PaymentProof::where('payment_id', $p['payment_id'])->firstOrFail();
-
-        $this->as($this->recorder)->get("/api/v1/payment-proofs/{$proof->id}/file")->assertOk();
-        $this->as($this->userWithRole('cashier'))->get("/api/v1/payment-proofs/{$proof->id}/file")->assertForbidden();
     }
 }

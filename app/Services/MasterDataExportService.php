@@ -240,8 +240,6 @@ class MasterDataExportService
                 'product_segment' => $v->product->product_segment,
                 'product_name' => $v->product->name,
                 'description' => $v->product->description,
-                'is_preorder' => $v->product->is_preorder ? 1 : 0,
-                'preorder_eta' => $v->product->preorder_eta?->toDateString(),
                 'product_is_active' => $v->product->is_active ? 1 : 0,
                 'variant_name' => $v->variant_name,
                 'cost_price' => number_format((float) $v->cost_price, 2, '.', ''),

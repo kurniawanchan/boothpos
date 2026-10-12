@@ -1,7 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRouter } from 'vue-router';
 import BaseModal from '../ui/BaseModal.vue';
 import DataTable from '../ui/DataTable.vue';
 import StatusPill from '../ui/StatusPill.vue';
@@ -12,16 +11,11 @@ import { formatDate } from '../../utils/date';
 import { useToastStore } from '../../stores/toast';
 
 /**
- * 009-ui-ux-refinements US5 (T043) — riwayat transaksi (penjualan +
- * pre-order tergabung) per pelanggan, dibuka dari CustomersView.vue.
+ * 009-ui-ux-refinements US5 (T043) — riwayat transaksi (penjualan) per pelanggan, dibuka dari CustomersView.vue.
+ * 046: pre-order sudah dihapus dari produk, jadi daftar ini hanya memuat penjualan.
  *
- * Sumber data GET /customers/{id}/transactions (T042). Drill-in ke detail
- * TIDAK membangun UI baru:
- * - type 'order' -> TransactionItemsModal yang sudah dipakai SalesView.vue
- *   (GET /orders/{order}, tidak diubah).
- * - type 'preorder' -> navigasi ke PreordersView via query
- *   ?preorder_id=<id>, yang membuka detail drawer pre-order yang sudah ada
- *   di sana (lihat watcher openDetailById di PreordersView.vue).
+ * Sumber data GET /customers/{id}/transactions (T042). Detail memakai TransactionItemsModal yang sudah dipakai
+ * SalesView.vue (GET /orders/{order}, tidak diubah).
  */
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -31,23 +25,11 @@ const emit = defineEmits(['close']);
 
 const { t } = useI18n();
 const toast = useToastStore();
-const router = useRouter();
 
 const rows = ref([]);
 const loading = ref(false);
 
-// Reuse existing preorder status labels/variants (PreordersView.vue) so
-// this list matches the badge styling used everywhere else pre-order
-// status is shown.
-const STATUS_LABEL = {
-  ordered: 'preorders.step_ordered',
-  dp_paid: 'preorders.step_dp_paid',
-  arrived: 'preorders.step_arrived',
-  settled: 'preorders.step_settled',
-  handed_over: 'preorders.step_handed_over',
-  cancelled: 'events_sessions.status_cancelled',
-};
-const STATUS_VARIANT = { ordered: 'neutral', dp_paid: 'warn', arrived: 'mint', settled: 'mint', handed_over: 'dark', cancelled: 'danger' };
+// Hanya penjualan yang dibatalkan yang diberi penanda status; yang selesai tampil "—" seperti sebelumnya.
 
 async function load() {
   if (!props.open || !props.customerId) {
@@ -69,7 +51,6 @@ watch(() => [props.open, props.customerId], load, { immediate: true });
 
 const columns = [
   { key: 'number', label: t('events_sessions.col_transaction_number') },
-  { key: 'type', label: t('events_sessions.col_transaction_type') },
   { key: 'status', label: t('events_sessions.col_transaction_status') },
   { key: 'total_amount', label: t('events_sessions.col_transaction_total') },
   { key: 'date', label: t('events_sessions.col_transaction_date') },
@@ -79,15 +60,8 @@ const showOrderDetail = ref(false);
 const detailOrderId = ref(null);
 
 function openRow(row) {
-  if (row.type === 'order') {
-    detailOrderId.value = row.id;
-    showOrderDetail.value = true;
-    return;
-  }
-  // Pre-order detail already lives in PreordersView.vue — navigate there
-  // instead of duplicating the drawer/stepper/payment UI here.
-  emit('close');
-  router.push({ name: 'preorders', query: { preorder_id: row.id } });
+  detailOrderId.value = row.id;
+  showOrderDetail.value = true;
 }
 </script>
 
@@ -101,11 +75,8 @@ function openRow(row) {
               {{ row.number }}
             </button>
           </template>
-          <template #cell-type="{ row }">
-            {{ row.type === 'order' ? t('events_sessions.transaction_type_order') : t('events_sessions.transaction_type_preorder') }}
-          </template>
           <template #cell-status="{ row }">
-            <StatusPill v-if="row.type === 'preorder'" :variant="STATUS_VARIANT[row.status] ?? 'neutral'">{{ t(STATUS_LABEL[row.status] ?? row.status) }}</StatusPill>
+            <StatusPill v-if="row.status === 'voided'" variant="danger">{{ t('events_sessions.status_cancelled') }}</StatusPill>
             <span v-else>—</span>
           </template>
           <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>

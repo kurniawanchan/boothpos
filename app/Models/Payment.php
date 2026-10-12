@@ -17,7 +17,7 @@ class Payment extends Model
     use HasDataMode, StampsBusinessDay;
 
     protected $fillable = [
-        'order_id', 'preorder_id', 'purchase_order_id', 'channel_id', 'method', 'purpose', 'amount',
+        'order_id', 'purchase_order_id', 'channel_id', 'method', 'purpose', 'amount',
         'verification', 'verified_by', 'verified_at', 'reject_reason', 'paid_at', 'notes',
         'reference', 'client_ref', 'session_id', 'recorded_by',
     ];
@@ -34,7 +34,6 @@ class Payment extends Model
     }
 
     public function order(): BelongsTo { return $this->belongsTo(Order::class); }
-    public function preorder(): BelongsTo { return $this->belongsTo(Preorder::class); }
     public function purchaseOrder(): BelongsTo { return $this->belongsTo(PurchaseOrder::class); }
     public function channel(): BelongsTo { return $this->belongsTo(PaymentChannel::class, 'channel_id'); }
     public function proofs(): HasMany { return $this->hasMany(PaymentProof::class); }
@@ -42,7 +41,7 @@ class Payment extends Model
     /** 028 — siapa yang mencatat pembayaran ini (NULL untuk baris lama). */
     public function recorder(): BelongsTo { return $this->belongsTo(User::class, 'recorded_by'); }
 
-    /** 028 — shift kasir tempat uang ini DITERIMA (NULL untuk pembayaran pre-order). */
+    /** 028 — shift kasir tempat uang ini DITERIMA (NULL bila tak diterima di shift, mis. pembayaran pre-order lama). */
     public function session(): BelongsTo { return $this->belongsTo(CashierSession::class, 'session_id'); }
 
     /**
@@ -139,12 +138,9 @@ class Payment extends Model
 
     protected function outletFromParent(): ?int
     {
-        // Pembayaran mengikuti induknya: order (POS), pre-order, atau shift tempat uang diterima.
+        // Pembayaran mengikuti induknya: order (POS) atau shift tempat uang diterima.
         if ($this->order_id !== null) {
             return Order::withoutGlobalScopes()->whereKey($this->order_id)->value('outlet_id');
-        }
-        if ($this->preorder_id !== null) {
-            return Preorder::withoutGlobalScopes()->whereKey($this->preorder_id)->value('outlet_id');
         }
         if ($this->session_id !== null) {
             return CashierSession::withoutGlobalScopes()->whereKey($this->session_id)->value('outlet_id');

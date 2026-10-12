@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\OutletSettlement;
 use App\Models\Product;
@@ -27,7 +26,6 @@ class OutletReportsTest extends TestCase
 
     private $home;
 
-    private Event $event;
 
     private ProductVariant $variant;
 
@@ -37,7 +35,6 @@ class OutletReportsTest extends TestCase
     {
         parent::setUp();
         [$this->a, $this->b, $this->home] = $this->makeOutlets(3)->all();
-        $this->event = Event::factory()->create(['status' => 'active']);
         $p = Product::factory()->create(['home_outlet_id' => $this->home->id, 'category_id' => Category::factory()->create()->id]);
         $this->variant = $p->variants()->create(['sku' => 'RPT-1', 'variant_name' => 'R', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 0]);
         $this->owner = User::factory()->create(['role' => 'owner']);
@@ -47,14 +44,14 @@ class OutletReportsTest extends TestCase
     {
         $cashier = $this->assignUser(User::factory()->create(['role' => 'cashier']), [$outlet]);
 
-        return $this->orderAt($this->shiftAt($outlet, $cashier, ['event_id' => $this->event->id]), $this->variant, $qty);
+        return $this->orderAt($this->shiftAt($outlet, $cashier), $this->variant, $qty);
     }
 
     private function recap(array $headers = []): array
     {
         $this->actingAs($this->owner, 'sanctum');
 
-        return collect($this->withHeaders($headers)->getJson("/api/v1/reports/outlet-settlements?event_id={$this->event->id}")->assertOk()->json('data'))->keyBy('outlet_id')->all();
+        return collect($this->withHeaders($headers)->getJson("/api/v1/reports/outlet-settlements")->assertOk()->json('data'))->keyBy('outlet_id')->all();
     }
 
     public function test_the_recap_groups_post_change_sales_by_the_selling_outlet_not_the_item_home(): void
@@ -77,12 +74,12 @@ class OutletReportsTest extends TestCase
 
         $rows = $this->recap();
         $this->assertEquals(50000, collect($rows)->sum(fn ($r) => (float) $r['total_sales']));
-        $sales = $this->getJson("/api/v1/reports/sales?event_id={$this->event->id}")->assertOk()->json('totals');
+        $sales = $this->getJson("/api/v1/reports/sales")->assertOk()->json('totals');
         $this->assertSame('50000.00', $sales['pos_net_sales'] ?? $sales['net_sales']);
 
         $onlyB = $this->recap(['X-Outlet-Id' => (string) $this->b->id]);
         $this->assertSame([$this->b->id], array_keys($onlyB));
-        $filtered = $this->withHeader('X-Outlet-Id', (string) $this->b->id)->getJson("/api/v1/reports/sales?event_id={$this->event->id}")->json('totals');
+        $filtered = $this->withHeader('X-Outlet-Id', (string) $this->b->id)->getJson("/api/v1/reports/sales")->json('totals');
         $this->assertSame('30000.00', $filtered['pos_net_sales'] ?? $filtered['net_sales']);
     }
 
@@ -101,19 +98,18 @@ class OutletReportsTest extends TestCase
         $this->assertEquals(60000, collect($rows)->sum(fn ($r) => (float) $r['total_sales']), 'both kinds, no double counting');
     }
 
-    public function test_the_stored_settlement_snapshot_equals_the_screen_and_event_close_uses_the_same_attribution(): void
+    public function test_the_recap_is_live_and_writes_no_settlement_snapshot(): void
     {
         $this->sellAt($this->a, 2);
         $this->sellAt($this->b, 3);
+        $before = OutletSettlement::count();
+
         $rows = $this->recap();
 
-        foreach ([$this->a, $this->b] as $o) {
-            $stored = OutletSettlement::where(['event_id' => $this->event->id, 'outlet_id' => $o->id])->firstOrFail();
-            $this->assertSame($rows[$o->id]['total_sales'], number_format((float) $stored->total_sales, 2, '.', ''));
-        }
-        \App\Models\CashierSession::withoutGlobalScopes()->update(['status' => 'closed']); // acara hanya bisa ditutup tanpa shift terbuka
-        $this->patchJson("/api/v1/events/{$this->event->id}/status", ['status' => 'closed'])->assertOk();
-        $this->assertSame('30000.00', number_format((float) OutletSettlement::where(['event_id' => $this->event->id, 'outlet_id' => $this->b->id])->value('total_sales'), 2, '.', ''));
+        // 046 — rekap dihitung langsung dari penjualan; tidak ada lagi snapshot per event / tutup event.
+        $this->assertSame('20000.00', $rows[$this->a->id]['total_sales']);
+        $this->assertSame('30000.00', $rows[$this->b->id]['total_sales']);
+        $this->assertSame($before, OutletSettlement::count());
     }
 
     public function test_the_profit_report_and_its_transactions_follow_the_same_attribution(): void
@@ -122,11 +118,11 @@ class OutletReportsTest extends TestCase
         $this->sellAt($this->b, 3);
         $this->actingAs($this->owner, 'sanctum');
 
-        $profit = collect($this->getJson("/api/v1/reports/outlet-profit?event_id={$this->event->id}")->assertOk()->json('data'))->keyBy('outlet_id');
+        $profit = collect($this->getJson("/api/v1/reports/outlet-profit")->assertOk()->json('data'))->keyBy('outlet_id');
         $this->assertSame(['20000.00', '8000.00', '12000.00'], [$profit[$this->a->id]['total_sales'], $profit[$this->a->id]['modal'], $profit[$this->a->id]['gross_profit']]);
         $this->assertArrayNotHasKey($this->home->id, $profit->all());
 
-        $tx = $this->getJson("/api/v1/reports/outlet-settlements/{$this->b->id}/transactions?event_id={$this->event->id}")->assertOk()->json();
+        $tx = $this->getJson("/api/v1/reports/outlet-settlements/{$this->b->id}/transactions")->assertOk()->json();
         $this->assertCount(1, $tx['transactions'], 'only the order sold at B');
         $this->assertSame(30000.0, round((float) collect($tx['transactions'])->sum(fn ($t) => collect($t['items'] ?? [])->sum('line_total') ?: ($t['line_total'] ?? $t['total'] ?? 0)), 2));
     }
@@ -139,7 +135,7 @@ class OutletReportsTest extends TestCase
         $user = $this->assignUser(User::factory()->create(['role_id' => $role->id]), [$this->a]);
         $this->actingAs($user, 'sanctum');
 
-        $ids = collect($this->getJson("/api/v1/reports/outlet-settlements?event_id={$this->event->id}")->assertOk()->json('data'))->pluck('outlet_id')->all();
+        $ids = collect($this->getJson("/api/v1/reports/outlet-settlements")->assertOk()->json('data'))->pluck('outlet_id')->all();
 
         $this->assertSame([$this->a->id], $ids);
     }

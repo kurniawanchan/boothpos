@@ -66,7 +66,7 @@ class TabSettlementService
             foreach ($data['payments'] as $input) {
                 // 'full' hanya untuk pembayaran yang menuntaskan tab; sebelumnya uang muka.
                 $input['purpose'] = $completes ? 'full' : 'down_payment';
-                $payment = $this->paymentRecorder->record($input, $order->id, null);
+                $payment = $this->paymentRecorder->record($input, $order->id);
                 // Kunci per-PENGIRIMAN: `client_ref` milik ledger UNIQUE per baris dan tak bisa dipakai bersama
                 // oleh beberapa baris dalam satu pengiriman (lihat migrasi 2026_10_31_000009).
                 $payment->forceFill(['submission_ref' => $ref])->save();
@@ -149,7 +149,6 @@ class TabSettlementService
             // Dibuat langsung `completed`: tab asli masih memegang kunci "satu tab terbuka per meja".
             $paid = Order::create([
                 'order_number' => $this->orders->generateOrderNumber(),
-                'event_id' => $order->event_id,
                 'session_id' => $order->session_id,
                 'customer_id' => $order->customer_id,
                 'user_id' => $user->id,
@@ -206,7 +205,7 @@ class TabSettlementService
 
             foreach ($data['payments'] as $input) {
                 $input['purpose'] = 'full';
-                $payment = $this->paymentRecorder->record($input, $paid->id, null);
+                $payment = $this->paymentRecorder->record($input, $paid->id);
                 $payment->forceFill(['submission_ref' => $ref])->save();
             }
 

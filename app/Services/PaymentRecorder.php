@@ -7,12 +7,11 @@ use App\Models\PaymentProof;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Dipakai bersama oleh OrderService dan PreorderService (dan PurchaseOrderService) —
- * DUA modul berbeda butuh logika identik, jadi diekstrak di sini alih-alih
- * disalin. Ambang DRY yang sama seperti StockService.
+ * Dipakai bersama oleh OrderService dan PurchaseOrderService — DUA modul berbeda butuh logika identik,
+ * jadi diekstrak di sini alih-alih disalin (046: PreorderService sudah dihapus). Ambang DRY yang sama seperti StockService.
  *
  * 031-optional-payment-proof — bukti bayar (foto/berkas) TIDAK lagi wajib untuk
- * pembayaran non-tunai pada penjualan dan pre-order: kasir boleh menyelesaikan
+ * pembayaran non-tunai pada penjualan: kasir boleh menyelesaikan
  * transaksi dulu dan menambahkan konfirmasi belakangan dari detail transaksi
  * (PaymentService::updateConfirmation). Yang tetap berlaku:
  *  - token bukti yang DIKIRIM harus valid dan belum terpakai (sekali pakai);
@@ -30,7 +29,7 @@ class PaymentRecorder
      * @param array{method:string,channel_id:?int,purpose:string,amount:float|string,proof_token:?string,notes:?string,reference?:?string,client_ref?:?string,session_id?:?int,recorded_by?:?int} $input
      * @throws ValidationException
      */
-    public function record(array $input, ?int $orderId, ?int $preorderId, ?int $purchaseOrderId = null): Payment
+    public function record(array $input, ?int $orderId, ?int $purchaseOrderId = null): Payment
     {
         $method = $input['method'];
 
@@ -62,7 +61,6 @@ class PaymentRecorder
 
         $payment = Payment::create([
             'order_id' => $orderId,
-            'preorder_id' => $preorderId,
             'purchase_order_id' => $purchaseOrderId,
             'channel_id' => $input['channel_id'] ?? null,
             'method' => $method,

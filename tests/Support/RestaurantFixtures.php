@@ -5,7 +5,6 @@ namespace Tests\Support;
 use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
-use App\Models\Event;
 use App\Models\KitchenTicket;
 use App\Models\KitchenTicketItem;
 use App\Models\Order;
@@ -34,10 +33,8 @@ trait RestaurantFixtures
 
     protected function makeShift(User $user, array $overrides = []): CashierSession
     {
-        $event = Event::factory()->create(['status' => 'active']);
-
         return CashierSession::factory()->create(array_merge([
-            'event_id' => $event->id, 'user_id' => $user->id, 'status' => 'open',
+            'user_id' => $user->id, 'status' => 'open',
         ], $overrides));
     }
 
@@ -70,7 +67,6 @@ trait RestaurantFixtures
 
         return Order::create(array_merge([
             'order_number' => sprintf('TRX-TEST-%06d', self::$fixtureSeq),
-            'event_id' => $session->event_id,
             'session_id' => $session->id,
             'user_id' => $cashier->id,
             'channel' => 'offline',

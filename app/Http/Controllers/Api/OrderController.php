@@ -40,7 +40,6 @@ class OrderController extends Controller
         // transaksi (research.md Keputusan 5, baris 4).
         $orders = Order::query()
             ->whereIn('status', [Order::STATUS_COMPLETED, Order::STATUS_VOIDED])
-            ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
             ->when($request->filled('session_id'), fn ($q) => $q->where('session_id', $request->integer('session_id')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
@@ -84,7 +83,7 @@ class OrderController extends Controller
         // lain yang memakai resource ini tidak berubah bentuk.
         return response()->json(new OrderResource($order->load([
             'items.variant.product.category', 'items.homeOutlet',
-            'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
+            'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
         ])));
     }
 
@@ -104,7 +103,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
         ])), $replayed ? 200 : 201);
     }
 
@@ -124,7 +123,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
         ])));
     }
 
@@ -157,7 +156,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
         ])));
     }
 
@@ -180,13 +179,13 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
         ])));
     }
 
     public function void(Request $request, Order $order): JsonResponse
     {
-        // Sama seperti catatan di EventPolicy::create() — "batalkan
+        // Sama seperti gerbang per-aksi lain — "batalkan
         // transaksi" adalah gerbang per-aksi di dalam menu 'sales'/'pos'
         // yang dibagi semua peran, bukan aksesnya sendiri. Dipetakan ke
         // canAccessMenu('settings') untuk alasan yang sama (satu-satunya
@@ -220,7 +219,7 @@ class OrderController extends Controller
             return response()->json(['message' => __('orders_payments.receipt_unavailable_for_open_tab')], 409);
         }
 
-        $order->load(['items.homeOutlet', 'payments', 'cashier', 'event', 'customer', 'table', 'splitFrom', 'outlet:id,code,name']);
+        $order->load(['items.homeOutlet', 'payments', 'cashier', 'customer', 'table', 'splitFrom', 'outlet:id,code,name']);
         $summary = PaymentSummary::for($order);
 
         return response()->json([
@@ -270,27 +269,9 @@ class OrderController extends Controller
             'tab_label' => $order->tab_label,
             // 028 — penjualan hasil pisah tagihan menyebut nomor tab asalnya.
             'split_from_order_number' => $order->splitFrom?->order_number,
-            'event_name' => $order->event->name,
             // 045: outlet tempat penjualan terjadi (outlet shift). Hanya dicetak bila instalasi punya lebih dari satu outlet.
             'outlet_name' => $order->outlet?->name,
             'outlet_code' => $order->outlet?->code,
-            // 014-sales-receipt-event-footer (US2, R2) — event Order tidak
-            // pernah null (beda dengan Preorder), tapi kolom tanggalnya
-            // sendiri masih bisa null, jadi tetap pakai ?->toDateString().
-            'event_location' => $order->event->location,
-            'event_start_date' => $order->event->start_date?->toDateString(),
-            'event_end_date' => $order->event->end_date?->toDateString(),
-            // 023-event-availability-invoice-redesign (US2) — sama persis
-            // dengan PreorderController::invoicePayload(); Order SELALU
-            // punya event (beda dari Preorder yang opsional), jadi tidak
-            // perlu null-safe di sisi event-nya sendiri.
-            'event_available_on_date' => $order->event->availableOnDate()?->toDateString(),
-            // Pilihan mentah dikirim juga (bukan cuma tanggal yang sudah
-            // diselesaikan) supaya frontend bisa membedakan 'both' (tampil
-            // sebagai rentang event_start_date..event_end_date) dari tidak
-            // ada batasan sama sekali (available_on null) — dua-duanya
-            // sama-sama membuat availableOnDate() null.
-            'event_available_on' => $order->event->available_on,
             'cashier_name' => $order->cashier->name,
             'created_at' => $order->created_at,
             'items' => $order->items->map(fn ($i) => [

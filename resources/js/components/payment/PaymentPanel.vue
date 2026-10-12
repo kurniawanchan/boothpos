@@ -14,8 +14,8 @@ import { useToastStore } from '../../stores/toast';
 /**
  * The reusable core of BoothPOS's payment flow — method picker, channel
  * picker, proof capture, cash/change math. Used inside PosPaymentModal
- * (mode="checkout") and RecordPaymentModal (mode="record", preorder
- * DP/settlement) so the non-trivial bits (proof capture, channel
+ * (mode="checkout") and AddPaymentModal (mode="record", a later payment on a
+ * sale) so the non-trivial bits (proof capture, channel
  * selection) are genuinely built once. See project brief item #15.
  *
  * 006-purchase-order-and-ops (US2/US3) — checkout mode now supports
@@ -76,9 +76,8 @@ const entriesTotal = computed(() => entries.value.reduce((sum, e) => sum + parse
 // against, and what's shown as the running balance banner.
 const remainingBeforeCurrent = computed(() => Math.max(dueNum.value - entriesTotal.value, 0));
 // 010-split-payment-preorder-reports (US2/T006) — the always-visible split
-// UI and its "covers the remaining balance" math now apply to mode="record"
-// too, not just checkout, so a preorder payment can be split exactly like a
-// POS checkout payment (research.md R2).
+// UI and its "covers the remaining balance" math apply to mode="record"
+// too, not just checkout (research.md R2).
 const isSplitting = computed(() => entries.value.length > 0);
 
 // 010-split-payment-preorder-reports (US1/T002, US2/T006) — single source of
@@ -189,7 +188,7 @@ function resetCurrentEntryFields() {
  * 010-split-payment-preorder-reports (US2/T006) — mode="record" used to
  * always emit a single payload immediately; it now accumulates into
  * `entries[]` exactly like checkout (research.md R2). The caller
- * (RecordPaymentModal) turns the emitted array into sequential API calls.
+ * (AddPaymentModal) turns the emitted entry into one API call.
  */
 function submit() {
   if (!canSubmitCurrent.value) return;

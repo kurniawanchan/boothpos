@@ -11,7 +11,7 @@ class OutletSettlement extends Model
     use HasDataMode;
 
     protected $fillable = [
-        'event_id', 'outlet_id', 'total_sales', 'total_units', 'deduction',
+        'outlet_id', 'total_sales', 'total_units', 'deduction',
         'payable_amount', 'paid_amount', 'status', 'calculated_at', 'paid_at', 'notes',
     ];
 
@@ -27,10 +27,6 @@ class OutletSettlement extends Model
         ];
     }
 
-    public function event(): BelongsTo
-    {
-        return $this->belongsTo(Event::class);
-    }
 
     public function outlet(): BelongsTo
     {

@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\ActivityLog;
 use App\Models\Outlet;
 use App\Models\CashierSession;
-use App\Models\Event;
 use App\Models\Material;
 use App\Models\OrderItem;
 use App\Models\ProductVariant;
@@ -268,8 +267,7 @@ class VariantBomCompleteTest extends TestCase
         $variant->update(['cost_price' => 100, 'current_stock' => 100]);
 
         $cashier = User::factory()->create(['role' => 'cashier']);
-        $event = Event::factory()->create(['status' => 'active']);
-        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
+        $session = CashierSession::factory()->create(['user_id' => $cashier->id, 'status' => 'open']);
         $sell = fn () => app(OrderService::class)->create([
             'session_id' => $session->id, 'local_ref' => (string) Str::uuid(),
             'items' => [['variant_id' => $variant->id, 'qty' => 1]],
@@ -277,12 +275,12 @@ class VariantBomCompleteTest extends TestCase
         ], $cashier);
 
         $before = $sell();
-        $profitBefore = $this->getJson("/api/v1/reports/profit?event_id={$event->id}")->assertOk()->json();
+        $profitBefore = $this->getJson("/api/v1/reports/profit")->assertOk()->json();
 
         $this->complete($variant)->assertOk();
 
         $this->assertSame('100.00', number_format((float) OrderItem::where('order_id', $before->id)->value('cost_price'), 2, '.', ''));
-        $profitAfter = $this->getJson("/api/v1/reports/profit?event_id={$event->id}")->assertOk()->json();
+        $profitAfter = $this->getJson("/api/v1/reports/profit")->assertOk()->json();
         $this->assertSame($profitBefore['cost_of_goods'], $profitAfter['cost_of_goods']);
         $this->assertSame($profitBefore['gross_profit'], $profitAfter['gross_profit']);
 

@@ -88,7 +88,7 @@ async function onSubmit() {
           Kasir tetap jalan walau sinyal venue mati.
         </h2>
         <p class="max-w-[400px] text-[14.5px] leading-relaxed text-dark-muted">
-          Seluruh transaksi terikat ke event aktif, rekap hasil per penjual terhitung otomatis saat event ditutup.
+          Setiap transaksi tercatat pada shift kasir, dan rekap hasil per outlet terhitung otomatis untuk periode yang Anda pilih.
         </p>
       </div>
     </div>

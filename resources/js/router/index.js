@@ -71,12 +71,6 @@ const routes = [
         meta: { titleKey: 'nav.dining_setup', subtitleKey: 'nav.dining_setup_subtitle', menuKey: 'dining_setup' },
       },
       {
-        path: 'events',
-        name: 'events',
-        component: () => import('../views/EventsView.vue'),
-        meta: { menuKey: 'events' },
-      },
-      {
         path: 'products',
         name: 'products',
         component: () => import('../views/ProductsView.vue'),
@@ -92,6 +86,10 @@ const routes = [
       },
       // 045 — URL lama /artists diarahkan ke /outlets (bookmark dan tautan lama tetap berfungsi).
       { path: 'artists', redirect: '/outlets' },
+      // 046 — modul Event dan Pre-order dihapus; alamat lama (termasuk ?event_id= / ?preorder_id= dan anak rutenya)
+      // menuju layar bawaan tanpa membawa query lama, bukan halaman galat.
+      { path: 'events/:pathMatch(.*)*', redirect: () => ({ name: 'dashboard', query: {}, hash: '' }) },
+      { path: 'preorders/:pathMatch(.*)*', redirect: () => ({ name: 'dashboard', query: {}, hash: '' }) },
       {
         path: 'outlets',
         name: 'outlets',
@@ -171,12 +169,6 @@ const routes = [
         name: 'customers',
         component: () => import('../views/CustomersView.vue'),
         meta: { menuKey: 'customers' },
-      },
-      {
-        path: 'preorders',
-        name: 'preorders',
-        component: () => import('../views/PreordersView.vue'),
-        meta: { menuKey: 'preorders' },
       },
       {
         path: 'sales',

@@ -5,7 +5,7 @@ import BaseButton from '../ui/BaseButton.vue';
 import { getReceipt } from '../../api/orders';
 import { formatIDR } from '../../utils/money';
 import { resolveAppName } from '../../utils/appName';
-import { formatDate, formatDateTime, formatDateRange } from '../../utils/date';
+import { formatDateTime } from '../../utils/date';
 import { downloadElementAsPdf, downloadElementAsPng } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
 import { useOutletStore } from '../../stores/outlet';
@@ -46,14 +46,6 @@ const downloadingImage = ref(false);
 const downloadingPdf = ref(false);
 
 const METHOD_LABELS = { cash: 'Tunai', bank_transfer: 'Transfer bank', qr_ewallet: 'QRIS / e-wallet' };
-
-// event_available_on_date is null both when no restriction was chosen AND
-// when it's 'both' days — the raw event_available_on tells them apart, so
-// 'both' renders the event's own date range instead of a single date.
-function availableOnDisplay(r) {
-  if (r.event_available_on === 'both') return formatDateRange(r.event_start_date, r.event_end_date);
-  return r.event_available_on_date ? formatDate(r.event_available_on_date) : null;
-}
 
 async function downloadAsImage() {
   if (!receiptEl.value) return;
@@ -122,32 +114,11 @@ watch(
         <span class="text-[17px] font-extrabold tracking-tight">{{ receipt.store_name }}</span>
         <span v-if="receipt.store_address" class="max-w-[300px] text-[11.5px] leading-snug text-muted-3">{{ receipt.store_address }}</span>
         <span v-if="outletStore.multi && receipt.outlet_name" class="text-[12.5px] font-semibold text-muted-4" data-testid="receipt-outlet">{{ receipt.outlet_name }}</span>
-        <span class="text-[12.5px] text-muted-2">{{ receipt.event_name }}</span>
         <span class="mt-1.5 font-mono text-[13px] font-semibold">{{ receipt.order_number }}</span>
         <!-- 028 — penjualan dari tab: tampilkan meja atau label takeaway. -->
         <span v-if="receipt.table" class="text-[12.5px] font-semibold text-muted-4">Meja {{ receipt.table.name }}</span>
         <span v-else-if="receipt.service_type === 'takeaway'" class="text-[12.5px] font-semibold text-muted-4">Takeaway<template v-if="receipt.tab_label"> — {{ receipt.tab_label }}</template></span>
         <span class="text-[12px] text-muted-2">{{ formatDateTime(receipt.created_at) }} · Kasir {{ receipt.cashier_name }}</span>
-      </div>
-
-      <!-- 023-event-availability-invoice-redesign (US2, FR-004/FR-005/
-           FR-006, research.md Decision 3) — MENGGANTIKAN blok footer kecil
-           "Lokasi:/Tanggal:" yang dulu ada di bawah, sama seperti
-           PreorderInvoiceModal.vue. Teks tetap Bahasa Indonesia langsung
-           (bukan t()) — struk ini SELALU Indonesia untuk pembeli, terlepas
-           preferensi bahasa kasir (lihat komentar di atas file ini). -->
-      <div
-        v-if="availableOnDisplay(receipt) || receipt.event_location"
-        class="flex flex-col gap-1.5 rounded-lg bg-brand px-4 py-3 text-white"
-      >
-        <div v-if="receipt.event_location" class="flex items-center justify-between gap-3 text-[13px]">
-          <span class="font-semibold text-mint-100">Lokasi</span>
-          <span class="font-bold">{{ receipt.event_location }}</span>
-        </div>
-        <div v-if="availableOnDisplay(receipt)" class="flex items-center justify-between gap-3 text-[13px]">
-          <span class="font-semibold text-mint-100">Tersedia pada</span>
-          <span class="font-bold">{{ availableOnDisplay(receipt) }}</span>
-        </div>
       </div>
 
       <div class="flex flex-col gap-3 border-y border-dashed border-line-2 py-4">

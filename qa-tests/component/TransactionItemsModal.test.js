@@ -43,7 +43,6 @@ const FULL_ORDER = {
   void_reason: null,
   customer: { id: 5, name: 'Rara Anindya', phone: '0812-0000-1111', email: 'rara@contoh.test' },
   cashier: { id: 1, name: 'Owner Dummy' },
-  event: { id: 1, name: 'Sakana Meet & Greet' },
   items: [
     { id: 1, product_id: 10, sku_snapshot: 'NEKKYAKT0001', name_snapshot: 'Akatsuki Keychain', variant_name: 'Blue', home_outlet_name: 'Nekoyama Studio', category_name: 'Keychain', qty: 3, sell_price: '10000.00', discount_amount: '0.00', line_total: '30000.00', image_url: 'http://localhost/storage/variant.png' },
     { id: 2, product_id: 11, sku_snapshot: 'YUKSTSAK0001', name_snapshot: 'Sakura Sticker', variant_name: 'Pink', home_outlet_name: 'Yukishiro Works', category_name: 'Sticker', qty: 3, sell_price: '20000.00', discount_amount: '2000.00', line_total: '58000.00', image_url: null },
@@ -95,7 +94,7 @@ describe('TransactionItemsModal — order header', () => {
     expect(screen.getByText('Rara Anindya')).toBeInTheDocument();
     expect(screen.getByText('0812-0000-1111')).toBeInTheDocument();
     expect(screen.getByText('Owner Dummy')).toBeInTheDocument();
-    expect(screen.getByText('Sakana Meet & Greet')).toBeInTheDocument();
+    expect(screen.queryByText('Sakana Meet & Greet')).not.toBeInTheDocument(); // 046: tanpa event
     expect(screen.getByText('Ambil jam 3')).toBeInTheDocument();
   });
 
@@ -489,7 +488,7 @@ describe('TransactionItemsModal — payment confirmation (031)', () => {
     await user.type(screen.getByLabelText(/catatan \(opsional\)/i), 'Sudah dicek');
     await user.click(screen.getByRole('button', { name: 'Simpan' }));
 
-    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith('orders', 101, 2, { reference: 'TRX-77', notes: 'Sudah dicek' }));
+    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith(101, 2, { reference: 'TRX-77', notes: 'Sudah dicek' }));
     const entry = await screen.findByTestId('payment-entry');
     await waitFor(() => expect(within(entry).getByText(/TRX-77/)).toBeInTheDocument());
     expect(within(entry).getByTestId('payment-notes')).toHaveTextContent('Sudah dicek');
@@ -582,7 +581,7 @@ describe('TransactionItemsModal — mark payment verified (032)', () => {
     expect(verifyPayment).not.toHaveBeenCalled();
     await user.click(within(dialog).getByRole('button', { name: 'Ya, tandai terverifikasi' }));
 
-    await waitFor(() => expect(verifyPayment).toHaveBeenCalledWith('orders', 101, 2));
+    await waitFor(() => expect(verifyPayment).toHaveBeenCalledWith(101, 2));
     await waitFor(() => expect(within(screen.getByTestId('payment-entry')).getByText('Terverifikasi')).toBeInTheDocument());
     expect(within(screen.getByTestId('payment-entry')).queryByRole('button', { name: 'Tandai terverifikasi' })).not.toBeInTheDocument();
     expect(toast.success).toHaveBeenCalled();

@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
-use App\Models\Event;
 use App\Models\PaymentChannel;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -35,9 +34,8 @@ class SplitPaymentTest extends TestCase
         $this->cashier = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($this->cashier, 'sanctum');
 
-        $event = Event::factory()->create(['status' => 'active']);
         $this->session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $this->cashier->id, 'status' => 'open',
+            'user_id' => $this->cashier->id, 'status' => 'open',
         ]);
 
         $artist = Outlet::factory()->create();

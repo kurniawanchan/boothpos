@@ -6,7 +6,6 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
@@ -26,7 +25,6 @@ class SalesPaymentStatusTest extends TestCase
 
     private User $cashier;
 
-    private Event $event;
 
     private CashierSession $session;
 
@@ -39,8 +37,7 @@ class SalesPaymentStatusTest extends TestCase
         parent::setUp();
         $this->cashier = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($this->cashier, 'sanctum');
-        $this->event = Event::factory()->create(['status' => 'active']);
-        $this->session = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
+        $this->session = CashierSession::factory()->create(['user_id' => $this->cashier->id, 'status' => 'open']);
 
         $product = Product::factory()->create([
             'home_outlet_id' => Outlet::factory()->create()->id, 'category_id' => Category::factory()->create()->id,
@@ -61,7 +58,7 @@ class SalesPaymentStatusTest extends TestCase
 
     private function report(): array
     {
-        return $this->getJson("/api/v1/reports/sales?event_id={$this->event->id}")->assertOk()->json();
+        return $this->getJson("/api/v1/reports/sales")->assertOk()->json();
     }
 
     private function row(array $report, Order $order): array
@@ -106,7 +103,7 @@ class SalesPaymentStatusTest extends TestCase
     {
         $order = $this->sell(200000);
         $this->postJson("/api/v1/sessions/{$this->session->id}/close", ['closing_cash' => 200000])->assertOk();
-        $shiftB = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
+        $shiftB = CashierSession::factory()->create(['user_id' => $this->cashier->id, 'status' => 'open']);
         $this->postJson("/api/v1/orders/{$order->id}/payments", ['method' => 'cash', 'amount' => 300000])->assertCreated();
 
         $sessions = collect($this->report()['sessions'])->keyBy('id');

@@ -4,15 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Outlet;
-use App\Models\OutletSettlement;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Services\SettlementService;
 use App\Services\SalesFigures;
 use App\Support\ModeGate;
-use App\Support\PreorderSellerSubtotals;
-use App\Support\ReportSplit;
+use App\Support\BusinessDay;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -32,11 +29,6 @@ class ReportController extends Controller
         'category' => 'Kategori',
         'outlet' => 'Outlet',
         'day' => 'Tanggal',
-        // 005-ux-enhancements-dashboard (US2) — grafik "penjualan per
-        // event" di dashboard butuh pengelompokan ini; ditambahkan di
-        // sini (bukan endpoint baru) supaya tetap satu jalur agregasi
-        // penjualan yang sudah teruji mode-scoping-nya, bukan duplikat.
-        'event' => 'Event',
         // 009-ui-ux-refinements (US6/FR-016) — dipakai Dashboard untuk
         // statistik per-pelanggan (tabel + chart). Baris untuk grouping
         // ini punya bentuk berbeda (customer_id/customer_name/
@@ -47,6 +39,30 @@ class ReportController extends Controller
         'customer' => 'Pelanggan',
     ];
 
+    /**
+     * 046 — periode laporan: `date_from`/`date_to` = tanggal BISNIS (Y-m-d). Laporan yang berskala periode
+     * (profit, rekap, modal outlet) memakai hari bisnis berjalan bila keduanya kosong; satu sisi yang
+     * diisi saja berarti rentang terbuka di sisi lainnya.
+     *
+     * @return array{0: ?string, 1: ?string}
+     */
+    private function period(Request $request, bool $defaultToday = true): array
+    {
+        $validated = $request->validate([
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:date_from'],
+        ]);
+
+        $from = $validated['date_from'] ?? null;
+        $to = $validated['date_to'] ?? null;
+
+        if ($defaultToday && $from === null && $to === null) {
+            $from = $to = BusinessDay::today();
+        }
+
+        return [$from, $to];
+    }
+
     public function sales(Request $request): JsonResponse
     {
         $groupBy = $request->string('group_by', 'product')->value();
@@ -55,126 +71,27 @@ class ReportController extends Controller
             $groupBy = 'product';
         }
 
-        // 042-dashboard-revamp — dasar query POS (order `completed` ⨝ item, filter data_mode eksplisit,
-        // event, dan tanggal BISNIS) hidup di SalesFigures supaya Dashboard memakai angka yang sama
-        // persis. Catatan lama tentang join 'categories' dan filter DEMO/LIVE ada di sana.
-        $base = SalesFigures::posBase([
-            'event_id' => $request->filled('event_id') ? $request->integer('event_id') : null,
-            'date_from' => $request->filled('date_from') ? $request->date('date_from')->toDateString() : null,
-            'date_to' => $request->filled('date_to') ? $request->date('date_to')->toDateString() : null,
-        ]);
+        // Halaman Sales memuat tanpa batas bila tanggal kosong ("semua"); SPA mengirim hari ini secara bawaan.
+        [$from, $to] = $this->period($request, defaultToday: false);
+
+        // 042-dashboard-revamp — dasar query POS (order `completed` ⨝ item, filter data_mode eksplisit
+        // dan tanggal BISNIS) hidup di SalesFigures supaya Dashboard memakai angka yang sama persis.
+        $base = SalesFigures::posBase(['date_from' => $from, 'date_to' => $to]);
 
         // Task 1 — setiap baris agregat kini membawa entity_id (product_id/
         // category_id/outlet_id) di samping label, supaya frontend bisa
-        // menaut baris ke halaman detail entitas (mis. detail produk +
-        // total stok, Task 2) — sebelumnya hanya label yang dipilih tanpa
-        // ID apa pun untuk ditaut.
-        [$idExpr, $labelExpr, $idAlias] = match ($groupBy) {
-            'category' => ['categories.id', 'categories.name', 'category_id'],
-            'outlet' => ['outlets.id', 'outlets.name', 'outlet_id'],
-            'event' => ['events.id', 'events.name', 'event_id'],
-            'day' => ['orders.business_date', 'orders.business_date', null],
-            default => ['products.id', 'products.name', 'product_id'],
-        };
-
-        // 010-split-payment-preorder-reports (US5/FR-011/FR-012, research.md
-        // R1) — Preorder yang belum lunas TIDAK boleh menyumbang nilai
-        // penuh line_total-nya ke laporan (itu barang yang belum tentu
-        // dibayar lunas). Uang yang diakui dibatasi pada yang BENAR-BENAR
-        // terkumpul di tabel `payments` (bukan cache preorders.paid_amount,
-        // yang bisa basi — lihat komentar SettlementService), lalu
-        // diproporsikan ke tiap item sesuai porsi line_total-nya terhadap
-        // subtotal preorder. Preorder 'cancelled' selalu menyumbang nol.
-        // Query terpisah (bukan loop per-preorder) yang di-agregasi lalu
-        // digabung SEKALI ke $rows/$totals di PHP di bawah — bukan
-        // UNION ALL, karena order_items dan preorder_items punya kolom
-        // (discount_amount) yang tidak simetris, dan penggabungan di PHP
-        // di sini tetap satu query tambahan, bukan N+1.
-        $preorderBase = $this->preorderRecognizedRevenueBase($request);
-
-        [$poIdExpr, $poLabelExpr] = match ($groupBy) {
+        // menaut baris ke halaman detail entitas.
+        [$idExpr, $labelExpr] = match ($groupBy) {
             'category' => ['categories.id', 'categories.name'],
             'outlet' => ['outlets.id', 'outlets.name'],
-            'event' => ['events.id', 'events.name'],
-            // Tidak ada tanggal pembayaran tunggal untuk preorder (uang bisa
-            // masuk bertahap) — sebagai proksi kami pakai tanggal preorder
-            // DIBUAT, konsisten dengan bagaimana 'day' pada order memakai
-            // tanggal transaksi terjadi. ASUMSI yang didokumentasikan di
-            // sini karena tidak ada satu tanggal "benar" untuk uang yang
-            // terkumpul dari beberapa pembayaran terpisah.
-            'day' => ['DATE(preorders.created_at)', 'DATE(preorders.created_at)'],
+            'day' => ['orders.business_date', 'orders.business_date'],
             default => ['products.id', 'products.name'],
         };
 
-        $fraction = self::PREORDER_FRACTION_EXPR;
-        $preorderRows = (clone $preorderBase)
-            ->selectRaw("
-                {$poIdExpr} as entity_id,
-                {$poLabelExpr} as label,
-                SUM(preorder_items.qty * ({$fraction})) as unit_count,
-                SUM(preorder_items.line_total * ({$fraction})) as amount
-            ")
-            ->groupBy(DB::raw($poIdExpr))
-            ->get();
-
-        $rows = (clone $base)
-            ->selectRaw("
-                {$idExpr} as entity_id,
-                {$labelExpr} as label,
-                SUM(order_items.qty) as unit_count,
-                SUM(order_items.line_total) as amount
-            ")
-            ->groupBy(DB::raw($idExpr))
-            ->get();
-
-        // Gabung baris order + preorder yang sudah masing-masing diagregasi
-        // di SQL, dikunci oleh entity_id (atau label untuk group_by=day yang
-        // entity_id-nya selalu null).
-        $merged = [];
-        foreach ($rows as $row) {
-            $key = $idAlias === null ? $row->label : $row->entity_id;
-            $merged[$key] = [
-                'entity_id' => $idAlias === null ? null : $row->entity_id,
-                'label' => $row->label,
-                'unit_count' => (float) $row->unit_count,
-                'amount' => (float) $row->amount,
-            ];
-        }
-        foreach ($preorderRows as $row) {
-            $key = $idAlias === null ? $row->label : $row->entity_id;
-            if (! isset($merged[$key])) {
-                $merged[$key] = [
-                    'entity_id' => $idAlias === null ? null : $row->entity_id,
-                    'label' => $row->label,
-                    'unit_count' => 0.0,
-                    'amount' => 0.0,
-                ];
-            }
-            $merged[$key]['unit_count'] += (float) $row->unit_count;
-            $merged[$key]['amount'] += (float) $row->amount;
-        }
-
-        $rows = collect(array_values($merged))
-            ->sortByDesc('amount')
-            ->values()
-            ->map(function (array $data) {
-                $data['amount'] = number_format($data['amount'], 2, '.', '');
-
-                return $data;
-            });
         if ($groupBy === 'customer') {
-            // 009-ui-ux-refinements (US6/T046) — satu query GROUP BY per
-            // orders.customer_id, sama seperti pola outlet/day di atas
-            // (bukan loop per-customer, Constitution Principle V).
-            // LEFT JOIN customers (bukan INNER) karena customer_id
-            // nullable untuk pembeli walk-in — baris "walk-in" tetap
-            // muncul dengan customer_id/customer_name null, bukan hilang
-            // diam-diam dari laporan. Tidak perlu filter data_mode
-            // tambahan pada 'customers': order_items.data_mode sudah
-            // menyaring baris sumbernya, dan customer_id yang tersimpan
-            // pada order sudah divalidasi lintas-mode saat order dibuat
-            // (lihat CLAUDE.md, catatan customer_id re-fetch di
-            // OrderService/PreorderService).
+            // 009-ui-ux-refinements (US6/T046) — satu query GROUP BY per orders.customer_id.
+            // LEFT JOIN customers (bukan INNER) karena customer_id nullable untuk pembeli walk-in —
+            // baris "walk-in" tetap muncul dengan customer_id/customer_name null.
             $rows = (clone $base)
                 ->leftJoin('customers', 'customers.id', '=', 'orders.customer_id')
                 ->selectRaw('
@@ -192,66 +109,51 @@ class ReportController extends Controller
 
                     return $data;
                 });
+        } else {
+            $rows = (clone $base)
+                ->selectRaw("
+                    {$idExpr} as entity_id,
+                    {$labelExpr} as label,
+                    SUM(order_items.qty) as unit_count,
+                    SUM(order_items.line_total) as amount
+                ")
+                ->groupBy(DB::raw($idExpr))
+                ->orderByDesc('amount')
+                ->get()
+                ->map(fn ($row) => [
+                    // group_by=day: kuncinya tanggal itu sendiri, bukan id entitas.
+                    'entity_id' => $groupBy === 'day' ? null : $row->entity_id,
+                    'label' => $row->label,
+                    'unit_count' => (float) $row->unit_count,
+                    'amount' => number_format((float) $row->amount, 2, '.', ''),
+                ]);
         }
-        // BUG YANG DITEMUKAN & DIPERBAIKI (012-seller-preorder-report-detail-export,
-        // ditemukan lewat test test_sales_and_profit_reports_include_only_the_
-        // collected_portion_of_a_partially_paid_preorder) — cabang `else` di sini
-        // DULU menghitung ULANG `$rows` dari `$base` (order_items) SAJA, menimpa
-        // hasil gabungan order+preorder yang sudah benar dari `$merged`/`$rows` di
-        // baris ~173 dengan agregasi order-only. Efeknya, outlet yang HANYA punya
-        // preorder (tanpa satu pun order reguler) hilang total dari baris laporan
-        // sales() untuk group_by selain 'customer', walau `$totals` (dihitung
-        // terpisah di bawah) tetap benar menyertakan kontribusi preorder — jadi
-        // total di kartu ringkasan sudah benar sementara tabel barisnya salah,
-        // sebuah inkonsistensi yang mudah tidak disadari. `$rows` dari baris
-        // 173-180 SUDAH benar (gabungan order+preorder, terurut, entity_id null
-        // untuk group_by=day) untuk setiap group_by selain 'customer' — cabang
-        // `else` yang menimpanya dihapus, bukan diperbaiki, karena computation-nya
-        // memang duplikat dari yang sudah dilakukan di atas.
 
         $totals = SalesFigures::totals($base);
 
-        $preorderTotals = (clone $preorderBase)->selectRaw("
-            SUM(preorder_items.qty * ({$fraction})) as unit_count,
-            SUM(preorder_items.line_total * ({$fraction})) as amount
-        ")->first();
+        // 046: tidak ada lagi pendapatan pre-order, jadi angka bersama = angka POS. Kunci `pos_*` tetap
+        // dikirim supaya klien/ekspor yang memakainya tidak berubah.
+        $totals->unit_count = (float) ($totals->unit_count ?? 0);
+        $totals->gross_sales = number_format((float) ($totals->gross_sales ?? 0), 2, '.', '');
+        $totals->net_sales = number_format((float) ($totals->net_sales ?? 0), 2, '.', '');
+        $totals->pos_unit_count = $totals->unit_count;
+        $totals->pos_gross_sales = $totals->gross_sales;
+        $totals->pos_net_sales = $totals->net_sales;
 
-        // unit_count tetap dibiarkan numerik apa adanya (mengikuti bentuk
-        // asli dari DB sebelum perubahan ini, yang juga tidak pernah
-        // di-number_format) — hanya kolom uang yang wajib string 2-desimal
-        // per konvensi "Money is returned as a string" di seluruh laporan
-        // ini (lihat gross_sales/net_sales di bawah dan amount per baris).
-        // Angka POS-SAJA untuk halaman Sales, yang hanya menampilkan transaksi dari POS. Diambil
-        // SEBELUM pendapatan pre-order digabung di bawah; `unit_count`/`gross_sales`/`net_sales`
-        // tetap memuat pre-order karena Dashboard & Laporan memang sengaja begitu (fitur 010).
-        $totals->pos_unit_count = (float) ($totals->unit_count ?? 0);
-        $totals->pos_gross_sales = number_format((float) ($totals->gross_sales ?? 0), 2, '.', '');
-        $totals->pos_net_sales = number_format((float) ($totals->net_sales ?? 0), 2, '.', '');
-
-        $totals->unit_count = (float) ($totals->unit_count ?? 0) + (float) ($preorderTotals->unit_count ?? 0);
-        $totals->gross_sales = number_format((float) ($totals->gross_sales ?? 0) + (float) ($preorderTotals->amount ?? 0), 2, '.', '');
-        $totals->net_sales = number_format((float) ($totals->net_sales ?? 0) + (float) ($preorderTotals->amount ?? 0), 2, '.', '');
-
-        $event = $request->filled('event_id') ? Event::find($request->integer('event_id')) : null;
-
-        // Daftar TRANSAKSI (order POS + pre-order yang sudah ada uangnya) dibangun oleh
-        // SalesTransactionsService — sumber yang SAMA dengan ekspor, supaya berkas ekspor
-        // tidak pernah berbeda dari layar. Lihat docblock service untuk aturan barisnya.
+        // Daftar TRANSAKSI dibangun oleh SalesTransactionsService — sumber yang SAMA dengan ekspor,
+        // supaya berkas ekspor tidak pernah berbeda dari layar.
         $built = app(\App\Services\SalesTransactionsService::class)->build([
-            'event_id' => $request->input('event_id'),
-            'date_from' => $request->input('date_from'),
-            'date_to' => $request->input('date_to'),
+            'date_from' => $from,
+            'date_to' => $to,
             'include_voided' => $request->input('include_voided'),
         ], $request->user());
-        $transactions = $built['transactions'];
 
         return response()->json([
-            'event' => $event,
             'group_by' => $groupBy,
             'group_label' => self::GROUP_LABELS[$groupBy],
             'totals' => $totals,
             'rows' => $rows,
-            'transactions' => $transactions,
+            'transactions' => $built['transactions'],
             'sessions' => $built['sessions'],
         ]);
     }
@@ -260,7 +162,7 @@ class ReportController extends Controller
      * Ekspor transaksi halaman Sales: PERSIS baris yang tampil di layar (hanya order POS).
      * Klien hanya mengirim KUNCI baris ("order:12") — nominalnya tidak pernah dipercaya;
      * seluruh isi berkas dibangun ulang dari database lewat SalesTransactionsService (sumber
-     * yang sama dengan daftar). Kunci yang tak ada / di luar filter event diabaikan, bukan
+     * yang sama dengan daftar). Kunci yang tak ada / di luar filter tanggal diabaikan, bukan
      * dibuatkan baris. Tanpa `keys` = seluruh transaksi sesuai filter.
      *
      * Kontak pelanggan (telepon/email) SENGAJA tidak ikut (lihat catatan GenericArrayExport);
@@ -269,7 +171,6 @@ class ReportController extends Controller
     public function exportSalesTransactions(Request $request)
     {
         $validated = $request->validate([
-            'event_id' => ['nullable', 'integer'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
             'include_voided' => ['nullable', 'boolean'],
@@ -311,238 +212,105 @@ class ReportController extends Controller
         return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\GenericArrayExport($rows), 'transaksi-penjualan.xlsx');
     }
 
-    /**
-     * 010-split-payment-preorder-reports (US5, research.md R1) — porsi
-     * subtotal preorder yang sudah BENAR-BENAR terkumpul di `payments`
-     * (bukan cache preorders.paid_amount). Dipakai sebagai faktor pengali
-     * line_total/qty/cost_price tiap preorder_items di titik pemakaian —
-     * satu ekspresi SQL yang dievaluasi per baris hasil JOIN, bukan
-     * dihitung lewat loop PHP per-preorder.
-     */
-    private const PREORDER_FRACTION_EXPR = 'CASE WHEN preorders.subtotal > 0 THEN COALESCE(pc.collected, 0) / preorders.subtotal ELSE 0 END';
-
-    /**
-     * Dasar query (FROM + JOIN + filter, TANPA select) yang dipakai bersama
-     * oleh sales()/profit() untuk mengagregasi pendapatan preorder yang
-     * diakui. Subquery `pc` menjumlahkan payments.amount per preorder,
-     * mengecualikan verification='rejected' (research.md R1) — dihitung
-     * SEKALI di sini lewat leftJoinSub, bukan N+1 per preorder. Preorder
-     * 'cancelled' dikeluarkan sepenuhnya lewat where() di bawah, bukan
-     * cuma fraction=0, supaya statusnya tidak diam-diam ikut ke-JOIN.
-     */
-    /**
-     * 012-seller-preorder-report-detail-export (T007, data-model.md
-     * "Pre-order per-seller breakdown row") — ekspresi CASE payment_completeness
-     * (unpaid/partial/paid) dipakai identik oleh preorders() di path default
-     * (header, alias `collected.amount_collected`) maupun path
-     * `breakdown=outlet` (alias `pc.collected` dari preorderRecognizedRevenueBase()),
-     * supaya kedua path tidak diam-diam punya definisi "lunas" yang berbeda.
-     * Diparameterkan lewat nama kolom SUM(payments.amount) karena kedua path
-     * memakai alias subquery yang berbeda.
-     */
-    private function paymentCompletenessCaseExpr(string $collectedColumn): string
-    {
-        return "
-            CASE
-                WHEN COALESCE({$collectedColumn}, 0) <= 0 THEN 'unpaid'
-                WHEN COALESCE({$collectedColumn}, 0) >= preorders.total_amount THEN 'paid'
-                ELSE 'partial'
-            END
-        ";
-    }
-
-    private function preorderRecognizedRevenueBase(Request $request)
-    {
-        $collected = DB::table('payments')
-            ->select('preorder_id', DB::raw('SUM(amount) as collected'))
-            ->whereNotNull('preorder_id')
-            ->where('verification', '!=', 'rejected')
-            ->where('data_mode', ModeGate::current())
-            ->groupBy('preorder_id');
-
-        return DB::table('preorder_items')
-            ->join('preorders', 'preorders.id', '=', 'preorder_items.preorder_id')
-            ->join('product_variants', 'product_variants.id', '=', 'preorder_items.variant_id')
-            ->join('products', 'products.id', '=', 'product_variants.product_id')
-            ->join('categories', 'categories.id', '=', 'products.category_id')
-            ->tap(fn ($q) => \App\Support\OutletFilter::joinReportPreorderOutlet($q))
-            ->join('events', 'events.id', '=', 'preorders.event_id')
-            ->leftJoinSub($collected, 'pc', 'pc.preorder_id', '=', 'preorders.id')
-            ->where('preorders.status', '!=', 'cancelled')
-            ->where('preorder_items.data_mode', ModeGate::current())
-            ->when(true, fn ($q) => \App\Support\OutletFilter::applyReportPreorder($q))
-            ->when($request->filled('event_id'), fn ($q) => $q->where('preorders.event_id', $request->integer('event_id')))
-            ->when($request->filled('date_from'), fn ($q) => $q->whereDate('preorders.created_at', '>=', $request->date('date_from')))
-            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('preorders.created_at', '<=', $request->date('date_to')));
-    }
-
     public function profit(Request $request): JsonResponse
     {
         if (! $request->user()->canAccessMenu('reports')) {
             return response()->json(['message' => __('reports.not_authorized')], 403);
         }
 
-        $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
-        $event = Event::findOrFail($eventId);
+        [$from, $to] = $this->period($request);
 
         $totals = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.event_id', $eventId)
             ->when(true, fn ($q) => \App\Support\OutletFilter::applyReport($q)) // 045 Stage 7: sama dengan baris per outlet
             ->where('orders.status', 'completed')
-            // 003-seed-demo-live — defense-in-depth, sama seperti sales()
-            // di atas (Event::findOrFail() sudah menyaring $eventId lintas
-            // mode, tapi query hand-rolled ini tetap dibuat eksplisit
-            // supaya tidak diam-diam benar hanya karena kebetulan digerbang
-            // lookup lain).
+            ->when($from, fn ($q) => $q->where('orders.business_date', '>=', $from))
+            ->when($to, fn ($q) => $q->where('orders.business_date', '<=', $to))
+            // 003-seed-demo-live — query hand-rolled tidak mewarisi global scope Eloquent: filter eksplisit.
             ->where('order_items.data_mode', ModeGate::current())
             ->selectRaw('
                 SUM(order_items.line_total) as revenue,
                 SUM(order_items.cost_price * order_items.qty) as cost_of_goods
             ')->first();
 
-        // 010-split-payment-preorder-reports (US5/FR-011, research.md R1/R7)
-        // — sama seperti sales(), pendapatan preorder yang diakui (uang
-        // terkumpul, diproporsikan per item) ditambahkan ke revenue, dan
-        // cost_price*qty-nya diproporsikan dengan RATIO YANG SAMA (bukan
-        // cost_price penuh) untuk ditambahkan ke cost_of_goods — PreorderItem
-        // sudah punya snapshot cost_price/sell_price/line_total yang sama
-        // persis bentuknya dengan OrderItem (confirmed di PreorderItem.php).
-        $fraction = self::PREORDER_FRACTION_EXPR;
-        $preorderTotals = $this->preorderRecognizedRevenueBase($request)
-            ->where('preorders.event_id', $eventId)
-            ->selectRaw("
-                SUM(preorder_items.line_total * ({$fraction})) as revenue,
-                SUM(preorder_items.cost_price * preorder_items.qty * ({$fraction})) as cost_of_goods
-            ")->first();
-
-        $revenue = (float) ($totals->revenue ?? 0) + (float) ($preorderTotals->revenue ?? 0);
-        $cost = (float) ($totals->cost_of_goods ?? 0) + (float) ($preorderTotals->cost_of_goods ?? 0);
-        $grossProfit = $revenue - $cost;
-        $netProfit = $grossProfit - (float) $event->event_cost;
-
-        // 033 — pemisahan POS vs pre-order. Bagian POS apa adanya; bagian
-        // pre-order = SISA dari total yang tampil (dalam sen), jadi POS +
-        // pre-order selalu persis sama dengan angka total di atas. Laba
-        // kotor dipisah dengan cara yang sama terhadap gross_profit yang
-        // tampil (bisa berselisih 1 sen dari pendapatan − modal bagian
-        // pre-order, murni efek pembulatan). event_cost/net_profit milik
-        // seluruh event, sengaja TIDAK dipisah.
-        $revenueText = number_format($revenue, 2, '.', '');
-        $costText = number_format($cost, 2, '.', '');
-        $grossText = number_format($grossProfit, 2, '.', '');
-        $revenuePos = number_format((float) ($totals->revenue ?? 0), 2, '.', '');
-        $costPos = number_format((float) ($totals->cost_of_goods ?? 0), 2, '.', '');
-        $grossPos = ReportSplit::money(ReportSplit::cents($revenuePos) - ReportSplit::cents($costPos));
+        // 046 — penjualan selesai saja untuk periode ini: tanpa pre-order, tanpa biaya event / laba bersih.
+        $revenue = (float) ($totals->revenue ?? 0);
+        $cost = (float) ($totals->cost_of_goods ?? 0);
 
         return response()->json([
-            'event' => $event,
-            'revenue' => $revenueText,
-            'cost_of_goods' => $costText,
-            'gross_profit' => $grossText,
-            'event_cost' => number_format((float) $event->event_cost, 2, '.', ''),
-            'net_profit' => number_format($netProfit, 2, '.', ''),
-            'revenue_pos' => $revenuePos,
-            'revenue_preorder' => ReportSplit::remainder($revenueText, $revenuePos),
-            'cost_of_goods_pos' => $costPos,
-            'cost_of_goods_preorder' => ReportSplit::remainder($costText, $costPos),
-            'gross_profit_pos' => $grossPos,
-            'gross_profit_preorder' => ReportSplit::remainder($grossText, $grossPos),
+            'date_from' => $from,
+            'date_to' => $to,
+            'revenue' => number_format($revenue, 2, '.', ''),
+            'cost_of_goods' => number_format($cost, 2, '.', ''),
+            'gross_profit' => number_format($revenue - $cost, 2, '.', ''),
         ]);
     }
 
     /**
-     * 045 Stage 7 — id outlet PELAPORAN yang memuat penjualan LAMA (order `outlet_backfilled`) pada event ini: barisnya
+     * 045 Stage 7 — id outlet PELAPORAN yang memuat penjualan LAMA (order `outlet_backfilled`) pada periode ini: barisnya
      * diberi `historical: true` karena atribusinya masih penjual lama (angka lampau tidak bergeser).
      *
      * @return list<int>
      */
-    private function historicalOutletIds(int $eventId): array
+    private function historicalOutletIds(?string $from, ?string $to): array
     {
         return DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.event_id', $eventId)->where('orders.status', 'completed')->where('orders.outlet_backfilled', 1)
+            ->when($from, fn ($q) => $q->where('orders.business_date', '>=', $from))
+            ->when($to, fn ($q) => $q->where('orders.business_date', '<=', $to))
+            ->where('orders.status', 'completed')->where('orders.outlet_backfilled', 1)
             ->where('order_items.data_mode', ModeGate::current())
             ->selectRaw(\App\Support\OutletFilter::reportOutletSql().' as oid')->distinct()->pluck('oid')->map(fn ($i) => (int) $i)->all();
     }
 
     public function outletSettlements(Request $request): JsonResponse
     {
-        // Sejalan dengan PRD 7.13 (kasir tidak boleh mengakses laporan
-        // modal/keuntungan) dan konsisten dengan profit()/
-        // recordSettlementPayment() di controller ini — rekap hasil
-        // outlet memuat payable_amount dan deduction, data komersial yang
-        // sama sensitifnya dengan laporan profit, jadi harus digerbang
-        // sama, bukan cuma mutasinya (recordSettlementPayment) saja.
+        // Sejalan dengan PRD 7.13 (kasir tidak boleh mengakses laporan modal/keuntungan): rekap hasil outlet
+        // digerbang sama seperti profit().
         if (! $request->user()->canAccessMenu('reports')) {
             return response()->json(['message' => __('reports.not_authorized')], 403);
         }
 
-        $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
-        $event = Event::findOrFail($eventId);
+        [$from, $to] = $this->period($request);
 
-        // Selalu dihitung ulang agar angka live, bukan dibaca mentah dari
-        // cache — konsisten dengan keputusan desain SettlementService.
-        // 040: hasilnya POS-saja; tidak ada lagi rincian POS vs pre-order.
-        $this->settlementService->recalculateForEvent($event);
+        // 046 — dihitung LANGSUNG dari penjualan selesai pada periode (tidak ada lagi snapshot per event).
+        $sales = $this->settlementService->posSalesForPeriod($from, $to);
 
-        $settlements = OutletSettlement::where('event_id', $eventId)->get()->keyBy('outlet_id');
-
-        // BUG YANG DITEMUKAN & DIPERBAIKI — laporan ini dulu membaca
-        // outlet_settlements saja, sedangkan SettlementService::
-        // recalculateForEvent() membangun barisnya dari agregasi
-        // GROUP BY order_items.home_outlet_id. Outlet yang belum punya satu pun
-        // order_items di event ini karena itu TIDAK PERNAH punya baris
-        // settlement, dan hilang total dari laporan — operator tidak bisa
-        // membedakan "outlet ini belum laku" dari "outlet ini tidak ikut
-        // event". Perbaikannya dilakukan di sisi LAPORAN (left join semua
-        // outlet aktif ke settlement-nya), bukan dengan menyemai baris
-        // outlet_settlements kosong untuk setiap outlet: tabel itu berperan
-        // sebagai catatan STATUS PEMBAYARAN ke outlet, jadi baris yang
-        // tidak pernah punya nilai bayar hanya akan jadi sampah yang
-        // mengaburkan maknanya.
-        //
-        // Outlet yang sudah dinonaktifkan/di-soft-delete TETAP muncul bila
-        // punya baris settlement di event ini — uangnya tetap wajib
-        // dibayar, dan versi lama malah fatal error di $s->homeOutlet->name
-        // untuk outlet yang sudah terhapus.
-        $outletIdsWithSettlement = $settlements->keys()->all();
-
-        // 045 Stage 7 — hanya outlet yang berlaku untuk pemanggil (penugasan ∩ pilihan header).
-        // `entitledIds()` (bukan effectiveIds) supaya outlet yang SUDAH dinonaktifkan tetap tampil bila punya penjualan.
+        // Outlet aktif TETAP muncul walau belum laku (nol), supaya "belum ada penjualan" terbedakan dari
+        // "tidak terdaftar"; outlet nonaktif/terhapus muncul bila punya penjualan pada periode ini.
+        // 045 Stage 7 — hanya outlet yang berlaku untuk pemanggil (penugasan ∩ pilihan header);
+        // `entitledIds()` supaya outlet yang SUDAH dinonaktifkan tetap tampil bila punya penjualan.
         $entitled = app(\App\Support\OutletContext::class)->entitledIds();
         $outlets = Outlet::withTrashed()
-            ->where(function ($q) use ($outletIdsWithSettlement) {
+            ->where(function ($q) use ($sales) {
                 $q->where(fn ($active) => $active->where('is_active', true)->whereNull('deleted_at'))
-                    ->orWhereIn('id', $outletIdsWithSettlement);
+                    ->orWhereIn('id', $sales->keys()->all());
             })
             ->when($entitled !== null, fn ($q) => $q->whereIn('id', $entitled ?: [0]))
             ->orderBy('name')
             ->get();
 
-        // 040 (tindak lanjut) — rekap kini hanya Penjual / Unit / Penjualan: tidak ada lagi
-        // id settlement, deduction, payable, paid, outstanding, maupun status, dan endpoint
-        // "Record payment" dihapus. `outlet_id` (selalu ada) adalah kunci baris untuk UI.
-        $historical = $this->historicalOutletIds($eventId);
-        $data = $outlets->map(function (Outlet $outlet) use ($settlements, $historical) {
-            $s = $settlements->get($outlet->id);
+        // Rekap hanya Penjual / Unit / Penjualan; `outlet_id` (selalu ada) adalah kunci baris untuk UI.
+        $historical = $this->historicalOutletIds($from, $to);
+        $data = $outlets->map(function (Outlet $outlet) use ($sales, $historical) {
+            $row = $sales->get($outlet->id);
 
             return [
                 'outlet_id' => $outlet->id,
                 'outlet_name' => $outlet->name,
                 // 045 Stage 7: memuat penjualan sebelum ada outlet penjualan (atribusi penjual lama).
                 'historical' => in_array($outlet->id, $historical, true),
-                'total_sales' => number_format((float) ($s?->total_sales ?? 0), 2, '.', ''),
-                'total_units' => (int) ($s?->total_units ?? 0),
+                'total_sales' => number_format((float) ($row['sales'] ?? 0), 2, '.', ''),
+                'total_units' => (int) round((float) ($row['units'] ?? 0)),
             ];
         })->values();
 
-        return response()->json(['event' => $event, 'data' => $data]);
+        return response()->json(['date_from' => $from, 'date_to' => $to, 'data' => $data]);
     }
 
     /**
-     * F11.6 — drill-down transaksi yang menyusun rekap satu outlet di satu
-     * event. Sengaja dipisah dari outletSettlements() (bukan menumpuk
+     * F11.6 — drill-down transaksi yang menyusun rekap satu outlet pada satu
+     * periode. Sengaja dipisah dari outletSettlements() (bukan menumpuk
      * ?with_transactions=1 di sana) karena bentuknya beda tujuan: yang satu
      * tabel ringkasan seluruh outlet, yang ini daftar order milik SATU
      * outlet — memuatnya sekaligus di setiap baris ringkasan akan menarik
@@ -557,12 +325,8 @@ class ReportController extends Controller
      */
     /**
      * 040-recap-pos-transactions-only — detail transaksi seorang seller pada
-     * suatu event: HANYA penjualan POS, supaya jumlahnya persis sama dengan
-     * kolom Penjualan pada baris rekap (yang juga POS-saja). Fitur 012
-     * sempat menggabungkan pre-order di sini (query kedua + sort ulang di
-     * PHP); itu dihapus bersama field `source` karena rekapnya sendiri tidak
-     * lagi memuat pre-order. Pre-order tetap bisa ditelusuri dari laporan
-     * Pre-order dan layar Pre-orders.
+     * suatu periode: HANYA penjualan POS, supaya jumlahnya persis sama dengan
+     * kolom Penjualan pada baris rekap (yang juga POS-saja).
      */
     public function outletSettlementTransactions(Request $request, Outlet $outlet): JsonResponse
     {
@@ -570,12 +334,12 @@ class ReportController extends Controller
             return response()->json(['message' => __('reports.not_authorized')], 403);
         }
 
-        $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
-        $event = Event::findOrFail($eventId);
+        [$from, $to] = $this->period($request);
 
         $items = OrderItem::query()
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.event_id', $eventId)
+            ->when($from, fn ($q) => $q->where('orders.business_date', '>=', $from))
+            ->when($to, fn ($q) => $q->where('orders.business_date', '<=', $to))
             ->when(true, fn ($q) => \App\Support\OutletFilter::applyReport($q))
             ->where('orders.status', 'completed')
             ->whereRaw(\App\Support\OutletFilter::reportOutletSql().' = ?', [$outlet->id])
@@ -623,38 +387,20 @@ class ReportController extends Controller
             ->values();
 
         return response()->json([
-            'event' => $event,
+            'date_from' => $from,
+            'date_to' => $to,
             'outlet' => ['id' => $outlet->id, 'name' => $outlet->name],
             'transactions' => $transactions,
         ]);
     }
 
     /**
-     * F9.5 — modal dan laba kotor PER ARTIST, terpisah dari biaya event.
+     * F9.5 — modal dan laba kotor PER OUTLET untuk satu periode tanggal bisnis.
      *
-     * KEPUTUSAN DESAIN (dicatat di sini karena tidak jelas dari nama
-     * method saja): PRD F9.5 sengaja tidak mewajibkan satu basis modal
-     * tertentu (harga modal manual vs. modal BOM) — lihat kriteria
-     * penerimaannya. Kodebase ini sudah punya pola arsitektural yang
-     * konsisten: field uang/identitas di-SNAPSHOT ke order_items pada
-     * saat transaksi terjadi (sell_price, cost_price, sku_snapshot,
-     * name_snapshot), justru supaya laporan historis tidak diam-diam
-     * berubah kalau data master (termasuk komposisi BOM) berubah setelah
-     * transaksi lampau terjadi. profit() (F9.1/F9.2) sudah memakai
-     * order_items.cost_price sebagai basis modal tingkat event — laporan
-     * ini memakai sumber yang SAMA, hanya diiris per outlet, supaya kedua
-     * laporan modal/keuntungan tetap konsisten satu sama lain dan tidak
-     * membangun dua jalur biaya paralel (harga modal manual vs. BOM
-     * hidup) yang bisa saling menyimpang dan membingungkan pengguna.
-     * Modal BOM (bom_cost, lihat BomCostCalculator) tetap tersedia lewat
-     * endpoint cost-breakdown-nya sendiri untuk kebutuhan lain, tapi
-     * BUKAN basis laporan historis ini.
-     *
-     * event_cost SENGAJA tidak dikurangkan di mana pun pada laporan ini —
-     * kriteria penerimaan F9.5 eksplisit melarangnya, karena biaya
-     * bersama itu sudah diperhitungkan terpisah di laba bersih tingkat
-     * event (F9.3) dan akan dobel-hitung atau teralokasi tidak adil antar
-     * outlet bila ikut dikurangkan di sini juga.
+     * Basis modal = order_items.cost_price (SNAPSHOT saat transaksi), sama dengan profit(), supaya laporan
+     * historis tidak berubah diam-diam ketika data master (termasuk BOM) berubah, dan kedua laporan
+     * modal/keuntungan tidak menyimpang satu sama lain. Modal BOM (bom_cost) tetap tersedia lewat endpoint
+     * cost-breakdown-nya sendiri.
      */
     public function outletProfit(Request $request): JsonResponse
     {
@@ -662,13 +408,13 @@ class ReportController extends Controller
             return response()->json(['message' => __('reports.not_authorized')], 403);
         }
 
-        $eventId = $request->validate(['event_id' => ['required', 'integer', 'exists:events,id']])['event_id'];
-        $event = Event::findOrFail($eventId);
+        [$from, $to] = $this->period($request);
 
-        $posRows = DB::table('order_items')
+        $rows = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->tap(fn ($q) => \App\Support\OutletFilter::joinReportOutlet($q)) // 045 Stage 7
-            ->where('orders.event_id', $eventId)
+            ->when($from, fn ($q) => $q->where('orders.business_date', '>=', $from))
+            ->when($to, fn ($q) => $q->where('orders.business_date', '<=', $to))
             ->when(true, fn ($q) => \App\Support\OutletFilter::applyReport($q))
             ->where('orders.status', 'completed')
             ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat catatan sales()
@@ -679,66 +425,20 @@ class ReportController extends Controller
                 SUM(order_items.cost_price * order_items.qty) as modal
             ')
             ->groupBy('outlets.id', 'outlets.name')
-            ->get()
-            ->keyBy('outlet_id');
+            ->orderBy('outlets.name')
+            ->get();
 
-        // 033 — laporan ini dulu HANYA membaca order_items sehingga seller
-        // yang cuma punya pre-order tidak muncul dan totalnya tidak sama
-        // dengan Rekap Seller. Kini pre-order yang diakui (porsi terbayar,
-        // pecahan dan pembatalan sama persis dengan sales()/profit()/Rekap)
-        // ikut dihitung lewat SATU query agregat tambahan per seller.
-        $fraction = self::PREORDER_FRACTION_EXPR;
-        $preorderRows = $this->preorderRecognizedRevenueBase($request)
-            ->where('preorders.event_id', $eventId)
-            ->selectRaw("
-                outlets.id as outlet_id,
-                outlets.name as outlet_name,
-                SUM(preorder_items.line_total * ({$fraction})) as total_sales,
-                SUM(preorder_items.cost_price * preorder_items.qty * ({$fraction})) as modal
-            ")
-            ->groupBy('outlets.id', 'outlets.name')
-            ->get()
-            ->keyBy('outlet_id');
+        $historical = $this->historicalOutletIds($from, $to);
+        $data = $rows->map(fn ($r) => [
+            'outlet_id' => $r->outlet_id,
+            'outlet_name' => $r->outlet_name,
+            'historical' => in_array((int) $r->outlet_id, $historical, true), // 045 Stage 7
+            'total_sales' => number_format((float) $r->total_sales, 2, '.', ''),
+            'modal' => number_format((float) $r->modal, 2, '.', ''),
+            'gross_profit' => number_format((float) $r->total_sales - (float) $r->modal, 2, '.', ''),
+        ])->values();
 
-        $historical = $this->historicalOutletIds($eventId);
-        $rows = $posRows->keys()->merge($preorderRows->keys())->unique()
-            ->map(function ($outletId) use ($posRows, $preorderRows, $historical) {
-                $pos = $posRows->get($outletId);
-                $pre = $preorderRows->get($outletId);
-
-                $posSales = (float) ($pos->total_sales ?? 0);
-                $posModal = (float) ($pos->modal ?? 0);
-                $totalSales = $posSales + (float) ($pre->total_sales ?? 0);
-                $totalModal = $posModal + (float) ($pre->modal ?? 0);
-
-                $salesText = number_format($totalSales, 2, '.', '');
-                $modalText = number_format($totalModal, 2, '.', '');
-                $grossText = number_format($totalSales - $totalModal, 2, '.', '');
-                $salesPos = number_format($posSales, 2, '.', '');
-                $modalPos = number_format($posModal, 2, '.', '');
-                $grossPos = ReportSplit::money(ReportSplit::cents($salesPos) - ReportSplit::cents($modalPos));
-
-                return [
-                    'outlet_id' => $outletId,
-                    'outlet_name' => $pos->outlet_name ?? $pre->outlet_name,
-                    'historical' => in_array((int) $outletId, $historical, true), // 045 Stage 7
-                    // Total = POS + pre-order (nama kunci lama dipertahankan).
-                    'total_sales' => $salesText,
-                    'modal' => $modalText,
-                    'gross_profit' => $grossText,
-                    // Bagian POS apa adanya; bagian pre-order = sisa total (sen).
-                    'sales_pos' => $salesPos,
-                    'sales_preorder' => ReportSplit::remainder($salesText, $salesPos),
-                    'modal_pos' => $modalPos,
-                    'modal_preorder' => ReportSplit::remainder($modalText, $modalPos),
-                    'gross_profit_pos' => $grossPos,
-                    'gross_profit_preorder' => ReportSplit::remainder($grossText, $grossPos),
-                ];
-            })
-            ->sortBy('outlet_name', SORT_STRING | SORT_FLAG_CASE)
-            ->values();
-
-        return response()->json(['event' => $event, 'data' => $rows]);
+        return response()->json(['date_from' => $from, 'date_to' => $to, 'data' => $data]);
     }
 
     /**
@@ -812,7 +512,7 @@ class ReportController extends Controller
      * seperti pola findOrFail() lain di controller ini.
      */
     /**
-     * BUG YANG DITEMUKAN & DIPERBAIKI (012-seller-preorder-report-detail-export,
+     * BUG YANG DITEMUKAN & DIPERBAIKI (012,
      * ditemukan lewat test T022) — stockByOutlet() mengembalikan bentuk respons
      * BERBEDA tergantung ada-tidaknya `outlet_id` di request (ringkasan per-outlet
      * dengan key 'data', vs detail per-varian tanpa key 'data' sama sekali). Jalur
@@ -902,256 +602,6 @@ class ReportController extends Controller
     }
 
     /**
-     * 010-split-payment-preorder-reports (US6) — laporan baru khusus
-     * pre-order: hitungan & nominal per status × kelengkapan pembayaran
-     * (unpaid/partial/paid). Berbeda dari sales()/profit() yang hanya
-     * menjumlah pendapatan pre-order yang SUDAH terbayar — laporan ini
-     * tentang STATE pre-order, jadi pre-order 'cancelled' tetap tampil
-     * di breakdown status meski tidak berkontribusi pendapatan.
-     *
-     * amount_collected dihitung live dari SUM(payments.amount) (bukan
-     * cache preorders.paid_amount yang bisa drift — research.md R1/R6),
-     * mengecualikan pembayaran yang verifikasinya 'rejected', sama
-     * seperti aturan sales()/profit() untuk order_items.
-     *
-     * Satu query SQL ber-GROUP BY, bukan loop PHP per pre-order
-     * (Constitution V), mengikuti pola sales() yang sudah ada.
-     */
-    public function preorders(Request $request): JsonResponse
-    {
-        if (! $request->user()->canAccessMenu('reports')) {
-            return response()->json(['message' => __('reports.not_authorized')], 403);
-        }
-
-        // 012-seller-preorder-report-detail-export (US2/T007, research.md R2)
-        // — path baru, terpisah total dari agregasi header di bawah, dipicu
-        // oleh ?breakdown=outlet. TIDAK mengubah query/shape default sama
-        // sekali (FR-005 aditif, bukan pengganti).
-        if ($request->query('breakdown') === 'outlet') {
-            return $this->preordersByOutlet($request);
-        }
-
-        // 012-seller-preorder-report-detail-export (US3/T013, research.md R3,
-        // data-model.md "Pre-order drilldown row") — path KETIGA, dipicu oleh
-        // hadirnya `status` (dengan atau tanpa `payment_completeness`/
-        // `outlet_id`), mengembalikan daftar preorder individual, bukan
-        // agregat. Endpoint sama (FR: reuse, bukan route baru) — dibedakan
-        // lewat presence parameter, bukan ?breakdown= lain, karena drilldown
-        // ini bukan "cara pengelompokan baru" seperti breakdown=outlet,
-        // melainkan "buka baris yang sudah dikelompokkan".
-        if ($request->filled('status')) {
-            return $this->preordersDrilldown($request);
-        }
-
-        $collected = DB::table('payments')
-            ->selectRaw('preorder_id, SUM(amount) as amount_collected')
-            ->whereNotNull('preorder_id')
-            ->where('verification', '!=', 'rejected')
-            ->groupBy('preorder_id');
-
-        $completeness = $this->paymentCompletenessCaseExpr('collected.amount_collected');
-
-        $rows = DB::table('preorders')
-            ->leftJoinSub($collected, 'collected', 'collected.preorder_id', '=', 'preorders.id')
-            // 003-seed-demo-live — query hand-rolled DB::table TIDAK ikut
-            // Eloquent global scope, lihat catatan di sales().
-            ->where('preorders.data_mode', ModeGate::current())
-                ->when(true, fn ($q) => \App\Support\OutletFilter::apply($q, 'preorders.outlet_id'))
-            ->when($request->filled('event_id'), fn ($q) => $q->where('preorders.event_id', $request->integer('event_id')))
-            ->selectRaw("
-                preorders.status as status,
-                {$completeness} as payment_completeness,
-                CASE
-                    WHEN COALESCE(collected.amount_collected, 0) <= 0 THEN 'unpaid'
-                    WHEN COALESCE(collected.amount_collected, 0) >= preorders.total_amount THEN 'paid'
-                    ELSE 'partial'
-                END as payment_completeness,
-                COUNT(*) as preorder_count,
-                SUM(preorders.total_amount) as total_order_value,
-                SUM(COALESCE(collected.amount_collected, 0)) as total_collected,
-                SUM(GREATEST(preorders.total_amount - COALESCE(collected.amount_collected, 0), 0)) as total_outstanding
-            ")
-            ->groupBy('preorders.status', 'payment_completeness')
-            ->orderBy('preorders.status')
-            ->orderBy('payment_completeness')
-            ->get()
-            ->map(fn ($row) => [
-                'status' => $row->status,
-                'payment_completeness' => $row->payment_completeness,
-                'preorder_count' => (int) $row->preorder_count,
-                'total_order_value' => number_format((float) $row->total_order_value, 2, '.', ''),
-                'total_collected' => number_format((float) $row->total_collected, 2, '.', ''),
-                'total_outstanding' => number_format((float) $row->total_outstanding, 2, '.', ''),
-            ]);
-
-        return response()->json(['rows' => $rows]);
-    }
-
-    /**
-     * 012-seller-preorder-report-detail-export (US2/T007, data-model.md
-     * "Pre-order per-seller breakdown row", research.md R2) — breakdown
-     * per-artis dari preorders(), dipicu oleh ?breakdown=outlet.
-     *
-     * Beda dari path default: JOIN ke preorder_items (via
-     * preorderRecognizedRevenueBase(), dipakai ulang dari 010 supaya tidak
-     * ada rumus proporsi kedua untuk pertanyaan yang sama — "berapa bagian
-     * preorder ini milik artis X"). Konsekuensinya, path ini otomatis
-     * mengecualikan preorder 'cancelled' sepenuhnya (base query sudah
-     * where status != cancelled), sesuai edge case spec: breakdown
-     * per-seller tidak boleh memasukkan preorder cancelled ke total uang.
-     *
-     * total_order_value/total_collected/total_outstanding di sini adalah
-     * proporsi (share) artis atas item preorder tsb, BUKAN total_amount
-     * penuh header seperti path default — jumlah semua outlet_id untuk
-     * status/payment_completeness yang sama akan match baris ringkasan
-     * path default untuk kombinasi tsb (di luar cancelled).
-     *
-     * preorder_count = COUNT(DISTINCT preorders.id): satu preorder dengan
-     * 2 item milik artis yang sama dihitung sekali, bukan dua kali.
-     *
-     * Satu query SQL ber-GROUP BY (Constitution V) — tidak ada loop PHP
-     * per preorder.
-     */
-    private function preordersByOutlet(Request $request): JsonResponse
-    {
-        $fraction = self::PREORDER_FRACTION_EXPR;
-        $completeness = $this->paymentCompletenessCaseExpr('pc.collected');
-
-        $rows = $this->preorderRecognizedRevenueBase($request)
-            ->selectRaw("
-                outlets.id as outlet_id,
-                outlets.name as outlet_name,
-                preorders.status as status,
-                {$completeness} as payment_completeness,
-                COUNT(DISTINCT preorders.id) as preorder_count,
-                SUM(preorder_items.line_total) as total_order_value,
-                SUM(preorder_items.line_total * ({$fraction})) as total_collected,
-                GREATEST(
-                    SUM(preorder_items.line_total) - SUM(preorder_items.line_total * ({$fraction})),
-                    0
-                ) as total_outstanding
-            ")
-            ->groupBy('outlets.id', 'outlets.name', 'preorders.status', 'payment_completeness')
-            ->orderBy('outlets.name')
-            // 039: dua penjual bernama SAMA tidak boleh saling menyusup — baris satu penjual harus
-            // berurutan supaya baris Subtotal-nya tepat di bawah baris terakhirnya.
-            ->orderBy('outlets.id')
-            ->orderBy('preorders.status')
-            ->orderBy('payment_completeness')
-            ->get()
-            ->map(fn ($row) => [
-                'outlet_id' => (int) $row->outlet_id,
-                'outlet_name' => $row->outlet_name,
-                'status' => $row->status,
-                'payment_completeness' => $row->payment_completeness,
-                'preorder_count' => (int) $row->preorder_count,
-                'total_order_value' => number_format((float) $row->total_order_value, 2, '.', ''),
-                'total_collected' => number_format((float) $row->total_collected, 2, '.', ''),
-                'total_outstanding' => number_format((float) $row->total_outstanding, 2, '.', ''),
-            ]);
-
-        // 039: subtotal per penjual dihitung SEKALI di sini (PreorderSellerSubtotals, dalam sen) dan dipakai
-        // layar DAN ekspor Excel; `rows` tidak berubah, jadi klien lama tetap jalan.
-        return response()->json(['rows' => $rows, 'subtotals' => PreorderSellerSubtotals::fromRows($rows->all())]);
-    }
-
-    /**
-     * 012-seller-preorder-report-detail-export (US3/T013, research.md R3,
-     * data-model.md "Pre-order drilldown row") — daftar preorder individual
-     * di balik satu baris ringkasan status×payment_completeness (path
-     * default), atau satu baris status×payment_completeness×outlet_id
-     * (path breakdown=outlet) ketika `outlet_id` turut diberikan.
-     *
-     * Tanpa outlet_id: order_value/collected/outstanding adalah total milik
-     * preorder itu sendiri (preorders.total_amount & SUM(payments.amount)),
-     * SAMA PERSIS dengan definisi yang dipakai path default di atas
-     * (paymentCompletenessCaseExpr() + agregasi collected yang sama) supaya
-     * jumlah baris drilldown = baris ringkasan (invariant SC-003/FR-007).
-     *
-     * Dengan outlet_id: order_value/collected/outstanding adalah PORSI milik
-     * artis tsb, dihitung lewat helper yang SAMA dengan preordersByOutlet()
-     * (preorderRecognizedRevenueBase() + PREORDER_FRACTION_EXPR), di-GROUP
-     * BY per preorder (bukan per item) supaya satu preorder dengan >1 item
-     * milik artis yang sama tetap satu baris drilldown.
-     */
-    private function preordersDrilldown(Request $request): JsonResponse
-    {
-        $status = $request->string('status')->toString();
-        $outletId = $request->filled('outlet_id') ? $request->integer('outlet_id') : null;
-
-        if ($outletId !== null) {
-            $fraction = self::PREORDER_FRACTION_EXPR;
-            $completeness = $this->paymentCompletenessCaseExpr('pc.collected');
-
-            $query = $this->preorderRecognizedRevenueBase($request)
-                ->leftJoin('customers', 'customers.id', '=', 'preorders.customer_id')
-                ->where('outlets.id', $outletId)
-                ->where('preorders.status', $status)
-                ->selectRaw("
-                    preorders.id as preorder_id,
-                    preorders.preorder_number as preorder_number,
-                    customers.name as customer_name,
-                    {$completeness} as payment_completeness,
-                    SUM(preorder_items.line_total) as order_value,
-                    SUM(preorder_items.line_total * ({$fraction})) as collected,
-                    GREATEST(
-                        SUM(preorder_items.line_total) - SUM(preorder_items.line_total * ({$fraction})),
-                        0
-                    ) as outstanding
-                ")
-                ->groupBy('preorders.id', 'preorders.preorder_number', 'customers.name', 'payment_completeness');
-
-            if ($request->filled('payment_completeness')) {
-                $query = $query->havingRaw('payment_completeness = ?', [$request->string('payment_completeness')->toString()]);
-            }
-
-            $rows = $query->orderBy('preorders.preorder_number')->get();
-        } else {
-            $collected = DB::table('payments')
-                ->selectRaw('preorder_id, SUM(amount) as amount_collected')
-                ->whereNotNull('preorder_id')
-                ->where('verification', '!=', 'rejected')
-                ->groupBy('preorder_id');
-
-            $completeness = $this->paymentCompletenessCaseExpr('collected.amount_collected');
-
-            $query = DB::table('preorders')
-                ->leftJoinSub($collected, 'collected', 'collected.preorder_id', '=', 'preorders.id')
-                ->leftJoin('customers', 'customers.id', '=', 'preorders.customer_id')
-                ->where('preorders.data_mode', ModeGate::current())
-                ->when(true, fn ($q) => \App\Support\OutletFilter::apply($q, 'preorders.outlet_id'))
-                ->where('preorders.status', $status)
-                ->when($request->filled('event_id'), fn ($q) => $q->where('preorders.event_id', $request->integer('event_id')))
-                ->selectRaw("
-                    preorders.id as preorder_id,
-                    preorders.preorder_number as preorder_number,
-                    customers.name as customer_name,
-                    {$completeness} as payment_completeness,
-                    preorders.total_amount as order_value,
-                    COALESCE(collected.amount_collected, 0) as collected,
-                    GREATEST(preorders.total_amount - COALESCE(collected.amount_collected, 0), 0) as outstanding
-                ");
-
-            if ($request->filled('payment_completeness')) {
-                $query = $query->havingRaw('payment_completeness = ?', [$request->string('payment_completeness')->toString()]);
-            }
-
-            $rows = $query->orderBy('preorders.preorder_number')->get();
-        }
-
-        $rows = $rows->map(fn ($row) => [
-            'preorder_id' => (int) $row->preorder_id,
-            'preorder_number' => $row->preorder_number,
-            'customer_name' => $row->customer_name,
-            'order_value' => number_format((float) $row->order_value, 2, '.', ''),
-            'collected' => number_format((float) $row->collected, 2, '.', ''),
-            'outstanding' => number_format((float) $row->outstanding, 2, '.', ''),
-        ]);
-
-        return response()->json(['rows' => $rows]);
-    }
-
-    /**
      * ASSUMPTION: PRD sengaja tidak menyebut nama pustaka Excel (lihat
      * PRD 9.1). Saya pilih maatwebsite/excel karena ini pustaka Excel
      * Laravel paling mapan — belum diverifikasi jalan di sandbox ini,
@@ -1159,7 +609,7 @@ class ReportController extends Controller
      */
     public function export(Request $request, string $report)
     {
-        if (! in_array($report, ['sales', 'profit', 'outlet-settlements', 'outlet-profit', 'purchases', 'stock-by-outlet', 'preorder'], true)) {
+        if (! in_array($report, ['sales', 'profit', 'outlet-settlements', 'outlet-profit', 'purchases', 'stock-by-outlet'], true)) {
             return response()->json(['message' => __('reports.unknown_report')], 404);
         }
 
@@ -1170,15 +620,6 @@ class ReportController extends Controller
         // sejalan dengan catatan di docblock GenericArrayExport sendiri.
         if ($report === 'outlet-settlements') {
             return $this->exportOutletSettlements($request);
-        }
-
-        // 012-seller-preorder-report-detail-export (US4/T021, research.md R5)
-        // — 'preorder' juga punya kebutuhan dua sheet (ringkasan status ×
-        // kelengkapan pembayaran + breakdown per seller dari US2), jadi
-        // ditangani lewat jalurnya sendiri, sama seperti 'outlet-settlements'
-        // di atas, alih-alih dipaksa masuk ke GenericArrayExport satu-sheet.
-        if ($report === 'preorder') {
-            return $this->exportPreorderReport($request);
         }
 
         // BUG YANG DITEMUKAN & DIPERBAIKI — match() di bawah sebelumnya
@@ -1192,7 +633,7 @@ class ReportController extends Controller
             'profit' => [$this->profit($request), null, 'laporan-profit.xlsx'],
             'outlet-profit' => [$this->outletProfit($request), 'data', 'laporan-modal-outlet.xlsx'],
             'purchases' => [$this->purchases($request), 'rows', 'laporan-pembelian.xlsx'],
-            // BUG YANG DITEMUKAN & DIPERBAIKI (012-seller-preorder-report-detail-export,
+            // BUG YANG DITEMUKAN & DIPERBAIKI (012,
             // ditemukan via test T022) — stockByOutlet() mengembalikan bentuk RESPONS
             // BERBEDA saat query string membawa `outlet_id` (detail per-varian, tanpa
             // key 'data') vs tanpa `outlet_id` (ringkasan per-outlet, key 'data'). Jalur
@@ -1228,7 +669,7 @@ class ReportController extends Controller
      * F11.6 — ekspor rekap outlet dua sheet: "Rekap" (bentuk lama, tidak
      * berubah, supaya tidak memutus apa pun yang sudah membaca berkas
      * lama) dan "Detail Transaksi" (baru — satu baris flat per item per
-     * order, lintas SEMUA outlet di event ini). Sheet-per-outlet sengaja
+     * order, lintas SEMUA outlet pada periode ini). Sheet-per-outlet sengaja
      * TIDAK dipakai — jumlah outlet per event tidak terbatas, dan
      * MultiSheetArrayExport dirancang untuk daftar sheet yang diketahui
      * sebelumnya, bukan satu sheet per baris data.
@@ -1243,12 +684,13 @@ class ReportController extends Controller
 
         $summaryRows = json_decode($summaryResponse->getContent(), true)['data'];
 
-        $eventId = $request->integer('event_id');
+        [$from, $to] = $this->period($request);
 
         $detailRows = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->tap(fn ($q) => \App\Support\OutletFilter::joinReportOutlet($q)) // 045 Stage 7
-            ->where('orders.event_id', $eventId)
+            ->when($from, fn ($q) => $q->where('orders.business_date', '>=', $from))
+            ->when($to, fn ($q) => $q->where('orders.business_date', '<=', $to))
             ->when(true, fn ($q) => \App\Support\OutletFilter::applyReport($q))
             ->where('orders.status', 'completed')
             ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat catatan sales()
@@ -1287,92 +729,6 @@ class ReportController extends Controller
                 new \App\Exports\SheetArrayExport('Detail Transaksi', $detailHeadings, $detailRows),
             ]),
             'rekap-outlet.xlsx'
-        );
-    }
-
-    /**
-     * 012-seller-preorder-report-detail-export (US4/T021, research.md R5)
-     * — ekspor laporan Pre-order dua sheet: "Ringkasan" (agregat
-     * status × kelengkapan pembayaran, bentuk lama dari preorders()) dan
-     * "Per Seller" (breakdown per outlet dari US2, preorders(breakdown=outlet)).
-     * Mengikuti pola exportOutletSettlements() persis — MultiSheetArrayExport
-     * dipilih karena GenericArrayExport tidak mendukung multi-sheet, dan
-     * FR-011 secara eksplisit meminta breakdown per seller ikut dalam
-     * ekspor yang sama (satu unduhan, bukan dua tombol export terpisah —
-     * lihat alternatif yang ditolak di research.md R5).
-     */
-    /**
-     * 039 — sisipkan baris "Subtotal — <penjual>" tepat sesudah baris terakhir tiap penjual pada sheet
-     * "Per Seller" (keputusan pemilik produk 2026-10-05: file sama dengan layar). Angkanya diambil dari
-     * `subtotals` respons API yang SAMA — tidak dihitung ulang di sini. Sel outlet_id, status, dan
-     * payment_completeness dikosongkan supaya baris ini tidak bisa tertukar dengan baris data; tidak ada
-     * baris grand-total (memang tidak ada di ekspor ini).
-     *
-     * @param  array<int, array<string, mixed>>  $rows
-     * @param  array<int, array<string, mixed>>  $subtotals
-     * @return array<int, array<string, mixed>>
-     */
-    private function withSellerSubtotalRows(array $rows, array $subtotals): array
-    {
-        $byOutlet = collect($subtotals)->keyBy('outlet_id');
-        $out = [];
-
-        foreach ($rows as $i => $row) {
-            $out[] = $row;
-            $isLastOfSeller = ! isset($rows[$i + 1]) || $rows[$i + 1]['outlet_id'] !== $row['outlet_id'];
-            $sub = $byOutlet->get($row['outlet_id']);
-
-            if ($isLastOfSeller && $sub !== null) {
-                $out[] = [
-                    'outlet_id' => null,
-                    'outlet_name' => 'Subtotal — '.$sub['outlet_name'],
-                    'status' => '',
-                    'payment_completeness' => '',
-                    'preorder_count' => $sub['preorder_count'],
-                    'total_order_value' => $sub['total_order_value'],
-                    'total_collected' => $sub['total_collected'],
-                    'total_outstanding' => $sub['total_outstanding'],
-                ];
-            }
-        }
-
-        return $out;
-    }
-
-    private function exportPreorderReport(Request $request)
-    {
-        $summaryResponse = $this->preorders($request);
-
-        if ($summaryResponse->getStatusCode() !== 200) {
-            return $summaryResponse;
-        }
-
-        $summaryPayload = json_decode($summaryResponse->getContent(), true);
-        $summaryRows = $summaryPayload['rows'];
-
-        // Panggil ulang preorders() dengan breakdown=outlet ditambahkan ke
-        // query request yang sama (merge(), bukan request baru) supaya
-        // seluruh parameter lain (event_id, dll.) yang sudah ada di request
-        // asli tetap ikut terbawa tanpa perlu disalin ulang manual.
-        $request->merge(['breakdown' => 'outlet']);
-        $breakdownResponse = $this->preorders($request);
-
-        if ($breakdownResponse->getStatusCode() !== 200) {
-            return $breakdownResponse;
-        }
-
-        $breakdownPayload = json_decode($breakdownResponse->getContent(), true);
-        $breakdownRows = $this->withSellerSubtotalRows($breakdownPayload['rows'], $breakdownPayload['subtotals'] ?? []);
-
-        $summaryHeadings = ['status', 'payment_completeness', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'];
-        $breakdownHeadings = ['outlet_id', 'outlet_name', 'status', 'payment_completeness', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'];
-
-        return \Maatwebsite\Excel\Facades\Excel::download(
-            new \App\Exports\MultiSheetArrayExport([
-                new \App\Exports\SheetArrayExport('Ringkasan', $summaryHeadings, $summaryRows),
-                new \App\Exports\SheetArrayExport('Per Seller', $breakdownHeadings, $breakdownRows),
-            ]),
-            'laporan-preorder.xlsx'
         );
     }
 }
