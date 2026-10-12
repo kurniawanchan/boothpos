@@ -98,7 +98,7 @@ function openProductDetail(item) {
 const showReceipt = ref(false);
 
 // --- Pembayaran (028-partial-split-payment, US5) -------------------------------------------
-// Ringkasan + riwayat bersama dengan pre-order; Tambah pembayaran selama masih ada sisa dan
+// Ringkasan + riwayat pembayaran; Tambah pembayaran selama masih ada sisa dan
 // penjualannya tidak batal; Hapus hanya owner/admin (server menegakkan: 403 / 409).
 const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));
 const canAddPayment = computed(() => !!order.value && !voided.value && parseMoney(order.value.payment_summary?.remaining) > 0);
@@ -148,7 +148,7 @@ async function viewPaymentProof(payment) {
   try {
     proofLightboxSrc.value = await getPaymentProofBlobUrl(payment.proof_id);
   } catch (err) {
-    toast.error(err.message || t('preorders.proof_load_failed'));
+    toast.error(err.message || t('payment_ledger.proof_load_failed'));
   }
 }
 
@@ -169,7 +169,7 @@ async function performVerify() {
   if (!verifyTarget.value || verifying.value) return;
   verifying.value = true;
   try {
-    order.value = await verifyPayment('orders', order.value.id, verifyTarget.value.id);
+    order.value = await verifyPayment(order.value.id, verifyTarget.value.id);
     toast.success(t('payment_ledger.verify_done'));
     emit('changed'); // badge "Belum terverifikasi" di daftar perlu dimuat ulang
   } catch (err) {
@@ -238,10 +238,6 @@ async function performVoid() {
           <div class="flex flex-col gap-0.5">
             <dt class="text-[11.5px] font-semibold text-muted-3">{{ t('reports.col_time') }}</dt>
             <dd class="text-[13.5px]">{{ formatDateTime(order.created_at) }}</dd>
-          </div>
-          <div v-if="order.event" class="flex flex-col gap-0.5">
-            <dt class="text-[11.5px] font-semibold text-muted-3">{{ t('reports.order_event') }}</dt>
-            <dd class="text-[13.5px]"><span>{{ order.event.name }}</span></dd>
           </div>
           <div class="flex flex-col gap-0.5">
             <dt class="text-[11.5px] font-semibold text-muted-3">{{ t('reports.col_customer') }}</dt>
@@ -316,7 +312,6 @@ async function performVoid() {
           <PaymentHistoryList
             :payments="payments"
             :show-proof="true"
-            :show-print="false"
             :can-delete="canDeletePayments"
             @delete="(p) => (paymentDeleteTarget = p)"
             @view-proof="viewPaymentProof"
@@ -368,7 +363,7 @@ async function performVoid() {
   />
   <ConfirmDialog
     :open="paymentDeleteTarget !== null"
-    :title="t('preorders.delete_payment')"
+    :title="t('payment_ledger.delete_payment')"
     :message="t('payment_ledger.delete_confirm_order', { amount: formatIDR(paymentDeleteTarget?.amount ?? 0), number: order?.order_number ?? '' })"
     :confirm-label="t('common.delete')"
     :loading="deletingPayment"
@@ -389,12 +384,11 @@ async function performVoid() {
     v-if="order"
     :open="confirmationTarget !== null"
     :payment="confirmationTarget"
-    kind="orders"
     :target-id="order.id"
     @close="confirmationTarget = null"
     @saved="handleConfirmationSaved"
   />
-  <ImageLightbox :open="!!proofLightboxSrc" :src="proofLightboxSrc" :alt="t('preorders.view_proof')" @close="closeProofLightbox" />
+  <ImageLightbox :open="!!proofLightboxSrc" :src="proofLightboxSrc" :alt="t('payment_ledger.view_proof')" @close="closeProofLightbox" />
 
   <ProductDetailModal :open="showProductDetail" :product-id="detailProductId" @close="showProductDetail = false" />
   <ReceiptModal :open="showReceipt" :order-id="order?.id ?? null" @close="showReceipt = false" />

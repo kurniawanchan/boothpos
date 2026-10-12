@@ -47,32 +47,30 @@ class TabReportsExclusionTest extends TestCase
     public function test_an_unpaid_tab_is_in_no_sales_report(): void
     {
         $this->asOwner();
-        $event = $this->session->event_id;
 
-        $sales = $this->getJson("/api/v1/reports/sales?event_id={$event}")->assertOk()->json();
+        $sales = $this->getJson("/api/v1/reports/sales")->assertOk()->json();
         $this->assertEquals(0, $sales['totals']['unit_count']);
         $this->assertEquals(0, $sales['totals']['gross_sales']);
         $this->assertEquals(0, $sales['totals']['net_sales']);
         $this->assertSame([], $sales['transactions'] ?? []);
 
-        $byProduct = $this->getJson("/api/v1/reports/sales?event_id={$event}&group_by=product")->assertOk()->json();
+        $byProduct = $this->getJson("/api/v1/reports/sales?group_by=product")->assertOk()->json();
         $this->assertSame([], $byProduct['data'] ?? []);
     }
 
     public function test_an_unpaid_tab_is_in_no_profit_or_seller_report(): void
     {
         $this->asOwner();
-        $event = $this->session->event_id;
 
-        $profit = $this->getJson("/api/v1/reports/profit?event_id={$event}")->assertOk()->json();
+        $profit = $this->getJson("/api/v1/reports/profit")->assertOk()->json();
         $this->assertEquals(0, $profit['revenue'] ?? $profit['totals']['revenue'] ?? 0);
 
-        $settlements = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$event}")->assertOk()->json('data');
+        $settlements = $this->getJson("/api/v1/reports/outlet-settlements")->assertOk()->json('data');
         foreach ($settlements as $row) {
             $this->assertEquals(0, $row['total_sales'], 'settlement penjual menghitung tab yang belum dibayar');
         }
 
-        $outletProfit = $this->getJson("/api/v1/reports/outlet-profit?event_id={$event}")->assertOk()->json();
+        $outletProfit = $this->getJson("/api/v1/reports/outlet-profit")->assertOk()->json();
         $this->assertSame([], $outletProfit['data'] ?? []);
     }
 
@@ -90,16 +88,15 @@ class TabReportsExclusionTest extends TestCase
         $this->apiPay($this->tab, [['method' => 'cash', 'amount' => 30000]])->assertOk()->assertJsonPath('status', 'completed');
 
         $this->asOwner();
-        $event = $this->session->event_id;
 
         // Bukti bahwa kunci yang dibaca test "tidak ada di laporan" memang kunci yang
         // benar: kunci-kunci yang SAMA harus terisi begitu tab lunas.
-        $profit = $this->getJson("/api/v1/reports/profit?event_id={$event}")->assertOk()->json();
+        $profit = $this->getJson("/api/v1/reports/profit")->assertOk()->json();
         $this->assertEquals(50000, $profit['revenue'] ?? $profit['totals']['revenue'] ?? null);
-        $settlement = collect($this->getJson("/api/v1/reports/outlet-settlements?event_id={$event}")->json('data'))->firstWhere('total_sales', '!=', 0);
+        $settlement = collect($this->getJson("/api/v1/reports/outlet-settlements")->json('data'))->firstWhere('total_sales', '!=', 0);
         $this->assertEquals(50000, $settlement['total_sales'] ?? null);
 
-        $sales = $this->getJson("/api/v1/reports/sales?event_id={$event}")->assertOk()->json();
+        $sales = $this->getJson("/api/v1/reports/sales")->assertOk()->json();
         $this->assertEquals(2, $sales['totals']['unit_count']);
         $this->assertEquals(50000, $sales['totals']['gross_sales']);
         $this->assertCount(1, $sales['transactions']);
@@ -115,7 +112,7 @@ class TabReportsExclusionTest extends TestCase
     private function exportedRows(array $body = []): array
     {
         Excel::fake();
-        $this->postJson('/api/v1/reports/sales/transactions/export', array_merge(['event_id' => $this->session->event_id], $body))->assertOk();
+        $this->postJson('/api/v1/reports/sales/transactions/export', $body)->assertOk();
 
         $rows = [];
         Excel::assertDownloaded('transaksi-penjualan.xlsx', function (GenericArrayExport $export) use (&$rows) {
@@ -148,13 +145,12 @@ class TabReportsExclusionTest extends TestCase
     private function assertNoSalesFigure(): void
     {
         $this->actingAs($this->owner, 'sanctum');
-        $event = $this->session->event_id;
 
-        $sales = $this->getJson("/api/v1/reports/sales?event_id={$event}")->assertOk()->json();
+        $sales = $this->getJson("/api/v1/reports/sales")->assertOk()->json();
         $this->assertEquals(0, $sales['totals']['unit_count']);
         $this->assertEquals(0, $sales['totals']['gross_sales']);
         $this->assertSame([], $sales['transactions'] ?? []);
-        foreach ($this->getJson("/api/v1/reports/outlet-settlements?event_id={$event}")->json('data') as $row) {
+        foreach ($this->getJson("/api/v1/reports/outlet-settlements")->json('data') as $row) {
             $this->assertEquals(0, $row['total_sales']);
         }
         $this->assertCount(0, $this->exportedRows());
@@ -207,7 +203,7 @@ class TabReportsExclusionTest extends TestCase
 
         // Tab pertama (setUp) masih terbuka dengan uang muka; hanya tab ini yang dijual: 1 unit, 10.000.
         $this->actingAs($this->owner, 'sanctum');
-        $sales = $this->getJson("/api/v1/reports/sales?event_id={$this->session->event_id}")->assertOk()->json();
+        $sales = $this->getJson("/api/v1/reports/sales")->assertOk()->json();
         $this->assertEquals(1, $sales['totals']['unit_count']);
         $this->assertEquals(10000, $sales['totals']['gross_sales']);
         $this->assertCount(1, $sales['transactions']);

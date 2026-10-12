@@ -54,8 +54,7 @@ export function uploadVariantImage(id, file) {
  * Lightweight cashier-facing search — GET /variants/lookup?q=&limit=.
  * 024-invoice-layout-shipping-slip — `q` empty now returns a default
  * browsable page from the backend (no longer short-circuited here), so
- * callers like PreordersView.vue's "Add item" field can show a list on
- * open, matching CustomerSearchDropdown.vue's UX.
+ * item pickers can show a list on open.
  */
 export function lookupVariants(q, limit = 20, { pos = false, stockOutlet = null } = {}) {
   // 045 Stage 4: `pos` = layar pemesanan — menu/harga menurut outlet SHIFT pengguna.

@@ -33,7 +33,7 @@ function renderModal(props = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   return render(PaymentConfirmationModal, {
-    props: { open: true, payment: PAYMENT, kind: 'orders', targetId: 101, ...props },
+    props: { open: true, payment: PAYMENT, targetId: 101, ...props },
     global: { plugins: [pinia], stubs: { ProofCapture: ProofCaptureStub } },
   });
 }
@@ -85,7 +85,7 @@ describe('PaymentConfirmationModal (031)', () => {
     await user.type(screen.getByLabelText(/nomor referensi/i), '  TRX-1 ');
     await user.click(saveButton());
 
-    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith('orders', 101, 10, { reference: 'TRX-1' }));
+    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith(101, 10, { reference: 'TRX-1' }));
     expect(uploadPaymentProof).not.toHaveBeenCalled();
     expect(view.emitted().saved[0]).toEqual([UPDATED]);
     expect(view.emitted().close).toBeTruthy();
@@ -100,7 +100,7 @@ describe('PaymentConfirmationModal (031)', () => {
     await waitFor(() => expect(uploadPaymentProof).toHaveBeenCalledTimes(1));
     await user.click(saveButton());
 
-    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith('orders', 101, 10, { proof_token: 'tok-1' }));
+    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith(101, 10, { proof_token: 'tok-1' }));
   });
 
   it('keeps Save disabled while a photo is still uploading', async () => {
@@ -115,17 +115,6 @@ describe('PaymentConfirmationModal (031)', () => {
 
     finish({ proof_token: 'late', file_size: 1 });
     await waitFor(() => expect(saveButton()).toBeEnabled());
-  });
-
-  it('works for a pre-order payment through the same call with kind "preorders"', async () => {
-    const { default: userEvent } = await import('@testing-library/user-event');
-    const user = userEvent.setup();
-    renderModal({ kind: 'preorders', targetId: 55 });
-
-    await user.type(screen.getByLabelText(/catatan \(opsional\)/i), 'DP via transfer');
-    await user.click(saveButton());
-
-    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith('preorders', 55, 10, { notes: 'DP via transfer' }));
   });
 
   it('shows the server\'s refusal and stays open when saving fails', async () => {
@@ -161,7 +150,7 @@ describe('PaymentConfirmationModal (031)', () => {
     await user.clear(screen.getByLabelText(/nomor referensi/i));
     await user.click(saveButton());
 
-    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith('orders', 101, 10, { reference: null }));
+    await waitFor(() => expect(updatePaymentConfirmation).toHaveBeenCalledWith(101, 10, { reference: null }));
   });
 
   it('explains that a new photo replaces the current proof (old file stays on record) only when a proof exists', () => {

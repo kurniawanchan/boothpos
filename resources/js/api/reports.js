@@ -5,8 +5,7 @@ export function salesReport(params = {}) {
 }
 
 /**
- * Ekspor transaksi halaman Sales. `keys` = kunci baris yang ingin diekspor ("order:12",
- * "preorder:3"); server membangun ulang isinya (nominal tak pernah dikirim dari klien).
+ * Ekspor transaksi halaman Sales. `keys` = kunci baris yang ingin diekspor ("order:12"); server membangun ulang isinya (nominal tak pernah dikirim dari klien).
  * Tanpa `keys` = seluruh transaksi sesuai `params`. Balasan: berkas .xlsx (Blob).
  */
 export function exportSalesTransactions(params = {}, keys = null) {
@@ -15,54 +14,40 @@ export function exportSalesTransactions(params = {}, keys = null) {
     .then((r) => r.data);
 }
 
-export function profitReport(eventId) {
-  return client.get('/reports/profit', { params: { event_id: eventId } }).then((r) => r.data);
+// 046 — laporan berskala PERIODE (tanggal bisnis), bukan event. Tanpa `date_from`/`date_to` server memakai
+// hari bisnis berjalan. `params` = { date_from, date_to }.
+export function profitReport(params = {}) {
+  return client.get('/reports/profit', { params }).then((r) => r.data);
 }
 
-export function outletSettlements(eventId) {
-  return client
-    .get('/reports/outlet-settlements', { params: { event_id: eventId } })
-    .then((r) => r.data);
+export function outletSettlements(params = {}) {
+  return client.get('/reports/outlet-settlements', { params }).then((r) => r.data);
 }
 
 // F11.6 — drill-down transaksi yang menyusun rekap satu outlet. Owner/admin
 // saja (backend mengembalikan 403 untuk role lain); pemanggil bertanggung
 // jawab menyembunyikan kontrolnya untuk role yang tidak berhak.
-export function outletSettlementTransactions(outletId, eventId) {
-  return client
-    .get(`/reports/outlet-settlements/${outletId}/transactions`, { params: { event_id: eventId } })
-    .then((r) => r.data);
+export function outletSettlementTransactions(outletId, params = {}) {
+  return client.get(`/reports/outlet-settlements/${outletId}/transactions`, { params }).then((r) => r.data);
 }
 
-// F9.5 — modal & laba kotor per outlet (terpisah dari profitReport() di
-// atas, yang berskala event). Owner/admin saja.
-export function outletProfitReport(eventId) {
-  return client.get('/reports/outlet-profit', { params: { event_id: eventId } }).then((r) => r.data);
+// F9.5 — modal & laba kotor per outlet. Owner/admin saja.
+export function outletProfitReport(params = {}) {
+  return client.get('/reports/outlet-profit', { params }).then((r) => r.data);
 }
 
-// 006-purchase-order-and-ops (US9) — tidak diskop event seperti tab lain di
-// halaman ini, jadi filternya sendiri (vendor_id/status/date_from/date_to).
+// 006-purchase-order-and-ops (US9) — filternya sendiri (vendor_id/status/date_from/date_to).
 export function purchasesReport(params = {}) {
   return client.get('/reports/purchases', { params }).then((r) => r.data);
 }
 
-// 006-purchase-order-and-ops (US10) — juga tidak diskop event; filter
-// opsionalnya outlet_id.
+// 006-purchase-order-and-ops (US10) — filter opsionalnya outlet_id.
 export function stockByOutletReport(params = {}) {
   return client.get('/reports/stock-by-outlet', { params }).then((r) => r.data);
 }
 
-// 010-split-payment-preorder-reports (US6) — laporan khusus pre-order:
-// jumlah & nominal dikelompokkan per status × payment_completeness. Tidak
-// diskop event secara wajib (event_id opsional, sama seperti purchasesReport
-// di atas), tapi ReportsView memfilternya lewat eventId yang sama seperti
-// tab lain agar konsisten dengan filter event di halaman ini.
-export function preorderReport(params = {}) {
-  return client.get('/reports/preorders', { params }).then((r) => r.data);
-}
-
 /**
- * report is one of: sales | profit | outlet-settlements. Downloaded via
+ * report is one of: sales | profit | outlet-settlements | outlet-profit | purchases | stock-by-outlet. Downloaded via
  * axios (not a plain <a href>) because the export endpoint requires the
  * same Bearer token as every other request — a bare link would hit it
  * unauthenticated and get a 401.

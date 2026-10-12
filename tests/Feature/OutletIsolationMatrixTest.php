@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Category;
-use App\Models\Event;
 use App\Models\Product;
 use App\Models\ReasonCode;
 use App\Models\Role;
@@ -39,7 +38,6 @@ class OutletIsolationMatrixTest extends TestCase
 
     private $shiftB;
 
-    private Event $event;
 
     protected function setUp(): void
     {
@@ -49,12 +47,11 @@ class OutletIsolationMatrixTest extends TestCase
         $this->cashierA = $this->assignUser(User::factory()->create(['role' => 'cashier']), [$this->a]);
         $this->cashierB = $this->assignUser(User::factory()->create(['role' => 'cashier']), [$this->b]);
 
-        $this->event = Event::factory()->create(['status' => 'active']);
         $product = Product::factory()->create(['home_outlet_id' => $this->a->id, 'category_id' => Category::factory()->create()->id]);
         $variant = $product->variants()->create(['sku' => 'ISO'.fake()->unique()->numerify('######'), 'variant_name' => 'Standard', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
-        $this->shiftA = $this->shiftAt($this->a, $this->cashierA, ['event_id' => $this->event->id]);
-        $this->shiftB = $this->shiftAt($this->b, $this->cashierB, ['event_id' => $this->event->id]);
+        $this->shiftA = $this->shiftAt($this->a, $this->cashierA, []);
+        $this->shiftB = $this->shiftAt($this->b, $this->cashierB, []);
         $this->orderA = $this->orderAt($this->shiftA, $variant, 2); // 20.000
         $this->orderB = $this->orderAt($this->shiftB, $variant, 3); // 30.000
     }
@@ -87,15 +84,15 @@ class OutletIsolationMatrixTest extends TestCase
     public function test_the_sales_report_numbers_follow_the_outlet_of_the_user(): void
     {
         $this->actingAs($this->cashierA, 'sanctum');
-        $mine = $this->getJson("/api/v1/reports/sales?event_id={$this->event->id}")->assertOk();
+        $mine = $this->getJson("/api/v1/reports/sales")->assertOk();
         $this->assertCount(1, $mine->json('transactions'));
 
         $this->actingAs(User::factory()->create(['role' => 'owner']), 'sanctum');
-        $all = $this->getJson("/api/v1/reports/sales?event_id={$this->event->id}")->assertOk();
+        $all = $this->getJson("/api/v1/reports/sales")->assertOk();
         $this->assertCount(2, $all->json('transactions'));
 
         $narrowed = $this->withHeader('X-Outlet-Id', (string) $this->b->id)
-            ->getJson("/api/v1/reports/sales?event_id={$this->event->id}")->assertOk();
+            ->getJson("/api/v1/reports/sales")->assertOk();
         $this->assertSame([$this->orderB->id], collect($narrowed->json('transactions'))->pluck('id')->all());
     }
 

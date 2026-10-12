@@ -36,8 +36,6 @@ class Product extends Model
         'name',
         'description',
         'image_path',
-        'is_preorder',
-        'preorder_eta',
         'is_active',
         'station_id',
         // 043 — fakta item. `published_at`/`discontinued_at` SENGAJA tidak di sini: hanya
@@ -84,9 +82,7 @@ class Product extends Model
     protected function casts(): array
     {
         return [
-            'is_preorder' => 'boolean',
             'is_active' => 'boolean',
-            'preorder_eta' => 'date',
             'is_retail' => 'boolean',
             'prep_minutes' => 'integer',
             'published_at' => 'datetime',

@@ -28,7 +28,6 @@ class PosDraftController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'event_id' => ['nullable', 'integer', 'exists:events,id'],
             'customer_id' => ['nullable', 'integer'],
             'label' => ['nullable', 'string', 'max:100'],
             'items' => ['required', 'array', 'min:1'],

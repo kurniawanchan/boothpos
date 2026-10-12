@@ -845,3 +845,10 @@ sekadar membaca kode); butir 5 lewat browser dan butir 6 ditangkap suite tes pen
    yang wajib dibayar di rekap; pembayaran ke seller untuk pre-order harus diurus di
    luar layar itu (laporan Pre-order tetap menampilkan jumlah terkumpul per seller).
 
+## Fitur 046 — Event dan Pre-order dihapus (2026-10-12)
+
+Atas permintaan pemilik produk, modul Event dan Pre-order dihapus: menu/layar/API-nya hilang, shift dan penjualan tidak lagi
+terikat event, dan laporan/Dashboard/halaman Penjualan memakai rentang tanggal bisnis (bawaan hari ini) dari penjualan saja.
+Baris event/pre-order lama dipertahankan di database sebagai riwayat diam. Detail, keputusan (D1–D16), bukti pemutakhiran, dan
+catatan rilis: `specs/046-hide-events-preorders/`. Satu temuan: `BulkPriceOutletsTest` gagal setelah tengah malam WIB karena
+memakai `now()->toDateString()` (UTC) alih-alih `BusinessDay::today()`; diperbaiki.

@@ -23,9 +23,4 @@ class Customer extends Model
     {
         return $this->hasMany(Order::class);
     }
-
-    public function preorders(): HasMany
-    {
-        return $this->hasMany(Preorder::class);
-    }
 }

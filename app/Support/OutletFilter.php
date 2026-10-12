@@ -42,21 +42,10 @@ final class OutletFilter
         return "(CASE WHEN {$orders}.outlet_backfilled = 1 THEN {$items}.home_outlet_id ELSE {$orders}.outlet_id END)";
     }
 
-    /** Sama untuk item pre-order (pre-order lama tetap atribusi penjual lamanya). */
-    public static function reportPreorderOutletSql(string $preorders = 'preorders', string $items = 'preorder_items'): string
-    {
-        return "(CASE WHEN {$preorders}.outlet_backfilled = 1 THEN {$items}.home_outlet_id ELSE {$preorders}.outlet_id END)";
-    }
-
     /** Join `outlets` pada outlet PELAPORAN (lihat reportOutletSql). */
     public static function joinReportOutlet($query, string $orders = 'orders', string $items = 'order_items')
     {
         return $query->join('outlets', fn ($j) => $j->whereRaw('outlets.id = '.self::reportOutletSql($orders, $items)));
-    }
-
-    public static function joinReportPreorderOutlet($query, string $preorders = 'preorders', string $items = 'preorder_items')
-    {
-        return $query->join('outlets', fn ($j) => $j->whereRaw('outlets.id = '.self::reportPreorderOutletSql($preorders, $items)));
     }
 
     /** Menyaring pada outlet PELAPORAN (bukan outlet order) — untuk laporan per outlet yang mengelompokkan per item. */
@@ -65,13 +54,6 @@ final class OutletFilter
         $context = app(OutletContext::class);
 
         return $context->user() === null ? $query : $query->whereRaw(self::reportOutletSql($orders, $items).' in ('.implode(',', array_map('intval', $context->effectiveIds() ?: [0])).')');
-    }
-
-    public static function applyReportPreorder($query)
-    {
-        $context = app(OutletContext::class);
-
-        return $context->user() === null ? $query : $query->whereRaw(self::reportPreorderOutletSql().' in ('.implode(',', array_map('intval', $context->effectiveIds() ?: [0])).')');
     }
 
     /** Potongan kunci cache untuk figur yang bergantung pada outlet (Constitution V: setiap masukan yang mengubah isi). */

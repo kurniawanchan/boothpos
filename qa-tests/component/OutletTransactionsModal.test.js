@@ -39,7 +39,8 @@ function renderModal(props) {
       open: true,
       outletId: 5,
       outletName: 'Outlet Uno',
-      eventId: 1,
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-02',
       ...props,
     },
     global: { plugins: [pinia] },
@@ -54,7 +55,7 @@ describe('OutletTransactionsModal — POS-only transaction detail', () => {
 
     renderModal();
 
-    await waitFor(() => expect(outletSettlementTransactions).toHaveBeenCalledWith(5, 1));
+    await waitFor(() => expect(outletSettlementTransactions).toHaveBeenCalledWith(5, { date_from: '2026-09-01', date_to: '2026-09-02' }));
 
     expect(await screen.findByText('ORD-0201')).toBeInTheDocument();
     expect(screen.getByText('KC-001')).toBeInTheDocument();

@@ -471,17 +471,16 @@ perintah terhadap container/database instalasi lain dari sini.
 
 ### 11.1 Setup awal restoran (sekali per mode DEMO/LIVE — tanpa kode)
 
-1. **Event berumur panjang.** Setiap penjualan milik sebuah shift, dan setiap shift milik sebuah event yang berstatus
-   `Active`. Restoran tidak punya "event satuan", jadi buat SATU event, mis. `Operasional Restoran` (mulai hari ini,
-   selesai bertahun-tahun ke depan, status Active). Event dibuat terpisah di mode DEMO dan LIVE.
-2. **Satu artist.** Tanpa lisensi multi-artist, instalasi boleh punya tepat satu artist aktif. Buat `Restoran`; semua menu
-   memakai artist ini. Laporan rekap penjual akan menampilkan satu baris — itu wajar.
+1. **Tidak ada event.** Sejak fitur 046 modul Event dihapus: shift dibuka langsung (kas awal + outlet) tanpa event, jadi
+   tidak ada lagi langkah "buat event Operasional Restoran".
+2. **Satu outlet.** Tanpa lisensi multi-outlet, instalasi boleh punya tepat satu outlet aktif. Buat `Restoran`; semua menu
+   memakai outlet ini. Laporan rekap outlet akan menampilkan satu baris — itu wajar.
 3. Kategori & menu (varian = ukuran). **Hidangan yang dibuat saat dipesan**: matikan "Lacak stok" pada variannya supaya
    tidak ada stok palsu dan penjualan tidak pernah terblokir "stok habis".
 4. *Pengaturan Restoran*: **Meja** (nama/area/kursi), **Stasiun** (Dapur, Bar), **Modifier** (grup + opsi + lampiran ke
    produk/kategori). Tetapkan stasiun pada kategori atau produk di layar Kategori/Produk (stasiun produk menang atas
    kategori; menu tanpa stasiun langsung dianggap siap saji).
-5. Buka sesi kasir (*Sesi Kasir*) pada event itu.
+5. Buka sesi kasir (*Sesi Kasir*).
 
 ### 11.2 Hak akses (kunci menu, dapat diatur per peran di layar Peran)
 
@@ -543,3 +542,20 @@ Peran dan akses outlet: setiap pengguna bisa dibatasi ke satu atau beberapa outl
 - Demo multi-outlet opsional: `docker compose exec app php artisan db:seed --class=WarkopOutletsDemoSeeder` (setelah `SakanaFridgeDemoSeeder`) — tiga outlet "Warkop WJM", pengguna contoh ditugaskan, meja, saldo per outlet, satu transfer dalam perjalanan. Idempoten.
 - Setelah mengaktifkan lebih dari satu outlet: tinjau penugasan di layar Pengguna (migrasi menugaskan pengguna non-admin ke SEMUA outlet yang ada; persempit sesuai kebutuhan).
 
+
+
+## 12. Event dan Pre-order dihapus (fitur 046, 2026-10-12)
+
+- **Yang berubah untuk pengguna:** menu *Events* dan *Pre-orders* hilang (alamat lamanya, termasuk yang membawa
+  `?event_id=`/`?preorder_id=`, mengalihkan ke Dashboard). Shift dibuka tanpa event. Laporan (Rekap Outlet, Modal & Untung,
+  Modal Outlet), Dashboard "Rincian periode", dan halaman Penjualan memakai **rentang tanggal bisnis** (bawaan hari ini);
+  tidak ada lagi filter/kolom event dan tidak ada angka pre-order di mana pun.
+- **Yang TIDAK berubah di data:** tabel `events`, `preorders`, `preorder_items`, `preorder_notifications`, `shipments`,
+  `payments.preorder_id`, dan baris buku besar stok lama tetap ada sebagai riwayat diam (tidak dikonversi, dihapus, atau
+  dibalik). Tidak ada layar maupun API yang membacanya. Pengiriman e-mail pre-order dan konfigurasi surat terkait sudah tidak dipakai.
+- **Pemutakhiran:** `app:backup` → ambil kode baru → `php artisan migrate` (dua migrasi: `event_id` menjadi nullable pada tiga
+  tabel; kunci menu `events`/`preorders` dicabut dari peran). Sebelum/sesudah, `php artisan outlets:reconcile --before` /
+  `--after` / `--compare` harus bersih. Bukti uji coba pada salinan: `specs/046-hide-events-preorders/evidence-upgrade.md`.
+- **Pembatalan (rollback):** pulihkan dari `app:backup` yang diambil sebelum pemutakhiran. `down()` migrasi nullable sengaja
+  berhenti bila sudah ada baris tanpa event (tidak mengarang event); kunci menu yang dicabut tidak dapat dipulihkan otomatis.
+- **Alamat tersimpan/saran:** pengguna yang menyimpan alamat `/events` atau `/preorders` akan mendarat di Dashboard.

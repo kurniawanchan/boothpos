@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 
 /**
  * 042-dashboard-revamp — garis tren kecil untuk kartu KPI. SVG sebaris, tanpa pustaka grafik (supaya tidak
- * menambah bobot bundel utama dan chart.js tetap hanya di potongan "Per event").
+ * menambah bobot bundel utama dan chart.js tetap hanya di potongan "Rincian periode").
  *
  * Kontrak:
  *  - `series` = garis NYATA (padat) dan berhenti di titik terakhir yang ada; `comparison` = garis pembanding

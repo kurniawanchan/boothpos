@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CashierSession;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\Payment;
 use Illuminate\Http\JsonResponse;
@@ -30,7 +29,6 @@ class CashierSessionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'event_id' => ['required', 'integer', 'exists:events,id'],
             'opening_cash' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
             // 045 Stage 2 — outlet shift. Opsional: tanpa nilai, dipakai outlet tunggal yang berlaku (D7).
@@ -54,11 +52,6 @@ class CashierSessionController extends Controller
             ], 409);
         }
 
-        $event = Event::findOrFail($validated['event_id']);
-        if ($event->status !== 'active') {
-            return response()->json(['message' => __('events_sessions.session_only_on_active_event')], 409);
-        }
-
         // 045 Stage 2 — outlet shift ditentukan SERVER (D7): body hanya boleh memilih dari outlet yang
         // boleh dilihat pengguna; tidak pernah memperluasnya. Setelah ini, order/pembayaran/tiket di
         // shift ini mewarisi outletnya.
@@ -78,9 +71,8 @@ class CashierSessionController extends Controller
             }
         }
 
-        $session = DB::transaction(function () use ($validated, $entries, $request, $event, $outletId) {
+        $session = DB::transaction(function () use ($validated, $entries, $request, $outletId) {
             $session = new CashierSession([
-                'event_id' => $event->id,
                 'user_id' => $request->user()->id,
                 'opened_at' => now(),
                 'opening_cash' => $validated['opening_cash'],
@@ -159,8 +151,8 @@ class CashierSessionController extends Controller
         // aslinya: pembayaran susulan atas penjualan lama masuk ke shift saat ini,
         // dan shift yang sudah ditutup tak berubah. Kembalian tetap dikurangkan di
         // shift penjualannya (kembalian hanya terjadi saat checkout). Order batal
-        // dikeluarkan seperti sebelumnya; pembayaran pre-order (session_id NULL)
-        // tetap di luar kas shift.
+        // dikeluarkan seperti sebelumnya; pembayaran tanpa shift (session_id NULL, mis. pembayaran
+        // pre-order lama) tetap di luar kas shift.
         $cashPaymentsTotal = Payment::where('session_id', $session->id)
             ->where('method', 'cash')
             ->where('verification', 'verified')

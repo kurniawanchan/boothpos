@@ -5,13 +5,11 @@ import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import SalesView from '../../resources/js/views/SalesView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listEvents } from '../../resources/js/api/events';
 import { salesReport } from '../../resources/js/api/reports';
 import { getFloor } from '../../resources/js/api/floor';
 import * as tabsApi from '../../resources/js/api/tabs';
 import { getOrder } from '../../resources/js/api/orders';
 
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), exportReport: vi.fn(), exportSalesTransactions: vi.fn() }));
 vi.mock('../../resources/js/api/floor', () => ({ getFloor: vi.fn() }));
 vi.mock('../../resources/js/api/tabs', () => ({
@@ -56,7 +54,7 @@ async function mountTables() {
     history: createMemoryHistory(),
     routes: [{ path: '/', component: { template: '<div />' } }, { path: '/floor/tabs/:id', name: 'floor-tab', component: { template: '<div />' } }],
   });
-  router.push('/?view=tables');
+  router.push('/?view=tables&from=2000-01-01&to=2099-12-31');
   await router.isReady();
   render(SalesView, { global: { plugins: [pinia, router] } });
   return userEvent.setup();
@@ -65,7 +63,6 @@ async function mountTables() {
 describe('SalesView — papan Meja → detail order (044)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [] });
     salesReport.mockResolvedValue({ event: null, totals: {}, sessions: [], transactions: [] });
     getFloor.mockResolvedValue(SNAPSHOT);
     tabsApi.getTab.mockResolvedValue(TAB);

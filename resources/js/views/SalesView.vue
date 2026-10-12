@@ -2,7 +2,6 @@
 import { ref, computed, watch, onMounted, nextTick, defineAsyncComponent } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
-import { listEvents } from '../api/events';
 import { salesReport, exportSalesTransactions } from '../api/reports';
 import { verifyOrderPayments } from '../api/payments';
 import { useToastStore } from '../stores/toast';
@@ -62,8 +61,6 @@ const viewOptions = computed(() => [
   { value: 'tables', label: t('sales.view_tables'), icon: 'ph-squares-four' },
 ]);
 
-const events = ref([]);
-const eventId = ref('');
 const sales = ref(null);
 const loading = ref(false);
 // 041 — kegagalan memuat ditampilkan di tabel (dengan "Coba lagi"), bukan area kosong. Pesan spesifik
@@ -84,15 +81,21 @@ const {
 let restored = false; // false selama query URL dipulihkan → jangan muat ganda
 
 onMounted(async () => {
-  events.value = (await listEvents({ per_page: 100 })).data;
-  const active = events.value.find((e) => e.status === 'active');
-  eventId.value = active?.id ?? events.value[0]?.id ?? '';
-  applyQuery(route?.query ?? {});
+  // 046 — tanpa event: bawaan hari ini (tanggal bisnis); query URL `from`/`to` menimpanya, dan mengosongkan
+  // tanggal berarti "semua".
+  const query = route?.query ?? {};
+  applyQuery(query);
+  if (!('from' in query) && !('to' in query)) {
+    const today = toLocalDateKey(new Date());
+    filters.dateFrom = today;
+    filters.dateTo = today;
+  }
   restored = true;
   await load();
 });
 
-watch(eventId, () => { if (restored) load(); });
+// Rentang tanggal juga dikirim ke SERVER (daftar dimuat per periode, bukan seluruh riwayat); sisanya tetap disaring di klien.
+watch(() => [filters.dateFrom, filters.dateTo], () => { if (restored) load(); });
 // 'sync': dijalankan seketika saat applyQuery() mengubah nilainya (restored masih false).
 watch(includeVoided, () => { if (restored) load(); }, { flush: 'sync' });
 
@@ -104,7 +107,8 @@ async function load() {
     // batal diminta ke SERVER — tidak ikut angka ringkasan, dan sengaja tidak dimuat
     // kecuali diminta.
     sales.value = await salesReport({
-      event_id: eventId.value || undefined,
+      date_from: filters.dateFrom || undefined,
+      date_to: filters.dateTo || undefined,
       include_voided: includeVoided.value ? 1 : undefined,
     });
   } catch {
@@ -149,8 +153,7 @@ const sessionOptions = computed(() =>
   }))
 );
 
-// --- preset tanggal: Hari ini, Kemarin, dan setiap hari event -------------------------
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+// --- preset tanggal: Hari ini dan Kemarin -------------------------
 const datePresets = computed(() => {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -158,18 +161,6 @@ const datePresets = computed(() => {
     { id: 'today', label: t('reports.preset_today'), date: toLocalDateKey(new Date()) },
     { id: 'yesterday', label: t('reports.preset_yesterday'), date: toLocalDateKey(yesterday) },
   ];
-  // start_date/end_date bisa berupa ISO ("2026-09-01T00:00:00Z"); hanya bagian tanggalnya.
-  const start = String(sales.value?.event?.start_date ?? '').slice(0, 10);
-  const end = String(sales.value?.event?.end_date ?? '').slice(0, 10);
-  if (DATE_RE.test(start) && DATE_RE.test(end)) {
-    for (let i = 0; i < 14; i += 1) {
-      const d = new Date(`${start}T00:00:00Z`);
-      d.setUTCDate(d.getUTCDate() + i);
-      const date = d.toISOString().slice(0, 10);
-      if (date > end) break;
-      list.push({ id: `day-${i + 1}`, label: t('reports.preset_day', { n: i + 1 }), date });
-    }
-  }
   return list;
 });
 const isPresetActive = (p) => filters.dateFrom === p.date && filters.dateTo === p.date;
@@ -201,7 +192,7 @@ const columns = computed(() => [
 
 // --- strip empat angka ------------------------------------------------------------------
 // Angka = transaksi dari POS saja, sama dengan daftar di bawahnya. Angka laporan bersama
-// (unit_count/gross_sales/net_sales) memuat pendapatan pre-order dan dipakai Dashboard/Laporan;
+// (unit_count/gross_sales/net_sales) sama dengan angka POS sejak 046 (tanpa pre-order) dan dipakai Dashboard/Laporan;
 // halaman ini memakai pos_* (dengan cadangan ke angka bersama untuk respons lama yang belum punya pos_*).
 // Belum termuat / gagal memuat → "—" (unavailable), bukan 0.
 const kpiItems = computed(() => {
@@ -266,7 +257,7 @@ async function doExport() {
   try {
     // Hanya KUNCI baris yang dikirim; server membangun ulang isi berkas (nominal tak dipercaya dari klien).
     const blob = await exportSalesTransactions(
-      { event_id: eventId.value || undefined, include_voided: includeVoided.value ? 1 : undefined },
+      { date_from: filters.dateFrom || undefined, date_to: filters.dateTo || undefined, include_voided: includeVoided.value ? 1 : undefined },
       exportKeys.value
     );
     saveBlob(blob, 'transaksi-penjualan.xlsx');
@@ -393,9 +384,8 @@ function viewFinishedTransaction(orderId) {
     <PageHeader :title="t('nav.sales')" :description="t('nav.sales_subtitle')">
       <template #actions>
         <ViewToggle v-if="canSeeTables" :model-value="view" :options="viewOptions" :label="t('sales.view_aria')" @update:model-value="(v) => setViewState({ view: v })" />
-        <!-- Tindakan khusus daftar (event, verifikasi massal, ekspor) tak berlaku di tampilan Meja. -->
+        <!-- Tindakan khusus daftar (verifikasi massal, ekspor) tak berlaku di tampilan Meja. -->
         <template v-if="view === 'list'">
-          <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
           <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
             <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
             {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}

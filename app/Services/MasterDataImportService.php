@@ -812,18 +812,6 @@ class MasterDataImportService
                 continue;
             }
 
-            // Cermin aturan StoreProductRequest: preorder wajib punya ETA.
-            if ($product === null) {
-                $isPreorder = $productAttributes['is_preorder'] ?? false;
-                $hasEta = array_key_exists('preorder_eta', $productAttributes);
-
-                if ($isPreorder && ! $hasEta) {
-                    $this->addError($sheet, $row, 'preorder_eta', 'Produk pre-order wajib punya perkiraan tanggal tiba (preorder_eta).');
-
-                    continue;
-                }
-            }
-
             $initialStock = null;
             if ($this->filled($values, 'initial_stock')) {
                 if (! $isNewVariant) {
@@ -876,19 +864,8 @@ class MasterDataImportService
             $attributes['description'] = $this->stringValue($values, 'description');
         }
 
-        if ($this->filled($values, 'is_preorder')) {
-            $isPreorder = $this->parseBool($sheet, $row, 'is_preorder', $values['is_preorder']);
-            if ($isPreorder !== null) {
-                $attributes['is_preorder'] = $isPreorder;
-            }
-        }
-
-        if ($this->filled($values, 'preorder_eta')) {
-            $eta = $this->parseDate($sheet, $row, 'preorder_eta', $values['preorder_eta']);
-            if ($eta !== null) {
-                $attributes['preorder_eta'] = $eta;
-            }
-        }
+        // 046: kolom `is_preorder`/`preorder_eta` dari berkas lama tidak lagi dibaca — pre-order sudah dihapus dari
+        // produk; berkas lama tetap bisa diimpor karena kolom yang tidak dikenal diabaikan.
 
         if ($this->filled($values, 'product_is_active')) {
             $isActive = $this->parseBool($sheet, $row, 'product_is_active', $values['product_is_active']);
@@ -2541,33 +2518,6 @@ class MasterDataImportService
         }
 
         return $parsed;
-    }
-
-    private function parseDate(string $sheet, int $row, string $column, mixed $value): ?string
-    {
-        // Sel bertipe tanggal di Excel sampai ke sini sebagai serial number,
-        // bukan teks — keduanya harus diterima.
-        if (is_numeric($value)) {
-            return ExcelDate::excelToDateTimeObject((float) $value)->format('Y-m-d');
-        }
-
-        $input = trim((string) $value);
-
-        try {
-            $date = Carbon::createFromFormat('Y-m-d', $input);
-        } catch (\Throwable) {
-            $date = false;
-        }
-
-        // Perbandingan balik WAJIB: createFromFormat menerima '2026-13-45'
-        // lalu diam-diam menggulungnya jadi 2027-02-14, bukan menolaknya.
-        if (! $date || $date->toDateString() !== $input) {
-            $this->addError($sheet, $row, $column, "Tanggal '{$value}' harus dalam format YYYY-MM-DD.");
-
-            return null;
-        }
-
-        return $date->toDateString();
     }
 
     // =================================================================

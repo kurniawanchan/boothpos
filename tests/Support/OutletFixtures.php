@@ -4,7 +4,6 @@ namespace Tests\Support;
 
 use App\Models\CashierSession;
 use App\Models\DiningTable;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -65,7 +64,6 @@ trait OutletFixtures
     protected function shiftAt($outlet, User $cashier, array $over = []): CashierSession
     {
         $attrs = array_merge([
-            'event_id' => Event::query()->value('id') ?? Event::factory()->create(['status' => 'active'])->id,
             'user_id' => $cashier->id,
             'status' => 'open',
         ], $over);

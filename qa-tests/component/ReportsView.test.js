@@ -3,11 +3,10 @@ import { render, screen, waitFor } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import ReportsView from '../../resources/js/views/ReportsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listEvents } from '../../resources/js/api/events';
 import { outletSettlements, outletSettlementTransactions, outletProfitReport, profitReport } from '../../resources/js/api/reports';
 import { listOutlets } from '../../resources/js/api/outlets';
+import { toLocalDateKey } from '../../resources/js/utils/date';
 
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({
   outletSettlements: vi.fn(),
@@ -18,6 +17,9 @@ vi.mock('../../resources/js/api/reports', () => ({
   stockByOutletReport: vi.fn(),
   exportReport: vi.fn(),
 }));
+
+// 046: periode laporan = rentang tanggal bisnis, bawaan hari ini.
+const TODAY = toLocalDateKey(new Date());
 
 function renderReports() {
   const pinia = createPinia();
@@ -34,7 +36,6 @@ describe('ReportsView — outlet transaction drill-down (F11.6)', () => {
   ];
 
   const DRILLDOWN_RESPONSE = {
-    event: { id: 1, name: 'Event A' },
     outlet: { id: 5, name: 'Outlet A' },
     transactions: [
       {
@@ -50,7 +51,6 @@ describe('ReportsView — outlet transaction drill-down (F11.6)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     listOutlets.mockResolvedValue({ data: [] });
     outletSettlements.mockResolvedValue({ data: SETTLEMENT_ROWS });
     outletSettlementTransactions.mockResolvedValue(DRILLDOWN_RESPONSE);
@@ -64,7 +64,7 @@ describe('ReportsView — outlet transaction drill-down (F11.6)', () => {
     // to its own page), so its data loads on mount without a click.
     await screen.findByText('Outlet A');
     await user.click(screen.getByRole('button', { name: 'Detail transaksi' }));
-    await waitFor(() => expect(outletSettlementTransactions).toHaveBeenCalledWith(5, 1));
+    await waitFor(() => expect(outletSettlementTransactions).toHaveBeenCalledWith(5, { date_from: TODAY, date_to: TODAY }));
     expect(await screen.findByText('ORD-201')).toBeInTheDocument();
     expect(screen.getByText('Stiker Holografik')).toBeInTheDocument();
     // Only 1 item row rendered — the response already isolated this
@@ -78,7 +78,7 @@ describe('ReportsView — outlet transaction drill-down (F11.6)', () => {
     const auth = useAuthStore();
     auth.user = { id: 2, role: 'Kasir', name: 'Kasir', menu_keys: ['dashboard', 'pos'] };
     render(ReportsView, { global: { plugins: [pinia] } });
-    await screen.findAllByRole('combobox'); // event selector (+ outlet filter) — always rendered regardless of role
+    await screen.findAllByRole('combobox'); // filter (periode / outlet) — always rendered regardless of role
     expect(screen.queryByText('Rekap Outlet')).not.toBeInTheDocument();
   });
 });
@@ -86,7 +86,6 @@ describe('ReportsView — outlet transaction drill-down (F11.6)', () => {
 // F9.5 — per-outlet gross profit view, deliberately excluding event_cost.
 describe('ReportsView — outlet profit tab (F9.5)', () => {
   const OUTLET_PROFIT_RESPONSE = {
-    event: { id: 1, name: 'Event A' },
     data: [
       { outlet_id: 5, outlet_name: 'Outlet A', total_sales: '90000.00', modal: '30000.00', gross_profit: '60000.00' },
     ],
@@ -94,7 +93,6 @@ describe('ReportsView — outlet profit tab (F9.5)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     listOutlets.mockResolvedValue({ data: [] });
     outletSettlements.mockResolvedValue({ data: [] });
     outletProfitReport.mockResolvedValue(OUTLET_PROFIT_RESPONSE);
@@ -106,7 +104,7 @@ describe('ReportsView — outlet profit tab (F9.5)', () => {
     renderReports();
     const tab = await screen.findByRole('tab', { name: 'Modal Outlet' });
     await user.click(tab);
-    await waitFor(() => expect(outletProfitReport).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(outletProfitReport).toHaveBeenCalledWith({ date_from: TODAY, date_to: TODAY }));
     expect(await screen.findByText('Outlet A')).toBeInTheDocument();
     // Rp 60.000 appears twice with only one row: once in the data row, once
     // in the new Grand Total footer row (which mirrors the single row's own
@@ -114,12 +112,13 @@ describe('ReportsView — outlet profit tab (F9.5)', () => {
     expect(screen.getAllByText('Rp 60.000')).toHaveLength(2);
   });
 
-  it('shows a note that the figure excludes event_cost, not a net-profit figure', async () => {
+  it('has no net-profit or event-cost figure (046: no events)', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
     await user.click(await screen.findByRole('tab', { name: 'Modal Outlet' }));
-    expect(await screen.findByText(/belum dikurangi biaya event/i)).toBeInTheDocument();
+    await screen.findByText('Outlet A');
+    expect(screen.queryByText(/biaya event/i)).not.toBeInTheDocument();
   });
 
   it('is hidden entirely for cashier/inventory roles', async () => {
@@ -128,7 +127,7 @@ describe('ReportsView — outlet profit tab (F9.5)', () => {
     const auth = useAuthStore();
     auth.user = { id: 3, role: 'Inventory', name: 'Gudang', menu_keys: ['dashboard', 'products', 'stock'] };
     render(ReportsView, { global: { plugins: [pinia] } });
-    await screen.findAllByRole('combobox'); // event selector (+ outlet filter) — always rendered regardless of role
+    await screen.findAllByRole('combobox'); // filter (periode / outlet) — always rendered regardless of role
     expect(screen.queryByText('Modal Outlet')).not.toBeInTheDocument();
   });
 });
@@ -144,7 +143,6 @@ describe('ReportsView — Rekap Outlet POS-saja (040)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     listOutlets.mockResolvedValue({ data: [] });
   });
 
@@ -200,68 +198,45 @@ describe('ReportsView — Rekap Outlet POS-saja (040)', () => {
   });
 });
 
-// 033 — Modal & Untung dan Modal Outlet: total + rincian POS/pre-order.
-describe('ReportsView — POS vs pre-order di laporan modal (033)', () => {
+// 046 — Modal & Untung: tiga angka (pendapatan, modal, laba kotor) untuk periode; tanpa pre-order, biaya event,
+// atau laba bersih.
+describe('ReportsView — Modal & Untung per periode (046)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     listOutlets.mockResolvedValue({ data: [] });
     outletSettlements.mockResolvedValue({ data: [] });
   });
 
-  it('Modal & Untung: kartu pendapatan/modal/laba kotor memuat sub-baris POS · Pre-order, biaya event & laba bersih tidak', async () => {
-    profitReport.mockResolvedValue({
-      event: { id: 1 },
-      revenue: '35000.00', cost_of_goods: '14000.00', gross_profit: '21000.00', event_cost: '1500.00', net_profit: '19500.00',
-      revenue_pos: '30000.00', revenue_preorder: '5000.00',
-      cost_of_goods_pos: '12000.00', cost_of_goods_preorder: '2000.00',
-      gross_profit_pos: '18000.00', gross_profit_preorder: '3000.00',
-    });
-    const { default: userEvent } = await import('@testing-library/user-event');
-    const user = userEvent.setup();
-    renderReports();
-    await user.click(await screen.findByRole('tab', { name: 'Modal & Untung' }));
-    expect(await screen.findByText('POS Rp 30.000 · Pre-order Rp 5.000')).toBeInTheDocument();
-    expect(screen.getByText('POS Rp 12.000 · Pre-order Rp 2.000')).toBeInTheDocument();
-    expect(screen.getByText('POS Rp 18.000 · Pre-order Rp 3.000')).toBeInTheDocument();
-    // tepat tiga sub-baris: biaya event dan laba bersih milik seluruh event, tidak dipisah
-    expect(screen.getAllByText(/^POS Rp/)).toHaveLength(3);
-  });
-
-  it('Modal & Untung: respons lama tanpa rincian tidak menampilkan sub-baris', async () => {
-    profitReport.mockResolvedValue({
-      event: { id: 1 }, revenue: '35000.00', cost_of_goods: '14000.00', gross_profit: '21000.00', event_cost: '0.00', net_profit: '21000.00',
-    });
+  it('shows exactly revenue, cost of goods and gross profit', async () => {
+    profitReport.mockResolvedValue({ revenue: '35000.00', cost_of_goods: '14000.00', gross_profit: '21000.00' });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
     await user.click(await screen.findByRole('tab', { name: 'Modal & Untung' }));
     expect(await screen.findByText('Rp 35.000')).toBeInTheDocument();
-    expect(screen.queryByText(/^POS Rp/)).not.toBeInTheDocument();
+    expect(screen.getByText('Rp 14.000')).toBeInTheDocument();
+    expect(screen.getByText('Rp 21.000')).toBeInTheDocument();
+    expect(screen.queryByText(/pre-order/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(profitReport).toHaveBeenCalledWith({ date_from: TODAY, date_to: TODAY }));
   });
 
-  it('Modal Outlet: sel dan Grand Total memuat sub-baris yang jumlahnya sama dengan total', async () => {
-    outletProfitReport.mockResolvedValue({
-      event: { id: 1 },
-      data: [
-        { outlet_id: 5, outlet_name: 'Outlet A', total_sales: '35000.00', modal: '14000.00', gross_profit: '21000.00',
-          sales_pos: '30000.00', sales_preorder: '5000.00', modal_pos: '12000.00', modal_preorder: '2000.00', gross_profit_pos: '18000.00', gross_profit_preorder: '3000.00' },
-        { outlet_id: 6, outlet_name: 'Outlet B', total_sales: '10000.00', modal: '4000.00', gross_profit: '6000.00',
-          sales_pos: '0.00', sales_preorder: '10000.00', modal_pos: '0.00', modal_preorder: '4000.00', gross_profit_pos: '0.00', gross_profit_preorder: '6000.00' },
-      ],
-    });
+  it('reloads with the new range when the period changes', async () => {
+    profitReport.mockResolvedValue({ revenue: '0.00', cost_of_goods: '0.00', gross_profit: '0.00' });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderReports();
-    await user.click(await screen.findByRole('tab', { name: 'Modal Outlet' }));
-    await screen.findByText('Outlet A');
-    // baris
-    expect(screen.getByText('POS Rp 30.000 · Pre-order Rp 5.000')).toBeInTheDocument();
-    expect(screen.getByText('POS Rp 0 · Pre-order Rp 10.000')).toBeInTheDocument();
-    // Grand Total: 30.000 + 0 | 5.000 + 10.000 -> total 45.000
-    expect(screen.getByText('POS Rp 30.000 · Pre-order Rp 15.000')).toBeInTheDocument();
-    expect(screen.getByText('Rp 45.000')).toBeInTheDocument();
-    // catatan bahwa laporan ini kini memuat pre-order
-    expect(screen.getByText(/juga menghitung bagian pre-order/i)).toBeInTheDocument();
+    await user.click(await screen.findByRole('tab', { name: 'Modal & Untung' }));
+    await waitFor(() => expect(profitReport).toHaveBeenCalled());
+
+    const from = await screen.findByTestId('period-from');
+    await user.clear(from);
+    await user.type(from, '2026-09-01');
+    await waitFor(() => expect(profitReport).toHaveBeenLastCalledWith(expect.objectContaining({ date_from: '2026-09-01' })));
+  });
+
+  it('has no Pre-order tab', async () => {
+    renderReports();
+    await screen.findByRole('tab', { name: 'Modal & Untung' });
+    expect(screen.queryByRole('tab', { name: /pre-order/i })).not.toBeInTheDocument();
   });
 });

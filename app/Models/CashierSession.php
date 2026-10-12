@@ -18,7 +18,7 @@ class CashierSession extends Model
     use HasDataMode, HasFactory, StampsBusinessDay;
 
     protected $fillable = [
-        'event_id', 'user_id', 'opened_at', 'closed_at', 'opening_cash',
+        'user_id', 'opened_at', 'closed_at', 'opening_cash',
         'closing_cash', 'expected_cash', 'cash_difference', 'status', 'notes',
     ];
 
@@ -40,10 +40,6 @@ class CashierSession extends Model
         return $this->getAttribute('opened_at') ?? $this->getAttribute('created_at') ?? now();
     }
 
-    public function event(): BelongsTo
-    {
-        return $this->belongsTo(Event::class);
-    }
 
     public function user(): BelongsTo
     {

@@ -17,10 +17,11 @@ import LoadingState from '../components/ui/LoadingState.vue';
 
 /**
  * 042-dashboard-revamp (US1) — Dashboard: kepala halaman (tanggal bisnis, "Diperbarui", periode, Ekspor), empat
- * angka utama dari SATU endpoint (GET /dashboard/summary), lalu bagian sekunder "Per event" (panel lama).
+ * angka utama dari SATU endpoint (GET /dashboard/summary), "Perlu tindakan" dan "Order terbaru". (046: bagian
+ * "Per event" sudah dihapus bersama modul Event.)
  *
  * Prinsip: tiap wilayah punya keadaan sendiri. Kegagalan ringkasan hanya menampilkan galat + Coba lagi di
- * wilayah angka; header dan "Per event" tetap tampil (contracts/ui-contracts.md "States").
+ * wilayah angka; header dan tabel order tetap tampil (contracts/ui-contracts.md "States").
  */
 const { t } = useI18n();
 const settings = useSettingsStore();
@@ -34,11 +35,11 @@ const scopeText = computed(() => {
 });
 const { period, setPeriod } = useDashboardPeriod();
 
-// "Per event" memuat chart.js dan enam panggilan API sendiri. defineAsyncComponent menjaga chart.js di luar
-// potongan pertama; AWAL render-nya ditunda sampai ringkasan selesai (lihat `perEventReady`) karena PHP di
+// "Rincian periode" memuat chart.js dan beberapa panggilan API sendiri. defineAsyncComponent menjaga chart.js di
+// luar potongan pertama; AWAL render-nya ditunda sampai ringkasan selesai (lihat `ordersReady`) karena PHP di
 // instalasi toko melayani permintaan hampir berurutan — angka utama harus mendapat giliran pertama.
-const PerEventSection = defineAsyncComponent({
-  loader: () => import('../components/dashboard/PerEventSection.vue'),
+const PeriodSection = defineAsyncComponent({
+  loader: () => import('../components/dashboard/PeriodSection.vue'),
   loadingComponent: { render: () => h(LoadingState, { rows: 6 }) },
   errorComponent: { render: () => h(ErrorState, { retryable: false }) },
   delay: 150,
@@ -46,7 +47,7 @@ const PerEventSection = defineAsyncComponent({
 
 const data = ref(null);
 const state = ref('loading'); // loading | error | ready
-const perEventReady = ref(false);
+const ordersReady = ref(false);
 const exporting = ref(false);
 
 // Respons dari periode yang sudah ditinggalkan (pengguna berpindah cepat) tidak boleh menimpa yang terbaru.
@@ -67,7 +68,7 @@ async function loadSummary({ silent = false } = {}) {
     // menunjukkan bahwa datanya tidak segar); galat penuh hanya bila belum ada data sama sekali.
     if (!silent || !data.value) state.value = 'error';
   } finally {
-    if (seq === requestSeq) perEventReady.value = true;
+    if (seq === requestSeq) ordersReady.value = true;
   }
 }
 
@@ -111,8 +112,8 @@ onMounted(() => {
   loadSummary();
   loadAttention();
   refresher.start();
-  // Jaring pengaman: bila ringkasan menggantung, bagian "Per event" tetap muncul (isinya tidak boleh hilang).
-  fallbackTimer = setTimeout(() => { perEventReady.value = true; }, 3000);
+  // Jaring pengaman: bila ringkasan menggantung, tabel order tetap muncul (isinya tidak boleh hilang).
+  fallbackTimer = setTimeout(() => { ordersReady.value = true; }, 3000);
 });
 onBeforeUnmount(() => clearTimeout(fallbackTimer));
 
@@ -189,11 +190,12 @@ async function onExport() {
       @retry="loadAttention()"
     />
 
-    <!-- Tabel menunggu ringkasan selesai (perEventReady) agar angka utama mendapat giliran pertama pada PHP toko
+    <!-- Tabel menunggu ringkasan selesai (ordersReady) agar angka utama mendapat giliran pertama pada PHP toko
          yang melayani permintaan hampir berurutan; sementara itu wilayahnya tampil sebagai kerangka. -->
-    <DashboardOrdersTable v-if="perEventReady" ref="ordersTable" :period="period" :running="refresher.running.value" :scope-text="t('dashboard.attention_scope_all')" />
+    <DashboardOrdersTable v-if="ordersReady" ref="ordersTable" :period="period" :running="refresher.running.value" :scope-text="t('dashboard.attention_scope_all')" />
     <section v-else class="mx-[26px] mb-5 border-2 border-line bg-white" data-testid="orders-slot"><LoadingState :rows="6" /></section>
 
-    <PerEventSection v-if="perEventReady" />
+    <PeriodSection v-if="ordersReady" />
+
   </div>
 </template>

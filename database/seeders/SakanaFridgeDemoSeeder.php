@@ -6,10 +6,8 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Material;
 use App\Models\Order;
-use App\Models\Preorder;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\ProductVariantBomLine;
@@ -19,7 +17,6 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorMaterialPrice;
 use App\Services\OrderService;
-use App\Services\PreorderService;
 use App\Services\StockService;
 use App\Support\ModeGate;
 use Illuminate\Database\Seeder;
@@ -40,8 +37,7 @@ use Illuminate\Support\Facades\Hash;
  * idempotensinya.
  *
  * Setiap entitas dibuat lewat service/pola yang sama dengan yang dipakai
- * endpoint sungguhan (ProductCodeGenerator, StockService, OrderService,
- * PreorderService) — bukan raw insert — supaya data dummy ini benar-benar
+ * endpoint sungguhan (ProductCodeGenerator, StockService, OrderService) — bukan raw insert — supaya data dummy ini benar-benar
  * lolos aturan bisnis yang sama seperti data asli (FR-002), bukan kasus
  * khusus yang cuma "terlihat benar".
  */
@@ -51,13 +47,10 @@ class SakanaFridgeDemoSeeder extends Seeder
 
     private OrderService $orderService;
 
-    private PreorderService $preorderService;
-
     public function run(): void
     {
         $this->stockService = app(StockService::class);
         $this->orderService = app(OrderService::class);
-        $this->preorderService = app(PreorderService::class);
 
         ModeGate::runAs('demo', function () {
             // Follow-up (2026-09-03) — BUG YANG DITEMUKAN & DIPERBAIKI:
@@ -75,7 +68,6 @@ class SakanaFridgeDemoSeeder extends Seeder
 
             $this->seedDemoUsers();
 
-            $event = $this->seedEvent();
             $categories = $this->seedCategories();
             $artists = $this->seedOutlets();
             $variantsByLabel = $this->seedProductsAndVariants($artists, $categories);
@@ -83,8 +75,7 @@ class SakanaFridgeDemoSeeder extends Seeder
             $vendors = $this->seedVendors();
             $materials = $this->seedMaterialsAndPrices($vendors);
             $this->seedBomLines($variantsByLabel, $materials);
-            $this->seedSales($event, $customers, $variantsByLabel);
-            $this->seedPreorders($event, $customers, $variantsByLabel);
+            $this->seedSales($customers, $variantsByLabel);
 
             $this->command?->info('Seed data Demo Sakana Fridge (mode DEMO) selesai.');
         });
@@ -122,21 +113,6 @@ class SakanaFridgeDemoSeeder extends Seeder
                 ]
             );
         }
-    }
-
-    private function seedEvent(): Event
-    {
-        return Event::firstOrCreate(
-            ['name' => 'Demo Sakana Fridge Meet & Greet Vol.1'],
-            [
-                'location' => 'Jakarta Convention Center, Senayan',
-                'start_date' => now()->subDays(3)->toDateString(),
-                'end_date' => now()->addDays(2)->toDateString(),
-                'status' => 'active',
-                'event_cost' => 3500000,
-                'notes' => 'Event contoh (data DEMO) untuk menampilkan alur booth multi-artist.',
-            ]
-        );
     }
 
     /** @return array<string,Category> keyed by 2-huruf code */
@@ -189,7 +165,7 @@ class SakanaFridgeDemoSeeder extends Seeder
      *
      * @param  array<string,Outlet>  $artists
      * @param  array<string,Category>  $categories
-     * @return array<string,ProductVariant[]> varian dikelompokkan per label produk, dipakai seedBomLines/seedSales/seedPreorders
+     * @return array<string,ProductVariant[]> varian dikelompokkan per label produk, dipakai seedBomLines/seedSales
      */
     private function seedProductsAndVariants(array $artists, array $categories): array
     {
@@ -394,16 +370,16 @@ class SakanaFridgeDemoSeeder extends Seeder
      * @param  Customer[]  $customers
      * @param  array<string,ProductVariant[]>  $variantsByLabel
      */
-    private function seedSales(Event $event, array $customers, array $variantsByLabel): void
+    private function seedSales(array $customers, array $variantsByLabel): void
     {
-        if (Order::where('event_id', $event->id)->exists()) {
+        // 046: tanpa event, penanda idempotensi = catatan khas transaksi contoh.
+        if (Order::where('notes', 'Transaksi contoh (data DEMO).')->exists()) {
             return; // idempotensi — sudah pernah di-seed sebelumnya
         }
 
         $owner = User::where('username', 'owner')->firstOrFail();
 
         $session = CashierSession::create([
-            'event_id' => $event->id,
             'user_id' => $owner->id,
             'opened_at' => now()->subHours(3),
             'opening_cash' => 500000,
@@ -453,80 +429,5 @@ class SakanaFridgeDemoSeeder extends Seeder
             'cash_difference' => 0,
             'status' => 'closed',
         ]);
-    }
-
-    /**
-     * Dua pre-order dengan status berbeda (FR-001/US1 acceptance #9):
-     * satu berhenti di 'dp_paid', satu lagi ditransisikan penuh sampai
-     * 'handed_over' — mendemonstrasikan siklus penuh arrived (stok naik)
-     * dan handed_over (stok turun) sekaligus (lihat CLAUDE.md "Stock
-     * movement invariants").
-     *
-     * @param  Customer[]  $customers
-     * @param  array<string,ProductVariant[]>  $variantsByLabel
-     */
-    private function seedPreorders(Event $event, array $customers, array $variantsByLabel): void
-    {
-        if (Preorder::where('event_id', $event->id)->exists()) {
-            return; // idempotensi
-        }
-
-        $owner = User::where('username', 'owner')->firstOrFail();
-        $variantPool = collect($variantsByLabel)->flatten()->values();
-
-        // --- Pre-order #1: berhenti di 'dp_paid' ---------------------------
-        $variant1 = $variantPool[1];
-        $preorder1 = $this->preorderService->create([
-            'event_id' => $event->id,
-            'customer_id' => $customers[2]->id,
-            'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $variant1->id, 'qty' => 1]],
-            'notes' => 'Pre-order contoh (data DEMO) — baru DP.',
-        ], $owner);
-        // PreorderService::create() tidak menyertakan 'status' di array
-        // create()-nya (mengandalkan DEFAULT 'ordered' di kolom DB), jadi
-        // objek yang dikembalikan BELUM memuat 'status' di memori — beda
-        // dengan alur HTTP asli yang selalu mengambil ulang model via route
-        // model binding pada request berikutnya. Di sini beberapa
-        // pemanggilan service dirantai dalam satu proses PHP yang sama,
-        // jadi di-refresh eksplisit supaya recordPayment()'s pengecekan
-        // status tidak salah membaca null.
-        $preorder1->refresh();
-
-        $dpAmount = round((float) $preorder1->total_amount * 0.5, 2);
-        $this->preorderService->recordPayment($preorder1, [
-            'method' => 'cash',
-            'amount' => $dpAmount,
-            'purpose' => 'down_payment',
-        ]);
-
-        // --- Pre-order #2: siklus penuh sampai 'handed_over' ---------------
-        $variant2 = $variantPool[4];
-        $preorder2 = $this->preorderService->create([
-            'event_id' => $event->id,
-            'customer_id' => $customers[0]->id,
-            'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $variant2->id, 'qty' => 2]],
-            'notes' => 'Pre-order contoh (data DEMO) — siklus penuh.',
-        ], $owner);
-        $preorder2->refresh(); // lihat komentar di preorder1 di atas
-
-        $dp2 = round((float) $preorder2->total_amount * 0.4, 2);
-        $preorder2 = $this->preorderService->recordPayment($preorder2, [
-            'method' => 'cash',
-            'amount' => $dp2,
-            'purpose' => 'down_payment',
-        ]);
-
-        $preorder2 = $this->preorderService->transitionStatus($preorder2, 'arrived', null, $owner);
-
-        $remaining = round((float) $preorder2->outstanding(), 2);
-        $preorder2 = $this->preorderService->recordPayment($preorder2, [
-            'method' => 'cash',
-            'amount' => $remaining,
-            'purpose' => 'settlement',
-        ]);
-
-        $this->preorderService->transitionStatus($preorder2, 'handed_over', null, $owner);
     }
 }

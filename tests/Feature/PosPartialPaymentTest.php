@@ -6,7 +6,6 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentChannel;
@@ -44,9 +43,8 @@ class PosPartialPaymentTest extends TestCase
         $this->cashier = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($this->cashier, 'sanctum');
 
-        $event = Event::factory()->create(['status' => 'active']);
         $this->session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $this->cashier->id, 'status' => 'open',
+            'user_id' => $this->cashier->id, 'status' => 'open',
         ]);
 
         $product = Product::factory()->create([

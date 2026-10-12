@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { useOutletStore } from '../../resources/js/stores/outlet';
 import ReceiptModal from '../../resources/js/components/receipt/ReceiptModal.vue';
-import { formatDate } from '../../resources/js/utils/date';
 
 const baseReceipt = {
   order_number: 'ORD-0001',
@@ -40,43 +39,22 @@ function renderModal(receiptOverrides, { multiOutlet = false } = {}) {
 }
 
 /**
- * 023-event-availability-invoice-redesign (US2, FR-004/FR-005/FR-006) —
- * standout available-on/location block REPLACES the old small
- * "Lokasi:/Tanggal:" footer line (research.md Decision 3).
+ * 046 — struk tidak lagi memuat event: tanpa nama event, lokasi, atau "Tersedia pada", walau payload
+ * lama masih membawa field itu (klien lama / data tersimpan).
  */
-describe('ReceiptModal standout available-on/location block (023 US2)', () => {
+describe('ReceiptModal tanpa event (046)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('renders location and the resolved available-on date prominently', async () => {
+  it('tidak mencetak lokasi atau tanggal ketersediaan event', async () => {
     renderModal({
+      event_name: 'Bazaar Lama',
       event_location: 'Jakarta Convention Center',
       event_available_on_date: '2026-09-02',
     });
 
     await screen.findByText('ORD-0001');
-    expect(screen.getByText('Jakarta Convention Center')).toBeInTheDocument();
-    expect(screen.getByText('Tersedia pada')).toBeInTheDocument();
-    expect(screen.getByText(formatDate('2026-09-02'))).toBeInTheDocument();
-  });
-
-  it('renders only the location when no available-on date is set', async () => {
-    renderModal({
-      event_location: 'Jakarta Convention Center',
-      event_available_on_date: null,
-    });
-
-    await screen.findByText('ORD-0001');
-    expect(screen.getByText('Jakarta Convention Center')).toBeInTheDocument();
-    expect(screen.queryByText('Tersedia pada')).not.toBeInTheDocument();
-  });
-
-  it('omits the entire standout block when location and available-on date are both absent', async () => {
-    renderModal({
-      event_location: null,
-      event_available_on_date: null,
-    });
-
-    await screen.findByText('ORD-0001');
+    expect(screen.queryByText('Jakarta Convention Center')).not.toBeInTheDocument();
+    expect(screen.queryByText('Bazaar Lama')).not.toBeInTheDocument();
     expect(screen.queryByText('Lokasi')).not.toBeInTheDocument();
     expect(screen.queryByText('Tersedia pada')).not.toBeInTheDocument();
   });

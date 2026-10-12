@@ -28,7 +28,7 @@ async function renderRail({ menuKeys, collapsed = false, props = {}, at = 'dashb
 }
 
 const ALL = ['dashboard', 'pos', 'session', 'events', 'products', 'outlets', 'categories', 'stock', 'vendors', 'materials',
-  'purchase_orders', 'customers', 'preorders', 'sales', 'reports', 'settings', 'users', 'roles', 'floor', 'kitchen',
+  'purchase_orders', 'customers', 'sales', 'reports', 'settings', 'users', 'roles', 'floor', 'kitchen',
   'dining_setup', 'companies', 'licenses', 'invoices'];
 
 describe('RailNav — visibilitas per peran', () => {
@@ -64,16 +64,6 @@ describe('RailNav — visibilitas per peran', () => {
 });
 
 describe('RailNav — lencana dan titik status', () => {
-  it('menampilkan jumlah keranjang POS dan pre-order yang menunggu', async () => {
-    await renderRail({
-      menuKeys: ['pos', 'preorders'],
-      props: { preorderAlertCount: 4 },
-      beforeRender: () => usePosCartStore().$patch({ items: [{ qty: 2 }, { qty: 1 }] }),
-    });
-    expect(screen.getByRole('link', { name: new RegExp(`^${t('nav.pos')}.*3`) })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: new RegExp(`^${t('nav.preorders')}.*4`) })).toBeInTheDocument();
-  });
-
   it('memberi titik status dengan teks untuk pembaca layar', async () => {
     await renderRail({ menuKeys: ['dashboard', 'sales'], props: { dots: { sales: true } } });
     const link = screen.getByRole('link', { name: new RegExp(t('nav.sales')) });

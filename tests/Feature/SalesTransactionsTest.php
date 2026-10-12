@@ -6,7 +6,6 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\PaymentChannel;
 use App\Models\Product;
@@ -30,7 +29,6 @@ class SalesTransactionsTest extends TestCase
 
     private User $owner;
 
-    private Event $event;
 
     private CashierSession $session;
 
@@ -45,9 +43,8 @@ class SalesTransactionsTest extends TestCase
         $this->owner = User::factory()->create(['role' => 'owner', 'name' => 'Pemilik']);
         $this->actingAs($this->cashier, 'sanctum');
 
-        $this->event = Event::factory()->create(['status' => 'active', 'name' => 'Sakana Fest']);
         $this->session = CashierSession::factory()->create([
-            'event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open', 'opening_cash' => 100000,
+            'user_id' => $this->cashier->id, 'status' => 'open', 'opening_cash' => 100000,
         ]);
 
         $category = Category::factory()->create();
@@ -77,7 +74,7 @@ class SalesTransactionsTest extends TestCase
     {
         $preorder = $this->postJson('/api/v1/preorders', array_merge([
             'customer_id' => Customer::factory()->create(['name' => 'Pembeli PO'])->id,
-            'event_id' => $this->event->id, 'fulfillment' => 'pickup',
+            'fulfillment' => 'pickup',
             'items' => [['variant_id' => $this->variantB->id, 'qty' => 2]],
         ], $overrides))->assertCreated()->json();
 
@@ -90,7 +87,6 @@ class SalesTransactionsTest extends TestCase
 
     private function report(array $query = []): array
     {
-        $query = array_merge(['event_id' => $this->event->id], $query);
 
         return $this->getJson('/api/v1/reports/sales?'.http_build_query($query))->assertOk()->json();
     }
@@ -113,35 +109,19 @@ class SalesTransactionsTest extends TestCase
         $this->assertArrayNotHasKey('type', $row); // satu-satunya jenis baris kini order POS
     }
 
-    public function test_preorders_never_appear_in_the_sales_rows_however_much_is_paid(): void
-    {
-        $order = $this->makeOrder();
-        $partlyPaid = $this->makePreorder(40000);
-        $fullyPaid = $this->makePreorder(100000);
-
-        $keys = $this->rows()->pluck('key')->all();
-
-        $this->assertSame(["order:{$order->id}"], $keys);
-        foreach ([$partlyPaid, $fullyPaid] as $preorder) {
-            $this->assertNotContains("preorder:{$preorder['id']}", $keys);
-        }
-    }
-
-    public function test_the_sales_page_figures_are_pos_only_while_the_shared_report_totals_still_include_preorders(): void
+    public function test_the_sales_page_figures_equal_the_shared_report_totals(): void
     {
         $this->makeOrder();          // 3×10.000 + 50.000 − diskon item 2.000 = 78.000 (4 unit)
-        $this->makePreorder(40000);  // pendapatan pre-order yang diakui: 40.000 (2 unit × 0,4 = 0,8)
 
         $totals = $this->report()['totals'];
 
-        // Angka khusus halaman Sales: hanya transaksi POS.
+        // 046: tidak ada lagi pendapatan pre-order, jadi angka POS dan angka bersama sama persis.
         $this->assertEquals(78000, (float) $totals['pos_net_sales']);
         $this->assertEquals(80000, (float) $totals['pos_gross_sales']);   // sebelum diskon item
         $this->assertEquals(4, (float) $totals['pos_unit_count']);
         $this->assertSame(1, (int) $totals['order_count']);
-        // Angka laporan bersama TIDAK berubah: Dashboard & Laporan sengaja memuat pre-order.
-        $this->assertEquals(118000, (float) $totals['net_sales']);
-        $this->assertGreaterThan((float) $totals['pos_unit_count'], (float) $totals['unit_count']);
+        $this->assertEquals(78000, (float) $totals['net_sales']);
+        $this->assertEquals((float) $totals['pos_unit_count'], (float) $totals['unit_count']);
     }
 
     public function test_rows_are_ordered_newest_first(): void

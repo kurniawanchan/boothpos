@@ -10,5 +10,5 @@ return [
     'outlet_not_authorized' => 'You are not authorized to manage outlets.',
     'outlet_license_quota_exceeded' => 'This installation uses a Pro license (one outlet). Upgrade to Master to add more outlets.',
     'insufficient_stock' => 'Insufficient stock for variant :sku. Available: :available.',
-    'customer_delete_has_transactions' => 'This customer still has transactions (orders/pre-orders) and cannot be deleted.',
+    'customer_delete_has_transactions' => 'This customer still has transactions (orders) and cannot be deleted.',
 ];

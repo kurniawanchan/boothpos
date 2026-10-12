@@ -12,7 +12,6 @@ import { useOutletStore } from '../../resources/js/stores/outlet';
 vi.mock('../../resources/js/api/sessions', () => ({
   currentSession: vi.fn(), sessionSummary: vi.fn(), closeSession: vi.fn(), openSession: vi.fn(),
 }));
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Event Aktif' }] }) }));
 vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn().mockResolvedValue({ data: [] }) }));
 
 const TWO = [{ id: 1, code: 'WJ1', name: 'Warkop WJM 1' }, { id: 2, code: 'WJ2', name: 'Warkop WJM 2' }];

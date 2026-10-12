@@ -4,16 +4,12 @@ import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import DashboardView from '../../resources/js/views/DashboardView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listEvents } from '../../resources/js/api/events';
 import { salesReport, profitReport, outletSettlements } from '../../resources/js/api/reports';
 import { lowStock } from '../../resources/js/api/stock';
-import { listPreorders } from '../../resources/js/api/preorders';
 import { summary } from '../../resources/js/api/dashboard';
 
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), outletSettlements: vi.fn() }));
 vi.mock('../../resources/js/api/stock', () => ({ lowStock: vi.fn() }));
-vi.mock('../../resources/js/api/preorders', () => ({ listPreorders: vi.fn() }));
 vi.mock('../../resources/js/api/dashboard', () => ({ summary: vi.fn(), exportDashboard: vi.fn() }));
 vi.mock('vue-chartjs', () => ({
   Bar: { template: '<div />' },
@@ -49,25 +45,23 @@ const SUMMARY = {
 };
 
 // 041 (US2) menempatkan Dashboard di page kit; 042 menggantinya dengan struktur baru: PageHeader + wilayah angka
-// utama (dari /dashboard/summary) + tempat panel berikutnya + bagian "Per event". Strip empat angka LAMA
-// (khusus event aktif) hidup di dalam bagian "Per event" dan diuji di PerEventSection.test.js.
+// utama (dari /dashboard/summary) + tempat panel berikutnya + bagian "Rincian periode" (046: dulu
+// "Per event"; strip empat angka LAMA hidup di dalamnya dan diuji di PeriodSection.test.js).
 describe('DashboardView — page structure (042)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     summary.mockResolvedValue(SUMMARY);
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     salesReport.mockResolvedValue({ totals: { net_sales: '1250000.00', order_count: 7, unit_count: 19, discount_total: '5000.00' }, rows: [] });
     lowStock.mockResolvedValue({ data: [] });
-    listPreorders.mockResolvedValue({ data: [], meta: { total: 0 } });
     profitReport.mockResolvedValue({ gross_profit: '400000.00' });
     outletSettlements.mockResolvedValue({ data: [] });
   });
 
-  it('has ONE page heading (h1) and the Per-event section as an h2', async () => {
+  it('has ONE page heading (h1) and the period breakdown section as an h2', async () => {
     await renderDashboard(['dashboard', 'reports']);
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Beranda'); // nav.dashboard (id)
-    expect(await screen.findByRole('heading', { level: 2, name: 'Per event' }, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'Rincian periode' }, { timeout: 10000 })).toBeInTheDocument();
   }, 30000);
 
   it('shows exactly four KPI cells whose values come from the summary endpoint', async () => {
@@ -83,25 +77,23 @@ describe('DashboardView — page structure (042)', () => {
   it('shows the attention panel and the latest-orders table (the slots of the first iteration are now real regions)', async () => {
     await renderDashboard(['dashboard']);
     expect(await screen.findByTestId('attention-panel')).toBeInTheDocument();
-    // Tabel dan "Per event" menunggu ringkasan selesai dan komponen async dimuat; pada mesin yang sibuk itu
+    // Tabel dan "Rincian periode" menunggu ringkasan selesai dan komponen async dimuat; pada mesin yang sibuk itu
     // bisa melewati batas 1 detik bawaan — batas dilonggarkan, bukan perilakunya.
     expect(await screen.findByTestId('dashboard-orders', {}, { timeout: 10000 })).toBeInTheDocument();
   }, 30000);
 
-  it('the old per-event KPI strip (incl. gross profit for reports users) still renders inside "Per event"', async () => {
+  it('the old KPI strip (incl. gross profit for reports users) still renders inside "Rincian periode"', async () => {
     await renderDashboard(['dashboard', 'reports']);
-    const section = await screen.findByTestId('per-event-section');
+    const section = await screen.findByTestId('per-period-section');
     expect(await within(section).findByText('Rp 1.250.000')).toBeInTheDocument();
     expect(await within(section).findByText('Rp 400.000')).toBeInTheDocument();
     await waitFor(() => expect(profitReport).toHaveBeenCalled());
   });
 
-  it('calls the summary endpoint exactly once on load, plus each existing per-event call once', async () => {
+  it('calls the summary endpoint exactly once on load, plus each period panel call once', async () => {
     await renderDashboard(['dashboard', 'reports']);
     await screen.findByText('Rp 1.250.000');
     expect(summary).toHaveBeenCalledTimes(1);
-    expect(listEvents).toHaveBeenCalledTimes(1);
     expect(lowStock).toHaveBeenCalledTimes(1);
-    expect(listPreorders).toHaveBeenCalledTimes(1);
   });
 });

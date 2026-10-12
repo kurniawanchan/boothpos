@@ -16,7 +16,6 @@ vi.mock('../../resources/js/api/settings', () => ({
   updateSettings: vi.fn(),
 }));
 vi.mock('../../resources/js/api/preorders', () => ({ listPreorders: vi.fn().mockResolvedValue({ data: [], meta: { total: 0 } }) }));
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn().mockResolvedValue({ data: [] }) }));
 
 const TWO = {
   outlets: [{ id: 1, code: 'WJ1', name: 'Warkop WJM 1' }, { id: 2, code: 'WJ2', name: 'Warkop WJM 2' }],

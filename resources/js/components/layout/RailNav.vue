@@ -22,7 +22,6 @@ import { isActive, visibleSections } from '../../utils/navigation';
  */
 const props = defineProps({
   collapsed: { type: Boolean, default: false },
-  preorderAlertCount: { type: Number, default: 0 },
   dots: { type: Object, default: () => ({}) },
 });
 defineEmits(['toggle']);
@@ -36,7 +35,7 @@ const { count: cartCount } = storeToRefs(usePosCartStore());
 const sections = computed(() =>
   visibleSections(
     (key) => auth.canAccessMenu(key),
-    { cart: cartCount.value, preorders: props.preorderAlertCount },
+    { cart: cartCount.value },
     props.dots
   )
 );

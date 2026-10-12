@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\CashierSession;
-use App\Models\Event;
 use App\Models\PaymentChannel;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -29,11 +28,10 @@ class OrderTest extends TestCase
         $this->cashier = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($this->cashier, 'sanctum');
 
-        $event = Event::factory()->create(['status' => 'active']);
         // 045 Stage 5 — stok per outlet: shift di outlet ASAL produk, supaya penjualan memakai saldo yang ada.
         $artist = Outlet::factory()->create();
         $this->session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $this->cashier->id, 'status' => 'open', 'outlet_id' => $artist->id,
+            'user_id' => $this->cashier->id, 'status' => 'open', 'outlet_id' => $artist->id,
         ]);
 
         $category = Category::factory()->create();
@@ -392,19 +390,15 @@ class OrderTest extends TestCase
             ->assertJsonPath('store_contact_person', null);
     }
 
-    // 014-sales-receipt-event-footer (US2) — footer struk kini juga
-    // menampilkan info event (lokasi & tanggal), bukan cuma nama.
-    public function test_receipt_includes_event_location_and_dates(): void
+    // 046 — struk tidak lagi membawa informasi event (nama, lokasi, tanggal, "tersedia pada").
+    public function test_receipt_carries_no_event_information(): void
     {
         $order = $this->postJson('/api/v1/orders', $this->basePayload())->json();
 
-        $response = $this->getJson("/api/v1/orders/{$order['id']}/receipt");
+        $payload = $this->getJson("/api/v1/orders/{$order['id']}/receipt")->assertOk()->json();
 
-        $event = $this->session->event;
-
-        $response->assertOk()
-            ->assertJsonPath('event_location', $event->location)
-            ->assertJsonPath('event_start_date', $event->start_date?->toDateString())
-            ->assertJsonPath('event_end_date', $event->end_date?->toDateString());
+        foreach (array_keys($payload) as $key) {
+            $this->assertStringStartsNotWith('event', $key, "struk masih membawa {$key}");
+        }
     }
 }

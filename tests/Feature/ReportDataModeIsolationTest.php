@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\OutletSettlement;
 use App\Models\CashierSession;
 use App\Models\Customer;
 use App\Models\Product;
@@ -50,11 +49,11 @@ class ReportDataModeIsolationTest extends TestCase
                 'payments' => [['method' => 'cash', 'amount' => $sellPrice]],
             ], $cashier);
 
-            return [$order, $variant, $session->event_id];
+            return [$order, $variant];
         });
     }
 
-    public function test_general_sales_report_without_event_filter_never_mixes_demo_into_live(): void
+    public function test_general_sales_report_never_mixes_demo_into_live(): void
     {
         $owner = $this->actingAsOwner();
         $this->createOrderInMode('live', $owner, 100000);
@@ -88,15 +87,15 @@ class ReportDataModeIsolationTest extends TestCase
         $this->assertCount(1, $response->json('transactions'));
     }
 
-    public function test_event_profit_report_is_not_contaminated_by_a_demo_order_on_a_different_event(): void
+    public function test_profit_report_is_not_contaminated_by_a_demo_order(): void
     {
         $owner = $this->actingAsOwner();
-        [$liveOrder, , $liveEventId] = $this->createOrderInMode('live', $owner, 200000);
+        $this->createOrderInMode('live', $owner, 200000);
         $this->createOrderInMode('demo', $owner, 777777);
 
         Setting::updateOrCreate(['key' => 'system_mode'], ['value' => 'live', 'type' => 'string', 'group' => 'system']);
 
-        $response = $this->getJson("/api/v1/reports/profit?event_id={$liveEventId}");
+        $response = $this->getJson('/api/v1/reports/profit');
 
         $response->assertOk();
         $this->assertSame('200000.00', $response->json('revenue'));
@@ -105,20 +104,16 @@ class ReportDataModeIsolationTest extends TestCase
     public function test_artist_settlement_recalculation_is_not_contaminated_by_demo_activity(): void
     {
         $owner = $this->actingAsOwner();
-        [$liveOrder, $liveVariant, $liveEventId] = $this->createOrderInMode('live', $owner, 150000);
+        $this->createOrderInMode('live', $owner, 150000);
         $this->createOrderInMode('demo', $owner, 888888);
 
         Setting::updateOrCreate(['key' => 'system_mode'], ['value' => 'live', 'type' => 'string', 'group' => 'system']);
 
-        $response = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$liveEventId}");
+        $response = $this->getJson('/api/v1/reports/outlet-settlements');
 
         $response->assertOk();
         $totalSalesSum = collect($response->json('data'))->sum(fn ($row) => (float) $row['total_sales']);
         $this->assertSame(150000.0, $totalSalesSum);
-
-        $settlement = OutletSettlement::where('event_id', $liveEventId)->first();
-        $this->assertNotNull($settlement);
-        $this->assertSame('live', $settlement->data_mode);
     }
 
     public function test_stock_movements_in_demo_never_affect_a_live_variants_current_stock(): void
@@ -156,8 +151,8 @@ class ReportDataModeIsolationTest extends TestCase
         $owner = $this->actingAsOwner();
         $demoCustomer = ModeGate::runAs('demo', fn () => Customer::factory()->create());
 
-        [, , $liveEventId] = $this->createOrderInMode('live', $owner, 10000);
-        $session = CashierSession::factory()->create(['user_id' => $owner->id, 'event_id' => $liveEventId]);
+        $this->createOrderInMode('live', $owner, 10000);
+        $session = CashierSession::factory()->create(['user_id' => $owner->id]);
         $product = Product::factory()->create();
         $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'sell_price' => 10000]);
         app(\App\Services\StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'initial', 5);
@@ -192,19 +187,4 @@ class ReportDataModeIsolationTest extends TestCase
         $this->assertSame(100000.0, $totalAmountSum);
     }
 
-    public function test_preorder_service_rejects_a_customer_id_belonging_to_a_different_mode(): void
-    {
-        $owner = $this->actingAsOwner();
-        $demoCustomer = ModeGate::runAs('demo', fn () => Customer::factory()->create());
-        $product = Product::factory()->create();
-        $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'sell_price' => 10000]);
-
-        $this->expectException(ValidationException::class);
-
-        app(\App\Services\PreorderService::class)->create([
-            'customer_id' => $demoCustomer->id,
-            'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
-        ], $owner);
-    }
 }

@@ -179,7 +179,6 @@ class OrderService
 
             $order = Order::create([
                 'order_number' => $this->generateOrderNumber(),
-                'event_id' => $session->event_id,
                 'session_id' => $session->id,
                 'customer_id' => $data['customer_id'] ?? null,
                 'user_id' => $cashier->id,
@@ -229,7 +228,6 @@ class OrderService
                 $this->paymentRecorder->record(
                     array_merge($paymentInput, ['session_id' => $session->id, 'recorded_by' => $cashier->id]),
                     $order->id,
-                    null,
                 );
             }
 

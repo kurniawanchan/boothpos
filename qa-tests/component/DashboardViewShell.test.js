@@ -8,16 +8,12 @@ import { useAuthStore } from '../../resources/js/stores/auth';
 import { useSettingsStore } from '../../resources/js/stores/settings';
 import { useToastStore } from '../../resources/js/stores/toast';
 import { useOutletStore } from '../../resources/js/stores/outlet';
-import { listEvents } from '../../resources/js/api/events';
 import { salesReport, profitReport, outletSettlements } from '../../resources/js/api/reports';
 import { lowStock } from '../../resources/js/api/stock';
-import { listPreorders } from '../../resources/js/api/preorders';
 import { summary, attention, orders, exportDashboard } from '../../resources/js/api/dashboard';
 
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), outletSettlements: vi.fn() }));
 vi.mock('../../resources/js/api/stock', () => ({ lowStock: vi.fn(), listMovements: vi.fn() }));
-vi.mock('../../resources/js/api/preorders', () => ({ listPreorders: vi.fn() }));
 vi.mock('../../resources/js/api/dashboard', () => ({ summary: vi.fn(), attention: vi.fn(), orders: vi.fn(), downloadOrdersCsv: vi.fn(), exportDashboard: vi.fn() }));
 vi.mock('vue-chartjs', () => ({ Bar: { template: '<div />' }, Doughnut: { template: '<div />' } }));
 
@@ -74,10 +70,8 @@ describe('DashboardView — shell: period, regions, export (042 T025)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     summary.mockImplementation(({ period }) => Promise.resolve(summaryFor(period)));
-    listEvents.mockResolvedValue({ data: [] });
     salesReport.mockResolvedValue({ totals: { net_sales: '0.00', order_count: 0, unit_count: 0, discount_total: '0.00' }, rows: [] });
     lowStock.mockResolvedValue({ data: [] });
-    listPreorders.mockResolvedValue({ data: [], meta: { total: 0 } });
     profitReport.mockResolvedValue({ gross_profit: '0.00' });
     outletSettlements.mockResolvedValue({ data: [] });
     exportDashboard.mockResolvedValue();
@@ -195,7 +189,7 @@ describe('DashboardView — shell: period, regions, export (042 T025)', () => {
   });
 
   describe('independent regions', () => {
-    it('a failing summary shows an error with Retry in the KPI region only; header and Per event stay', async () => {
+    it('a failing summary shows an error with Retry in the KPI region only; header and Rincian periode stay', async () => {
       const user = userEvent.setup();
       summary.mockRejectedValueOnce(new Error('down'));
       await renderDashboard();
@@ -204,7 +198,7 @@ describe('DashboardView — shell: period, regions, export (042 T025)', () => {
       expect(await within(kpis).findByRole('alert')).toHaveTextContent('Gagal memuat angka utama');
       expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
       expect(screen.getByTestId('export-dashboard')).toBeInTheDocument();
-      expect(await screen.findByRole('heading', { level: 2, name: 'Per event' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { level: 2, name: 'Rincian periode' })).toBeInTheDocument();
       expect(await screen.findByText('Penjualan per kategori')).toBeInTheDocument();
 
       await user.click(within(kpis).getByRole('button', { name: /coba lagi/i }));
@@ -236,13 +230,13 @@ describe('DashboardView — shell: period, regions, export (042 T025)', () => {
       expect(within(await screen.findByTestId('dashboard-kpis')).getByText('Rp 1.000.000')).toBeInTheDocument();
     });
 
-    it('failing per-event calls do not blank the KPI region', async () => {
+    it('failing period panel calls do not blank the KPI region', async () => {
       salesReport.mockRejectedValue(new Error('down'));
       lowStock.mockRejectedValue(new Error('down'));
       await renderDashboard();
       const kpis = await screen.findByTestId('dashboard-kpis');
       expect(await within(kpis).findByText('Rp 1.000.000')).toBeInTheDocument();
-      await waitFor(() => expect(listEvents).toHaveBeenCalled());
+      await waitFor(() => expect(salesReport).toHaveBeenCalled());
       expect(within(kpis).getByText('Rp 1.000.000')).toBeInTheDocument();
     });
   });
@@ -255,7 +249,7 @@ describe('DashboardView — shell: period, regions, export (042 T025)', () => {
       await screen.findByText('Rp 1.000.000');
       await screen.findByText('Penjualan per kategori');
       const summaryCalls = summary.mock.calls.length;
-      const eventCalls = listEvents.mock.calls.length;
+      const panelCalls = salesReport.mock.calls.length;
 
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       // Pewaktu dibuat saat mount (waktu nyata); daftarkan ulang dengan memicu visibilitas -> arm() memakai pewaktu palsu.
@@ -266,7 +260,7 @@ describe('DashboardView — shell: period, regions, export (042 T025)', () => {
       await vi.advanceTimersByTimeAsync(30_000);
       expect(summary.mock.calls.length).toBe(summaryCalls + 2);
       expect(summary).toHaveBeenLastCalledWith({ period: '7d' });
-      expect(listEvents.mock.calls.length).toBe(eventCalls); // "Per event" tidak ikut di-refresh
+      expect(salesReport.mock.calls.length).toBe(panelCalls); // "Rincian periode" tidak ikut di-refresh
     });
 
     it('the same 30 s timer also refreshes attention and the orders page, keeping the table filters', async () => {

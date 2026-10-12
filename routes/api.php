@@ -11,7 +11,6 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\CustomerController;
 use App\Http\Controllers\Api\DiningTableController;
-use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\FloorController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\InvoiceExportImportController;
@@ -26,12 +25,10 @@ use App\Http\Controllers\Api\ModifierGroupController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentChannelController;
 use App\Http\Controllers\Api\PaymentProofController;
-use App\Http\Controllers\Api\PreorderController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
-use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\StationController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\TabController;
@@ -256,8 +253,6 @@ Route::prefix('v1')->group(function () {
         Route::delete('/bom/{bomLine}', [VariantBomController::class, 'destroy']);
         Route::get('/variants/{variant}/cost-breakdown', [MaterialController::class, 'costBreakdown']);
 
-        Route::apiResource('events', EventController::class);
-        Route::patch('/events/{event}/status', [EventController::class, 'updateStatus']);
 
         Route::get('/sessions/current', [CashierSessionController::class, 'current']);
         Route::post('/sessions', [CashierSessionController::class, 'store']);
@@ -322,45 +317,6 @@ Route::prefix('v1')->group(function () {
         Route::delete('/tabs/{order}/items/{item}', [TabLineController::class, 'destroy'])->whereNumber('item');
         Route::post('/tabs/{order}/payments', [TabPaymentController::class, 'store']);
 
-        // 007-preorder-import-export-notify — rute statis ('export',
-        // 'import/template', 'import') WAJIB didaftarkan SEBELUM
-        // apiResource('preorders', ...)'s 'show' (GET /preorders/{preorder}),
-        // supaya 'export'/'import' tidak tertangkap sebagai {preorder} id
-        // dan gagal route-model-binding (404).
-        Route::get('/preorders/export', [PreorderController::class, 'export']);
-        Route::get('/preorders/import/template', [PreorderController::class, 'importTemplate']);
-        Route::post('/preorders/import', [PreorderController::class, 'import']);
-
-        // 013-preorder-list-filters-receipt (T023) — rute statis 'summary'
-        // WAJIB didaftarkan SEBELUM apiResource('preorders', ...)'s 'show'
-        // (GET /preorders/{preorder}), dengan alasan sama seperti
-        // 'export'/'import' di atas: supaya "summary" tidak tertangkap
-        // sebagai {preorder} id dan gagal route-model-binding.
-        Route::get('/preorders/summary', [PreorderController::class, 'summary']);
-
-        // 022-preorder-invoice-crud-overhaul (US5) — rute statis 'bulk-*'
-        // WAJIB didaftarkan SEBELUM apiResource('preorders', ...)'s 'show',
-        // alasan sama seperti 'export'/'import'/'summary' di atas.
-        Route::post('/preorders/bulk-invoices', [PreorderController::class, 'bulkInvoices']);
-        Route::post('/preorders/bulk-email', [PreorderController::class, 'bulkEmailInvoices']);
-
-        // 027-preorder-duplicate-split — rute statis, WAJIB sebelum
-        // apiResource('preorders', ...) (alasan sama dengan 'bulk-*' di atas).
-        Route::post('/preorders/duplicate', [PreorderController::class, 'duplicate']);
-
-        Route::apiResource('preorders', PreorderController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
-        Route::patch('/preorders/{preorder}/status', [PreorderController::class, 'updateStatus']);
-        Route::patch('/preorders/{preorder}/dispatch-status', [PreorderController::class, 'updateDispatchStatus']);
-        Route::post('/preorders/{preorder}/payments', [PreorderController::class, 'storePayment']);
-        Route::delete('/preorders/{preorder}/payments/{payment}', [PreorderController::class, 'destroyPayment']);
-        Route::patch('/preorders/{preorder}/payments/{payment}/confirmation', [PreorderController::class, 'updatePaymentConfirmation']);
-        Route::post('/preorders/{preorder}/payments/{payment}/verify', [PreorderController::class, 'verifyPayment']);
-        Route::post('/preorders/{preorder}/split', [PreorderController::class, 'split']);
-        Route::post('/preorders/{preorder}/shipment', [ShipmentController::class, 'store']);
-        Route::get('/preorders/{preorder}/invoice', [PreorderController::class, 'invoice']);
-        Route::post('/preorders/{preorder}/notifications/resend', [PreorderController::class, 'resendNotification']);
-        Route::patch('/shipments/{shipment}', [ShipmentController::class, 'update']);
-
         // Ekspor/impor master data (PRD 7.15). Dikelompokkan di bawah
         // /exports dan /imports — bukan /artists/export dsb — supaya tidak
         // bertabrakan dengan apiResource /artists/{artist} dan supaya
@@ -384,11 +340,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/outlet-profit', [ReportController::class, 'outletProfit']);
         Route::get('/reports/outlet-settlements', [ReportController::class, 'outletSettlements']);
         Route::get('/reports/outlet-settlements/{outlet}/transactions', [ReportController::class, 'outletSettlementTransactions']);
-        // 010-split-payment-preorder-reports (US6) — laporan baru khusus
-        // pre-order (status × kelengkapan pembayaran), gated sama seperti
-        // laporan lain di atas (canAccessMenu('reports') di dalam method).
-        Route::get('/reports/preorders', [ReportController::class, 'preorders']);
         Route::get('/reports/{report}/export', [ReportController::class, 'export'])
-            ->where('report', 'sales|profit|outlet-settlements|outlet-profit|purchases|stock-by-outlet|preorder');
+            ->where('report', 'sales|profit|outlet-settlements|outlet-profit|purchases|stock-by-outlet');
     });
 });

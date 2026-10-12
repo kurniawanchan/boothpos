@@ -20,9 +20,6 @@ vi.mock('../../resources/js/api/settings', () => ({
 vi.mock('../../resources/js/api/preorders', () => ({
   listPreorders: vi.fn().mockResolvedValue({ data: [], meta: { total: 0 } }),
 }));
-vi.mock('../../resources/js/api/events', () => ({
-  listEvents: vi.fn().mockResolvedValue({ data: [{ id: 1, name: 'Comic Frontier 2026' }] }),
-}));
 
 const t = (key) => i18n.global.t(key);
 
@@ -78,9 +75,10 @@ describe('AppShell — komposisi kerangka', () => {
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main-content');
   });
 
-  it('memuat nama toko dan event aktif ke topbar', async () => {
+  it('memuat nama toko ke topbar (tanpa event)', async () => {
     await renderShell();
-    await waitFor(() => expect(screen.getByTestId('store-label')).toHaveTextContent('Sakana Fridge · Comic Frontier 2026'));
+    await waitFor(() => expect(screen.getByTestId('store-label')).toHaveTextContent('Sakana Fridge'));
+    expect(screen.getByTestId('store-label')).not.toHaveTextContent('Comic Frontier');
   });
 
   it('menampilkan judul bawaan dari route meta untuk halaman yang belum memakai PageHeader', async () => {

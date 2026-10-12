@@ -6,7 +6,6 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -27,7 +26,6 @@ class ShiftCashAttributionTest extends TestCase
 
     private User $cashier;
 
-    private Event $event;
 
     private ProductVariant $variant;
 
@@ -38,7 +36,6 @@ class ShiftCashAttributionTest extends TestCase
         parent::setUp();
         $this->cashier = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($this->cashier, 'sanctum');
-        $this->event = Event::factory()->create(['status' => 'active']);
 
         $product = Product::factory()->create([
             'home_outlet_id' => Outlet::factory()->create()->id, 'category_id' => Category::factory()->create()->id,
@@ -52,7 +49,7 @@ class ShiftCashAttributionTest extends TestCase
     private function openShift(float $openingCash = 0): CashierSession
     {
         return CashierSession::factory()->create([
-            'event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open', 'opening_cash' => $openingCash,
+            'user_id' => $this->cashier->id, 'status' => 'open', 'opening_cash' => $openingCash,
         ]);
     }
 
@@ -128,19 +125,26 @@ class ShiftCashAttributionTest extends TestCase
         $this->assertEquals(10000, $closedB['expected_cash']); // pembayaran order batal tidak dihitung
     }
 
-    public function test_pre_order_payments_stay_outside_shift_cash(): void
+    public function test_legacy_preorder_payments_stay_outside_shift_cash(): void
     {
+        // 046 — pembayaran pre-order lama (riwayat diam di database, tanpa shift) tidak pernah masuk kas shift.
         $shift = $this->openShift(5000);
-        $preorder = $this->postJson('/api/v1/preorders', [
-            'customer_id' => $this->customer->id, 'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $this->variant->id, 'qty' => 2]],
-        ])->assertCreated()->json();
-        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", ['method' => 'cash', 'amount' => 50000, 'purpose' => 'down_payment'])->assertCreated();
+        $outletId = \App\Models\Outlet::query()->value('id');
+        $preorderId = \Illuminate\Support\Facades\DB::table('preorders')->insertGetId([
+            'preorder_number' => 'PRE-LAMA-1', 'customer_id' => $this->customer->id, 'user_id' => $this->cashier->id,
+            'status' => 'dp_paid', 'fulfillment' => 'pickup', 'subtotal' => 100000, 'total_amount' => 100000, 'paid_amount' => 50000,
+            'outlet_id' => $outletId, 'data_mode' => 'demo', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        \Illuminate\Support\Facades\DB::table('payments')->insert([
+            'order_id' => null, 'preorder_id' => $preorderId, 'purchase_order_id' => null, 'session_id' => null,
+            'outlet_id' => $outletId, 'method' => 'cash', 'purpose' => 'down_payment',
+            'amount' => 50000, 'verification' => 'verified', 'paid_at' => now(), 'data_mode' => 'demo',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
 
         $closed = $this->close($shift, 5000)->json();
 
         $this->assertEquals(5000, $closed['expected_cash']);
-        $this->assertNull(\App\Models\Payment::where('preorder_id', $preorder['id'])->first()->session_id);
     }
 
     public function test_the_backfill_semantics_checkout_payments_belong_to_the_sale_shift(): void

@@ -38,8 +38,6 @@ export const NAV_SECTIONS = [
           { name: 'dining-setup', label: 'nav.dining_setup', menuKey: 'dining_setup' },
         ],
       },
-      { name: 'preorders', label: 'nav.preorders', icon: 'ph-clock-countdown', menuKey: 'preorders', badgeKey: 'preorders' },
-      { name: 'events', label: 'nav.events', icon: 'ph-calendar-dots', menuKey: 'events' },
     ],
   },
   {

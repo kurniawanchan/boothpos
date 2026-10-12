@@ -6,8 +6,7 @@ import { formatDateTime } from '../../utils/date';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
 
 /**
- * 028-partial-split-payment — riwayat pembayaran satu transaksi (pre-order atau
- * penjualan POS), dalam urutan dicatat. Setiap entri berdiri sendiri: metode,
+ * 028-partial-split-payment — riwayat pembayaran satu penjualan POS, dalam urutan dicatat. Setiap entri berdiri sendiri: metode,
  * jumlah, waktu, nomor referensi (bila ada), pencatat (bila diketahui), status.
  *
  * Jumlah/metode/waktu entri TIDAK bisa diubah (tak ada jalur ubah di server).
@@ -26,17 +25,15 @@ import { paymentMethodLabel } from '../../utils/paymentMethods';
  * `can_verify` (pencatat pembayaran tidak boleh memverifikasi miliknya sendiri), aksi "Tandai
  * terverifikasi". Verifikasi satu arah dan FINAL: sengaja tak ada aksi untuk membatalkannya.
  * Komponen ini hanya menampilkan dan memancarkan event; pemanggil yang membuka
- * bukti, membuka dialog konfirmasi, memverifikasi, mencetak invoice, dan mengonfirmasi hapus.
+ * bukti, membuka dialog konfirmasi, memverifikasi, dan mengonfirmasi hapus.
  */
 defineProps({
   payments: { type: Array, default: () => [] },
   canDelete: { type: Boolean, default: false },
-  // Penjualan POS tak punya invoice-per-pembayaran (showPrint=false); sejak 031 bukti dimuat di
-  // detail penjualan juga, jadi keduanya menampilkan "Lihat bukti" (menurut flag server).
+  // Sejak 031 bukti dimuat di detail penjualan: "Lihat bukti" mengikuti flag server.
   showProof: { type: Boolean, default: true },
-  showPrint: { type: Boolean, default: true },
 });
-const emit = defineEmits(['view-proof', 'print', 'delete', 'edit-confirmation', 'verify']);
+const emit = defineEmits(['view-proof', 'delete', 'edit-confirmation', 'verify']);
 
 // "Belum ada bukti" hanya bila server MENYATAKAN has_proof === false (non-tunai).
 const lacksProof = (p) => p.method !== 'cash' && p.has_proof === false;
@@ -93,13 +90,13 @@ const { t } = useI18n();
           </StatusPill>
         </div>
       </div>
-      <div v-if="(showProof && canViewProof(p)) || p.can_edit_confirmation || canVerify(p) || showPrint || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
+      <div v-if="(showProof && canViewProof(p)) || p.can_edit_confirmation || canVerify(p) || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
         <button
           v-if="showProof && canViewProof(p)"
           type="button"
           class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active"
           @click="emit('view-proof', p)"
-        >{{ t('preorders.view_proof') }}</button>
+        >{{ t('payment_ledger.view_proof') }}</button>
         <button
           v-if="canVerify(p)"
           type="button"
@@ -115,12 +112,6 @@ const { t } = useI18n();
           @click="emit('edit-confirmation', p)"
         >{{ hasAnyConfirmation(p) ? t('payment_ledger.edit_confirmation') : t('payment_ledger.add_confirmation') }}</button>
         <button
-          v-if="showPrint"
-          type="button"
-          class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active"
-          @click="emit('print', p)"
-        >{{ t('preorders.print_payment_receipt') }}</button>
-        <button
           v-if="canDelete"
           type="button"
           class="ml-auto whitespace-nowrap text-[12px] font-semibold text-danger-text hover:underline"
@@ -130,5 +121,5 @@ const { t } = useI18n();
       </div>
     </div>
   </div>
-  <p v-else class="text-[12px] text-muted-3">{{ t('preorders.payment_history_empty') }}</p>
+  <p v-else class="text-[12px] text-muted-3">{{ t('payment_ledger.payment_history_empty') }}</p>
 </template>

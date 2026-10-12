@@ -4,6 +4,11 @@
 
 *Sistem POS event-based multi-artist untuk toko merchandise*
 
+> **Catatan bertanggal — 2026-10-12 (fitur 046):** modul **Event** dan **Pre-order** dihapus dari produk atas permintaan pemilik
+> produk (laporan per periode tanggal bisnis, penjualan saja; baris event/pre-order lama tetap di database sebagai riwayat diam).
+> Bagian PRD yang membahas event, pre-order, pengiriman kurir, dan rekap per event di bawah adalah RIWAYAT, bukan perilaku
+> sekarang (tidak ditulis ulang, sama seperti catatan bertanggal lain). Lihat `specs/046-hide-events-preorders/`.
+
 | Field | Isi |
 |---|---|
 | Produk | BoothPOS — POS untuk toko merchandise yang berjualan online & bazaar/event |

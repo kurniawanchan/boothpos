@@ -176,6 +176,32 @@ class MasterDataImportTest extends TestCase
         $this->assertDatabaseHas('users', ['username' => 'contoh.kasir']);
     }
 
+    public function test_an_old_file_with_the_removed_preorder_columns_still_imports(): void
+    {
+        $this->actingAsRole('owner');
+        $headings = array_merge(MasterDataSheets::headings(MasterDataSheets::PRODUCTS), ['is_preorder', 'preorder_eta']);
+
+        $file = $this->workbook([
+            'outlets' => ['rows' => [['code' => 'RYU', 'name' => 'Ryu Illustration', 'is_active' => 1]]],
+            'categories' => ['rows' => [['code' => 'KY', 'name' => 'Keychain', 'display_order' => 1, 'is_active' => 1]]],
+            'products' => [
+                'headings' => $headings,
+                'rows' => [[
+                    'home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
+                    'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard',
+                    'cost_price' => 10000, 'sell_price' => 25000, 'low_stock_alert' => 5,
+                    // 046: kolom lama dibawa berkas lama; harus diabaikan, bukan galat.
+                    'is_preorder' => 1, 'preorder_eta' => '2026-12-31',
+                ]],
+            ],
+        ]);
+
+        $this->postImport($file)->assertOk()->assertJsonPath('applied', true)->assertJsonPath('errors', []);
+
+        $this->assertDatabaseHas('products', ['name' => 'Keychain Sakura']);
+        $this->assertFalse(\Illuminate\Support\Facades\Schema::hasColumn('product_variants', 'is_preorder'));
+    }
+
     public function test_template_is_gated_to_master_data_roles(): void
     {
         $this->actingAsRole('cashier');

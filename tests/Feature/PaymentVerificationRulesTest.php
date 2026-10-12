@@ -2,12 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\Outlet;
-use App\Models\Category;
-use App\Models\Customer;
+use App\Models\CashierSession;
+use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentChannel;
-use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -21,28 +19,26 @@ class PaymentVerificationRulesTest extends TestCase
 {
     use RefreshDatabase;
 
-    private int $preorderId;
+    private int $orderId;
 
     protected function setUp(): void
     {
         parent::setUp();
-        $this->actingAs(User::factory()->create(['role' => 'owner']), 'sanctum');
-        $variant = Product::factory()->create([
-            'home_outlet_id' => Outlet::factory()->create()->id,
-            'category_id' => Category::factory()->create()->id,
-            'is_preorder' => true,
-        ])->variants()->create(['sku' => 'VER0001', 'sell_price' => 100000, 'cost_price' => 50000, 'current_stock' => 0]);
-        $this->preorderId = $this->postJson('/api/v1/preorders', [
-            'customer_id' => Customer::factory()->create()->id, 'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
-        ])->assertCreated()->json('id');
+        $owner = User::factory()->create(['role' => 'owner']);
+        $this->actingAs($owner, 'sanctum');
+        // 046: induk pembayaran selalu penjualan POS (pre-order sudah dihapus).
+        $session = CashierSession::factory()->create(['user_id' => $owner->id]);
+        $this->orderId = Order::create([
+            'order_number' => 'TRX-RULES-0001', 'session_id' => $session->id, 'user_id' => $owner->id,
+            'subtotal' => 100000, 'total_amount' => 100000, 'paid_amount' => 0, 'status' => 'completed',
+        ])->id;
     }
 
     /** chk_payments_channel: non-tunai wajib punya kanal, tunai wajib tanpa kanal. */
     private function payment(array $overrides = []): Payment
     {
         $row = array_merge([
-            'preorder_id' => $this->preorderId, 'method' => 'qr_ewallet', 'purpose' => 'down_payment',
+            'order_id' => $this->orderId, 'method' => 'qr_ewallet', 'purpose' => 'down_payment',
             'amount' => 50000, 'verification' => 'pending', 'paid_at' => now(),
         ], $overrides);
         $row['channel_id'] = $row['method'] === 'cash' ? null : PaymentChannel::create([

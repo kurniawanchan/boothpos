@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Satu-satunya jalur sah untuk mengubah stok. Dipakai oleh: penyesuaian
- * manual, transaksi penjualan, dan alur pre-order (arrived/handed_over).
+ * manual, transaksi penjualan, dan transfer antar-outlet.
  *
  * 045 Stage 5 — stok adalah SALDO PER OUTLET (`variant_outlet_stock`): setiap pergerakan WAJIB menyebut outlet
  * (argumen `$outletId` tanpa nilai bawaan — memanggil tanpa outlet adalah galat pemrograman, dijaga tes pemindai
@@ -118,7 +118,7 @@ class StockService
 
             // F13.4 — hanya penyesuaian MANUAL yang dianggap "tindakan
             // sensitif" per PRD 7.13, bukan setiap pergerakan stok (jual/
-            // beli/preorder juga lewat method ini tapi bukan sasaran F13.4).
+            // beli juga lewat method ini tapi bukan sasaran F13.4).
             // Ditulis di sini, bukan di StockController, supaya berlaku
             // untuk SEMUA pemanggil applyMovement() bertipe 'adjustment' di
             // masa depan juga — dan tetap di dalam transaksi yang sama

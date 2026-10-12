@@ -24,7 +24,7 @@ import PurchaseOrderDetailModal from '../components/purchaseOrders/PurchaseOrder
 import PageHeader from '../components/page/PageHeader.vue';
 import TabBar from '../components/page/TabBar.vue';
 import FilterBar from '../components/page/FilterBar.vue';
-import PreorderRowActions from '../components/preorder/PreorderRowActions.vue';
+import RowActionsMenu from '../components/ui/RowActionsMenu.vue';
 
 const { t } = useI18n();
 const toast = useToastStore();
@@ -338,7 +338,7 @@ function openDetail(po) {
             >
               {{ t(`purchase_orders.action_${next}`) }}
             </button>
-            <PreorderRowActions :actions="rowActions(row)" :max-inline="3" @select="(key) => onRowAction(row, key)" />
+            <RowActionsMenu :actions="rowActions(row)" :max-inline="3" @select="(key) => onRowAction(row, key)" />
           </div>
         </template>
       </DataTable>

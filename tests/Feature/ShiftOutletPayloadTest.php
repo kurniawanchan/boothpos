@@ -29,7 +29,7 @@ class ShiftOutletPayloadTest extends TestCase
         $this->getJson('/api/v1/sessions/current')->assertOk()->assertJsonPath('outlet.name', $b->name)->assertJsonPath('outlet.code', $b->code);
         $this->getJson("/api/v1/sessions/{$shift->id}/summary")->assertOk()->assertJsonPath('session.outlet.name', $b->name);
         $this->getJson("/api/v1/orders/{$order->id}")->assertOk()->assertJsonPath('outlet.name', $b->name);
-        $this->assertContains($b->name, collect($this->getJson('/api/v1/reports/sales?event_id='.$shift->event_id)->assertOk()->json('transactions'))->pluck('sold_at_name')->all());
+        $this->assertContains($b->name, collect($this->getJson('/api/v1/reports/sales')->assertOk()->json('transactions'))->pluck('sold_at_name')->all());
         $this->getJson("/api/v1/orders/{$order->id}/receipt")->assertOk()->assertJsonPath('outlet_name', $b->name)->assertJsonPath('outlet_code', $b->code);
     }
 }

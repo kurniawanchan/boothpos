@@ -102,8 +102,6 @@ const productForm = reactive({
   product_segment: '',
   name: '',
   description: '',
-  is_preorder: false,
-  preorder_eta: '',
   is_active: true,
   station_id: '',
   short_name: '',
@@ -200,8 +198,6 @@ function openCreate(defaults = {}) {
     product_segment: '',
     name: '',
     description: '',
-    is_preorder: false,
-    preorder_eta: '',
     is_active: true,
     station_id: '',
     short_name: '',
@@ -236,8 +232,6 @@ async function openEdit(product) {
     product_segment: full.product_segment ?? '',
     name: full.name,
     description: full.description ?? '',
-    is_preorder: full.is_preorder,
-    preorder_eta: full.preorder_eta ?? '',
     is_active: full.is_active,
     station_id: full.station_id ?? '',
     short_name: full.short_name ?? '',
@@ -418,8 +412,6 @@ async function saveProduct() {
         category_id: Number(productForm.category_id),
         name: productForm.name,
         description: productForm.description || null,
-        is_preorder: productForm.is_preorder,
-        preorder_eta: productForm.is_preorder ? productForm.preorder_eta || null : null,
         is_active: productForm.is_active,
         station_id: productForm.station_id || null,
         ...factsPayload(),
@@ -466,8 +458,6 @@ async function saveProduct() {
         product_segment: productForm.product_segment || null,
         name: productForm.name,
         description: productForm.description || null,
-        is_preorder: productForm.is_preorder,
-        preorder_eta: productForm.is_preorder ? productForm.preorder_eta || null : null,
         // Rilis aktif: server memaksa draft apa pun nilainya; dikirim apa adanya supaya perilaku rilis-mati tetap sama.
         is_active: productForm.is_active,
         station_id: productForm.station_id || null,
@@ -725,15 +715,8 @@ async function saveProduct() {
         </div>
       </ProductFormBlock>
 
-      <!-- LAINNYA — yang tetap dibutuhkan API tetapi tidak ada di desain: pre-order dan gambar produk. -->
+      <!-- LAINNYA — yang tetap dibutuhkan API tetapi tidak ada di desain: gambar produk. -->
       <ProductFormBlock :title="t('products.f_sec_other')">
-        <div class="flex items-center gap-5">
-          <label class="flex items-center gap-2.5 text-[13px] font-medium text-muted-5">
-            <input v-model="productForm.is_preorder" type="checkbox" class="h-4 w-4 accent-brand" />
-            {{ t('master_data.preorder_product') }}
-          </label>
-          <BaseInput v-if="productForm.is_preorder" v-model="productForm.preorder_eta" type="date" :label="t('master_data.eta')" :error="formErrors.preorder_eta" class="flex-1" />
-        </div>
         <ProductField v-slot="{ id }" :label="t('master_data.product_image')">
           <div class="flex items-center gap-3">
             <button

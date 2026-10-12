@@ -1,13 +1,11 @@
 <script setup>
-import { computed, ref, onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
 import { useOutletStore } from '../../stores/outlet';
 import { activateOutletSelection } from '../../utils/outletSelection';
-import { listPreorders } from '../../api/preorders';
-import { listEvents } from '../../api/events';
 import { useRailState } from '../../composables/useRailState';
 import { customHeaderCount } from '../../composables/usePageHeader';
 import RailNav from './RailNav.vue';
@@ -17,9 +15,8 @@ import SchemaUpdateBanner from './SchemaUpdateBanner.vue';
 /**
  * 041-back-office-ui-redesign (US1) — kerangka seluruh halaman: rel navigasi + topbar + area konten.
  * Menggantikan AppSidebar/AppTopbar. Yang dipertahankan dari versi sebelumnya (komentar asli di riwayat git):
- *  - nama toko & event aktif dimuat SEKALI di sini (bukan di tiap view; tak ada endpoint "event aktif");
+ *  - nama toko dimuat SEKALI di sini (bukan di tiap view);
  *  - judul/subjudul bawaan dari route.meta.titleKey/subtitleKey, jatuh ke nav.<nama>;
- *  - badge pre-order = jumlah pre-order `dp_paid` (belum ada endpoint "alerts" khusus);
  *  - tombol keluar → auth.logout() lalu ke halaman login.
  * Yang baru: keadaan ciut/lebar rel diingat per pengguna (useRailState), tautan "lewati ke konten", dan judul
  * bawaan yang otomatis disembunyikan begitu sebuah halaman memakai <PageHeader> (composables/usePageHeader.js).
@@ -40,8 +37,6 @@ function onOutletChange(id) {
 }
 const { t } = useI18n();
 
-const activeEvent = ref(null);
-const preorderAlertCount = ref(0);
 const { collapsed, toggle } = useRailState(computed(() => auth.user?.id ?? null));
 
 const pageTitle = computed(() => t(route.meta.titleKey ?? `nav.${route.name}`));
@@ -53,18 +48,6 @@ onMounted(async () => {
   const scopeLoaded = auth.user?.id != null ? outlet.load(auth.user.id).catch(() => {}) : Promise.resolve();
   await settings.load();
   await scopeLoaded;
-  try {
-    const res = await listPreorders({ status: 'dp_paid', per_page: 1 });
-    preorderAlertCount.value = res.meta?.total ?? 0;
-  } catch {
-    // Non-fatal — lencana tetap 0 bila gagal.
-  }
-  try {
-    const eventsRes = await listEvents({ status: 'active', per_page: 1 });
-    activeEvent.value = eventsRes.data[0] ?? null;
-  } catch {
-    // Non-fatal — topbar cukup tidak menampilkan nama event.
-  }
 });
 
 async function handleLogout() {
@@ -78,9 +61,9 @@ async function handleLogout() {
     <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:bg-brand focus:px-3 focus:py-2 focus:text-[13px] focus:font-bold focus:text-white">
       {{ t('frame.skip_to_content') }}
     </a>
-    <RailNav :collapsed="collapsed" :preorder-alert-count="preorderAlertCount" @toggle="toggle" />
+    <RailNav :collapsed="collapsed" @toggle="toggle" />
     <div class="flex min-w-0 flex-1 flex-col">
-      <TopBar :store-name="settings.storeName" :active-event="activeEvent" :outlets="outlet.outlets" :outlet-id="outlet.selected" @update:outlet-id="onOutletChange" @logout="handleLogout" />
+      <TopBar :store-name="settings.storeName" :outlets="outlet.outlets" :outlet-id="outlet.selected" @update:outlet-id="onOutletChange" @logout="handleLogout" />
       <SchemaUpdateBanner v-if="settings.schemaUpdateRequired" />
       <main id="main-content" tabindex="-1" class="min-h-0 flex-1 overflow-auto outline-none">
         <!-- Judul bawaan untuk halaman yang belum memakai <PageHeader>. -->

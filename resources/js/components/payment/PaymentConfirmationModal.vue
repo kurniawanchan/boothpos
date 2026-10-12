@@ -14,7 +14,7 @@ import { paymentMethodLabel } from '../../utils/paymentMethods';
 /**
  * 031-optional-payment-proof (US2/US3) — dialog "Bukti & catatan pembayaran": menambah,
  * mengubah, atau mengganti konfirmasi sebuah pembayaran non-tunai SETELAH tercatat. Dipakai
- * detail Sales (penjualan POS) dan detail Pre-order; `kind` menentukan jalurnya.
+ * detail Sales (penjualan POS).
  *
  * Alurnya sama dengan checkout: foto diunggah DULU (mendapat `proof_token`), lalu satu PATCH
  * membawa HANYA yang berubah. Tombol Simpan mati selama unggahan berjalan, selama tak ada
@@ -25,7 +25,6 @@ import { paymentMethodLabel } from '../../utils/paymentMethods';
 const props = defineProps({
   open: { type: Boolean, default: false },
   payment: { type: Object, default: null }, // entri riwayat pembayaran (reference, notes, proof flags)
-  kind: { type: String, default: 'orders' }, // orders | preorders
   targetId: { type: [Number, String, null], default: null },
 });
 const emit = defineEmits(['close', 'saved']);
@@ -96,7 +95,7 @@ async function save() {
   saving.value = true;
   error.value = '';
   try {
-    const result = await updatePaymentConfirmation(props.kind, props.targetId, props.payment.id, buildPayload());
+    const result = await updatePaymentConfirmation(props.targetId, props.payment.id, buildPayload());
     toast.success(t('payment_ledger.confirmation_saved'));
     emit('saved', result);
     emit('close');

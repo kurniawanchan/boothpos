@@ -85,15 +85,15 @@ describe('ProductFormDrawer — create mode follows the Menu item design (043)',
     expect(headers).toEqual([P.f_col_variant, P.f_col_sku, P.f_col_image, P.f_col_price, P.f_col_stock, P.f_col_active]);
   });
 
-  it('keeps what the API needs: outlet, segment, retail and pre-order checkboxes, product image', async () => {
+  it('keeps what the API needs: outlet, segment, retail checkbox, product image (and no pre-order controls, 046)', async () => {
     const { user } = await openCreate();
 
     expect(screen.getByLabelText(new RegExp(`^${id.master_data.owner_artist}`))).toHaveValue('1'); // satu-satunya outlet dipilih
     expect(screen.getByLabelText(id.master_data.segment_3)).toBeEnabled();
     expect(screen.getByLabelText(/item ritel/i)).toBeInTheDocument();
     expect(screen.getByLabelText(id.master_data.product_image)).toBeInTheDocument();
-    await user.click(screen.getByLabelText(id.master_data.preorder_product));
-    expect(screen.getByLabelText(id.master_data.eta)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/pre-order/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/perkiraan tiba/i)).not.toBeInTheDocument();
   });
 
   it('sends name, short name, category, outlet, tax, prep minutes, station and the first-variant price', async () => {
@@ -440,7 +440,7 @@ describe('ProductFormDrawer — edit mode is the same form as create mode (043)'
   ];
   const FULL = (extra = {}) => ({
     id: 1, home_outlet_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001', product_segment: 'KEY', description: '',
-    is_preorder: false, preorder_eta: null, is_active: true, image_url: null, short_name: null, tax_category: null, prep_minutes: null, is_retail: false,
+    is_active: true, image_url: null, short_name: null, tax_category: null, prep_minutes: null, is_retail: false,
     variants: [{ id: 10, sku: 'ART-KY-001-001', variant_name: 'Standard', cost_price: '1000.00', sell_price: '3000.00', current_stock: 5, low_stock_alert: null, is_active: true, track_stock: true, image_url: null }],
     modifier_links: LINKS,
     ...extra,
@@ -488,7 +488,7 @@ describe('ProductFormDrawer — edit mode is the same form as create mode (043)'
     expect(screen.getByLabelText(/^kategori pajak/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^estimasi persiapan/i)).toBeInTheDocument();
     expect(screen.getByLabelText(id.master_data.product_image)).toBeInTheDocument();
-    expect(screen.getByLabelText(id.master_data.preorder_product)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/pre-order/i)).not.toBeInTheDocument();
     expect(screen.getByLabelText(id.master_data.segment_3)).toBeDisabled(); // server tidak pernah menerimanya saat ubah
     expect(screen.queryByTestId('variant-card')).not.toBeInTheDocument();
   });

@@ -19,7 +19,7 @@ class PaymentProofController extends Controller
     /**
      * Bukti diunggah SEBELUM payment/order dibuat (lihat sequence diagram
      * transaksi kasir di uml-pos-mvp.md). payment_id diisi belakangan saat
-     * order/preorder benar-benar tersimpan — lihat catatan migrasi
+     * order benar-benar tersimpan — lihat catatan migrasi
      * payment_proofs untuk penjelasan penyimpangan dari skema asli.
      */
     public function store(Request $request): JsonResponse

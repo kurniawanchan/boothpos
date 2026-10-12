@@ -423,7 +423,7 @@ class TabSplitMergeMoveTest extends TestCase
         $this->split($tab, [['item_id' => $a, 'qty' => 1]], [['method' => 'cash', 'amount' => 10000]])->assertCreated();
 
         $this->actingAs(User::factory()->create(['role' => 'owner']), 'sanctum');
-        $sales = $this->getJson("/api/v1/reports/sales?event_id={$this->session->event_id}")->assertOk()->json();
+        $sales = $this->getJson("/api/v1/reports/sales")->assertOk()->json();
 
         $this->assertEquals(10000, $sales['totals']['gross_sales']);
         $this->assertCount(1, $sales['transactions']);

@@ -11,7 +11,6 @@ class CashierSessionFactory extends Factory
     public function definition(): array
     {
         return [
-            'event_id' => \App\Models\Event::factory(),
             'user_id' => \App\Models\User::factory(),
             'opened_at' => now(),
             'opening_cash' => 0,

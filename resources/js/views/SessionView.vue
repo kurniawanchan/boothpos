@@ -3,7 +3,6 @@ import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { currentSession, openSession, closeSession, sessionSummary } from '../api/sessions';
-import { listEvents } from '../api/events';
 import { listOutlets } from '../api/outlets';
 import { useToastStore } from '../stores/toast';
 import { useOutletStore } from '../stores/outlet';
@@ -21,13 +20,12 @@ const { t } = useI18n();
 const loading = ref(true);
 const session = ref(null);
 const summary = ref(null);
-const activeEvents = ref([]);
 
 const outletStore = useOutletStore();
 // 045 Stage 2 — outlet shift. Tampil hanya bila pengguna melihat lebih dari satu outlet (disembunyikan, bukan
 // dinonaktifkan, di satu outlet); bawaannya outlet yang dipilih di topbar. Server yang memutuskan: tanpa nilai
 // dan lebih dari satu outlet, ia menjawab 422 errors.outlet_id.
-const openForm = reactive({ event_id: '', outlet_id: outletStore.selected ?? '', opening_cash: '0', notes: '' });
+const openForm = reactive({ outlet_id: outletStore.selected ?? '', opening_cash: '0', notes: '' });
 watch(() => outletStore.selected, (id) => { if (id != null && !openForm.outlet_id) openForm.outlet_id = id; });
 const openErrors = reactive({});
 const opening = ref(false);
@@ -126,9 +124,6 @@ async function load() {
       summary.value = await sessionSummary(session.value.id);
       closingCash.value = 0;
     } else {
-      const res = await listEvents({ status: 'active', per_page: 50 });
-      activeEvents.value = res.data;
-      if (activeEvents.value[0]) openForm.event_id = activeEvents.value[0].id;
       outlets.value = (await listOutlets({ per_page: 100, is_active: true })).data;
     }
   } catch {
@@ -144,7 +139,6 @@ async function handleOpen() {
   opening.value = true;
   try {
     await openSession({
-      event_id: Number(openForm.event_id),
       opening_cash: toMoneyString(openForm.opening_cash),
       notes: openForm.notes || null,
       ...(openForm.outlet_id ? { outlet_id: Number(openForm.outlet_id) } : {}),
@@ -241,18 +235,7 @@ async function handleClose() {
         <span class="text-[12.5px] text-muted-2">{{ t('events_sessions.open_session_desc') }}</span>
       </div>
 
-      <div v-if="activeEvents.length === 0" class="flex items-center gap-3 rounded-lg border border-warn-border bg-warn-bg px-4 py-3.5 text-[13px] text-warn-text">
-        <i class="ph-duotone ph-info text-[18px]" aria-hidden="true"></i>
-        {{ t('events_sessions.no_active_event_open_one') }}
-      </div>
-      <form v-else class="flex flex-col gap-3.5" @submit.prevent="handleOpen">
-        <BaseSelect
-          v-model="openForm.event_id"
-          :label="t('events_sessions.event')"
-          required
-          :options="activeEvents.map((e) => ({ value: e.id, label: e.name }))"
-          :error="openErrors.event_id"
-        />
+      <form class="flex flex-col gap-3.5" @submit.prevent="handleOpen">
         <BaseSelect
           v-if="outletStore.multi"
           v-model="openForm.outlet_id"
@@ -299,7 +282,7 @@ async function handleClose() {
         <div class="flex items-start justify-between gap-3">
           <div class="flex flex-col gap-1">
             <span class="text-[16px] font-bold tracking-tight">{{ t('events_sessions.session_number', { id: session.id, user: session.user_name }) }}</span>
-            <span class="text-[12.5px] text-muted-2">{{ t('events_sessions.opened_at', { time: formatDateTime(session.opened_at), event: session.event_name }) }}</span>
+            <span class="text-[12.5px] text-muted-2">{{ t('events_sessions.opened_at', { time: formatDateTime(session.opened_at) }) }}</span>
             <span v-if="outletStore.multi && session.outlet" class="text-[12.5px] font-semibold text-muted-4" data-testid="session-outlet">{{ t('events_sessions.session_outlet', { outlet: session.outlet.name }) }}</span>
           </div>
           <StatusPill variant="mint"><span class="h-1.5 w-1.5 rounded-full bg-brand"></span>{{ t('events_sessions.open_status') }}</StatusPill>

@@ -6,7 +6,6 @@ use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\PaymentChannel;
 use App\Models\Product;
@@ -27,7 +26,6 @@ class SalesPageDataTest extends TestCase
 
     private User $cashier;
 
-    private Event $event;
 
     private CashierSession $session;
 
@@ -41,8 +39,7 @@ class SalesPageDataTest extends TestCase
         $this->cashier = User::factory()->create(['role' => 'cashier', 'name' => 'Kasir Satu']);
         $this->actingAs($this->cashier, 'sanctum');
 
-        $this->event = Event::factory()->create(['status' => 'active', 'name' => 'Sakana Fest']);
-        $this->session = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
+        $this->session = CashierSession::factory()->create(['user_id' => $this->cashier->id, 'status' => 'open']);
 
         $category = Category::factory()->create(['name' => 'Keychain']);
         $artistA = Outlet::factory()->create(['name' => 'Nekoyama Studio']);
@@ -67,7 +64,7 @@ class SalesPageDataTest extends TestCase
 
     private function transaction(Order $order): array
     {
-        $rows = $this->getJson("/api/v1/reports/sales?event_id={$this->event->id}")->assertOk()->json('transactions');
+        $rows = $this->getJson("/api/v1/reports/sales")->assertOk()->json('transactions');
 
         return collect($rows)->firstWhere('id', $order->id);
     }
@@ -140,7 +137,7 @@ class SalesPageDataTest extends TestCase
         $this->assertSame('Budi Santoso', $detail['customer']['name']);
         $this->assertSame('0812-0000-1111', $detail['customer']['phone']);
         $this->assertSame('Kasir Satu', $detail['cashier']['name']);
-        $this->assertSame('Sakana Fest', $detail['event']['name']);
+        $this->assertArrayNotHasKey('event', $detail);
         $this->assertSame('Ambil jam 3', $detail['notes']);
         $this->assertSame('offline', $detail['channel']);
     }

@@ -6,7 +6,6 @@ use App\Models\ActivityLog;
 use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
-use App\Models\Event;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentChannel;
@@ -59,7 +58,7 @@ class PaymentVerificationBulkTest extends TestCase
     private function sale(User $cashier, ?array $payments = null): array
     {
         $session = CashierSession::factory()->create([
-            'event_id' => Event::factory()->create(['status' => 'active'])->id, 'user_id' => $cashier->id, 'status' => 'open',
+            'user_id' => $cashier->id, 'status' => 'open',
         ]);
         $this->as($cashier);
         $order = $this->postJson('/api/v1/orders', [

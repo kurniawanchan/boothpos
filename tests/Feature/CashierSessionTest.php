@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\CashierSession;
-use App\Models\Event;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -12,50 +11,44 @@ class CashierSessionTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_cashier_can_open_session_on_active_event(): void
+    public function test_cashier_can_open_a_session_without_any_event(): void
     {
         $user = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($user, 'sanctum');
-        $event = Event::factory()->create(['status' => 'active']);
 
-        $response = $this->postJson('/api/v1/sessions', [
-            'event_id' => $event->id, 'opening_cash' => 500000,
-        ]);
+        $response = $this->postJson('/api/v1/sessions', ['opening_cash' => 500000]);
 
+        // 046 — tanpa event sama sekali: shift hanya butuh kas awal (dan outlet, dipilih server).
         $response->assertCreated()->assertJsonPath('status', 'open');
+        $this->assertNull(CashierSession::first()->event_id);
     }
 
-    public function test_cannot_open_session_on_draft_event(): void
+    public function test_an_event_id_in_the_request_is_ignored(): void
     {
         $user = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($user, 'sanctum');
-        $event = Event::factory()->create(['status' => 'draft']);
 
-        $this->postJson('/api/v1/sessions', [
-            'event_id' => $event->id, 'opening_cash' => 500000,
-        ])->assertStatus(409);
+        $this->postJson('/api/v1/sessions', ['event_id' => 999, 'opening_cash' => 100000])->assertCreated();
+
+        $this->assertNull(CashierSession::first()->event_id);
     }
 
     public function test_cannot_open_second_session_while_one_is_open(): void
     {
         $user = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($user, 'sanctum');
-        $event = Event::factory()->create(['status' => 'active']);
 
-        $this->postJson('/api/v1/sessions', ['event_id' => $event->id, 'opening_cash' => 100000])
-            ->assertCreated();
+        $this->postJson('/api/v1/sessions', ['opening_cash' => 100000])->assertCreated();
 
-        $this->postJson('/api/v1/sessions', ['event_id' => $event->id, 'opening_cash' => 100000])
-            ->assertStatus(409);
+        $this->postJson('/api/v1/sessions', ['opening_cash' => 100000])->assertStatus(409);
     }
 
     public function test_cashier_cannot_close_another_cashiers_session(): void
     {
         $ownerOfSession = User::factory()->create(['role' => 'cashier']);
         $attacker = User::factory()->create(['role' => 'cashier']);
-        $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $ownerOfSession->id, 'status' => 'open',
+            'user_id' => $ownerOfSession->id, 'status' => 'open',
         ]);
 
         $this->actingAs($attacker, 'sanctum');
@@ -70,9 +63,8 @@ class CashierSessionTest extends TestCase
     {
         $cashier = User::factory()->create(['role' => 'cashier']);
         $owner = User::factory()->create(['role' => 'owner']);
-        $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open', 'opening_cash' => 100000,
+            'user_id' => $cashier->id, 'status' => 'open', 'opening_cash' => 100000,
         ]);
 
         $this->actingAs($owner, 'sanctum');
@@ -89,9 +81,8 @@ class CashierSessionTest extends TestCase
         // sama persis.
         $ownerOfSession = User::factory()->create(['role' => 'cashier']);
         $attacker = User::factory()->create(['role' => 'cashier']);
-        $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $ownerOfSession->id, 'status' => 'open',
+            'user_id' => $ownerOfSession->id, 'status' => 'open',
         ]);
 
         $this->actingAs($attacker, 'sanctum');
@@ -103,9 +94,8 @@ class CashierSessionTest extends TestCase
     {
         $cashier = User::factory()->create(['role' => 'cashier']);
         $owner = User::factory()->create(['role' => 'owner']);
-        $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open',
+            'user_id' => $cashier->id, 'status' => 'open',
         ]);
 
         $this->actingAs($owner, 'sanctum');
@@ -118,9 +108,8 @@ class CashierSessionTest extends TestCase
     public function test_cashier_can_view_own_session_summary(): void
     {
         $cashier = User::factory()->create(['role' => 'cashier']);
-        $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open',
+            'user_id' => $cashier->id, 'status' => 'open',
         ]);
 
         $this->actingAs($cashier, 'sanctum');
@@ -132,9 +121,8 @@ class CashierSessionTest extends TestCase
     {
         $user = User::factory()->create(['role' => 'cashier']);
         $this->actingAs($user, 'sanctum');
-        $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create([
-            'event_id' => $event->id, 'user_id' => $user->id, 'status' => 'open', 'opening_cash' => 100000,
+            'user_id' => $user->id, 'status' => 'open', 'opening_cash' => 100000,
         ]);
 
         // Tanpa order sama sekali, expected_cash = opening_cash saja.

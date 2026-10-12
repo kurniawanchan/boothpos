@@ -112,18 +112,21 @@ class ProductTest extends TestCase
         $response->assertStatus(422)->assertJsonValidationErrors('variants');
     }
 
-    public function test_preorder_product_requires_eta(): void
+    public function test_obsolete_preorder_fields_are_ignored_and_not_returned(): void
     {
         $this->actingAsRole('owner');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
 
+        // 046 — produk pre-order sudah tidak ada: tidak ada lagi aturan ETA, dan kolomnya tidak dikirim balik.
         $response = $this->postJson('/api/v1/products', [
             'home_outlet_id' => $artist->id, 'category_id' => $category->id,
-            'name' => 'Pre-order Figure', 'is_preorder' => true,
+            'name' => 'Figure', 'is_preorder' => true,
             'variants' => [['variant_name' => 'A', 'sell_price' => 500000]],
         ]);
 
-        $response->assertStatus(422)->assertJsonValidationErrors('preorder_eta');
+        $response->assertCreated();
+        $this->assertArrayNotHasKey('is_preorder', $response->json());
+        $this->assertArrayNotHasKey('preorder_eta', $response->json());
     }
 
     public function test_cashier_cannot_create_product(): void

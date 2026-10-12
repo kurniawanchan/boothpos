@@ -3,12 +3,10 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import SalesView from '../../resources/js/views/SalesView.vue';
-import { listEvents } from '../../resources/js/api/events';
 import { salesReport, exportSalesTransactions } from '../../resources/js/api/reports';
 import { toLocalDateKey } from '../../resources/js/utils/date';
 import { verifyOrderPayments } from '../../resources/js/api/payments';
 
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), exportReport: vi.fn(), exportSalesTransactions: vi.fn() }));
 vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn(), getReceipt: vi.fn(), voidOrder: vi.fn() }));
 vi.mock('../../resources/js/api/products', () => ({ getProduct: vi.fn() }));
@@ -73,7 +71,8 @@ async function setup({ url = '/sales', data = WITHOUT_VOIDED, ready = 'ORD-301' 
       { path: '/sales', name: 'sales', component: { template: '<div />' } },
     ],
   });
-  router.push(url);
+  // 046: tanggal bawaan = hari ini; kosongkan kecuali URL uji menentukan sendiri.
+  router.push(/[?&](from|to)=/.test(url) ? url : `${url}${url.includes('?') ? '&' : '?'}from=2000-01-01&to=2099-12-31`);
   await router.isReady();
   render(SalesView, { global: { plugins: [pinia, router] } });
   await screen.findByText(ready);
@@ -95,7 +94,6 @@ async function pick(user, trigger, option) {
 describe('SalesView — POS transactions only', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
   });
 
   it('lists only POS transactions, newest first, with a receipt for each', async () => {
@@ -136,7 +134,6 @@ describe('SalesView — POS transactions only', () => {
 describe('SalesView — voided transactions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
   });
 
   it('hides voided orders by default', async () => {
@@ -171,7 +168,6 @@ describe('SalesView — voided transactions', () => {
 describe('SalesView — payment verification', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
   });
 
   it('flags payments that are not yet verified', async () => {
@@ -193,7 +189,6 @@ describe('SalesView — payment verification', () => {
 describe('SalesView — cashier shifts and cash summary', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
   });
 
   it('filters by shift', async () => {
@@ -251,7 +246,6 @@ describe('SalesView — cashier shifts and cash summary', () => {
 describe('SalesView — margin (only when the server sends it)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
   });
 
   const withMargin = response([
@@ -286,7 +280,6 @@ describe('SalesView — margin (only when the server sends it)', () => {
 describe('SalesView — row detail at a glance', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
   });
 
   it('previews the biggest lines and counts the rest', async () => {
@@ -303,19 +296,14 @@ describe('SalesView — row detail at a glance', () => {
 describe('SalesView — date presets', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
   });
 
-  it('offers a shortcut for every day of the event and filters to that day', async () => {
-    const user = await setup();
+  it('offers only the Today and Yesterday shortcuts (no event days)', async () => {
+    await setup();
 
-    await user.click(screen.getByRole('button', { name: 'Hari 1' }));
-    expect(screen.getByLabelText('Dari tanggal')).toHaveValue('2026-09-01');
-    expect(screen.getByLabelText('Sampai tanggal')).toHaveValue('2026-09-01');
-    expect(order()).toEqual(['ORD-302', 'ORD-301']);
-
-    await user.click(screen.getByRole('button', { name: 'Hari 2' }));
-    expect(order()).toEqual(['ORD-303']);
+    expect(screen.getByRole('button', { name: 'Hari ini' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Kemarin' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hari 1' })).not.toBeInTheDocument();
   });
 
   it('has Today and Yesterday shortcuts based on the local date', async () => {
@@ -336,8 +324,8 @@ describe('SalesView — date presets', () => {
   it('clicking the active shortcut again clears the dates', async () => {
     const user = await setup();
 
-    await user.click(screen.getByRole('button', { name: 'Hari 1' }));
-    await user.click(screen.getByRole('button', { name: 'Hari 1' }));
+    await user.click(screen.getByRole('button', { name: 'Hari ini' }));
+    await user.click(screen.getByRole('button', { name: 'Hari ini' }));
 
     expect(screen.getByLabelText('Dari tanggal')).toHaveValue('');
     expect(order()).toHaveLength(3);
@@ -347,7 +335,6 @@ describe('SalesView — date presets', () => {
 describe('SalesView — filters live in the URL', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
   });
 
   it('writes the active filters and sort to the address, and removes them on reset', async () => {
@@ -382,7 +369,6 @@ describe('SalesView — filters live in the URL', () => {
 describe('SalesView — export and selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
     exportSalesTransactions.mockResolvedValue(new Blob(['x']));
     URL.createObjectURL = vi.fn(() => 'blob:fake');
     URL.revokeObjectURL = vi.fn();
@@ -396,7 +382,7 @@ describe('SalesView — export and selection', () => {
 
     await waitFor(() => expect(exportSalesTransactions).toHaveBeenCalledTimes(1));
     expect(exportSalesTransactions).toHaveBeenCalledWith(
-      expect.objectContaining({ event_id: 1 }),
+      expect.objectContaining({ date_from: '2000-01-01', date_to: '2099-12-31' }),
       ['order:303', 'order:302', 'order:301'],
     );
     expect(URL.createObjectURL).toHaveBeenCalled();
@@ -461,7 +447,6 @@ describe('SalesView — partially paid sales (028 US5)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
   });
 
   it('marks a partially paid sale with its remaining balance and sums the outstanding in the summary', async () => {
@@ -512,7 +497,6 @@ describe('SalesView — partially paid sales (028 US5)', () => {
 describe('SalesView — bulk mark verified (032 US3)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active', start_date: '2026-09-01', end_date: '2026-09-02' }] });
     verifyOrderPayments.mockResolvedValue({ verified: 2, verified_orders: 2, skipped: { already_verified: 0, own_payment: 0, voided: 0, rejected: 0 }, skipped_total: 0 });
   });
 

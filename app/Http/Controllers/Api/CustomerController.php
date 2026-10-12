@@ -104,8 +104,7 @@ class CustomerController extends Controller
     }
 
     /**
-     * Added for the pre-orders list — clicking a customer's name there
-     * needs their full contact/address info, which the list response
+     * Full contact/address info of one customer, which the list response
      * deliberately keeps thin (`customer_name` only, for pagination
      * payload size). Same `view` gate as everywhere else in this
      * controller (any logged-in role).
@@ -129,43 +128,27 @@ class CustomerController extends Controller
     }
 
     /**
-     * 009-ui-ux-refinements User Story 5 (T039) — riwayat transaksi
-     * pelanggan, menggabungkan Order (penjualan langsung) dan Preorder
-     * dalam satu daftar yang diurutkan berdasarkan tanggal terbaru.
-     * Auth memakai tier baca yang sama dengan index() (viewAny) — bukan
-     * tier hapus (delete) milik destroy() di atas, sesuai kontrak
-     * api-deltas.md ("no widening").
-     *
-     * Order memiliki kolom status sendiri (enum completed/voided) —
-     * dipakai apa adanya. Preorder memakai nilai kolom status miliknya
-     * sendiri (ordered/dp_paid/arrived/settled/handed_over/cancelled).
+     * 009-ui-ux-refinements User Story 5 (T039) — riwayat transaksi pelanggan: penjualan (order) saja, terbaru
+     * di atas (046: pre-order sudah dihapus dari produk). Auth memakai tier baca yang sama dengan index()
+     * (viewAny) — bukan tier hapus milik destroy(), sesuai kontrak api-deltas.md ("no widening").
      */
     public function transactions(Request $request, Customer $customer): JsonResponse
     {
         $this->authorize('viewAny', Customer::class);
 
-        // Scope DataModeScope global pada Order/Preorder sudah otomatis
-        // menyaring sesuai mode DEMO/LIVE aktif — tidak perlu filter manual.
+        // DataModeScope global pada Order sudah menyaring sesuai mode DEMO/LIVE aktif.
         // 028 — tab yang masih terbuka belum menjadi transaksi pelanggan.
-        $orders = $customer->orders()->where('status', '!=', \App\Models\Order::STATUS_OPEN)->get()->map(fn (\App\Models\Order $order) => [
-            'type' => 'order',
-            'id' => $order->id,
-            'number' => $order->order_number,
-            'status' => $order->status,
-            'total_amount' => number_format((float) $order->total_amount, 2, '.', ''),
-            'date' => $order->created_at?->toIso8601String(),
-        ]);
-
-        $preorders = $customer->preorders()->get()->map(fn (\App\Models\Preorder $preorder) => [
-            'type' => 'preorder',
-            'id' => $preorder->id,
-            'number' => $preorder->preorder_number,
-            'status' => $preorder->status,
-            'total_amount' => number_format((float) $preorder->total_amount, 2, '.', ''),
-            'date' => $preorder->created_at?->toIso8601String(),
-        ]);
-
-        $transactions = $orders->concat($preorders)
+        $transactions = $customer->orders()
+            ->where('status', '!=', \App\Models\Order::STATUS_OPEN)
+            ->get()
+            ->map(fn (\App\Models\Order $order) => [
+                'type' => 'order',
+                'id' => $order->id,
+                'number' => $order->order_number,
+                'status' => $order->status,
+                'total_amount' => number_format((float) $order->total_amount, 2, '.', ''),
+                'date' => $order->created_at?->toIso8601String(),
+            ])
             ->sortByDesc('date')
             ->values();
 
@@ -176,12 +159,11 @@ class CustomerController extends Controller
     {
         $this->authorize('delete', $customer);
 
-        // Guard — pelanggan yang pernah punya order/pre-order (status apa
-        // pun) tidak boleh dihapus, mengikuti pola guard hapus Outlet/
-        // Category (lihat plan 009-ui-ux-refinements R6). CATATAN: Order/
-        // Preorder TIDAK memakai trait SoftDeletes (tidak ada kolom
-        // deleted_at) — lihat catatan yang sama di EventController::destroy().
-        $hasTransactions = $customer->orders()->exists() || $customer->preorders()->exists();
+        // Guard — pelanggan yang pernah punya order (status apa pun) tidak boleh dihapus, mengikuti pola guard
+        // hapus Outlet/Category (lihat plan 009-ui-ux-refinements R6). CATATAN: Order TIDAK memakai trait
+        // SoftDeletes (tidak ada kolom deleted_at). Pre-order lama (riwayat diam sejak 046) tidak dihitung:
+        // pelanggannya dihapus lunak, barisnya tetap menunjuk id yang sama.
+        $hasTransactions = $customer->orders()->exists();
 
         if ($hasTransactions) {
             return response()->json([

@@ -97,7 +97,6 @@ class ProductController extends Controller
             // hasil ketika parameter ada tapi bernilai kosong.
             ->when(count(array_filter($request->array('home_outlet_id'))) > 0, fn ($q) => $q->whereIn('home_outlet_id', array_filter($request->array('home_outlet_id'))))
             ->when(count(array_filter($request->array('category_id'))) > 0, fn ($q) => $q->whereIn('category_id', array_filter($request->array('category_id'))))
-            ->when($request->has('is_preorder'), fn ($q) => $q->where('is_preorder', $request->boolean('is_preorder')))
             ->when($notCarriedHere !== [], fn ($q) => $q->whereNotIn('id', $notCarriedHere))
             ->orderBy('name')
             ->paginate($perPage);
@@ -154,8 +153,6 @@ class ProductController extends Controller
                 'product_segment' => strtoupper($segment),
                 'name' => $data['name'],
                 'description' => $data['description'] ?? null,
-                'is_preorder' => $data['is_preorder'] ?? false,
-                'preorder_eta' => $data['preorder_eta'] ?? null,
                 // 043 — dengan rilis menu AKTIF, item baru berstatus draft (belum terbit) sampai rilis berikutnya;
                 // dengan rilis mati perilaku lama: langsung aktif.
                 'is_active' => \App\Support\MenuSettings::releaseEnabled() ? false : ($data['is_active'] ?? true),
@@ -499,13 +496,8 @@ class ProductController extends Controller
     }
 
     /**
-     * 024-invoice-layout-shipping-slip — `q` kosong SEKARANG mengembalikan
-     * halaman default (bukan array kosong), meniru pola GET /customers
-     * yang sudah ada (CustomerSearchDropdown.vue menampilkan daftar
-     * default saat dibuka, bukan hanya setelah mengetik) — dipakai
-     * PreordersView.vue supaya "Add item" berperilaku sama dengan field
-     * pelanggan: klik untuk lihat daftar yang bisa dijelajahi, lalu
-     * mengetik untuk menyaring.
+     * 024 — `q` kosong mengembalikan halaman default (bukan array kosong), meniru pola GET /customers:
+     * pemilih item menampilkan daftar yang bisa dijelajahi saat dibuka, lalu menyaring saat mengetik.
      */
     public function lookupVariants(Request $request): JsonResponse
     {
@@ -524,7 +516,7 @@ class ProductController extends Controller
             ->with(['product.homeOutlet', 'product.category'])
             ->where('is_active', true)
             ->when($notCarriedHere !== [], fn ($q) => $q->whereNotIn('product_id', $notCarriedHere))
-            // 043 — produk yang didiskontinu tidak lagi bisa dipilih (mis. untuk pre-order baru).
+            // 043 — produk yang didiskontinu tidak lagi bisa dipilih .
             ->whereHas('product', fn ($p) => $p->where('is_active', true))
             ->when($term !== '', fn ($q) => $q->where(function ($q) use ($term) {
                 $q->where('sku', 'like', "%{$term}%")
@@ -540,15 +532,13 @@ class ProductController extends Controller
             'sku' => $v->sku,
             'label' => $v->product->name.' — '.$v->variant_name,
             'home_outlet_name' => $v->product->homeOutlet->name,
-            // Requested for the preorder "Add item" dropdown/item list, so
-            // staff can tell apart same-named products across categories
+            // So staff can tell apart same-named products across categories
             // without opening each one.
             'category_name' => $v->product->category?->name,
             'sell_price' => number_format((float) $v->sell_price, 2, '.', ''),
             'outlet_price' => ($op = app(\App\Support\OutletPriceBook::class)->forCurrentOutlet($v->id)) === null ? null : number_format($op, 2, '.', ''),
             'current_stock' => $v->current_stock,
             'outlet_stock' => app(\App\Support\OutletPriceBook::class)->orderingStockOrNull($v->id),
-            'is_preorder' => (bool) $v->product->is_preorder,
             // Falls back to the PRODUCT's own image when this variant has
             // none of its own — same accessor ProductVariant::image_url now
             // exposes to every caller (see its docblock), not duplicated

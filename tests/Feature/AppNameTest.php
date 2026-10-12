@@ -81,27 +81,4 @@ class AppNameTest extends TestCase
         $this->getJson('/api/v1/settings/features')->assertJsonPath('app_name', 'BoothPOS');
     }
 
-    public function test_the_preorder_invoice_payload_carries_the_app_name(): void
-    {
-        $this->actingAsRole('owner');
-        $product = Product::factory()->create([
-            'home_outlet_id' => Outlet::factory()->create()->id,
-            'category_id' => Category::factory()->create()->id,
-            'is_preorder' => true,
-        ]);
-        $variant = $product->variants()->create(['sku' => 'APPN0001', 'sell_price' => 10000, 'cost_price' => 5000, 'current_stock' => 0]);
-        $preorder = $this->postJson('/api/v1/preorders', [
-            'customer_id' => Customer::factory()->create()->id, 'fulfillment' => 'pickup',
-            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
-        ])->assertCreated()->json();
-
-        $this->getJson("/api/v1/preorders/{$preorder['id']}/invoice")->assertOk()->assertJsonPath('app_name', 'BoothPOS');
-
-        $this->setAppName('Kasir Sakana')->assertOk();
-        $this->getJson("/api/v1/preorders/{$preorder['id']}/invoice")->assertJsonPath('app_name', 'Kasir Sakana');
-
-        // Unduh massal memakai jalur payload yang sama.
-        $bulk = $this->postJson('/api/v1/preorders/bulk-invoices', ['preorder_ids' => [$preorder['id']], 'document' => 'invoice'])->assertOk();
-        $this->assertSame('Kasir Sakana', $bulk->json('data.0.app_name'));
-    }
 }

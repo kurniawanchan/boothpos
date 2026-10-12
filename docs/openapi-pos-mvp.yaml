@@ -2,8 +2,8 @@ openapi: 3.0.3
 
 # =====================================================================
 # KLASIFIKASI: INTERNAL
-# Kontrak API — Sistem POS Event-Based Multi-Artist
-# Cakupan: MVP Oktober 2026 (termasuk pre-order dan pengiriman kurir)
+# Kontrak API — Sistem POS Multi-Outlet
+# Cakupan: MVP Oktober 2026. 046 (2026-10-12): modul Event dan Pre-order (termasuk pengiriman kurir) dihapus dari API.
 # Acuan: PRD v1.4, schema-pos-mvp.sql v1.0, uml-pos-mvp.md v1.0
 #
 # ATURAN: berkas ini adalah sumber kebenaran kontrak API. Koleksi Bruno
@@ -15,8 +15,8 @@ info:
   title: BoothPOS API
   version: 1.4.0
   description: |
-    API internal untuk BoothPOS — sistem POS berbasis event untuk toko
-    merchandise yang berjualan online maupun di bazaar/event. Berjalan di
+    API internal untuk BoothPOS — sistem POS untuk toko
+    merchandise dan restoran dengan satu atau beberapa outlet. Berjalan di
     localhost pada perangkat operasional toko, tanpa akses publik,
     sejalan dengan model lisensi sekali bayar dan instalasi lokal per toko.
 
@@ -42,9 +42,8 @@ tags:
   - name: Master Data
   - name: Settings
   - name: Stock
-  - name: Event & Session
+  - name: Session
   - name: Sales
-  - name: Preorder
   - name: Payment
   - name: Report
   - name: Vendor & Bahan Baku
@@ -935,7 +934,6 @@ paths:
           style: form
           explode: true
           schema: { type: array, items: { type: integer } }
-        - { name: is_preorder, in: query, schema: { type: boolean } }
         - name: with_variants
           in: query
           description: |
@@ -1131,9 +1129,10 @@ paths:
         login, sehingga `user_name` tidak boleh ikut dibuka).
 
         `reference` diselesaikan server menjadi nomor transaksi yang bisa dibaca
-        (penjualan/retur -> nomor order; tiba/serah terima/selisih edit pre-order ->
-        nomor pre-order) dan `null` bila tidak bisa dibuktikan menyangkut varian
-        ini (tidak pernah menampilkan nomor yang salah). Penyesuaian stok awal/manual
+        (penjualan/retur -> nomor order; transfer -> nomor transfer) dan `null` bila
+        tidak bisa dibuktikan menyangkut varian ini. 046 — pergerakan lama bertipe
+        `purchase`/`preorder_handover` yang menunjuk pre-order tetap tampil sebagai riwayat
+        tetapi selalu `null`; tipe `preorder_handover` tidak lagi dibuat siapa pun (tidak pernah menampilkan nomor yang salah). Penyesuaian stok awal/manual
         dan impor tidak punya referensi (alasan ada di `reason`).
       parameters:
         - { name: variant_id, in: query, schema: { type: integer } }
@@ -1318,112 +1317,11 @@ paths:
                         low_stock_alert: { type: integer }
 
   # ------------------------------------------------------------------
-  # EVENT & SESI
+  # SESI KASIR (046: tanpa event)
   # ------------------------------------------------------------------
-  /events:
-    get:
-      tags: [Event & Session]
-      summary: Daftar event
-      parameters:
-        - { name: status, in: query, schema: { type: string, enum: [draft, active, closed, cancelled] } }
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PerPage'
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Paginated'
-                  - type: object
-                    properties:
-                      data:
-                        type: array
-                        items: { $ref: '#/components/schemas/Event' }
-    post:
-      tags: [Event & Session]
-      summary: Buat event
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/EventInput' }
-      responses:
-        '201':
-          description: Dibuat
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Event' }
-
-  /events/{id}:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    get:
-      tags: [Event & Session]
-      summary: Detail event
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Event' }
-    put:
-      tags: [Event & Session]
-      summary: Perbarui event
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/EventInput' }
-      responses:
-        '200':
-          description: Diperbarui
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Event' }
-    delete:
-      tags: [Event & Session]
-      summary: Hapus event
-      description: |
-        009-ui-ux-refinements (US4). Soft delete, owner/admin saja. Ditolak
-        (409) bila event masih memiliki order atau pre-order (status apa
-        pun) yang mereferensikannya.
-      responses:
-        '204': { description: Berhasil }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-
-  /events/{id}/status:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    patch:
-      tags: [Event & Session]
-      summary: Ubah status event
-      description: |
-        Perpindahan status mengikuti state machine. Menutup event memicu
-        perhitungan `artist_settlements`. Event tidak dapat ditutup bila
-        masih ada sesi kasir berstatus `open`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [status]
-              properties:
-                status: { type: string, enum: [active, closed, cancelled] }
-      responses:
-        '200':
-          description: Diperbarui
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Event' }
-        '409':
-          $ref: '#/components/responses/Conflict'
-
   /sessions/current:
     get:
-      tags: [Event & Session]
+      tags: [Session]
       summary: Sesi kasir aktif milik pengguna
       description: 045 — membawa `outlet_id` dan `outlet {id, code, name}` (outlet shift); sama untuk POST /sessions dan `session` pada ringkasan shift.
       responses:
@@ -1437,10 +1335,14 @@ paths:
 
   /sessions:
     post:
-      tags: [Event & Session]
+      tags: [Session]
       summary: Buka sesi kasir
       description: |
         Ditolak bila pengguna masih memiliki sesi lain berstatus `open`.
+
+        046-hide-events-preorders — shift TIDAK lagi terikat event: `event_id` DIHAPUS dari body (nilai yang masih
+        dikirim klien lama diabaikan) dan tidak ada lagi aturan "hanya pada event aktif"; shift hanya butuh kas awal
+        dan outlet (dipilih server).
 
         006-purchase-order-and-ops (US6) — `opening_cash_entries[]` opsional
         memecah `opening_cash` per artist (satu sesi kasir tetap satu baris
@@ -1453,9 +1355,8 @@ paths:
           application/json:
             schema:
               type: object
-              required: [event_id, opening_cash]
+              required: [opening_cash]
               properties:
-                event_id: { type: integer }
                 outlet_id:
                   type: integer
                   nullable: true
@@ -1487,7 +1388,7 @@ paths:
   /sessions/{id}/close:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     post:
-      tags: [Event & Session]
+      tags: [Session]
       summary: Tutup sesi kasir
       description: |
         Server menghitung `expected_cash` dari kas awal ditambah pembayaran
@@ -1537,7 +1438,7 @@ paths:
   /sessions/{id}/summary:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     get:
-      tags: [Event & Session]
+      tags: [Session]
       summary: Ringkasan sesi kasir
       responses:
         '200':
@@ -1661,7 +1562,7 @@ paths:
       summary: Unggah bukti pembayaran
       description: |
         Dipanggil sebelum transaksi disimpan. Mengembalikan `proof_token`
-        yang disertakan saat membuat order atau pembayaran pre-order.
+        yang disertakan saat membuat order atau pembayaran.
         Token tanpa transaksi akan dibersihkan otomatis setelah 24 jam.
 
         CATATAN KEAMANAN (area risiko: input validation) — tipe berkas
@@ -1724,7 +1625,6 @@ paths:
       tags: [Sales]
       summary: Daftar transaksi
       parameters:
-        - { name: event_id, in: query, schema: { type: integer } }
         - { name: session_id, in: query, schema: { type: integer } }
         - { name: status, in: query, schema: { type: string, enum: [completed, voided] } }
         - { name: date_from, in: query, schema: { type: string, format: date } }
@@ -2047,7 +1947,6 @@ paths:
               type: object
               required: [items]
               properties:
-                event_id: { type: integer, nullable: true }
                 customer_id: { type: integer, nullable: true }
                 label: { type: string, nullable: true, maxLength: 100 }
                 items:
@@ -2241,7 +2140,7 @@ paths:
     post:
       tags: [Purchase Order]
       summary: Catat pembayaran ke vendor untuk purchase order ini
-      description: Lewat PaymentRecorder yang sama dengan pembayaran order/preorder (parameter purchaseOrderId).
+      description: Lewat PaymentRecorder yang sama dengan pembayaran order (parameter purchaseOrderId).
       requestBody:
         required: true
         content:
@@ -2341,8 +2240,8 @@ paths:
       summary: Hapus pelanggan
       description: |
         009-ui-ux-refinements (US4). Soft delete, owner/admin saja. Ditolak
-        (409) bila pelanggan masih memiliki order atau pre-order (status
-        apa pun) yang mereferensikannya.
+        (409) bila pelanggan masih memiliki order (status apa pun) yang
+        mereferensikannya. 046 — pre-order lama (riwayat diam) tidak dihitung.
       responses:
         '204': { description: Berhasil }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -2355,12 +2254,10 @@ paths:
       tags: [Master Data]
       summary: Riwayat transaksi pelanggan
       description: |
-        009-ui-ux-refinements (US5). Menggabungkan order dan pre-order milik
-        pelanggan menjadi satu daftar ringkas, diurutkan berdasarkan tanggal
-        terbaru. Tier otorisasi baca sama dengan GET /customers (tidak
-        diperluas). `status` untuk order memakai kolom status miliknya
-        sendiri (completed/voided); untuk pre-order memakai kolom status
-        pre-order (ordered/dp_paid/arrived/settled/handed_over/cancelled).
+        009-ui-ux-refinements (US5). Daftar ringkas order (penjualan) milik
+        pelanggan, terbaru dulu (046: pre-order sudah dihapus dari riwayat).
+        Tier otorisasi baca sama dengan GET /customers (tidak diperluas).
+        `status` memakai kolom status order (completed/voided).
       responses:
         '200':
           description: Berhasil
@@ -2374,7 +2271,7 @@ paths:
                     items:
                       type: object
                       properties:
-                        type: { type: string, enum: [order, preorder] }
+                        type: { type: string, enum: [order] }
                         id: { type: integer }
                         number: { type: string }
                         status: { type: string }
@@ -2467,865 +2364,6 @@ paths:
                         row: { type: integer }
                         errors: { type: array, items: { type: string } }
         '422': { $ref: '#/components/responses/ValidationError' }
-
-  # ------------------------------------------------------------------
-  # PRE-ORDER
-  # ------------------------------------------------------------------
-  /preorders:
-    get:
-      tags: [Preorder]
-      summary: Daftar pre-order
-      parameters:
-        - { name: status, in: query, schema: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] } }
-        - { name: event_id, in: query, schema: { type: integer } }
-        - { name: customer_id, in: query, schema: { type: integer } }
-        - { name: fulfillment, in: query, schema: { type: string, enum: [pickup, courier] } }
-        - { name: dispatch_status, in: query, description: "Penanda manual invoice-terkirim/pengiriman-berjalan. Boleh diulang (`dispatch_status[]=a&dispatch_status[]=b`); nilai berbeda di-OR-kan. Berlaku juga untuk `/preorders/summary` dan `/preorders/export`.", schema: { type: array, items: { type: string, enum: [pending, invoice_sent, shipping] } } }
-        - { name: search, in: query, description: "007-preorder-import-export-notify (US1) — cocok parsial, tidak peka huruf besar/kecil, terhadap nama pelanggan.", schema: { type: string } }
-        - { name: artist_id, in: query, description: "013-preorder-list-filters-receipt (US1) — hanya pre-order yang punya minimal satu item milik penjual ini (via `whereHas`, tidak menduplikasi baris pre-order yang punya beberapa item dari penjual yang sama).", schema: { type: integer } }
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PerPage'
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Paginated'
-                  - type: object
-                    properties:
-                      data:
-                        type: array
-                        items: { $ref: '#/components/schemas/PreorderSummary' }
-    post:
-      tags: [Preorder]
-      summary: Buat pre-order
-      description: |
-        Pelanggan wajib diisi. Stok TIDAK berkurang pada tahap ini karena
-        barang belum tersedia.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/PreorderInput' }
-      responses:
-        '201':
-          description: Dibuat
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /preorders/{id}:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    get:
-      tags: [Preorder]
-      summary: Detail pre-order
-      description: |
-        007-preorder-import-export-notify (US4) — respons kini menyertakan
-        `latest_notification` (percobaan kirim email terakhir untuk
-        pre-order ini, atau `null` bila belum pernah dicoba).
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Preorder'
-                  - type: object
-                    properties:
-                      latest_notification:
-                        type: object
-                        nullable: true
-                        properties:
-                          trigger: { type: string, enum: [status_change, manual_resend] }
-                          status: { type: string, enum: [sent, skipped_no_email, skipped_not_configured, failed] }
-                          error_message: { type: string, nullable: true }
-                          sent_at: { type: string, format: date-time, nullable: true }
-        '404': { $ref: '#/components/responses/NotFound' }
-    patch:
-      tags: [Preorder]
-      summary: Ubah pre-order (022-preorder-invoice-crud-overhaul, US1, FR-001/FR-001a/FR-002)
-      description: |
-        Item boleh diubah (tambah/hapus/ubah qty) selama status BUKAN
-        "handed_over"/"cancelled" (409 kalau ditolak). Kalau status sudah
-        "arrived"/"settled" (stok sudah pernah ditambahkan saat transisi ke
-        "arrived"), efek stok dikoreksi lewat DELTA per variant (qty baru
-        dikurangi qty lama) — bukan membalik lalu menerapkan ulang seluruh
-        item (research.md Decision 3).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [items]
-              properties:
-                customer_id: { type: integer }
-                event_id: { type: integer, nullable: true }
-                fulfillment: { type: string, enum: [pickup, courier] }
-                shipping_cost: { $ref: '#/components/schemas/Money' }
-                discount: { $ref: '#/components/schemas/Money' }
-                pickup_day: { type: string, format: date, nullable: true }
-                courier_name: { type: string, nullable: true }
-                expected_date: { type: string, format: date, nullable: true }
-                notes: { type: string, nullable: true }
-                items:
-                  type: array
-                  items:
-                    type: object
-                    required: [variant_id, qty]
-                    properties:
-                      variant_id: { type: integer }
-                      qty: { type: integer, minimum: 1 }
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
-        '409':
-          description: Status "handed_over"/"cancelled" (edit ditolak), atau perubahan membuat total lebih kecil dari yang sudah dibayar.
-        '422': { $ref: '#/components/responses/ValidationError' }
-        '404': { $ref: '#/components/responses/NotFound' }
-    delete:
-      tags: [Preorder]
-      summary: Hapus pre-order (022-preorder-invoice-crud-overhaul, US1, FR-003/FR-004)
-      description: |
-        Hanya boleh selagi status masih "ordered" DAN belum ada pembayaran
-        tercatat. Status lain (termasuk "arrived") WAJIB memakai aksi
-        "Cancel" (`PATCH /preorders/{id}/status`) — bukan endpoint ini.
-      responses:
-        '204': { description: Berhasil dihapus }
-        '409': { description: 'Status bukan "ordered", atau sudah ada pembayaran tercatat — gunakan aksi Cancel.' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /preorders/{id}/invoice:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    get:
-      tags: [Preorder]
-      summary: Data invoice sesuai status (007-preorder-import-export-notify US2; label "receipt" dihapus seluruhnya di 022-preorder-invoice-crud-overhaul US3)
-      description: |
-        022-preorder-invoice-crud-overhaul (US4, FR-012) — endpoint yang
-        SAMA PERSIS ini juga menjadi sumber data "Payment invoice" (dahulu
-        "Payment receipt") di frontend, karena `payments` sudah dimuat di
-        sini; tidak ada endpoint kedua untuk dokumen tersebut.
-
-        023-event-availability-invoice-redesign (US3, FR-009) — `shipping_cost`
-        (sudah ada sejak `Preorder`/`present()`) kini benar-benar dirender di
-        dokumen invoice (bukan hanya dikembalikan tanpa ditampilkan) — tidak
-        ada perubahan skema, hanya perilaku frontend.
-
-        Data mentah — PDF-nya dirender di klien (html2canvas + jsPDF), sama
-        seperti struk penjualan dan invoice purchase order. `document_type`
-        dihitung server dari status pre-order saat ini (`invoice` untuk
-        `ordered`/`dp_paid`/`arrived`, `receipt` secara internal untuk
-        `settled`/`handed_over`, `cancelled` untuk `cancelled`) — tapi label
-        yang ditampilkan ke pengguna SELALU "Invoice" (FR-007), nilai
-        `receipt` di sini hanya identifier internal, bukan lagi teks yang
-        ditampilkan.
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/Preorder'
-                  - type: object
-                    properties:
-                      document_type: { type: string, enum: [invoice, receipt, cancelled] }
-                      event_name: { type: string, nullable: true, description: "014-sales-receipt-event-footer — null when the preorder has no event_id." }
-                      event_location: { type: string, nullable: true }
-                      event_start_date: { type: string, format: date, nullable: true }
-                      event_end_date: { type: string, format: date, nullable: true }
-                      event_available_on_date:
-                        type: string
-                        format: date
-                        nullable: true
-                        description: 023-event-availability-invoice-redesign (US2) — resolved via Event::availableOnDate(); null when the event has no available_on set, or no event is linked.
-                      store_identity:
-                        type: object
-                        nullable: true
-                        description: 022-preorder-invoice-crud-overhaul (US3, FR-008) — disalin dari assembly yang sama dengan GET /orders/{id}/receipt.
-                        properties:
-                          name: { type: string }
-                          logo_url: { type: string, nullable: true }
-                          contact_person: { type: string, nullable: true }
-                          contact_phone: { type: string, nullable: true }
-                          contact_email: { type: string, nullable: true }
-                          address: { type: string, nullable: true }
-                      payment_channels:
-                        type: array
-                        description: 022-preorder-invoice-crud-overhaul (US3, FR-009) — account_number TIDAK disamarkan di sini (beda dari GET /payment-channels untuk kasir non-privileged).
-                        items:
-                          type: object
-                          properties:
-                            id: { type: integer }
-                            type: { type: string, enum: [bank_transfer, qr_ewallet] }
-                            provider: { type: string }
-                            account_name: { type: string, nullable: true }
-                            account_number: { type: string, nullable: true }
-                            qr_image_url: { type: string, nullable: true }
-                      footer_text: { type: string, nullable: true, description: 022-preorder-invoice-crud-overhaul (US3, FR-010) — sama dengan receipt_footer_text yang sudah ada. }
-                      app_name: { type: string, description: "Nama aplikasi untuk teks 'Powered by …' (default BoothPOS) — ikut payload supaya dokumen unduhan massal sama dengan yang di layar." }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /preorders/bulk-invoices:
-    post:
-      tags: [Preorder]
-      summary: Payload invoice untuk banyak pre-order sekaligus (022-preorder-invoice-crud-overhaul, US5, FR-013)
-      description: |
-        Mengembalikan array payload invoice LENGKAP (schema sama dengan
-        `GET /preorders/{id}/invoice`) untuk setiap id yang diminta, dalam
-        satu respons — PDF-nya tetap dirender di klien (tidak ada
-        rendering PDF sisi server, research.md Decision 5). `document`
-        `invoice` atau `payment_invoice`; untuk `payment_invoice`,
-        frontend memilih pembayaran terakhir dari `payments` pada setiap
-        payload.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [preorder_ids, document]
-              properties:
-                preorder_ids: { type: array, items: { type: integer }, minItems: 1 }
-                document: { type: string, enum: [invoice, payment_invoice] }
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data: { type: array, items: { $ref: '#/components/schemas/Preorder' } }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /preorders/bulk-email:
-    post:
-      tags: [Preorder]
-      summary: Kirim invoice/payment invoice ke banyak pre-order sekaligus (022-preorder-invoice-crud-overhaul, US5, FR-014/FR-015)
-      description: |
-        Satu email per pre-order terpilih (`PreorderInvoiceMail`, badan
-        HTML tanpa lampiran PDF — research.md Decision 5), memakai jalur
-        catat-setiap-percobaan yang sama dengan `PreorderNotifier`
-        (trigger baru `bulk_invoice_email` di `preorder_notifications`).
-        SELALU 200 dengan laporan per-baris — satu pelanggan tanpa email
-        tidak menggagalkan batch (FR-015).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [preorder_ids, document]
-              properties:
-                preorder_ids: { type: array, items: { type: integer }, minItems: 1 }
-                document: { type: string, enum: [invoice, payment_invoice] }
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        preorder_id: { type: integer }
-                        status: { type: string, enum: [sent, skipped_no_email, skipped_not_configured, failed] }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /preorders/duplicate:
-    post:
-      tags: [Preorder]
-      summary: Duplikat satu atau banyak pre-order (027-preorder-duplicate-split, US1/US2)
-      description: |
-        Membuat SATU salinan baru per id yang dikirim (tidak pernah digabung).
-        Salinan dibangun lewat jalur `create()` yang sama dengan pre-order baru:
-        harga tiap barang diambil dari harga varian SAAT INI (bukan harga yang
-        tercatat di pesanan asal), status `ordered`, tanpa pembayaran, bukti
-        bayar, atau pengiriman, `dispatch_status` `pending`, nomor baru. Yang
-        disalin: pelanggan, event, fulfillment, hari jemput/kurir, expected_date,
-        ongkir, diskon, catatan, dan barang+qty. Event yang sudah dihapus →
-        salinan tanpa event (dan tanpa hari jemput); hari jemput di luar rentang
-        event dibuang. Semua status sumber boleh diduplikasi. Sumber tidak
-        berubah dan stok tidak disentuh. Tidak ada email yang dikirim; satu
-        baris `activity_logs` (`duplicated`) ditulis per salinan.
-
-        SELALU 200 dengan laporan per-pre-order (pola `/preorders/bulk-email`):
-        tiap salinan memakai transaksinya sendiri, jadi satu yang gagal tidak
-        menggagalkan yang lain. Penyebab gagal: barang/produk dihapus atau
-        nonaktif, diskon melebihi total hasil harga baru, atau id bukan milik
-        mode data (DEMO/LIVE) yang aktif ("tidak ditemukan").
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [preorder_ids]
-              properties:
-                preorder_ids: { type: array, items: { type: integer }, minItems: 1, maxItems: 100 }
-      responses:
-        '200':
-          description: Laporan per-pre-order, urutan sama dengan permintaan (id ganda dibuang)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        source_id: { type: integer }
-                        source_number: { type: string, nullable: true }
-                        status: { type: string, enum: [created, failed] }
-                        preorder: { $ref: '#/components/schemas/Preorder', description: "Hanya bila status = created" }
-                        error: { type: string, description: "Hanya bila status = failed" }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /preorders/summary:
-    get:
-      tags: [Preorder]
-      summary: Statistik ringkas daftar pre-order (013-preorder-list-filters-receipt, US5)
-      description: |
-        Menghormati filter yang SAMA PERSIS dengan `GET /preorders`
-        (`status`/`event_id`/`customer_id`/`fulfillment`/`search`/`artist_id`,
-        via helper `applyFilters()` yang sama) sehingga statistik ini tidak
-        pernah berbeda dari apa yang sedang ditampilkan di layar. `total_amount`/
-        `paid_amount` diambil langsung dari kolom `Preorder` yang sudah
-        otoritatif (bukan rekonsiliasi ulang dari `payments`) — lihat
-        research.md R3 fitur ini untuk alasannya.
-      parameters:
-        - { name: status, in: query, schema: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] } }
-        - { name: event_id, in: query, schema: { type: integer } }
-        - { name: customer_id, in: query, schema: { type: integer } }
-        - { name: fulfillment, in: query, schema: { type: string, enum: [pickup, courier] } }
-        - { name: search, in: query, schema: { type: string } }
-        - { name: artist_id, in: query, schema: { type: integer } }
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  transaction_count: { type: integer }
-                  by_status:
-                    type: array
-                    description: Selalu 6 entri (semua status), nol-diisi ("0.00") untuk status tanpa baris yang cocok.
-                    items:
-                      type: object
-                      properties:
-                        status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
-                        count: { type: integer, description: "Jumlah (qty) pre-order berstatus ini dalam himpunan terfilter." }
-                        total_amount: { $ref: '#/components/schemas/Money' }
-                  grand_total: { $ref: '#/components/schemas/Money', description: "BUG YANG DITEMUKAN & DIPERBAIKI — mengecualikan preorder berstatus 'cancelled' (sebelumnya ikut terjumlah). by_status['cancelled'] tetap menampilkan total uangnya sendiri secara terpisah." }
-                  total_outstanding: { $ref: '#/components/schemas/Money', description: "Sama seperti grand_total — mengecualikan preorder 'cancelled'." }
-
-  /preorders/export:
-    get:
-      tags: [Preorder]
-      summary: Ekspor daftar pre-order ke .xlsx (007-preorder-import-export-notify, US3; layout diganti seluruhnya di 022-preorder-invoice-crud-overhaul US7)
-      description: |
-        Hanya owner/admin. Menghormati filter yang sama dengan `GET /preorders`
-        (`status`/`event_id`/`customer_id`/`fulfillment`/`search`/`date_from`/`date_to`).
-
-        022-preorder-invoice-crud-overhaul (US7, FR-017): layout MENGGANTIKAN
-        SELURUHNYA format row-per-item feature 007/021 — sekarang SATU BARIS
-        PER PESANAN dengan kolom `customer_name`, `event_name` (nama, bukan
-        ID), `fulfillment` (`pickup`/`mail order`), `pickup_day` (teks
-        "Day N"), `products`/`quantities`/`unit_prices` (comma-separated,
-        dicocokkan lewat posisi), `shipping_cost`, `courier_name`,
-        `expected_date`, `discount`, `notes`, `dispatch_status`,
-        `invoice_sent_at`, `shipping_at`. File hasil ekspor ini bisa
-        diimpor balik apa adanya (round-trip, SC-005).
-
-        Penanda invoice-terkirim/pengiriman-berjalan: `dispatch_status` bernilai
-        `pending`/`invoice_sent`/`shipping`; tanggalnya ISO 8601 dengan offset
-        (mis. `2026-09-27T03:00:00+00:00`). Dua kolom tambahan **hanya-baca**,
-        `created_at` dan `updated_at`, ikut diekspor SESUDAH kolom di atas —
-        untuk dibaca; importer membiarkannya dan tidak pernah menulisnya.
-
-        Filter `status`, `fulfillment`, dan `dispatch_status` boleh berupa nilai
-        tunggal ATAU diulang sebagai array (`status[]=a&status[]=b`, di-OR-kan) —
-        sama seperti `GET /preorders`, karena tombol Export meneruskan filter list.
-      parameters:
-        - { name: status, in: query, schema: { type: array, items: { type: string } } }
-        - { name: event_id, in: query, schema: { type: integer } }
-        - { name: customer_id, in: query, schema: { type: integer } }
-        - { name: fulfillment, in: query, schema: { type: array, items: { type: string } } }
-        - { name: dispatch_status, in: query, schema: { type: array, items: { type: string, enum: [pending, invoice_sent, shipping] } } }
-        - { name: search, in: query, schema: { type: string } }
-        - { name: date_from, in: query, schema: { type: string, format: date } }
-        - { name: date_to, in: query, schema: { type: string, format: date } }
-      responses:
-        '200':
-          description: Berkas .xlsx
-          content:
-            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
-              schema: { type: string, format: binary }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /preorders/import/template:
-    get:
-      tags: [Preorder]
-      summary: Unduh template impor pre-order (007-preorder-import-export-notify, US3)
-      description: Hanya owner/admin. Kolom header sama persis dengan yang divalidasi `POST /preorders/import`.
-      responses:
-        '200':
-          description: Berkas .xlsx
-          content:
-            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
-              schema: { type: string, format: binary }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /preorders/import:
-    post:
-      tags: [Preorder]
-      summary: Impor batch pre-order dari .xlsx (007-preorder-import-export-notify, US3)
-      description: |
-        Hanya owner/admin. Validasi PENUH dulu, baru diterapkan sekaligus
-        dalam satu transaksi (all-or-nothing, meniru
-        `MasterDataImportService` — research.md R3) — bila ada satu baris
-        gagal, TIDAK ADA yang disimpan. Setiap pre-order yang diimpor
-        SELALU dibuat berstatus `ordered` dengan `paid_amount = 0`, apa pun
-        data di berkas (FR-010) — operator memajukan status/pembayarannya
-        secara manual setelah impor lewat endpoint yang sudah ada.
-        `customer_name` yang belum dikenal otomatis membuat `Customer`
-        baru (FR-009). Harga/qty pada baris DIPAKAI APA ADANYA (bukan
-        dihitung ulang dari master data saat ini) — pengecualian yang
-        disengaja terhadap aturan "server selalu menghitung ulang", karena
-        impor mencatat transaksi historis yang sudah terjadi di luar
-        sistem (research.md R4).
-
-        022-preorder-invoice-crud-overhaul (US7, FR-017/FR-018): layout
-        SATU-BARIS-PER-PESANAN menggantikan seluruhnya format row-per-item
-        lama. `event_name` dicocokkan lewat nama (bukan ID) — ambigu/tidak
-        ditemukan adalah galat baris. `fulfillment` menerima kata
-        "pickup"/"mail order". `pickup_day` ditulis "Day N" (diselesaikan
-        ke tanggal asli lewat rentang tanggal event yang cocok, sama seperti
-        `resolvePickupDayAndCourier()`). `products`/`quantities`/
-        `unit_prices` adalah TIGA kolom comma-separated yang WAJIB sama
-        panjang (jumlah berbeda = galat baris, FR-018) dan dicocokkan lewat
-        posisi. Aturan cross-field pickup_day/courier_name vs fulfillment
-        tetap sama persis dengan `POST /preorders`.
-
-        **Kolom `dispatch_status` / `invoice_sent_at` / `shipping_at`** (opsional;
-        kosong = `pending` tanpa tanggal). Aturannya sama dengan
-        `PATCH /preorders/{id}/dispatch-status`: `shipping` hanya untuk
-        `mail order`; `pending` tidak boleh bertanggal; `invoice_sent` tidak boleh
-        punya `shipping_at`; tanggal kosong pada status aktif diisi waktu impor.
-        Tanggal diterima sebagai teks ISO 8601 (offset dihormati) atau sel tanggal
-        Excel. Baris yang melanggar dilaporkan sebagai galat baris (409), dan
-        seluruh berkas ditolak (all-or-nothing). `created_at`/`updated_at` di
-        berkas diabaikan — pesanan hasil impor tercatat dibuat saat impor.
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file]
-              properties:
-                file: { type: string, format: binary, description: Berkas .xlsx dengan tata kolom sama dengan template. }
-                dry_run: { type: string, enum: ['1'], description: Validasi tanpa menyimpan (pratinjau). }
-      responses:
-        '201':
-          description: Tersimpan
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  created_count: { type: integer }
-                  created_customer_count: { type: integer }
-                  preorder_ids: { type: array, items: { type: integer } }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409':
-          description: Validasi gagal — tidak ada baris yang disimpan.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message: { type: string }
-                  row_errors:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        row: { type: integer }
-                        errors: { type: array, items: { type: string } }
-
-  /preorders/{id}/notifications/resend:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    post:
-      tags: [Preorder]
-      summary: Kirim ulang notifikasi email pre-order (007-preorder-import-export-notify, US4)
-      description: |
-        Hanya owner/admin. Jalur yang sama persis dengan notifikasi
-        otomatis saat status berubah (`PreorderNotifier`), dipicu manual,
-        independen dari perubahan status apa pun. SELALU 200 dengan hasil
-        percobaan, tidak pernah 500 karena kegagalan kirim (FR-012/FR-013)
-        — kegagalan/dilewati adalah hasil yang sah, bukan galat request.
-      responses:
-        '200':
-          description: Percobaan tercatat (berhasil atau tidak)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status: { type: string, enum: [sent, skipped_no_email, skipped_not_configured, failed] }
-                  recipient_email: { type: string, nullable: true }
-                  sent_at: { type: string, format: date-time, nullable: true }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /preorders/{id}/status:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    patch:
-      tags: [Preorder]
-      summary: Ubah status pre-order
-      description: |
-        Perpindahan status mengikuti state machine pada dokumen UML.
-        Lompatan status ditolak dengan 409.
-
-        **Efek stok:**
-        - `arrived` menulis `stock_movements` bertipe `purchase`
-        - `handed_over` menulis `stock_movements` bertipe `preorder_handover`
-        - `handed_over` hanya diizinkan bila `paid_amount` sudah menutup `total_amount`
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [status]
-              properties:
-                status: { type: string, enum: [dp_paid, arrived, settled, handed_over, cancelled] }
-                cancel_reason: { type: string, nullable: true }
-      responses:
-        '200':
-          description: Diperbarui
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
-        '409':
-          description: Perpindahan status tidak valid atau belum lunas
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-
-  /preorders/{id}/dispatch-status:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    patch:
-      tags: [Preorder]
-      summary: Ubah penanda invoice terkirim / pengiriman berjalan
-      description: |
-        Penanda manual, terpisah dari `status` utama — TIDAK menyentuh stok,
-        pembayaran, maupun notifikasi email. Bisa maju dan mundur (koreksi salah
-        klik). Nilai: `pending` (belum), `invoice_sent`, `shipping`.
-        Pre-order berstatus `cancelled` ditolak dengan 409. Nilai `shipping`
-        hanya berlaku untuk Mail Order (`fulfillment=courier`); untuk pickup
-        ditolak dengan 409. Mengedit pre-order dari Mail Order ke pickup
-        menurunkan `shipping` otomatis menjadi `invoice_sent`.
-
-        **Tanggal (diisi server, tak bisa dikirim klien):** respons pre-order
-        membawa `invoice_sent_at` dan `shipping_at` (ISO 8601, `null` bila tak
-        aktif), selain `created_at`/`updated_at`. Menandai ulang nilai yang
-        sudah aktif tidak menggeser tanggalnya; mundur dari `shipping` menghapus
-        `shipping_at` tapi mempertahankan `invoice_sent_at`; kembali ke
-        `pending` menghapus keduanya. `GET /preorders` juga bisa diurutkan
-        dengan `sort_by=created_at|updated_at`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [dispatch_status]
-              properties:
-                dispatch_status: { type: string, enum: [pending, invoice_sent, shipping] }
-      responses:
-        '200':
-          description: Diperbarui
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
-        '409':
-          description: Pre-order sudah dibatalkan
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '422':
-          description: Nilai tidak valid
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-
-  /preorders/{id}/split:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    post:
-      tags: [Preorder]
-      summary: Pisahkan sebagian unit pre-order ke pre-order baru (027-preorder-duplicate-split, US3/US4)
-      description: |
-        Dua mode. `items`: pengguna menyebut `item_id` + `qty` yang pindah ke SATU
-        pre-order baru (baris yang sama boleh disebut dua kali — dijumlahkan dulu).
-        `by_seller`: penjual dari baris dengan id terkecil tetap di pesanan asal,
-        setiap penjual lain menjadi satu pre-order baru berisi baris utuhnya.
-
-        Aturan (semua ditegakkan server di dalam satu transaksi dengan baris asal
-        terkunci — gagal di mana pun berarti tidak ada yang berubah):
-        - Ditolak `409` bila status `handed_over`/`cancelled`, bila pre-order
-          punya pembayaran APA PUN (tidak ada pembagian pembayaran), atau bila
-          diskon asal akan melebihi sisa subtotal + ongkir.
-        - Ditolak `422` bila item bukan milik pre-order ini, qty melebihi baris,
-          tidak ada unit yang pindah / tidak ada yang tersisa, atau `by_seller`
-          pada pre-order dengan satu penjual.
-        - Baris yang pindah seluruhnya memakai baris `preorder_items` yang SAMA
-          (id tetap, supaya rujukan pergerakan stok tetap benar); baris yang pindah
-          sebagian dikecilkan dan snapshot harga/modal/penjualnya disalin ke baris
-          baru. Harga TIDAK dihitung ulang.
-        - Pesanan baru: pelanggan/event/fulfillment/hari jemput/kurir/expected_date
-          disalin, `status` mewarisi pesanan asal, `shipping_cost` 0, `discount` 0,
-          tanpa catatan, `dispatch_status` `pending`, `user_id` = pengguna yang
-          memisahkan, `source.type` = `split`. Ongkir, diskon, catatan, data
-          pengiriman, dan penanda invoice tetap di pesanan asal.
-        - Stok TIDAK disentuh dan tidak ada pergerakan stok ditulis; tidak ada
-          email; satu baris `activity_logs` (`split`) ditulis pada pesanan asal.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [mode]
-              properties:
-                mode: { type: string, enum: [items, by_seller] }
-                items:
-                  type: array
-                  description: Wajib bila `mode` = `items`
-                  minItems: 1
-                  items:
-                    type: object
-                    required: [item_id, qty]
-                    properties:
-                      item_id: { type: integer }
-                      qty: { type: integer, minimum: 1 }
-      responses:
-        '201':
-          description: Berhasil dipisah
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  original: { $ref: '#/components/schemas/Preorder', description: "Termasuk split_children" }
-                  created:
-                    type: array
-                    items: { $ref: '#/components/schemas/Preorder' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: "Status tertutup, sudah ada pembayaran, atau diskon melebihi sisa tagihan" }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /preorders/{id}/payments/{payment_id}:
-    delete:
-      tags: [Preorder]
-      summary: Hapus satu pembayaran pre-order beserta bukti bayarnya
-      description: |
-        Hanya owner/admin (403 untuk peran lain). Menghapus baris pembayaran dan
-        bukti bayarnya (baris `payment_proofs` + file di disk privat, file dihapus
-        setelah commit), lalu menghitung ULANG `paid_amount` dari pembayaran yang
-        tersisa dan memundurkan status sejauh yang ditimbulkan pembayaran itu:
-        `settled` yang tak lagi lunas → `arrived`; `dp_paid` tanpa sisa pembayaran
-        → `ordered`; `arrived` tidak pernah mundur (stok sudah masuk). Ditolak
-        `409` untuk pre-order `handed_over`/`cancelled`; `404` bila pembayaran
-        bukan milik pre-order ini. Satu baris `activity_logs` (`payment_deleted`,
-        berisi status dan jumlah lama/baru) ditulis di transaksi yang sama.
-        Respons memuat `payment_summary` yang sudah dihitung ulang (028-partial-split-payment).
-      parameters:
-        - { $ref: '#/components/parameters/Id' }
-        - { name: payment_id, in: path, required: true, schema: { type: integer } }
-      responses:
-        '200':
-          description: Pre-order sesudah dihitung ulang
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: "Pre-order sudah diserahkan atau dibatalkan" }
-
-  /preorders/{id}/payments/{payment_id}/verify:
-    post:
-      tags: [Preorder]
-      summary: Tandai satu pembayaran non-tunai pre-order terverifikasi (032-mark-payment-verified)
-      description: |
-        032-mark-payment-verified — menandai SATU pembayaran non-tunai yang masih `pending` sebagai
-        `verified` (sudah dicocokkan dengan mutasi bank/e-wallet). Tanpa body. **Satu arah dan FINAL:**
-        tidak ada route untuk membatalkan verifikasi (keputusan produk); jejaknya ada di activity log.
-
-        **Otorisasi:** owner/admin, atau pengguna mana pun KECUALI pencatat pembayaran itu
-        (`payments.recorded_by`) — pencatat → 403. Pembayaran lama tanpa pencatat boleh diverifikasi siapa pun.
-
-        **Aturan** (setelah baris transaksi dikunci, jadi dua klik serentak berlaku berurutan): pembayaran
-        milik transaksi ini (404 bila bukan); pre-order `cancelled` → 409 (pre-order `handed_over` tetap boleh: tak ada uang yang bergerak); tunai → 422 (`errors.method`; tunai sudah
-        terverifikasi sejak dicatat); sudah `verified` → 409; `rejected` → 409.
-
-        Menulis `verified_by`/`verified_at` dan baris `activity_logs` `payment_verified` (nilai lama/baru) di
-        transaksi yang sama. Tidak mengubah jumlah, metode, kanal, status, total, kas yang diharapkan, atau
-        laporan; pembayaran itu kini muncul di rincian per-metode `GET /sessions/{id}/summary` (rincian itu
-        sejak awal hanya menghitung pembayaran terverifikasi).
-      parameters:
-        - { $ref: '#/components/parameters/Id' }
-        - { name: payment_id, in: path, required: true, schema: { type: integer } }
-      responses:
-        '200':
-          description: Pre-order sesudah diverifikasi (payments[] memuat verification, verified_by_name, verified_at, can_verify)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: "Pre-order batal, atau pembayaran sudah terverifikasi / ditolak" }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /preorders/{id}/payments/{payment_id}/confirmation:
-    patch:
-      tags: [Preorder]
-      summary: Tambah / ubah / ganti konfirmasi pembayaran pre-order (031-optional-payment-proof)
-      description: |
-        031-optional-payment-proof — menambah, mengubah, atau mengganti KONFIRMASI sebuah pembayaran
-        non-tunai yang sudah tercatat: bukti (`proof_token` dari `POST /payment-proofs`), `reference`,
-        dan `notes`. Semua kunci opsional; minimal satu harus dikirim (422 `errors.confirmation`).
-        Mengirim `null` mengosongkan referensi/catatan, tetapi hasil akhirnya tidak boleh kosong
-        sama sekali (bukti, referensi, dan catatan semuanya tak ada → 422). Bukti tidak bisa
-        dihapus mentah, hanya diganti: bukti lama ditandai `superseded_at`, file dan barisnya
-        DIPERTAHANKAN untuk audit.
-
-        **Otorisasi:** owner/admin, atau pengguna yang mencatat pembayaran itu (`payments.recorded_by`);
-        pengguna lain → 403. Pembayaran lama tanpa pencatat → hanya owner/admin.
-
-        **Aturan** (setelah baris transaksi dikunci): pembayaran milik transaksi ini (404 bila bukan);
-        pre-order `cancelled` → 409 (pre-order `handed_over` tetap boleh: konfirmasi tak menggerakkan uang); pembayaran tunai → 422 (`errors.method`); token bukti tak dikenal/sudah terpakai → 422.
-
-        Tidak pernah mengubah jumlah, metode, kanal, waktu, status, total, atau kas shift. Menulis
-        `activity_logs` `payment_confirmation_updated` (nilai lama dan baru) di transaksi yang sama.
-      parameters:
-        - { $ref: '#/components/parameters/Id' }
-        - { name: payment_id, in: path, required: true, schema: { type: integer } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/PaymentConfirmationInput' }
-      responses:
-        '200':
-          description: Pre-order sesudah diubah (payments[] memuat notes, proof_id, has_proof, can_view_proof, can_edit_confirmation)
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: "Pre-order sudah dibatalkan" }
-        '422': { $ref: '#/components/responses/ValidationError' }
-
-  /preorders/{id}/payments:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    post:
-      tags: [Preorder]
-      summary: Catat pembayaran pre-order
-      description: |
-        Dipakai untuk DP maupun pelunasan. Setiap pembayaran tersimpan SENDIRI
-        dan LANGSUNG, berapa pun jumlahnya (028-partial-split-payment): tidak ada
-        lagi penahanan entri di klien sampai tagihan tertutup. Pembayaran
-        non-tunai wajib menyertakan kanal; `proof_token` opsional sejak
-        031-optional-payment-proof (bukti bisa ditambahkan belakangan lewat
-        `PATCH /preorders/{id}/payments/{payment_id}/confirmation`). Server menghitung
-        ulang `paid_amount` dari entri, memindahkan status (pembayaran pertama →
-        `dp_paid`; melunasi pre-order `arrived` → `settled`), menulis baris
-        `activity_logs` `payment_recorded`, dan mengembalikan pre-order lengkap
-        dengan `payment_summary` serta `payments[]` (referensi, pencatat, status).
-        Pre-order `handed_over`/`cancelled` → 409.
-
-        Pengaman (028): jumlah harus > 0 dan ≤ sisa tagihan (dinilai ulang setelah
-        baris pre-order dikunci, jadi dua staf yang membayar bersamaan tak bisa
-        melebihi tagihan); `client_ref` (UUID, opsional di server, selalu dikirim
-        SPA) membuat klik ganda / coba-ulang aman — kunci yang sama pada
-        pre-order yang sama menjawab 200 tanpa menambah pembayaran.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/PaymentInput' }
-      responses:
-        '201':
-          description: Tersimpan — pre-order terbaru dengan `payment_summary`
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
-        '200':
-          description: Replay idempotensi — `client_ref` yang sama sudah tercatat pada pre-order ini; tidak ada pembayaran baru, isinya keadaan terkini (sama seperti 201).
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Preorder' }
-        '409': { description: "Pre-order sudah diserahkan/dibatalkan, atau sudah lunas (tidak ada sisa tagihan)" }
-        '422': { description: "Bentuk salah, `amount` melebihi sisa tagihan (`errors.amount` menyebut maksimum yang bisa dibayar; PERUBAHAN 028 — dulu kelebihan bayar diterima), atau `client_ref` sudah dipakai transaksi lain" }
-
-  /preorders/{id}/shipment:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    post:
-      tags: [Preorder]
-      summary: Buat data pengiriman
-      description: Hanya untuk pre-order dengan `fulfillment = courier`. Satu pre-order satu pengiriman.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ShipmentInput' }
-      responses:
-        '201':
-          description: Dibuat
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Shipment' }
-        '409': { $ref: '#/components/responses/Conflict' }
-
-  /shipments/{id}:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    patch:
-      tags: [Preorder]
-      summary: Perbarui pengiriman
-      description: Dipakai untuk mengisi nomor resi dan memindahkan status pengiriman.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                tracking_number: { type: string, nullable: true }
-                status: { type: string, enum: [pending, packed, shipped, delivered] }
-                notes: { type: string, nullable: true }
-      responses:
-        '200':
-          description: Diperbarui
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Shipment' }
 
   # ------------------------------------------------------------------
   # LAPORAN
@@ -3852,24 +2890,20 @@ paths:
       description: |
         045 Stage 4 — tiap baris `transactions[]` membawa `sold_at_name`/`sold_at_code` (outlet TEMPAT penjualan = outlet shift;
         beda dari `outlet_names`, outlet asal item).
-        010-split-payment-preorder-reports (US5) — totals dan setiap baris
-        `rows[]` sejak fitur ini kini juga memuat pendapatan yang DIAKUI
-        dari Pre-order, digabung ke angka penjualan Order biasa. "Diakui"
-        berarti dibatasi pada uang yang benar-benar terkumpul di
-        `payments` (bukan nilai penuh pre-order), diproporsikan ke tiap
-        item sesuai porsi `line_total`-nya terhadap subtotal pre-order;
-        pre-order berstatus `cancelled` selalu menyumbang nol. Bentuk
-        respons tidak berubah, hanya nilainya lebih lengkap.
 
-        042-dashboard-revamp — `date_from`/`date_to` kini TANGGAL BISNIS (zona waktu toko +
+        046-hide-events-preorders — tidak ada lagi event dan pre-order: angka dan baris hanya dari order `completed`
+        (POS/tab); `event_id` dan pengelompokan `event` DIHAPUS, `totals.pos_*` sama dengan angka bersama (kunci
+        dipertahankan), dan respons tidak lagi membawa `event`. Tanpa `date_from`/`date_to` laporan ini memuat SEMUA
+        penjualan (SPA mengirim hari ini secara bawaan).
+
+        042-dashboard-revamp — `date_from`/`date_to` adalah TANGGAL BISNIS (zona waktu toko +
         jam batas hari, disimpan pada `orders.business_date`), bukan tanggal UTC dari
         `created_at`; `group_by=day` mengelompokkan menurut tanggal bisnis yang sama. Angka
         `pos_*` dihitung oleh `App\Services\SalesFigures`, sumber yang sama dengan Dashboard.
       parameters:
-        - { name: event_id, in: query, schema: { type: integer } }
         - { name: date_from, in: query, description: "Tanggal bisnis (Y-m-d).", schema: { type: string, format: date } }
         - { name: date_to, in: query, description: "Tanggal bisnis (Y-m-d).", schema: { type: string, format: date } }
-        - { name: group_by, in: query, schema: { type: string, enum: [product, category, artist, day, event, customer], default: product } }
+        - { name: group_by, in: query, schema: { type: string, enum: [product, category, outlet, day, customer], default: product } }
         - { name: include_voided, in: query, description: "1 = sertakan order berstatus `voided` di `transactions[]` (untuk audit). Transaksi batal TIDAK PERNAH ikut `totals`/`rows`.", schema: { type: integer, enum: [0, 1] } }
       responses:
         '200':
@@ -3877,17 +2911,21 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SalesReport' }
+        '422':
+          description: Rentang tanggal tidak valid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /reports/sales/transactions/export:
     post:
       tags: [Report]
       summary: Ekspor daftar transaksi Sales (.xlsx)
       description: |
-        Berkas berisi PERSIS baris yang tampil di halaman Sales (hanya transaksi dari POS; pre-order
-        tidak ada di halaman itu, jadi kunci `preorder:*` ditolak 422). Klien hanya mengirim KUNCI baris
+        Berkas berisi PERSIS baris yang tampil di halaman Sales (hanya transaksi dari POS, jadi kunci selain `order:<id>` ditolak 422). Klien hanya mengirim KUNCI baris
         (`keys`: "order:12"); seluruh isi dibangun ulang di server lewat service yang sama
         dengan `GET /reports/sales`, jadi nominal tak bisa dipalsukan dan berkas tak pernah berbeda
-        dari layar. Kunci yang tak ada atau di luar filter `event_id`/tanggal DIABAIKAN. Tanpa `keys`
+        dari layar. Kunci yang tak ada atau di luar filter tanggal DIABAIKAN. Tanpa `keys`
         = seluruh transaksi sesuai filter. Maks. 5000 kunci.
 
         Kolom: `transaction_no, status, time, customer, sellers, cashier, items` (SEMUA baris
@@ -3904,7 +2942,6 @@ paths:
             schema:
               type: object
               properties:
-                event_id: { type: integer, nullable: true }
                 date_from: { type: string, format: date, nullable: true }
                 date_to: { type: string, format: date, nullable: true }
                 include_voided: { type: boolean, nullable: true }
@@ -3928,27 +2965,16 @@ paths:
   /reports/profit:
     get:
       tags: [Report]
-      summary: Laporan modal dan keuntungan
+      summary: Laporan modal dan keuntungan (per periode)
       description: |
-        Laba kotor dihitung dari nilai snapshot pada `order_items`, bukan
-        harga master saat laporan dibuka. Laba bersih mengurangkan
-        `event_cost`. Hanya peran owner dan admin.
+        Laba kotor dihitung dari nilai snapshot pada `order_items`, bukan harga master saat laporan dibuka. Hanya
+        peran owner dan admin.
 
-        010-split-payment-preorder-reports (US5) — `revenue` dan
-        `cost_of_goods` sejak fitur ini juga memuat kontribusi Pre-order:
-        pendapatan yang benar-benar terkumpul (bukan nilai penuh
-        pre-order) beserta `cost_price` yang diproporsikan dengan rasio
-        yang sama, memakai aturan diakui/proporsi yang sama seperti
-        `GET /reports/sales` di atas.
-
-        033-seller-recap-pos-preorder-split — `revenue`, `cost_of_goods`
-        dan `gross_profit` juga dipisah menurut jenisnya lewat field
-        `*_pos` (penjualan POS) dan `*_preorder` (porsi pre-order yang
-        terbayar). Bagian pre-order adalah SISA dari total yang tampil
-        (dalam sen), jadi POS + pre-order persis sama dengan totalnya.
-        `event_cost` dan `net_profit` milik seluruh event dan tidak dipisah.
+        046-hide-events-preorders — berskala PERIODE tanggal bisnis (bawaan hari bisnis berjalan) dan penjualan
+        selesai saja: tanpa `event_id`, `event`, `event_cost`, `net_profit`, dan seluruh bagian `*_pos`/`*_preorder`.
       parameters:
-        - { name: event_id, in: query, required: true, schema: { type: integer } }
+        - { name: date_from, in: query, description: "Tanggal bisnis (Y-m-d). Kosong DAN date_to kosong = hari bisnis berjalan.", schema: { type: string, format: date } }
+        - { name: date_to, in: query, description: "Tanggal bisnis (Y-m-d), >= date_from.", schema: { type: string, format: date } }
       responses:
         '200':
           description: Berhasil
@@ -3956,35 +2982,25 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ProfitReport' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: Rentang tanggal tidak valid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
-  /reports/artist-profit:
+  /reports/outlet-profit:
     get:
       tags: [Report]
-      summary: Laporan modal dan laba kotor per artist (F9.5)
+      summary: Laporan modal dan laba kotor per outlet (F9.5)
       description: |
-        Untuk setiap artist dengan minimal satu `order_items` 'completed'
-        ATAU pre-order non-`cancelled` yang sudah terbayar pada event ini:
-        `total_sales` (SUM `line_total`), `modal` (SUM `cost_price * qty`,
-        snapshot yang sama dipakai `GET /reports/profit` — bukan modal BOM
-        hidup, lihat docblock `ReportController::artistProfit()`), dan
-        `gross_profit = total_sales - modal`.
-
-        033-seller-recap-pos-preorder-split — **PERUBAHAN PERILAKU**: laporan
-        ini dulu HANYA membaca `order_items` (POS). Kini `total_sales`,
-        `modal` dan `gross_profit` adalah POS + porsi pre-order yang sudah
-        terbayar (aturan diakui/proporsi sama seperti `GET /reports/profit`).
-        040 — `GET /reports/artist-settlements` sejak itu POS-SAJA, jadi
-        `total_sales` laporan ini TIDAK lagi sama dengan Rekap Seller bila
-        event punya pre-order; yang tetap sama adalah `sales_pos` dengan
-        `total_sales` Rekap. Rinciannya ada di `*_pos` (sama dengan angka lama) dan `*_preorder`
-        (sisa dari total, tepat sampai sen). Seller yang hanya punya
-        pre-order kini ikut tampil. Urut nama.
-
-        `event_cost` TIDAK dikurangkan di laporan ini sama sekali (sudah
-        diperhitungkan terpisah pada `GET /reports/profit`, F9.3) — sengaja
-        tidak ada field itu pada respons ini. Hanya peran owner dan admin.
+        Untuk setiap outlet dengan minimal satu `order_items` 'completed' pada periode: `total_sales` (SUM
+        `line_total`), `modal` (SUM `cost_price * qty`, snapshot yang sama dipakai `GET /reports/profit`) dan
+        `gross_profit = total_sales - modal`. Dikelompokkan per outlet PELAPORAN (045 Stage 7); baris yang memuat
+        penjualan lama membawa `historical: true`. 046 — periode tanggal bisnis (bawaan hari ini), tanpa event dan
+        pre-order. Urut nama. Hanya peran owner dan admin.
       parameters:
-        - { name: event_id, in: query, required: true, schema: { type: integer } }
+        - { name: date_from, in: query, description: "Tanggal bisnis (Y-m-d). Kosong DAN date_to kosong = hari bisnis berjalan.", schema: { type: string, format: date } }
+        - { name: date_to, in: query, description: "Tanggal bisnis (Y-m-d), >= date_from.", schema: { type: string, format: date } }
       responses:
         '200':
           description: Berhasil
@@ -3993,23 +3009,19 @@ paths:
               schema:
                 type: object
                 properties:
-                  event: { $ref: '#/components/schemas/Event' }
+                  date_from: { type: string, format: date }
+                  date_to: { type: string, format: date }
                   data:
                     type: array
                     items:
                       type: object
                       properties:
-                        artist_id: { type: integer }
-                        artist_name: { type: string }
+                        outlet_id: { type: integer }
+                        outlet_name: { type: string }
+                        historical: { type: boolean }
                         total_sales: { $ref: '#/components/schemas/Money' }
                         modal: { $ref: '#/components/schemas/Money' }
                         gross_profit: { $ref: '#/components/schemas/Money' }
-                        sales_pos: { $ref: '#/components/schemas/Money' }
-                        sales_preorder: { $ref: '#/components/schemas/Money' }
-                        modal_pos: { $ref: '#/components/schemas/Money' }
-                        modal_preorder: { $ref: '#/components/schemas/Money' }
-                        gross_profit_pos: { $ref: '#/components/schemas/Money' }
-                        gross_profit_preorder: { $ref: '#/components/schemas/Money' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /reports/purchases:
@@ -4098,59 +3110,20 @@ paths:
         '404':
           description: artist_id tidak ditemukan pada mode DEMO/LIVE yang aktif
 
-  /reports/preorders:
+  /reports/outlet-settlements:
     get:
       tags: [Report]
-      summary: Laporan khusus pre-order (010-split-payment-preorder-reports, US6)
+      summary: Rekap penjualan per outlet (per periode)
       description: |
-        Laporan baru, terpisah dari `GET /reports/sales`/`profit` — fokus
-        pada STATE pre-order (status × kelengkapan pembayaran), bukan hanya
-        pendapatan yang sudah diakui. Satu baris per kombinasi
-        `status` (`ordered`/`dp_paid`/`arrived`/`settled`/`handed_over`/
-        `cancelled`) × `payment_completeness` (`unpaid`/`partial`/`paid`).
+        046-hide-events-preorders — dihitung LANGSUNG dari penjualan selesai pada periode (tanggal bisnis, bawaan hari
+        bisnis berjalan); tidak ada lagi snapshot per event dan tidak ada lagi "tutup event". Tiap baris HANYA
+        `outlet_id`, `outlet_name`, `historical`, `total_sales`, `total_units`.
 
-        `total_collected` dihitung live dari `SUM(payments.amount)`
-        (verifikasi bukan `rejected`), bukan cache `preorders.paid_amount`
-        (research.md R1/R6) — sama seperti aturan pengakuan pendapatan yang
-        dipakai `GET /reports/sales`/`profit` untuk pre-order. Pre-order
-        `cancelled` tetap tampil di breakdown status (berbeda dari
-        `sales()`/`profit()` yang menganggapnya menyumbang nol pendapatan).
-
-        Hanya peran owner/admin (`canAccessMenu('reports')`, sama seperti
-        laporan lain di file ini).
-
-        012-seller-preorder-report-detail-export — tiga mode tambahan lewat
-        endpoint yang SAMA (bukan route baru, research.md R3/R4):
-        1. `?breakdown=artist` — baris ringkasan di atas dipecah per
-           `artist_id`/`artist_name` (join `preorder_items`), dengan
-           proporsi yang SAMA seperti diakui-dari-`payments` di atas.
-           Cancelled tidak muncul sebagai bucket tersendiri di mode ini
-           (beda dari mode default), konsekuensi dari memakai ulang helper
-           `preorderRecognizedRevenueBase()` yang sudah memfilter
-           `status != 'cancelled'` — didokumentasikan di kode, bukan bug.
-        2. `?status=&payment_completeness=` (opsional `artist_id`) —
-           drill-down: daftar preorder INDIVIDUAL yang menyusun satu baris
-           ringkasan/breakdown, bukan agregat.
-
-        039-preorder-seller-subtotal — dengan `?breakdown=artist`, baris
-        diurutkan per seller (nama lalu `artist_id`, sehingga seluruh baris
-        satu seller BERURUTAN) dan respons membawa `subtotals[]`: satu entri
-        per seller, dijumlahkan di server dari baris yang sama dalam sen
-        (`App\Support\PreorderSellerSubtotals`). `total_outstanding` adalah
-        jumlah `total_outstanding` baris (bukan nilai − terkumpul), sehingga
-        subtotal selalu sama dengan penjumlahan tangan baris yang tampil.
-        Bentuk default dan drill-down tidak berubah.
+        Daftar memuat seluruh outlet aktif yang berlaku untuk pemanggil, termasuk yang belum punya penjualan (nol).
+        Outlet nonaktif hanya ikut bila punya penjualan pada periode. Hanya peran owner dan admin.
       parameters:
-        - { name: event_id, in: query, schema: { type: integer }, description: 'Filter ke satu event (FR-014).' }
-        - { name: breakdown, in: query, schema: { type: string, enum: [artist] }, description: '012 US2 — pecah baris ringkasan per seller.' }
-        - { name: status, in: query, schema: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }, description: '012 US3 — hadir bersama payment_completeness memicu mode drill-down.' }
-        - { name: payment_completeness, in: query, schema: { type: string, enum: [unpaid, partial, paid] }, description: '012 US3 — dipakai bersama status untuk drill-down.' }
-        - { name: artist_id, in: query, schema: { type: integer }, description: '012 US3 — opsional, mempersempit drill-down ke satu seller.' }
-      responses:
-        '200':
-          description: Berhasil — bentuk respons tergantung parameter (lihat description)
-      parameters:
-        - { name: event_id, in: query, schema: { type: integer }, description: 'Filter ke satu event (FR-014).' }
+        - { name: date_from, in: query, description: "Tanggal bisnis (Y-m-d). Kosong DAN date_to kosong = hari bisnis berjalan.", schema: { type: string, format: date } }
+        - { name: date_to, in: query, description: "Tanggal bisnis (Y-m-d), >= date_from.", schema: { type: string, format: date } }
       responses:
         '200':
           description: Berhasil
@@ -4159,128 +3132,29 @@ paths:
               schema:
                 type: object
                 properties:
-                  rows:
-                    type: array
-                    description: |
-                      Tanpa parameter tambahan: baris ringkasan status ×
-                      payment_completeness. Dengan `breakdown=artist`: baris
-                      per seller (menambah `artist_id`/`artist_name`).
-                      Dengan `status`+`payment_completeness`: daftar
-                      preorder individual (bentuk berbeda, lihat di bawah).
-                    items:
-                      oneOf:
-                        - type: object
-                          properties:
-                            status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
-                            payment_completeness: { type: string, enum: [unpaid, partial, paid] }
-                            artist_id: { type: integer, description: 'Hanya ada saat breakdown=artist.' }
-                            artist_name: { type: string, description: 'Hanya ada saat breakdown=artist.' }
-                            preorder_count: { type: integer }
-                            total_order_value: { type: string, example: '1500000.00' }
-                            total_collected: { type: string, example: '500000.00' }
-                            total_outstanding: { type: string, example: '1000000.00' }
-                        - type: object
-                          description: Baris drill-down (saat status+payment_completeness diberikan)
-                          properties:
-                            preorder_id: { type: integer }
-                            preorder_number: { type: string }
-                            customer_name: { type: string, nullable: true }
-                            order_value: { type: string, example: '75000.00' }
-                            collected: { type: string, example: '75000.00' }
-                            outstanding: { type: string, example: '0.00' }
-                  subtotals:
-                    type: array
-                    description: |
-                      039 — hanya ada saat `breakdown=artist`. Satu entri per
-                      seller (urutan sama dengan kemunculan pertama di `rows`);
-                      penjumlahan semua entri sama dengan penjumlahan semua baris.
-                    items:
-                      type: object
-                      properties:
-                        artist_id: { type: integer }
-                        artist_name: { type: string }
-                        preorder_count: { type: integer }
-                        total_order_value: { type: string, example: '1500000.00' }
-                        total_collected: { type: string, example: '500000.00' }
-                        total_outstanding: { type: string, example: '1000000.00' }
-                    items:
-                      type: object
-                      properties:
-                        status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
-                        payment_completeness: { type: string, enum: [unpaid, partial, paid] }
-                        preorder_count: { type: integer }
-                        total_order_value: { type: string, example: '1500000.00' }
-                        total_collected: { type: string, example: '500000.00' }
-                        total_outstanding: { type: string, example: '1000000.00' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /reports/artist-settlements:
-    get:
-      tags: [Report]
-      summary: Rekap hasil per artist
-      description: |
-        Angka dihitung ulang dari `order_items` setiap kali dibaca, tanpa
-        potongan komisi.
-
-        040-recap-pos-transactions-only — rekap ini HANYA memuat penjualan
-        POS (order `completed`, bukan void): `total_sales`/`total_units`
-        dan snapshot yang disimpan di `artist_settlements` semuanya POS-saja.
-        Pre-order tidak menyumbang apa pun (membalik 010/033; pre-order tetap
-        ada di `GET /reports/preorders*`, `/reports/profit` dan
-        `/reports/artist-profit`).
-
-        Tindak lanjut 040 — tiap baris HANYA `artist_id`, `artist_name`,
-        `total_sales`, `total_units`. Field `id`, `deduction`,
-        `payable_amount`, `paid_amount`, `outstanding`, `status` dan
-        endpoint `POST /reports/artist-settlements/{id}/payment` DIHAPUS
-        (layar rekap hanya Penjual / Unit / Penjualan). `paid_amount` lama
-        di tabel tidak disentuh.
-
-        Daftar memuat **seluruh artist aktif**, termasuk yang belum punya
-        penjualan sama sekali di event ini (`total_sales` `"0.00"`,
-        `total_units` 0). Artist nonaktif hanya ikut bila punya baris
-        settlement di event ini.
-
-        Field 033 `pos_units`, `preorder_units`, `pos_sales` dan
-        `preorder_sales` DIHAPUS (tidak ada lagi pemisahan).
-      parameters:
-        - { name: event_id, in: query, required: true, schema: { type: integer } }
-      responses:
-        '200':
-          description: Berhasil
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  event: { $ref: '#/components/schemas/Event' }
+                  date_from: { type: string, format: date }
+                  date_to: { type: string, format: date }
                   data:
                     type: array
-                    items: { $ref: '#/components/schemas/ArtistSettlement' }
+                    items: { $ref: '#/components/schemas/OutletSettlement' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
-  /reports/artist-settlements/{artist}/transactions:
+  /reports/outlet-settlements/{outlet}/transactions:
     parameters:
-      - name: artist
+      - name: outlet
         in: path
         required: true
         schema: { type: integer }
     get:
       tags: [Report]
-      summary: Drill-down transaksi yang menyusun rekap satu artist (F11.6)
+      summary: Drill-down transaksi yang menyusun rekap satu outlet (F11.6)
       description: |
-        Daftar order 'completed' pada event ini yang memuat minimal satu
-        item milik artist ini, dikelompokkan per order. Karena satu order
-        booth ini bisa berisi item dari BEBERAPA artist sekaligus, `items[]`
-        pada setiap baris HANYA memuat item milik artist yang diminta —
-        bukan seluruh isi order tersebut. Hanya peran owner dan admin.
-
-        040 — HANYA transaksi POS, sehingga jumlah `amount_for_artist`
-        sama dengan `total_sales` seller itu di `GET /reports/artist-settlements`.
-        Entri pre-order (012) dan field `source` dihapus. Field pengidentifikasi
-        tetap `key` ("order-<id>") / `amount_for_artist`. Query memfilter
-        `data_mode` (celah lama ditutup di 012).
+        Daftar order 'completed' pada periode yang memuat minimal satu item outlet PELAPORAN ini, dikelompokkan per
+        order. `items[]` pada setiap baris HANYA memuat item milik outlet yang diminta, jadi jumlah `amount_for_outlet`
+        sama dengan `total_sales` outlet itu pada rekap. Hanya peran owner dan admin.
       parameters:
-        - { name: event_id, in: query, required: true, schema: { type: integer } }
+        - { name: date_from, in: query, description: "Tanggal bisnis (Y-m-d). Kosong DAN date_to kosong = hari bisnis berjalan.", schema: { type: string, format: date } }
+        - { name: date_to, in: query, description: "Tanggal bisnis (Y-m-d), >= date_from.", schema: { type: string, format: date } }
       responses:
         '200':
           description: Berhasil
@@ -4289,8 +3163,9 @@ paths:
               schema:
                 type: object
                 properties:
-                  event: { $ref: '#/components/schemas/Event' }
-                  artist:
+                  date_from: { type: string, format: date }
+                  date_to: { type: string, format: date }
+                  outlet:
                     type: object
                     properties:
                       id: { type: integer }
@@ -4312,7 +3187,7 @@ paths:
                               name: { type: string }
                               qty: { type: integer }
                               line_total: { $ref: '#/components/schemas/Money' }
-                        amount_for_artist:
+                        amount_for_outlet:
                           $ref: '#/components/schemas/Money'
         '403': { $ref: '#/components/responses/Forbidden' }
 
@@ -4321,50 +3196,32 @@ paths:
       - name: report
         in: path
         required: true
-        schema: { type: string, enum: [sales, profit, artist-settlements, artist-profit, purchases, stock-by-artist, preorder] }
+        schema: { type: string, enum: [sales, profit, outlet-settlements, outlet-profit, purchases, stock-by-outlet] }
     get:
       tags: [Report]
       summary: Ekspor laporan ke Excel
       description: |
-        Parameter filter sama dengan endpoint laporan terkait. Ekspor tidak
-        menyertakan kolom kontak pelanggan.
+        Parameter filter sama dengan endpoint laporan terkait (periode `date_from`/`date_to` untuk `profit`,
+        `outlet-settlements`, `outlet-profit`). Ekspor tidak menyertakan kolom kontak pelanggan.
 
-        `report=artist-settlements` (F11.6) sengaja berbeda dari tiga
-        laporan lain: berkasnya berisi DUA sheet, "Rekap" (bentuk lama,
-        tidak berubah) dan "Detail Transaksi" (baru — satu baris flat per
-        item per order, lintas semua artist di event ini: artist_name,
-        order_number, date, item_name, qty, line_total).
+        `report=outlet-settlements` (F11.6) berisi DUA sheet: "Rekap" (kolom `outlet_id, outlet_name, historical,
+        total_sales, total_units`, sama dengan layar) dan "Detail Transaksi" (satu baris flat per item per order pada
+        periode: outlet_name, order_number, date, item_name, qty, line_total).
 
-        040 — sheet "Rekap" berisi kolom `artist_id, artist_name,
-        total_sales, total_units` (kolom pos/pre-order dari 033 dan, pada
-        tindak lanjut, id/deduction/payable/paid/outstanding/status dihapus;
-        nilainya sama dengan `GET /reports/artist-settlements`, POS-saja).
-        Sheet "Detail Transaksi" memang hanya memuat item POS dan kini
-        jumlahnya sama dengan sheet "Rekap". Ekspor `profit` dan
-        `artist-profit` otomatis membawa field `*_pos`/`*_preorder` baru
-        sebagai kolom tambahan setelah kolom lama.
+        `report=purchases` — satu sheet, baris sama seperti `GET /reports/purchases`. `report=stock-by-outlet` — satu
+        sheet, SELALU bentuk ringkasan (per outlet).
 
-        012-seller-preorder-report-detail-export (US4) — tiga tipe laporan
-        yang sebelumnya sama sekali tidak bisa diekspor:
-        - `report=purchases` — satu sheet, baris sama seperti
-          `GET /reports/purchases`.
-        - `report=stock-by-artist` — satu sheet, SELALU bentuk ringkasan
-          (per-seller), bahkan bila request punya `artist_id` — ekspor ini
-          tidak pernah memakai bentuk detail per-varian.
-        - `report=preorder` — DUA sheet seperti `artist-settlements`:
-          "Ringkasan" (bentuk `GET /reports/preorders` default) dan
-          "Per Seller" (bentuk `?breakdown=artist`). Sheet "Per Seller"
-          (039) memuat satu baris "Subtotal — <nama seller>" setelah baris
-          terakhir tiap seller (nilai dari `subtotals[]` yang sama dengan
-          layar; kolom status/kelengkapan kosong, `artist_id` kosong).
+        046 — nilai `preorder` DIHAPUS (404) bersama modul Pre-order.
       parameters:
-        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: date_from, in: query, description: "Tanggal bisnis (Y-m-d). Kosong DAN date_to kosong = hari bisnis berjalan.", schema: { type: string, format: date } }
+        - { name: date_to, in: query, description: "Tanggal bisnis (Y-m-d), >= date_from.", schema: { type: string, format: date } }
       responses:
         '200':
           description: Berkas xlsx
           content:
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
               schema: { type: string, format: binary }
+        '404': { description: Jenis laporan tidak dikenal }
 
   # ------------------------------------------------------------------
   # VENDOR, BAHAN BAKU, DAN BOM (ditambahkan pasca-MVP, 2026-09-01)
@@ -7581,7 +6438,6 @@ components:
         category_name: { type: string, nullable: true, description: "Nama kategori produk induk (untuk membedakan produk bernama sama)" }
         sell_price: { $ref: '#/components/schemas/Money' }
         current_stock: { type: integer }
-        is_preorder: { type: boolean }
         image_url: { type: string, nullable: true, description: "Foto varian sendiri; bila tidak ada, foto produk induk; bila tidak ada, null. Layar kasir memakainya di kartu hasil pencarian dan baris keranjang." }
 
     Product:
@@ -7597,8 +6453,6 @@ components:
         description: { type: string, nullable: true }
         image_path: { type: string, nullable: true, description: "Diisi via POST /products/{id}/image atau impor massal (Task 6)." }
         image_url: { type: string, nullable: true, readOnly: true, description: "URL siap-pakai (disk publik), ditambahkan Task 5." }
-        is_preorder: { type: boolean }
-        preorder_eta: { type: string, format: date, nullable: true }
         is_active: { type: boolean }
         variants:
           type: array
@@ -7612,8 +6466,6 @@ components:
         category_id: { type: integer }
         name: { type: string, maxLength: 150 }
         description: { type: string, nullable: true }
-        is_preorder: { type: boolean, default: false }
-        preorder_eta: { type: string, format: date, nullable: true }
         is_active: { type: boolean, default: true }
         variants:
           type: array
@@ -7640,50 +6492,15 @@ components:
           nullable: true
           readOnly: true
           properties:
-            type: { type: string, enum: [order, preorder] }
-            id: { type: integer, description: id order / pre-order }
+            type: { type: string, enum: [order, stock_transfer] }
+            id: { type: integer, description: id order / transfer }
             number: { type: string, example: "TRX-20261004-0007" }
         created_at: { type: string, format: date-time }
-
-    Event:
-      type: object
-      properties:
-        id: { type: integer }
-        name: { type: string }
-        location: { type: string, nullable: true }
-        start_date: { type: string, format: date }
-        end_date: { type: string, format: date }
-        available_on:
-          type: string
-          nullable: true
-          enum: [day_1, day_2]
-          description: 023-event-availability-invoice-redesign (US1) — resolved to a real date via Event::availableOnDate(); only meaningful for multi-day events, cleared automatically if the event collapses to one day.
-        status: { type: string, enum: [draft, active, closed, cancelled] }
-        event_cost: { $ref: '#/components/schemas/Money' }
-        notes: { type: string, nullable: true }
-
-    EventInput:
-      type: object
-      required: [name, start_date, end_date]
-      properties:
-        name: { type: string, maxLength: 150 }
-        location: { type: string, nullable: true }
-        start_date: { type: string, format: date }
-        end_date: { type: string, format: date }
-        available_on:
-          type: string
-          nullable: true
-          enum: [day_1, day_2]
-          description: Rejected (422) when start_date equals end_date (023-event-availability-invoice-redesign US1, FR-002).
-        event_cost: { $ref: '#/components/schemas/Money' }
-        notes: { type: string, nullable: true }
 
     CashierSession:
       type: object
       properties:
         id: { type: integer }
-        event_id: { type: integer }
-        event_name: { type: string, readOnly: true }
         user_id: { type: integer }
         user_name: { type: string, readOnly: true }
         opened_at: { type: string, format: date-time }
@@ -7951,7 +6768,6 @@ components:
       properties:
         id: { type: integer }
         order_number: { type: string, example: TRX-20261025-0001 }
-        event_name: { type: string }
         total_amount: { $ref: '#/components/schemas/Money' }
         item_count: { type: integer }
         status: { type: string, enum: [completed, voided] }
@@ -7962,7 +6778,6 @@ components:
       properties:
         id: { type: integer }
         order_number: { type: string }
-        event_id: { type: integer }
         session_id: { type: integer }
         customer_id: { type: integer, nullable: true }
         subtotal: { $ref: '#/components/schemas/Money' }
@@ -7985,10 +6800,6 @@ components:
             phone: { type: string, nullable: true }
             email: { type: string, nullable: true }
         cashier:
-          type: object
-          description: "Hanya di GET /orders/{id}."
-          properties: { id: { type: integer }, name: { type: string } }
-        event:
           type: object
           description: "Hanya di GET /orders/{id}."
           properties: { id: { type: integer }, name: { type: string } }
@@ -8031,15 +6842,6 @@ components:
         store_contact_phone: { type: string, nullable: true }
         store_contact_email: { type: string, nullable: true }
         order_number: { type: string }
-        event_name: { type: string }
-        event_location: { type: string, nullable: true, description: "014-sales-receipt-event-footer." }
-        event_start_date: { type: string, format: date, nullable: true }
-        event_end_date: { type: string, format: date, nullable: true }
-        event_available_on_date:
-          type: string
-          format: date
-          nullable: true
-          description: 023-event-availability-invoice-redesign (US2) — resolved via Event::availableOnDate(); Order always has an event, so only null when the event itself has no available_on set.
         cashier_name: { type: string }
         created_at: { type: string, format: date-time }
         items:
@@ -8063,165 +6865,6 @@ components:
               amount: { $ref: '#/components/schemas/Money' }
         change_amount: { $ref: '#/components/schemas/Money' }
 
-    PreorderItemInput:
-      type: object
-      required: [variant_id, qty]
-      properties:
-        variant_id: { type: integer }
-        qty: { type: integer, minimum: 1 }
-
-    PreorderInput:
-      type: object
-      required: [customer_id, fulfillment, items]
-      properties:
-        event_id: { type: integer, nullable: true }
-        customer_id: { type: integer }
-        fulfillment: { type: string, enum: [pickup, courier], description: "021-preorder-form-updates — label ditampilkan sebagai 'Mail Order' untuk nilai 'courier' (perubahan label saja, lihat research.md Decision 4)." }
-        shipping_cost: { $ref: '#/components/schemas/Money' }
-        discount: { $ref: '#/components/schemas/Money', description: "021-preorder-form-updates (US2) — nominal Rupiah tetap, opsional, default 0. 422 bila melebihi subtotal+shipping_cost." }
-        pickup_day: { type: string, format: date, nullable: true, description: "021-preorder-form-updates (US3) — hanya berlaku saat fulfillment=pickup DAN event_id terisi; harus berada dalam rentang tanggal event tersebut (422 bila tidak)." }
-        courier_name: { type: string, nullable: true, description: "021-preorder-form-updates (US3) — hanya berlaku saat fulfillment=courier; default 'JNE' bila kosong; harus salah satu dari daftar App\\Support\\Couriers." }
-        expected_date: { type: string, format: date, nullable: true }
-        notes: { type: string, nullable: true }
-        items:
-          type: array
-          minItems: 1
-          items: { $ref: '#/components/schemas/PreorderItemInput' }
-
-    PreorderSummary:
-      type: object
-      properties:
-        id: { type: integer }
-        preorder_number: { type: string, example: PO-20261025-0001 }
-        customer_name: { type: string }
-        status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
-        fulfillment: { type: string, enum: [pickup, courier] }
-        total_amount: { $ref: '#/components/schemas/Money' }
-        paid_amount: { $ref: '#/components/schemas/Money' }
-        customer_address: { type: string, nullable: true, description: "Alamat pelanggan (Customer.address) — dipakai popup bendera Mail Order 'ongkir/alamat belum diisi'; sudah tersedia tanpa query tambahan karena pelanggan dimuat untuk tiap baris." }
-        has_payments: { type: boolean, description: "027-preorder-duplicate-split — true bila ADA baris pembayaran apa pun (bahkan bernilai kecil). Dipakai UI untuk menonaktifkan aksi Split; satu subquery EXISTS untuk seluruh halaman." }
-        outstanding: { $ref: '#/components/schemas/Money' }
-        created_at: { type: string, format: date-time }
-        sellers:
-          type: array
-          description: "013-preorder-list-filters-receipt (US1) — set penjual berbeda-beda di seluruh item pre-order ini, urutan kemunculan pertama."
-          items:
-            type: object
-            properties:
-              id: { type: integer }
-              name: { type: string }
-
-    Preorder:
-      type: object
-      properties:
-        id: { type: integer }
-        preorder_number: { type: string }
-        event_id: { type: integer, nullable: true }
-        customer: { $ref: '#/components/schemas/Customer' }
-        status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
-        fulfillment: { type: string, enum: [pickup, courier] }
-        created_at: { type: string, format: date-time, description: "024-invoice-layout-shipping-slip — ditambahkan ke present() (sebelumnya hanya ada di PreorderSummary/index())." }
-        notes: { type: string, nullable: true, description: "Catatan pesanan. Sebelumnya hanya ada di PreorderSummary (list); kini juga di payload detail agar panel detail bisa menampilkannya." }
-        source:
-          type: object
-          nullable: true
-          description: "027-preorder-duplicate-split — asal pre-order ini; null untuk pre-order biasa. `preorder_id` null bila sumbernya sudah dihapus (nomor tetap ada sebagai snapshot)."
-          properties:
-            type: { type: string, enum: [duplicate, split] }
-            preorder_id: { type: integer, nullable: true }
-            preorder_number: { type: string }
-        split_children:
-          type: array
-          description: "027 — pre-order yang dipisahkan DARI pre-order ini. Hanya terisi di GET /preorders/{id} dan respons split; kosong di tempat lain."
-          items:
-            type: object
-            properties:
-              id: { type: integer }
-              preorder_number: { type: string }
-        store_identity:
-          type: object
-          nullable: true
-          description: "024-invoice-layout-shipping-slip — BUG YANG DITEMUKAN & DIPERBAIKI: sebelumnya hanya ada di invoicePayload(), sehingga blok 'Dari' di surat jalan panel detail (yang memuat lewat show()/present()) selalu kosong."
-          properties:
-            name: { type: string }
-            logo_url: { type: string, nullable: true }
-            contact_person: { type: string, nullable: true }
-            contact_phone: { type: string, nullable: true }
-            contact_email: { type: string, nullable: true }
-            address: { type: string, nullable: true }
-        subtotal: { $ref: '#/components/schemas/Money' }
-        shipping_cost: { $ref: '#/components/schemas/Money' }
-        discount: { $ref: '#/components/schemas/Money', description: "021-preorder-form-updates (US2) — 0.00 untuk pre-order dari sebelum fitur ini." }
-        total_amount: { $ref: '#/components/schemas/Money' }
-        paid_amount: { $ref: '#/components/schemas/Money' }
-        outstanding: { $ref: '#/components/schemas/Money' }
-        expected_date: { type: string, format: date, nullable: true }
-        pickup_day: { type: string, format: date, nullable: true, description: "021-preorder-form-updates (US3) — tanggal ASLI (bukan label 'Day 1'), diturunkan dari rentang tanggal event saat dibuat." }
-        courier_name: { type: string, nullable: true, description: "021-preorder-form-updates (US3) — nilai DEFAULT/preferensi yang dipilih saat preorder dibuat; BUKAN Shipment.courier_name (kolom terpisah, diisi ulang saat shipment sungguhan dibuat)." }
-        cancel_reason: { type: string, nullable: true }
-        sellers:
-          type: array
-          description: "013-preorder-list-filters-receipt (US1) — set penjual berbeda-beda di seluruh item pre-order ini, urutan kemunculan pertama."
-          items:
-            type: object
-            properties:
-              id: { type: integer }
-              name: { type: string }
-        items:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: integer }
-              variant_id: { type: integer }
-              artist_id: { type: integer, nullable: true, description: "013-preorder-list-filters-receipt (US1)." }
-              artist_name: { type: string, nullable: true }
-              sku_snapshot: { type: string }
-              name_snapshot: { type: string }
-              qty: { type: integer }
-              sell_price: { $ref: '#/components/schemas/Money' }
-              line_total: { $ref: '#/components/schemas/Money' }
-        payments:
-          type: array
-          description: Entri pembayaran dalam urutan dicatat. Tiap entri membawa `reference`, `recorded_by_name`, dan `status` (`paid`/`rejected`).
-          items: { $ref: '#/components/schemas/Payment' }
-        payment_summary: { $ref: '#/components/schemas/PaymentSummary' }
-        shipment:
-          allOf:
-            - $ref: '#/components/schemas/Shipment'
-          nullable: true
-
-    ShipmentInput:
-      type: object
-      required: [courier_name, recipient_name, recipient_phone, address_line]
-      properties:
-        courier_name: { type: string, maxLength: 50 }
-        tracking_number: { type: string, nullable: true }
-        shipping_cost: { $ref: '#/components/schemas/Money' }
-        recipient_name: { type: string, maxLength: 100 }
-        recipient_phone: { type: string, maxLength: 30 }
-        # 022-preorder-invoice-crud-overhaul (US2, FR-006) — city/postal_code
-        # dihapus; alamat cukup satu field, sama seperti Customer.address.
-        address_line: { type: string, maxLength: 255 }
-        province: { type: string, nullable: true }
-        notes: { type: string, nullable: true }
-
-    Shipment:
-      type: object
-      properties:
-        id: { type: integer }
-        preorder_id: { type: integer }
-        courier_name: { type: string }
-        tracking_number: { type: string, nullable: true }
-        shipping_cost: { $ref: '#/components/schemas/Money' }
-        recipient_name: { type: string }
-        recipient_phone: { type: string }
-        address_line: { type: string }
-        province: { type: string, nullable: true }
-        status: { type: string, enum: [pending, packed, shipped, delivered] }
-        shipped_at: { type: string, format: date-time, nullable: true }
-        delivered_at: { type: string, format: date-time, nullable: true }
-
     SalesReport:
       type: object
       description: |
@@ -8242,7 +6885,6 @@ components:
         `SUM(order_items.qty)`. `customer_id`/`customer_name` bernilai
         `null` untuk order walk-in (tanpa pelanggan tercatat).
       properties:
-        event: { $ref: '#/components/schemas/Event' }
         sessions:
           type: array
           description: "Shift kasir dari order yang tercantum di `transactions[]`, terbaru dulu (untuk filter shift & ringkasan kas)."
@@ -8258,7 +6900,7 @@ components:
               closing_cash: { $ref: '#/components/schemas/Money', nullable: true }
               expected_cash: { $ref: '#/components/schemas/Money', nullable: true }
               cash_received: { $ref: '#/components/schemas/Money', description: "028-partial-split-payment — tunai yang DITERIMA di shift ini (pembayaran tunai terverifikasi dengan `session_id` = shift, tanpa order batal) dikurangi kembalian order shift ini; mencakup pelunasan susulan atas penjualan shift lain dan tidak bergantung pada filter. Shift yang hanya menerima pelunasan susulan juga tercantum." }
-        group_by: { type: string, enum: [product, category, artist, day, event, customer] }
+        group_by: { type: string, enum: [product, category, outlet, day, customer] }
         group_label:
           type: string
           description: |
@@ -8273,7 +6915,7 @@ components:
             unit_count: { type: integer }
             gross_sales: { $ref: '#/components/schemas/Money' }
             discount_total: { $ref: '#/components/schemas/Money' }
-            net_sales: { $ref: '#/components/schemas/Money', description: "Order POS + pendapatan pre-order yang diakui (dipakai Dashboard & Laporan)." }
+            net_sales: { $ref: '#/components/schemas/Money', description: "Penjualan bersih order selesai (dipakai Dashboard & Laporan)." }
             pos_unit_count: { type: number, description: "Unit terjual dari order POS SAJA. Halaman Sales memakai `pos_*` karena hanya menampilkan transaksi POS." }
             pos_gross_sales: { $ref: '#/components/schemas/Money', description: Penjualan kotor order POS saja. }
             pos_net_sales: { $ref: '#/components/schemas/Money', description: Penjualan bersih order POS saja. }
@@ -8282,7 +6924,7 @@ components:
           description: |
             Bentuk baris berbeda untuk `group_by=customer` — lihat
             `SalesReportCustomerRow` alih-alih skema inline di bawah,
-            yang berlaku untuk product/category/artist/day/event.
+            yang berlaku untuk product/category/outlet/day.
           items:
             type: object
             properties:
@@ -8378,25 +7020,20 @@ components:
 
     ProfitReport:
       type: object
+      description: 046 — tiga angka untuk periode; tanpa event, biaya event, laba bersih, atau bagian pre-order.
       properties:
-        event: { $ref: '#/components/schemas/Event' }
+        date_from: { type: string, format: date }
+        date_to: { type: string, format: date }
         revenue: { $ref: '#/components/schemas/Money' }
         cost_of_goods: { $ref: '#/components/schemas/Money' }
         gross_profit: { $ref: '#/components/schemas/Money' }
-        event_cost: { $ref: '#/components/schemas/Money' }
-        net_profit: { $ref: '#/components/schemas/Money' }
-        revenue_pos: { $ref: '#/components/schemas/Money' }
-        revenue_preorder: { $ref: '#/components/schemas/Money' }
-        cost_of_goods_pos: { $ref: '#/components/schemas/Money' }
-        cost_of_goods_preorder: { $ref: '#/components/schemas/Money' }
-        gross_profit_pos: { $ref: '#/components/schemas/Money' }
-        gross_profit_preorder: { $ref: '#/components/schemas/Money' }
 
-    ArtistSettlement:
+    OutletSettlement:
       type: object
       properties:
-        artist_id: { type: integer }
-        artist_name: { type: string }
+        outlet_id: { type: integer }
+        outlet_name: { type: string }
+        historical: { type: boolean }
         total_sales: { $ref: '#/components/schemas/Money' }
         total_units: { type: integer }
 

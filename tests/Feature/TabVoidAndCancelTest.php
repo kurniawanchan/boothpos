@@ -294,7 +294,7 @@ class TabVoidAndCancelTest extends TestCase
         $this->voidTab()->assertOk();
 
         $this->getJson("/api/v1/tabs/{$this->tab}")->assertNotFound();
-        $sales = $this->getJson("/api/v1/reports/sales?event_id={$this->session->event_id}")->assertOk()->json();
+        $sales = $this->getJson("/api/v1/reports/sales")->assertOk()->json();
         $this->assertEquals(0, $sales['totals']['gross_sales']);
         $this->assertSame([], collect($this->getJson('/api/v1/tabs')->json('data'))->pluck('id')->all());
     }

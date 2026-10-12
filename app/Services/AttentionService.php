@@ -93,8 +93,7 @@ class AttentionService
     }
 
     /**
-     * Order POS/tab yang punya pembayaran non-tunai menunggu verifikasi (pembayaran pre-order punya
-     * layarnya sendiri). Yang dihitung ORDER, bukan baris pembayaran, supaya jumlahnya sama dengan baris
+     * Order POS/tab yang punya pembayaran non-tunai menunggu verifikasi. Yang dihitung ORDER, bukan baris pembayaran, supaya jumlahnya sama dengan baris
      * pada halaman tujuan (filter "perlu verifikasi" di Sales: status terburuk = pending, jadi order yang
      * punya pembayaran ditolak tidak ikut). Nilai = jumlah pembayaran yang menunggu itu.
      */

@@ -9,7 +9,7 @@ import { toLocalDateKey } from '../utils/date';
  * "tanpa perlu memuat ulang seluruh laporan"). Antar-filter di-AND-kan; beberapa nilai
  * dalam SATU filter (kasir, outlet, pembayaran, shift) di-OR-kan.
  *
- * Halaman Sales hanya menampilkan transaksi dari POS (pre-order tidak ikut). Baris lama tanpa
+ * Halaman Sales hanya menampilkan transaksi dari POS. Baris lama tanpa
  * field baru (mis. dari fixture/payload lama) diperlakukan wajar: bukan batal, tanpa margin.
  */
 const CUSTOMER_TYPES = ['named', 'walkin'];

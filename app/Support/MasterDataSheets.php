@@ -96,7 +96,7 @@ final class MasterDataSheets
             ],
             self::PRODUCTS => [
                 'sku', 'home_outlet_code', 'category_code', 'product_segment', 'product_name',
-                'description', 'is_preorder', 'preorder_eta', 'product_is_active',
+                'description', 'product_is_active',
                 'variant_name', 'cost_price', 'sell_price', 'low_stock_alert',
                 'variant_is_active', 'initial_stock', 'image_filename',
                 // Ditambahkan atas permintaan eksplisit pemilik toko — gambar
@@ -193,8 +193,6 @@ final class MasterDataSheets
                 'product_segment' => 'SAK',
                 'product_name' => 'Keychain Sakura',
                 'description' => 'Kosongkan sku untuk produk/varian BARU; SKU dibuat server.',
-                'is_preorder' => 0,
-                'preorder_eta' => '',
                 'product_is_active' => 1,
                 'variant_name' => 'Standard',
                 'cost_price' => '10000.00',

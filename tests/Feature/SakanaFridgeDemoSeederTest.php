@@ -5,10 +5,8 @@ namespace Tests\Feature;
 use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
-use App\Models\Event;
 use App\Models\Material;
 use App\Models\Order;
-use App\Models\Preorder;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\ProductVariantBomLine;
@@ -39,7 +37,6 @@ class SakanaFridgeDemoSeederTest extends TestCase
         $this->runSeeders();
 
         ModeGate::runAs('demo', function () {
-            $this->assertSame(1, Event::where('status', 'active')->count());
             $this->assertSame(3, Outlet::count());
             $this->assertSame(3, Category::count());
             $this->assertSame(9, Product::count());
@@ -52,9 +49,6 @@ class SakanaFridgeDemoSeederTest extends TestCase
             $this->assertGreaterThanOrEqual(1, ProductVariantBomLine::count());
             $this->assertGreaterThanOrEqual(1, Order::where('status', 'completed')->count());
 
-            $preorderStatuses = Preorder::pluck('status')->unique()->values()->all();
-            $this->assertContains('dp_paid', $preorderStatuses);
-            $this->assertContains('handed_over', $preorderStatuses);
         });
     }
 
@@ -63,9 +57,9 @@ class SakanaFridgeDemoSeederTest extends TestCase
         $this->runSeeders();
 
         $tables = [
-            Event::class, Outlet::class, Category::class, Product::class, ProductVariant::class,
+            Outlet::class, Category::class, Product::class, ProductVariant::class,
             Customer::class, Vendor::class, Material::class, VendorMaterialPrice::class,
-            ProductVariantBomLine::class, Order::class, Preorder::class,
+            ProductVariantBomLine::class, Order::class,
         ];
 
         foreach ($tables as $modelClass) {
@@ -79,7 +73,6 @@ class SakanaFridgeDemoSeederTest extends TestCase
         $this->runSeeders();
 
         $counts = ModeGate::runAs('demo', fn () => [
-            'events' => Event::count(),
             'outlets' => Outlet::count(),
             'categories' => Category::count(),
             'products' => Product::count(),
@@ -88,13 +81,11 @@ class SakanaFridgeDemoSeederTest extends TestCase
             'vendors' => Vendor::count(),
             'materials' => Material::count(),
             'orders' => Order::count(),
-            'preorders' => Preorder::count(),
         ]);
 
         $this->seed(SakanaFridgeDemoSeeder::class);
 
         $countsAfterRerun = ModeGate::runAs('demo', fn () => [
-            'events' => Event::count(),
             'outlets' => Outlet::count(),
             'categories' => Category::count(),
             'products' => Product::count(),
@@ -103,7 +94,6 @@ class SakanaFridgeDemoSeederTest extends TestCase
             'vendors' => Vendor::count(),
             'materials' => Material::count(),
             'orders' => Order::count(),
-            'preorders' => Preorder::count(),
         ]);
 
         $this->assertSame($counts, $countsAfterRerun);

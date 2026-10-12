@@ -3,11 +3,10 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import ReportsView from '../../resources/js/views/ReportsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listEvents } from '../../resources/js/api/events';
 import { listOutlets } from '../../resources/js/api/outlets';
+import { toLocalDateKey } from '../../resources/js/utils/date';
 import { outletSettlements, stockByOutletReport, exportReport } from '../../resources/js/api/reports';
 
-vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({
   outletSettlements: vi.fn(),
@@ -36,12 +35,11 @@ function renderReports(menuKeys = ['dashboard', 'reports']) {
 describe('ReportsView — page kit structure (041)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Event A', status: 'active' }] });
     listOutlets.mockResolvedValue({ data: [] });
     outletSettlements.mockResolvedValue({ data: ROWS });
   });
 
-  it('renders the page header (single h1) with the export action and a tablist with all six report tabs', async () => {
+  it('renders the page header (single h1) with the export action and a tablist with all five report tabs', async () => {
     renderReports();
     await screen.findByText('Outlet A');
 
@@ -50,7 +48,7 @@ describe('ReportsView — page kit structure (041)', () => {
     expect(screen.getByRole('button', { name: /ekspor \.xlsx/i })).toBeInTheDocument();
 
     const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
-    expect(tabs).toHaveLength(6);
+    expect(tabs).toHaveLength(5);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
   });
 
@@ -67,7 +65,7 @@ describe('ReportsView — page kit structure (041)', () => {
     renderReports();
     await screen.findByText('Outlet A');
     await user.click(screen.getByRole('button', { name: /ekspor \.xlsx/i }));
-    expect(exportReport).toHaveBeenCalledWith('outlet-settlements', { event_id: 1 });
+    expect(exportReport).toHaveBeenCalledWith('outlet-settlements', { date_from: toLocalDateKey(new Date()), date_to: toLocalDateKey(new Date()) });
   });
 
   it('shows an error state with a retry button that reloads the tab', async () => {

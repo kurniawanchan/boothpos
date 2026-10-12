@@ -39,7 +39,7 @@ class BulkPriceOutletsTest extends TestCase
 
     private function body(array $over = []): array
     {
-        return array_merge(['category_ids' => [$this->category->id], 'type' => 'percent', 'value' => 10, 'rounding' => 'none', 'effective_from' => now()->toDateString()], $over);
+        return array_merge(['category_ids' => [$this->category->id], 'type' => 'percent', 'value' => 10, 'rounding' => 'none', 'effective_from' => \App\Support\BusinessDay::today()], $over);
     }
 
     public function test_preview_for_chosen_outlets_starts_from_the_outlets_effective_price(): void
