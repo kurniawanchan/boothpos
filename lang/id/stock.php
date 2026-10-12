@@ -16,4 +16,5 @@ return [
     'transfer_item_not_found' => 'Item tidak ditemukan.',
     'transfer_untracked' => 'Item :sku tidak melacak stok, jadi tidak bisa ditransfer.',
     'transfer_whole_qty' => 'Item ditransfer dalam jumlah bulat.',
+    'transfer_client_ref_conflict' => 'Referensi klien ini sudah dipakai untuk transfer lain.',
 ];

@@ -107,6 +107,21 @@ class StockTransferTest extends TestCase
         $this->assertSame(20, $this->bal($this->a), 'the replay moved nothing');
     }
 
+    public function test_a_client_ref_used_by_someone_else_or_for_another_route_is_a_conflict_not_a_replay(): void
+    {
+        $this->dispatch(['client_ref' => 'shared-ref'])->assertCreated();
+
+        // Orang lain memakai ref yang sama: tidak boleh melihat/mengulang transfer itu.
+        $other = $this->actor([$this->a, $this->b], ['stock.transfer.dispatch']);
+        $this->actingAs($other, 'sanctum');
+        $this->dispatch(['client_ref' => 'shared-ref'])->assertStatus(409);
+
+        // Pengirim yang sama tetapi rute berbeda: juga konflik.
+        $this->actingAs($this->owner, 'sanctum');
+        $this->dispatch(['client_ref' => 'shared-ref'], $this->a, $this->c)->assertStatus(409);
+        $this->assertSame(1, StockTransfer::count());
+    }
+
     public function test_not_carried_at_the_destination_is_a_warning_not_a_refusal(): void
     {
         app(OutletMenuService::class)->setCarried($this->variant->product, [$this->a->id]);

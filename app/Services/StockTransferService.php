@@ -41,7 +41,13 @@ class StockTransferService
      */
     public function dispatch(User $by, int $fromId, int $toId, array $lines, ?string $note = null, ?string $clientRef = null): array
     {
+        // Idempoten HANYA untuk pengirim yang sama dengan rute yang sama: `client_ref` milik orang lain (atau rute lain)
+        // tidak boleh membocorkan transfer itu lewat pengulangan — ditolak 409, bukan dikembalikan.
         if ($clientRef !== null && ($existing = StockTransfer::withoutGlobalScopes()->where('client_ref', $clientRef)->first()) !== null) {
+            if ((int) $existing->dispatched_by !== (int) $by->id || (int) $existing->from_outlet_id !== $fromId || (int) $existing->to_outlet_id !== $toId) {
+                throw ValidationException::withMessages(['client_ref' => __('stock.transfer_client_ref_conflict')])->status(409);
+            }
+
             return ['transfer' => $existing->load('lines'), 'replayed' => true];
         }
 

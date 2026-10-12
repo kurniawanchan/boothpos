@@ -16,4 +16,5 @@ return [
     'transfer_item_not_found' => 'Item not found.',
     'transfer_untracked' => 'Item :sku does not track stock, so it cannot be transferred.',
     'transfer_whole_qty' => 'Items are transferred in whole units.',
+    'transfer_client_ref_conflict' => 'This client reference was already used for a different transfer.',
 ];
