@@ -13,7 +13,7 @@ import { i18n } from '../../resources/js/i18n';
 // sidebar/topbar lama (lebar 228 px, kunci `boothpos:sidebar-visible`, tombol "tampilkan sidebar").
 vi.mock('../../resources/js/api/settings', () => ({
   featureFlags: vi.fn().mockResolvedValue({
-    multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, system_mode: 'live', store_name: 'Sakana Fridge',
+    multi_outlet_enabled: false, outlet_count: 0, outlet_limit_reached: false, system_mode: 'live', store_name: 'Sakana Fridge',
   }),
   updateSettings: vi.fn(),
 }));

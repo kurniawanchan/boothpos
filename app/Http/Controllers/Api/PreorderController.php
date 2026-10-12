@@ -50,7 +50,7 @@ class PreorderController extends Controller
         // seluruh halaman, bukan satu query payments per baris (N+1). Dipakai
         // frontend untuk menonaktifkan aksi Split, karena pembayaran apa pun
         // (bahkan yang bernilai kecil) menghalangi pemisahan.
-        $query = Preorder::query()->with(['customer', 'items.artist'])->withExists('payments');
+        $query = Preorder::query()->with(['customer', 'items.homeOutlet'])->withExists('payments');
         $query = $this->applyFilters($query, $request);
         $query = $this->applySort($query, $request);
 
@@ -454,7 +454,7 @@ class PreorderController extends Controller
         // nya sendiri (diagnostik per status, disengaja), tapi angka
         // ringkasan uang keseluruhan harus mengecualikannya — sama seperti
         // precedent yang sudah ada di breakdown per-seller
-        // (preordersByArtist(): "preorder cancelled tidak masuk total
+        // (preordersByOutlet(): "preorder cancelled tidak masuk total
         // uang", 012-seller-preorder-report-detail-export).
         // transaction_count TETAP menghitung semua status (termasuk
         // Cancelled) karena itu jumlah baris yang tampil di tabel, bukan
@@ -473,7 +473,7 @@ class PreorderController extends Controller
     /**
      * 013-preorder-list-filters-receipt (T003) — hasil ekstraksi rantai
      * filter index() apa adanya (perilaku identik), ditambah filter
-     * artist_id baru. Pakai whereHas (WHERE EXISTS), BUKAN join, supaya
+     * home_outlet_id baru. Pakai whereHas (WHERE EXISTS), BUKAN join, supaya
      * satu Preorder dengan beberapa item dari artist yang sama tidak
      * pernah terduplikasi (research.md R2).
      */
@@ -481,7 +481,7 @@ class PreorderController extends Controller
     {
         return $query
             // Array-capable, same convention as ProductController::index()'s
-            // artist_id/category_id (005-ux-enhancements-dashboard US1):
+            // home_outlet_id/category_id (005-ux-enhancements-dashboard US1):
             // $request->array() normalizes both the new `status[]=a&status[]=b`
             // (multi-select filter, "can filter multiple / combine
             // conditions") and the old scalar `status=a` into an array, so
@@ -526,9 +526,9 @@ class PreorderController extends Controller
                     }
                 });
             })
-            ->when(count(array_filter($request->array('artist_id'))) > 0, fn ($q) => $q->whereHas(
+            ->when(count(array_filter($request->array('home_outlet_id'))) > 0, fn ($q) => $q->whereHas(
                 'items',
-                fn ($iq) => $iq->whereIn('artist_id', array_filter($request->array('artist_id')))
+                fn ($iq) => $iq->whereIn('home_outlet_id', array_filter($request->array('home_outlet_id')))
             ));
     }
 
@@ -580,7 +580,7 @@ class PreorderController extends Controller
     /**
      * 013-preorder-list-filters-receipt (T004) — daftar penjual unik
      * (id, name) lintas item preorder, urut kemunculan pertama. Null-safe:
-     * item dengan artist_id yang tidak resolve (referensi menggantung)
+     * item dengan home_outlet_id yang tidak resolve (referensi menggantung)
      * dilewati, tidak crash.
      */
     private function sellersFor(Preorder $preorder): array
@@ -588,13 +588,13 @@ class PreorderController extends Controller
         $sellers = [];
 
         foreach ($preorder->items as $item) {
-            $artist = $item->artist;
+            $outlet = $item->homeOutlet;
 
-            if (! $artist || isset($sellers[$artist->id])) {
+            if (! $outlet || isset($sellers[$outlet->id])) {
                 continue;
             }
 
-            $sellers[$artist->id] = ['id' => $artist->id, 'name' => $artist->name];
+            $sellers[$outlet->id] = ['id' => $outlet->id, 'name' => $outlet->name];
         }
 
         return array_values($sellers);
@@ -831,7 +831,7 @@ class PreorderController extends Controller
                 'name_snapshot' => $i->name_snapshot, 'qty' => $i->qty,
                 'sell_price' => number_format((float) $i->sell_price, 2, '.', ''),
                 'line_total' => number_format((float) $i->line_total, 2, '.', ''),
-                'artist_id' => $i->artist_id, 'artist_name' => $i->artist?->name,
+                'home_outlet_id' => $i->home_outlet_id, 'home_outlet_name' => $i->homeOutlet?->name,
                 // Added at the product owner's explicit request — the
                 // variant this line snapshot came from may since have been
                 // updated with its own image; falls back to null (not the

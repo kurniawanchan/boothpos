@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -43,7 +43,7 @@ class SalesPaymentStatusTest extends TestCase
         $this->session = CashierSession::factory()->create(['event_id' => $this->event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
 
         $product = Product::factory()->create([
-            'artist_id' => Artist::factory()->create()->id, 'category_id' => Category::factory()->create()->id,
+            'home_outlet_id' => Outlet::factory()->create()->id, 'category_id' => Category::factory()->create()->id,
         ]);
         $this->variant = $product->variants()->create(['sku' => 'SPST0001', 'sell_price' => 100000, 'cost_price' => 40000, 'current_stock' => 100]);
         $this->customer = Customer::factory()->create();

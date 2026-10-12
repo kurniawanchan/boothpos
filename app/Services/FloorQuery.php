@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\DiningTable;
 use App\Models\Order;
+use App\Models\Outlet;
+use App\Support\OutletContext;
 use App\Support\PaymentSummary;
 
 /**
@@ -28,7 +30,7 @@ class FloorQuery
     public function build(): array
     {
         $tabs = Order::query()
-            ->select(['id', 'order_number', 'table_id', 'tab_label', 'service_type', 'total_amount', 'session_id', 'created_at'])
+            ->select(['id', 'outlet_id', 'order_number', 'table_id', 'tab_label', 'service_type', 'total_amount', 'session_id', 'created_at'])
             ->selectRaw('GREATEST(0, '.PaymentSummary::orderPaidSql('orders').') as paid_total')
             ->where('status', Order::STATUS_OPEN)
             ->withCount([
@@ -46,6 +48,25 @@ class FloorQuery
             // Urut manual (display_order) dulu, lalu nama secara alami: "2" sebelum "10".
             ->sort(fn ($a, $b) => $a->display_order <=> $b->display_order ?: strnatcasecmp($a->name, $b->name));
 
+        $outletIds = app(OutletContext::class)->effectiveIds();
+
+        // Satu outlet yang berlaku → bentuk lama (areas, takeaway_tabs). Beberapa → dikelompokkan per outlet.
+        if (count($outletIds) > 1) {
+            $payload = ['outlets' => Outlet::query()->whereIn('id', $outletIds)->orderBy('id')->get(['id', 'code', 'name'])
+                ->map(fn (Outlet $o) => ['id' => $o->id, 'code' => $o->code, 'name' => $o->name]
+                    + $this->groups($tabs->where('outlet_id', $o->id), $tables->where('outlet_id', $o->id), $byTable))
+                ->all()];
+        } else {
+            $payload = $this->groups($tabs, $tables, $byTable);
+        }
+        $payload['version'] = md5(json_encode($payload));
+
+        return $payload;
+    }
+
+    /** @return array{areas: list<array>, takeaway_tabs: list<array>} */
+    private function groups($tabs, $tables, $byTable): array
+    {
         $areas = $tables->groupBy('area')
             ->map(fn ($group, $area) => [
                 'area' => (string) $area,
@@ -58,10 +79,7 @@ class FloorQuery
         $takeaway = $tabs->whereNull('table_id')->sortBy('id')->values()
             ->map(fn (Order $o) => $this->tabRow($o) + ['tab_label' => $o->tab_label])->all();
 
-        $payload = ['areas' => $areas, 'takeaway_tabs' => $takeaway];
-        $payload['version'] = md5(json_encode($payload));
-
-        return $payload;
+        return ['areas' => $areas, 'takeaway_tabs' => $takeaway];
     }
 
     private function tableRow(DiningTable $table, ?Order $tab): array

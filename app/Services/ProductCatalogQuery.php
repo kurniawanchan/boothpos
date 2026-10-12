@@ -8,9 +8,11 @@ use App\Models\MenuChange;
 use App\Models\MenuRelease;
 use App\Models\Material;
 use App\Models\ModifierGroup;
+use App\Models\Outlet;
 use App\Models\Product;
 use App\Models\User;
 use App\Support\MenuSettings;
+use App\Support\OutletContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -34,8 +36,12 @@ class ProductCatalogQuery
     private const SORTS = ['name', '-name', 'sku', '-sku', 'price', '-price', 'status', '-status'];
 
     /** @param array<string,mixed> $f filter tervalidasi: tab, q, category_id[], status[], quality, sort, page, per_page */
+    /** @var Collection<int, Outlet> outlet yang tampil sebagai chip per item; kosong bila hanya satu outlet terlihat */
+    private ?Collection $chipOutlets = null;
+
     public function page(array $f, User $user): LengthAwarePaginator
     {
+        $this->chipOutlets = $this->resolveChipOutlets($f);
         $query = $this->base($f);
         $this->applySort($query, (string) ($f['sort'] ?? 'name'));
 
@@ -119,6 +125,8 @@ class ProductCatalogQuery
                 'variants:id,product_id,sku,variant_name,sell_price,cost_price,is_active',
                 'modifierGroups:id,name', 'category.modifierGroups:id,name',
                 'availabilityMarks' => fn ($m) => $m->active()->with('reason:id,code,label_id,label_en'),
+                // 045 Stage 3 — hanya pasangan yang TIDAK dibawa yang perlu dimuat (tanpa baris = dibawa).
+                'outletItemSettings' => fn ($s) => $s->where('is_carried', false),
             ]);
 
         $tab = $f['tab'] ?? 'menu';
@@ -148,6 +156,17 @@ class ProductCatalogQuery
                     });
                 }
             });
+        }
+
+        // 045 Stage 3 — filter outlet: item yang dibawa SALAH SATU outlet terpilih (tanpa baris relasi = dibawa).
+        if (! empty($f['outlet_id'])) {
+            $ids = array_values(array_intersect(app(OutletContext::class)->effectiveIds(), array_map('intval', (array) $f['outlet_id'])));
+            if ($ids === []) {
+                $q->whereRaw('1 = 0');
+            } else {
+                $in = implode(',', $ids);
+                $q->whereRaw("EXISTS (SELECT 1 FROM outlets o WHERE o.id IN ({$in}) AND o.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM outlet_item_settings s WHERE s.product_id = products.id AND s.outlet_id = o.id AND s.is_carried = 0))");
+            }
         }
 
         // "86 hari ini" (angka header) menyaring daftar ke item yang tanda 86-nya berlaku.
@@ -259,15 +278,58 @@ class ProductCatalogQuery
                 'variants_summary' => $names->isEmpty() ? __('products.no_variants') : $names->implode(' / '),
                 'variant_count' => $variants->count(),
                 'modifier_summary' => $groups->take(3)->all(),
-                'availability' => [[
-                    'outlet_id' => null, 'outlet_code' => null,
-                    'state' => $mark ? 'sold_out' : 'available',
-                    'reason' => $mark?->reason?->label(),
-                ]],
+                'availability' => $this->availabilityFor($p, $mark),
                 'food_cost_pct' => $foodCost,
                 'quality' => $flags,
             ];
         })->values();
+    }
+
+    /** @return Collection<int, Outlet> */
+    private function resolveChipOutlets(array $f): Collection
+    {
+        $context = app(OutletContext::class);
+        if (! $context->isMulti()) {
+            return new Collection;
+        }
+
+        $ids = $context->effectiveIds();
+        if (! empty($f['outlet_id'])) {
+            $ids = array_values(array_intersect($ids, array_map('intval', (array) $f['outlet_id'])));
+        }
+
+        return Outlet::query()->whereIn('id', $ids ?: [0])->orderBy('id')->get(['id', 'code', 'name']);
+    }
+
+    /**
+     * Ketersediaan per outlet yang terlihat (045 Stage 3): `not_carried` | `sold_out` | `available`. Tanda 86 GLOBAL
+     * (outlet NULL) berlaku di semua outlet. Satu outlet terlihat → bentuk lama: satu entri tanpa outlet.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function availabilityFor(Product $p, ?\App\Models\ItemAvailabilityMark $firstMark): array
+    {
+        if ($this->chipOutlets === null || $this->chipOutlets->isEmpty()) {
+            return [[
+                'outlet_id' => null, 'outlet_code' => null,
+                'state' => $firstMark ? 'sold_out' : 'available',
+                'reason' => $firstMark?->reason?->label(),
+            ]];
+        }
+
+        $notCarried = $p->outletItemSettings->pluck('outlet_id')->map(fn ($id) => (int) $id)->all();
+
+        return $this->chipOutlets->map(function (Outlet $o) use ($p, $notCarried) {
+            if (in_array($o->id, $notCarried, true)) {
+                return ['outlet_id' => $o->id, 'outlet_code' => $o->code, 'outlet_name' => $o->name, 'state' => 'not_carried', 'reason' => null];
+            }
+            $mark = $p->availabilityMarks->first(fn ($m) => $m->outlet_id === null || (int) $m->outlet_id === $o->id);
+
+            return [
+                'outlet_id' => $o->id, 'outlet_code' => $o->code, 'outlet_name' => $o->name,
+                'state' => $mark ? 'sold_out' : 'available', 'reason' => $mark?->reason?->label(),
+            ];
+        })->values()->all();
     }
 
     private function money(mixed $v): ?string

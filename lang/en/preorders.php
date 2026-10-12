@@ -56,6 +56,7 @@ return [
     'dispatch_status_cancelled' => 'A cancelled preorder no longer has an active invoice or shipment to track.',
 
     // 027-preorder-duplicate-split
+    'item_not_carried' => 'Item :sku is not sold at this outlet.',
     'duplicate_item_unavailable' => 'Item ":item" can no longer be sold (deleted or inactive), so this pre-order was not duplicated.',
     'duplicate_not_found' => 'Pre-order not found.',
 
@@ -66,7 +67,7 @@ return [
     'split_qty_exceeds_line' => 'You cannot move more than the :qty unit(s) of ":item" in this pre-order.',
     'split_must_move_and_keep' => 'At least one unit must move to the new pre-order and at least one unit must stay on this one.',
     'split_discount_exceeds_remaining' => 'After the split, the discount on this pre-order would be larger than what is left to pay. Lower the discount first, then split again.',
-    'split_single_seller' => 'All items in this pre-order belong to the same seller, so there is nothing to split by seller.',
+    'split_single_seller' => 'All items in this pre-order belong to the same outlet, so there is nothing to split by outlet.',
 
     // Hapus pembayaran pre-order
     'payment_delete_not_allowed_status' => 'Payments of a "Handed over" or "Cancelled" pre-order can no longer be deleted — this transaction is closed.',

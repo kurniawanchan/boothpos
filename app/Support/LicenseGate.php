@@ -2,13 +2,13 @@
 
 namespace App\Support;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Setting;
 
 /**
  * Satu-satunya tempat yang tahu perbedaan Pro vs Master. Kalau nanti ada
  * flag berbayar lain selain multi-artist, tambahkan method di sini —
- * jangan sebar pengecekan Setting::get('multi_artist_enabled') di banyak
+ * jangan sebar pengecekan Setting::get('multi_outlet_enabled') di banyak
  * tempat berbeda.
  */
 class LicenseGate
@@ -19,16 +19,16 @@ class LicenseGate
      * yang falsy). filter_var dengan FILTER_VALIDATE_BOOLEAN menangani
      * "true"/"false"/"1"/"0" dengan benar.
      */
-    public static function multiArtistEnabled(): bool
+    public static function multiOutletEnabled(): bool
     {
-        $value = Setting::get('multi_artist_enabled', false);
+        $value = Setting::get('multi_outlet_enabled', false);
 
         return filter_var($value, FILTER_VALIDATE_BOOLEAN);
     }
 
-    public static function activeArtistCount(): int
+    public static function activeOutletCount(): int
     {
-        return Artist::where('is_active', true)->count();
+        return Outlet::where('is_active', true)->count();
     }
 
     /**
@@ -36,17 +36,17 @@ class LicenseGate
      * sendiri). Instalasi baru yang belum punya artist sama sekali tetap
      * boleh membuat satu, baik Pro maupun Master.
      */
-    public static function canCreateArtist(): bool
+    public static function canCreateOutlet(): bool
     {
-        if (self::multiArtistEnabled()) {
+        if (self::multiOutletEnabled()) {
             return true;
         }
 
-        return self::activeArtistCount() === 0;
+        return self::activeOutletCount() === 0;
     }
 
-    public static function artistLimitReached(): bool
+    public static function outletLimitReached(): bool
     {
-        return ! self::multiArtistEnabled() && self::activeArtistCount() >= 1;
+        return ! self::multiOutletEnabled() && self::activeOutletCount() >= 1;
     }
 }

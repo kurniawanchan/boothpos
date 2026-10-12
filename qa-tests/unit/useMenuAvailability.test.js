@@ -133,4 +133,10 @@ describe('useMenuAvailability (043)', () => {
     await vi.advanceTimersByTimeAsync(30000);
     expect(pollAvailability).not.toHaveBeenCalled();
   });
+
+  it('045: asks for the shift outlet (pos) only when opted in', async () => {
+    mountHost({ pos: true });
+    await flush();
+    expect(pollAvailability).toHaveBeenCalledWith(null, { pos: true });
+  });
 });

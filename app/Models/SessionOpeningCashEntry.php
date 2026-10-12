@@ -12,7 +12,7 @@ class SessionOpeningCashEntry extends Model
 
     public $timestamps = false;
 
-    protected $fillable = ['session_id', 'artist_id', 'amount', 'created_at'];
+    protected $fillable = ['session_id', 'outlet_id', 'amount', 'created_at'];
 
     protected function casts(): array
     {
@@ -24,8 +24,8 @@ class SessionOpeningCashEntry extends Model
         return $this->belongsTo(CashierSession::class, 'session_id');
     }
 
-    public function artist(): BelongsTo
+    public function outlet(): BelongsTo
     {
-        return $this->belongsTo(Artist::class);
+        return $this->belongsTo(Outlet::class);
     }
 }

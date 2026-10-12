@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\DiningTable;
+use App\Support\OutletDefaults;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -36,14 +37,15 @@ class StoreDiningTableRequest extends FormRequest
             'seats' => ['sometimes', 'integer', 'min:1', 'max:99'],
             'display_order' => ['sometimes', 'integer', 'min:-32768', 'max:32767'],
             'is_active' => ['sometimes', 'boolean'],
+            // 045 Stage 2 — outlet meja, hanya saat membuat (tidak berubah sesudahnya); wajib termasuk outlet yang boleh dilihat.
+            'outlet_id' => ['sometimes', 'nullable', 'integer'],
         ];
     }
 
     /**
-     * Keunikan (area, nama) dicek lewat model Eloquent — BUKAN rule `unique:`
-     * bawaan — karena rule itu memakai query mentah yang melewati
-     * DataModeScope: meja DEMO bernama sama akan memblokir meja LIVE
-     * (jebakan yang sama dengan `customer_id` di CLAUDE.md).
+     * Keunikan NAMA per OUTLET (045 Stage 2, D17), sama dengan indeks database
+     * uniq_dining_tables_outlet_name. Dicek lewat query tanpa scope: indeks database
+     * tidak peduli mode data maupun cakupan pengguna, jadi pemeriksaan ini juga tidak boleh.
      */
     public function after(): array
     {
@@ -54,15 +56,19 @@ class StoreDiningTableRequest extends FormRequest
 
             $current = $this->route('dining_table');
             $name = $this->has('name') ? (string) $this->input('name') : $current?->name;
-            $area = $this->has('area') ? (string) ($this->input('area') ?? '') : ($current?->area ?? '');
 
             if ($name === null) {
                 return;
             }
 
-            $taken = DiningTable::query()
+            $outletId = $current?->outlet_id ?? ($this->filled('outlet_id') ? $this->integer('outlet_id') : OutletDefaults::peekForNewRecord());
+            if ($outletId === null) {
+                return;
+            }
+
+            $taken = DiningTable::withoutGlobalScopes()
                 ->where('name', $name)
-                ->where('area', $area)
+                ->where('outlet_id', $outletId)
                 ->when($current, fn ($q) => $q->where('id', '!=', $current->id))
                 ->exists();
 

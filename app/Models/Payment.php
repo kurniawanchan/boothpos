@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOutlet;
 use App\Models\Concerns\HasDataMode;
 use App\Models\Concerns\StampsBusinessDay;
 use Carbon\CarbonInterface;
@@ -11,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Payment extends Model
 {
+    use BelongsToOutlet;
+
     use HasDataMode, StampsBusinessDay;
 
     protected $fillable = [
@@ -132,5 +135,21 @@ class Payment extends Model
         return $user->isOwnerOrAdmin()
             || $this->recorded_by === null
             || (int) $this->recorded_by !== (int) $user->id;
+    }
+
+    protected function outletFromParent(): ?int
+    {
+        // Pembayaran mengikuti induknya: order (POS), pre-order, atau shift tempat uang diterima.
+        if ($this->order_id !== null) {
+            return Order::withoutGlobalScopes()->whereKey($this->order_id)->value('outlet_id');
+        }
+        if ($this->preorder_id !== null) {
+            return Preorder::withoutGlobalScopes()->whereKey($this->preorder_id)->value('outlet_id');
+        }
+        if ($this->session_id !== null) {
+            return CashierSession::withoutGlobalScopes()->whereKey($this->session_id)->value('outlet_id');
+        }
+
+        return null;
     }
 }

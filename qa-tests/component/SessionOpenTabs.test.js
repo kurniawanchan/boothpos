@@ -11,7 +11,7 @@ vi.mock('../../resources/js/api/sessions', () => ({
   currentSession: vi.fn(), sessionSummary: vi.fn(), closeSession: vi.fn(), openSession: vi.fn(),
 }));
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn().mockResolvedValue({ data: [] }) }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn().mockResolvedValue({ data: [] }) }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn().mockResolvedValue({ data: [] }) }));
 
 const session = { id: 4, status: 'open', opened_at: '2026-10-03T08:00:00+07:00', opening_cash: '100000.00', event_id: 1 };
 const summary = {

@@ -6,7 +6,7 @@ const { t } = useI18n();
 
 /**
  * 005-ux-enhancements-dashboard (US1) — dropdown multi-pilih dengan
- * pencarian dan opsi "Semua", untuk filter artist/category di
+ * pencarian dan opsi "Semua", untuk filter outlet/category di
  * Products & POS. Sengaja komponen BARU (bukan menambah mode `multiple`
  * ke BaseSelect.vue) supaya 8+ pemanggil BaseSelect.vue yang sudah ada
  * tidak berisiko regresi — lihat research.md R2. Struktur

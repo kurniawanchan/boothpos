@@ -30,9 +30,9 @@ const SALES_RESPONSE = {
     { entity_id: 11, label: 'Pin Akrilik', unit_count: 2, amount: '60000.00' },
   ],
   transactions: [
-    { id: 101, order_number: 'ORD-001', customer_name: 'Budi Santoso', created_at: '2026-09-01T10:00:00Z', cashier_name: 'Kasir A', item_count: 2, total_amount: '60000.00', artist_names: ['Nekoyama Studio'] },
-    { id: 102, order_number: 'ORD-002', customer_name: null, created_at: '2026-09-01T11:00:00Z', cashier_name: 'Kasir A', item_count: 1, total_amount: '30000.00', artist_names: ['Yukishiro Works'] },
-    { id: 103, order_number: 'ORD-003', customer_name: 'Siti Aminah', created_at: '2026-09-01T12:00:00Z', cashier_name: 'Kasir B', item_count: 2, total_amount: '60000.00', artist_names: ['Nekoyama Studio', 'Hoshizora Craft'] },
+    { id: 101, order_number: 'ORD-001', customer_name: 'Budi Santoso', created_at: '2026-09-01T10:00:00Z', cashier_name: 'Kasir A', item_count: 2, total_amount: '60000.00', outlet_names: ['Nekoyama Studio'] },
+    { id: 102, order_number: 'ORD-002', customer_name: null, created_at: '2026-09-01T11:00:00Z', cashier_name: 'Kasir A', item_count: 1, total_amount: '30000.00', outlet_names: ['Yukishiro Works'] },
+    { id: 103, order_number: 'ORD-003', customer_name: 'Siti Aminah', created_at: '2026-09-01T12:00:00Z', cashier_name: 'Kasir B', item_count: 2, total_amount: '60000.00', outlet_names: ['Nekoyama Studio', 'Hoshizora Craft'] },
   ],
 };
 
@@ -45,8 +45,8 @@ function renderSales() {
 }
 
 // Penjualan dikeluarkan dari ReportsView.vue menjadi menu tersendiri — layar
-// ini terbuka untuk semua peran (kasir termasuk), berbeda dari Rekap Artist/
-// Modal & Untung/Modal Artist yang tetap owner/admin-only di ReportsView.vue.
+// ini terbuka untuk semua peran (kasir termasuk), berbeda dari Rekap Outlet/
+// Modal & Untung/Modal Outlet yang tetap owner/admin-only di ReportsView.vue.
 describe('SalesView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,7 +54,7 @@ describe('SalesView', () => {
     salesReport.mockResolvedValue(SALES_RESPONSE);
   });
 
-  // 009-ui-ux-refinements US2 — the per-product/category/artist/day summary
+  // 009-ui-ux-refinements US2 — the per-product/category/outlet/day summary
   // table and its group_by selector are gone; the transaction list is the
   // page's only/primary table now.
   it('renders no product-summary table, only the transaction list', async () => {
@@ -104,7 +104,7 @@ describe('SalesView', () => {
     getOrder.mockResolvedValue({
       id: 101,
       order_number: 'ORD-001',
-      items: [{ id: 1, variant_id: 1, artist_id: 1, product_id: 10, sku_snapshot: 'ABCST0001', name_snapshot: 'Stiker Holografik', qty: 2, sell_price: '30000.00', line_total: '60000.00' }],
+      items: [{ id: 1, variant_id: 1, home_outlet_id: 1, product_id: 10, sku_snapshot: 'ABCST0001', name_snapshot: 'Stiker Holografik', qty: 2, sell_price: '30000.00', line_total: '60000.00' }],
     });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
@@ -120,7 +120,7 @@ describe('SalesView', () => {
     getOrder.mockResolvedValue({
       id: 101,
       order_number: 'ORD-001',
-      items: [{ id: 1, variant_id: 1, artist_id: 1, product_id: 10, sku_snapshot: 'ABCST0001', name_snapshot: 'Stiker Holografik', qty: 2, sell_price: '30000.00', line_total: '60000.00' }],
+      items: [{ id: 1, variant_id: 1, home_outlet_id: 1, product_id: 10, sku_snapshot: 'ABCST0001', name_snapshot: 'Stiker Holografik', qty: 2, sell_price: '30000.00', line_total: '60000.00' }],
     });
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
@@ -136,13 +136,13 @@ describe('SalesView', () => {
     getOrder.mockResolvedValue({
       id: 101,
       order_number: 'ORD-001',
-      items: [{ id: 1, variant_id: 1, artist_id: 1, product_id: 10, sku_snapshot: 'ABCST0001', name_snapshot: 'Stiker Holografik', qty: 2, sell_price: '30000.00', line_total: '60000.00' }],
+      items: [{ id: 1, variant_id: 1, home_outlet_id: 1, product_id: 10, sku_snapshot: 'ABCST0001', name_snapshot: 'Stiker Holografik', qty: 2, sell_price: '30000.00', line_total: '60000.00' }],
     });
     getProduct.mockResolvedValue({
       id: 10,
       name: 'Stiker Holografik',
       code_prefix: 'ABCST',
-      artist_name: 'Artist A',
+      home_outlet_name: 'Outlet A',
       category_name: 'Stiker',
       is_preorder: false,
       is_active: true,
@@ -204,7 +204,7 @@ describe('SalesView — transaction search (F10.6)', () => {
     expect(screen.getByText('ORD-003')).toBeInTheDocument();
   });
 
-  it('filters by artist name, matching a transaction that has multiple artists', async () => {
+  it('filters by outlet name, matching a transaction that has multiple outlets', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderSales();
@@ -235,7 +235,7 @@ describe('SalesView — transaction search (F10.6)', () => {
     expect(await screen.findByText('Detail pelanggan')).toBeInTheDocument();
   });
 
-  it('fills the search box when clicking an artist name', async () => {
+  it('fills the search box when clicking an outlet name', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderSales();
@@ -264,10 +264,10 @@ const FILTER_RESPONSE = {
   event: { id: 1, name: 'Event A' },
   totals: { order_count: 4, unit_count: 12, gross_sales: '225000.00', net_sales: '225000.00' },
   transactions: [
-    { id: 201, order_number: 'ORD-201', customer_name: 'Budi', created_at: '2026-09-01T09:00:00Z', cashier_id: 1, cashier_name: 'Kasir A', item_count: 2, unit_count: 4, discount_amount: '0.00', payment_methods: ['cash'], total_amount: '60000.00', artist_names: ['Nekoyama Studio'] },
-    { id: 202, order_number: 'ORD-202', customer_name: null, created_at: '2026-09-01T11:00:00Z', cashier_id: 1, cashier_name: 'Kasir A', item_count: 1, unit_count: 1, discount_amount: '0.00', payment_methods: ['qr_ewallet'], total_amount: '30000.00', artist_names: ['Yukishiro Works'] },
-    { id: 203, order_number: 'ORD-203', customer_name: 'Siti', created_at: '2026-09-02T10:00:00Z', cashier_id: 2, cashier_name: 'Kasir B', item_count: 3, unit_count: 6, discount_amount: '5000.00', payment_methods: ['cash', 'bank_transfer'], total_amount: '120000.00', artist_names: ['Nekoyama Studio', 'Hoshizora Craft'] },
-    { id: 204, order_number: 'ORD-204', customer_name: null, created_at: '2026-09-02T14:00:00Z', cashier_id: 2, cashier_name: 'Kasir B', item_count: 1, unit_count: 1, discount_amount: '0.00', payment_methods: ['cash'], total_amount: '15000.00', artist_names: ['Hoshizora Craft'] },
+    { id: 201, order_number: 'ORD-201', customer_name: 'Budi', created_at: '2026-09-01T09:00:00Z', cashier_id: 1, cashier_name: 'Kasir A', item_count: 2, unit_count: 4, discount_amount: '0.00', payment_methods: ['cash'], total_amount: '60000.00', outlet_names: ['Nekoyama Studio'] },
+    { id: 202, order_number: 'ORD-202', customer_name: null, created_at: '2026-09-01T11:00:00Z', cashier_id: 1, cashier_name: 'Kasir A', item_count: 1, unit_count: 1, discount_amount: '0.00', payment_methods: ['qr_ewallet'], total_amount: '30000.00', outlet_names: ['Yukishiro Works'] },
+    { id: 203, order_number: 'ORD-203', customer_name: 'Siti', created_at: '2026-09-02T10:00:00Z', cashier_id: 2, cashier_name: 'Kasir B', item_count: 3, unit_count: 6, discount_amount: '5000.00', payment_methods: ['cash', 'bank_transfer'], total_amount: '120000.00', outlet_names: ['Nekoyama Studio', 'Hoshizora Craft'] },
+    { id: 204, order_number: 'ORD-204', customer_name: null, created_at: '2026-09-02T14:00:00Z', cashier_id: 2, cashier_name: 'Kasir B', item_count: 1, unit_count: 1, discount_amount: '0.00', payment_methods: ['cash'], total_amount: '15000.00', outlet_names: ['Hoshizora Craft'] },
   ],
 };
 
@@ -309,10 +309,10 @@ describe('SalesView — filters', () => {
     expect(rowOrder()).toEqual(['ORD-204', 'ORD-203']);
   });
 
-  it('filters by seller, matching a transaction that has several sellers', async () => {
+  it('filters by outlet, matching a transaction that has several outlets', async () => {
     const user = await setupFilters();
 
-    await pickOption(user, 'Semua penjual', 'Hoshizora Craft');
+    await pickOption(user, 'Semua outlet', 'Hoshizora Craft');
 
     expect(rowOrder()).toEqual(['ORD-204', 'ORD-203']);
   });
@@ -453,7 +453,7 @@ describe('SalesView — column sort order', () => {
     expect(rowOrder()).toEqual(['ORD-203', 'ORD-201', 'ORD-204', 'ORD-202']); // Siti, Budi, walk-in tetap terakhir
   });
 
-  it('sorts by cashier, item count, and seller', async () => {
+  it('sorts by cashier, item count, and outlet', async () => {
     const user = await setupFilters();
 
     await user.click(header(/^Kasir/));
@@ -462,7 +462,7 @@ describe('SalesView — column sort order', () => {
     await user.click(header(/^Item/));
     expect(rowOrder().at(-1)).toBe('ORD-203'); // 3 baris item = terbanyak, terakhir saat menaik
 
-    await user.click(header(/^Penjual/));
+    await user.click(header(/^Outlet/));
     expect(rowOrder()[0]).toBe('ORD-204'); // "Hoshizora Craft" paling awal secara alfabet
   });
 

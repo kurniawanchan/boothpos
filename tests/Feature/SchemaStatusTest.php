@@ -85,7 +85,7 @@ class SchemaStatusTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'cashier']), 'sanctum');
 
         $this->getJson('/api/v1/settings/features')->assertOk()->assertJsonStructure([
-            'multi_artist_enabled', 'artist_count', 'artist_limit_reached', 'system_mode', 'app_name', 'store_name', 'schema_update_required',
+            'multi_outlet_enabled', 'outlet_count', 'outlet_limit_reached', 'system_mode', 'app_name', 'store_name', 'schema_update_required',
         ]);
     }
 }

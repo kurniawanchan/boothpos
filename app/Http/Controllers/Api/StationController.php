@@ -35,7 +35,18 @@ class StationController extends Controller
 
     public function store(StoreStationRequest $request): JsonResponse
     {
-        return response()->json(new StationResource(Station::create($request->validated())), 201);
+        $outletId = $request->filled('outlet_id') ? $request->integer('outlet_id') : null;
+        if ($outletId !== null && ! app(\App\Support\OutletContext::class)->isPermitted($outletId)) {
+            return response()->json(['message' => __('outlets.forbidden'), 'code' => 'outlet_forbidden'], 403);
+        }
+
+        $station = new Station(collect($request->validated())->except('outlet_id')->all());
+        if ($outletId !== null) {
+            $station->outlet_id = $outletId;
+        }
+        $station->save();
+
+        return response()->json(new StationResource($station), 201);
     }
 
     public function show(Request $request, Station $station): JsonResponse

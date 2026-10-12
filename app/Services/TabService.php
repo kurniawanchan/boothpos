@@ -133,7 +133,9 @@ class TabService
 
             $variant = ProductVariant::with('product')->lockForUpdate()->findOrFail($data['variant_id']);
             // 043 — satu aturan "bisa dipesan" (varian, produk/diskontinu, tanda 86): App\Support\MenuAvailability.
-            \App\Support\MenuAvailability::assertOrderable($variant, 'variant_id');
+            \App\Support\MenuAvailability::assertOrderable($variant, 'variant_id', $order->outlet_id);
+            // 045 Stage 3 — harga yang berlaku di outlet tab (lihat PriceService::applyOutletPrice).
+            app(PriceService::class)->applyOutletPrice($variant, $order->outlet_id);
 
             $qty = (int) $data['qty'];
             $note = $this->cleanNote($data['note'] ?? null);
@@ -164,7 +166,7 @@ class TabService
             } else {
                 $line = $order->items()->create([
                     'variant_id' => $variant->id,
-                    'artist_id' => $variant->product->artist_id,
+                    'home_outlet_id' => $variant->product->home_outlet_id,
                     'sku_snapshot' => $variant->sku,
                     'name_snapshot' => $variant->product->name.' — '.$variant->variant_name,
                     'qty' => $qty,
@@ -178,7 +180,7 @@ class TabService
             }
 
             $this->stockService->applyMovementIfTracked(
-                variant: $variant, type: 'sale', qtyChange: -$qty,
+                variant: $variant, outletId: (int) $order->outlet_id, type: 'sale', qtyChange: -$qty,
                 referenceType: 'order_item', referenceId: $line->id, userId: $user->id,
             );
 
@@ -222,6 +224,7 @@ class TabService
 
                 $this->stockService->applyMovementIfTracked(
                     variant: $variant,
+                    outletId: $this->outletOfLine($line),
                     type: $delta > 0 ? 'sale' : 'return',
                     qtyChange: -$delta,
                     referenceType: 'order_item', referenceId: $line->id, userId: $user->id,
@@ -379,9 +382,15 @@ class TabService
         }
 
         $this->stockService->applyMovementIfTracked(
-            variant: $variant, type: 'return', qtyChange: $qty,
+            variant: $variant, outletId: $this->outletOfLine($line), type: 'return', qtyChange: $qty,
             referenceType: 'order_item', referenceId: $line->id, userId: $user->id,
         );
+    }
+
+    /** 045 Stage 5 — stok bergerak di outlet ORDER baris itu (outlet shift saat tab dibuka). */
+    private function outletOfLine(\App\Models\OrderItem $line): int
+    {
+        return (int) Order::withoutGlobalScopes()->whereKey($line->order_id)->value('outlet_id');
     }
 
     // --- tutup kosong / serah-terima ---------------------------------------
@@ -439,6 +448,11 @@ class TabService
 
                 if (! $table->is_active) {
                     throw ValidationException::withMessages(['table_id' => __('restaurant.table_inactive')]);
+                }
+
+                // 045 Stage 2 (D17) — tab hanya boleh pindah ke meja di outlet yang sama.
+                if ($table->outlet_id !== $order->outlet_id) {
+                    throw new TabConflictException(__('restaurant.outlet_mismatch'), ['code' => 'outlet_mismatch']);
                 }
 
                 if ($order->table_id !== $table->id) {

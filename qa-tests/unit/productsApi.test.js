@@ -35,6 +35,8 @@ describe('api/products (043)', () => {
     expect(client.post).toHaveBeenCalledWith('/products/12/sold-out', { reason_code_id: 3, note: 'habis' });
     await products.undoSoldOut(12);
     expect(client.delete).toHaveBeenCalledWith('/products/12/sold-out');
+    await products.undoSoldOut(12, [2, 3]);
+    expect(client.delete).toHaveBeenCalledWith('/products/12/sold-out', { data: { outlet_ids: [2, 3] } });
   });
 
   it('discontinues with a reason and reactivates', async () => {

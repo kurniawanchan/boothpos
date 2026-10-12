@@ -90,11 +90,14 @@ const routes = [
         component: () => import('../views/ProductDetailView.vue'),
         meta: { titleKey: 'nav.products', menuKey: 'products' },
       },
+      // 045 — URL lama /artists diarahkan ke /outlets (bookmark dan tautan lama tetap berfungsi).
+      { path: 'artists', redirect: '/outlets' },
       {
-        path: 'artists',
-        name: 'artists',
-        component: () => import('../views/ArtistsView.vue'),
-        meta: { menuKey: 'artists' },
+        path: 'outlets',
+        name: 'outlets',
+        component: () => import('../views/OutletsView.vue'),
+        // Kunci judul tetap nav.artists (nilainya sudah "Outlet"); nav.<nama rute> tidak ada untuk rute ini.
+        meta: { titleKey: 'nav.artists', menuKey: 'outlets' },
       },
       {
         path: 'categories',
@@ -107,6 +110,13 @@ const routes = [
         name: 'stock',
         component: () => import('../views/StockView.vue'),
         meta: { titleKey: 'nav.stock_page_title', subtitleKey: 'nav.stock_subtitle', menuKey: 'stock' },
+      },
+      {
+        // 045 Stage 6 — transfer stok antar outlet; izin aksi dan penugasan outlet ditegakkan server.
+        path: 'stock/transfers',
+        name: 'stock-transfers',
+        component: () => import('../views/stock/TransfersView.vue'),
+        meta: { titleKey: 'transfers.title', subtitleKey: 'transfers.subtitle', menuKey: 'stock' },
       },
       {
         path: 'vendors',
@@ -180,8 +190,8 @@ const routes = [
         component: () => import('../views/ReportsView.vue'),
         meta: {
           // Tab "Penjualan" dipindah ke halaman/menu 'sales' tersendiri —
-          // ketiga tab yang tersisa di halaman ini (Rekap Artist, Modal &
-          // Untung, Modal Artist) semuanya owner/admin-only (PRD 7.13),
+          // ketiga tab yang tersisa di halaman ini (Rekap Outlet, Modal &
+          // Untung, Modal Outlet) semuanya owner/admin-only (PRD 7.13),
           // jadi rutenya sendiri digerbang di sini, bukan cuma tab-nya,
           // supaya kasir/inventory tidak pernah sampai ke halaman kosong.
           menuKey: 'reports',

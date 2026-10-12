@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -43,9 +43,9 @@ class StockMovementsTest extends TestCase
         $this->actingAs($this->owner, 'sanctum');
 
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => Artist::factory()->create()->id, 'category_id' => $category->id, 'name' => 'MCYT', 'is_preorder' => true]);
+        $product = Product::factory()->create(['home_outlet_id' => Outlet::factory()->create()->id, 'category_id' => $category->id, 'name' => 'MCYT', 'is_preorder' => true]);
         $this->variant = $product->variants()->create(['sku' => 'SPFKCMCY0001', 'variant_name' => 'Slippery 5cm', 'sell_price' => 20000, 'cost_price' => 5000, 'current_stock' => 10]);
-        $this->other = Product::factory()->create(['artist_id' => $product->artist_id, 'category_id' => $category->id, 'name' => 'Other'])
+        $this->other = Product::factory()->create(['home_outlet_id' => $product->home_outlet_id, 'category_id' => $category->id, 'name' => 'Other'])
             ->variants()->create(['sku' => 'SPFKCOTH0001', 'variant_name' => 'Std', 'sell_price' => 10000, 'cost_price' => 1000, 'current_stock' => 10]);
     }
 
@@ -105,7 +105,7 @@ class StockMovementsTest extends TestCase
 
     public function test_rows_carry_user_product_and_variant_details(): void
     {
-        app(StockService::class)->applyMovement($this->variant, 'adjustment', 5, reason: 'tambah stok', userId: $this->owner->id);
+        app(StockService::class)->applyMovement($this->variant, \App\Support\OutletStockSync::homeOutletOf($this->variant), 'adjustment', 5, reason: 'tambah stok', userId: $this->owner->id);
 
         $row = $this->movements("variant_id={$this->variant->id}")->assertOk()->json('data.0');
 
@@ -245,8 +245,8 @@ class StockMovementsTest extends TestCase
     public function test_the_newest_stock_after_equals_the_current_stock(): void
     {
         $service = app(StockService::class);
-        $service->applyMovement($this->variant, 'purchase', 5, userId: $this->owner->id);
-        $service->applyMovement($this->variant, 'sale', -3, userId: $this->owner->id);
+        $service->applyMovement($this->variant, \App\Support\OutletStockSync::homeOutletOf($this->variant), 'purchase', 5, userId: $this->owner->id);
+        $service->applyMovement($this->variant, \App\Support\OutletStockSync::homeOutletOf($this->variant), 'sale', -3, userId: $this->owner->id);
 
         $newest = $this->movements("variant_id={$this->variant->id}")->json('data.0');
 
@@ -260,6 +260,13 @@ class StockMovementsTest extends TestCase
         for ($i = 0; $i < 4; $i++) {
             $this->movement(['type' => 'sale', 'qty_change' => -1, 'reference_type' => 'order_item', 'reference_id' => $order->id]);
         }
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        // Halaman kecil harus memuat KEDUA jenis referensi (penjualan dan pre-order), supaya jumlah query
+        // yang dibandingkan memang sama; tanpa ini urutan waktu yang seri membuat halaman kecil hanya
+        // memuat satu jenis.
+        $this->movement(['type' => 'sale', 'qty_change' => -1, 'reference_type' => 'order_item', 'reference_id' => $order->id]);
+        $this->movement(['type' => 'purchase', 'reference_type' => 'preorder_item', 'reference_id' => $pre['items'][0]['id']]);
         DB::flushQueryLog();
         DB::enableQueryLog();
         $this->movements('per_page=2')->assertOk();

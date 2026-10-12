@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
  * digabung tanpa pemisah — lihat migration
  * 2026_10_25_000001_widen_product_code_and_sku_columns_for_dashed_format
  * untuk riwayat perubahan lebar kolom):
- *   code_prefix = artist.code(3) + "-" + category.code(2) + "-" + product_segment(3)
+ *   code_prefix = outlet.code(3) + "-" + category.code(2) + "-" + product_segment(3)
  *   sku         = code_prefix(10) + "-" + urutan 3 digit
  *
  * Kode bersifat PERMANEN setelah dibuat (F19.4) — service ini hanya
@@ -43,19 +43,19 @@ class ProductCodeGenerator
      * agar admin diminta menyunting product_segment secara manual
      * (F19.5), sesuai KISS: jangan menebak niat pengguna.
      */
-    public function buildCodePrefix(string $artistCode, string $categoryCode, string $productSegment): string
+    public function buildCodePrefix(string $outletCode, string $categoryCode, string $productSegment): string
     {
-        $prefix = strtoupper($artistCode).'-'.strtoupper($categoryCode).'-'.strtoupper($productSegment);
+        $prefix = strtoupper($outletCode).'-'.strtoupper($categoryCode).'-'.strtoupper($productSegment);
 
         if (strlen($prefix) !== 10) {
-            throw new \InvalidArgumentException('Kombinasi kode artist, kategori, dan segmen produk harus menghasilkan 10 karakter (format ART-CA-SEG).');
+            throw new \InvalidArgumentException('Kombinasi kode outlet, kategori, dan segmen produk harus menghasilkan 10 karakter (format ART-CA-SEG).');
         }
 
         // 003-seed-demo-live — withoutGlobalScope: code_prefix UNIQUE lintas
         // SELURUH tabel (bukan per data_mode), jadi pengecekan tabrakan di
         // sini juga harus lintas mode, sama seperti alasan di
         // OrderService::generateOrderNumber().
-        if (Product::withTrashed()->withoutGlobalScope(DataModeScope::class)->where('code_prefix', $prefix)->exists()) {
+        if (Product::withTrashed()->withoutGlobalScopes()->where('code_prefix', $prefix)->exists()) {
             throw ValidationException::withMessages([
                 'product_segment' => "Kombinasi kode ini ({$prefix}) sudah dipakai produk lain. Ubah segmen nama produk secara manual.",
             ]);

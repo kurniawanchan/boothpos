@@ -12,8 +12,8 @@ class ProductResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'artist_id' => $this->artist_id,
-            'artist_name' => $this->whenLoaded('artist', fn () => $this->artist->name),
+            'home_outlet_id' => $this->home_outlet_id,
+            'home_outlet_name' => $this->whenLoaded('homeOutlet', fn () => $this->homeOutlet->name),
             'category_id' => $this->category_id,
             'category_name' => $this->whenLoaded('category', fn () => $this->category->name),
             'code_prefix' => $this->code_prefix,
@@ -26,6 +26,12 @@ class ProductResource extends JsonResource
             'preorder_eta' => $this->preorder_eta?->toDateString(),
             'is_active' => $this->is_active,
             'station_id' => $this->station_id,
+            // 045 Stage 3 — outlet yang boleh dilihat pengguna dan apakah masing-masing membawa produk ini. Hanya ada bila
+            // beberapa outlet terlihat DAN relasi `outletItemSettings.outlet` dimuat (show/store/update); disembunyikan di satu outlet.
+            'outlets' => $this->when(
+                $this->relationLoaded('outletItemSettings') && app(\App\Support\OutletContext::class)->isMulti(),
+                fn () => $this->visibleOutletStates()
+            ),
             'variants' => ProductVariantResource::collection($this->whenLoaded('variants')),
             // 028 — hanya bila diminta (?with_modifiers=1): grup EFEKTIF yang aktif beserta opsi aktifnya.
             'modifier_groups' => $this->when($this->relationLoaded('modifierGroups'), fn () => app(\App\Services\ModifierResolver::class)
@@ -38,5 +44,17 @@ class ProductResource extends JsonResource
                     ])->values(),
                 ])->values()),
         ];
+    }
+
+    /** @return list<array{id: int, code: string, name: string, carried: bool}> */
+    private function visibleOutletStates(): array
+    {
+        $permitted = app(\App\Support\OutletContext::class)->permittedIds();
+
+        return $this->outletItemSettings
+            ->filter(fn ($row) => in_array((int) $row->outlet_id, $permitted, true) && $row->outlet !== null)
+            ->sortBy('outlet_id')
+            ->map(fn ($row) => ['id' => (int) $row->outlet_id, 'code' => $row->outlet->code, 'name' => $row->outlet->name, 'carried' => (bool) $row->is_carried])
+            ->values()->all();
     }
 }

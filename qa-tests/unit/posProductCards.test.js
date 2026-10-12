@@ -14,7 +14,7 @@ const variant = (overrides = {}) => ({
 const product = (overrides = {}) => ({
   id: 1,
   name: 'Keychain Sakura',
-  artist_name: 'Ryu Illustration',
+  home_outlet_name: 'Ryu Illustration',
   category_id: 2,
   variants: [variant()],
   ...overrides,
@@ -94,20 +94,20 @@ describe('buildProductCards', () => {
 
 describe('toCartItem', () => {
   it('keeps the bare product name for a single-variant shortcut add', () => {
-    const card = { name: 'Poster A2', artist_name: 'Ryu', variant_count: 1 };
+    const card = { name: 'Poster A2', home_outlet_name: 'Ryu', variant_count: 1 };
     const item = toCartItem(card, variant({ id: 5, variant_name: 'Standard' }));
     expect(item.name).toBe('Poster A2');
     expect(item.variant_id).toBe(5);
   });
 
   it('disambiguates the name with the variant when the product has more than one', () => {
-    const card = { name: 'Keychain Sakura', artist_name: 'Ryu', variant_count: 2 };
+    const card = { name: 'Keychain Sakura', home_outlet_name: 'Ryu', variant_count: 2 };
     const item = toCartItem(card, variant({ id: 7, variant_name: 'Large' }));
     expect(item.name).toBe('Keychain Sakura — Large');
   });
 
   it('carries sku, price, and stock straight from the chosen variant', () => {
-    const card = { name: 'Poster A2', artist_name: 'Ryu', variant_count: 1 };
+    const card = { name: 'Poster A2', home_outlet_name: 'Ryu', variant_count: 1 };
     const item = toCartItem(card, variant({ sku: 'RYUKYSAK0009', sell_price: '99000.00', current_stock: 3 }));
     expect(item.sku).toBe('RYUKYSAK0009');
     expect(item.sell_price).toBe('99000.00');
@@ -115,13 +115,13 @@ describe('toCartItem', () => {
   });
 
   it("uses the variant's own image when it has one", () => {
-    const card = { name: 'Poster A2', artist_name: 'Ryu', variant_count: 1, image_url: 'https://example.test/product.png' };
+    const card = { name: 'Poster A2', home_outlet_name: 'Ryu', variant_count: 1, image_url: 'https://example.test/product.png' };
     const item = toCartItem(card, variant({ image_url: 'https://example.test/variant.png' }));
     expect(item.image_url).toBe('https://example.test/variant.png');
   });
 
   it("falls back to the product's image when the variant has none", () => {
-    const card = { name: 'Poster A2', artist_name: 'Ryu', variant_count: 1, image_url: 'https://example.test/product.png' };
+    const card = { name: 'Poster A2', home_outlet_name: 'Ryu', variant_count: 1, image_url: 'https://example.test/product.png' };
     const item = toCartItem(card, variant({ image_url: null }));
     expect(item.image_url).toBe('https://example.test/product.png');
   });
@@ -135,7 +135,7 @@ describe('buildSearchCards', () => {
     variant_id: 7,
     sku: 'SPF-PI-MCY-014',
     label: 'MCYT — Slippery',
-    artist_name: 'sapphirefiless',
+    home_outlet_name: 'sapphirefiless',
     category_name: 'Pin',
     sell_price: '15000.00',
     current_stock: 20,
@@ -173,7 +173,7 @@ describe('buildSearchCards', () => {
       variant_id: 2,
       sku: 'SPF-PI-MCY-014',
       name: 'MCYT — Slippery (40cm)',
-      artist_name: 'sapphirefiless',
+      home_outlet_name: 'sapphirefiless',
       sell_price: '40000.00',
       current_stock: 9,
       category_code: null,
@@ -188,4 +188,27 @@ describe('buildSearchCards', () => {
     expect(buildSearchCards([])).toEqual([]);
   });
 
+});
+
+// 045 Stage 3 — kasir menampilkan harga khusus outlet bila ada.
+import { shownPrice } from '../../resources/js/utils/posProductCards';
+
+describe('shownPrice (045 Stage 3)', () => {
+  it('prefers the outlet price and falls back to the base price', () => {
+    expect(shownPrice({ sell_price: '20000.00', outlet_price: '25000.00' })).toBe('25000.00');
+    expect(shownPrice({ sell_price: '20000.00', outlet_price: null })).toBe('20000.00');
+    expect(shownPrice({ sell_price: '20000.00' })).toBe('20000.00');
+  });
+});
+
+// 045 Stage 5 — kartu POS memakai saldo outlet shift (`outlet_stock`) bila ada, selain itu total.
+describe('posProductCards on-hand (045 Stage 5)', () => {
+  it('uses outlet_stock for the card and cart item, falling back to current_stock', async () => {
+    const { buildProductCards } = await import('../../resources/js/utils/posProductCards');
+    const cards = buildProductCards([{ id: 1, name: 'A', category_id: 1, variants: [{ id: 11, sku: 'S', variant_name: 'R', sell_price: '1000.00', current_stock: 9, outlet_stock: 2, is_active: true }] }]);
+    expect(cards[0].total_stock).toBe(2);
+    expect(toCartItem(cards[0], cards[0].variants[0]).current_stock).toBe(2);
+    const plain = buildProductCards([{ id: 1, name: 'A', category_id: 1, variants: [{ id: 11, sku: 'S', variant_name: 'R', sell_price: '1000.00', current_stock: 9, is_active: true }] }]);
+    expect(plain[0].total_stock).toBe(9);
+  });
 });

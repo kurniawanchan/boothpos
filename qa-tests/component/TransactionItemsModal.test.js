@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import TransactionItemsModal from '../../resources/js/components/sales/TransactionItemsModal.vue';
 import { getOrder, getReceipt, voidOrder, addOrderPayment, deleteOrderPayment } from '../../resources/js/api/orders';
 import { useAuthStore } from '../../resources/js/stores/auth';
+import { useOutletStore } from '../../resources/js/stores/outlet';
 import { getProduct } from '../../resources/js/api/products';
 import { updatePaymentConfirmation, getPaymentProofBlobUrl, uploadPaymentProof, verifyPayment } from '../../resources/js/api/payments';
 
@@ -24,7 +25,7 @@ vi.mock('../../resources/js/stores/toast', () => ({ useToastStore: () => toast }
 
 /**
  * Detail transaksi (dulu hanya tabel "Produk Terjual"): siapa, kapan, di event mana,
- * produk apa dari penjual mana beserta foto/diskonnya, bagaimana total dihitung, dan
+ * produk apa dari outlet mana beserta foto/diskonnya, bagaimana total dihitung, dan
  * bagaimana dibayar. Angka: kotor 90.000 − diskon item 2.000 − diskon pesanan 3.000 = 85.000.
  */
 const FULL_ORDER = {
@@ -44,8 +45,8 @@ const FULL_ORDER = {
   cashier: { id: 1, name: 'Owner Dummy' },
   event: { id: 1, name: 'Sakana Meet & Greet' },
   items: [
-    { id: 1, product_id: 10, sku_snapshot: 'NEKKYAKT0001', name_snapshot: 'Akatsuki Keychain', variant_name: 'Blue', artist_name: 'Nekoyama Studio', category_name: 'Keychain', qty: 3, sell_price: '10000.00', discount_amount: '0.00', line_total: '30000.00', image_url: 'http://localhost/storage/variant.png' },
-    { id: 2, product_id: 11, sku_snapshot: 'YUKSTSAK0001', name_snapshot: 'Sakura Sticker', variant_name: 'Pink', artist_name: 'Yukishiro Works', category_name: 'Sticker', qty: 3, sell_price: '20000.00', discount_amount: '2000.00', line_total: '58000.00', image_url: null },
+    { id: 1, product_id: 10, sku_snapshot: 'NEKKYAKT0001', name_snapshot: 'Akatsuki Keychain', variant_name: 'Blue', home_outlet_name: 'Nekoyama Studio', category_name: 'Keychain', qty: 3, sell_price: '10000.00', discount_amount: '0.00', line_total: '30000.00', image_url: 'http://localhost/storage/variant.png' },
+    { id: 2, product_id: 11, sku_snapshot: 'YUKSTSAK0001', name_snapshot: 'Sakura Sticker', variant_name: 'Pink', home_outlet_name: 'Yukishiro Works', category_name: 'Sticker', qty: 3, sell_price: '20000.00', discount_amount: '2000.00', line_total: '58000.00', image_url: null },
   ],
   // 028 — ringkasan turunan: dibayar 100.000 tunai/QRIS − kembalian 15.000 = 85.000 = lunas.
   payment_summary: { grand_total: '85000.00', total_paid: '85000.00', remaining: '0.00', status: 'fully_paid', payment_count: 2 },
@@ -58,9 +59,10 @@ const FULL_ORDER = {
 // Modal ini menyarangkan ProductDetailModal/ReceiptModal yang memakai store Pinia.
 // `menuKeys`: menu yang dimiliki pengguna yang login — membatalkan transaksi digerbang menu 'settings'
 // (sama seperti di server: OrderController::void()).
-function renderModal(props, menuKeys = []) {
+function renderModal(props, menuKeys = [], { multiOutlet = false } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
+  useOutletStore().multi = multiOutlet;
   useAuthStore().user = { id: 1, role: 'Owner', name: 'Tester', menu_keys: menuKeys };
 
   return render(TransactionItemsModal, { props, global: { plugins: [pinia] } });
@@ -129,7 +131,7 @@ describe('TransactionItemsModal — order header', () => {
 describe('TransactionItemsModal — items', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('describes each product: variant, SKU, seller, category', async () => {
+  it('describes each product: variant, SKU, outlet, category', async () => {
     await open();
     const row = screen.getByText('Akatsuki Keychain').closest('li');
 
@@ -615,5 +617,22 @@ describe('TransactionItemsModal — mark payment verified (032)', () => {
     await open(orderWith(qrisEntry({ can_verify: false }), { status: 'voided', void_reason: 'Salah input' }));
 
     expect(within(screen.getByTestId('payment-entry')).queryByRole('button', { name: 'Tandai terverifikasi' })).not.toBeInTheDocument();
+  });
+});
+
+// 045 Stage 4 — outlet tempat penjualan di detail transaksi: hanya bila ada lebih dari satu outlet.
+describe('TransactionItemsModal — selling outlet (045)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('names the selling outlet with several outlets and nothing at one outlet', async () => {
+    const order = { ...FULL_ORDER, outlet: { id: 2, code: 'WJ2', name: 'Warkop WJM 2' } };
+    getOrder.mockResolvedValue(order);
+    renderModal({ open: true, orderId: order.id, onChanged }, [], { multiOutlet: true });
+    expect(await screen.findByTestId('order-outlet')).toHaveTextContent('Dijual di Warkop WJM 2');
+    cleanup();
+
+    renderModal({ open: true, orderId: order.id, onChanged }, []);
+    await screen.findByText(order.order_number);
+    expect(screen.queryByTestId('order-outlet')).toBeNull();
   });
 });

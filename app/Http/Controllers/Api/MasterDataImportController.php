@@ -49,7 +49,7 @@ class MasterDataImportController extends Controller
      */
     public function template(Request $request): BinaryFileResponse|JsonResponse
     {
-        if (! $request->user()->canAccessAnyMenu(['artists', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users'])) {
+        if (! $request->user()->canAccessAnyMenu(['outlets', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users'])) {
             return response()->json(['message' => __('master_data_import.not_authorized_template')], 403);
         }
 

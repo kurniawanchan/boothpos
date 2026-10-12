@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreUserRequest;
+use App\Http\Requests\UpdateUserOutletsRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
@@ -31,7 +32,7 @@ class UserController extends Controller
         $perPage = min((int) $request->integer('per_page', 25), 100);
 
         $users = User::query()
-            ->with('role')
+            ->with(['role', 'outlets:id'])
             // 003-seed-demo-live follow-up (FR-017) — daftar tampilan
             // saja; TIDAK memengaruhi login (lihat catatan di User model).
             ->where('data_mode', ModeGate::current())
@@ -63,6 +64,15 @@ class UserController extends Controller
         $user = User::create($validated);
 
         DB::transaction(function () use ($user, $request) {
+            // 045 Stage 2 — instalasi SATU outlet tetap berjalan tanpa langkah penugasan: pengguna non-admin baru
+            // otomatis ditugaskan ke satu-satunya outlet aktif (tanpa ini ia tidak bisa membuka shift).
+            if (! $user->load('role')->hasAllOutlets()) {
+                $activeOutlets = \App\Models\Outlet::query()->where('is_active', true)->pluck('id');
+                if ($activeOutlets->count() === 1) {
+                    $user->outlets()->sync($activeOutlets->all());
+                }
+            }
+
             $this->activityLogger->log(
                 userId: $request->user()?->id,
                 action: 'created',
@@ -73,14 +83,67 @@ class UserController extends Controller
             );
         });
 
-        return response()->json(new UserResource($user->fresh('role')), 201);
+        return response()->json(new UserResource($user->fresh(['role', 'outlets:id'])), 201);
     }
 
     public function show(User $user): JsonResponse
     {
         $this->authorize('view', $user);
 
-        return response()->json(new UserResource($user->load('role')));
+        return response()->json(new UserResource($user->load(['role', 'outlets:id'])));
+    }
+
+    /**
+     * 045 Stage 2 — PUT /users/{user}/outlets: mengganti seluruh penugasan outlet pengguna.
+     *
+     * Owner/Admin dilarang ditugaskan (409): mereka selalu melihat semua outlet, jadi baris penugasan
+     * hanya akan menyesatkan. Perubahan dicatat di activity_logs DALAM transaksi yang sama (aturan
+     * ActivityLogger), sehingga penugasan yang gagal tersimpan tidak meninggalkan catatan palsu.
+     */
+    public function outlets(UpdateUserOutletsRequest $request, User $user): JsonResponse
+    {
+        $this->authorize('update', $user);
+
+        $actor = $request->user();
+
+        // Tidak seorang pun mengatur penugasannya sendiri: memperluas outlet untuk diri sendiri adalah
+        // eskalasi hak (temuan tinjauan keamanan 2026-10-12).
+        if ($actor->id === $user->id) {
+            return response()->json(['message' => __('outlets.forbidden'), 'code' => 'outlet_forbidden'], 403);
+        }
+
+        if ($user->hasAllOutlets()) {
+            return response()->json(['message' => __('outlets.all_by_role'), 'code' => 'outlet_all_by_role'], 409);
+        }
+
+        $before = $user->outlets()->orderBy('outlets.id')->pluck('outlets.id')->map(fn ($id) => (int) $id)->values()->all();
+        $after = collect($request->validated('outlet_ids'))->map(fn ($id) => (int) $id)->unique()->sort()->values()->all();
+
+        // Pengelola tanpa flag all_outlets hanya boleh MEMBERI dan MELEPAS outlet yang SENDIRI ia lihat.
+        // Tanpa batas ini, pengguna dengan menu `users` bisa menugaskan outlet yang tak pernah boleh ia
+        // lihat, atau mencabut akses pengguna lain ke outlet yang tak bisa ia lihat.
+        if (! $actor->hasAllOutlets()) {
+            $permitted = app(\App\Support\OutletContext::class)->permittedIds();
+            if (array_diff($after, $permitted) !== [] || array_diff($before, $permitted) !== []) {
+                return response()->json(['message' => __('outlets.forbidden'), 'code' => 'outlet_forbidden'], 403);
+            }
+        }
+
+        DB::transaction(function () use ($request, $user, $before, $after) {
+            $user->outlets()->sync($after);
+
+            app(ActivityLogger::class)->log(
+                $request->user()->id,
+                'user_outlets_updated',
+                'user',
+                $user->id,
+                __('outlets.assignments_changed'),
+                ['outlet_ids' => $before],
+                ['outlet_ids' => $after],
+            );
+        });
+
+        return response()->json(new UserResource($user->fresh(['role'])->load('outlets:id')));
     }
 
     public function update(UpdateUserRequest $request, User $user): JsonResponse
@@ -92,7 +155,7 @@ class UserController extends Controller
 
         // FR-006 — konflik aturan bisnis, bukan soal hak akses, jadi 409
         // (bukan 403) dan dicek manual di sini, konsisten dengan pola
-        // guard bisnis lain di kodebase ini (ArtistController::destroy(),
+        // guard bisnis lain di kodebase ini (OutletController::destroy(),
         // dst.), bukan dilempar lewat $this->authorize().
         if (app(UserPolicy::class)->isSelfLockout($request->user(), $user, $deactivating, $roleChanging)) {
             return response()->json([

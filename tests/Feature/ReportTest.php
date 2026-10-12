@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -17,7 +17,7 @@ use Tests\TestCase;
 
 class ReportTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, \Tests\Support\TreatsOrdersAsLegacy;
 
     public function test_artist_settlement_matches_sum_of_actual_orders(): void
     {
@@ -27,14 +27,14 @@ class ReportTest extends TestCase
         $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
 
-        $artistA = Artist::factory()->create(['code' => 'AAA']);
-        $artistB = Artist::factory()->create(['code' => 'BBB']);
+        $artistA = Outlet::factory()->create(['code' => 'AAA']);
+        $artistB = Outlet::factory()->create(['code' => 'BBB']);
         $category = Category::factory()->create();
 
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id]);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id]);
         $variantA = $productA->variants()->create(['sku' => 'AAAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id]);
         $variantB = $productB->variants()->create(['sku' => 'BBBKYBBB0001', 'sell_price' => 20000, 'cost_price' => 8000, 'current_stock' => 100]);
 
         $orderService = app(OrderService::class);
@@ -47,10 +47,10 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $response = $this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}");
+        $response = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$event->id}");
 
         $response->assertOk();
-        $rows = collect($response->json('data'))->keyBy('artist_id');
+        $rows = collect($response->json('data'))->keyBy('outlet_id');
 
         $this->assertEquals('30000.00', $rows[$artistA->id]['total_sales']); // 3 x 10000
         $this->assertEquals('20000.00', $rows[$artistB->id]['total_sales']); // 1 x 20000
@@ -64,10 +64,10 @@ class ReportTest extends TestCase
         $this->actingAs($cashier, 'sanctum');
 
         $event = Event::factory()->create(['status' => 'active']);
+        $artist = Outlet::factory()->create();
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
-        $artist = Artist::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'AAAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $orderService = app(OrderService::class);
@@ -79,12 +79,12 @@ class ReportTest extends TestCase
 
         $this->actingAs($owner, 'sanctum');
 
-        $before = $this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->json('data.0.total_sales');
+        $before = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$event->id}")->json('data.0.total_sales');
         $this->assertEquals('20000.00', $before);
 
         $orderService->void($order, 'Test batal', $owner);
 
-        $after = $this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->json('data.0.total_sales');
+        $after = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$event->id}")->json('data.0.total_sales');
         $this->assertEquals('0.00', $after); // order voided -> tidak ikut terhitung
     }
 
@@ -98,7 +98,7 @@ class ReportTest extends TestCase
     }
 
     // Regresi — celah access-control ditemukan saat security review:
-    // artistSettlements() tidak punya pemeriksaan owner/admin sama sekali,
+    // outletSettlements() tidak punya pemeriksaan owner/admin sama sekali,
     // padahal mengembalikan data penjualan per artist (data komersial
     // sesensitif laporan profit), dan sibling-nya di controller yang sama
     // (profit) sudah menegakkannya.
@@ -108,12 +108,12 @@ class ReportTest extends TestCase
         $this->actingAs($cashier, 'sanctum');
         $event = Event::factory()->create();
 
-        $this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->assertStatus(403);
+        $this->getJson("/api/v1/reports/outlet-settlements?event_id={$event->id}")->assertStatus(403);
     }
 
     // Regresi — artist tanpa satu pun order_items di event ini dulu hilang
     // total dari laporan, karena SettlementService membangun baris dari
-    // GROUP BY order_items.artist_id sehingga tidak pernah ada baris
+    // GROUP BY order_items.home_outlet_id sehingga tidak pernah ada baris
     // settlement untuk mereka.
     public function test_artists_without_any_sales_still_appear_with_zeroes(): void
     {
@@ -121,13 +121,13 @@ class ReportTest extends TestCase
         $this->actingAs($cashier, 'sanctum');
 
         $event = Event::factory()->create(['status' => 'active']);
-        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
 
-        $selling = Artist::factory()->create(['code' => 'SEL', 'name' => 'Artist Laku']);
-        $idle = Artist::factory()->create(['code' => 'IDL', 'name' => 'Artist Belum Laku']);
+        $selling = Outlet::factory()->create(['code' => 'SEL', 'name' => 'Outlet Laku']);
+        $idle = Outlet::factory()->create(['code' => 'IDL', 'name' => 'Outlet Belum Laku']);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
         $category = Category::factory()->create();
 
-        $product = Product::factory()->create(['artist_id' => $selling->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $selling->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'SELKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         app(OrderService::class)->create([
@@ -139,8 +139,8 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $rows = collect($this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")->json('data'))
-            ->keyBy('artist_id');
+        $rows = collect($this->getJson("/api/v1/reports/outlet-settlements?event_id={$event->id}")->json('data'))
+            ->keyBy('outlet_id');
 
         $this->assertCount(2, $rows);
 
@@ -148,7 +148,7 @@ class ReportTest extends TestCase
 
         $this->assertSame('0.00', $rows[$idle->id]['total_sales']);
         $this->assertSame(0, $rows[$idle->id]['total_units']);
-        $this->assertSame('Artist Belum Laku', $rows[$idle->id]['artist_name']);
+        $this->assertSame('Outlet Belum Laku', $rows[$idle->id]['outlet_name']);
     }
 
     // 040 (tindak lanjut) — endpoint "Record payment" untuk seller dihapus; rutenya tidak ada lagi.
@@ -157,20 +157,20 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $this->postJson('/api/v1/reports/artist-settlements/1/payment', ['amount' => 20000])->assertStatus(404);
+        $this->postJson('/api/v1/reports/outlet-settlements/1/payment', ['amount' => 20000])->assertStatus(404);
     }
 
-    // Artist nonaktif TIDAK ikut dilaporkan bila tidak punya penjualan —
-    // laporan berisi "semua artist AKTIF", bukan seluruh isi tabel artists.
+    // Outlet nonaktif TIDAK ikut dilaporkan bila tidak punya penjualan —
+    // laporan berisi "semua artist AKTIF", bukan seluruh isi tabel outlets.
     public function test_inactive_artist_without_sales_is_not_listed(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
         $event = Event::factory()->create(['status' => 'active']);
-        Artist::factory()->create(['code' => 'OFF', 'is_active' => false]);
+        Outlet::factory()->create(['code' => 'OFF', 'is_active' => false]);
 
-        $this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")
+        $this->getJson("/api/v1/reports/outlet-settlements?event_id={$event->id}")
             ->assertOk()
             ->assertJsonCount(0, 'data');
     }
@@ -183,11 +183,11 @@ class ReportTest extends TestCase
         $this->actingAs($cashier, 'sanctum');
 
         $event = Event::factory()->create(['status' => 'active']);
-        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
 
-        $artist = Artist::factory()->create(['code' => 'RET', 'is_active' => true]);
+        $artist = Outlet::factory()->create(['code' => 'RET', 'is_active' => true]);
+        $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'RETKYAAA0001', 'sell_price' => 5000, 'cost_price' => 2000, 'current_stock' => 50]);
 
         app(OrderService::class)->create([
@@ -201,7 +201,7 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")
+        $this->getJson("/api/v1/reports/outlet-settlements?event_id={$event->id}")
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.total_sales', '5000.00');
@@ -243,9 +243,9 @@ class ReportTest extends TestCase
         $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
 
-        $artist = Artist::factory()->create(['code' => 'RYU']);
+        $artist = Outlet::factory()->create(['code' => 'RYU']);
         $category = Category::factory()->create(['code' => 'KY']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Minecraft']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Minecraft']);
         $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $orderService = app(OrderService::class);
@@ -301,9 +301,9 @@ class ReportTest extends TestCase
         $this->assertEquals($category->id, $byCategory->json('rows.0.entity_id'));
         $this->assertEquals($category->name, $byCategory->json('rows.0.label'));
 
-        $byArtist = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=artist")->assertOk();
-        $this->assertEquals('Artist', $byArtist->json('group_label'));
-        $this->assertEquals($artist->id, $byArtist->json('rows.0.entity_id'));
+        $byOutlet = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=outlet")->assertOk();
+        $this->assertEquals('Outlet', $byOutlet->json('group_label'));
+        $this->assertEquals($artist->id, $byOutlet->json('rows.0.entity_id'));
 
         $byDay = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=day")->assertOk();
         $this->assertEquals('Tanggal', $byDay->json('group_label'));
@@ -321,9 +321,9 @@ class ReportTest extends TestCase
 
         $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'AAAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $customer = Customer::factory()->create(['name' => 'Budi Santoso']);
@@ -353,9 +353,9 @@ class ReportTest extends TestCase
 
         $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'BBBKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         app(OrderService::class)->create([
@@ -375,7 +375,7 @@ class ReportTest extends TestCase
     }
 
     // =====================================================================
-    // F11.6 — drill-down transaksi per artist di Rekap Artist
+    // F11.6 — drill-down transaksi per artist di Rekap Outlet
     // =====================================================================
 
     public function test_artist_settlement_transactions_requires_owner_or_admin(): void
@@ -384,9 +384,9 @@ class ReportTest extends TestCase
         $this->actingAs($cashier, 'sanctum');
 
         $event = Event::factory()->create();
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
 
-        $this->getJson("/api/v1/reports/artist-settlements/{$artist->id}/transactions?event_id={$event->id}")
+        $this->getJson("/api/v1/reports/outlet-settlements/{$artist->id}/transactions?event_id={$event->id}")
             ->assertStatus(403);
     }
 
@@ -402,13 +402,13 @@ class ReportTest extends TestCase
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
         $category = Category::factory()->create();
 
-        $artistA = Artist::factory()->create(['code' => 'ARA', 'name' => 'Artist A']);
-        $artistB = Artist::factory()->create(['code' => 'ARB', 'name' => 'Artist B']);
+        $artistA = Outlet::factory()->create(['code' => 'ARA', 'name' => 'Outlet A']);
+        $artistB = Outlet::factory()->create(['code' => 'ARB', 'name' => 'Outlet B']);
 
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id, 'name' => 'Produk A']);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id, 'name' => 'Produk A']);
         $variantA = $productA->variants()->create(['sku' => 'ARAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id, 'name' => 'Produk B']);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id, 'name' => 'Produk B']);
         $variantB = $productB->variants()->create(['sku' => 'ARBKYAAA0001', 'sell_price' => 20000, 'cost_price' => 8000, 'current_stock' => 100]);
 
         $orderService = app(OrderService::class);
@@ -435,7 +435,7 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $forA = $this->getJson("/api/v1/reports/artist-settlements/{$artistA->id}/transactions?event_id={$event->id}")
+        $forA = $this->getJson("/api/v1/reports/outlet-settlements/{$artistA->id}/transactions?event_id={$event->id}")
             ->assertOk();
 
         $this->assertCount(2, $forA->json('transactions'));
@@ -445,16 +445,16 @@ class ReportTest extends TestCase
         $sharedRowForA = collect($forA->json('transactions'))->firstWhere('key', 'order-'.$sharedOrder->id);
         // Item milik artist A saja dalam order gabungan — bukan item B.
         $this->assertCount(1, $sharedRowForA['items']);
-        $this->assertSame('20000.00', $sharedRowForA['amount_for_artist']); // 2 x 10000
+        $this->assertSame('20000.00', $sharedRowForA['amount_for_outlet']); // 2 x 10000
 
-        $forB = $this->getJson("/api/v1/reports/artist-settlements/{$artistB->id}/transactions?event_id={$event->id}")
+        $forB = $this->getJson("/api/v1/reports/outlet-settlements/{$artistB->id}/transactions?event_id={$event->id}")
             ->assertOk();
 
         $this->assertCount(1, $forB->json('transactions'));
         $sharedRowForB = $forB->json('transactions.0');
         $this->assertSame('order-'.$sharedOrder->id, $sharedRowForB['key']);
         $this->assertCount(1, $sharedRowForB['items']);
-        $this->assertSame('20000.00', $sharedRowForB['amount_for_artist']); // 1 x 20000
+        $this->assertSame('20000.00', $sharedRowForB['amount_for_outlet']); // 1 x 20000
     }
 
     // =====================================================================
@@ -473,8 +473,8 @@ class ReportTest extends TestCase
         $category = Category::factory()->create();
         $customer = Customer::factory()->create();
 
-        $artist = Artist::factory()->create(['code' => 'US1', 'name' => 'Artist US1']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $artist = Outlet::factory()->create(['code' => 'US1', 'name' => 'Outlet US1']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'US1KYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $order = app(OrderService::class)->create([
@@ -491,7 +491,7 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $response = $this->getJson("/api/v1/reports/artist-settlements/{$artist->id}/transactions?event_id={$event->id}")
+        $response = $this->getJson("/api/v1/reports/outlet-settlements/{$artist->id}/transactions?event_id={$event->id}")
             ->assertOk();
 
         $transactions = collect($response->json('transactions'));
@@ -499,7 +499,7 @@ class ReportTest extends TestCase
 
         $orderTx = $transactions->first();
         $this->assertSame('order-'.$order->id, $orderTx['key']);
-        $this->assertSame('10000.00', $orderTx['amount_for_artist']);
+        $this->assertSame('10000.00', $orderTx['amount_for_outlet']);
         $this->assertArrayNotHasKey('source', $orderTx);
         $this->assertNotContains('preorder-'.$preorder->id, $transactions->pluck('key')->all());
     }
@@ -511,15 +511,15 @@ class ReportTest extends TestCase
 
         $event = Event::factory()->create(['status' => 'active']);
         $category = Category::factory()->create();
-        $artist = Artist::factory()->create(['code' => 'US5']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $artist = Outlet::factory()->create(['code' => 'US5']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'US5KYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $this->createPartiallyPaidPreorder($event, Customer::factory()->create(), [
             ['variant' => $variant, 'qty' => 1],
         ], paidAmount: 10000);
 
-        $this->getJson("/api/v1/reports/artist-settlements/{$artist->id}/transactions?event_id={$event->id}")
+        $this->getJson("/api/v1/reports/outlet-settlements/{$artist->id}/transactions?event_id={$event->id}")
             ->assertOk()
             ->assertJsonPath('transactions', []);
     }
@@ -534,8 +534,8 @@ class ReportTest extends TestCase
         $category = Category::factory()->create();
         $customer = Customer::factory()->create();
 
-        $artist = Artist::factory()->create(['code' => 'US2', 'name' => 'Artist US2']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $artist = Outlet::factory()->create(['code' => 'US2', 'name' => 'Outlet US2']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'US2KYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         app(OrderService::class)->create([
@@ -551,14 +551,14 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $detailResponse = $this->getJson("/api/v1/reports/artist-settlements/{$artist->id}/transactions?event_id={$event->id}")
+        $detailResponse = $this->getJson("/api/v1/reports/outlet-settlements/{$artist->id}/transactions?event_id={$event->id}")
             ->assertOk();
         $sumOfEntries = collect($detailResponse->json('transactions'))
-            ->sum(fn ($tx) => (float) $tx['amount_for_artist']);
+            ->sum(fn ($tx) => (float) $tx['amount_for_outlet']);
 
-        $recapResponse = $this->getJson("/api/v1/reports/artist-settlements?event_id={$event->id}")
+        $recapResponse = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$event->id}")
             ->assertOk();
-        $recapRow = collect($recapResponse->json('data'))->firstWhere('artist_id', $artist->id);
+        $recapRow = collect($recapResponse->json('data'))->firstWhere('outlet_id', $artist->id);
         $this->assertNotNull($recapRow);
 
         // 040: pre-order (4000 terkumpul) tidak lagi ikut di keduanya.
@@ -576,8 +576,8 @@ class ReportTest extends TestCase
         $customer = Customer::factory()->create();
         $category = Category::factory()->create();
 
-        $artist = Artist::factory()->create(['code' => 'US3']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $artist = Outlet::factory()->create(['code' => 'US3']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'US3KYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $preorder = $this->createPartiallyPaidPreorder($event, $customer, [
@@ -586,7 +586,7 @@ class ReportTest extends TestCase
 
         app(\App\Services\PreorderService::class)->transitionStatus($preorder, 'cancelled', 'dibatalkan pelanggan', $owner);
 
-        $response = $this->getJson("/api/v1/reports/artist-settlements/{$artist->id}/transactions?event_id={$event->id}")
+        $response = $this->getJson("/api/v1/reports/outlet-settlements/{$artist->id}/transactions?event_id={$event->id}")
             ->assertOk();
 
         $keys = collect($response->json('transactions'))->pluck('key')->all();
@@ -598,13 +598,13 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $artist = Artist::factory()->create(['code' => 'US4']);
+        $artist = Outlet::factory()->create(['code' => 'US4']);
         $category = Category::factory()->create();
 
         [$liveOrder, $liveEventId] = \App\Support\ModeGate::runAs('live', function () use ($artist, $category, $owner) {
             $event = Event::factory()->create(['status' => 'active']);
             $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $owner->id, 'status' => 'open']);
-            $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+            $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
             $variant = $product->variants()->create(['sku' => 'US4KYLIV0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
             $order = app(OrderService::class)->create([
@@ -624,7 +624,7 @@ class ReportTest extends TestCase
         \App\Support\ModeGate::runAs('demo', function () use ($artist, $category, $owner) {
             $event = Event::factory()->create(['status' => 'active']);
             $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $owner->id, 'status' => 'open']);
-            $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+            $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
             $variant = $product->variants()->create(['sku' => 'US4KYDEM0001', 'sell_price' => 999999, 'cost_price' => 4000, 'current_stock' => 100]);
 
             app(OrderService::class)->create([
@@ -641,12 +641,12 @@ class ReportTest extends TestCase
 
         \App\Models\Setting::updateOrCreate(['key' => 'system_mode'], ['value' => 'live', 'type' => 'string', 'group' => 'system']);
 
-        $response = $this->getJson("/api/v1/reports/artist-settlements/{$artist->id}/transactions?event_id={$liveEventId}")
+        $response = $this->getJson("/api/v1/reports/outlet-settlements/{$artist->id}/transactions?event_id={$liveEventId}")
             ->assertOk();
 
         $transactions = collect($response->json('transactions'));
         $this->assertCount(1, $transactions);
-        $sum = $transactions->sum(fn ($tx) => (float) $tx['amount_for_artist']);
+        $sum = $transactions->sum(fn ($tx) => (float) $tx['amount_for_outlet']);
         // 10000 (order LIVE) saja — TANPA kontaminasi dari order/preorder DEMO
         // senilai jutaan, dan (040) tanpa pre-order LIVE-nya.
         $this->assertSame(10000.0, $sum);
@@ -667,9 +667,9 @@ class ReportTest extends TestCase
 
         $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
-        $artist = Artist::factory()->create(['code' => 'EXP', 'name' => 'Artist Ekspor']);
+        $artist = Outlet::factory()->create(['code' => 'EXP', 'name' => 'Outlet Ekspor']);
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Gantungan Kunci']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Gantungan Kunci']);
         $variant = $product->variants()->create(['sku' => 'EXPKYAAA0001', 'sell_price' => 15000, 'cost_price' => 5000, 'current_stock' => 100]);
 
         app(OrderService::class)->create([
@@ -681,7 +681,7 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $response = $this->get("/api/v1/reports/artist-settlements/export?event_id={$event->id}");
+        $response = $this->get("/api/v1/reports/outlet-settlements/export?event_id={$event->id}");
         $response->assertOk();
 
         $tmpPath = tempnam(sys_get_temp_dir(), 'rekap-artist').'.xlsx';
@@ -694,8 +694,8 @@ class ReportTest extends TestCase
         $this->assertContains('Detail Transaksi', $sheetNames);
 
         $summarySheet = $spreadsheet->getSheetByName('Rekap');
-        $this->assertSame('artist_name', $summarySheet->getCell('B1')->getValue());
-        $this->assertSame('Artist Ekspor', $summarySheet->getCell('B2')->getValue());
+        $this->assertSame('outlet_name', $summarySheet->getCell('B1')->getValue());
+        $this->assertSame('Outlet Ekspor', $summarySheet->getCell('B2')->getValue());
 
         $detailSheet = $spreadsheet->getSheetByName('Detail Transaksi');
         $this->assertSame('item_name', $detailSheet->getCell('D1')->getValue());
@@ -719,9 +719,9 @@ class ReportTest extends TestCase
 
         $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'AAAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $budi = Customer::factory()->create(['name' => 'Budi Santoso']);
@@ -791,9 +791,9 @@ class ReportTest extends TestCase
 
         $event = Event::factory()->create(['status' => 'active']);
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'AAAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $customer = Customer::factory()->create(['name' => 'Dedi Kurnia']);
@@ -813,12 +813,12 @@ class ReportTest extends TestCase
             'payments' => [['method' => 'cash', 'amount' => 50000]],
         ], $cashier);
         // 042: laporan memakai tanggal BISNIS tersimpan — geser keduanya, bukan hanya created_at.
-        $outOfRange->forceFill(['created_at' => now()->subDays(10), 'business_date' => now()->subDays(10)->toDateString()])->save();
+        $outOfRange->forceFill(['created_at' => now()->subDays(10), 'business_date' => \Carbon\CarbonImmutable::parse(\App\Support\BusinessDay::today())->subDays(10)->toDateString()])->save();
 
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $today = now()->toDateString();
+        $today = \App\Support\BusinessDay::today(); // tanggal bisnis toko, sama dengan yang distempel saat order dibuat
         $response = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=customer&date_from={$today}&date_to={$today}");
 
         $response->assertOk();
@@ -838,7 +838,7 @@ class ReportTest extends TestCase
         $this->actingAs($cashier, 'sanctum');
         $event = Event::factory()->create();
 
-        $this->getJson("/api/v1/reports/artist-profit?event_id={$event->id}")->assertStatus(403);
+        $this->getJson("/api/v1/reports/outlet-profit?event_id={$event->id}")->assertStatus(403);
     }
 
     public function test_artist_profit_sums_modal_across_multiple_orders_and_never_subtracts_event_cost(): void
@@ -851,9 +851,9 @@ class ReportTest extends TestCase
         $event = Event::factory()->create(['status' => 'active', 'event_cost' => 5000000]);
         $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $cashier->id, 'status' => 'open']);
 
-        $artist = Artist::factory()->create(['code' => 'MDL', 'name' => 'Artist Modal']);
+        $artist = Outlet::factory()->create(['code' => 'MDL', 'name' => 'Outlet Modal']);
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'MDLKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $orderService = app(OrderService::class);
@@ -875,10 +875,10 @@ class ReportTest extends TestCase
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
 
-        $response = $this->getJson("/api/v1/reports/artist-profit?event_id={$event->id}");
+        $response = $this->getJson("/api/v1/reports/outlet-profit?event_id={$event->id}");
         $response->assertOk();
 
-        $row = collect($response->json('data'))->firstWhere('artist_id', $artist->id);
+        $row = collect($response->json('data'))->firstWhere('outlet_id', $artist->id);
 
         // total_sales = 5 x 10000, modal = 5 x 4000, gross_profit = selisihnya
         $this->assertSame('50000.00', $row['total_sales']);
@@ -902,7 +902,7 @@ class ReportTest extends TestCase
     // ke "dp_paid" juga saat dicatat lewat service langsung (dulu fixture ini
     // diam-diam tertinggal di "ordered" karena atribut status default DB tidak
     // terbaca pada model hasil create()); itu yang terjadi di jalur API nyata.
-    private function createPartiallyPaidPreorder(Event $event, Customer $customer, array $itemsByArtist, float $paidAmount): \App\Models\Preorder
+    private function createPartiallyPaidPreorder(Event $event, Customer $customer, array $itemsByOutlet, float $paidAmount): \App\Models\Preorder
     {
         $preorderService = app(\App\Services\PreorderService::class);
         $user = User::factory()->create(['role' => 'owner']);
@@ -911,7 +911,7 @@ class ReportTest extends TestCase
             'event_id' => $event->id,
             'customer_id' => $customer->id,
             'fulfillment' => 'pickup',
-            'items' => collect($itemsByArtist)->map(fn ($i) => ['variant_id' => $i['variant']->id, 'qty' => $i['qty']])->values()->all(),
+            'items' => collect($itemsByOutlet)->map(fn ($i) => ['variant_id' => $i['variant']->id, 'qty' => $i['qty']])->values()->all(),
         ], $user);
 
         if ($paidAmount > 0) {
@@ -931,9 +931,9 @@ class ReportTest extends TestCase
         $event = Event::factory()->create(['status' => 'active']);
         $customer = Customer::factory()->create();
 
-        $artist = Artist::factory()->create(['code' => 'PRA']);
+        $artist = Outlet::factory()->create(['code' => 'PRA']);
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         // sell_price 10000, cost_price 4000, qty 1 -> subtotal 10000.
         $variant = $product->variants()->create(['sku' => 'PRAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
@@ -943,7 +943,7 @@ class ReportTest extends TestCase
             ['variant' => $variant, 'qty' => 1],
         ], paidAmount: 4000);
 
-        $salesResponse = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=artist");
+        $salesResponse = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=outlet");
         $salesResponse->assertOk();
 
         $row = collect($salesResponse->json('rows'))->firstWhere('entity_id', $artist->id);
@@ -971,16 +971,16 @@ class ReportTest extends TestCase
         $event = Event::factory()->create(['status' => 'active']);
         $customer = Customer::factory()->create();
 
-        $artist = Artist::factory()->create(['code' => 'PRU']);
+        $artist = Outlet::factory()->create(['code' => 'PRU']);
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'PRUKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $this->createPartiallyPaidPreorder($event, $customer, [
             ['variant' => $variant, 'qty' => 1],
         ], paidAmount: 0);
 
-        $salesResponse = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=artist");
+        $salesResponse = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=outlet");
         $salesResponse->assertOk();
 
         // Baris boleh muncul (preorder tetap ter-JOIN), tapi NILAINYA harus
@@ -1004,9 +1004,9 @@ class ReportTest extends TestCase
         $event = Event::factory()->create(['status' => 'active']);
         $customer = Customer::factory()->create();
 
-        $artist = Artist::factory()->create(['code' => 'PRC']);
+        $artist = Outlet::factory()->create(['code' => 'PRC']);
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'PRCKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         $preorder = $this->createPartiallyPaidPreorder($event, $customer, [
@@ -1015,7 +1015,7 @@ class ReportTest extends TestCase
 
         app(\App\Services\PreorderService::class)->transitionStatus($preorder, 'cancelled', 'dibatalkan pelanggan', $owner);
 
-        $salesResponse = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=artist");
+        $salesResponse = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=outlet");
         $salesResponse->assertOk();
 
         $row = collect($salesResponse->json('rows'))->firstWhere('entity_id', $artist->id);
@@ -1035,27 +1035,27 @@ class ReportTest extends TestCase
         $customer = Customer::factory()->create();
         $category = Category::factory()->create();
 
-        $artistA = Artist::factory()->create(['code' => 'PMA']);
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id]);
+        $artistA = Outlet::factory()->create(['code' => 'PMA']);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id]);
         // qty 1 x sell_price 6000, cost_price 2000 -> line_total 6000.
         $variantA = $productA->variants()->create(['sku' => 'PMAKYAAA0001', 'sell_price' => 6000, 'cost_price' => 2000, 'current_stock' => 100]);
 
-        $artistB = Artist::factory()->create(['code' => 'PMB']);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
+        $artistB = Outlet::factory()->create(['code' => 'PMB']);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id]);
         // qty 1 x sell_price 4000, cost_price 1000 -> line_total 4000.
         $variantB = $productB->variants()->create(['sku' => 'PMBKYAAA0001', 'sell_price' => 4000, 'cost_price' => 1000, 'current_stock' => 100]);
 
         // subtotal preorder = 6000 + 4000 = 10000. Baru 5000 (50%) dibayar.
         // fraction = 5000 / 10000 = 0.5.
-        // Artist A recognized revenue = 6000 * 0.5 = 3000, unit = 1 * 0.5 = 0.5.
-        // Artist B recognized revenue = 4000 * 0.5 = 2000, unit = 1 * 0.5 = 0.5.
+        // Outlet A recognized revenue = 6000 * 0.5 = 3000, unit = 1 * 0.5 = 0.5.
+        // Outlet B recognized revenue = 4000 * 0.5 = 2000, unit = 1 * 0.5 = 0.5.
         // Total recognized = 5000, sama dengan uang yang benar-benar terkumpul.
         $this->createPartiallyPaidPreorder($event, $customer, [
             ['variant' => $variantA, 'qty' => 1],
             ['variant' => $variantB, 'qty' => 1],
         ], paidAmount: 5000);
 
-        $salesResponse = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=artist");
+        $salesResponse = $this->getJson("/api/v1/reports/sales?event_id={$event->id}&group_by=outlet");
         $salesResponse->assertOk();
 
         $rows = collect($salesResponse->json('rows'));
@@ -1084,12 +1084,12 @@ class ReportTest extends TestCase
         $customer = Customer::factory()->create();
         $category = Category::factory()->create();
 
-        $artistA = Artist::factory()->create(['code' => 'SMA']);
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id]);
+        $artistA = Outlet::factory()->create(['code' => 'SMA']);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id]);
         $variantA = $productA->variants()->create(['sku' => 'SMAKYAAA0001', 'sell_price' => 6000, 'cost_price' => 2000, 'current_stock' => 100]);
 
-        $artistB = Artist::factory()->create(['code' => 'SMB']);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
+        $artistB = Outlet::factory()->create(['code' => 'SMB']);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id]);
         $variantB = $productB->variants()->create(['sku' => 'SMBKYAAA0001', 'sell_price' => 4000, 'cost_price' => 1000, 'current_stock' => 100]);
 
         // Subtotal 10000 dengan 5000 terkumpul: sebelum 040 menyumbang 3000 ke A dan 2000 ke B.
@@ -1098,8 +1098,8 @@ class ReportTest extends TestCase
             ['variant' => $variantB, 'qty' => 1],
         ], paidAmount: 5000);
 
-        $cancelledArtist = Artist::factory()->create(['code' => 'SMC']);
-        $productC = Product::factory()->create(['artist_id' => $cancelledArtist->id, 'category_id' => $category->id]);
+        $cancelledOutlet = Outlet::factory()->create(['code' => 'SMC']);
+        $productC = Product::factory()->create(['home_outlet_id' => $cancelledOutlet->id, 'category_id' => $category->id]);
         $variantC = $productC->variants()->create(['sku' => 'SMCKYAAA0001', 'sell_price' => 5000, 'cost_price' => 2000, 'current_stock' => 100]);
 
         $owner = User::factory()->create(['role' => 'owner']);
@@ -1110,12 +1110,12 @@ class ReportTest extends TestCase
 
         app(SettlementService::class)->recalculateForEvent($event);
 
-        $this->assertSame(0, \App\Models\ArtistSettlement::where('event_id', $event->id)->count());
+        $this->assertSame(0, \App\Models\OutletSettlement::where('event_id', $event->id)->count());
     }
 
     // =====================================================================
     // 012-seller-preorder-report-detail-export
-    // T008 (US2) — GET /reports/preorders?breakdown=artist
+    // T008 (US2) — GET /reports/preorders?breakdown=outlet
     // =====================================================================
 
     // Preorder lintas 2 artist: item A senilai 6000, item B senilai 4000,
@@ -1130,12 +1130,12 @@ class ReportTest extends TestCase
         $customer = Customer::factory()->create();
         $category = Category::factory()->create();
 
-        $artistA = Artist::factory()->create(['code' => 'BDA', 'name' => 'Artist BDA']);
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id]);
+        $artistA = Outlet::factory()->create(['code' => 'BDA', 'name' => 'Outlet BDA']);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id]);
         $variantA = $productA->variants()->create(['sku' => 'BDAKYAAA0001', 'sell_price' => 6000, 'cost_price' => 2000, 'current_stock' => 100]);
 
-        $artistB = Artist::factory()->create(['code' => 'BDB', 'name' => 'Artist BDB']);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
+        $artistB = Outlet::factory()->create(['code' => 'BDB', 'name' => 'Outlet BDB']);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id]);
         $variantB = $productB->variants()->create(['sku' => 'BDBKYAAA0001', 'sell_price' => 4000, 'cost_price' => 1000, 'current_stock' => 100]);
 
         // subtotal = 6000 + 4000 = 10000, dibayar 5000 (50%).
@@ -1144,12 +1144,12 @@ class ReportTest extends TestCase
             ['variant' => $variantB, 'qty' => 1],
         ], paidAmount: 5000);
 
-        $response = $this->getJson("/api/v1/reports/preorders?event_id={$event->id}&breakdown=artist")
+        $response = $this->getJson("/api/v1/reports/preorders?event_id={$event->id}&breakdown=outlet")
             ->assertOk();
 
         $rows = collect($response->json('rows'));
-        $rowA = $rows->firstWhere('artist_id', $artistA->id);
-        $rowB = $rows->firstWhere('artist_id', $artistB->id);
+        $rowA = $rows->firstWhere('outlet_id', $artistA->id);
+        $rowB = $rows->firstWhere('outlet_id', $artistB->id);
 
         $this->assertNotNull($rowA);
         $this->assertNotNull($rowB);
@@ -1194,8 +1194,8 @@ class ReportTest extends TestCase
         $customer = Customer::factory()->create();
         $category = Category::factory()->create();
 
-        $artist = Artist::factory()->create(['code' => 'CNT']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $artist = Outlet::factory()->create(['code' => 'CNT']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant1 = $product->variants()->create(['sku' => 'CNTKYAAA0001', 'sell_price' => 5000, 'cost_price' => 2000, 'current_stock' => 100]);
         $variant2 = $product->variants()->create(['sku' => 'CNTKYAAA0002', 'sell_price' => 5000, 'cost_price' => 2000, 'current_stock' => 100]);
 
@@ -1205,17 +1205,17 @@ class ReportTest extends TestCase
             ['variant' => $variant2, 'qty' => 1],
         ], paidAmount: 10000);
 
-        $response = $this->getJson("/api/v1/reports/preorders?event_id={$event->id}&breakdown=artist")
+        $response = $this->getJson("/api/v1/reports/preorders?event_id={$event->id}&breakdown=outlet")
             ->assertOk();
 
-        $row = collect($response->json('rows'))->firstWhere('artist_id', $artist->id);
+        $row = collect($response->json('rows'))->firstWhere('outlet_id', $artist->id);
         $this->assertNotNull($row);
         $this->assertSame(1, $row['preorder_count']);
     }
 
     // =====================================================================
     // 012-seller-preorder-report-detail-export
-    // T014 (US3) — GET /reports/preorders drilldown (status/payment_completeness/artist_id)
+    // T014 (US3) — GET /reports/preorders drilldown (status/payment_completeness/home_outlet_id)
     // =====================================================================
 
     public function test_preorders_drilldown_without_artist_id_matches_the_summary_bucket(): void
@@ -1228,8 +1228,8 @@ class ReportTest extends TestCase
         $customer2 = Customer::factory()->create(['name' => 'Siti']);
         $category = Category::factory()->create();
 
-        $artist = Artist::factory()->create(['code' => 'DRA']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $artist = Outlet::factory()->create(['code' => 'DRA']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'DRAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
 
         // Dua preorder terpisah, status/kelengkapan sama (partial): masing2
@@ -1269,9 +1269,9 @@ class ReportTest extends TestCase
         );
     }
 
-    // Dengan artist_id: invariant yang sama berlaku untuk porsi prorata
+    // Dengan outlet_id: invariant yang sama berlaku untuk porsi prorata
     // milik artist tersebut secara spesifik (bukan total penuh preorder).
-    public function test_preorders_drilldown_with_artist_id_matches_that_artists_prorated_breakdown_row(): void
+    public function test_preorders_drilldown_with_outlet_id_matches_that_artists_prorated_breakdown_row(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($owner, 'sanctum');
@@ -1280,12 +1280,12 @@ class ReportTest extends TestCase
         $customer = Customer::factory()->create(['name' => 'Andi']);
         $category = Category::factory()->create();
 
-        $artistA = Artist::factory()->create(['code' => 'DWA']);
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id]);
+        $artistA = Outlet::factory()->create(['code' => 'DWA']);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id]);
         $variantA = $productA->variants()->create(['sku' => 'DWAKYAAA0001', 'sell_price' => 6000, 'cost_price' => 2000, 'current_stock' => 100]);
 
-        $artistB = Artist::factory()->create(['code' => 'DWB']);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
+        $artistB = Outlet::factory()->create(['code' => 'DWB']);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id]);
         $variantB = $productB->variants()->create(['sku' => 'DWBKYAAA0001', 'sell_price' => 4000, 'cost_price' => 1000, 'current_stock' => 100]);
 
         // subtotal 10000, dibayar 5000 (50%) -> artistA share 3000, artistB share 2000.
@@ -1294,12 +1294,12 @@ class ReportTest extends TestCase
             ['variant' => $variantB, 'qty' => 1],
         ], paidAmount: 5000);
 
-        $breakdownResponse = $this->getJson("/api/v1/reports/preorders?event_id={$event->id}&breakdown=artist")->assertOk();
-        $breakdownRowA = collect($breakdownResponse->json('rows'))->firstWhere('artist_id', $artistA->id);
+        $breakdownResponse = $this->getJson("/api/v1/reports/preorders?event_id={$event->id}&breakdown=outlet")->assertOk();
+        $breakdownRowA = collect($breakdownResponse->json('rows'))->firstWhere('outlet_id', $artistA->id);
         $this->assertNotNull($breakdownRowA);
 
         $drilldownResponse = $this->getJson(
-            "/api/v1/reports/preorders?event_id={$event->id}&status=dp_paid&payment_completeness=partial&artist_id={$artistA->id}"
+            "/api/v1/reports/preorders?event_id={$event->id}&status=dp_paid&payment_completeness=partial&outlet_id={$artistA->id}"
         )->assertOk();
 
         $rows = collect($drilldownResponse->json('rows'));
@@ -1317,7 +1317,7 @@ class ReportTest extends TestCase
 
     // =====================================================================
     // 012-seller-preorder-report-detail-export
-    // T022 (US4) — GET /reports/{report}/export untuk purchases, stock-by-artist, preorder
+    // T022 (US4) — GET /reports/{report}/export untuk purchases, stock-by-outlet, preorder
     // =====================================================================
 
     public function test_purchases_export_produces_a_real_file_and_respects_status_filter(): void
@@ -1354,29 +1354,29 @@ class ReportTest extends TestCase
         $this->actingAs($owner, 'sanctum');
 
         $category = Category::factory()->create();
-        $artistA = Artist::factory()->create(['code' => 'SBA', 'name' => 'Artist SBA']);
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id]);
+        $artistA = Outlet::factory()->create(['code' => 'SBA', 'name' => 'Outlet SBA']);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id]);
         $productA->variants()->create(['sku' => 'SBAKYAAA0001', 'sell_price' => 5000, 'cost_price' => 2000, 'current_stock' => 10]);
 
-        $artistB = Artist::factory()->create(['code' => 'SBB', 'name' => 'Artist SBB']);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
+        $artistB = Outlet::factory()->create(['code' => 'SBB', 'name' => 'Outlet SBB']);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id]);
         $productB->variants()->create(['sku' => 'SBBKYAAA0001', 'sell_price' => 5000, 'cost_price' => 2000, 'current_stock' => 20]);
 
-        $response = $this->get('/api/v1/reports/stock-by-artist/export');
+        $response = $this->get('/api/v1/reports/stock-by-outlet/export');
         $response->assertOk();
         $response->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
-        // stock-by-artist juga "Tidak diskop event" (docs/openapi-pos-mvp.yaml)
+        // stock-by-outlet juga "Tidak diskop event" (docs/openapi-pos-mvp.yaml)
         // — laporan ini tidak punya konsep filter periode/event sama sekali,
         // jadi FR-012's "respects the active filter" di sini berarti: baris
         // pada berkas ekspor cocok dengan data ringkasan yang sesungguhnya
         // ditampilkan di layar (semua artist), bukan sub-himpunan yang keliru.
         //
         // CATATAN — BUG DITEMUKAN (bukan bagian dari feature ini, tidak
-        // diperbaiki di sini): memfilter export ini dengan ?artist_id=
+        // diperbaiki di sini): memfilter export ini dengan ?home_outlet_id=
         // menghasilkan 500, karena export() mengasumsikan payload
-        // stockByArtist() selalu punya key 'data' (bentuk ringkasan semua
-        // artist), padahal dengan artist_id terisi stockByArtist() balik ke
+        // stockByOutlet() selalu punya key 'data' (bentuk ringkasan semua
+        // artist), padahal dengan home_outlet_id terisi stockByOutlet() balik ke
         // bentuk detail satu-artist tanpa key 'data' sama sekali
         // (ReportController.php:1188 "Undefined array key \"data\"").
         $tmpPath = tempnam(sys_get_temp_dir(), 'laporan-stok').'.xlsx';
@@ -1398,8 +1398,8 @@ class ReportTest extends TestCase
 
         $eventA = Event::factory()->create(['status' => 'active']);
         $customerA = Customer::factory()->create();
-        $artistA = Artist::factory()->create(['code' => 'PXA', 'name' => 'Artist PXA']);
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id]);
+        $artistA = Outlet::factory()->create(['code' => 'PXA', 'name' => 'Outlet PXA']);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id]);
         $variantA = $productA->variants()->create(['sku' => 'PXAKYAAA0001', 'sell_price' => 10000, 'cost_price' => 4000, 'current_stock' => 100]);
         $this->createPartiallyPaidPreorder($eventA, $customerA, [
             ['variant' => $variantA, 'qty' => 1],
@@ -1409,8 +1409,8 @@ class ReportTest extends TestCase
         // ke $eventA.
         $eventB = Event::factory()->create(['status' => 'active']);
         $customerB = Customer::factory()->create();
-        $artistB = Artist::factory()->create(['code' => 'PXB', 'name' => 'Artist PXB']);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
+        $artistB = Outlet::factory()->create(['code' => 'PXB', 'name' => 'Outlet PXB']);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id]);
         $variantB = $productB->variants()->create(['sku' => 'PXBKYAAA0001', 'sell_price' => 999999, 'cost_price' => 4000, 'current_stock' => 100]);
         $this->createPartiallyPaidPreorder($eventB, $customerB, [
             ['variant' => $variantB, 'qty' => 1],
@@ -1436,8 +1436,8 @@ class ReportTest extends TestCase
 
         // event_id filter dihormati: hanya artist PXA (event A) yang muncul
         // di sheet "Per Seller", artist PXB (event B, senilai jutaan) TIDAK.
-        $this->assertStringContainsString('Artist PXA', $perSellerContent);
-        $this->assertStringNotContainsString('Artist PXB', $perSellerContent);
+        $this->assertStringContainsString('Outlet PXA', $perSellerContent);
+        $this->assertStringNotContainsString('Outlet PXB', $perSellerContent);
         $this->assertStringNotContainsString('999999', $summaryContent);
 
         unlink($tmpPath);

@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore } from '../../stores/settings';
+import { useOutletStore } from '../../stores/outlet';
+import { activateOutletSelection } from '../../utils/outletSelection';
 import { listPreorders } from '../../api/preorders';
 import { listEvents } from '../../api/events';
 import { useRailState } from '../../composables/useRailState';
@@ -26,6 +28,16 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const settings = useSettingsStore();
+const outlet = useOutletStore();
+// 045 Stage 2 — pilihan outlet tersimpan diaktifkan SINKRON saat setup, sebelum anak-anak (halaman) memuat
+// datanya, supaya permintaan pertama mereka sudah membawa X-Outlet-Id. Server tetap memotong dengan lingkup pengguna.
+activateOutletSelection(auth.user?.id);
+
+// Memilih outlet memuat ulang halaman: setiap layar mengambil ulang datanya dengan header baru.
+function onOutletChange(id) {
+  outlet.select(id);
+  window.location.reload();
+}
 const { t } = useI18n();
 
 const activeEvent = ref(null);
@@ -36,7 +48,11 @@ const pageTitle = computed(() => t(route.meta.titleKey ?? `nav.${route.name}`));
 const pageSubtitle = computed(() => t(route.meta.subtitleKey ?? `nav.${String(route.name)}_subtitle`));
 
 onMounted(async () => {
+  // Cakupan outlet dimuat bersamaan dengan pengaturan (tidak saling menunggu). Non-fatal bila gagal: tanpa cakupan
+  // pemilih outlet tidak tampil dan server memakai semua outlet yang boleh.
+  const scopeLoaded = auth.user?.id != null ? outlet.load(auth.user.id).catch(() => {}) : Promise.resolve();
   await settings.load();
+  await scopeLoaded;
   try {
     const res = await listPreorders({ status: 'dp_paid', per_page: 1 });
     preorderAlertCount.value = res.meta?.total ?? 0;
@@ -64,7 +80,7 @@ async function handleLogout() {
     </a>
     <RailNav :collapsed="collapsed" :preorder-alert-count="preorderAlertCount" @toggle="toggle" />
     <div class="flex min-w-0 flex-1 flex-col">
-      <TopBar :store-name="settings.storeName" :active-event="activeEvent" @logout="handleLogout" />
+      <TopBar :store-name="settings.storeName" :active-event="activeEvent" :outlets="outlet.outlets" :outlet-id="outlet.selected" @update:outlet-id="onOutletChange" @logout="handleLogout" />
       <SchemaUpdateBanner v-if="settings.schemaUpdateRequired" />
       <main id="main-content" tabindex="-1" class="min-h-0 flex-1 overflow-auto outline-none">
         <!-- Judul bawaan untuk halaman yang belum memakai <PageHeader>. -->

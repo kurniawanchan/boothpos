@@ -4,11 +4,11 @@ import { useI18n } from 'vue-i18n';
 import { formatIDR } from '../../utils/money';
 import EmptyState from '../../components/ui/EmptyState.vue';
 import DataTable from '../../components/ui/DataTable.vue';
-import ArtistTransactionsModal from '../../components/report/ArtistTransactionsModal.vue';
+import OutletTransactionsModal from '../../components/report/OutletTransactionsModal.vue';
 import { sumRows } from './sumRows';
 
-// Tab "Rekap Penjual" — baris sudah difilter penjual oleh induk; Grand Total dijumlah dari baris yang TAMPIL
-// (memilih satu penjual otomatis menjadikan Grand Total subtotal penjual itu).
+// Tab "Rekap Outlet" — baris sudah difilter outlet oleh induk; Grand Total dijumlah dari baris yang TAMPIL
+// (memilih satu outlet otomatis menjadikan Grand Total subtotal outlet itu).
 const props = defineProps({
   rows: { type: Array, required: true },
   loading: { type: Boolean, default: false },
@@ -19,13 +19,13 @@ const { t } = useI18n();
 const totals = computed(() => sumRows(props.rows, ['total_sales'], ['total_units']));
 
 const columns = computed(() => [
-  { key: 'artist_name', label: t('reports.col_artist') },
+  { key: 'outlet_name', label: t('reports.col_artist') },
   { key: 'total_units', label: t('reports.col_unit') },
   { key: 'total_sales', label: t('reports.col_sales') },
   { key: 'actions', label: '' },
 ]);
 
-// F11.6 — drill-down transaksi per penjual.
+// F11.6 — drill-down transaksi per outlet.
 const showTransactions = ref(false);
 const target = ref(null);
 function openTransactions(row) {
@@ -41,14 +41,19 @@ function openTransactions(row) {
     :columns="columns"
     :rows="rows"
     :loading="loading"
-    row-key="artist_id"
+    row-key="outlet_id"
     :empty-message="t('reports.no_active_artists_settlement')"
   >
     <!-- 040 — rekap ini POS-saja: tidak ada lagi kolom POS/pre-order. -->
+    <template #cell-outlet_name="{ row }">
+      {{ row.outlet_name }}
+      <!-- 045 Stage 7 — memuat penjualan sebelum ada outlet penjualan: atribusinya masih penjual lama. -->
+      <span v-if="row.historical" class="ml-1.5 border border-line px-1.5 py-0.5 text-[11px] font-semibold text-muted-4" :title="t('reports.historical_hint')" data-testid="historical-tag">{{ t('reports.historical') }}</span>
+    </template>
     <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
     <template #cell-actions="{ row }">
       <div class="flex items-center justify-end gap-3">
-        <!-- F11.6 — drill-down tersedia untuk penjual manapun di rekap ini (memakai artist_id, yang selalu
+        <!-- F11.6 — drill-down tersedia untuk outlet manapun di rekap ini (memakai outlet_id, yang selalu
              ada — lihat row-key di atas), bukan hanya yang sudah punya baris settlement, supaya "belum ada
              penjualan" juga bisa diverifikasi langsung sebagai daftar kosong. -->
         <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openTransactions(row)">{{ t('reports.transaction_detail') }}</button>
@@ -64,10 +69,10 @@ function openTransactions(row) {
     </template>
   </DataTable>
 
-  <ArtistTransactionsModal
+  <OutletTransactionsModal
     :open="showTransactions"
-    :artist-id="target?.artist_id"
-    :artist-name="target?.artist_name"
+    :outlet-id="target?.outlet_id"
+    :outlet-name="target?.outlet_name"
     :event-id="eventId"
     @close="showTransactions = false"
   />

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
@@ -30,10 +30,10 @@ class PreorderInvoiceCreatedAtTest extends TestCase
         $user = User::factory()->create(['role' => 'owner']);
         $this->actingAs($user, 'sanctum');
 
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
         $product = Product::factory()->create([
-            'artist_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id, 'is_preorder' => true,
         ]);
         $this->variant = $product->variants()->create([
             'sku' => 'CRTD0001', 'sell_price' => 100000, 'cost_price' => 50000, 'current_stock' => 0,

@@ -272,4 +272,25 @@ describe('FloorBoard', () => {
     expect(screen.getByText('Nonaktif')).toBeInTheDocument();
     expect(figure('Meja terisi')).toHaveTextContent('1 / 1');
   });
+
+  it('045: dengan beberapa outlet, area dikelompokkan per outlet dengan judul "Outlet — N dari M meja terisi"', async () => {
+    getFloor.mockResolvedValue({
+      outlets: [
+        { id: 1, code: 'WJ1', name: 'Warkop 1', areas: [{ area: 'Indoor', tables: [table(1), busy(2, order(2))] }], takeaway_tabs: [] },
+        { id: 2, code: 'WJ2', name: 'Warkop 2', areas: [{ area: 'Indoor', tables: [table(3), table(4), busy(5, order(5))] }], takeaway_tabs: [] },
+      ],
+      version: 'v1',
+    });
+    await mountBoard();
+
+    const headings = screen.getAllByTestId('board-outlet-heading').map((h) => h.textContent.replace(/\s+/g, ' ').trim());
+    expect(headings).toEqual(['Warkop 1 — 1 dari 2 meja terisi', 'Warkop 2 — 1 dari 3 meja terisi']);
+    // Angka papan tetap satu: 2 terisi dari 5 meja, dihitung di floorBoard.js.
+    expect(figure('Meja terisi')).toHaveTextContent('2 / 5');
+  });
+
+  it('045: satu outlet tidak memunculkan judul outlet', async () => {
+    await mountBoard();
+    expect(screen.queryAllByTestId('board-outlet-heading')).toHaveLength(0);
+  });
 });

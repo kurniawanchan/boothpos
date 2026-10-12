@@ -40,10 +40,19 @@ class BulkPriceTest extends TestCase
 
         return $v->fresh();
     }
+    /**
+     * Tanggal bisnis TOKO (zona waktu toko, bukan UTC): validasi tanggal berlaku memakai BusinessDay,
+     * jadi `now()` (UTC) membuat tes gagal antara 00:00-07:00 WIB — dikunci di sini.
+     */
+    private function businessToday(int $addDays = 0): string
+    {
+        return \Carbon\CarbonImmutable::parse(\App\Support\BusinessDay::today())->addDays($addDays)->toDateString();
+    }
+
 
     private function body(array $over = []): array
     {
-        return array_merge(['category_ids' => [], 'type' => 'percent', 'value' => 5, 'rounding' => '500', 'effective_from' => now()->toDateString()], $over);
+        return array_merge(['category_ids' => [], 'type' => 'percent', 'value' => 5, 'rounding' => '500', 'effective_from' => $this->businessToday()], $over);
     }
 
     public function test_preview_is_server_computed_with_percent_amount_and_rounding(): void
@@ -89,7 +98,7 @@ class BulkPriceTest extends TestCase
             'value ' => $this->body(['category_ids' => [$cat->id], 'value' => 0]),
             'type' => $this->body(['category_ids' => [$cat->id], 'type' => 'kali']),
             'rounding' => $this->body(['category_ids' => [$cat->id], 'rounding' => '1000']),
-            'effective_from' => $this->body(['category_ids' => [$cat->id], 'effective_from' => now()->subDay()->toDateString()]),
+            'effective_from' => $this->body(['category_ids' => [$cat->id], 'effective_from' => $this->businessToday(-1)]),
         ];
         foreach ($cases as $field => $body) {
             $this->postJson('/api/v1/price-changes', $body)->assertStatus(422)->assertJsonValidationErrors(trim($field));
@@ -177,7 +186,7 @@ class BulkPriceTest extends TestCase
         $cat = Category::factory()->create();
         $v = $this->item('Kopi', 10000, $cat);
 
-        $r = $this->postJson('/api/v1/price-changes', $this->body(['category_ids' => [$cat->id], 'effective_from' => now()->addDays(2)->toDateString()]))->assertCreated()->json();
+        $r = $this->postJson('/api/v1/price-changes', $this->body(['category_ids' => [$cat->id], 'effective_from' => $this->businessToday(2)]))->assertCreated()->json();
         $this->assertSame(1, $r['pending']);
         $this->assertSame('10000.00', (string) $v->fresh()->sell_price);
 

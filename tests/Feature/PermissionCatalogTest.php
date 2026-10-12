@@ -61,6 +61,7 @@ class PermissionCatalogTest extends TestCase
         $inventoryId = Role::where('name', 'Inventory')->value('id') ?? Role::factory()->create(['name' => 'Inventory', 'menu_keys' => ['products']])->id;
 
         $this->getJson("/api/v1/roles/{$inventoryId}")->assertOk()
-            ->assertJsonPath('permissions', [PermissionCatalog::ITEM_MANAGE, PermissionCatalog::ITEM_86, PermissionCatalog::RECIPE_EDIT]);
+            // 045 Stage 6: inventory juga mengirim dan menerima transfer stok (bukan membatalkan).
+            ->assertJsonPath('permissions', [PermissionCatalog::ITEM_MANAGE, PermissionCatalog::ITEM_86, PermissionCatalog::RECIPE_EDIT, PermissionCatalog::TRANSFER_DISPATCH, PermissionCatalog::TRANSFER_RECEIVE]);
     }
 }

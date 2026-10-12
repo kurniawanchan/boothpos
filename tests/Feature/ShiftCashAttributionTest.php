@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -41,7 +41,7 @@ class ShiftCashAttributionTest extends TestCase
         $this->event = Event::factory()->create(['status' => 'active']);
 
         $product = Product::factory()->create([
-            'artist_id' => Artist::factory()->create()->id, 'category_id' => Category::factory()->create()->id,
+            'home_outlet_id' => Outlet::factory()->create()->id, 'category_id' => Category::factory()->create()->id,
         ]);
         $this->variant = $product->variants()->create([
             'sku' => 'SHFT0001', 'sell_price' => 100000, 'cost_price' => 40000, 'current_stock' => 100,

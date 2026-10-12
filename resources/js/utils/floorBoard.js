@@ -69,8 +69,26 @@ export function buildBoard(snapshot, nowMs) {
       return table.tab ? orderTile(table.tab, base, nowMs) : emptyTile(base);
     });
 
-    return { area: a.area ?? '', tiles, total: tiles.length, occupied: tiles.filter((t) => t.state === 'occupied').length };
+    return {
+      area: a.area ?? '', areaLabel: a.area_label ?? a.area ?? '', outletId: a.outlet_id ?? null, outletName: a.outlet_name ?? null,
+      tiles, total: tiles.length, occupied: tiles.filter((t) => t.state === 'occupied').length,
+    };
   });
+
+  // 045 Stage 2 — dengan beberapa outlet, area dikelompokkan per outlet (judul "Outlet — N dari M meja terisi").
+  // Dihitung DI SINI dari grup yang sama dengan angka papan, jadi tidak bisa menyimpang darinya.
+  const outletSections = [];
+  for (const g of groups) {
+    if (g.outletId === null) continue;
+    let section = outletSections.find((o) => o.outletId === g.outletId);
+    if (!section) {
+      section = { outletId: g.outletId, outletName: g.outletName, groups: [], total: 0, occupied: 0 };
+      outletSections.push(section);
+    }
+    section.groups.push(g);
+    section.total += g.total;
+    section.occupied += g.occupied;
+  }
 
   const takeaway = (snapshot?.takeaway_tabs ?? []).map((tab) => orderTile(
     tab,
@@ -92,6 +110,7 @@ export function buildBoard(snapshot, nowMs) {
       openValue: centsToMoney(openCents),
     },
     groups,
+    outletSections,
     takeaway,
   };
 }

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -25,10 +25,10 @@ class MasterDataExportTest extends TestCase
 
     private function seedCatalog(): void
     {
-        $artist = Artist::factory()->create(['code' => 'RYU', 'name' => 'Ryu Illustration']);
+        $artist = Outlet::factory()->create(['code' => 'RYU', 'name' => 'Ryu Illustration']);
         $category = Category::factory()->create(['code' => 'KY', 'name' => 'Keychain']);
         $product = Product::factory()->create([
-            'artist_id' => $artist->id,
+            'home_outlet_id' => $artist->id,
             'category_id' => $category->id,
             'code_prefix' => 'RYUKYSAK',
             'product_segment' => 'SAK',
@@ -84,7 +84,7 @@ class MasterDataExportTest extends TestCase
 
         $row = array_combine($rows[0], $rows[1]);
         $this->assertSame('RYUKYSAK0001', $row['sku']);
-        $this->assertSame('RYU', $row['artist_code']);
+        $this->assertSame('RYU', $row['home_outlet_code']);
         $this->assertSame('KY', $row['category_code']);
         $this->assertSame('Keychain Sakura', $row['product_name']);
         $this->assertSame('Standard', $row['variant_name']);
@@ -99,7 +99,7 @@ class MasterDataExportTest extends TestCase
         $sheets = $this->readDownload('/api/v1/exports/stock');
 
         $rows = $sheets[MasterDataSheets::STOCK];
-        $this->assertSame(['sku', 'current_stock', 'reason'], $rows[0]);
+        $this->assertSame(['sku', 'current_stock', 'reason', 'outlet_code'], $rows[0]);
 
         $row = array_combine($rows[0], $rows[1]);
         $this->assertSame('RYUKYSAK0001', $row['sku']);
@@ -111,8 +111,8 @@ class MasterDataExportTest extends TestCase
         $this->actingAsRole('owner');
         $this->seedCatalog();
 
-        $artists = $this->readDownload('/api/v1/exports/artists')[MasterDataSheets::ARTISTS];
-        $this->assertSame(MasterDataSheets::headings(MasterDataSheets::ARTISTS), $artists[0]);
+        $artists = $this->readDownload('/api/v1/exports/outlets')[MasterDataSheets::OUTLETS];
+        $this->assertSame(MasterDataSheets::headings(MasterDataSheets::OUTLETS), $artists[0]);
         $this->assertSame('RYU', array_combine($artists[0], $artists[1])['code']);
 
         $categories = $this->readDownload('/api/v1/exports/categories')[MasterDataSheets::CATEGORIES];

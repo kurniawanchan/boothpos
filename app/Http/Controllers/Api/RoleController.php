@@ -39,8 +39,39 @@ class RoleController extends Controller
         ]);
     }
 
+    /**
+     * 045 — `all_outlets` memberi cakupan SEMUA outlet, jadi hanya pengguna yang sendiri melihat semua outlet yang
+     * boleh menyalakan/mematikannya (pengelola ber-cakupan sempit tidak boleh memperluas perannya sendiri); selain itu
+     * peran bawaan Owner/Admin selalu menyala. Mengembalikan respons galat, atau null bila boleh.
+     */
+    private function guardAllOutlets(Request $request, ?Role $role, array $data): ?JsonResponse
+    {
+        if (! array_key_exists('all_outlets', $data)) {
+            return null;
+        }
+        $next = (bool) $data['all_outlets'];
+        if ($role !== null && $next === (bool) $role->all_outlets) {
+            return null;
+        }
+        if ($role === null && $next === false) {
+            return null; // peran baru bawaannya sudah mati
+        }
+        if (! $request->user()->hasAllOutlets()) {
+            return response()->json(['message' => __('outlets.forbidden'), 'code' => 'outlet_forbidden'], 403);
+        }
+        if ($role !== null && ! $next && ($role->is_system_default || in_array(strtolower($role->name), ['owner', 'admin'], true))) {
+            return response()->json(['message' => __('outlets.all_by_role'), 'code' => 'outlet_all_by_role'], 409);
+        }
+
+        return null;
+    }
+
     public function store(StoreRoleRequest $request): JsonResponse
     {
+        if ($denied = $this->guardAllOutlets($request, null, $request->validated())) {
+            return $denied;
+        }
+
         // ->fresh() supaya is_system_default (default DB `false`, tidak
         // pernah dikirim klien — lihat StoreRoleRequest) terbaca benar,
         // bukan null seperti langsung setelah insert tanpa refetch.
@@ -90,7 +121,19 @@ class RoleController extends Controller
             }
         }
 
+        if ($denied = $this->guardAllOutlets($request, $role, $data)) {
+            return $denied;
+        }
+
+        $before = (bool) $role->all_outlets;
         $role->update($data);
+        if ($before !== (bool) $role->all_outlets) {
+            $this->activityLogger->log(
+                userId: $request->user()?->id, action: 'role_outlet_scope_changed', entityType: 'Role', entityId: $role->id,
+                description: "Cakupan outlet peran {$role->name}: ".($before ? 'semua outlet' : 'outlet ditugaskan').' → '.($role->all_outlets ? 'semua outlet' : 'outlet ditugaskan').'.',
+                oldValues: ['all_outlets' => $before], newValues: ['all_outlets' => (bool) $role->all_outlets],
+            );
+        }
         $role->refresh()->loadCount(['users as active_users_count' => fn ($q) => $q->where('is_active', true)]);
 
         return response()->json(new RoleResource($role));

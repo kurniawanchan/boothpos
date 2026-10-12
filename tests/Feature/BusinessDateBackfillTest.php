@@ -69,7 +69,7 @@ class BusinessDateBackfillTest extends TestCase
     {
         $order = $this->legacyOrder('2026-10-10 03:00:00');
         $paymentId = DB::table('payments')->insertGetId([
-            'order_id' => $order, 'method' => 'cash', 'purpose' => 'full', 'amount' => 1000, 'verification' => 'verified',
+            'order_id' => $order, 'outlet_id' => DB::table('orders')->where('id', $order)->value('outlet_id'), 'method' => 'cash', 'purpose' => 'full', 'amount' => 1000, 'verification' => 'verified',
             'paid_at' => '2026-10-10 19:30:00', 'data_mode' => 'live', 'created_at' => '2026-10-10 19:30:00', 'updated_at' => '2026-10-10 19:30:00',
         ]);
         DB::table('cashier_sessions')->update(['business_date' => null, 'opened_at' => '2026-10-10 19:10:00']);

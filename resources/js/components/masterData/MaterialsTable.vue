@@ -16,6 +16,8 @@ import BaseTextarea from '../ui/BaseTextarea.vue';
 import ConfirmDialog from '../ui/ConfirmDialog.vue';
 import FilterBar from '../page/FilterBar.vue';
 import MaterialVendorPricesModal from './MaterialVendorPricesModal.vue';
+import MaterialStockAdjustModal from './MaterialStockAdjustModal.vue';
+import { useOutletStore } from '../../stores/outlet';
 
 /**
  * Daftar bahan baku (pencarian, tabel, formulir, hapus, harga vendor) — dipecah UTUH dari MaterialsView (perilaku
@@ -33,6 +35,12 @@ const emit = defineEmits(['changed']);
 
 const { t } = useI18n();
 const toast = useToastStore();
+const outletStore = useOutletStore();
+// 045 Stage 5 — stok bahan adalah saldo per outlet: koreksi per outlet; rincian per outlet hanya dengan beberapa outlet.
+const adjustTarget = ref(null);
+const stockText = (row) => (outletStore.multi && (row.outlet_stock ?? []).length
+  ? row.outlet_stock.map((o) => `${o.outlet_code} ${Number(o.on_hand)}`).join(' · ')
+  : String(Number(row.current_stock ?? 0)));
 
 const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listMaterials, props.kind ? { kind: props.kind } : {});
 const search = ref('');
@@ -69,6 +77,7 @@ const columns = computed(() => [
   { key: 'name', label: t('master_data.col_name') },
   ...(props.kind ? [] : [{ key: 'kind', label: t('vendors_materials.col_kind') }]),
   { key: 'unit', label: t('vendors_materials.col_unit') },
+  { key: 'stock', label: t('stock.material_stock') },
   { key: 'vendor_price_count', label: t('vendors_materials.col_vendor_count') },
   { key: 'is_active', label: t('master_data.col_status') },
   { key: 'actions', label: '' },
@@ -197,12 +206,14 @@ defineExpose({ openCreate, reload: load });
     >
       <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
       <template #cell-kind="{ row }"><StatusPill variant="neutral">{{ t(`vendors_materials.kind_${row.kind ?? 'ingredient'}`) }}</StatusPill></template>
+      <template #cell-stock="{ row }"><span class="font-mono text-[12.5px]" data-testid="material-stock">{{ stockText(row) }}</span></template>
       <template #cell-vendor_price_count="{ row }">{{ row.vendor_price_count ?? 0 }}</template>
       <template #cell-is_active="{ row }">
         <StatusPill :variant="row.is_active ? 'success' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
       </template>
       <template #cell-actions="{ row }">
         <div class="flex justify-end gap-2">
+          <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" data-testid="material-adjust" @click="adjustTarget = row">{{ t('stock.material_stock_adjust') }}</button>
           <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openPrices(row)">{{ t('vendors_materials.vendor_prices_action') }}</button>
           <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
           <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
@@ -249,6 +260,8 @@ defineExpose({ openCreate, reload: load });
       </div>
     </template>
   </BaseModal>
+
+  <MaterialStockAdjustModal :open="adjustTarget !== null" :material="adjustTarget" @close="adjustTarget = null" @saved="load(); emit('changed')" />
 
   <ConfirmDialog
     :open="showDelete"

@@ -4,7 +4,7 @@ import { useSalesFilters } from '../../resources/js/composables/useSalesFilters'
 
 const tx = (over) => ({
   key: `order:${over.id}`, status: 'completed', created_at: '2026-10-02T03:00:00Z', session_id: 1, total_amount: '100000.00',
-  cash_amount: '0.00', noncash_amount: '0.00', payment_methods: [], artist_names: [], unit_count: 1, item_count: 1,
+  cash_amount: '0.00', noncash_amount: '0.00', payment_methods: [], outlet_names: [], unit_count: 1, item_count: 1,
   payment_status: 'fully_paid', paid_amount: '100000.00', balance_amount: '0.00', ...over,
 });
 

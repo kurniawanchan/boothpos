@@ -172,7 +172,7 @@ class TabSettlementService
 
                 $paid->items()->create([
                     'variant_id' => $line->variant_id,
-                    'artist_id' => $line->artist_id,
+                    'home_outlet_id' => $line->home_outlet_id,
                     'sku_snapshot' => $line->sku_snapshot,
                     'name_snapshot' => $line->name_snapshot,
                     'qty' => $qty,

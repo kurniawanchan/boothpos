@@ -11,7 +11,7 @@ class OrderItem extends Model
     use HasDataMode;
 
     protected $fillable = [
-        'order_id', 'variant_id', 'artist_id', 'sku_snapshot', 'name_snapshot',
+        'order_id', 'variant_id', 'home_outlet_id', 'sku_snapshot', 'name_snapshot',
         'qty', 'cost_price', 'sell_price', 'discount_amount', 'line_total',
         'modifiers', 'note', 'sent_at',
     ];
@@ -27,7 +27,7 @@ class OrderItem extends Model
 
     public function order(): BelongsTo { return $this->belongsTo(Order::class); }
     public function variant(): BelongsTo { return $this->belongsTo(ProductVariant::class, 'variant_id'); }
-    public function artist(): BelongsTo { return $this->belongsTo(Artist::class); }
+    public function homeOutlet(): BelongsTo { return $this->belongsTo(Outlet::class, 'home_outlet_id'); }
 
     /** 028 — item tiket dapur untuk baris ini (ada setelah baris dikirim). */
     public function ticketItem(): \Illuminate\Database\Eloquent\Relations\HasOne { return $this->hasOne(KitchenTicketItem::class); }

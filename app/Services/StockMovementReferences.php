@@ -42,8 +42,24 @@ class StockMovementReferences
 
         $this->resolveOrders($movements, $result);
         $this->resolvePreorders($movements, $result);
+        $this->resolveTransfers($movements, $result);
 
         return $result;
+    }
+
+    /** 045 Stage 6 — pergerakan transfer_* menunjuk nomor transfer (reference_id = id transfer). */
+    private function resolveTransfers(Collection $movements, array &$result): void
+    {
+        $moved = $movements->filter(fn ($m) => $m->reference_type === 'stock_transfer' && $m->reference_id);
+        if ($moved->isEmpty()) {
+            return;
+        }
+        $numbers = \App\Models\StockTransfer::withoutGlobalScopes()->whereIn('id', $moved->pluck('reference_id')->unique())->pluck('number', 'id');
+        foreach ($moved as $m) {
+            if (isset($numbers[$m->reference_id])) {
+                $result[$m->id] = ['type' => 'stock_transfer', 'id' => (int) $m->reference_id, 'number' => $numbers[$m->reference_id]];
+            }
+        }
     }
 
     private function resolveOrders(Collection $movements, array &$result): void

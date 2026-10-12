@@ -4,27 +4,27 @@ import { createPinia, setActivePinia } from 'pinia';
 import ReportsView from '../../resources/js/views/ReportsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listEvents } from '../../resources/js/api/events';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { preorderReport } from '../../resources/js/api/reports';
 import id from '../../resources/js/locales/id.json';
 import en from '../../resources/js/locales/en.json';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({
-  artistSettlements: vi.fn().mockResolvedValue({ data: [] }),
-  artistSettlementTransactions: vi.fn(),
+  outletSettlements: vi.fn().mockResolvedValue({ data: [] }),
+  outletSettlementTransactions: vi.fn(),
   profitReport: vi.fn(),
-  artistProfitReport: vi.fn(),
+  outletProfitReport: vi.fn(),
   purchasesReport: vi.fn(),
-  stockByArtistReport: vi.fn(),
+  stockByOutletReport: vi.fn(),
   exportReport: vi.fn(),
   preorderReport: vi.fn(),
 }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-const R = (artist_id, artist_name, status, payment_completeness, preorder_count, value, collected, outstanding) => ({
-  artist_id, artist_name, status, payment_completeness, preorder_count,
+const R = (outlet_id, outlet_name, status, payment_completeness, preorder_count, value, collected, outstanding) => ({
+  outlet_id, outlet_name, status, payment_completeness, preorder_count,
   total_order_value: value, total_collected: collected, total_outstanding: outstanding,
 });
 // Angka dari layar yang melatari fitur ini: baris "Paid" punya collected > order value, outstanding 0.
@@ -37,13 +37,13 @@ const ROWS = [
   R(11, 'y4o_shi', 'dp_paid', 'paid', 1, '25000.00', '25000.00', '0.00'),
 ];
 const SUBTOTALS = [
-  { artist_id: 3, artist_name: 'sapphirefiless', preorder_count: 28, total_order_value: '1920000.00', total_collected: '1239000.00', total_outstanding: '935000.00' },
-  { artist_id: 9, artist_name: 'tofynx', preorder_count: 4, total_order_value: '140000.00', total_collected: '0.00', total_outstanding: '140000.00' },
-  { artist_id: 11, artist_name: 'y4o_shi', preorder_count: 2, total_order_value: '40000.00', total_collected: '25000.00', total_outstanding: '15000.00' },
+  { outlet_id: 3, outlet_name: 'sapphirefiless', preorder_count: 28, total_order_value: '1920000.00', total_collected: '1239000.00', total_outstanding: '935000.00' },
+  { outlet_id: 9, outlet_name: 'tofynx', preorder_count: 4, total_order_value: '140000.00', total_collected: '0.00', total_outstanding: '140000.00' },
+  { outlet_id: 11, outlet_name: 'y4o_shi', preorder_count: 2, total_order_value: '40000.00', total_collected: '25000.00', total_outstanding: '15000.00' },
 ];
 
-async function openBySeller({ rows = ROWS, subtotals = SUBTOTALS } = {}) {
-  preorderReport.mockImplementation(async (params = {}) => (params.breakdown === 'artist' ? { rows, subtotals } : { rows: [] }));
+async function openByOutlet({ rows = ROWS, subtotals = SUBTOTALS } = {}) {
+  preorderReport.mockImplementation(async (params = {}) => (params.breakdown === 'outlet' ? { rows, subtotals } : { rows: [] }));
   const pinia = createPinia();
   setActivePinia(pinia);
   useAuthStore().user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'reports'] };
@@ -52,7 +52,7 @@ async function openBySeller({ rows = ROWS, subtotals = SUBTOTALS } = {}) {
   const user = userEvent.setup();
 
   await user.click(await screen.findByRole('tab', { name: 'Pre-order' }));
-  await user.click(await screen.findByRole('tab', { name: 'Per Penjual' }));
+  await user.click(await screen.findByRole('tab', { name: 'Per Outlet' }));
   if (rows.length) await screen.findAllByText('tofynx');
 
   return user;
@@ -63,16 +63,16 @@ const text = (tr) => tr.textContent.replace(/\s+/g, ' ').trim();
 const subtotalRows = () => bodyRows().filter((tr) => text(tr).startsWith('Subtotal'));
 const grandTotal = () => [...document.querySelectorAll('tfoot tr')].find((tr) => text(tr).startsWith('Grand Total'));
 
-// 039-preorder-seller-subtotal (US1) — baris Subtotal per penjual pada laporan Pre-order "Per Penjual".
-describe('ReportsView — pre-order By Seller subtotals (039)', () => {
+// 039-preorder-seller-subtotal (US1) — baris Subtotal per outlet pada laporan Pre-order "Per Outlet".
+describe('ReportsView — pre-order By Outlet subtotals (039)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listEvents.mockResolvedValue({ data: [{ id: 1, name: 'Comifuro 23', status: 'active' }] });
-    listArtists.mockResolvedValue({ data: [{ id: 3, name: 'sapphirefiless' }, { id: 9, name: 'tofynx' }, { id: 11, name: 'y4o_shi' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 3, name: 'sapphirefiless' }, { id: 9, name: 'tofynx' }, { id: 11, name: 'y4o_shi' }] });
   });
 
-  it('puts a "Subtotal — <seller>" row after each seller\'s LAST row, single-row sellers included', async () => {
-    await openBySeller();
+  it('puts a "Subtotal — <outlet>" row after each outlet\'s LAST row, single-row outlets included', async () => {
+    await openByOutlet();
 
     const lines = bodyRows().map(text);
     // 6 baris data + 3 subtotal
@@ -87,7 +87,7 @@ describe('ReportsView — pre-order By Seller subtotals (039)', () => {
   });
 
   it('shows the server figures on a subtotal row, with empty status/completeness cells and no Detail button', async () => {
-    await openBySeller();
+    await openByOutlet();
     const sapphire = subtotalRows()[0];
 
     expect(within(sapphire).getByText('28')).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe('ReportsView — pre-order By Seller subtotals (039)', () => {
   });
 
   it('styles a subtotal between a data row and the Grand Total', async () => {
-    await openBySeller();
+    await openByOutlet();
     const sub = subtotalRows()[0];
     const data = bodyRows()[0];
 
@@ -114,7 +114,7 @@ describe('ReportsView — pre-order By Seller subtotals (039)', () => {
   });
 
   it('keeps the Grand Total last, unchanged, and equal to the sum of the subtotals for every figure', async () => {
-    await openBySeller();
+    await openByOutlet();
     const gt = grandTotal();
 
     // 28+4+2 = 34; 1.920.000+140.000+40.000 = 2.100.000; 1.239.000+0+25.000 = 1.264.000; 935.000+140.000+15.000 = 1.090.000
@@ -125,11 +125,11 @@ describe('ReportsView — pre-order By Seller subtotals (039)', () => {
     expect(document.querySelector('tbody').compareDocumentPosition(gt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('with one seller selected shows only that seller\'s rows, its subtotal, and a Grand Total equal to it', async () => {
-    const user = await openBySeller();
+  it('with one outlet selected shows only that outlet\'s rows, its subtotal, and a Grand Total equal to it', async () => {
+    const user = await openByOutlet();
 
-    const sellerFilter = screen.getAllByRole('combobox').find((c) => /semua penjual/i.test(c.textContent));
-    await user.click(sellerFilter);
+    const outletFilter = screen.getAllByRole('combobox').find((c) => /semua outlet/i.test(c.textContent));
+    await user.click(outletFilter);
     await user.click(await screen.findByRole('option', { name: 'tofynx' }));
 
     await waitFor(() => expect(bodyRows()).toHaveLength(2)); // 1 baris data + 1 subtotal
@@ -141,7 +141,7 @@ describe('ReportsView — pre-order By Seller subtotals (039)', () => {
   });
 
   it('shows no subtotal and no Grand Total when there are no rows', async () => {
-    await openBySeller({ rows: [], subtotals: [] });
+    await openByOutlet({ rows: [], subtotals: [] });
 
     expect(subtotalRows()).toHaveLength(0);
     expect(grandTotal()).toBeUndefined();
@@ -149,10 +149,10 @@ describe('ReportsView — pre-order By Seller subtotals (039)', () => {
   });
 
   it('opens the drill-down of the DATA row that is clicked, and the Summary view has no subtotal rows', async () => {
-    const user = await openBySeller();
+    const user = await openByOutlet();
 
     await user.click(within(bodyRows()[1]).getByRole('button', { name: id.reports.preorder_detail_action }));
-    await waitFor(() => expect(preorderReport).toHaveBeenCalledWith(expect.objectContaining({ status: 'dp_paid', payment_completeness: 'paid', artist_id: 3 })));
+    await waitFor(() => expect(preorderReport).toHaveBeenCalledWith(expect.objectContaining({ status: 'dp_paid', payment_completeness: 'paid', outlet_id: 3 })));
   });
 
   it('has the Subtotal label in both languages', () => {

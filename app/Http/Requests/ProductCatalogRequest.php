@@ -28,6 +28,9 @@ class ProductCatalogRequest extends FormRequest
             'status.*' => ['in:draft,active,discontinued'],
             'quality' => ['sometimes', 'nullable', 'in:'.implode(',', ProductCatalogQuery::QUALITY_KINDS)],
             'availability' => ['sometimes', 'nullable', 'in:sold_out'],
+            // 045 Stage 3 — hanya item yang DIBAWA salah satu outlet ini (dipotong dengan outlet yang boleh dilihat pengguna).
+            'outlet_id' => ['sometimes', 'array'],
+            'outlet_id.*' => ['integer'],
             'sort' => ['sometimes', 'in:name,-name,sku,-sku,price,-price,status,-status'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],

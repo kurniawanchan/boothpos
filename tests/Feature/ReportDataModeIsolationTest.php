@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\ArtistSettlement;
+use App\Models\OutletSettlement;
 use App\Models\CashierSession;
 use App\Models\Customer;
 use App\Models\Product;
@@ -40,7 +40,7 @@ class ReportDataModeIsolationTest extends TestCase
         return ModeGate::runAs($mode, function () use ($cashier, $sellPrice) {
             $product = Product::factory()->create();
             $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'cost_price' => 1000, 'sell_price' => $sellPrice]);
-            app(\App\Services\StockService::class)->applyMovement($variant, 'initial', 10);
+            app(\App\Services\StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'initial', 10);
 
             $session = CashierSession::factory()->create(['user_id' => $cashier->id]);
 
@@ -110,13 +110,13 @@ class ReportDataModeIsolationTest extends TestCase
 
         Setting::updateOrCreate(['key' => 'system_mode'], ['value' => 'live', 'type' => 'string', 'group' => 'system']);
 
-        $response = $this->getJson("/api/v1/reports/artist-settlements?event_id={$liveEventId}");
+        $response = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$liveEventId}");
 
         $response->assertOk();
         $totalSalesSum = collect($response->json('data'))->sum(fn ($row) => (float) $row['total_sales']);
         $this->assertSame(150000.0, $totalSalesSum);
 
-        $settlement = ArtistSettlement::where('event_id', $liveEventId)->first();
+        $settlement = OutletSettlement::where('event_id', $liveEventId)->first();
         $this->assertNotNull($settlement);
         $this->assertSame('live', $settlement->data_mode);
     }
@@ -136,7 +136,7 @@ class ReportDataModeIsolationTest extends TestCase
         ModeGate::runAs('demo', function () use ($owner) {
             $product = Product::factory()->create();
             $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'current_stock' => 0]);
-            app(\App\Services\StockService::class)->applyMovement($variant, 'initial', 500);
+            app(\App\Services\StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'initial', 500);
         });
 
         $this->assertSame(9, $liveVariant->fresh()->current_stock);
@@ -160,7 +160,7 @@ class ReportDataModeIsolationTest extends TestCase
         $session = CashierSession::factory()->create(['user_id' => $owner->id, 'event_id' => $liveEventId]);
         $product = Product::factory()->create();
         $variant = ProductVariant::factory()->create(['product_id' => $product->id, 'sell_price' => 10000]);
-        app(\App\Services\StockService::class)->applyMovement($variant, 'initial', 5);
+        app(\App\Services\StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), 'initial', 5);
 
         $this->expectException(ValidationException::class);
 

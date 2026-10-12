@@ -6,7 +6,7 @@ import ProductsView from '../../resources/js/views/ProductsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { i18n } from '../../resources/js/i18n';
 import { listProducts, createProduct, uploadProductImage } from '../../resources/js/api/products';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { listCategories } from '../../resources/js/api/categories';
 
 vi.mock('../../resources/js/api/products', () => ({
@@ -19,7 +19,7 @@ vi.mock('../../resources/js/api/products', () => ({
   updateVariant: vi.fn(),
   uploadProductImage: vi.fn(),
 }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/categories', () => ({ listCategories: vi.fn() }));
 vi.mock('../../resources/js/api/masterData', () => ({ exportMasterData: vi.fn(), importMasterData: vi.fn(), downloadImportTemplate: vi.fn() }));
 
@@ -55,7 +55,7 @@ describe('ProductsView — product image upload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listProducts.mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } });
-    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A', code: 'ART' }] });
     listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
     createProduct.mockResolvedValue({ id: 99, name: 'Produk Baru' });
   });

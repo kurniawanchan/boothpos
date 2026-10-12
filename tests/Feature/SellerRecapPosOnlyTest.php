@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
-use App\Models\ArtistSettlement;
+use App\Models\Outlet;
+use App\Models\OutletSettlement;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
@@ -29,7 +29,7 @@ use Tests\TestCase;
  */
 class SellerRecapPosOnlyTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, \Tests\Support\TreatsOrdersAsLegacy;
 
     private User $owner;
 
@@ -58,11 +58,11 @@ class SellerRecapPosOnlyTest extends TestCase
 
     // ----- fixtures -----------------------------------------------------
 
-    /** @return array{0: Artist, 1: ProductVariant} */
+    /** @return array{0: Outlet, 1: ProductVariant} */
     private function seller(string $code, float $price = 10000, float $cost = 4000): array
     {
-        $artist = Artist::factory()->create(['code' => $code, 'name' => "Seller {$code}"]);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $this->category->id]);
+        $artist = Outlet::factory()->create(['code' => $code, 'name' => "Seller {$code}"]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $this->category->id]);
         $variant = $product->variants()->create([
             'sku' => $code.'KYAAA0001', 'sell_price' => $price, 'cost_price' => $cost, 'current_stock' => 1000,
         ]);
@@ -103,14 +103,14 @@ class SellerRecapPosOnlyTest extends TestCase
 
     private function recapRows(): \Illuminate\Support\Collection
     {
-        $response = $this->getJson("/api/v1/reports/artist-settlements?event_id={$this->event->id}")->assertOk();
+        $response = $this->getJson("/api/v1/reports/outlet-settlements?event_id={$this->event->id}")->assertOk();
 
-        return collect($response->json('data'))->keyBy('artist_id');
+        return collect($response->json('data'))->keyBy('outlet_id');
     }
 
     private function exportSheets(): array
     {
-        $response = $this->get("/api/v1/reports/artist-settlements/export?event_id={$this->event->id}");
+        $response = $this->get("/api/v1/reports/outlet-settlements/export?event_id={$this->event->id}");
         $response->assertOk();
 
         $tmp = tempnam(sys_get_temp_dir(), 'recap').'.xlsx';
@@ -150,7 +150,7 @@ class SellerRecapPosOnlyTest extends TestCase
 
         // 040: sisa field 033 (pos_*/preorder_*) dan, pada tindak lanjut, id/deduction/payable/paid/
         // outstanding/status sudah tidak ada — rekap hanya Penjual, Unit, Penjualan.
-        $this->assertSame(['artist_id', 'artist_name', 'total_sales', 'total_units'], array_keys($row));
+        $this->assertSame(['outlet_id', 'outlet_name', 'historical', 'total_sales', 'total_units'], array_keys($row));
     }
 
     public function test_a_seller_with_one_pos_unit_and_a_huge_paid_preorder_shows_only_the_pos_unit(): void
@@ -170,7 +170,7 @@ class SellerRecapPosOnlyTest extends TestCase
     public function test_preorder_only_and_empty_sellers_are_still_listed_with_zeros(): void
     {
         [$preOnly, $preVariant] = $this->seller('SPD');
-        $empty = Artist::factory()->create(['code' => 'SPE', 'name' => 'Seller SPE']);
+        $empty = Outlet::factory()->create(['code' => 'SPE', 'name' => 'Seller SPE']);
         $this->preorder([[$preVariant, 1]], paid: 10000);
 
         $rows = $this->recapRows();
@@ -207,7 +207,7 @@ class SellerRecapPosOnlyTest extends TestCase
         ModeGate::runAs('demo', function () use ($artist) {
             $event = Event::factory()->create(['status' => 'active']);
             $session = CashierSession::factory()->create(['event_id' => $event->id, 'user_id' => $this->cashier->id, 'status' => 'open']);
-            $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $this->category->id]);
+            $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $this->category->id]);
             $demo = $product->variants()->create(['sku' => 'SPGKYDEM0001', 'sell_price' => 999999, 'cost_price' => 1, 'current_stock' => 100]);
             $this->posSale([[$demo, 1]], $session);
             $this->preorder([[$demo, 1]], paid: 888888, event: $event);
@@ -224,8 +224,8 @@ class SellerRecapPosOnlyTest extends TestCase
     {
         foreach (['cashier', 'inventory'] as $role) {
             $this->actingAs(User::factory()->create(['role' => $role]), 'sanctum');
-            $this->getJson("/api/v1/reports/artist-settlements?event_id={$this->event->id}")->assertForbidden();
-            $this->get("/api/v1/reports/artist-settlements/export?event_id={$this->event->id}")->assertForbidden();
+            $this->getJson("/api/v1/reports/outlet-settlements?event_id={$this->event->id}")->assertForbidden();
+            $this->get("/api/v1/reports/outlet-settlements/export?event_id={$this->event->id}")->assertForbidden();
         }
     }
 
@@ -239,8 +239,8 @@ class SellerRecapPosOnlyTest extends TestCase
         // pre-order dan pembayaran tercatat. Kini total dinolkan, paid_amount TIDAK disentuh.
         [$artist, $variant] = $this->seller('SPH');
         $this->preorder([[$variant, 1]], paid: 10000);
-        $settlement = ArtistSettlement::create([
-            'event_id' => $this->event->id, 'artist_id' => $artist->id,
+        $settlement = OutletSettlement::create([
+            'event_id' => $this->event->id, 'outlet_id' => $artist->id,
             'total_sales' => 10000, 'total_units' => 1, 'deduction' => 0,
             'payable_amount' => 10000, 'paid_amount' => 4000, 'status' => 'partial',
         ]);
@@ -259,8 +259,8 @@ class SellerRecapPosOnlyTest extends TestCase
     {
         [$artist, $variant] = $this->seller('SPI');
         $this->posSale([[$variant, 3]]);
-        $settlement = ArtistSettlement::create([
-            'event_id' => $this->event->id, 'artist_id' => $artist->id,
+        $settlement = OutletSettlement::create([
+            'event_id' => $this->event->id, 'outlet_id' => $artist->id,
             'total_sales' => 0, 'total_units' => 0, 'deduction' => 0,
             'payable_amount' => 0, 'paid_amount' => 50000, 'status' => 'paid',
         ]);
@@ -278,7 +278,7 @@ class SellerRecapPosOnlyTest extends TestCase
         $this->session->update(['status' => 'closed']);
         $this->patchJson("/api/v1/events/{$this->event->id}/status", ['status' => 'closed'])->assertOk();
 
-        $stored = ArtistSettlement::where('event_id', $this->event->id)->where('artist_id', $artist->id)->firstOrFail();
+        $stored = OutletSettlement::where('event_id', $this->event->id)->where('outlet_id', $artist->id)->firstOrFail();
 
         $this->assertSame('20000.00', number_format((float) $stored->total_sales, 2, '.', ''));
         $this->assertSame(2, (int) $stored->total_units);
@@ -299,7 +299,7 @@ class SellerRecapPosOnlyTest extends TestCase
         $summary = $this->exportSheets()['summary'];
         $headings = $summary[0];
 
-        $this->assertSame(['artist_id', 'artist_name', 'total_sales', 'total_units'], $headings);
+        $this->assertSame(['outlet_id', 'outlet_name', 'historical', 'total_sales', 'total_units'], $headings);
 
         $row = array_combine($headings, collect($summary)->skip(1)->first(fn ($r) => (string) $r[0] === (string) $artist->id));
 

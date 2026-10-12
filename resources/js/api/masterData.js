@@ -3,7 +3,7 @@ import client from './client';
 // Filenames match exactly what GET /exports/{entity} sends server-side
 // (PRD 7.15) — kept here rather than trusting Content-Disposition parsing.
 const EXPORT_FILENAMES = {
-  artists: 'data-artist.xlsx',
+  outlets: 'data-outlet.xlsx',
   categories: 'data-kategori.xlsx',
   products: 'data-produk.xlsx',
   stock: 'data-stok.xlsx',
@@ -11,6 +11,8 @@ const EXPORT_FILENAMES = {
   materials: 'data-bahan-baku.xlsx',
   vendor_prices: 'data-harga-vendor.xlsx',
   bom: 'data-bom.xlsx',
+  outlet_items: 'data-item-outlet.xlsx',
+  outlet_prices: 'data-harga-outlet.xlsx',
 };
 
 function downloadBlob(blob, filename) {
@@ -25,7 +27,7 @@ function downloadBlob(blob, filename) {
 }
 
 /**
- * GET /exports/{entity} — entity ∈ artists|categories|products|stock.
+ * GET /exports/{entity} — entity ∈ outlets|categories|products|stock.
  * Same blob-download pattern as `exportReport` in api/reports.js. Uses the
  * same column headers the import accepts, so export → edit → re-upload
  * round-trips through the same file.

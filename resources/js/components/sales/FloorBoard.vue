@@ -46,6 +46,7 @@ start();
 
 const board = computed(() => buildBoard({ areas: floor.areas, takeaway_tabs: floor.takeawayTabs }, now.value));
 
+const outletSections = computed(() => board.value.outletSections);
 const ready = computed(() => lastOkAt.value !== null);
 const failedFirstLoad = computed(() => !ready.value && !!lastError.value);
 const isEmpty = computed(() => ready.value && board.value.groups.length === 0 && board.value.takeaway.length === 0);
@@ -128,15 +129,38 @@ function onSelect(tile, opener) {
         </div>
 
         <div class="flex flex-col gap-6 px-5 py-5">
-          <section v-for="group in board.groups" :key="group.area" :aria-label="areaLabel(group.area)" class="flex flex-col gap-2.5">
-            <div class="flex flex-wrap items-baseline justify-between gap-2">
-              <h3 class="text-[13px] font-extrabold uppercase tracking-wide text-muted-4">{{ areaLabel(group.area) }}</h3>
-              <span class="text-[12px] text-muted-3">{{ t('sales.group_count', { occupied: group.occupied, total: group.total }) }}</span>
-            </div>
-            <div class="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
-              <FloorBoardTile v-for="tile in group.tiles" :key="tile.key" :tile="tile" @select="onSelect" />
-            </div>
+          <!-- 045: beberapa outlet → satu bagian per outlet dengan judul "Outlet — N dari M meja terisi"; satu outlet → daftar area lama. -->
+          <section
+            v-for="outlet in outletSections"
+            :key="`outlet-${outlet.outletId}`"
+            :aria-label="outlet.outletName"
+            class="flex flex-col gap-5"
+            data-testid="board-outlet"
+          >
+            <h3 class="border-b-2 border-line pb-1.5 text-[14px] font-extrabold tracking-tight" data-testid="board-outlet-heading">
+              {{ t('sales.outlet_group_count', { outlet: outlet.outletName, occupied: outlet.occupied, total: outlet.total }) }}
+            </h3>
+            <section v-for="group in outlet.groups" :key="group.area" :aria-label="areaLabel(group.areaLabel)" class="flex flex-col gap-2.5">
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <h4 class="text-[13px] font-extrabold uppercase tracking-wide text-muted-4">{{ areaLabel(group.areaLabel) }}</h4>
+                <span class="text-[12px] text-muted-3">{{ t('sales.group_count', { occupied: group.occupied, total: group.total }) }}</span>
+              </div>
+              <div class="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
+                <FloorBoardTile v-for="tile in group.tiles" :key="tile.key" :tile="tile" @select="onSelect" />
+              </div>
+            </section>
           </section>
+          <template v-if="!outletSections.length">
+          <section v-for="group in board.groups" :key="group.area" :aria-label="areaLabel(group.area)" class="flex flex-col gap-2.5">
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 class="text-[13px] font-extrabold uppercase tracking-wide text-muted-4">{{ areaLabel(group.area) }}</h3>
+                <span class="text-[12px] text-muted-3">{{ t('sales.group_count', { occupied: group.occupied, total: group.total }) }}</span>
+              </div>
+              <div class="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3">
+                <FloorBoardTile v-for="tile in group.tiles" :key="tile.key" :tile="tile" @select="onSelect" />
+              </div>
+            </section>
+          </template>
 
           <section v-if="board.takeaway.length" :aria-label="t('sales.takeaway_group')" class="flex flex-col gap-2.5">
             <div class="flex flex-wrap items-baseline justify-between gap-2">

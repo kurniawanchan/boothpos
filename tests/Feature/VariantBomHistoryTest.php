@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\ProductVariant;
 use App\Models\PurchaseOrderItem;
 use App\Models\User;
@@ -24,7 +24,7 @@ class VariantBomHistoryTest extends TestCase
 
     private User $owner;
 
-    private Artist $seller;
+    private Outlet $seller;
 
     private ProductVariant $variant;
 
@@ -34,7 +34,7 @@ class VariantBomHistoryTest extends TestCase
 
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->owner, 'sanctum');
-        $this->seller = Artist::factory()->create();
+        $this->seller = Outlet::factory()->create();
         $this->variant = $this->variantFor($this->seller);
     }
 
@@ -44,7 +44,7 @@ class VariantBomHistoryTest extends TestCase
     }
 
     /** Baris BOM dari satu baris PO; mengembalikan [id baris BOM, baris PO]. */
-    private function useLine(string $type, string $name, float $price, string $orderedAt, string $status = 'ordered', ?Artist $artist = null): array
+    private function useLine(string $type, string $name, float $price, string $orderedAt, string $status = 'ordered', ?Outlet $artist = null): array
     {
         [$item] = $this->po($artist ?? $this->seller, $status, [['type' => $type, 'name' => $name, 'price' => $price]], 'Vendor X', $orderedAt);
         $rowId = $this->addItems($this->variant, [['purchase_order_item_id' => $item->id]])->assertCreated()->json('data.0.id');
@@ -80,7 +80,7 @@ class VariantBomHistoryTest extends TestCase
 
         $this->po($this->seller, 'ordered', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 500]], 'Vendor Z', '2026-10-01 10:00:00');  // harga sama
         $this->po($this->seller, 'ordered', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 400]], 'Vendor Z', '2026-08-01 10:00:00');  // lebih lama
-        $this->po(Artist::factory()->create(), 'ordered', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 900]], 'Vendor Z', '2026-10-02 10:00:00'); // seller lain
+        $this->po(Outlet::factory()->create(), 'ordered', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 900]], 'Vendor Z', '2026-10-02 10:00:00'); // seller lain
         $this->po($this->seller, 'draft', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 901]], 'Vendor Z', '2026-10-03 10:00:00');
         $this->po($this->seller, 'cancelled', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 902]], 'Vendor Z', '2026-10-04 10:00:00');
         $this->po($this->seller, 'ordered', [['type' => 'material', 'name' => 'Other Material', 'price' => 903]], 'Vendor Z', '2026-10-05 10:00:00'); // bahan lain
@@ -184,7 +184,7 @@ class VariantBomHistoryTest extends TestCase
     public function test_replace_applies_the_same_seller_and_status_rules_and_rejects_duplicates(): void
     {
         [$rowId] = $this->useLine('material', 'Ball Chain', 500, '2026-09-01 10:00:00');
-        [$otherSeller] = $this->po(Artist::factory()->create(), 'ordered', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 1]]);
+        [$otherSeller] = $this->po(Outlet::factory()->create(), 'ordered', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 1]]);
         [$draft] = $this->po($this->seller, 'draft', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 1]]);
         [$cancelled] = $this->po($this->seller, 'cancelled', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 1]]);
 

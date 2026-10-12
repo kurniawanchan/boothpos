@@ -62,8 +62,8 @@ export function rejectApproval(id, payload) {
  * GET /menu/availability?since=<etag> — 304 bila etag sama. Axios menganggap 304 sebagai galat, jadi status itu
  * diterima di sini dan dipetakan ke { notModified: true } supaya pemanggil (POS/lantai) tak perlu menangkapnya.
  */
-export function pollAvailability(since = null) {
+export function pollAvailability(since = null, { pos = false } = {}) {
   return client
-    .get('/menu/availability', { params: since ? { since } : {}, validateStatus: (s) => (s >= 200 && s < 300) || s === 304 })
+    .get('/menu/availability', { params: { ...(since ? { since } : {}), ...(pos ? { pos: 1 } : {}) }, validateStatus: (s) => (s >= 200 && s < 300) || s === 304 })
     .then((r) => (r.status === 304 ? { notModified: true } : r.data));
 }

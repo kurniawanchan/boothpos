@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Validator;
 
 /**
  * Endpoint admin untuk `Setting::updateOrCreate` (F14.1/F14.3, dan juga
- * satu-satunya jalur mengubah `multi_artist_enabled` — lihat README bagian
+ * satu-satunya jalur mengubah `multi_outlet_enabled` — lihat README bagian
  * "Lisensi Pro vs Master", yang sebelumnya menyebut ini sebagai gap).
  *
  * Bentuk request BULK (array of {key, value, type?, group?}), bukan satu
@@ -48,7 +48,7 @@ class UpdateSettingsRequest extends FormRequest
             // rule 'email' bawaan Laravel — jadi validasi formatnya ditegakkan
             // lewat closure yang membaca key baris yang sama, bukan menambah
             // field terpisah. Tidak ada validasi format serupa untuk key lain
-            // (mis. 'multi_artist_enabled' hanya divalidasi lewat rule 'type'
+            // (mis. 'multi_outlet_enabled' hanya divalidasi lewat rule 'type'
             // di bawah) karena hanya FR-018 yang secara eksplisit meminta ini.
             'settings.*.value' => [
                 'present',
@@ -65,7 +65,7 @@ class UpdateSettingsRequest extends FormRequest
                     }
 
                     // 003-seed-demo-live (FR-004) — 'system_mode' adalah satu
-                    // baris settings lagi, sama seperti 'multi_artist_enabled',
+                    // baris settings lagi, sama seperti 'multi_outlet_enabled',
                     // jadi divalidasi lewat closure yang sama alih-alih endpoint
                     // baru (lihat contracts/settings-system-mode.md).
                     if ($key === 'system_mode' && ! in_array($value, ['demo', 'live'], true)) {

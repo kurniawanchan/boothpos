@@ -31,7 +31,7 @@ vi.mock('../../resources/js/api/payments', () => ({
 const tx = (n) => ({
   key: `order:${n}`, id: n, order_number: `ORD-${n}`, status: 'completed', customer_name: null, created_at: '2026-09-01T09:00:00Z',
   cashier_id: 1, cashier_name: 'Kasir A', session_id: 1, item_count: 1, unit_count: 1,
-  total_amount: '10000.00', cash_amount: '10000.00', noncash_amount: '0.00', payment_methods: ['cash'], artist_names: [],
+  total_amount: '10000.00', cash_amount: '10000.00', noncash_amount: '0.00', payment_methods: ['cash'], outlet_names: [],
   items_preview: [], items_more: 0, payment_state: 'verified', discount_amount: '0.00',
 });
 const DATA = {

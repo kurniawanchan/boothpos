@@ -6,14 +6,14 @@ import ProductsView from '../../resources/js/views/ProductsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { useSettingsStore } from '../../resources/js/stores/settings';
 import { listProducts, productSummary } from '../../resources/js/api/products';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { listCategories } from '../../resources/js/api/categories';
 
 vi.mock('../../resources/js/api/products', () => ({
   listProducts: vi.fn(), productSummary: vi.fn(), getProduct: vi.fn(), createProduct: vi.fn(), updateProduct: vi.fn(), deleteProduct: vi.fn(),
   addVariant: vi.fn(), updateVariant: vi.fn(), uploadProductImage: vi.fn(), uploadVariantImage: vi.fn(),
 }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/categories', () => ({ listCategories: vi.fn() }));
 vi.mock('../../resources/js/api/stations', () => ({ listStations: vi.fn().mockResolvedValue({ data: [] }) }));
 vi.mock('../../resources/js/api/materials', () => ({ listMaterials: vi.fn().mockResolvedValue({ data: [], meta: { current_page: 1, per_page: 25, total: 0, last_page: 1 } }), createMaterial: vi.fn(), updateMaterial: vi.fn(), deleteMaterial: vi.fn() }));
@@ -67,7 +67,7 @@ describe('ProductsView — page structure (043)', () => {
     localStorage.clear();
     listProducts.mockResolvedValue({ data: [ROW(1), ROW(2)], meta: META(), counts: COUNTS });
     productSummary.mockResolvedValue(SUMMARY);
-    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A', code: 'ART' }] });
     listCategories.mockResolvedValue({ data: [{ id: 3, name: 'Kopi', code: 'KP' }] });
   });
 

@@ -48,4 +48,23 @@ describe('AvailabilityChips', () => {
     expect(screen.queryByTestId('availability-chip')).not.toBeInTheDocument();
     expect(screen.getByTestId('availability-none')).toHaveTextContent('Tidak tersedia');
   });
+
+  // 045 Stage 3 — keadaan "tidak dijual" dan ringkasan untuk banyak outlet.
+  it('shows a neutral "Tidak dijual" chip with its own icon for an outlet that does not carry the item', () => {
+    render(AvailabilityChips, { props: { availability: [{ outlet_id: 3, outlet_code: 'WJM3', state: 'not_carried', reason: null }] } });
+    const chip = screen.getByTestId('availability-chip');
+    expect(chip).toHaveTextContent('WJM3');
+    expect(chip).toHaveTextContent('Tidak dijual');
+    expect(chip.querySelector('.ph-minus-circle')).not.toBeNull();
+  });
+
+  it('collapses more than four outlets into counts per state, with the codes as hover text', () => {
+    const states = ['available', 'available', 'sold_out', 'not_carried', 'available'];
+    render(AvailabilityChips, { props: { availability: states.map((state, i) => ({ outlet_id: i + 1, outlet_code: `WJM${i + 1}`, state, reason: null })) } });
+
+    const chips = screen.getAllByTestId('availability-summary-chip');
+    expect(chips.map((c) => c.textContent.trim())).toEqual(['3 ada', '1 habis (86)', '1 tidak dijual']);
+    expect(chips[0]).toHaveAttribute('title', 'WJM1, WJM2, WJM5');
+    expect(screen.queryByTestId('availability-chip')).not.toBeInTheDocument();
+  });
 });

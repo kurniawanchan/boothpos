@@ -83,8 +83,8 @@ class OrderController extends Controller
         // Semuanya opt-in lewat whenLoaded() di OrderResource, jadi endpoint
         // lain yang memakai resource ini tidak berubah bentuk.
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.artist',
-            'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+            'items.variant.product.category', 'items.homeOutlet',
+            'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
         ])));
     }
 
@@ -104,7 +104,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
         ])), $replayed ? 200 : 201);
     }
 
@@ -124,7 +124,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
         ])));
     }
 
@@ -157,7 +157,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
         ])));
     }
 
@@ -180,7 +180,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event', 'outlet:id,code,name',
         ])));
     }
 
@@ -220,7 +220,7 @@ class OrderController extends Controller
             return response()->json(['message' => __('orders_payments.receipt_unavailable_for_open_tab')], 409);
         }
 
-        $order->load(['items.artist', 'payments', 'cashier', 'event', 'customer', 'table', 'splitFrom']);
+        $order->load(['items.homeOutlet', 'payments', 'cashier', 'event', 'customer', 'table', 'splitFrom', 'outlet:id,code,name']);
         $summary = PaymentSummary::for($order);
 
         return response()->json([
@@ -271,6 +271,9 @@ class OrderController extends Controller
             // 028 — penjualan hasil pisah tagihan menyebut nomor tab asalnya.
             'split_from_order_number' => $order->splitFrom?->order_number,
             'event_name' => $order->event->name,
+            // 045: outlet tempat penjualan terjadi (outlet shift). Hanya dicetak bila instalasi punya lebih dari satu outlet.
+            'outlet_name' => $order->outlet?->name,
+            'outlet_code' => $order->outlet?->code,
             // 014-sales-receipt-event-footer (US2, R2) — event Order tidak
             // pernah null (beda dengan Preorder), tapi kolom tanggalnya
             // sendiri masih bisa null, jadi tetap pakai ?->toDateString().
@@ -301,10 +304,10 @@ class OrderController extends Controller
                 // booth multi-artist bisa berisi barang dari beberapa
                 // artist sekaligus; nama artist per baris, bukan satu
                 // nama tunggal di kop struk. artist_snapshot tidak ada
-                // (hanya artist_id disimpan di order_items), jadi diambil
+                // (hanya home_outlet_id disimpan di order_items), jadi diambil
                 // dari relasi — artist tidak pernah dihapus keras
                 // (RESTRICT di FK), jadi selalu ada.
-                'artist_name' => $i->artist?->name,
+                'home_outlet_name' => $i->homeOutlet?->name,
             ]),
             'subtotal' => number_format((float) $order->subtotal, 2, '.', ''),
             'discount_amount' => number_format((float) $order->discount_amount, 2, '.', ''),

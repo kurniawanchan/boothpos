@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Outlet;
 use App\Models\Role;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,13 +25,13 @@ class UserFactory extends Factory
      * kebutuhan test — jangan diduplikasi di file test manapun.
      */
     private const LEGACY_ROLE_MENU_KEYS = [
-        'owner' => ['name' => 'Owner', 'menu_keys' => [
-            'dashboard', 'pos', 'session', 'events', 'products', 'artists', 'categories',
+        'owner' => ['name' => 'Owner', 'all_outlets' => true, 'menu_keys' => [
+            'dashboard', 'pos', 'session', 'events', 'products', 'outlets', 'categories',
             'stock', 'vendors', 'materials', 'customers', 'preorders', 'sales', 'reports',
             'users', 'roles', 'settings',
         ]],
-        'admin' => ['name' => 'Admin', 'menu_keys' => [
-            'dashboard', 'pos', 'session', 'events', 'products', 'artists', 'categories',
+        'admin' => ['name' => 'Admin', 'all_outlets' => true, 'menu_keys' => [
+            'dashboard', 'pos', 'session', 'events', 'products', 'outlets', 'categories',
             'stock', 'vendors', 'materials', 'customers', 'preorders', 'sales', 'reports',
             'users', 'roles', 'settings',
         ]],
@@ -38,7 +39,7 @@ class UserFactory extends Factory
             'dashboard', 'pos', 'session', 'events', 'customers', 'preorders', 'sales',
         ]],
         'inventory' => ['name' => 'Inventory', 'menu_keys' => [
-            'dashboard', 'pos', 'session', 'events', 'products', 'artists', 'categories',
+            'dashboard', 'pos', 'session', 'events', 'products', 'outlets', 'categories',
             'stock', 'vendors', 'materials', 'customers', 'preorders', 'sales',
         ]],
     ];
@@ -52,6 +53,27 @@ class UserFactory extends Factory
             'role_id' => $this->roleIdFor('cashier'),
             'is_active' => true,
         ];
+    }
+
+    /**
+     * 045 Stage 2 — pengguna non-admin yang dibuat tes mendapat SEMUA outlet aktif, supaya tes lama yang
+     * bertindak sebagai kasir tetap melihat datanya sendiri (produksi tidak melakukan ini; penugasan
+     * di produksi eksplisit lewat PUT /users/{user}/outlets). Yang butuh pengguna tanpa penugasan
+     * memakai state unassigned().
+     */
+    public function configure(): static
+    {
+        return $this->afterCreating(function (\App\Models\User $user) {
+            if (! $user->hasAllOutlets()) {
+                $user->outlets()->syncWithoutDetaching(Outlet::query()->where('is_active', true)->pluck('id')->all());
+            }
+        });
+    }
+
+    /** Pengguna non-admin tanpa penugasan outlet (untuk tes penolakan 409 outlet_unassigned dan cakupan kosong). */
+    public function unassigned(): static
+    {
+        return $this->afterCreating(fn (\App\Models\User $user) => $user->outlets()->detach());
     }
 
     public function create($attributes = [], ?Model $parent = null)
@@ -86,7 +108,7 @@ class UserFactory extends Factory
 
         return Role::firstOrCreate(
             ['name' => $definition['name']],
-            ['menu_keys' => $definition['menu_keys'], 'is_system_default' => true]
+            ['menu_keys' => $definition['menu_keys'], 'is_system_default' => true, 'all_outlets' => $definition['all_outlets'] ?? false]
         )->id;
     }
 }

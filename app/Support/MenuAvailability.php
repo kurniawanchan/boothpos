@@ -29,8 +29,11 @@ class MenuAvailability
 
     public const SOLD_OUT = 'sold_out';
 
+    /** 045 Stage 3 — produk aktif tetapi outlet ini tidak membawanya. */
+    public const NOT_CARRIED = 'not_carried';
+
     /** Alasan tidak bisa dipesan, atau null bila bisa. Varian harus dimuat dengan relasi `product`. */
-    public static function unavailableReason(ProductVariant $variant): ?string
+    public static function unavailableReason(ProductVariant $variant, ?int $outletId = null): ?string
     {
         if (! $variant->is_active) {
             return self::VARIANT_INACTIVE;
@@ -41,16 +44,21 @@ class MenuAvailability
             return self::PRODUCT_INACTIVE;
         }
 
-        if (ItemAvailabilityMark::query()->active()->where('product_id', $product->id)->exists()) {
+        // 045 Stage 3 — outlet pesanan: produk harus dibawa outlet itu dan tidak ditandai 86 di sana (atau global).
+        if ($outletId !== null && ! app(\App\Services\OutletMenuService::class)->isCarried($product->id, $outletId)) {
+            return self::NOT_CARRIED;
+        }
+
+        if (ItemAvailabilityMark::query()->active()->appliesTo($outletId)->where('product_id', $product->id)->exists()) {
             return self::SOLD_OUT;
         }
 
         return null;
     }
 
-    public static function isOrderable(ProductVariant $variant): bool
+    public static function isOrderable(ProductVariant $variant, ?int $outletId = null): bool
     {
-        return self::unavailableReason($variant) === null;
+        return self::unavailableReason($variant, $outletId) === null;
     }
 
     /**
@@ -58,9 +66,9 @@ class MenuAvailability
      *
      * @throws ValidationException
      */
-    public static function assertOrderable(ProductVariant $variant, string $field = 'items'): void
+    public static function assertOrderable(ProductVariant $variant, string $field = 'items', ?int $outletId = null): void
     {
-        $reason = self::unavailableReason($variant);
+        $reason = self::unavailableReason($variant, $outletId);
         if ($reason === null) {
             return;
         }
@@ -77,8 +85,8 @@ class MenuAvailability
      *
      * @return list<int>
      */
-    public static function soldOutProductIds(): array
+    public static function soldOutProductIds(?int $outletId = null): array
     {
-        return ItemAvailabilityMark::query()->active()->pluck('product_id')->unique()->values()->all();
+        return ItemAvailabilityMark::query()->active()->appliesTo($outletId)->pluck('product_id')->unique()->values()->all();
     }
 }

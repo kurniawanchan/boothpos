@@ -19,6 +19,7 @@ import { formatIDR, parseMoney } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
 import { useToastStore } from '../../stores/toast';
+import { useOutletStore } from '../../stores/outlet';
 import { useAuthStore } from '../../stores/auth';
 
 /**
@@ -26,7 +27,7 @@ import { useAuthStore } from '../../stores/auth';
  * pelanggan). Dulu hanya tabel "Produk Terjual" (009-ui-ux-refinements US2); kini
  * menjawab pertanyaan yang biasanya muncul saat membuka sebuah transaksi: siapa
  * pembelinya dan kasirnya, kapan dan di event mana, produk APA (foto, varian, SKU,
- * penjual, kategori) dengan diskonnya, BAGAIMANA total dihitung, dan bagaimana
+ * outlet, kategori) dengan diskonnya, BAGAIMANA total dihitung, dan bagaimana
  * dibayar. Modal/untung sengaja TIDAK ada — halaman ini terbuka untuk kasir.
  *
  * Struk (ReceiptModal) dibuka dari DALAM modal ini, sama seperti detail produk,
@@ -42,6 +43,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'changed']);
 
 const toast = useToastStore();
+const outletStore = useOutletStore(); // 045: "Dijual di …" hanya bila ada lebih dari satu outlet
 const auth = useAuthStore();
 const { t } = useI18n();
 
@@ -228,6 +230,7 @@ async function performVoid() {
 
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <span class="font-mono text-[16px] font-extrabold tracking-tight">{{ order.order_number }}</span>
+          <span v-if="outletStore.multi && order.outlet" class="text-[12.5px] font-semibold text-muted-4" data-testid="order-outlet">{{ t('reports.sold_at_line', { outlet: order.outlet.name }) }}</span>
           <span class="text-[12.5px] font-semibold text-muted-3">{{ t('reports.order_items_summary', { items: items.length, units: unitCount }) }}</span>
         </div>
 
@@ -287,7 +290,7 @@ async function performVoid() {
               </div>
               <div class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11.5px] text-muted-3">
                 <span v-if="item.sku_snapshot" class="font-mono">{{ item.sku_snapshot }}</span>
-                <span v-if="item.artist_name">{{ item.artist_name }}</span>
+                <span v-if="item.home_outlet_name">{{ item.home_outlet_name }}</span>
                 <span v-if="item.category_name">{{ item.category_name }}</span>
               </div>
             </div>

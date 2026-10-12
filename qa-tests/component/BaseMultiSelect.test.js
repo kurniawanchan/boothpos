@@ -10,9 +10,9 @@ function renderMultiSelect(props = {}) {
     props: {
       modelValue: [],
       options: [
-        { value: 1, label: 'Artist Satu' },
-        { value: 2, label: 'Artist Dua' },
-        { value: 3, label: 'Artist Tiga' },
+        { value: 1, label: 'Outlet Satu' },
+        { value: 2, label: 'Outlet Dua' },
+        { value: 3, label: 'Outlet Tiga' },
       ],
       'onUpdate:modelValue': () => {},
       ...props,
@@ -37,8 +37,8 @@ describe('BaseMultiSelect', () => {
     await user.type(screen.getByPlaceholderText('Cari…'), 'dua');
 
     await waitFor(() => {
-      expect(screen.getByRole('option', { name: 'Artist Dua' })).toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: 'Artist Satu' })).not.toBeInTheDocument();
+      expect(screen.getByRole('option', { name: 'Outlet Dua' })).toBeInTheDocument();
+      expect(screen.queryByRole('option', { name: 'Outlet Satu' })).not.toBeInTheDocument();
     });
   });
 
@@ -49,7 +49,7 @@ describe('BaseMultiSelect', () => {
     renderMultiSelect({ 'onUpdate:modelValue': (v) => (emitted = v) });
 
     await user.click(screen.getByRole('button'));
-    await user.click(await screen.findByRole('option', { name: 'Artist Satu' }));
+    await user.click(await screen.findByRole('option', { name: 'Outlet Satu' }));
 
     expect(emitted).toEqual([1]);
   });

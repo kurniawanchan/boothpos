@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\ProductVariant;
 use App\Models\Role;
 use App\Models\User;
@@ -23,7 +23,7 @@ class VariantDuplicateFlowTest extends TestCase
 
     private User $owner;
 
-    private Artist $seller;
+    private Outlet $seller;
 
     private ProductVariant $red;
 
@@ -32,7 +32,7 @@ class VariantDuplicateFlowTest extends TestCase
         parent::setUp();
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->owner, 'sanctum');
-        $this->seller = Artist::factory()->create();
+        $this->seller = Outlet::factory()->create();
 
         $this->red = $this->variantFor($this->seller);
         [$chain] = $this->po($this->seller, 'ordered', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 500]]);

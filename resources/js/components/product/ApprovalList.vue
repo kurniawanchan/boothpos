@@ -61,7 +61,8 @@ watch(
 function isOwn(row) {
   return row.requested_by_id !== undefined && row.requested_by_id !== null && row.requested_by_id === auth.user?.id;
 }
-const nameOf = (row) => [row.product_name, row.variant_name].filter(Boolean).join(' · ');
+// 045: perubahan harga outlet menyebut outletnya ("@ WJ2"); harga dasar tidak membawa outlet_code.
+const nameOf = (row) => [row.product_name, row.variant_name].filter(Boolean).join(' · ') + (row.outlet_code ? ` @ ${row.outlet_code}` : '');
 
 async function approve(row) {
   if (busyId.value) return;

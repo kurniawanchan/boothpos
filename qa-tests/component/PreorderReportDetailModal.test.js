@@ -14,8 +14,8 @@ vi.mock('vue-router', () => ({
 }));
 
 // 012-seller-preorder-report-detail-export (US3/T015-T018) — drill-down dari
-// satu baris ringkasan (atau per-penjual) laporan Pre-order ke daftar
-// pre-order individual, sama seperti StockByArtistDetailModal (research.md R3).
+// satu baris ringkasan (atau per-outlet) laporan Pre-order ke daftar
+// pre-order individual, sama seperti StockByOutletDetailModal (research.md R3).
 const ROWS = [
   {
     preorder_id: 101,
@@ -43,7 +43,7 @@ function renderModal(props) {
       open: true,
       status: 'dp_paid',
       paymentCompleteness: 'partial',
-      artistId: null,
+      outletId: null,
       ...props,
     },
     global: { plugins: [pinia] },
@@ -64,7 +64,7 @@ describe('PreorderReportDetailModal — individual preorder drilldown', () => {
       expect(preorderReport).toHaveBeenCalledWith({
         status: 'dp_paid',
         payment_completeness: 'partial',
-        artist_id: undefined,
+        outlet_id: undefined,
       })
     );
 

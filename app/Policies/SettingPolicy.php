@@ -8,7 +8,7 @@ use App\Models\User;
  * Setting bukan "master data" (produk/stok) — sengaja TIDAK memakai
  * canAccessMenu('products'/dst) (yang mencakup peran inventory), sama
  * seperti EventPolicy. Konfigurasi toko, format struk, dan flag lisensi
- * (multi_artist_enabled) adalah keputusan tingkat owner/admin, digerbang
+ * (multi_outlet_enabled) adalah keputusan tingkat owner/admin, digerbang
  * canAccessMenu('settings').
  */
 class SettingPolicy

@@ -47,7 +47,7 @@ class PosDraftService
         $validItems = [];
 
         foreach ($snapshot['items'] ?? [] as $item) {
-            $variant = ProductVariant::with('product.artist')->find($item['variant_id']);
+            $variant = ProductVariant::with('product.homeOutlet')->find($item['variant_id']);
 
             if (! $variant || ! $variant->is_active) {
                 $warnings[] = __('pos_drafts.variant_unavailable', ['sku' => $item['sku'] ?? $item['variant_id']]);
@@ -58,7 +58,7 @@ class PosDraftService
                 'variant_id' => $variant->id,
                 'sku' => $variant->sku,
                 'name' => $variant->product->name.' — '.$variant->variant_name,
-                'artist_name' => $variant->product->artist?->name,
+                'home_outlet_name' => $variant->product->homeOutlet?->name,
                 'sell_price' => (string) $variant->sell_price,
                 'current_stock' => $variant->current_stock,
                 'qty' => $item['qty'],

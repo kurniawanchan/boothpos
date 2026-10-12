@@ -21,7 +21,7 @@ class PreorderService
 {
     /** Relasi yang dibaca PreorderController::present() — dimuat ulang agar field tak hilang diam-diam. */
     public const PAYLOAD_RELATIONS = [
-        'items.artist', 'items.variant.product.category', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer', 'splitChildren',
+        'items.homeOutlet', 'items.variant.product.category', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer', 'splitChildren',
     ];
 
     public function __construct(
@@ -29,6 +29,20 @@ class PreorderService
         private PaymentRecorder $paymentRecorder,
         private ActivityLogger $activityLogger,
     ) {}
+
+    /**
+     * 045 Stage 4 — pre-order dicatat di outlet pembuatnya (OutletDefaults); item yang tidak dibawa outlet itu ditolak.
+     * Hanya "dibawa/tidak" yang diperiksa (pre-order bukan stok, jadi tanda 86 tidak berlaku).
+     *
+     * @throws ValidationException
+     */
+    private function assertCarriedAtOutlet(ProductVariant $variant): void
+    {
+        $outletId = \App\Support\OutletDefaults::peekForNewRecord();
+        if ($outletId !== null && ! app(OutletMenuService::class)->isCarried((int) $variant->product_id, $outletId)) {
+            throw ValidationException::withMessages(['items' => __('preorders.item_not_carried', ['sku' => $variant->sku])]);
+        }
+    }
 
     /**
      * Stok TIDAK berkurang di sini — barang belum ada secara fisik.
@@ -53,6 +67,7 @@ class PreorderService
 
             foreach ($data['items'] as $itemInput) {
                 $variant = ProductVariant::with('product')->findOrFail($itemInput['variant_id']);
+                $this->assertCarriedAtOutlet($variant);
                 $qty = (int) $itemInput['qty'];
                 $lineTotal = (float) $variant->sell_price * $qty;
 
@@ -96,7 +111,7 @@ class PreorderService
                 $variant = $line['variant'];
                 $preorder->items()->create([
                     'variant_id' => $variant->id,
-                    'artist_id' => $variant->product->artist_id,
+                    'home_outlet_id' => $variant->product->home_outlet_id,
                     'sku_snapshot' => $variant->sku,
                     'name_snapshot' => $variant->product->name.' — '.$variant->variant_name,
                     'qty' => $line['qty'],
@@ -242,7 +257,7 @@ class PreorderService
     {
         return $this->performSplit($source, $user, function (Collection $items) {
             // $items sudah terurut menurut id; groupBy mempertahankan urutan kemunculan pertama.
-            $bySeller = $items->groupBy('artist_id');
+            $bySeller = $items->groupBy('home_outlet_id');
 
             if ($bySeller->count() < 2) {
                 throw ValidationException::withMessages(['mode' => __('preorders.split_single_seller')]);
@@ -305,7 +320,7 @@ class PreorderService
             $created = [];
             $movedLog = [];
             foreach ($groups as $group) {
-                $new = Preorder::create([
+                $new = new Preorder([
                     'preorder_number' => $this->generateNumber(),
                     'event_id' => $locked->event_id,
                     'customer_id' => $locked->customer_id,
@@ -324,6 +339,10 @@ class PreorderService
                     'source_type' => 'split',
                     'source_preorder_number' => $locked->preorder_number,
                 ]);
+                // 045 Stage 4 — pecahan tetap di outlet pesanan asal (outlet_id tidak fillable dan tidak boleh ikut
+                // konteks permintaan, yang bisa berbeda dari outlet asal).
+                $new->outlet_id = $locked->outlet_id;
+                $new->save();
 
                 foreach ($group as $itemId => $qty) {
                     $item = $items[$itemId];
@@ -339,7 +358,7 @@ class PreorderService
                             'line_total' => round((float) $item->sell_price * $remaining, 2),
                         ]);
                         $new->items()->create([
-                            'variant_id' => $item->variant_id, 'artist_id' => $item->artist_id,
+                            'variant_id' => $item->variant_id, 'home_outlet_id' => $item->home_outlet_id,
                             'sku_snapshot' => $item->sku_snapshot, 'name_snapshot' => $item->name_snapshot,
                             'qty' => $qty, 'cost_price' => $item->cost_price, 'sell_price' => $item->sell_price,
                             'line_total' => round((float) $item->sell_price * $qty, 2),
@@ -515,16 +534,17 @@ class PreorderService
                     $sellPrice = (float) $existing->sell_price;
                     $lineTotal = $sellPrice * $qty;
                     $newItemsData[] = [
-                        'variant_id' => $variantId, 'artist_id' => $existing->artist_id,
+                        'variant_id' => $variantId, 'home_outlet_id' => $existing->home_outlet_id,
                         'sku_snapshot' => $existing->sku_snapshot, 'name_snapshot' => $existing->name_snapshot,
                         'qty' => $qty, 'cost_price' => $existing->cost_price,
                         'sell_price' => $existing->sell_price, 'line_total' => $lineTotal,
                     ];
                 } else {
                     $variant = ProductVariant::with('product')->findOrFail($variantId);
+                    $this->assertCarriedAtOutlet($variant);
                     $lineTotal = (float) $variant->sell_price * $qty;
                     $newItemsData[] = [
-                        'variant_id' => $variantId, 'artist_id' => $variant->product->artist_id,
+                        'variant_id' => $variantId, 'home_outlet_id' => $variant->product->home_outlet_id,
                         'sku_snapshot' => $variant->sku,
                         'name_snapshot' => $variant->product->name.' — '.$variant->variant_name,
                         'qty' => $qty, 'cost_price' => $variant->cost_price,
@@ -590,7 +610,7 @@ class PreorderService
 
                     $variant = ProductVariant::lockForUpdate()->findOrFail($variantId);
                     $this->stockService->applyMovement(
-                        variant: $variant, type: 'purchase', qtyChange: $delta,
+                        variant: $variant, outletId: (int) $preorder->outlet_id, type: 'purchase', qtyChange: $delta,
                         referenceType: 'preorder', referenceId: $preorder->id, userId: $user->id, // id PRE-ORDER (036): dulu 'preorder_item' -> bentrok makna dengan baris tiba/serah terima
                     );
                 }
@@ -720,7 +740,7 @@ class PreorderService
                 foreach ($preorder->items as $item) {
                     $variant = ProductVariant::lockForUpdate()->findOrFail($item->variant_id);
                     $this->stockService->applyMovement(
-                        variant: $variant, type: 'purchase', qtyChange: $item->qty,
+                        variant: $variant, outletId: (int) $preorder->outlet_id, type: 'purchase', qtyChange: $item->qty,
                         referenceType: 'preorder_item', referenceId: $item->id, userId: $user->id,
                     );
                 }
@@ -730,7 +750,7 @@ class PreorderService
                 foreach ($preorder->items as $item) {
                     $variant = ProductVariant::lockForUpdate()->findOrFail($item->variant_id);
                     $this->stockService->applyMovement(
-                        variant: $variant, type: 'preorder_handover', qtyChange: -$item->qty,
+                        variant: $variant, outletId: (int) $preorder->outlet_id, type: 'preorder_handover', qtyChange: -$item->qty,
                         referenceType: 'preorder_item', referenceId: $item->id, userId: $user->id,
                     );
                 }
@@ -777,7 +797,7 @@ class PreorderService
     public function generateNumber(): string
     {
         $today = now()->format('Ymd');
-        $countToday = Preorder::withoutGlobalScope(DataModeScope::class)
+        $countToday = Preorder::withoutGlobalScopes()
             ->whereDate('created_at', now()->toDateString())
             ->count();
 

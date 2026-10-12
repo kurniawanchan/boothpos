@@ -27,7 +27,7 @@ async function renderRail({ menuKeys, collapsed = false, props = {}, at = 'dashb
   return render(RailNav, { props: { collapsed, ...props }, global: { plugins: [pinia, router] } });
 }
 
-const ALL = ['dashboard', 'pos', 'session', 'events', 'products', 'artists', 'categories', 'stock', 'vendors', 'materials',
+const ALL = ['dashboard', 'pos', 'session', 'events', 'products', 'outlets', 'categories', 'stock', 'vendors', 'materials',
   'purchase_orders', 'customers', 'preorders', 'sales', 'reports', 'settings', 'users', 'roles', 'floor', 'kitchen',
   'dining_setup', 'companies', 'licenses', 'invoices'];
 

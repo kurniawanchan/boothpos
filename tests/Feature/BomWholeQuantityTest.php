@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Material;
 use App\Models\ProductVariant;
 use App\Models\ProductVariantBomLine;
@@ -24,7 +24,7 @@ class BomWholeQuantityTest extends TestCase
 
     private User $owner;
 
-    private Artist $seller;
+    private Outlet $seller;
 
     private ProductVariant $variant;
 
@@ -33,7 +33,7 @@ class BomWholeQuantityTest extends TestCase
         parent::setUp();
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->owner, 'sanctum');
-        $this->seller = Artist::factory()->create();
+        $this->seller = Outlet::factory()->create();
         $this->variant = $this->variantFor($this->seller);
     }
 

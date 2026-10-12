@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -11,7 +11,7 @@ use Tests\TestCase;
 
 /**
  * 005-ux-enhancements-dashboard (US1) — GET /products sekarang menerima
- * artist_id/category_id sebagai array (multi-select dropdown), bukan lagi
+ * home_outlet_id/category_id sebagai array (multi-select dropdown), bukan lagi
  * skalar tunggal. Lihat ProductController::index() dan research.md R3.
  */
 class ProductFilterMultiValueTest extends TestCase
@@ -30,16 +30,16 @@ class ProductFilterMultiValueTest extends TestCase
     {
         $this->actingAsRole('owner');
 
-        $artistA = Artist::factory()->create();
-        $artistB = Artist::factory()->create();
-        $artistC = Artist::factory()->create();
+        $artistA = Outlet::factory()->create();
+        $artistB = Outlet::factory()->create();
+        $artistC = Outlet::factory()->create();
         $category = Category::factory()->create();
 
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id]);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
-        $productC = Product::factory()->create(['artist_id' => $artistC->id, 'category_id' => $category->id]);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id]);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id]);
+        $productC = Product::factory()->create(['home_outlet_id' => $artistC->id, 'category_id' => $category->id]);
 
-        $response = $this->getJson('/api/v1/products?'.http_build_query(['artist_id' => [$artistA->id, $artistB->id]]));
+        $response = $this->getJson('/api/v1/products?'.http_build_query(['home_outlet_id' => [$artistA->id, $artistB->id]]));
 
         $response->assertOk();
         $ids = collect($response->json('data'))->pluck('id');
@@ -52,20 +52,20 @@ class ProductFilterMultiValueTest extends TestCase
     {
         $this->actingAsRole('owner');
 
-        $artistA = Artist::factory()->create();
-        $artistB = Artist::factory()->create();
+        $artistA = Outlet::factory()->create();
+        $artistB = Outlet::factory()->create();
         $categoryX = Category::factory()->create();
         $categoryY = Category::factory()->create();
 
         // Cocok kedua sumbu.
-        $match = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $categoryX->id]);
+        $match = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $categoryX->id]);
         // Cocok artist saja.
-        $artistOnly = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $categoryY->id]);
+        $artistOnly = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $categoryY->id]);
         // Cocok category saja.
-        $categoryOnly = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $categoryX->id]);
+        $categoryOnly = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $categoryX->id]);
 
         $response = $this->getJson('/api/v1/products?'.http_build_query([
-            'artist_id' => [$artistA->id],
+            'home_outlet_id' => [$artistA->id],
             'category_id' => [$categoryX->id],
         ]));
 
@@ -80,14 +80,14 @@ class ProductFilterMultiValueTest extends TestCase
     {
         $this->actingAsRole('owner');
 
-        $artistA = Artist::factory()->create();
-        $artistB = Artist::factory()->create();
+        $artistA = Outlet::factory()->create();
+        $artistB = Outlet::factory()->create();
         $category = Category::factory()->create();
 
-        $productA = Product::factory()->create(['artist_id' => $artistA->id, 'category_id' => $category->id]);
-        $productB = Product::factory()->create(['artist_id' => $artistB->id, 'category_id' => $category->id]);
+        $productA = Product::factory()->create(['home_outlet_id' => $artistA->id, 'category_id' => $category->id]);
+        $productB = Product::factory()->create(['home_outlet_id' => $artistB->id, 'category_id' => $category->id]);
 
-        $response = $this->getJson('/api/v1/products?artist_id='.$artistA->id);
+        $response = $this->getJson('/api/v1/products?home_outlet_id='.$artistA->id);
 
         $response->assertOk();
         $ids = collect($response->json('data'))->pluck('id');

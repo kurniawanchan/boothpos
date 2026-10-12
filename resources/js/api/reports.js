@@ -19,25 +19,25 @@ export function profitReport(eventId) {
   return client.get('/reports/profit', { params: { event_id: eventId } }).then((r) => r.data);
 }
 
-export function artistSettlements(eventId) {
+export function outletSettlements(eventId) {
   return client
-    .get('/reports/artist-settlements', { params: { event_id: eventId } })
+    .get('/reports/outlet-settlements', { params: { event_id: eventId } })
     .then((r) => r.data);
 }
 
-// F11.6 — drill-down transaksi yang menyusun rekap satu artist. Owner/admin
+// F11.6 — drill-down transaksi yang menyusun rekap satu outlet. Owner/admin
 // saja (backend mengembalikan 403 untuk role lain); pemanggil bertanggung
 // jawab menyembunyikan kontrolnya untuk role yang tidak berhak.
-export function artistSettlementTransactions(artistId, eventId) {
+export function outletSettlementTransactions(outletId, eventId) {
   return client
-    .get(`/reports/artist-settlements/${artistId}/transactions`, { params: { event_id: eventId } })
+    .get(`/reports/outlet-settlements/${outletId}/transactions`, { params: { event_id: eventId } })
     .then((r) => r.data);
 }
 
-// F9.5 — modal & laba kotor per artist (terpisah dari profitReport() di
+// F9.5 — modal & laba kotor per outlet (terpisah dari profitReport() di
 // atas, yang berskala event). Owner/admin saja.
-export function artistProfitReport(eventId) {
-  return client.get('/reports/artist-profit', { params: { event_id: eventId } }).then((r) => r.data);
+export function outletProfitReport(eventId) {
+  return client.get('/reports/outlet-profit', { params: { event_id: eventId } }).then((r) => r.data);
 }
 
 // 006-purchase-order-and-ops (US9) — tidak diskop event seperti tab lain di
@@ -47,9 +47,9 @@ export function purchasesReport(params = {}) {
 }
 
 // 006-purchase-order-and-ops (US10) — juga tidak diskop event; filter
-// opsionalnya artist_id.
-export function stockByArtistReport(params = {}) {
-  return client.get('/reports/stock-by-artist', { params }).then((r) => r.data);
+// opsionalnya outlet_id.
+export function stockByOutletReport(params = {}) {
+  return client.get('/reports/stock-by-outlet', { params }).then((r) => r.data);
 }
 
 // 010-split-payment-preorder-reports (US6) — laporan khusus pre-order:
@@ -62,7 +62,7 @@ export function preorderReport(params = {}) {
 }
 
 /**
- * report is one of: sales | profit | artist-settlements. Downloaded via
+ * report is one of: sales | profit | outlet-settlements. Downloaded via
  * axios (not a plain <a href>) because the export endpoint requires the
  * same Bearer token as every other request — a bare link would hit it
  * unauthenticated and get a 401.

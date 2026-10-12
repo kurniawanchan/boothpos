@@ -7,7 +7,7 @@ import { toLocalDateKey } from '../utils/date';
  *
  * Semuanya dikerjakan di frontend atas `transactions[]` yang sudah dimuat (F10.6:
  * "tanpa perlu memuat ulang seluruh laporan"). Antar-filter di-AND-kan; beberapa nilai
- * dalam SATU filter (kasir, penjual, pembayaran, shift) di-OR-kan.
+ * dalam SATU filter (kasir, outlet, pembayaran, shift) di-OR-kan.
  *
  * Halaman Sales hanya menampilkan transaksi dari POS (pre-order tidak ikut). Baris lama tanpa
  * field baru (mis. dari fixture/payload lama) diperlakukan wajar: bukan batal, tanpa margin.
@@ -19,13 +19,14 @@ const SETTLEMENTS = ['unpaid', 'partially_paid', 'fully_paid'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LIST = 50;
 
-// Nilai kosong (walk-in, tanpa penjual, tanpa margin) SELALU di akhir, apa pun arahnya.
+// Nilai kosong (walk-in, tanpa outlet, tanpa margin) SELALU di akhir, apa pun arahnya.
 export const SORT_ACCESSORS = {
   order_number: (tx) => tx.order_number ?? null,
   customer_name: (tx) => tx.customer_name || null,
-  artist_names: (tx) => [...(tx.artist_names ?? [])].sort((a, b) => a.localeCompare(b))[0] ?? null,
+  outlet_names: (tx) => [...(tx.outlet_names ?? [])].sort((a, b) => a.localeCompare(b))[0] ?? null,
   created_at: (tx) => Date.parse(tx.created_at),
   cashier_name: (tx) => tx.cashier_name || null,
+  sold_at_name: (tx) => tx.sold_at_name || null,
   item_count: (tx) => Number(tx.item_count ?? 0),
   payment_methods: (tx) => (tx.payment_methods ?? [])[0] ?? null,
   margin_amount: (tx) => (tx.margin_amount === undefined ? null : parseFloat(tx.margin_amount)),
@@ -53,7 +54,7 @@ export function useSalesFilters({ transactions, sessions }) {
   const search = ref('');
   const includeVoided = ref(false);
   const filters = reactive({
-    dateFrom: '', dateTo: '', cashiers: [], sellers: [], payments: [], sessions: [],
+    dateFrom: '', dateTo: '', cashiers: [], outlets: [], payments: [], sessions: [],
     customerType: '', paymentState: '', settlement: '', minTotal: '', maxTotal: '',
   });
   const sortKey = ref('created_at');
@@ -74,8 +75,8 @@ export function useSalesFilters({ transactions, sessions }) {
     return [...seen].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   });
 
-  const sellerOptions = computed(() =>
-    [...new Set(all.value.flatMap((tx) => tx.artist_names ?? []))]
+  const outletOptions = computed(() =>
+    [...new Set(all.value.flatMap((tx) => tx.outlet_names ?? []))]
       .sort((a, b) => a.localeCompare(b))
       .map((name) => ({ value: name, label: name }))
   );
@@ -88,14 +89,14 @@ export function useSalesFilters({ transactions, sessions }) {
 
   // --- penyaringan ----------------------------------------------------------------
   function matchesSearch(tx, q) {
-    const artistNames = (tx.artist_names ?? []).join(' ').toLowerCase();
-    return [tx.order_number, tx.customer_name, tx.cashier_name].some((v) => (v ?? '').toLowerCase().includes(q)) || artistNames.includes(q);
+    const outletNames = (tx.outlet_names ?? []).join(' ').toLowerCase();
+    return [tx.order_number, tx.customer_name, tx.cashier_name].some((v) => (v ?? '').toLowerCase().includes(q)) || outletNames.includes(q);
   }
 
   function matchesFilters(tx) {
     const f = filters;
     if (f.cashiers.length && !f.cashiers.some((v) => v == cashierKey(tx))) return false;
-    if (f.sellers.length && !(tx.artist_names ?? []).some((name) => f.sellers.includes(name))) return false;
+    if (f.outlets.length && !(tx.outlet_names ?? []).some((name) => f.outlets.includes(name))) return false;
     if (f.payments.length && !(tx.payment_methods ?? []).some((m) => f.payments.includes(m))) return false;
     if (f.sessions.length && !f.sessions.some((id) => id == tx.session_id)) return false;
     if (f.paymentState && (tx.payment_state ?? 'none') !== f.paymentState) return false;
@@ -125,7 +126,7 @@ export function useSalesFilters({ transactions, sessions }) {
   const activeCount = computed(() => {
     const f = filters;
     return [
-      search.value.trim() !== '', f.dateFrom !== '', f.dateTo !== '', f.cashiers.length > 0, f.sellers.length > 0,
+      search.value.trim() !== '', f.dateFrom !== '', f.dateTo !== '', f.cashiers.length > 0, f.outlets.length > 0,
       f.payments.length > 0, f.sessions.length > 0, f.customerType !== '', f.paymentState !== '', f.settlement !== '',
       f.minTotal !== '' && f.minTotal !== null, f.maxTotal !== '' && f.maxTotal !== null,
     ].filter(Boolean).length;
@@ -134,7 +135,7 @@ export function useSalesFilters({ transactions, sessions }) {
   function reset() {
     search.value = '';
     Object.assign(filters, {
-      dateFrom: '', dateTo: '', cashiers: [], sellers: [], payments: [], sessions: [],
+      dateFrom: '', dateTo: '', cashiers: [], outlets: [], payments: [], sessions: [],
       customerType: '', paymentState: '', settlement: '', minTotal: '', maxTotal: '',
     });
   }
@@ -219,7 +220,7 @@ export function useSalesFilters({ transactions, sessions }) {
     const put = (key, value) => { if (value !== '' && value !== null && value !== undefined && !(Array.isArray(value) && !value.length)) q[key] = Array.isArray(value) ? value.join(',') : String(value); };
     put('q', search.value.trim());
     put('from', f.dateFrom); put('to', f.dateTo);
-    put('cashier', f.cashiers); put('seller', f.sellers); put('pay', f.payments); put('session', f.sessions);
+    put('cashier', f.cashiers); put('outlet', f.outlets); put('pay', f.payments); put('session', f.sessions);
     put('cust', f.customerType); put('pstate', f.paymentState); put('settle', f.settlement);
     put('min', f.minTotal); put('max', f.maxTotal);
     if (includeVoided.value) q.voided = '1';
@@ -238,7 +239,7 @@ export function useSalesFilters({ transactions, sessions }) {
     filters.dateFrom = date(query.from);
     filters.dateTo = date(query.to);
     filters.cashiers = listOf(one(query.cashier));
-    filters.sellers = listOf(one(query.seller));
+    filters.outlets = listOf(one(query.outlet));
     filters.payments = listOf(one(query.pay));
     filters.sessions = listOf(one(query.session));
     filters.customerType = oneOf(query.cust, CUSTOMER_TYPES);
@@ -257,7 +258,7 @@ export function useSalesFilters({ transactions, sessions }) {
 
   return {
     search, filters, includeVoided, sortKey, sortDir,
-    cashierOptions, sellerOptions, paymentMethods,
+    cashierOptions, outletOptions, paymentMethods,
     filtered, sorted, summary, shiftSummary, hasMargin,
     activeCount, hasFilterOtherThanSearch,
     reset, sortBy, toQuery, applyQuery,

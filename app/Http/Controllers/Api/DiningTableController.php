@@ -35,7 +35,17 @@ class DiningTableController extends Controller
 
     public function store(StoreDiningTableRequest $request): JsonResponse
     {
-        $table = DiningTable::create($request->payload());
+        $outletId = $request->filled('outlet_id') ? $request->integer('outlet_id') : null;
+        if ($outletId !== null && ! app(\App\Support\OutletContext::class)->isPermitted($outletId)) {
+            return response()->json(['message' => __('outlets.forbidden'), 'code' => 'outlet_forbidden'], 403);
+        }
+
+        // outlet_id tidak ada di $fillable: diset di sini dari pilihan yang sudah divalidasi (default: BelongsToOutlet).
+        $table = new DiningTable($request->payload());
+        if ($outletId !== null) {
+            $table->outlet_id = $outletId;
+        }
+        $table->save();
 
         return response()->json(new DiningTableResource($table), 201);
     }

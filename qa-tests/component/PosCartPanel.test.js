@@ -50,10 +50,10 @@ describe('PosCartPanel', () => {
     expect(screen.getByText('Buka sesi kasir terlebih dahulu.')).toBeInTheDocument();
   });
 
-  it('shows the seller name on a cart item when present', async () => {
+  it('shows the outlet name on a cart item when present', async () => {
     const { pinia } = renderPanel();
     const cart = usePosCartStore(pinia);
-    cart.add({ variant_id: 1, sku: 'SKU1', name: 'Produk A', sell_price: '10000.00', current_stock: 5, artist_name: 'Ryu Illustration' });
+    cart.add({ variant_id: 1, sku: 'SKU1', name: 'Produk A', sell_price: '10000.00', current_stock: 5, home_outlet_name: 'Ryu Illustration' });
     await Promise.resolve();
     expect(screen.getByText('Ryu Illustration')).toBeInTheDocument();
   });

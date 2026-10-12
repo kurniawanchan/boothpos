@@ -48,4 +48,8 @@ return [
     'recipe_conflict_bom' => 'Varian :skus memakai BOM yang sudah selesai sebagai sumber biaya. Buka kembali BOM-nya sebelum memakai resep.',
     'recipe_conflict_recipe' => 'Varian ini digerakkan resep. Biayanya tidak bisa ditandai selesai lewat BOM.',
     'recipe_cost_locked' => 'Harga modal varian ini mengikuti resep. Buat versi resep baru untuk mengubahnya.',
+    'bulk_price_scope_invalid' => 'Pilih cakupan harga yang valid.',
+    'bulk_price_outlets_required' => 'Pilih minimal satu outlet.',
+    'outlet_price_release_unavailable' => 'Harga per outlet belum bisa diubah saat rilis menu aktif.',
+    'outlet_ids_required' => 'Pilih minimal satu outlet untuk ditandai habis.',
 ];

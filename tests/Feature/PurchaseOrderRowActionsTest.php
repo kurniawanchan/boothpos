@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Material;
 use App\Models\Payment;
 use App\Models\ProductVariantBomLine;
@@ -60,14 +60,14 @@ class PurchaseOrderRowActionsTest extends TestCase
         foreach (['draft', 'ordered', 'received', 'paid', 'cancelled'] as $status) {
             $po = $this->makePo($status);
             $vendor = Vendor::factory()->create();
-            $seller = Artist::factory()->create();
+            $seller = Outlet::factory()->create();
 
-            $this->putJson("/api/v1/purchase-orders/{$po->id}", ['vendor_id' => $vendor->id, 'artist_id' => $seller->id, 'notes' => "catatan {$status}"])
-                ->assertOk()->assertJsonPath('vendor_id', $vendor->id)->assertJsonPath('artist_id', $seller->id)->assertJsonPath('notes', "catatan {$status}");
+            $this->putJson("/api/v1/purchase-orders/{$po->id}", ['vendor_id' => $vendor->id, 'outlet_id' => $seller->id, 'notes' => "catatan {$status}"])
+                ->assertOk()->assertJsonPath('vendor_id', $vendor->id)->assertJsonPath('outlet_id', $seller->id)->assertJsonPath('notes', "catatan {$status}");
 
             $fresh = $po->fresh();
             $this->assertSame($vendor->id, $fresh->vendor_id, $status);
-            $this->assertSame($seller->id, $fresh->artist_id, $status);
+            $this->assertSame($seller->id, $fresh->outlet_id, $status);
         }
     }
 
@@ -90,16 +90,16 @@ class PurchaseOrderRowActionsTest extends TestCase
 
     public function test_the_seller_cannot_change_once_a_bom_uses_one_of_the_lines(): void
     {
-        $sellerA = Artist::factory()->create();
+        $sellerA = Outlet::factory()->create();
         $variant = $this->variantFor($sellerA);
         [$item] = $this->po($sellerA, 'ordered', [['type' => 'material', 'name' => 'Ball Chain', 'price' => 500]]);
         $this->addItems($variant, [['purchase_order_item_id' => $item->id]])->assertCreated();
         $po = $item->purchaseOrder;
-        $other = Artist::factory()->create();
+        $other = Outlet::factory()->create();
 
-        $this->putJson("/api/v1/purchase-orders/{$po->id}", ['artist_id' => $other->id])->assertStatus(409);
+        $this->putJson("/api/v1/purchase-orders/{$po->id}", ['outlet_id' => $other->id])->assertStatus(409);
 
-        $this->assertSame($sellerA->id, $po->fresh()->artist_id);
+        $this->assertSame($sellerA->id, $po->fresh()->outlet_id);
         // vendor/notes tetap boleh diubah walau seller terkunci
         $this->putJson("/api/v1/purchase-orders/{$po->id}", ['notes' => 'masih bisa'])->assertOk();
     }
@@ -143,11 +143,11 @@ class PurchaseOrderRowActionsTest extends TestCase
 
     public function test_assigning_a_seller_logs_only_the_seller_entry_not_a_second_updated_entry(): void
     {
-        $po = $this->makePo('ordered', ['artist_id' => null]);
-        $po->update(['artist_id' => null]);
-        $seller = Artist::factory()->create();
+        $po = $this->makePo('ordered', ['outlet_id' => null]);
+        $po->update(['outlet_id' => null]);
+        $seller = Outlet::factory()->create();
 
-        $this->putJson("/api/v1/purchase-orders/{$po->id}", ['artist_id' => $seller->id])->assertOk();
+        $this->putJson("/api/v1/purchase-orders/{$po->id}", ['outlet_id' => $seller->id])->assertOk();
 
         $this->assertSame(1, ActivityLog::where('action', 'purchase_order_seller_assigned')->where('entity_id', $po->id)->count());
         $this->assertSame(0, ActivityLog::where('action', 'purchase_order_updated')->count());
@@ -209,7 +209,7 @@ class PurchaseOrderRowActionsTest extends TestCase
     public function test_a_bom_row_that_uses_a_line_blocks_deletion_even_on_a_draft(): void
     {
         $po = $this->makePo('draft');
-        $variant = $this->variantFor($po->artist);
+        $variant = $this->variantFor($po->outlet);
         ProductVariantBomLine::factory()->fromPoLine($po->items()->first())->create(['product_variant_id' => $variant->id]);
 
         $res = $this->deleteJson("/api/v1/purchase-orders/{$po->id}")->assertStatus(409);

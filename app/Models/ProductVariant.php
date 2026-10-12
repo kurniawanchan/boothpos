@@ -32,6 +32,13 @@ class ProductVariant extends Model
     protected static function booted(): void
     {
         static::created(fn (ProductVariant $v) => app(\App\Services\PriceService::class)->recordCreated($v));
+        // 045 Stage 5 — stok awal/penulisan langsung `current_stock` dibukukan ke saldo outlet asal (invarian I2).
+        static::created(fn (ProductVariant $v) => \App\Support\OutletStockSync::variantCreated($v));
+        static::updated(function (ProductVariant $v) {
+            if ($v->wasChanged('current_stock')) {
+                \App\Support\OutletStockSync::variantChanged($v, (int) $v->current_stock - (int) $v->getOriginal('current_stock'));
+            }
+        });
     }
 
     protected $fillable = [

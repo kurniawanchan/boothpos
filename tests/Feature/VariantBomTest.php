@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Material;
 use App\Models\Product;
@@ -30,9 +30,9 @@ class VariantBomTest extends TestCase
 
     private User $owner;
 
-    private Artist $sellerA;
+    private Outlet $sellerA;
 
-    private Artist $sellerB;
+    private Outlet $sellerB;
 
     protected function setUp(): void
     {
@@ -40,8 +40,8 @@ class VariantBomTest extends TestCase
 
         $this->owner = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->owner, 'sanctum');
-        $this->sellerA = Artist::factory()->create(['name' => 'Seller A']);
-        $this->sellerB = Artist::factory()->create(['name' => 'Seller B']);
+        $this->sellerA = Outlet::factory()->create(['name' => 'Seller A']);
+        $this->sellerB = Outlet::factory()->create(['name' => 'Seller B']);
     }
 
     // ===================================================================

@@ -10,6 +10,7 @@ import StatusPill from '../ui/StatusPill.vue';
 import TablePagination from '../ui/TablePagination.vue';
 import { usePaginatedList } from '../../composables/usePaginatedList';
 import { listMovements } from '../../api/stock';
+import { useOutletStore } from '../../stores/outlet';
 import { MOVEMENT_TYPES, movementTypeLabelKey, movementTypeVariant } from '../../utils/stockMovements';
 import { formatDateTime } from '../../utils/date';
 
@@ -29,6 +30,7 @@ const props = defineProps({
 const emit = defineEmits(['close']);
 
 const { t } = useI18n();
+const outletStore = useOutletStore(); // 045 Stage 5: kolom Outlet hanya bila ada lebih dari satu outlet
 const { items, meta, params, loading, error, load, setPage, setFilter } = usePaginatedList(listMovements);
 
 const typeFilter = ref('');
@@ -41,6 +43,7 @@ const typeOptions = computed(() => [
 ]);
 
 const columns = computed(() => [
+  ...(outletStore.multi ? [{ key: 'outlet_name', label: t('stock.col_outlet') }] : []),
   { key: 'type', label: t('master_data.col_type') },
   { key: 'qty_change', label: t('master_data.col_qty_change') },
   { key: 'range', label: t('master_data.col_range') },
@@ -97,6 +100,7 @@ watch(
       </div>
       <div v-else class="overflow-hidden rounded-lg border border-line-2 bg-white">
         <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.history_empty')">
+          <template #cell-outlet_name="{ row }">{{ row.outlet_name || '—' }}</template>
           <template #cell-type="{ row }">
             <StatusPill :variant="movementTypeVariant(row.type)">{{ t(movementTypeLabelKey(row.type)) }}</StatusPill>
           </template>

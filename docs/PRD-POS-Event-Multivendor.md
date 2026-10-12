@@ -65,6 +65,8 @@ Nilai inti yang ditawarkan:
 
 ---
 
+**Catatan — 2026-10-11 (konstitusi 2.0.0, fitur 045).** Satu organisasi kini dapat memiliki beberapa *outlet* (tempat yang menjual menu) di satu mesin atau satu server bersama. Entitas *penjual* (seller) diganti namanya menjadi *outlet* di tempat yang sama (identitas dan riwayat tetap); stok, transaksi, meja, shift, dan laporan kini dicakup per outlet; hanya instalasi satu outlet yang tidak berubah. Lihat `specs/045-outlets-per-outlet-menu/`.
+
 ## 2. Latar belakang & masalah
 
 Penjualan merchandise anime/game di Indonesia sebagian besar terjadi di event komunitas dengan karakteristik: durasi pendek (1–3 hari), volume transaksi padat di jam tertentu, koneksi internet tidak reliable, dan barang dititipkan dari banyak artist sekaligus.
@@ -805,6 +807,8 @@ Catatan keamanan (area risiko: secrets management) — koleksi Bruno dan Postman
 Dokumen ini memuat 26 modul. Dengan 1 developer dan waktu 2 bulan menuju event Oktober, seluruhnya tidak mungkin selesai. Pemotongan cakupan bukan pilihan, melainkan keharusan.
 
 Yang meringankan: skalanya kecil. Lima artist dan puluhan SKU berarti beberapa fitur yang dirancang untuk skala besar tidak memberi manfaat nyata pada event pertama, sehingga dapat ditunda tanpa kerugian operasional.
+
+**Catatan — 2026-10-11 (fitur 045, konstitusi 2.0.0).** Dua butir di bawah ini *tidak* dihidupkan kembali sebagai fitur baru: *penjualan/konsinyasi ke penjual* tetap dicoret dari MVP. Yang berubah adalah makna *penjual* — kini *outlet*, lokasi yang menjual menu milik organisasi yang sama — dan cakupan outlet (shift, pesanan, meja, stok, transfer antar-outlet, laporan per outlet) ditambahkan sebagai kapabilitas baru yang tercatat di `specs/045-outlets-per-outlet-menu/`, bukan sebagai pembatalan pemotongan di bawah.
 
 ### 10.2 Yang dipotong dari MVP dan alasannya
 

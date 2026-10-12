@@ -14,14 +14,15 @@ class UpdateProductRequest extends FormRequest
     public function rules(): array
     {
         return [
+            ...\App\Support\OutletCarriedRule::rules(),
             // code_prefix dan product_segment TIDAK ada di sini secara
-            // sengaja (bukan 'prohibited' seperti Artist/Category, karena
+            // sengaja (bukan 'prohibited' seperti Outlet/Category, karena
             // OpenAPI ProductInput tidak mensyaratkan 'prohibited' untuk
             // field ini — kolom yang tidak dikirim cukup diabaikan oleh
             // FormRequest, tidak perlu ditolak keras). Konsisten dengan
             // catatan di openapi-pos-mvp.yaml: "Perubahan nama tidak
             // mengubah code_prefix maupun SKU yang sudah ada."
-            'artist_id' => ['sometimes', 'integer', 'exists:artists,id'],
+            'home_outlet_id' => ['sometimes', 'integer', 'exists:outlets,id'],
             'category_id' => ['sometimes', 'integer', 'exists:categories,id'],
             'name' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string'],

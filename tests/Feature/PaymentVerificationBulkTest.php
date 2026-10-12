@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Event;
@@ -41,7 +41,7 @@ class PaymentVerificationBulkTest extends TestCase
         $this->cashierA = User::factory()->create(['role' => 'cashier', 'name' => 'Kasir A']);
         $this->cashierB = User::factory()->create(['role' => 'cashier', 'name' => 'Kasir B']);
         $product = Product::factory()->create([
-            'artist_id' => Artist::factory()->create()->id,
+            'home_outlet_id' => Outlet::factory()->create()->id,
             'category_id' => Category::factory()->create()->id,
         ]);
         $this->variant = $product->variants()->create(['sku' => 'VBK0001', 'sell_price' => 25000, 'cost_price' => 10000, 'current_stock' => 500]);

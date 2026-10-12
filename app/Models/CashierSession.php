@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOutlet;
 use App\Models\Concerns\HasDataMode;
 use App\Models\Concerns\StampsBusinessDay;
 use Carbon\CarbonInterface;
@@ -12,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CashierSession extends Model
 {
+    use BelongsToOutlet;
+
     use HasDataMode, HasFactory, StampsBusinessDay;
 
     protected $fillable = [

@@ -20,6 +20,16 @@ class PriceChangeApplier implements ChangeApplier
             return false;
         }
 
+        // 045 Stage 3 — perubahan harga OUTLET menulis harga khusus outlet itu (null = kembali mengikuti dasar).
+        if (isset($change->payload['outlet_id'])) {
+            $override = $change->payload['new_override'] ?? null;
+            $this->prices->writeOutletPrice($variant, (int) $change->payload['outlet_id'], $override === null ? null : round((float) $override, 2), $by, 'release', $change->payload['note'] ?? null, [
+                'release_id' => $release?->id, 'change_id' => $change->id, 'approved_by' => $change->approval?->decided_by,
+            ]);
+
+            return true;
+        }
+
         $new = round((float) $change->payload['new_price'], 2);
         $old = round((float) $variant->sell_price, 2);
 

@@ -13,6 +13,7 @@ return [
     'local_ref_not_a_tab' => 'This reference belongs to a sale, not to a tab.',
     'table_inactive' => 'This table is inactive and cannot receive a new tab.',
     'table_occupied' => 'This table already has an open tab.',
+    'outlet_mismatch' => 'This table belongs to another outlet; a tab cannot be moved between outlets.',
     'tab_not_open' => 'This tab is no longer open.',
     'tab_not_empty' => 'This tab has items. Remove them, or void the tab.',
     'empty_tab_reason' => 'Empty tab closed',

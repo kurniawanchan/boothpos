@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { currentSession } from '../api/sessions';
 import { listCategories } from '../api/categories';
-import { listArtists } from '../api/artists';
+import { listOutlets } from '../api/outlets';
 import { listProducts, lookupVariants } from '../api/products';
 import { createOrder } from '../api/orders';
 import { usePosCartStore } from '../stores/posCart';
@@ -28,17 +28,17 @@ const cart = usePosCartStore();
 const toast = useToastStore();
 const { t } = useI18n();
 // 043 (US3) — item 86 / diskontinu redup dan ditolak di sini dalam ~5 dtk; penjaga sebenarnya tetap server (409).
-const availability = useMenuAvailability();
+const availability = useMenuAvailability({ pos: true });
 
 const session = ref(null);
 const sessionChecked = ref(false);
 const categories = ref([]);
-const artists = ref([]);
+const outlets = ref([]);
 // 005-ux-enhancements-dashboard (US1) — array (multi-select dropdown
 // dengan pencarian), bukan lagi satu ID chip tunggal. Array kosong =
 // "Semua" — lihat BaseMultiSelect.vue.
 const selectedCategoryIds = ref([]);
-const selectedArtistIds = ref([]);
+const selectedOutletIds = ref([]);
 const search = ref('');
 const browsedProducts = ref([]);
 const searchResults = ref(null);
@@ -61,7 +61,7 @@ onMounted(async () => {
   sessionChecked.value = true;
   const catRes = await listCategories({ per_page: 100 });
   categories.value = catRes.data;
-  artists.value = (await listArtists({ per_page: 100 })).data;
+  outlets.value = (await listOutlets({ per_page: 100 })).data;
   await loadBrowse();
 });
 
@@ -75,9 +75,10 @@ async function loadBrowse() {
     // inactive ones) in one extra query total — no more per-product N+1.
     const res = await listProducts({
       ...(selectedCategoryIds.value.length ? { category_id: selectedCategoryIds.value } : {}),
-      ...(selectedArtistIds.value.length ? { artist_id: selectedArtistIds.value } : {}),
+      ...(selectedOutletIds.value.length ? { home_outlet_id: selectedOutletIds.value } : {}),
       is_active: true,
       with_variants: 1,
+      pos: 1, // 045: menu menurut outlet shift (item yang tidak dibawa tidak ditawarkan; harga outlet)
       per_page: 100,
     });
     browsedProducts.value = res.data;
@@ -86,9 +87,9 @@ async function loadBrowse() {
   }
 }
 watch(selectedCategoryIds, loadBrowse);
-watch(selectedArtistIds, loadBrowse);
+watch(selectedOutletIds, loadBrowse);
 
-const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+const outletOptions = computed(() => outlets.value.map((a) => ({ value: a.id, label: a.name })));
 const categoryOptions = computed(() => categories.value.map((c) => ({ value: c.id, label: c.name })));
 
 // BUG YANG DITEMUKAN & DIPERBAIKI (030-fix-pos-search-product-image) —
@@ -110,12 +111,12 @@ const runSearch = useDebouncedFn(async () => {
   loadingGrid.value = true;
   try {
     // GET /variants/lookup — the cashier-facing search endpoint. It has no
-    // category/seller filter; each hit carries its already-resolved
+    // category/outlet filter; each hit carries its already-resolved
     // `image_url` (variant's photo, else the product's), which
     // buildSearchCards passes through to the card and, via the card, to the
     // cart line, and its `category_name` shows as the same label the browse
     // cards have (030).
-    const res = await lookupVariants(term, 40);
+    const res = await lookupVariants(term, 40, { pos: true });
     if (seq !== searchSeq) return;
     searchResults.value = res.data;
   } finally {
@@ -309,10 +310,10 @@ async function resumeDraft(draftId) {
       </div>
 
       <!-- 005-ux-enhancements-dashboard (US1) — dropdown multi-pilih dengan
-           pencarian, menggantikan baris chip artist/category dari
+           pencarian, menggantikan baris chip outlet/category dari
            004-sidebar-menu-reorg (lihat research.md R2). -->
       <div class="flex flex-wrap gap-2.5">
-        <BaseMultiSelect v-model="selectedArtistIds" :options="artistOptions" :all-label="t('master_data.all_artists')" class="w-52" />
+        <BaseMultiSelect v-model="selectedOutletIds" :options="outletOptions" :all-label="t('master_data.all_artists')" class="w-52" />
         <BaseMultiSelect v-model="selectedCategoryIds" :options="categoryOptions" :all-label="t('master_data.all_categories')" class="w-52" />
       </div>
 
@@ -342,7 +343,7 @@ async function resumeDraft(draftId) {
             <div class="flex flex-col gap-1 px-3 py-2.5">
               <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
               <span v-if="card.category_name" class="text-[10.5px] font-semibold uppercase tracking-wide text-muted-4">{{ card.category_name }}</span>
-              <span class="text-[11px] text-muted-3">{{ card.artist_name }}</span>
+              <span class="text-[11px] text-muted-3">{{ card.home_outlet_name }}</span>
               <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
                 <span class="text-[14.5px] font-bold text-brand-active">{{ formatIDR(card.sell_price) }}</span>
                 <span class="text-[11px] text-muted-3">{{ t('pos.stock_count', { count: card.current_stock }) }}</span>
@@ -376,7 +377,7 @@ async function resumeDraft(draftId) {
             <div class="flex flex-col gap-1 px-3 py-2.5">
               <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
               <span v-if="card.category_name" class="text-[10.5px] font-semibold uppercase tracking-wide text-muted-4">{{ card.category_name }}</span>
-              <span class="text-[11px] text-muted-3">{{ card.artist_name }}</span>
+              <span class="text-[11px] text-muted-3">{{ card.home_outlet_name }}</span>
               <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
                 <span class="text-[14.5px] font-bold text-brand-active">
                   <template v-if="card.variant_count === 0">{{ t('pos.no_variants') }}</template>

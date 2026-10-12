@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -45,10 +45,10 @@ class MasterDataImportTest extends TestCase
         return $user;
     }
 
-    private function enableMultiArtist(): void
+    private function enableMultiOutlet(): void
     {
         Setting::updateOrCreate(
-            ['key' => 'multi_artist_enabled'],
+            ['key' => 'multi_outlet_enabled'],
             ['value' => '1', 'type' => 'boolean', 'group' => 'licensing'],
         );
     }
@@ -104,7 +104,7 @@ class MasterDataImportTest extends TestCase
     private function fullCatalogWorkbook(): UploadedFile
     {
         return $this->workbook([
-            'artists' => ['rows' => [
+            'outlets' => ['rows' => [
                 ['code' => 'RYU', 'name' => 'Ryu Illustration', 'contact_email' => 'ryu@example.test', 'is_active' => 1],
             ]],
             'categories' => ['rows' => [
@@ -112,7 +112,7 @@ class MasterDataImportTest extends TestCase
             ]],
             'products' => ['rows' => [
                 [
-                    'artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
+                    'home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
                     'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard',
                     'cost_price' => 10000, 'sell_price' => 25000, 'low_stock_alert' => 5,
                     'initial_stock' => 20,
@@ -165,7 +165,7 @@ class MasterDataImportTest extends TestCase
             ->assertJsonPath('applied', true)
             ->assertJsonPath('errors', []);
 
-        $this->assertDatabaseHas('artists', ['code' => 'RYU']);
+        $this->assertDatabaseHas('outlets', ['code' => 'RYU']);
         $this->assertDatabaseHas('categories', ['code' => 'KY']);
         $this->assertDatabaseHas('product_variants', ['sku' => 'RYU-KY-SAK-001', 'current_stock' => 20]);
 
@@ -197,13 +197,13 @@ class MasterDataImportTest extends TestCase
             // impor/ekspor sebelahnya, bukan "This action is unauthorized."
             ->assertJsonPath('message', 'Hanya owner/admin/inventory yang dapat mengimpor data master.');
 
-        $this->assertSame(0, Artist::count());
+        $this->assertSame(0, Outlet::count());
     }
 
     public function test_inventory_role_may_import(): void
     {
         $this->actingAsRole('inventory');
-        $this->enableMultiArtist();
+        $this->enableMultiOutlet();
 
         $this->postImport($this->fullCatalogWorkbook())->assertOk();
     }
@@ -219,7 +219,7 @@ class MasterDataImportTest extends TestCase
         $response = $this->postImport(new UploadedFile($path, 'jahat.xlsx', null, null, true));
 
         $response->assertStatus(422);
-        $this->assertSame(0, Artist::count());
+        $this->assertSame(0, Outlet::count());
     }
 
     public function test_a_zip_that_is_not_a_workbook_is_rejected(): void
@@ -249,7 +249,7 @@ class MasterDataImportTest extends TestCase
     public function test_happy_path_creates_artists_categories_products_and_stock(): void
     {
         $this->actingAsRole('owner');
-        $this->enableMultiArtist();
+        $this->enableMultiOutlet();
 
         $response = $this->postImport($this->fullCatalogWorkbook());
 
@@ -257,11 +257,11 @@ class MasterDataImportTest extends TestCase
             ->assertJsonPath('applied', true)
             ->assertJsonPath('dry_run', false)
             ->assertJsonPath('errors', [])
-            ->assertJsonPath('sheets.artists.created', 1)
+            ->assertJsonPath('sheets.outlets.created', 1)
             ->assertJsonPath('sheets.categories.created', 1)
             ->assertJsonPath('sheets.products.created', 1);
 
-        $this->assertDatabaseHas('artists', ['code' => 'RYU', 'name' => 'Ryu Illustration']);
+        $this->assertDatabaseHas('outlets', ['code' => 'RYU', 'name' => 'Ryu Illustration']);
         $this->assertDatabaseHas('categories', ['code' => 'KY', 'name' => 'Keychain']);
 
         // Kode produk & SKU dihasilkan SERVER lewat ProductCodeGenerator.
@@ -276,12 +276,12 @@ class MasterDataImportTest extends TestCase
     public function test_segment_is_derived_from_the_product_name_when_left_blank(): void
     {
         $this->actingAsRole('owner');
-        Artist::factory()->create(['code' => 'RYU']);
+        Outlet::factory()->create(['code' => 'RYU']);
         Category::factory()->create(['code' => 'KY']);
 
         $this->postImport($this->workbook([
             'products' => ['rows' => [
-                ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_name' => 'Poster Yuki', 'variant_name' => 'A4', 'sell_price' => 15000],
+                ['home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_name' => 'Poster Yuki', 'variant_name' => 'A4', 'sell_price' => 15000],
             ]],
         ]))->assertOk();
 
@@ -291,16 +291,16 @@ class MasterDataImportTest extends TestCase
     public function test_sheets_are_processed_in_dependency_order_regardless_of_physical_order(): void
     {
         $this->actingAsRole('owner');
-        $this->enableMultiArtist();
+        $this->enableMultiOutlet();
 
         // Sheet ditulis TERBALIK di dalam berkas: produk dulu, artist dan
         // kategori paling belakang.
         $file = $this->workbook([
             'products' => ['rows' => [
-                ['artist_code' => 'ZZZ', 'category_code' => 'ZZ', 'product_segment' => 'AAA', 'product_name' => 'Produk Baru', 'variant_name' => 'Standard', 'sell_price' => 1000],
+                ['home_outlet_code' => 'ZZZ', 'category_code' => 'ZZ', 'product_segment' => 'AAA', 'product_name' => 'Produk Baru', 'variant_name' => 'Standard', 'sell_price' => 1000],
             ]],
             'categories' => ['rows' => [['code' => 'ZZ', 'name' => 'Kategori Baru']]],
-            'artists' => ['rows' => [['code' => 'ZZZ', 'name' => 'Artist Baru']]],
+            'outlets' => ['rows' => [['code' => 'ZZZ', 'name' => 'Outlet Baru']]],
         ]);
 
         $this->postImport($file)->assertOk()->assertJsonPath('applied', true);
@@ -313,13 +313,40 @@ class MasterDataImportTest extends TestCase
         $this->actingAsRole('owner');
 
         $file = $this->workbook([
-            'Artists' => ['headings' => MasterDataSheets::headings('artists'), 'rows' => [['code' => 'RYU', 'name' => 'Ryu']]],
+            'Artists' => ['headings' => MasterDataSheets::headings('outlets'), 'rows' => [['code' => 'RYU', 'name' => 'Ryu']]],
             'Catatan Toko' => ['headings' => ['apa saja'], 'rows' => []],
         ]);
 
         $this->postImport($file)->assertOk()
-            ->assertJsonPath('sheets.artists.created', 1)
+            ->assertJsonPath('sheets.outlets.created', 1)
             ->assertJsonPath('ignored_sheets', ['Catatan Toko']);
+    }
+
+    /**
+     * 045 — berkas dari sebelum rename seller → outlet membawa sheet 'artists'
+     * dan kolom 'artist_code'. Keduanya harus tetap terbaca saat impor (alias
+     * di MasterDataSheets), sementara ekspor/template memakai nama baru.
+     */
+    public function test_legacy_sheet_and_column_names_from_before_the_outlet_rename_still_import(): void
+    {
+        $this->actingAsRole('owner');
+        Category::factory()->create(['code' => 'KY', 'name' => 'Keychain']);
+
+        $productHeadings = array_map(
+            fn (string $heading) => $heading === 'home_outlet_code' ? 'artist_code' : $heading,
+            MasterDataSheets::headings('products'),
+        );
+
+        $this->postImport($this->workbook([
+            'Artists' => ['headings' => MasterDataSheets::headings('outlets'), 'rows' => [['code' => 'RYU', 'name' => 'Ryu']]],
+            'products' => ['headings' => $productHeadings, 'rows' => [[
+                'artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
+                'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000,
+            ]]],
+        ]))->assertOk()
+            ->assertJsonPath('sheets.outlets.created', 1)
+            ->assertJsonPath('sheets.products.created', 1)
+            ->assertJsonPath('ignored_sheets', []);
     }
 
     // =================================================================
@@ -330,20 +357,20 @@ class MasterDataImportTest extends TestCase
     {
         $this->actingAsRole('owner');
 
-        Artist::factory()->create(['code' => 'RYU', 'name' => 'Nama Lama']);
+        Outlet::factory()->create(['code' => 'RYU', 'name' => 'Nama Lama']);
         Category::factory()->create(['code' => 'KY', 'name' => 'Keychain']);
 
         $rows = [[
-            'artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
+            'home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
             'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000,
         ]];
 
         $this->postImport($this->workbook([
-            'artists' => ['rows' => [['code' => 'RYU', 'name' => 'Nama Baru']]],
+            'outlets' => ['rows' => [['code' => 'RYU', 'name' => 'Nama Baru']]],
             'products' => ['rows' => $rows],
         ]))->assertOk();
 
-        $this->assertSame('Nama Baru', Artist::where('code', 'RYU')->value('name'));
+        $this->assertSame('Nama Baru', Outlet::where('code', 'RYU')->value('name'));
         $this->assertSame(1, ProductVariant::count());
 
         // Impor kedua dengan harga yang sudah dikoreksi — tidak boleh
@@ -351,11 +378,11 @@ class MasterDataImportTest extends TestCase
         $rows[0]['sell_price'] = 30000;
 
         $this->postImport($this->workbook([
-            'artists' => ['rows' => [['code' => 'RYU', 'name' => 'Nama Baru']]],
+            'outlets' => ['rows' => [['code' => 'RYU', 'name' => 'Nama Baru']]],
             'products' => ['rows' => $rows],
         ]))->assertOk()
-            ->assertJsonPath('sheets.artists.updated', 1)
-            ->assertJsonPath('sheets.artists.created', 0)
+            ->assertJsonPath('sheets.outlets.updated', 1)
+            ->assertJsonPath('sheets.outlets.created', 0)
             ->assertJsonPath('sheets.products.updated', 1)
             ->assertJsonPath('sheets.products.created', 0);
 
@@ -367,10 +394,10 @@ class MasterDataImportTest extends TestCase
     public function test_a_second_variant_of_an_existing_product_is_created_with_a_sequential_sku(): void
     {
         $this->actingAsRole('owner');
-        Artist::factory()->create(['code' => 'RYU']);
+        Outlet::factory()->create(['code' => 'RYU']);
         Category::factory()->create(['code' => 'KY']);
 
-        $base = ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura'];
+        $base = ['home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura'];
 
         $this->postImport($this->workbook([
             'products' => ['rows' => [
@@ -389,10 +416,10 @@ class MasterDataImportTest extends TestCase
     public function test_a_row_may_update_an_existing_variant_by_sku(): void
     {
         $this->actingAsRole('owner');
-        $artist = Artist::factory()->create(['code' => 'RYU']);
+        $artist = Outlet::factory()->create(['code' => 'RYU']);
         $category = Category::factory()->create(['code' => 'KY']);
         $product = Product::factory()->create([
-            'artist_id' => $artist->id, 'category_id' => $category->id,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id,
             'code_prefix' => 'RYUKYSAK', 'product_segment' => 'SAK', 'name' => 'Keychain Sakura',
         ]);
         $product->variants()->create(['sku' => 'RYUKYSAK0001', 'variant_name' => 'Standard', 'sell_price' => 25000]);
@@ -413,12 +440,12 @@ class MasterDataImportTest extends TestCase
     public function test_a_client_supplied_sku_for_a_new_variant_is_rejected(): void
     {
         $this->actingAsRole('owner');
-        Artist::factory()->create(['code' => 'RYU']);
+        Outlet::factory()->create(['code' => 'RYU']);
         Category::factory()->create(['code' => 'KY']);
 
         $response = $this->postImport($this->workbook([
             'products' => ['rows' => [
-                ['sku' => 'AKUBIKINSENDIRI', 'artist_code' => 'RYU', 'category_code' => 'KY', 'product_name' => 'Palsu', 'variant_name' => 'Standard', 'sell_price' => 1000],
+                ['sku' => 'AKUBIKINSENDIRI', 'home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_name' => 'Palsu', 'variant_name' => 'Standard', 'sell_price' => 1000],
             ]],
         ]));
 
@@ -437,10 +464,10 @@ class MasterDataImportTest extends TestCase
     public function test_stock_sheet_is_absolute_and_is_applied_as_a_movement(): void
     {
         $this->actingAsRole('owner');
-        $artist = Artist::factory()->create(['code' => 'RYU']);
+        $artist = Outlet::factory()->create(['code' => 'RYU']);
         $category = Category::factory()->create(['code' => 'KY']);
         $product = Product::factory()->create([
-            'artist_id' => $artist->id, 'category_id' => $category->id,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id,
             'code_prefix' => 'RYUKYSAK', 'product_segment' => 'SAK',
         ]);
         $product->variants()->create(['sku' => 'RYUKYSAK0001', 'sell_price' => 1000, 'current_stock' => 8]);
@@ -465,9 +492,9 @@ class MasterDataImportTest extends TestCase
     public function test_a_stock_row_that_matches_current_stock_writes_no_movement(): void
     {
         $this->actingAsRole('owner');
-        $artist = Artist::factory()->create(['code' => 'RYU']);
+        $artist = Outlet::factory()->create(['code' => 'RYU']);
         $category = Category::factory()->create(['code' => 'KY']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'code_prefix' => 'RYUKYSAK']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'code_prefix' => 'RYUKYSAK']);
         $product->variants()->create(['sku' => 'RYUKYSAK0001', 'sell_price' => 1000, 'current_stock' => 8]);
 
         $this->postImport($this->workbook([
@@ -482,7 +509,7 @@ class MasterDataImportTest extends TestCase
     public function test_initial_stock_on_a_new_variant_goes_through_stock_movements(): void
     {
         $this->actingAsRole('owner');
-        $this->enableMultiArtist();
+        $this->enableMultiOutlet();
 
         $this->postImport($this->fullCatalogWorkbook())->assertOk();
 
@@ -499,9 +526,9 @@ class MasterDataImportTest extends TestCase
     public function test_initial_stock_is_refused_for_a_variant_that_already_exists(): void
     {
         $this->actingAsRole('owner');
-        $artist = Artist::factory()->create(['code' => 'RYU']);
+        $artist = Outlet::factory()->create(['code' => 'RYU']);
         $category = Category::factory()->create(['code' => 'KY']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'code_prefix' => 'RYUKYSAK']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'code_prefix' => 'RYUKYSAK']);
         $product->variants()->create(['sku' => 'RYUKYSAK0001', 'variant_name' => 'Standard', 'sell_price' => 1000, 'current_stock' => 4]);
 
         $this->postImport($this->workbook([
@@ -535,12 +562,12 @@ class MasterDataImportTest extends TestCase
     public function test_a_stock_row_may_reference_a_sku_created_by_the_products_sheet(): void
     {
         $this->actingAsRole('owner');
-        Artist::factory()->create(['code' => 'RYU']);
+        Outlet::factory()->create(['code' => 'RYU']);
         Category::factory()->create(['code' => 'KY']);
 
         $this->postImport($this->workbook([
             'products' => ['rows' => [
-                ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
+                ['home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
             ]],
             'stock' => ['rows' => [
                 ['sku' => 'RYU-KY-SAK-001', 'current_stock' => 7],
@@ -556,12 +583,12 @@ class MasterDataImportTest extends TestCase
     public function test_a_mistyped_deferred_sku_still_rolls_the_whole_import_back(): void
     {
         $this->actingAsRole('owner');
-        Artist::factory()->create(['code' => 'RYU']);
+        Outlet::factory()->create(['code' => 'RYU']);
         Category::factory()->create(['code' => 'KY']);
 
         $this->postImport($this->workbook([
             'products' => ['rows' => [
-                ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
+                ['home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
             ]],
             'stock' => ['rows' => [
                 ['sku' => 'RYU-KY-SAK-999', 'current_stock' => 7],
@@ -585,18 +612,18 @@ class MasterDataImportTest extends TestCase
     public function test_one_bad_row_rolls_back_every_other_sheet(): void
     {
         $this->actingAsRole('owner');
-        $this->enableMultiArtist();
+        $this->enableMultiOutlet();
 
         $file = $this->workbook([
-            'artists' => ['rows' => [
+            'outlets' => ['rows' => [
                 ['code' => 'RYU', 'name' => 'Ryu Illustration'],
                 ['code' => 'AKI', 'name' => 'Aki Studio'],
             ]],
             'categories' => ['rows' => [['code' => 'KY', 'name' => 'Keychain']]],
             'products' => ['rows' => [
-                ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
+                ['home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
                 // baris 3: kategori 'ZZ' tidak ada di berkas maupun database
-                ['artist_code' => 'RYU', 'category_code' => 'ZZ', 'product_segment' => 'PST', 'product_name' => 'Poster', 'variant_name' => 'A4', 'sell_price' => 15000],
+                ['home_outlet_code' => 'RYU', 'category_code' => 'ZZ', 'product_segment' => 'PST', 'product_name' => 'Poster', 'variant_name' => 'A4', 'sell_price' => 15000],
             ]],
         ]);
 
@@ -611,7 +638,7 @@ class MasterDataImportTest extends TestCase
         $this->assertStringContainsString("'ZZ'", $response->json('errors.0.message'));
 
         // Tidak ada satu pun sheet yang tersimpan sebagian.
-        $this->assertSame(0, Artist::count());
+        $this->assertSame(0, Outlet::count());
         $this->assertSame(0, Category::count());
         $this->assertSame(0, Product::count());
         $this->assertSame(0, ProductVariant::count());
@@ -621,10 +648,10 @@ class MasterDataImportTest extends TestCase
     public function test_duplicate_codes_inside_one_sheet_are_reported(): void
     {
         $this->actingAsRole('owner');
-        $this->enableMultiArtist();
+        $this->enableMultiOutlet();
 
         $this->postImport($this->workbook([
-            'artists' => ['rows' => [
+            'outlets' => ['rows' => [
                 ['code' => 'RYU', 'name' => 'Satu'],
                 ['code' => 'RYU', 'name' => 'Dua'],
             ]],
@@ -636,12 +663,12 @@ class MasterDataImportTest extends TestCase
     public function test_a_non_numeric_price_is_rejected_rather_than_guessed(): void
     {
         $this->actingAsRole('owner');
-        Artist::factory()->create(['code' => 'RYU']);
+        Outlet::factory()->create(['code' => 'RYU']);
         Category::factory()->create(['code' => 'KY']);
 
         $this->postImport($this->workbook([
             'products' => ['rows' => [
-                ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_name' => 'Poster', 'variant_name' => 'A4', 'sell_price' => 'Rp 15.000'],
+                ['home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_name' => 'Poster', 'variant_name' => 'A4', 'sell_price' => 'Rp 15.000'],
             ]],
         ]))->assertStatus(422)
             ->assertJsonPath('errors.0.column', 'sell_price');
@@ -652,7 +679,7 @@ class MasterDataImportTest extends TestCase
         $this->actingAsRole('owner');
 
         $this->postImport($this->workbook([
-            'artists' => ['headings' => ['kode', 'nama'], 'rows' => [['kode' => 'RYU', 'nama' => 'Ryu']]],
+            'outlets' => ['headings' => ['kode', 'nama'], 'rows' => [['kode' => 'RYU', 'nama' => 'Ryu']]],
         ]))->assertStatus(422)
             ->assertJsonCount(1, 'errors')
             ->assertJsonPath('errors.0.row', 1);
@@ -676,33 +703,33 @@ class MasterDataImportTest extends TestCase
     public function test_import_cannot_bypass_the_pro_license_artist_quota(): void
     {
         $this->actingAsRole('owner');
-        // multi_artist_enabled dibiarkan false -> lisensi Pro (1 artist).
+        // multi_outlet_enabled dibiarkan false -> lisensi Pro (1 artist).
 
         $this->postImport($this->workbook([
-            'artists' => ['rows' => [
+            'outlets' => ['rows' => [
                 ['code' => 'RYU', 'name' => 'Satu'],
                 ['code' => 'AKI', 'name' => 'Dua'],
             ]],
         ]))->assertStatus(422)
-            ->assertJsonPath('errors.0.sheet', 'artists');
+            ->assertJsonPath('errors.0.sheet', 'outlets');
 
-        $this->assertSame(0, Artist::count());
+        $this->assertSame(0, Outlet::count());
     }
 
     public function test_dry_run_reports_the_plan_without_writing_anything(): void
     {
         $this->actingAsRole('owner');
-        $this->enableMultiArtist();
+        $this->enableMultiOutlet();
 
         $this->postImport($this->fullCatalogWorkbook(), ['dry_run' => 1])
             ->assertOk()
             ->assertJsonPath('applied', false)
             ->assertJsonPath('dry_run', true)
             ->assertJsonPath('errors', [])
-            ->assertJsonPath('sheets.artists.created', 1)
+            ->assertJsonPath('sheets.outlets.created', 1)
             ->assertJsonPath('sheets.products.created', 1);
 
-        $this->assertSame(0, Artist::count());
+        $this->assertSame(0, Outlet::count());
         $this->assertSame(0, Product::count());
         $this->assertSame(0, StockMovement::count());
     }
@@ -710,7 +737,7 @@ class MasterDataImportTest extends TestCase
     public function test_the_import_writes_an_activity_log_entry(): void
     {
         $user = $this->actingAsRole('owner');
-        $this->enableMultiArtist();
+        $this->enableMultiOutlet();
 
         $this->postImport($this->fullCatalogWorkbook())->assertOk();
 
@@ -731,9 +758,9 @@ class MasterDataImportTest extends TestCase
     public function test_a_stock_export_can_be_edited_and_imported_back(): void
     {
         $this->actingAsRole('owner');
-        $artist = Artist::factory()->create(['code' => 'RYU']);
+        $artist = Outlet::factory()->create(['code' => 'RYU']);
         $category = Category::factory()->create(['code' => 'KY']);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'code_prefix' => 'RYUKYSAK']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'code_prefix' => 'RYUKYSAK']);
         $product->variants()->create(['sku' => 'RYUKYSAK0001', 'sell_price' => 1000, 'current_stock' => 3]);
 
         $exported = tempnam(sys_get_temp_dir(), 'roundtrip').'.xlsx';
@@ -763,7 +790,7 @@ class MasterDataImportTest extends TestCase
         $this->actingAsRole('owner');
 
         $workbook = $this->workbook([
-            'artists' => ['rows' => [
+            'outlets' => ['rows' => [
                 ['code' => 'RYU', 'name' => 'Ryu Illustration', 'is_active' => 1],
             ]],
             'categories' => ['rows' => [
@@ -771,7 +798,7 @@ class MasterDataImportTest extends TestCase
             ]],
             'products' => ['rows' => [
                 [
-                    'artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
+                    'home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
                     'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard',
                     'sell_price' => 25000, 'image_filename' => 'produk-sakura.jpg',
                 ],
@@ -805,7 +832,7 @@ class MasterDataImportTest extends TestCase
         $this->actingAsRole('owner');
 
         $workbook = $this->workbook([
-            'artists' => ['rows' => [
+            'outlets' => ['rows' => [
                 ['code' => 'RYU', 'name' => 'Ryu Illustration', 'is_active' => 1],
             ]],
             'categories' => ['rows' => [
@@ -813,7 +840,7 @@ class MasterDataImportTest extends TestCase
             ]],
             'products' => ['rows' => [
                 [
-                    'artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
+                    'home_outlet_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK',
                     'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard',
                     'sell_price' => 25000,
                     'image_filename' => 'produk-sakura.jpg',

@@ -7,7 +7,7 @@ import { formatIDR } from '../../utils/money';
 
 const { t } = useI18n();
 
-// `product` is a browse card from posProductCards.js — { name, artist_name,
+// `product` is a browse card from posProductCards.js — { name, home_outlet_name,
 // variants: [...active only] }. Only opened for products with more than
 // one active variant; the single-variant case is added to the cart
 // directly by PosView without ever showing this picker.
@@ -41,7 +41,7 @@ function openImageLightbox(v) {
   <BaseModal :open="open" :title="product?.name ?? t('pos.pick_variant')" max-width-class="max-w-[420px]" @close="emit('close')">
     <div class="flex flex-col gap-2.5 px-5 py-4">
       <p v-if="product?.category_name" class="text-[11px] font-semibold uppercase tracking-wide text-muted-4">{{ product.category_name }}</p>
-      <p v-if="product?.artist_name" class="text-[12px] text-muted-3">{{ product.artist_name }} · {{ t('pos.pick_variant_hint') }}</p>
+      <p v-if="product?.home_outlet_name" class="text-[12px] text-muted-3">{{ product.home_outlet_name }} · {{ t('pos.pick_variant_hint') }}</p>
       <button
         v-for="v in product?.variants ?? []"
         :key="v.id"

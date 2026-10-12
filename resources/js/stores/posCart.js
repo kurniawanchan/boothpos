@@ -12,7 +12,7 @@ import { parseMoney, toMoneyString } from '../utils/money';
  */
 export const usePosCartStore = defineStore('posCart', {
   state: () => ({
-    items: [], // { variant_id, sku, name, artist_name, sell_price, current_stock, qty }
+    items: [], // { variant_id, sku, name, home_outlet_name, sell_price, current_stock, qty }
   }),
   getters: {
     count: (state) => state.items.reduce((sum, i) => sum + i.qty, 0),

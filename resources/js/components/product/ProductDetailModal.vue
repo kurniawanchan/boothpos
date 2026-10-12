@@ -115,7 +115,7 @@ function openImageLightbox(src, alt) {
         <div class="flex flex-1 flex-col gap-1">
           <span class="font-mono text-[12px] font-bold text-brand-active">{{ product.code_prefix }}</span>
           <span class="text-[15px] font-bold tracking-tight">{{ product.name }}</span>
-          <span class="text-[12.5px] text-muted-2">{{ product.artist_name }} · {{ product.category_name }}</span>
+          <span class="text-[12.5px] text-muted-2">{{ product.home_outlet_name }} · {{ product.category_name }}</span>
           <div class="flex gap-1.5">
             <StatusPill :variant="product.is_preorder ? 'warn' : 'neutral'">{{ product.is_preorder ? t('master_data.preorder') : t('master_data.ready_stock') }}</StatusPill>
             <StatusPill :variant="product.is_active ? 'mint' : 'neutral'">{{ product.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>

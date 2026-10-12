@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Event;
@@ -17,14 +17,14 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
 /**
- * 039-preorder-seller-subtotal — GET /reports/preorders?breakdown=artist ganti
+ * 039-preorder-seller-subtotal — GET /reports/preorders?breakdown=outlet ganti
  * `subtotals` (satu per penjual) dan ekspor Excel "Per Seller" memuat baris
  * Subtotal yang SAMA. Subtotal = jumlah baris yang ditampilkan (dalam sen);
  * outstanding = jumlah outstanding baris (yang sudah >= 0), bukan nilai - terkumpul.
  */
 class PreorderSellerSubtotalsReportTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, \Tests\Support\TreatsOrdersAsLegacy;
 
     private Event $event;
 
@@ -45,8 +45,8 @@ class PreorderSellerSubtotalsReportTest extends TestCase
 
     private function seller(string $name): array
     {
-        $artist = Artist::factory()->create(['name' => $name]);
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $this->category->id]);
+        $artist = Outlet::factory()->create(['name' => $name]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $this->category->id]);
         $variant = $product->variants()->create(['sku' => 'SUB'.str_pad((string) ++$this->sku, 8, '0', STR_PAD_LEFT), 'sell_price' => 1000, 'cost_price' => 100, 'current_stock' => 100]);
 
         return [$artist, $variant];
@@ -70,17 +70,17 @@ class PreorderSellerSubtotalsReportTest extends TestCase
 
     private function report(?Event $event = null): array
     {
-        return $this->getJson('/api/v1/reports/preorders?event_id='.($event ?? $this->event)->id.'&breakdown=artist')->assertOk()->json();
+        return $this->getJson('/api/v1/reports/preorders?event_id='.($event ?? $this->event)->id.'&breakdown=outlet')->assertOk()->json();
     }
 
     /** Fixture utama: 4 penjual — A (3 baris), B (1 baris), dua penjual bernama SAMA (C, D) yang bisa saling menyusup bila hanya diurutkan menurut nama. */
     private function seedMany(): array
     {
-        [$a, $va] = $this->seller('Artist A');
+        [$a, $va] = $this->seller('Outlet A');
         $this->preorder($va, 10);            // ordered / unpaid
         $this->preorder($va, 10, 4000);      // dp_paid / partial
         $this->preorder($va, 8, 8000);       // dp_paid / paid
-        [$b, $vb] = $this->seller('Artist B');
+        [$b, $vb] = $this->seller('Outlet B');
         $this->preorder($vb, 5);
         [$c, $vc] = $this->seller('Same Name');
         [$d, $vd] = $this->seller('Same Name');
@@ -108,16 +108,16 @@ class PreorderSellerSubtotalsReportTest extends TestCase
         $subtotals = collect($json['subtotals']);
 
         $this->assertCount(4, $subtotals);
-        $this->assertGreaterThanOrEqual(3, collect($rows)->where('artist_id', $a->id)->count(), 'seller A has several rows');
-        $this->assertSame(1, collect($rows)->where('artist_id', $b->id)->count(), 'seller B has a single row and still gets a subtotal');
+        $this->assertGreaterThanOrEqual(3, collect($rows)->where('outlet_id', $a->id)->count(), 'seller A has several rows');
+        $this->assertSame(1, collect($rows)->where('outlet_id', $b->id)->count(), 'seller B has a single row and still gets a subtotal');
 
         foreach ($subtotals as $sub) {
-            $own = array_values(array_filter($rows, fn ($r) => $r['artist_id'] === $sub['artist_id']));
+            $own = array_values(array_filter($rows, fn ($r) => $r['outlet_id'] === $sub['outlet_id']));
             $this->assertSame(array_sum(array_column($own, 'preorder_count')), $sub['preorder_count']);
             $this->assertSame(ReportSplit::money($this->centsOf($own, 'total_order_value')), $sub['total_order_value']);
             $this->assertSame(ReportSplit::money($this->centsOf($own, 'total_collected')), $sub['total_collected']);
             $this->assertSame(ReportSplit::money($this->centsOf($own, 'total_outstanding')), $sub['total_outstanding']);
-            $this->assertSame(['artist_id', 'artist_name', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'], array_keys($sub));
+            $this->assertSame(['outlet_id', 'outlet_name', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'], array_keys($sub));
         }
     }
 
@@ -135,7 +135,7 @@ class PreorderSellerSubtotalsReportTest extends TestCase
     public function test_rows_are_contiguous_per_seller_even_when_two_sellers_share_a_name(): void
     {
         $this->seedMany();
-        $ids = array_column($this->report()['rows'], 'artist_id');
+        $ids = array_column($this->report()['rows'], 'outlet_id');
 
         $seen = [];
         $previous = null;
@@ -154,20 +154,20 @@ class PreorderSellerSubtotalsReportTest extends TestCase
         $this->seedMany();
         $json = $this->report();
 
-        $order = array_values(array_unique(array_column($json['rows'], 'artist_id')));
-        $this->assertSame($order, array_column($json['subtotals'], 'artist_id'));
+        $order = array_values(array_unique(array_column($json['rows'], 'outlet_id')));
+        $this->assertSame($order, array_column($json['subtotals'], 'outlet_id'));
     }
 
     public function test_an_overpaid_row_is_summed_as_displayed_not_as_value_minus_collected(): void
     {
-        [$e, $ve] = $this->seller('Artist Over');
+        [$e, $ve] = $this->seller('Outlet Over');
         $pre = $this->preorder($ve, 10);
         // Pembayaran lama (sebelum dibatasi): langsung ke tabel, melebihi total 10000.
         Payment::create(['preorder_id' => $pre->id, 'method' => 'cash', 'purpose' => 'down_payment', 'amount' => 15000, 'verification' => 'verified', 'paid_at' => now()]);
 
         $json = $this->report();
-        $rows = array_values(array_filter($json['rows'], fn ($r) => $r['artist_id'] === $e->id));
-        $sub = collect($json['subtotals'])->firstWhere('artist_id', $e->id);
+        $rows = array_values(array_filter($json['rows'], fn ($r) => $r['outlet_id'] === $e->id));
+        $sub = collect($json['subtotals'])->firstWhere('outlet_id', $e->id);
 
         $this->assertNotEmpty($rows);
         $this->assertSame(ReportSplit::money($this->centsOf($rows, 'total_outstanding')), $sub['total_outstanding']);
@@ -180,14 +180,14 @@ class PreorderSellerSubtotalsReportTest extends TestCase
     {
         $this->seedMany();
         $other = Event::factory()->create(['status' => 'active']);
-        [$z, $vz] = $this->seller('Artist Elsewhere');
+        [$z, $vz] = $this->seller('Outlet Elsewhere');
         $this->preorder($vz, 7, 0, $other);
 
         $mine = $this->report();
         $theirs = $this->report($other);
 
-        $this->assertNotContains($z->id, array_column($mine['subtotals'], 'artist_id'));
-        $this->assertSame([$z->id], array_column($theirs['subtotals'], 'artist_id'));
+        $this->assertNotContains($z->id, array_column($mine['subtotals'], 'outlet_id'));
+        $this->assertSame([$z->id], array_column($theirs['subtotals'], 'outlet_id'));
         $this->assertSame('7000.00', $theirs['subtotals'][0]['total_order_value']);
     }
 
@@ -227,7 +227,7 @@ class PreorderSellerSubtotalsReportTest extends TestCase
         $sheet = $this->perSellerSheet();
 
         $this->assertSame(['Ringkasan', 'Per Seller'], $sheet['names']);
-        $this->assertSame(['artist_id', 'artist_name', 'status', 'payment_completeness', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'], $sheet['sellers'][0]);
+        $this->assertSame(['outlet_id', 'outlet_name', 'status', 'payment_completeness', 'preorder_count', 'total_order_value', 'total_collected', 'total_outstanding'], $sheet['sellers'][0]);
 
         $body = array_slice($sheet['sellers'], 1);
         $subtotalRows = array_values(array_filter($body, fn ($r) => str_starts_with((string) $r[1], 'Subtotal — ')));
@@ -236,8 +236,8 @@ class PreorderSellerSubtotalsReportTest extends TestCase
 
         foreach ($json['subtotals'] as $i => $sub) {
             $row = $subtotalRows[$i];
-            $this->assertSame('Subtotal — '.$sub['artist_name'], $row[1]);
-            $this->assertEmpty($row[0], 'artist_id is empty on a subtotal row');
+            $this->assertSame('Subtotal — '.$sub['outlet_name'], $row[1]);
+            $this->assertEmpty($row[0], 'outlet_id is empty on a subtotal row');
             $this->assertEmpty($row[2]);
             $this->assertEmpty($row[3]);
             $this->assertEquals($sub['preorder_count'], $row[4]);

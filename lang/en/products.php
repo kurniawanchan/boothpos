@@ -48,4 +48,8 @@ return [
     'recipe_conflict_bom' => 'Variant(s) :skus use a completed BOM as their cost source. Reopen the BOM before using a recipe.',
     'recipe_conflict_recipe' => 'This variant is driven by a recipe. Its cost cannot be marked complete through the BOM.',
     'recipe_cost_locked' => 'This variant\'s cost price follows its recipe. Create a new recipe version to change it.',
+    'bulk_price_scope_invalid' => 'Choose a valid price scope.',
+    'bulk_price_outlets_required' => 'Choose at least one outlet.',
+    'outlet_price_release_unavailable' => 'Outlet prices cannot be changed while menu releases are on.',
+    'outlet_ids_required' => 'Choose at least one outlet to mark as sold out.',
 ];

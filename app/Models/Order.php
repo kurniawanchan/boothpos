@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOutlet;
 use App\Models\Concerns\HasDataMode;
 use App\Models\Concerns\StampsBusinessDay;
 use App\Support\BusinessDay;
@@ -11,6 +12,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Order extends Model
 {
+    use BelongsToOutlet;
+
     use HasDataMode, StampsBusinessDay;
 
     // 028 — gunakan konstanta ini di kode baru. `cashier_sessions.status`
@@ -94,4 +97,14 @@ class Order extends Model
     }
 
     public function isOpen(): bool { return $this->status === self::STATUS_OPEN; }
+
+    protected function outletFromParent(): ?int
+    {
+        // Order mewarisi outlet SHIFT-nya (D7/D8): outlet order tidak pernah datang dari input.
+        if ($this->session_id === null) {
+            return null;
+        }
+
+        return CashierSession::withoutGlobalScopes()->whereKey($this->session_id)->value('outlet_id');
+    }
 }

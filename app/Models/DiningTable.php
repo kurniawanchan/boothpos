@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToOutlet;
 use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  */
 class DiningTable extends Model
 {
+    use BelongsToOutlet;
+
     use HasDataMode, HasFactory;
 
     protected $fillable = ['name', 'area', 'seats', 'display_order', 'is_active'];

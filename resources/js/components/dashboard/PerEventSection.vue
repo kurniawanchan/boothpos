@@ -11,7 +11,7 @@ import { Bar, Doughnut } from 'vue-chartjs';
 import { Chart, BarElement, ArcElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 import { useAuthStore } from '../../stores/auth';
 import { listEvents } from '../../api/events';
-import { salesReport, profitReport, artistSettlements } from '../../api/reports';
+import { salesReport, profitReport, outletSettlements } from '../../api/reports';
 import { lowStock } from '../../api/stock';
 import { listPreorders } from '../../api/preorders';
 import { formatIDR, parseMoney } from '../../utils/money';
@@ -64,7 +64,7 @@ const dateFrom = ref('');
 const dateTo = ref('');
 
 const categoryReport = ref(null);
-const artistChartReport = ref(null);
+const outletChartReport = ref(null);
 const eventReport = ref(null);
 // US6 (T048/T049) — statistik per pelanggan, mengikuti filter tanggal
 // yang sama dengan panel "Penjualan per hari" (bukan filter terpisah,
@@ -110,13 +110,13 @@ async function loadBreakdownCharts() {
   const eventId = activeEvent.value?.id;
   const [cat, art, evt] = await Promise.all([
     salesReport({ event_id: eventId, group_by: 'category' }),
-    salesReport({ event_id: eventId, group_by: 'artist' }),
+    salesReport({ event_id: eventId, group_by: 'outlet' }),
     // Event breakdown intentionally NOT scoped to eventId — the whole
     // point of this chart is comparing across events.
     salesReport({ group_by: 'event' }),
   ]);
   categoryReport.value = cat;
-  artistChartReport.value = art;
+  outletChartReport.value = art;
   eventReport.value = evt;
 }
 
@@ -144,7 +144,7 @@ onMounted(async () => {
     ];
     if (eventId && auth.canAccessMenu('reports')) {
       tasks.push(profitReport(eventId).then((r) => (profit.value = r)));
-      tasks.push(artistSettlements(eventId).then((r) => (settlements.value = r.data)));
+      tasks.push(outletSettlements(eventId).then((r) => (settlements.value = r.data)));
     }
     if (auth.canAccessMenu('reports')) {
       tasks.push(loadCustomerPanel());
@@ -226,7 +226,7 @@ function chartDataFromRows(rows) {
   };
 }
 const categoryChartData = computed(() => chartDataFromRows(categoryReport.value?.rows));
-const artistChartData = computed(() => chartDataFromRows(artistChartReport.value?.rows));
+const outletChartData = computed(() => chartDataFromRows(outletChartReport.value?.rows));
 const eventChartData = computed(() => chartDataFromRows(eventReport.value?.rows));
 
 // US6 (T048) — bentuk baris group_by=customer beda dari grouping lain
@@ -334,17 +334,17 @@ const doughnutOptions = {
 
       <div v-if="auth.canAccessMenu('reports')" class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
         <span class="text-[14.5px] font-bold">{{ t('dashboard.results_per_artist') }}</span>
-        <!-- GET /reports/artist-settlements now lists every active artist,
+        <!-- GET /reports/outlet-settlements now lists every active outlet,
              not only those with sales — so this only stays empty when
-             there are no active artists at all for the event, never
+             there are no active outlets at all for the event, never
              because sales are still zero. -->
         <EmptyState v-if="!loading && !settlements.length" icon="ph-users-three" :message="t('dashboard.no_active_artists')" />
-        <div v-for="row in settlements" :key="row.artist_id" class="flex flex-col gap-1.5">
+        <div v-for="row in settlements" :key="row.outlet_id" class="flex flex-col gap-1.5">
           <div class="flex items-baseline justify-between">
-            <span class="text-[12.5px] font-semibold">{{ row.artist_name }}</span>
+            <span class="text-[12.5px] font-semibold">{{ row.outlet_name }}</span>
             <span class="text-[12.5px] font-bold" :class="parseMoney(row.total_sales) > 0 ? 'text-brand-active' : 'text-muted-3'">{{ formatIDR(row.total_sales) }}</span>
           </div>
-          <!-- A zero-earning artist still gets a visible (if minimal) bar
+          <!-- A zero-earning outlet still gets a visible (if minimal) bar
                rather than a zero-width one, so a list that's entirely
                zero still reads as "no sales yet" instead of a rendering
                glitch. -->
@@ -362,7 +362,7 @@ const doughnutOptions = {
       </div>
     </div>
 
-    <!-- US2 (FR-010) — grafik penjualan per kategori/artist/event. -->
+    <!-- US2 (FR-010) — grafik penjualan per kategori/outlet/event. -->
     <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div class="flex flex-col gap-3 rounded-card border border-line-2 bg-white p-5">
         <span class="text-[14.5px] font-bold">{{ t('dashboard.sales_by_category') }}</span>
@@ -372,8 +372,8 @@ const doughnutOptions = {
       </div>
       <div class="flex flex-col gap-3 rounded-card border border-line-2 bg-white p-5">
         <span class="text-[14.5px] font-bold">{{ t('dashboard.sales_by_artist') }}</span>
-        <EmptyState v-if="!loading && !artistChartReport?.rows?.length" icon="ph-chart-bar" :message="t('dashboard.no_sales_recorded')" />
-        <div v-else class="h-[190px]"><Bar :data="artistChartData" :options="chartOptions" /></div>
+        <EmptyState v-if="!loading && !outletChartReport?.rows?.length" icon="ph-chart-bar" :message="t('dashboard.no_sales_recorded')" />
+        <div v-else class="h-[190px]"><Bar :data="outletChartData" :options="chartOptions" /></div>
         <RouterLink :to="{ name: 'reports' }" class="self-start text-[12px] font-semibold text-brand-active hover:underline">{{ t('dashboard.view_full_report') }} →</RouterLink>
       </div>
       <div class="flex flex-col gap-3 rounded-card border border-line-2 bg-white p-5">

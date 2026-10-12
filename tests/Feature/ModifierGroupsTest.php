@@ -123,7 +123,7 @@ class ModifierGroupsTest extends TestCase
     public function test_attachments_replace_the_products_and_categories_of_a_group(): void
     {
         $group = $this->postJson('/api/v1/modifier-groups', $this->payload())->json();
-        $product = Product::factory()->create(['artist_id' => $this->makeVariant()->product->artist_id, 'category_id' => Category::factory()->create()->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $this->makeVariant()->product->home_outlet_id, 'category_id' => Category::factory()->create()->id]);
         $category = Category::factory()->create();
 
         $this->putJson("/api/v1/modifier-groups/{$group['id']}/attachments", ['product_ids' => [$product->id], 'category_ids' => [$category->id]])

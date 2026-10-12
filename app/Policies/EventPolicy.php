@@ -37,6 +37,6 @@ class EventPolicy
 
     // Hapus permanen sengaja owner/admin saja (isOwnerOrAdmin), bukan
     // canAccessMenu('settings') seperti ability lain di atas — mengikuti
-    // pola guard hapus Artist/Category (lihat plan 009-ui-ux-refinements T005).
+    // pola guard hapus Outlet/Category (lihat plan 009-ui-ux-refinements T005).
     public function delete(User $user, Event $event): bool { return $user->isOwnerOrAdmin(); }
 }

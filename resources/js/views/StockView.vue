@@ -7,6 +7,7 @@ import { listMovements, createAdjustment, lowStock } from '../api/stock';
 import { lookupVariants } from '../api/products';
 import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
+import { useOutletStore } from '../stores/outlet';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { formatDateTime } from '../utils/date';
@@ -25,6 +26,9 @@ import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 import { MOVEMENT_TYPES, movementTypeLabelKey, movementTypeVariant } from '../utils/stockMovements';
 
 const auth = useAuthStore();
+const outletStore = useOutletStore();
+// 045 Stage 5 — stok adalah saldo per outlet: kolom/filter/pilihan outlet hanya bila ada lebih dari satu outlet.
+const multi = computed(() => outletStore.multi);
 const { t } = useI18n();
 const toast = useToastStore();
 
@@ -64,6 +68,7 @@ function clearLowFilter() {
 const lowColumns = computed(() => [
   { key: 'product_name', label: t('dashboard.link_stock_low_col_product') },
   { key: 'sku', label: t('dashboard.link_stock_low_col_sku') },
+  ...(multi.value ? [{ key: 'outlet_name', label: t('stock.col_outlet') }] : []),
   { key: 'current_stock', label: t('dashboard.link_stock_low_col_stock') },
   { key: 'low_stock_alert', label: t('dashboard.link_stock_low_col_alert') },
 ]);
@@ -122,6 +127,7 @@ function closeDetail() {
 
 const columns = computed(() => [
   { key: 'sku', label: t('master_data.col_sku') },
+  ...(multi.value ? [{ key: 'outlet_name', label: t('stock.col_outlet') }] : []),
   { key: 'type', label: t('master_data.col_type') },
   { key: 'qty_change', label: t('master_data.col_qty_change') },
   { key: 'range', label: t('master_data.col_range') },
@@ -134,7 +140,9 @@ const columns = computed(() => [
 // parameter yang dikirim ke server tetap sama persis (type/date_from/date_to, kosong = tidak dikirim).
 const dateFrom = ref('');
 const dateTo = ref('');
-const filtersActive = computed(() => !!(typeFilter.value || dateFrom.value || dateTo.value));
+const outletFilter = ref('');
+const outletFilterOptions = computed(() => [{ value: '', label: t('stock.all_outlets') }, ...outletStore.outlets.map((o) => ({ value: o.id, label: o.name }))]);
+const filtersActive = computed(() => !!(typeFilter.value || dateFrom.value || dateTo.value || outletFilter.value));
 
 function applyFilters(patch) {
   setFilter(patch);
@@ -144,7 +152,8 @@ function resetFilters() {
   typeFilter.value = '';
   dateFrom.value = '';
   dateTo.value = '';
-  setFilter({ type: undefined, date_from: undefined, date_to: undefined });
+  outletFilter.value = '';
+  setFilter({ type: undefined, date_from: undefined, date_to: undefined, outlet_id: undefined });
 }
 
 // --- Adjustment dialog -----------------------------------------------
@@ -153,6 +162,8 @@ const adjustSearch = ref('');
 const adjustResults = ref([]);
 const adjustRows = ref([]);
 const adjustReason = ref('');
+const adjustOutlet = ref('');
+const adjustOutletOptions = computed(() => outletStore.outlets.map((o) => ({ value: o.id, label: o.name })));
 const submitting = ref(false);
 
 const runSearch = useDebouncedFn(async () => {
@@ -160,13 +171,15 @@ const runSearch = useDebouncedFn(async () => {
     adjustResults.value = [];
     return;
   }
-  const res = await lookupVariants(adjustSearch.value.trim(), 8);
+  const res = await lookupVariants(adjustSearch.value.trim(), 8, adjustOutlet.value ? { stockOutlet: adjustOutlet.value } : {});
   adjustResults.value = res.data;
 }, 300);
 
 function openAdjust() {
   adjustRows.value = [];
   adjustReason.value = '';
+  // 045 Stage 5 — bawaan: outlet yang sedang dipilih di pemilih outlet; kosong bila "semua" (harus dipilih).
+  adjustOutlet.value = multi.value ? (outletStore.selected ?? '') : '';
   adjustSearch.value = '';
   adjustResults.value = [];
   showAdjust.value = true;
@@ -174,7 +187,7 @@ function openAdjust() {
 
 function addRow(variant) {
   if (adjustRows.value.some((r) => r.variant_id === variant.variant_id)) return;
-  adjustRows.value.push({ variant_id: variant.variant_id, sku: variant.sku, label: variant.label, current_stock: variant.current_stock, delta: 0 });
+  adjustRows.value.push({ variant_id: variant.variant_id, sku: variant.sku, label: variant.label, current_stock: variant.outlet_stock ?? variant.current_stock, delta: 0 });
   adjustSearch.value = '';
   adjustResults.value = [];
 }
@@ -187,13 +200,14 @@ function removeRow(index) {
   adjustRows.value.splice(index, 1);
 }
 
-const canSubmitAdjustment = () => adjustReason.value.trim().length > 0 && adjustRows.value.some((r) => r.delta !== 0);
+const canSubmitAdjustment = () => adjustReason.value.trim().length > 0 && adjustRows.value.some((r) => r.delta !== 0) && (!multi.value || !!adjustOutlet.value);
 
 async function submitAdjustment() {
   submitting.value = true;
   try {
     await createAdjustment({
       reason: adjustReason.value.trim(),
+      ...(multi.value ? { outlet_id: adjustOutlet.value } : {}),
       items: adjustRows.value.filter((r) => r.delta !== 0).map((r) => ({ variant_id: r.variant_id, qty_change: r.delta })),
     });
     toast.success(t('master_data.adjustment_saved'));
@@ -212,6 +226,10 @@ async function submitAdjustment() {
   <div class="pb-10">
     <PageHeader :title="t('nav.stock_page_title')" :description="t('nav.stock_subtitle')">
       <template v-if="auth.canAccessMenu('stock')" #actions>
+        <RouterLink v-if="multi" :to="{ name: 'stock-transfers' }" class="inline-flex h-10 items-center gap-2 border-2 border-line bg-white px-3.5 text-[13px] font-bold text-muted-5 hover:border-brand hover:text-brand-active" data-testid="open-transfers">
+          <i class="ph-duotone ph-arrows-left-right text-[16px]" aria-hidden="true"></i>
+          {{ t('transfers.title') }}
+        </RouterLink>
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('common.export_xlsx') }}
@@ -251,6 +269,7 @@ async function submitAdjustment() {
         @retry="loadLow"
       >
         <template #cell-sku="{ row }"><span class="font-mono text-[12px] font-semibold">{{ row.sku }}</span></template>
+        <template #cell-outlet_name="{ row }">{{ row.outlet_name || '—' }}</template>
         <template #cell-current_stock="{ row }"><span class="font-mono text-[13px] font-bold text-danger-text">{{ row.current_stock }}</span></template>
       </DataTable>
     </section>
@@ -263,6 +282,15 @@ async function submitAdjustment() {
           :placeholder="t('master_data.all_types')"
           :options="typeOptions"
           @update:model-value="(v) => applyFilters({ type: v || undefined })"
+        />
+        <BaseSelect
+          v-if="multi"
+          v-model="outletFilter"
+          class="w-52"
+          :placeholder="t('stock.all_outlets')"
+          :options="outletFilterOptions"
+          data-testid="stock-outlet-filter"
+          @update:model-value="(v) => applyFilters({ outlet_id: v || undefined })"
         />
         <BaseInput v-model="dateFrom" type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
         <BaseInput v-model="dateTo" type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_to: v || undefined })" />
@@ -285,6 +313,7 @@ async function submitAdjustment() {
           >{{ row.sku }}</button>
           <span v-else class="font-mono text-[12px] font-semibold">{{ row.sku }}</span>
         </template>
+        <template #cell-outlet_name="{ row }">{{ row.outlet_name || '—' }}</template>
         <template #cell-type="{ row }"><StatusPill :variant="movementTypeVariant(row.type)">{{ t(movementTypeLabelKey(row.type)) }}</StatusPill></template>
         <template #cell-qty_change="{ row }">
           <span class="font-mono text-[13px] font-bold" :class="row.qty_change >= 0 ? 'text-brand-active' : 'text-danger-text'">{{ row.qty_change >= 0 ? '+' : '' }}{{ row.qty_change }}</span>
@@ -320,12 +349,22 @@ async function submitAdjustment() {
           </button>
         </div>
 
+        <BaseSelect
+          v-if="multi"
+          v-model="adjustOutlet"
+          :label="t('stock.adjust_outlet')"
+          :placeholder="t('stock.adjust_outlet_placeholder')"
+          :options="adjustOutletOptions"
+          data-testid="adjust-outlet"
+          @update:model-value="() => { adjustRows = []; }"
+        />
+
         <div class="relative">
           <BaseInput v-model="adjustSearch" :label="t('master_data.search_variant')" :placeholder="t('master_data.search_variant_placeholder')" @input="runSearch" />
           <div v-if="adjustResults.length" class="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-line-2 bg-white shadow-lg">
             <button v-for="v in adjustResults" :key="v.variant_id" type="button" class="flex w-full flex-col gap-0.5 px-3.5 py-2.5 text-left hover:bg-line-7" @click="addRow(v)">
               <span class="text-[13px] font-semibold">{{ v.label }}</span>
-              <span class="font-mono text-[11px] text-muted-3">{{ v.sku }} · stok {{ v.current_stock }}</span>
+              <span class="font-mono text-[11px] text-muted-3">{{ v.sku }} · stok {{ v.outlet_stock ?? v.current_stock }}</span>
             </button>
           </div>
         </div>

@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\Artist;
+use App\Models\Outlet;
+use App\Models\OutletItemSetting;
+use App\Models\VariantOutletPrice;
 use App\Models\Category;
 use App\Models\Material;
 use App\Models\ProductVariant;
@@ -33,7 +35,7 @@ class MasterDataExportService
     public function rows(string $entity): array
     {
         return match ($entity) {
-            MasterDataSheets::ARTISTS => $this->artistRows(),
+            MasterDataSheets::OUTLETS => $this->outletRows(),
             MasterDataSheets::CATEGORIES => $this->categoryRows(),
             MasterDataSheets::PRODUCTS => $this->productRows(),
             MasterDataSheets::STOCK => $this->stockRows(),
@@ -41,6 +43,8 @@ class MasterDataExportService
             MasterDataSheets::MATERIALS => $this->materialRows(),
             MasterDataSheets::VENDOR_PRICES => $this->vendorPriceRows(),
             MasterDataSheets::BOM => $this->bomRows(),
+            MasterDataSheets::OUTLET_ITEMS => $this->outletItemRows(),
+            MasterDataSheets::OUTLET_PRICES => $this->outletPriceRows(),
             MasterDataSheets::ROLES => $this->roleRows(),
             MasterDataSheets::USERS => $this->userRows(),
             default => throw new \InvalidArgumentException("Entitas ekspor tidak dikenali: {$entity}."),
@@ -50,7 +54,7 @@ class MasterDataExportService
     public function filename(string $entity): string
     {
         return match ($entity) {
-            MasterDataSheets::ARTISTS => 'data-artist.xlsx',
+            MasterDataSheets::OUTLETS => 'data-outlet.xlsx',
             MasterDataSheets::CATEGORIES => 'data-kategori.xlsx',
             MasterDataSheets::PRODUCTS => 'data-produk.xlsx',
             MasterDataSheets::STOCK => 'data-stok.xlsx',
@@ -58,10 +62,30 @@ class MasterDataExportService
             MasterDataSheets::MATERIALS => 'data-bahan.xlsx',
             MasterDataSheets::VENDOR_PRICES => 'data-harga-vendor.xlsx',
             MasterDataSheets::BOM => 'data-bom.xlsx',
+            MasterDataSheets::OUTLET_ITEMS => 'data-item-outlet.xlsx',
+            MasterDataSheets::OUTLET_PRICES => 'data-harga-outlet.xlsx',
             MasterDataSheets::ROLES => 'data-peran.xlsx',
             MasterDataSheets::USERS => 'data-pengguna.xlsx',
             default => throw new \InvalidArgumentException("Entitas ekspor tidak dikenali: {$entity}."),
         };
+    }
+
+    /** 045 Stage 3 — satu baris per pasangan (outlet, item) yang tercatat; `is_carried` 1/0. */
+    private function outletItemRows(): array
+    {
+        return \App\Support\OutletFilter::apply(OutletItemSetting::query(), 'outlet_id')->with(['outlet:id,code', 'product:id,code_prefix'])->orderBy('outlet_id')->orderBy('product_id')->get()
+            ->filter(fn ($r) => $r->outlet !== null && $r->product !== null)
+            ->map(fn ($r) => ['outlet_code' => $r->outlet->code, 'product_code' => $r->product->code_prefix, 'is_carried' => $r->is_carried ? 1 : 0])
+            ->values()->all();
+    }
+
+    /** 045 Stage 3 — hanya harga KHUSUS outlet; varian/outlet tanpa baris mengikuti harga dasar. */
+    private function outletPriceRows(): array
+    {
+        return \App\Support\OutletFilter::apply(VariantOutletPrice::query(), 'outlet_id')->with(['variant:id,sku', 'outlet:id,code'])->orderBy('outlet_id')->orderBy('variant_id')->get()
+            ->filter(fn ($r) => $r->outlet !== null && $r->variant !== null)
+            ->map(fn ($r) => ['sku' => $r->variant->sku, 'outlet_code' => $r->outlet->code, 'price' => number_format((float) $r->price, 2, '.', '')])
+            ->values()->all();
     }
 
     /**
@@ -158,9 +182,9 @@ class MasterDataExportService
             ])->all();
     }
 
-    private function artistRows(): array
+    private function outletRows(): array
     {
-        return Artist::query()->orderBy('code')->get()->map(fn (Artist $a) => [
+        return Outlet::query()->orderBy('code')->get()->map(fn (Outlet $a) => [
             'code' => $a->code,
             'name' => $a->name,
             'contact_phone' => $a->contact_phone,
@@ -203,7 +227,7 @@ class MasterDataExportService
     private function productRows(): array
     {
         return ProductVariant::query()
-            ->with(['product.artist', 'product.category'])
+            ->with(['product.homeOutlet', 'product.category'])
             ->join('products', 'products.id', '=', 'product_variants.product_id')
             ->orderBy('products.name')
             ->orderBy('product_variants.sku')
@@ -211,7 +235,7 @@ class MasterDataExportService
             ->get()
             ->map(fn (ProductVariant $v) => [
                 'sku' => $v->sku,
-                'artist_code' => $v->product->artist->code,
+                'home_outlet_code' => $v->product->homeOutlet->code,
                 'category_code' => $v->product->category->code,
                 'product_segment' => $v->product->product_segment,
                 'product_name' => $v->product->name,
@@ -238,15 +262,20 @@ class MasterDataExportService
             ])->all();
     }
 
+    /** 045 Stage 5 — satu baris per (varian, outlet) yang punya saldo; berkas ini kembali diimpor apa adanya. */
     private function stockRows(): array
     {
-        return ProductVariant::query()
-            ->orderBy('sku')
+        // 045 Stage 8 — ekspor hanya memuat outlet yang berlaku untuk pemanggil (bukan semua outlet).
+        return \App\Support\OutletFilter::apply(\App\Models\VariantOutletStock::query(), 'outlet_id')
+            ->with(['variant:id,sku', 'outlet:id,code'])
             ->get()
-            ->map(fn (ProductVariant $v) => [
-                'sku' => $v->sku,
-                'current_stock' => $v->current_stock,
+            ->filter(fn ($b) => $b->variant !== null && $b->outlet !== null)
+            ->sortBy(fn ($b) => $b->variant->sku.'|'.$b->outlet->code)
+            ->map(fn ($b) => [
+                'sku' => $b->variant->sku,
+                'current_stock' => $b->current_stock,
                 'reason' => null,
-            ])->all();
+                'outlet_code' => $b->outlet->code,
+            ])->values()->all();
     }
 }

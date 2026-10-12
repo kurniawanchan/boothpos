@@ -25,6 +25,7 @@ import KpiStrip from '../components/page/KpiStrip.vue';
 import ViewToggle from '../components/page/ViewToggle.vue';
 import FilterBar from '../components/page/FilterBar.vue';
 import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
+import { useOutletStore } from '../stores/outlet';
 import ShiftSummaryPanel from '../components/sales/ShiftSummaryPanel.vue';
 import CustomerQuickDetailModal from '../components/sales/CustomerQuickDetailModal.vue';
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
@@ -36,7 +37,7 @@ const FloorBoard = defineAsyncComponent(() => import('../components/sales/FloorB
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
-// Rekap Artist/Modal & Untung/Modal Artist di halaman Laporan yang
+// Rekap Outlet/Modal & Untung/Modal Outlet di halaman Laporan yang
 // sengaja dibatasi owner/admin saja (PRD 7.13). Menggabungkannya dalam
 // satu halaman membuat kasir melihat tab kosong tak berguna sebelum ini.
 //
@@ -47,6 +48,7 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter(); // undefined bila tak ada router (mis. test lama) — sinkron URL dilewati
 const auth = useAuthStore();
+const outletStore = useOutletStore();
 
 // --- saklar Daftar order | Meja (044-sales-table-view) -----------------------------------------
 // Pilihan tersimpan di URL (?view=tables; kosong = daftar). Saklar HANYA ada bagi pengguna dengan akses lantai
@@ -72,7 +74,7 @@ const transactions = computed(() => sales.value?.transactions ?? []);
 const sessions = computed(() => sales.value?.sessions ?? []);
 const {
   search, filters, includeVoided, sortKey, sortDir,
-  cashierOptions, sellerOptions, paymentMethods,
+  cashierOptions, outletOptions, paymentMethods,
   filtered, sorted, summary, shiftSummary, hasMargin,
   activeCount, hasFilterOtherThanSearch,
   reset, sortBy, toQuery, applyQuery,
@@ -115,7 +117,7 @@ async function load() {
 }
 
 // --- filter tersimpan di URL (bisa di-bookmark / dibagikan) -----------------------
-const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'seller', 'pay', 'session', 'cust', 'pstate', 'min', 'max', 'voided', 'sort', 'dir'];
+const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'outlet', 'pay', 'session', 'cust', 'pstate', 'min', 'max', 'voided', 'sort', 'dir'];
 watch(() => JSON.stringify(toQuery()), (json) => {
   if (!restored || !router) return;
   const others = Object.fromEntries(Object.entries(route.query).filter(([k]) => !OUR_QUERY_KEYS.includes(k)));
@@ -184,9 +186,11 @@ const columns = computed(() => [
   { key: 'select', label: '' },
   { key: 'order_number', label: t('reports.col_transaction_no'), sortable: true },
   { key: 'customer_name', label: t('reports.col_customer'), sortable: true },
-  { key: 'artist_names', label: t('reports.col_artist'), sortable: true },
+  { key: 'outlet_names', label: t('reports.col_artist'), sortable: true },
   { key: 'created_at', label: t('reports.col_time'), sortable: true },
   { key: 'cashier_name', label: t('reports.col_cashier'), sortable: true },
+  // 045 Stage 4 — outlet tempat penjualan (outlet shift); hanya bila ada lebih dari satu outlet.
+  ...(outletStore.multi ? [{ key: 'sold_at_name', label: t('reports.col_sold_at'), sortable: true }] : []),
   { key: 'item_count', label: t('reports.col_item'), sortable: true },
   { key: 'payment_methods', label: t('reports.col_payment'), sortable: true },
   // Kolom margin HANYA ada bila server mengirimnya (owner/admin) — bukan disembunyikan di sini.
@@ -339,8 +343,8 @@ function openReceipt(row) {
   showReceipt.value = true;
 }
 
-// Follow-up 2 (FR-023) — klik nama artist adalah pintasan mengisi kotak pencarian.
-function searchByArtist(name) {
+// Follow-up 2 (FR-023) — klik nama outlet adalah pintasan mengisi kotak pencarian.
+function searchByOutlet(name) {
   search.value = name;
 }
 
@@ -409,7 +413,7 @@ function viewFinishedTransaction(orderId) {
     <KpiStrip v-if="view === 'list'" data-testid="kpi-cards" :items="kpiItems" />
 
     <section v-if="view === 'list'" class="mx-[26px] border-2 border-line bg-white">
-      <!-- Filter lengkap: pencarian teks + tanggal (dengan pintasan) + kasir + shift + penjual + pembayaran +
+      <!-- Filter lengkap: pencarian teks + tanggal (dengan pintasan) + kasir + shift + outlet + pembayaran +
            status bayar + jenis pelanggan + rentang total. Semua bekerja langsung (tanpa memuat ulang) dan
            tersimpan di URL. "N data" = baris yang benar-benar tampil setelah filter. -->
       <FilterBar
@@ -440,7 +444,7 @@ function viewFinishedTransaction(orderId) {
 
             <BaseMultiSelect v-model="filters.cashiers" :options="cashierOptions" :all-label="t('reports.filter_cashier_all')" />
             <BaseMultiSelect v-model="filters.sessions" :options="sessionOptions" :all-label="t('reports.filter_session_all')" />
-            <BaseMultiSelect v-model="filters.sellers" :options="sellerOptions" :all-label="t('reports.filter_seller_all')" />
+            <BaseMultiSelect v-model="filters.outlets" :options="outletOptions" :all-label="t('reports.filter_seller_all')" />
 
             <BaseMultiSelect v-model="filters.payments" :options="paymentOptions" :all-label="t('reports.filter_payment_all')" />
             <BaseSelect v-model="filters.paymentState" :placeholder="t('reports.filter_paystate_all')" :options="paymentStateOptions" />
@@ -508,11 +512,11 @@ function viewFinishedTransaction(orderId) {
             >{{ row.customer_name }}</button>
             <span v-else class="text-muted-3">{{ t('reports.walkin') }}</span>
           </template>
-          <template #cell-artist_names="{ row }">
+          <template #cell-outlet_names="{ row }">
             <span class="flex flex-wrap gap-x-1 text-[12.5px] text-muted-4">
-              <template v-if="(row.artist_names ?? []).length">
-                <span v-for="(name, i) in row.artist_names" :key="name">
-                  <button type="button" class="underline decoration-dotted hover:text-brand-active" @click="searchByArtist(name)">{{ name }}</button><template v-if="i < row.artist_names.length - 1">,</template>
+              <template v-if="(row.outlet_names ?? []).length">
+                <span v-for="(name, i) in row.outlet_names" :key="name">
+                  <button type="button" class="underline decoration-dotted hover:text-brand-active" @click="searchByOutlet(name)">{{ name }}</button><template v-if="i < row.outlet_names.length - 1">,</template>
                 </span>
               </template>
               <span v-else>—</span>

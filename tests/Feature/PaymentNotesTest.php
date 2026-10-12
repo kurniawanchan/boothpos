@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Event;
@@ -39,9 +39,9 @@ class PaymentNotesTest extends TestCase
             'event_id' => $event->id, 'user_id' => $this->cashier->id, 'status' => 'open',
         ]);
 
-        $artist = Artist::factory()->create();
+        $artist = Outlet::factory()->create();
         $category = Category::factory()->create();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $this->variant = $product->variants()->create([
             'sku' => 'NOTES0001', 'sell_price' => 25000, 'cost_price' => 10000, 'current_stock' => 10,
         ]);

@@ -165,6 +165,35 @@ paths:
               schema: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /me/scope:
+    get:
+      tags: [Auth]
+      summary: Outlet yang boleh dilihat pengguna dan pilihan X-Outlet-Id (045 Stage 2)
+      description: >
+        Header `X-Outlet-Id` (opsional, di semua endpoint ber-login) hanya MENYEMPITKAN dalam outlet yang boleh
+        dilihat pengguna; tanpa header = semua. Id di luar daftar → 403 `outlet_forbidden`; bukan angka → 422
+        `outlet_invalid`. `outlet_id` pada body/query tidak pernah memperluas cakupan atau menentukan outlet record.
+        Record outlet lain yang diminta lewat id menjawab 404.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  outlets:
+                    type: array
+                    items:
+                      type: object
+                      properties: { id: { type: integer }, code: { type: string }, name: { type: string } }
+                  selected: { type: integer, nullable: true }
+                  can_see_all: { type: boolean }
+                  multi: { type: boolean, description: "Lebih dari satu outlet terlihat; kendali pemilih tampil hanya bila true." }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /auth/password:
     put:
       tags: [Auth]
@@ -873,7 +902,14 @@ paths:
         berbentuk baris katalog (grid/tabel layar Produk) + `counts` per tab (menu, retail, material,
         semi_finished, packaging, modifier), dengan filter `q`, `category_id[]` (termasuk sub-kategori),
         `status[]` (draft|active|discontinued), `quality` (no_station|no_price|no_cost), `sort`
-        (name|sku|price|status, awalan `-` = turun), `page`, `per_page` (15). Tanpa `tab`, bentuk lama
+        (name|sku|price|status, awalan `-` = turun), `page`, `per_page` (15).
+        045 Stage 4 (bentuk lama, tanpa `tab`): `pos=1` = layar pemesanan — menu menurut outlet SHIFT terbuka pengguna
+        (item yang tidak dibawa outlet itu tidak muncul; varian membawa `outlet_price` untuk outlet itu). Hal sama berlaku
+        untuk `GET /variants/lookup?pos=1` dan `GET /menu/availability?pos=1` (tanda 86 outlet shift, bukan header).
+        045 Stage 3: `outlet_id[]` mempersempit ke item yang DIBAWA outlet-outlet itu (hanya outlet yang boleh dilihat
+        pemanggil). Dengan lebih dari satu outlet terlihat, `availability` berisi satu entri per outlet
+        `{outlet_id, outlet_code, outlet_name, state: available|sold_out|not_carried, reason}`; dengan satu outlet
+        bentuk lama (satu entri tanpa outlet). Tanpa `tab`, bentuk lama
         tidak berubah. Biaya (`food_cost_pct`) hanya untuk pengguna dengan menu products/reports.
       parameters:
         - { name: tab, in: query, schema: { type: string, enum: [menu, retail] }, description: "043 — mengaktifkan mode katalog" }
@@ -948,6 +984,11 @@ paths:
     get:
       tags: [Master Data]
       summary: Detail produk beserta varian
+      description: |
+        045 Stage 3 (halaman item): `availability` satu baris per outlet yang terlihat (state `available|sold_out|not_carried`,
+        catatan 86 per outlet) dan `outlet_prices` `{outlets:[{id,code,name}], by_variant:{variantId:{outletId:"harga"}}}`
+        berisi HANYA harga khusus outlet (yang tidak ada mengikuti harga dasar); keduanya berbentuk lama / `null` bila hanya
+        satu outlet terlihat.
       responses:
         '200':
           description: Berhasil
@@ -1058,7 +1099,7 @@ paths:
     get:
       tags: [Master Data]
       summary: Cari varian untuk kasir
-      description: Endpoint ringan khusus layar kasir. Hanya mengembalikan varian aktif dengan kolom seperlunya.
+      description: Endpoint ringan khusus layar kasir. Hanya mengembalikan varian aktif dengan kolom seperlunya. 045 — `pos=1` (outlet shift; item yang tidak dibawa tidak muncul; `outlet_price`, `outlet_stock`) dan `stock_outlet=<id>` (layar Stok; `outlet_stock` = saldo di outlet itu).
       parameters:
         - { name: q, in: query, required: true, description: "SKU, nama varian, atau nama produk induknya", schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 50 } }
@@ -1083,7 +1124,8 @@ paths:
       summary: Riwayat pergerakan stok
       description: |
         036-bom-variant-stock-ux — dipakai layar Stok DAN riwayat transaksi per
-        varian (`variant_id`). Urutan: `created_at` terbaru dulu, lalu `id`
+        varian (`variant_id`). 045 Stage 5: setiap baris membawa `outlet_id/outlet_code/outlet_name`; `stock_before/after` =
+        saldo outlet itu; hanya outlet yang berlaku; filter `outlet_id`. Urutan: `created_at` terbaru dulu, lalu `id`
         terbaru dulu (timestamp kembar tetap stabil). **Akses**: menu `stock`
         ATAU `products` — peran lain 403 (dulu terbuka untuk semua peran yang
         login, sehingga `user_name` tidak boleh ikut dibuka).
@@ -1123,6 +1165,8 @@ paths:
         Dipakai untuk stok awal dan hasil stock opname. Menulis baris
         `stock_movements` dan memperbarui `current_stock` dalam satu
         transaksi database. Alasan wajib diisi.
+        045 Stage 5 — stok adalah saldo per outlet: `outlet_id` wajib bila pengguna melihat beberapa outlet (422), di
+        luar yang boleh dilihat → 403 `outlet_forbidden`; satu outlet = outlet itu. Saldo satu outlet tidak boleh negatif (422).
       requestBody:
         required: true
         content:
@@ -1132,6 +1176,7 @@ paths:
               required: [items, reason]
               properties:
                 reason: { type: string, maxLength: 255, example: Stok awal event Oktober }
+                outlet_id: { type: integer, description: "045: outlet yang saldonya diubah" }
                 items:
                   type: array
                   minItems: 1
@@ -1154,14 +1199,105 @@ paths:
                     items: { $ref: '#/components/schemas/StockMovement' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /stock/balances:
+    get:
+      tags: [Stock]
+      summary: Saldo stok per (varian, outlet) (045 Stage 5)
+      description: Menu `stock` atau `products`. Hanya outlet yang berlaku; filter `variant_id[]` dan `outlet_id`. `{data:[{variant_id,sku,outlet_id,outlet_code,outlet_name,on_hand}]}`.
+      parameters:
+        - { name: variant_id, in: query, schema: { type: array, items: { type: integer } } }
+        - { name: outlet_id, in: query, schema: { type: integer } }
+      responses:
+        '200': { description: Berhasil }
+        '403': { description: Tanpa menu stock/products }
+  /stock/transfers:
+    get:
+      tags: [Stock]
+      summary: Daftar transfer stok antar outlet (045 Stage 6)
+      description: Menu `stock`. Hanya transfer yang salah satu outletnya menjadi hak pemanggil (outlet nonaktif tetap dihitung); filter `status`, `outlet_id[]`, `from`, `to`, `discrepancy=1`. Tiap baris membawa `can {receive, cancel}` yang dihitung server (izin + penugasan).
+      responses:
+        '200': { description: "{data:[{id,number,status,has_discrepancy,from_outlet,to_outlet,line_count,dispatched_at/by,received_at/by,cancelled_at/by,can}], meta}" }
+    post:
+      tags: [Stock]
+      summary: Membuat DAN mengirim transfer
+      description: >
+        Izin `stock.transfer.dispatch`; outlet asal harus hak pemanggil (403 `outlet_forbidden`). Outlet berbeda dan aktif, baris
+        (kind variant|material, item_id, qty > 0; item harus melacak stok, jumlah bulat) → 422; saldo asal tidak cukup → 409/422 dengan nama
+        outlet. Saldo asal turun seketika (`transfer_out`); barang berstatus dalam perjalanan. `client_ref` idempoten (`200` untuk
+        pengulangan). Item yang tidak dijual di tujuan hanya memberi peringatan `not_carried_at_destination`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from_outlet_id, to_outlet_id, lines]
+              properties:
+                from_outlet_id: { type: integer }
+                to_outlet_id: { type: integer }
+                note: { type: string, maxLength: 255 }
+                client_ref: { type: string, maxLength: 64 }
+                lines:
+                  type: array
+                  items: { type: object, required: [kind, item_id, qty], properties: { kind: { type: string, enum: [variant, material] }, item_id: { type: integer }, qty: { type: number } } }
+      responses:
+        '201': { description: Transfer dikirim }
+        '200': { description: Pengulangan client_ref }
+        '403': { description: Tanpa izin / outlet asal di luar jangkauan }
+        '422': { description: Validasi }
+  /stock/transfers/{id}:
+    get:
+      tags: [Stock]
+      summary: Detail transfer (baris, langkah, jejak buku besar, peringatan)
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200': { description: Berhasil }
+        '404': { description: Di luar jangkauan }
+  /stock/transfers/{id}/receive:
+    post:
+      tags: [Stock]
+      summary: Menerima transfer
+      description: >
+        Izin `stock.transfer.receive` dan outlet tujuan hak pemanggil (nonaktif tetap boleh). `lines[{line_id, qty_received, reason}]`
+        (kosong = terima semua). Kurang dari dikirim → `reason` wajib dan transfer ditandai selisih; lebih → 422; kedua kali → 409.
+      responses:
+        '200': { description: Diterima }
+        '403': { description: Izin / outlet }
+        '409': { description: Bukan dalam perjalanan }
+        '422': { description: Selisih tanpa alasan / lebih dari dikirim }
+  /stock/transfers/{id}/cancel:
+    post:
+      tags: [Stock]
+      summary: Membatalkan transfer yang belum diterima
+      description: Izin `stock.transfer.cancel` dan outlet asal hak pemanggil. Barang kembali ke outlet asal (`transfer_cancel`). Hanya in_transit (409 selain itu).
+      responses:
+        '200': { description: Dibatalkan }
+        '403': { description: Izin / outlet }
+        '409': { description: Bukan dalam perjalanan }
+  /stock/transfers/discrepancies:
+    get:
+      tags: [Stock]
+      summary: Selisih transfer (dikirim − diterima, alasan, penerima)
+      responses:
+        '200': { description: "{data:[{number,from_outlet,to_outlet,item,qty_sent,qty_received,shortfall,reason,received_by}]}" }
+  /stock/in-transit:
+    get:
+      tags: [Stock]
+      summary: Jumlah dalam perjalanan per item dan arah
+      parameters: [{ name: outlet_id, in: query, schema: { type: array, items: { type: integer } } }]
+      responses:
+        '200': { description: "{data:[{kind,item,from_outlet,to_outlet,qty,transfers[]}]}" }
   /stock/low:
     get:
       tags: [Stock]
-      summary: Varian dengan stok menipis
+      summary: Varian dengan stok menipis (per outlet)
       description: |
         Varian aktif yang `current_stock`-nya sudah di titik atau di bawah
         `low_stock_alert` masing-masing. Varian tanpa `low_stock_alert`
         (null) tidak pernah muncul di sini — belum ada ambang untuk dicek.
+        045 Stage 5 — stok adalah saldo PER OUTLET: satu baris per (varian, outlet) yang punya saldo ≤ ambang, hanya untuk
+        outlet yang berlaku; `current_stock` = saldo di outlet itu; baris membawa `outlet_id/outlet_code/outlet_name`.
+        Definisi yang sama dengan angka "stok menipis" Dashboard.
       responses:
         '200':
           description: Berhasil
@@ -1289,6 +1425,7 @@ paths:
     get:
       tags: [Event & Session]
       summary: Sesi kasir aktif milik pengguna
+      description: 045 — membawa `outlet_id` dan `outlet {id, code, name}` (outlet shift); sama untuk POST /sessions dan `session` pada ringkasan shift.
       responses:
         '200':
           description: Berhasil
@@ -1319,15 +1456,23 @@ paths:
               required: [event_id, opening_cash]
               properties:
                 event_id: { type: integer }
+                outlet_id:
+                  type: integer
+                  nullable: true
+                  description: >
+                    045 Stage 2 — outlet shift. Opsional: tanpa nilai dipakai satu-satunya outlet yang berlaku
+                    (penugasan atau header X-Outlet-Id); lebih dari satu → 422 `errors.outlet_id`. Di luar outlet
+                    yang boleh dilihat → 403 `outlet_forbidden`. Pengguna non-admin tanpa penugasan → 409
+                    `outlet_unassigned`. Order, pembayaran dan tiket di shift ini mewarisi outletnya.
                 opening_cash: { type: string, example: "500000.00" }
                 opening_cash_entries:
                   type: array
                   nullable: true
                   items:
                     type: object
-                    required: [artist_id, amount]
+                    required: [amount]
                     properties:
-                      artist_id: { type: integer }
+                      outlet_id: { type: integer, nullable: true }
                       amount: { type: string, example: "250000.00" }
                 notes: { type: string, nullable: true }
       responses:
@@ -1860,7 +2005,7 @@ paths:
     get:
       tags: [Sales]
       summary: Data struk
-      description: Mengembalikan data siap tampil untuk struk di layar, termasuk identitas toko dari pengaturan dan `app_name` (nama aplikasi untuk teks "Powered by …"). 028-partial-split-payment — juga `paid_amount`, `balance_amount`, `payment_status` (`unpaid|partially_paid|fully_paid`) dan `reference`/`paid_at` per pembayaran; struk yang diambil ulang setelah pembayaran susulan memuatnya.
+      description: Mengembalikan data siap tampil untuk struk di layar, termasuk identitas toko dari pengaturan dan `app_name` (nama aplikasi untuk teks "Powered by …"). 028-partial-split-payment — juga `paid_amount`, `balance_amount`, `payment_status` (`unpaid|partially_paid|fully_paid`) dan `reference`/`paid_at` per pembayaran; struk yang diambil ulang setelah pembayaran susulan memuatnya. 045 — `outlet_name`/`outlet_code` = outlet tempat penjualan terjadi (outlet shift); SPA mencetaknya hanya bila ada lebih dari satu outlet.
       responses:
         '200':
           description: Berhasil
@@ -3342,7 +3487,7 @@ paths:
         - { name: page, in: query, schema: { type: integer } }
         - { name: per_page, in: query, schema: { type: integer, maximum: 100 } }
       responses:
-        '200': { description: "{data:[{at,variant,old_price,new_price,source,by,approved_by,release_version,note}], meta}" }
+        '200': { description: "{data:[{at,variant,outlet_id,outlet_code,old_price,new_price,source,by,approved_by,release_version,note}], meta}. 045: baris harga OUTLET membawa outlet_id/outlet_code (null = harga dasar) dan hanya untuk outlet yang boleh dilihat pemanggil." }
 
   /products/{id}/sold-out:
     post:
@@ -3352,6 +3497,13 @@ paths:
         Izin `menu.item.86` (403 bila tidak). Alasan wajib dari kategori `sold_out`. Berlaku sampai akhir hari
         bisnis (zona waktu toko + cut-off) atau sampai dibatalkan; item tidak bisa ditambahkan ke order/tab
         baru (409) tetapi baris yang sudah ada tidak berubah. 409 bila item didiskontinu atau sudah ditandai.
+
+        045 Stage 3 — per outlet: `outlet_ids` (opsional; tiap id harus termasuk outlet yang boleh dilihat, selain itu 422;
+        `[]` → 422) menandai HANYA outlet-outlet itu (satu tanda per outlet). Tanpa `outlet_ids`: outlet yang DIPILIH
+        (`X-Outlet-Id`) bila ada; selain itu tanda GLOBAL yang berlaku di semua outlet (perilaku lama). Bentrok (409)
+        bila sudah ada tanda aktif yang berlaku di outlet itu. DELETE menerima `outlet_ids` yang sama dan hanya
+        membatalkan tanda outlet-outlet itu (403 `outlet_forbidden` di luar jangkauan). Order/tab juga ditolak (422)
+        bila item TIDAK DIBAWA outlet shift/tab (`unavailable_not_carried`).
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       requestBody:
@@ -3436,8 +3588,10 @@ paths:
                 value: { type: number }
                 rounding: { type: string, enum: [none, "500"] }
                 effective_from: { type: string, format: date }
+                price_scope: { type: string, enum: [base, outlets, all_outlets], default: base, description: "045: base = harga dasar (perilaku lama); outlets/all_outlets = harga khusus per outlet (harga lama = harga efektif di outlet; item yang tidak dibawa outlet dilewati; 422 saat rilis menu aktif)" }
+                outlet_ids: { type: array, items: { type: integer }, description: "Wajib untuk price_scope=outlets; harus termasuk outlet yang boleh dilihat" }
       responses:
-        '200': { description: Pratinjau }
+        '200': { description: "Pratinjau; tiap item membawa outlet_id/outlet_code (null untuk harga dasar)" }
         '403': { description: Tanpa izin }
         '422': { description: Validasi }
 
@@ -3686,11 +3840,18 @@ paths:
         '403': { description: Tanpa izin }
         '409': { description: Sudah diputuskan }
 
+  # 045 Stage 7 — CATATAN untuk seluruh laporan per outlet di bawah (nama rute di berkas ini masih memakai istilah lama
+  # "artist"; rute sebenarnya: /reports/outlet-settlements, /reports/outlet-profit, /reports/stock-by-outlet):
+  # baris dikelompokkan per outlet TEMPAT penjualan (outlet shift/pre-order); order dan pre-order LAMA (`outlet_backfilled`)
+  # tetap atas nama penjual lamanya dan barisnya membawa `historical: true` (angka lampau tidak bergeser). Σ baris =
+  # total; hanya outlet yang berlaku untuk pemanggil; stok per outlet membaca saldo `variant_outlet_stock`.
   /reports/sales:
     get:
       tags: [Report]
       summary: Laporan penjualan
       description: |
+        045 Stage 4 — tiap baris `transactions[]` membawa `sold_at_name`/`sold_at_code` (outlet TEMPAT penjualan = outlet shift;
+        beda dari `outlet_names`, outlet asal item).
         010-split-payment-preorder-reports (US5) — totals dan setiap baris
         `rows[]` sejak fitur ini kini juga memuat pendapatan yang DIAKUI
         dari Pre-order, digabung ke angka penjualan Order biasa. "Diakui"
@@ -4255,6 +4416,31 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /users/{id}/outlets:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Pengguna & Peran]
+      summary: Ganti penugasan outlet pengguna (045 Stage 2)
+      description: >
+        Mengganti SELURUH penugasan. Pengguna tidak boleh mengatur penugasannya sendiri (403). Pengelola tanpa
+        flag `all_outlets` hanya boleh memberi dan melepas outlet yang ia lihat sendiri (403 `outlet_forbidden`).
+        Owner/Admin ditolak 409 `outlet_all_by_role` (mereka melihat semua outlet). Outlet tidak ada/nonaktif → 422.
+        Daftar kosong = sengaja tanpa penugasan. Dicatat di activity_logs (`user_outlets_updated`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outlet_ids]
+              properties:
+                outlet_ids: { type: array, items: { type: integer } }
+      responses:
+        '200': { description: Pengguna dengan outlet_ids terbaru }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /users/{id}:
@@ -5113,6 +5299,32 @@ paths:
         '204': { description: Berhasil }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /materials/{material}/adjustments:
+    parameters:
+      - { name: material, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Koreksi stok bahan di satu outlet (045 Stage 5)
+      description: >
+        Selisih (+/−), bukan jumlah akhir. `outlet_id` wajib bila pengguna melihat beberapa outlet (422); di luar yang boleh
+        dilihat → 403; saldo outlet tidak boleh negatif (422). Lewat MaterialStockService; audit `material_stock_adjusted`.
+        `GET /materials` membawa `outlet_stock[{outlet_id,outlet_code,outlet_name,on_hand}]` (outlet yang berlaku).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [qty_change, reason]
+              properties:
+                outlet_id: { type: integer }
+                qty_change: { type: number }
+                reason: { type: string, maxLength: 255 }
+      responses:
+        '201': { description: "{material_id,outlet_id,stock_before,stock_after}" }
+        '403': { description: Outlet di luar jangkauan }
+        '422': { description: Validasi / saldo negatif / outlet wajib }
+
   /materials/{material}/vendor-prices:
     parameters:
       - { name: material, in: path, required: true, schema: { type: integer } }
@@ -5171,6 +5383,47 @@ paths:
   # SEMUA aksi lain butuh menu `products` DAN `purchase_orders` (403 bila
   # tidak). Respons baca/mutasi berbentuk VariantBom { data, summary }.
   # ------------------------------------------------------------------
+
+  /variants/{variant}/outlet-prices:
+    parameters: [{ name: variant, in: path, required: true, schema: { type: integer } }]
+    get:
+      tags: [Produk]
+      summary: Harga dasar dan harga per outlet sebuah varian (045 Stage 3)
+      description: >
+        Hanya outlet yang boleh dilihat pengguna yang tampil. `price: null` / `follows_base: true` = outlet itu
+        mengikuti harga dasar. Perlu izin mengubah produk.
+      responses:
+        '200': { description: Berhasil }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /variants/{variant}/outlet-prices/{outlet}:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+      - { name: outlet, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Produk]
+      summary: Menetapkan atau menghapus harga khusus satu outlet (045 Stage 3)
+      description: >
+        Lewat PriceService (satu-satunya penulis harga): satu baris price_history ber-`outlet_id` dan audit
+        `outlet_price_changed` di transaksi yang sama. `price: null` menghapus harga khusus. Outlet di luar yang
+        boleh dilihat → 403 `outlet_forbidden`; harga negatif → 422. Selama rilis menu AKTIF perubahan menjadi
+        `menu_change` (payload membawa `outlet_id`/`outlet_code`) yang menunggu rilis, dan selisih di atas ambang
+        menunggu persetujuan — jalur yang sama dengan harga dasar; respons membawa `pending`, `requires_approval`,
+        `change_id`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [price]
+              properties:
+                price: { type: string, nullable: true, example: "25000.00" }
+                note: { type: string, nullable: true }
+      responses:
+        '200': { description: "Berhasil (changed, pending, requires_approval, change_id, price, effective_price)" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /variants/{variant}/bom:
     parameters:
@@ -5598,7 +5851,7 @@ paths:
       - name: entity
         in: path
         required: true
-        schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, roles, users] }
+        schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, outlet_items, outlet_prices, roles, users] }
     get:
       tags: [Import & Export]
       summary: Ekspor satu entitas master data ke Excel
@@ -5690,11 +5943,13 @@ paths:
         | `artists` | `code` |
         | `categories` | `code` |
         | `products` | `sku` bila diisi; bila kosong, `code_prefix` + urutan varian |
-        | `stock` | `sku` |
+        | `stock` | pasangan (`sku`, `outlet_code`) — jumlah AKHIR per outlet; `outlet_code` wajib bila ada beberapa outlet; stok awal sheet `products` = outlet asal produk |
         | `vendors` | `code` |
         | `materials` | `code` |
         | `vendor_prices` | pasangan (`vendor_code`, `material_code`) |
         | `bom` | pasangan (`sku`, `material_code`) |
+        | `outlet_items` | pasangan (`outlet_code`, `product_code` = `code_prefix`); `is_carried` 1/0 (kosong = dibawa untuk baris baru) |
+        | `outlet_prices` | pasangan (`sku`, `outlet_code`); `price` angka ≥ 0, atau kata `base` untuk menghapus harga khusus. Ditolak (per baris) saat rilis menu aktif; outlet harus boleh dikelola pengunggah |
         | `roles` | `name` |
         | `users` | `username` |
 
@@ -5835,6 +6090,9 @@ paths:
     post:
       tags: [Restaurant]
       summary: Buat meja (menu `dining_setup`)
+      description: >
+        045 Stage 2 — body boleh membawa `outlet_id` (harus termasuk outlet yang boleh dilihat, selain itu 403
+        `outlet_forbidden`; kosong = outlet tunggal yang berlaku). Outlet tidak berubah sesudah dibuat. Nama unik per outlet (422).
       requestBody:
         required: true
         content:
@@ -5907,6 +6165,10 @@ paths:
         membawa `paid_amount` (total terbayar turunan), dan meja NONAKTIF yang masih memegang order terbuka
         ikut dicantumkan (`is_active: false`, `state: occupied`) supaya uang yang berjalan tidak hilang dari
         layar; meja nonaktif tanpa order tetap disembunyikan. Tidak ada nilai yang bergantung jam di respons ini.
+
+        045 Stage 2 — disaring menurut outlet pengguna (`X-Outlet-Id` mempersempit). Satu outlet yang berlaku →
+        bentuk di atas (`areas`, `takeaway_tabs`). Beberapa outlet → `outlets: [{id, code, name, areas, takeaway_tabs}]`
+        (jumlah query tetap konstan). Nama meja unik PER OUTLET.
       parameters:
         - { name: version, in: query, schema: { type: string }, description: Token `version` dari respons sebelumnya. }
       responses:
@@ -6266,6 +6528,8 @@ paths:
     post:
       tags: [Restaurant]
       summary: Buat stasiun (menu `dining_setup`)
+      description: >
+        045 Stage 2 — sama seperti meja: `outlet_id` opsional saat membuat; nama unik per outlet.
       requestBody:
         required: true
         content:
@@ -6438,7 +6702,7 @@ paths:
         Meja lama kosong, meja baru terisi; baris, tiket dan pembayaran tidak berubah. Juga mendudukkan tab
         takeaway di sebuah meja (`service_type` menjadi `dine_in`). Meja tujuan terisi → `409` dengan
         `existing_tab_id` (sarankan menggabung); meja nonaktif → `409`; mode DEMO/LIVE lain → `404`.
-        Memindahkan ke meja yang sama tidak berefek.
+        Memindahkan ke meja yang sama tidak berefek. 045 Stage 2 — meja di OUTLET lain → `409` dengan `code: outlet_mismatch`.
       requestBody:
         required: true
         content:
@@ -6895,6 +7159,12 @@ components:
           type: array
           items: { type: string }
           description: Setiap nilai harus salah satu kunci App\Support\MenuKeys — kunci tak dikenal ditolak 422.
+        all_outlets:
+          type: boolean
+          description: >
+            045 — peran melihat SEMUA outlet tanpa penugasan per pengguna. Hanya pengguna yang sendiri melihat semua
+            outlet yang boleh mengubahnya (selain itu 403 `outlet_forbidden`); peran Owner/Admin tidak bisa dimatikan
+            (409 `outlet_all_by_role`). Perubahan dicatat `role_outlet_scope_changed`.
 
     UserInput:
       type: object

@@ -23,7 +23,7 @@ class LowStockHistoryTest extends TestCase
         $previous = CarbonImmutable::getTestNow();
         CarbonImmutable::setTestNow($at);
         try {
-            app(StockService::class)->applyMovement($variant, $type, $qty);
+            app(StockService::class)->applyMovement($variant, \App\Support\OutletStockSync::homeOutletOf($variant), $type, $qty);
         } finally {
             CarbonImmutable::setTestNow($previous);
         }

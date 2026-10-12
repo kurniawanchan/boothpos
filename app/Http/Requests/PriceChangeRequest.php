@@ -25,6 +25,9 @@ class PriceChangeRequest extends FormRequest
             'value' => ['sometimes', 'nullable'],
             'rounding' => ['sometimes', 'nullable', 'string'],
             'effective_from' => ['sometimes', 'nullable', 'string'],
+            'price_scope' => ['sometimes', 'nullable', 'string'],
+            'outlet_ids' => ['sometimes', 'array'],
+            'outlet_ids.*' => ['integer'],
         ];
     }
 }

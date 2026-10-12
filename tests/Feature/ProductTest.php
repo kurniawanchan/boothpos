@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -23,7 +23,7 @@ class ProductTest extends TestCase
     private function baseline(): array
     {
         return [
-            'artist' => Artist::factory()->create(['code' => 'RYU']),
+            'artist' => Outlet::factory()->create(['code' => 'RYU']),
             'category' => Category::factory()->create(['code' => 'KY']),
         ];
     }
@@ -34,7 +34,7 @@ class ProductTest extends TestCase
         ['artist' => $artist, 'category' => $category] = $this->baseline();
 
         $response = $this->postJson('/api/v1/products', [
-            'artist_id' => $artist->id,
+            'home_outlet_id' => $artist->id,
             'category_id' => $category->id,
             'product_segment' => 'SAK',
             'name' => 'Keychain Sakura',
@@ -54,7 +54,7 @@ class ProductTest extends TestCase
         ['artist' => $artist, 'category' => $category] = $this->baseline();
 
         $response = $this->postJson('/api/v1/products', [
-            'artist_id' => $artist->id,
+            'home_outlet_id' => $artist->id,
             'category_id' => $category->id,
             'name' => 'Poster Yuki',
             'variants' => [['variant_name' => 'Standard', 'sell_price' => 15000]],
@@ -69,7 +69,7 @@ class ProductTest extends TestCase
         ['artist' => $artist, 'category' => $category] = $this->baseline();
 
         $product = $this->postJson('/api/v1/products', [
-            'artist_id' => $artist->id, 'category_id' => $category->id,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id,
             'product_segment' => 'SAK', 'name' => 'Keychain',
             'variants' => [['variant_name' => 'A', 'sell_price' => 20000]],
         ])->json();
@@ -87,7 +87,7 @@ class ProductTest extends TestCase
         ['artist' => $artist, 'category' => $category] = $this->baseline();
 
         $payload = [
-            'artist_id' => $artist->id, 'category_id' => $category->id,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id,
             'product_segment' => 'SAK', 'name' => 'Keychain Sakura',
             'variants' => [['variant_name' => 'A', 'sell_price' => 20000]],
         ];
@@ -105,7 +105,7 @@ class ProductTest extends TestCase
         ['artist' => $artist, 'category' => $category] = $this->baseline();
 
         $response = $this->postJson('/api/v1/products', [
-            'artist_id' => $artist->id, 'category_id' => $category->id,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id,
             'name' => 'Tanpa Varian', 'variants' => [],
         ]);
 
@@ -118,7 +118,7 @@ class ProductTest extends TestCase
         ['artist' => $artist, 'category' => $category] = $this->baseline();
 
         $response = $this->postJson('/api/v1/products', [
-            'artist_id' => $artist->id, 'category_id' => $category->id,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id,
             'name' => 'Pre-order Figure', 'is_preorder' => true,
             'variants' => [['variant_name' => 'A', 'sell_price' => 500000]],
         ]);
@@ -132,7 +132,7 @@ class ProductTest extends TestCase
         ['artist' => $artist, 'category' => $category] = $this->baseline();
 
         $this->postJson('/api/v1/products', [
-            'artist_id' => $artist->id, 'category_id' => $category->id,
+            'home_outlet_id' => $artist->id, 'category_id' => $category->id,
             'name' => 'Test', 'variants' => [['variant_name' => 'A', 'sell_price' => 1000]],
         ])->assertStatus(403);
     }
@@ -141,7 +141,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('owner');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000, 'is_active' => true]);
 
         $this->deleteJson("/api/v1/products/{$product->id}")->assertStatus(409);
@@ -151,7 +151,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 25000, 'current_stock' => 7]);
 
         $response = $this->getJson('/api/v1/products');
@@ -166,7 +166,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 25000, 'current_stock' => 7]);
         $product->variants()->create(['sku' => 'RYUKYAAA0002', 'sell_price' => 30000, 'current_stock' => 3]);
 
@@ -186,9 +186,9 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Sakura']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Sakura']);
         $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 25000]);
-        Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Poster Yuki']);
+        Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Poster Yuki']);
 
         $response = $this->getJson('/api/v1/products?search=Sakura');
 
@@ -199,9 +199,9 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Sakura']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Sakura']);
         $product->variants()->create(['sku' => 'RYU-KY-SAK-001', 'sell_price' => 25000]);
-        Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Poster Yuki']);
+        Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Poster Yuki']);
 
         $response = $this->getJson('/api/v1/products?search=SAK-001');
 
@@ -215,9 +215,9 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Love Bullet']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Love Bullet']);
         $product->variants()->create(['sku' => 'RYUKYAAA0001', 'variant_name' => 'Koharu', 'sell_price' => 40000]);
-        Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Poster Yuki']);
+        Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Poster Yuki']);
 
         $response = $this->getJson('/api/v1/products?search=Koharu');
 
@@ -232,7 +232,7 @@ class ProductTest extends TestCase
 
         foreach (range(1, 5) as $i) {
             $product = Product::factory()->create([
-                'artist_id' => $artist->id,
+                'home_outlet_id' => $artist->id,
                 'category_id' => $category->id,
                 'code_prefix' => 'RYUKYP'.str_pad((string) $i, 2, '0', STR_PAD_LEFT),
             ]);
@@ -253,7 +253,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Sakura']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Keychain Sakura']);
         $product->variants()->create(['sku' => 'RYU-KY-SAK-001', 'sell_price' => 25000, 'current_stock' => 10]);
 
         $response = $this->getJson('/api/v1/variants/lookup?q=SAK-001');
@@ -270,7 +270,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Love Bullet']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Love Bullet']);
         $product->variants()->create(['sku' => 'RYUKYAAA0001', 'variant_name' => 'Koharu', 'sell_price' => 40000, 'current_stock' => 10]);
 
         $response = $this->getJson('/api/v1/variants/lookup?q=Koharu');
@@ -286,7 +286,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Love Bullet']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Love Bullet']);
         $product->variants()->create(['sku' => 'RYUKYAAA0002', 'sell_price' => 40000, 'current_stock' => 10]);
 
         $response = $this->getJson('/api/v1/variants/lookup?q=RYUKYAAA0002');
@@ -303,7 +303,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Slippery', 'image_path' => 'products/induk.png']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Slippery', 'image_path' => 'products/induk.png']);
         $product->variants()->create(['sku' => 'SPFIMG0001', 'variant_name' => 'Besar', 'sell_price' => 40000, 'current_stock' => 9, 'image_path' => 'variants/sendiri.png']);
 
         $response = $this->getJson('/api/v1/variants/lookup?q=SPFIMG0001');
@@ -316,7 +316,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Slippery', 'image_path' => 'products/induk.png']);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Slippery', 'image_path' => 'products/induk.png']);
         $product->variants()->create(['sku' => 'SPFIMG0002', 'variant_name' => 'Kecil', 'sell_price' => 15000, 'current_stock' => 20]);
 
         // dicari lewat nama produk DAN lewat potongan SKU: foto yang sama
@@ -331,7 +331,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Slippery', 'image_path' => null]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Slippery', 'image_path' => null]);
         $product->variants()->create(['sku' => 'SPFIMG0003', 'sell_price' => 5000, 'current_stock' => 20]);
 
         $response = $this->getJson('/api/v1/variants/lookup?q=SPFIMG0003');
@@ -344,7 +344,7 @@ class ProductTest extends TestCase
     {
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000, 'is_active' => false]);
 
         $response = $this->getJson('/api/v1/variants/lookup?q=AAA0001');
@@ -361,7 +361,7 @@ class ProductTest extends TestCase
         \Illuminate\Support\Facades\Storage::fake('public');
         $this->actingAsRole('owner');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
 
         $response = $this->post("/api/v1/products/{$product->id}/image", [
             'image' => \Illuminate\Http\UploadedFile::fake()->image('produk.jpg'),
@@ -377,7 +377,7 @@ class ProductTest extends TestCase
         \Illuminate\Support\Facades\Storage::fake('public');
         $this->actingAsRole('owner');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
 
         $response = $this->post("/api/v1/products/{$product->id}/image", [
             'image' => \Illuminate\Http\UploadedFile::fake()->create('produk.jpg', 10, 'application/pdf'),
@@ -391,7 +391,7 @@ class ProductTest extends TestCase
         \Illuminate\Support\Facades\Storage::fake('public');
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
 
         $response = $this->post("/api/v1/products/{$product->id}/image", [
             'image' => \Illuminate\Http\UploadedFile::fake()->image('produk.jpg'),
@@ -411,7 +411,7 @@ class ProductTest extends TestCase
         \Illuminate\Support\Facades\Storage::fake('public');
         $this->actingAsRole('owner');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000]);
 
         $response = $this->post("/api/v1/variants/{$variant->id}/image", [
@@ -428,7 +428,7 @@ class ProductTest extends TestCase
         \Illuminate\Support\Facades\Storage::fake('public');
         $this->actingAsRole('owner');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000]);
 
         $response = $this->post("/api/v1/variants/{$variant->id}/image", [
@@ -443,7 +443,7 @@ class ProductTest extends TestCase
         \Illuminate\Support\Facades\Storage::fake('public');
         $this->actingAsRole('cashier');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000]);
 
         $response = $this->post("/api/v1/variants/{$variant->id}/image", [
@@ -458,7 +458,7 @@ class ProductTest extends TestCase
         \Illuminate\Support\Facades\Storage::fake('public');
         $this->actingAsRole('owner');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => $category->id]);
         $variant = $product->variants()->create(['sku' => 'RYUKYAAA0001', 'sell_price' => 1000]);
 
         $this->post("/api/v1/products/{$product->id}/image", ['image' => \Illuminate\Http\UploadedFile::fake()->image('produk.jpg')])->assertOk();

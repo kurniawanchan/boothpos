@@ -64,11 +64,11 @@ const discount = computed(() => parseMoney(props.preorder?.discount));
 const remainingTotal = computed(() => remainingSubtotal.value + shippingCost.value - discount.value);
 const discountTooHigh = computed(() => discount.value > remainingSubtotal.value + shippingCost.value);
 
-// "Pisah per penjual" hanya ditawarkan bila ada ≥ 2 penjual berbeda; server
-// tetap menolak (422) bila ternyata hanya satu. Penjual dari baris pertama
+// "Pisah per outlet" hanya ditawarkan bila ada ≥ 2 outlet berbeda; server
+// tetap menolak (422) bila ternyata hanya satu. Outlet dari baris pertama
 // tetap di pesanan asal — ditentukan server, bukan di sini.
-const sellerCount = computed(() => new Set(lines.value.map((l) => l.artist_id).filter((id) => id != null)).size);
-const canSplitBySeller = computed(() => sellerCount.value >= 2);
+const outletCount = computed(() => new Set(lines.value.map((l) => l.home_outlet_id).filter((id) => id != null)).size);
+const canSplitByOutlet = computed(() => outletCount.value >= 2);
 
 async function submit(mode = 'items') {
   if (submitting.value) return;
@@ -111,7 +111,7 @@ async function submit(mode = 'items') {
           <div class="flex min-w-0 flex-1 flex-col gap-0.5">
             <span class="truncate text-[13px] font-semibold">{{ line.name_snapshot }}</span>
             <span class="font-mono text-[11px] text-muted-3">
-              {{ line.sku_snapshot }} · {{ formatIDR(line.sell_price) }}<span v-if="line.artist_name"> · {{ line.artist_name }}</span>
+              {{ line.sku_snapshot }} · {{ formatIDR(line.sell_price) }}<span v-if="line.home_outlet_name"> · {{ line.home_outlet_name }}</span>
             </span>
           </div>
           <span class="whitespace-nowrap text-[11.5px] text-muted-3">{{ t('preorders.split_of', { qty: line.qty }) }}</span>
@@ -156,7 +156,7 @@ async function submit(mode = 'items') {
 
     <template #footer>
       <div class="flex flex-wrap items-center justify-between gap-2.5">
-        <BaseButton v-if="canSplitBySeller" variant="secondary" :loading="submitting" data-testid="split-by-seller" @click="submit('by_seller')">
+        <BaseButton v-if="canSplitByOutlet" variant="secondary" :loading="submitting" data-testid="split-by-outlet" @click="submit('by_seller')">
           <i class="ph-duotone ph-users-three" aria-hidden="true"></i>
           {{ t('preorders.split_by_seller') }}
         </BaseButton>

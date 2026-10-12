@@ -1,4 +1,25 @@
 <!--
+Sync Impact Report — amendment 2.0.0 (approved 2026-10-11, product owner)
+=========================================================================
+Version change: 1.0.0 → 2.0.0 (MAJOR: the single-machine / no-multi-tenancy premise is redefined)
+Modified sections:
+  - Stack & Environment Constraints: first paragraph replaced (one organisation, one or more outlets;
+    shape (a) one machine, shape (b) one shared server; outlet defined).
+  - Principle IV (Security): one paragraph added (outlet is server-derived, never from a request body;
+    a request may only narrow within the user's outlets; one shared access mechanism for outlet data).
+  - Principle V (Performance): one sentence added (cached/precomputed figures keyed by every input that
+    changes them, and stating the time computed).
+Added/removed principles: none.
+Templates checked: plan-template.md (generic Constitution Check, no change), spec-template.md,
+  tasks-template.md (no constitution references).
+Docs receiving DATED NOTES (history is not rewritten): CLAUDE.md ("What this is" and the
+  environment-constraints list); docs/PRD-POS-Event-Multivendor.md (§1 and the scope cut in §10.2);
+  docs/RUNBOOK.md (outlet migration and rehearsal section).
+Follow-up TODOs: hosting guidance for shape (b) (docs/deploy-oracle-cloud.md covers one store today);
+  licence tier limits the number of outlets (Pro one, Master several) — implemented in feature 045.
+-->
+
+<!--
 Sync Impact Report
 ==================
 Version change: [TEMPLATE] → 1.0.0 (initial ratification)
@@ -120,6 +141,8 @@ adjustments, price changes, bulk imports) MUST write an audit-log entry
 inside the same database transaction as the mutation itself, so a
 rolled-back action never leaves a log claiming it happened.
 
+The **outlet** of a record is decided by the server — from the user's assignment, the open shift, or the owning record — and is **never taken from a request body**. A request may only *narrow* what a user sees within the outlets that user is assigned to; asking for an outlet the user is not assigned to is refused, and a record outside the user's outlets is not found. Access control for outlet data MUST be enforced by one shared mechanism applied to every read path (lists, details, figures, exports, reports), not by per-query conditions.
+
 **Rationale**: This is a point-of-sale system handling real money at a live
 event, with multiple roles (owner, admin, cashier, inventory) whose access
 must actually differ, not just appear to differ. A trusted-client bug or an
@@ -138,7 +161,7 @@ the application's initial bundle — verified by inspecting the production
 build output, not assumed. Reports that must reflect live, always-correct
 state (e.g. artist settlements) MAY recompute on every read rather than
 trust a stale cache, but that choice MUST be deliberate and documented,
-not an accident of not having thought about caching at all.
+not an accident of not having thought about caching at all. A figure or list that is cached or precomputed for display MUST be keyed by every input that changes its content — data mode, the user's permitted outlets, the selected outlet and period — and MUST state the time it was computed.
 
 **Rationale**: A booth's point-of-sale screen and its reports are used
 under real time pressure during a live event; a slow product grid or a
@@ -147,10 +170,7 @@ the register, not just an abstract metric.
 
 ## Stack & Environment Constraints
 
-BoothPOS ships as a one-time license installed and run entirely on a single
-local machine per store (Laravel API + Vue SPA on one box, no cloud tier,
-no multi-tenancy) — architectural decisions MUST account for this, not
-assume a hosted multi-server deployment.
+BoothPOS serves **one organisation**, which has **one or more outlets**. It runs in one of two supported shapes: **(a)** entirely on one local machine (the original deployment, unchanged — one outlet, nothing outlet-related visible), or **(b)** on **one shared server** that every outlet's devices reach over HTTPS. There is always exactly **one server and one database per organisation**, and that server is the only writer of business data. **Multi-tenancy across unrelated customers remains out of scope.** Architectural decisions MUST work in shape (a) and MUST NOT assume more than one server. An **outlet** is a place that sells the organisation's menu; every operational record (shift, order, table, stock movement) belongs to exactly one outlet.
 
 - **MySQL 8 is required** for both the application database and the test
   database; `DB_CONNECTION` MUST be left to environment-specific
@@ -194,4 +214,4 @@ consistency. A review that touches behavior governed by a Core Principle
 SHOULD verify compliance with that principle explicitly, not merely assume
 it.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-09-02
+**Version**: 2.0.0 | **Ratified**: 2026-09-02 | **Last Amended**: 2026-10-11

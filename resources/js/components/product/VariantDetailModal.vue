@@ -18,7 +18,7 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   variant: { type: Object, default: null },
   productName: { type: String, default: '' },
-  artistName: { type: String, default: '' },
+  outletName: { type: String, default: '' },
   categoryName: { type: String, default: '' },
 });
 const emit = defineEmits(['close']);
@@ -48,7 +48,7 @@ const lightboxOpen = ref(false);
           <span class="font-mono text-[12px] font-bold text-brand-active">{{ variant.sku }}</span>
           <span class="text-[15px] font-bold tracking-tight">{{ productName }}</span>
           <span class="text-[12.5px] text-muted-2">{{ variant.variant_name }}</span>
-          <span v-if="artistName || categoryName" class="text-[12px] text-muted-3">{{ artistName }} · {{ categoryName }}</span>
+          <span v-if="outletName || categoryName" class="text-[12px] text-muted-3">{{ outletName }} · {{ categoryName }}</span>
           <StatusPill class="mt-1 w-fit" :variant="variant.is_active ? 'mint' : 'neutral'">{{ variant.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
         </div>
       </div>

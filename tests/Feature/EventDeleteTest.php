@@ -14,7 +14,7 @@ use Tests\TestCase;
 
 // 009-ui-ux-refinements (US4, T031) — guarded delete for Event: hanya
 // boleh dihapus bila belum pernah punya order/pre-order (status/soft-
-// delete apa pun), mengikuti pola guard hapus Artist/Category.
+// delete apa pun), mengikuti pola guard hapus Outlet/Category.
 class EventDeleteTest extends TestCase
 {
     use RefreshDatabase;

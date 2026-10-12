@@ -10,8 +10,8 @@ import { formatIDR } from '../../utils/money';
 /**
  * 012-seller-preorder-report-detail-export (US3, T015-T017) — drill-down
  * dari satu baris laporan Pre-order (ringkasan status × payment_completeness,
- * opsional per penjual) ke daftar pre-order individual yang menyusunnya.
- * Mengikuti pola StockByArtistDetailModal.vue persis (research.md R3):
+ * opsional per outlet) ke daftar pre-order individual yang menyusunnya.
+ * Mengikuti pola StockByOutletDetailModal.vue persis (research.md R3):
  * endpoint yang sama dengan tabel ringkasan (preorderReport), dipanggil
  * ON DEMAND saat baris diklik, dengan param filter tambahan yang membuat
  * backend mengembalikan baris per-pre-order alih-alih agregat.
@@ -20,7 +20,7 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   status: { type: String, default: '' },
   paymentCompleteness: { type: String, default: '' },
-  artistId: { type: [Number, String, null], default: null },
+  outletId: { type: [Number, String, null], default: null },
 });
 const emit = defineEmits(['close']);
 
@@ -31,7 +31,7 @@ const loading = ref(false);
 const detail = ref(null);
 
 watch(
-  () => [props.open, props.status, props.paymentCompleteness, props.artistId],
+  () => [props.open, props.status, props.paymentCompleteness, props.outletId],
   async ([open, status, paymentCompleteness]) => {
     if (!open || !status || !paymentCompleteness) {
       detail.value = null;
@@ -41,12 +41,12 @@ watch(
     try {
       // research.md R3 — endpoint yang sama dengan tabel ringkasan
       // (preorderReport), tapi dengan status+payment_completeness (dan
-      // artist_id opsional dari breakdown per penjual, US2) backend
+      // outlet_id opsional dari breakdown per outlet, US2) backend
       // mengembalikan daftar pre-order individual, bukan agregat.
       const res = await preorderReport({
         status,
         payment_completeness: paymentCompleteness,
-        artist_id: props.artistId || undefined,
+        outlet_id: props.outletId || undefined,
       });
       detail.value = res.rows ?? res;
     } catch (err) {

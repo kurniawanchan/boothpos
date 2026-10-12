@@ -21,6 +21,11 @@ class MaterialResource extends JsonResource
             // 006-purchase-order-and-ops (US1) — sebelumnya materials tidak
             // punya konsep stok sama sekali; lihat research.md R4.
             'current_stock' => number_format((float) $this->current_stock, 3, '.', ''),
+            // 045 Stage 5 — saldo per outlet yang berlaku (hanya bila relasinya dimuat); `current_stock` tetap total.
+            'outlet_stock' => $this->when($this->relationLoaded('outletStock'), fn () => $this->outletStock->map(fn ($b) => [
+                'outlet_id' => $b->outlet_id, 'outlet_code' => $b->outlet?->code, 'outlet_name' => $b->outlet?->name,
+                'on_hand' => number_format((float) $b->current_stock, 3, '.', ''),
+            ])->values()),
             'vendor_price_count' => $this->vendor_prices_count ?? null,
             // vendor_prices hanya disertakan bila controller memuat relasinya
             // (show), konsisten dengan gaya relationLoaded() di kodebase ini.

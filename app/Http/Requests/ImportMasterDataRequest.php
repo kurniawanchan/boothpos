@@ -42,7 +42,7 @@ class ImportMasterDataRequest extends FormRequest
         // data tetap bisa mengimpornya secara massal, konsisten dengan
         // owner/admin/inventory hari ini.
         return $this->user()?->canAccessAnyMenu([
-            'artists', 'categories', 'products', 'stock', 'vendors', 'materials',
+            'outlets', 'categories', 'products', 'stock', 'vendors', 'materials',
             'roles', 'users',
         ]) ?? false;
     }
@@ -52,7 +52,7 @@ class ImportMasterDataRequest extends FormRequest
      * unauthorized." — satu-satunya pesan berbahasa Inggris di antara tiga
      * endpoint impor/ekspor yang bersebelahan (GET /exports/{entity} dan
      * GET /imports/master-data/template sudah membalas dalam bahasa
-     * Indonesia). Polanya meniru StoreArtistRequest::failedAuthorization().
+     * Indonesia). Polanya meniru StoreOutletRequest::failedAuthorization().
      *
      * CATATAN: StockAdjustmentRequest punya kekurangan yang sama dan
      * SENGAJA tidak ikut diubah di sini — itu di luar cakupan perubahan

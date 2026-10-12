@@ -2,7 +2,7 @@
 
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ActivityLogController;
-use App\Http\Controllers\Api\ArtistController;
+use App\Http\Controllers\Api\OutletController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BackupController;
 use App\Http\Controllers\Api\BusinessTypeController;
@@ -60,7 +60,9 @@ Route::prefix('v1')->group(function () {
     // SetLocaleFromUser HANYA di sini, bukan pada POST /auth/login di
     // atas — layar login selalu Bahasa Indonesia (FR-001), locale
     // per-akun baru berlaku setelah $request->user() resolve.
-    Route::middleware(['auth:sanctum', SetLocaleFromUser::class])->group(function () {
+    Route::middleware(['auth:sanctum', SetLocaleFromUser::class, \App\Http\Middleware\ResolveOutletContext::class])->group(function () {
+        // 045 Stage 2 — outlet yang boleh dilihat pengguna dan pilihan X-Outlet-Id (contracts/api-scope.md).
+        Route::get('/me/scope', [\App\Http\Controllers\Api\MeScopeController::class, 'show']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::put('/auth/language', [AuthController::class, 'updateLanguage']);
@@ -93,6 +95,8 @@ Route::prefix('v1')->group(function () {
         // pola yang sama seperti /products/{product}/image — attach
         // terpisah, bukan bagian dari apiResource, karena multipart.
         Route::apiResource('users', UserController::class);
+        // 045 Stage 2 — penugasan outlet pengguna (Owner/Admin tidak ditugaskan; lihat UserController::outlets).
+        Route::put('/users/{user}/outlets', [UserController::class, 'outlets']);
         Route::post('/users/{user}/photo', [UserController::class, 'uploadPhoto']);
 
         // Peran (Role) dan registry menu — 001-user-store-settings User
@@ -110,7 +114,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/reason-codes/{reasonCode}', [\App\Http\Controllers\Api\ReasonCodeController::class, 'update']);
         Route::apiResource('roles', RoleController::class);
 
-        Route::apiResource('artists', ArtistController::class);
+        Route::apiResource('outlets', OutletController::class);
         Route::apiResource('categories', CategoryController::class);
         Route::post('/categories/{category}/image', [CategoryController::class, 'uploadImage']);
         // 020-customer-data-import-export — rute statis DIDAFTARKAN
@@ -154,12 +158,24 @@ Route::prefix('v1')->group(function () {
         Route::post('/products/{product}/image', [ProductController::class, 'uploadImage']);
         Route::post('/products/{product}/variants', [ProductController::class, 'storeVariant']);
         Route::put('/variants/{variant}', [ProductController::class, 'updateVariant']);
+        // 045 Stage 3 — harga varian per outlet (lewat PriceService).
+        Route::get('/variants/{variant}/outlet-prices', [\App\Http\Controllers\Api\VariantOutletPriceController::class, 'index']);
+        Route::put('/variants/{variant}/outlet-prices/{outlet}', [\App\Http\Controllers\Api\VariantOutletPriceController::class, 'update']);
         Route::post('/variants/{variant}/image', [ProductController::class, 'uploadVariantImage']);
         Route::get('/variants/lookup', [ProductController::class, 'lookupVariants']);
 
         Route::get('/stock/movements', [StockController::class, 'movements']);
         Route::post('/stock/adjustments', [StockController::class, 'adjust']);
         Route::get('/stock/low', [StockController::class, 'lowStock']);
+        Route::get('/stock/balances', [StockController::class, 'balances']);
+        // 045 Stage 6 — transfer stok antar outlet. Rute tetap (discrepancies/in-transit) didaftarkan SEBELUM {id}.
+        Route::get('/stock/transfers/discrepancies', [\App\Http\Controllers\Api\StockTransferController::class, 'discrepancies']);
+        Route::get('/stock/in-transit', [\App\Http\Controllers\Api\StockTransferController::class, 'inTransit']);
+        Route::get('/stock/transfers', [\App\Http\Controllers\Api\StockTransferController::class, 'index']);
+        Route::post('/stock/transfers', [\App\Http\Controllers\Api\StockTransferController::class, 'store']);
+        Route::get('/stock/transfers/{id}', [\App\Http\Controllers\Api\StockTransferController::class, 'show'])->whereNumber('id');
+        Route::post('/stock/transfers/{id}/receive', [\App\Http\Controllers\Api\StockTransferController::class, 'receive'])->whereNumber('id');
+        Route::post('/stock/transfers/{id}/cancel', [\App\Http\Controllers\Api\StockTransferController::class, 'cancel'])->whereNumber('id');
 
         // Vendor/bahan baku/BOM — pasca-MVP, ditambahkan 2026-09-01 (lihat
         // catatan bertanggal di CLAUDE.md/README.md/PRD). Harga vendor per
@@ -179,6 +195,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/purchase-orders/{purchase_order}/payments', [PurchaseOrderController::class, 'storePayment']);
         Route::get('/purchase-orders/{purchase_order}/invoice', [PurchaseOrderController::class, 'invoice']);
         Route::post('/materials/{material}/vendor-prices', [MaterialController::class, 'storeVendorPrice']);
+        Route::post('/materials/{material}/adjustments', [MaterialController::class, 'adjustStock']);
         Route::put('/vendor-prices/{vendorPrice}', [MaterialController::class, 'updateVendorPrice']);
         Route::delete('/vendor-prices/{vendorPrice}', [MaterialController::class, 'destroyVendorPrice']);
 
@@ -349,7 +366,7 @@ Route::prefix('v1')->group(function () {
         // bertabrakan dengan apiResource /artists/{artist} dan supaya
         // seluruh permukaan berkas berpasangan simetris di satu tempat.
         Route::get('/exports/{entity}', [MasterDataExportController::class, 'show'])
-            ->where('entity', 'artists|categories|products|stock|vendors|materials|vendor_prices|bom|roles|users');
+            ->where('entity', 'outlets|categories|products|stock|vendors|materials|vendor_prices|bom|outlet_items|outlet_prices|roles|users');
         Route::get('/imports/master-data/template', [MasterDataImportController::class, 'template']);
         Route::post('/imports/master-data', [MasterDataImportController::class, 'store']);
 
@@ -363,15 +380,15 @@ Route::prefix('v1')->group(function () {
         Route::post('/reports/sales/transactions/export', [ReportController::class, 'exportSalesTransactions']);
         Route::get('/reports/profit', [ReportController::class, 'profit']);
         Route::get('/reports/purchases', [ReportController::class, 'purchases']);
-        Route::get('/reports/stock-by-artist', [ReportController::class, 'stockByArtist']);
-        Route::get('/reports/artist-profit', [ReportController::class, 'artistProfit']);
-        Route::get('/reports/artist-settlements', [ReportController::class, 'artistSettlements']);
-        Route::get('/reports/artist-settlements/{artist}/transactions', [ReportController::class, 'artistSettlementTransactions']);
+        Route::get('/reports/stock-by-outlet', [ReportController::class, 'stockByOutlet']);
+        Route::get('/reports/outlet-profit', [ReportController::class, 'outletProfit']);
+        Route::get('/reports/outlet-settlements', [ReportController::class, 'outletSettlements']);
+        Route::get('/reports/outlet-settlements/{outlet}/transactions', [ReportController::class, 'outletSettlementTransactions']);
         // 010-split-payment-preorder-reports (US6) — laporan baru khusus
         // pre-order (status × kelengkapan pembayaran), gated sama seperti
         // laporan lain di atas (canAccessMenu('reports') di dalam method).
         Route::get('/reports/preorders', [ReportController::class, 'preorders']);
         Route::get('/reports/{report}/export', [ReportController::class, 'export'])
-            ->where('report', 'sales|profit|artist-settlements|artist-profit|purchases|stock-by-artist|preorder');
+            ->where('report', 'sales|profit|outlet-settlements|outlet-profit|purchases|stock-by-outlet|preorder');
     });
 });

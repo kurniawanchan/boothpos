@@ -142,7 +142,7 @@ const bankChannels = computed(() => props.invoice.payment_channels?.filter((c) =
         <tr v-for="item in invoice.items" :key="item.id" class="border-b border-dashed border-line-2 last:border-b-0">
           <td class="py-2.5 pr-2">
             <span class="font-semibold leading-snug">{{ item.name_snapshot }}</span>
-            <span v-if="item.artist_name" class="block text-[11px] text-muted-3">{{ item.artist_name }}</span>
+            <span v-if="item.home_outlet_name" class="block text-[11px] text-muted-3">{{ item.home_outlet_name }}</span>
           </td>
           <td class="py-2.5 pr-2 text-right text-brand-active font-bold">{{ item.qty }}</td>
           <td class="py-2.5 pr-2 text-right text-muted-3">{{ formatIDR(item.sell_price) }}</td>

@@ -7,14 +7,15 @@ import DashboardView from '../../resources/js/views/DashboardView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { useSettingsStore } from '../../resources/js/stores/settings';
 import { useToastStore } from '../../resources/js/stores/toast';
+import { useOutletStore } from '../../resources/js/stores/outlet';
 import { listEvents } from '../../resources/js/api/events';
-import { salesReport, profitReport, artistSettlements } from '../../resources/js/api/reports';
+import { salesReport, profitReport, outletSettlements } from '../../resources/js/api/reports';
 import { lowStock } from '../../resources/js/api/stock';
 import { listPreorders } from '../../resources/js/api/preorders';
 import { summary, attention, orders, exportDashboard } from '../../resources/js/api/dashboard';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
-vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), artistSettlements: vi.fn() }));
+vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), outletSettlements: vi.fn() }));
 vi.mock('../../resources/js/api/stock', () => ({ lowStock: vi.fn(), listMovements: vi.fn() }));
 vi.mock('../../resources/js/api/preorders', () => ({ listPreorders: vi.fn() }));
 vi.mock('../../resources/js/api/dashboard', () => ({ summary: vi.fn(), attention: vi.fn(), orders: vi.fn(), downloadOrdersCsv: vi.fn(), exportDashboard: vi.fn() }));
@@ -78,7 +79,7 @@ describe('DashboardView — shell: period, regions, export (042 T025)', () => {
     lowStock.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [], meta: { total: 0 } });
     profitReport.mockResolvedValue({ gross_profit: '0.00' });
-    artistSettlements.mockResolvedValue({ data: [] });
+    outletSettlements.mockResolvedValue({ data: [] });
     exportDashboard.mockResolvedValue();
     attention.mockResolvedValue(ATTENTION);
     orders.mockResolvedValue(ORDERS);
@@ -99,6 +100,18 @@ describe('DashboardView — shell: period, regions, export (042 T025)', () => {
       // 12:30 WIB (+07:00) == 14:30 WITA/Asia/Makassar (+08:00 -> 13.30). Mengganti zona toko menggeser jamnya.
       useSettingsStore(pinia).storeTimezone = 'Asia/Jayapura'; // +09:00
       await screen.findByText('Diperbarui 14.30');
+    });
+
+    it('045: names the outlet scope only when there are several outlets', async () => {
+      const { pinia } = await renderDashboard();
+      await screen.findByTestId('business-date');
+      expect(screen.queryByTestId('dashboard-scope')).toBeNull();
+
+      const outlets = useOutletStore(pinia);
+      Object.assign(outlets, { outlets: [{ id: 1, code: 'WJ1', name: 'Warkop 1' }, { id: 2, code: 'WJ2', name: 'Warkop 2' }], multi: true, selected: null });
+      expect(await screen.findByTestId('dashboard-scope')).toHaveTextContent('Semua outlet · 2');
+      outlets.selected = 2;
+      await waitFor(() => expect(screen.getByTestId('dashboard-scope')).toHaveTextContent('Outlet: Warkop 2'));
     });
 
     it('has an Export button next to the period control', async () => {

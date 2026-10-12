@@ -57,8 +57,10 @@ export function uploadVariantImage(id, file) {
  * callers like PreordersView.vue's "Add item" field can show a list on
  * open, matching CustomerSearchDropdown.vue's UX.
  */
-export function lookupVariants(q, limit = 20) {
-  return client.get('/variants/lookup', { params: { q, limit } }).then((r) => r.data);
+export function lookupVariants(q, limit = 20, { pos = false, stockOutlet = null } = {}) {
+  // 045 Stage 4: `pos` = layar pemesanan — menu/harga menurut outlet SHIFT pengguna.
+  // 045 Stage 5: `stockOutlet` = layar Stok — hasil membawa `outlet_stock` (saldo di outlet itu).
+  return client.get('/variants/lookup', { params: { q, limit, ...(pos ? { pos: 1 } : {}), ...(stockOutlet ? { stock_outlet: stockOutlet } : {}) } }).then((r) => r.data);
 }
 
 // --- 043-products-page-redesign: tindakan item (kontrak api-products.md) ---------------------------------------
@@ -71,8 +73,11 @@ export function soldOut(id, payload) {
 }
 
 /** DELETE /products/{id}/sold-out — batalkan 86 aktif. */
-export function undoSoldOut(id) {
-  return client.delete(`/products/${id}/sold-out`).then((r) => r.data);
+export function undoSoldOut(id, outletIds = null) {
+  const url = `/products/${id}/sold-out`;
+  const request = outletIds?.length ? client.delete(url, { data: { outlet_ids: outletIds } }) : client.delete(url);
+
+  return request.then((r) => r.data);
 }
 
 /** POST /products/{id}/discontinue — { reason_code_id, note? }; bila rilis aktif, mengembalikan perubahan tertunda. */
@@ -97,4 +102,9 @@ export function saveVariants(id, payload) {
 /** PUT /products/{id}/modifier-links — { links: [{ group_id, is_required, min_select, max_select, display_order }] }. */
 export function saveModifierLinks(id, links) {
   return client.put(`/products/${id}/modifier-links`, { links }).then((r) => r.data);
+}
+
+/** 045 Stage 3 — harga varian di satu outlet; `price: null` menghapus harga khusus (kembali mengikuti dasar). */
+export function setVariantOutletPrice(variantId, outletId, price) {
+  return client.put(`/variants/${variantId}/outlet-prices/${outletId}`, { price }).then((r) => r.data);
 }

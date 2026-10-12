@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { listPreorders, getPreorder, deletePreorder, getPreorderSummary, duplicatePreorders } from '../api/preorders';
-import { listArtists } from '../api/artists';
+import { listOutlets } from '../api/outlets';
 import { useToastStore } from '../stores/toast';
 import { useAuthStore } from '../stores/auth';
 import PageHeader from '../components/page/PageHeader.vue';
@@ -69,14 +69,14 @@ function applyFilter(patch) {
   loadSummary();
 }
 
-// 013-preorder-list-filters-receipt (US1, T008) — filter penjual, pola
-// sama seperti seller filter di ReportsView.vue.
-const artists = ref([]);
+// 013-preorder-list-filters-receipt (US1, T008) — filter outlet, pola
+// sama seperti filter outlet di ReportsView.vue.
+const outlets = ref([]);
 
 onMounted(load);
 onMounted(loadSummary);
 onMounted(async () => {
-  artists.value = (await listArtists({ per_page: 100, is_active: true })).data;
+  outlets.value = (await listOutlets({ per_page: 100, is_active: true })).data;
 });
 
 // 009-ui-ux-refinements US5 (T043) — CustomerTransactionsModal.vue
@@ -100,36 +100,36 @@ function onSearch(value) {
 }
 
 // BUG YANG DITEMUKAN & DIPERBAIKI — ketiga filter status/fulfillment/
-// penjual sebelumnya memakai BaseSelect TANPA `v-model`/`:model-value`
+// outlet sebelumnya memakai BaseSelect TANPA `v-model`/`:model-value`
 // (hanya mendengarkan @update:model-value), jadi label yang tertampil di
 // tombolnya SELALU menampilkan placeholder ("All statuses"/dst.) meski
 // filter sudah benar-benar aktif di baliknya — ditemukan lewat verifikasi
 // browser sungguhan. Diganti ke BaseMultiSelect (pola yang sama seperti
-// artist_id[]/category_id[] di ProductsView, 005-ux-enhancements-dashboard):
+// home_outlet_id[]/category_id[] di ProductsView, 005-ux-enhancements-dashboard):
 // array kosong berarti "Semua", dan ketiga filter ini + pencarian tetap
 // DI-AND-kan satu sama lain di backend (PreorderController::applyFilters()),
 // sementara beberapa nilai dalam satu filter yang sama di-OR-kan (whereIn).
 const statusFilter = ref([]);
 const fulfillmentFilter = ref([]);
-const artistFilter = ref([]);
+const outletFilter = ref([]);
 const dispatchFilter = ref([]);
 const statusOptions = computed(() => Object.entries(STATUS_LABEL.value).map(([value, label]) => ({ value, label })));
 const dispatchOptions = computed(() => Object.entries(DISPATCH_LABEL.value).map(([value, label]) => ({ value, label })));
 const fulfillmentOptions = computed(() => Object.entries(FULFILLMENT_LABEL.value).map(([value, label]) => ({ value, label })));
-const sellerOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+const outletOptions = computed(() => outlets.value.map((a) => ({ value: a.id, label: a.name })));
 
 function applyPreorderFilters() {
   applyFilter({
     status: statusFilter.value.length ? statusFilter.value : undefined,
     fulfillment: fulfillmentFilter.value.length ? fulfillmentFilter.value : undefined,
-    artist_id: artistFilter.value.length ? artistFilter.value : undefined,
+    home_outlet_id: outletFilter.value.length ? outletFilter.value : undefined,
     dispatch_status: dispatchFilter.value.length ? dispatchFilter.value : undefined,
   });
 }
 
 const filtersActive = computed(() => !!customerSearch.value
   || statusFilter.value.length > 0 || fulfillmentFilter.value.length > 0
-  || artistFilter.value.length > 0 || dispatchFilter.value.length > 0);
+  || outletFilter.value.length > 0 || dispatchFilter.value.length > 0);
 
 // 041 — "Atur ulang filter" mengosongkan pencarian dan keempat filter sekaligus dalam SATU pemuatan
 // (urutan kolom tidak termasuk filter, jadi tidak disentuh).
@@ -137,9 +137,9 @@ function resetFilters() {
   customerSearch.value = '';
   statusFilter.value = [];
   fulfillmentFilter.value = [];
-  artistFilter.value = [];
+  outletFilter.value = [];
   dispatchFilter.value = [];
-  applyFilter({ search: undefined, status: undefined, fulfillment: undefined, artist_id: undefined, dispatch_status: undefined });
+  applyFilter({ search: undefined, status: undefined, fulfillment: undefined, home_outlet_id: undefined, dispatch_status: undefined });
 }
 
 // Column sort state — mirrored into the same `sort_by`/`sort_dir` query
@@ -391,9 +391,9 @@ const { exporting, importFileInput, doExportPreorders, doDownloadImportTemplate,
           @update:model-value="applyPreorderFilters"
         />
         <BaseMultiSelect
-          v-model="artistFilter"
+          v-model="outletFilter"
           class="w-48"
-          :options="sellerOptions"
+          :options="outletOptions"
           :all-label="t('preorders.all_sellers')"
           @update:model-value="applyPreorderFilters"
         />

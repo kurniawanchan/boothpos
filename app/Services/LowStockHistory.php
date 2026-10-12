@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\ProductVariant;
+use App\Models\VariantOutletStock;
 use App\Support\ModeGate;
+use App\Support\OutletFilter;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -15,19 +17,31 @@ use Illuminate\Support\Facades\DB;
  * stok lampau dibaca dari buku besar `stock_movements.stock_after` (movement terakhir sebelum
  * instan itu) — tanpa tabel riwayat baru dan tanpa penjadwal (research.md D8).
  *
- * Pembatasan yang disengaja: varian tanpa movement sebelum instan itu dianggap BELUM ada (tidak
- * dihitung). Stok per outlet belum ada (fase 3), jadi angkanya selalu seluruh organisasi.
+ * 045 Stage 5 — stok adalah saldo PER OUTLET: satu "item menipis" = satu pasangan (varian, outlet) yang punya saldo,
+ * dibatasi pada outlet yang berlaku (OutletFilter). Satu outlet = angka yang sama seperti sebelumnya.
+ *
+ * Pembatasan yang disengaja: pasangan tanpa movement sebelum instan itu dianggap BELUM ada (tidak dihitung).
  */
 class LowStockHistory
 {
     /** Persis hasil `/stock/low`. */
     public static function current(): int
     {
-        return ProductVariant::query()
-            ->whereNotNull('low_stock_alert')
-            ->whereColumn('current_stock', '<=', 'low_stock_alert')
-            ->where('is_active', 1)
-            ->count();
+        return self::currentQuery()->count();
+    }
+
+    /** Pasangan (varian aktif ber-ambang, outlet) yang saldonya ≤ ambang — satu definisi untuk /stock/low dan dashboard. */
+    public static function currentQuery()
+    {
+        $q = VariantOutletStock::query()
+            ->join('product_variants', 'product_variants.id', '=', 'variant_outlet_stock.variant_id')
+            ->whereNull('product_variants.deleted_at')
+            ->where('product_variants.data_mode', ModeGate::current())
+            ->whereNotNull('product_variants.low_stock_alert')
+            ->whereColumn('variant_outlet_stock.current_stock', '<=', 'product_variants.low_stock_alert')
+            ->where('product_variants.is_active', 1);
+
+        return OutletFilter::apply($q, 'variant_outlet_stock.outlet_id');
     }
 
     /**
@@ -59,21 +73,23 @@ class LowStockHistory
         DB::table('stock_movements')
             ->where('data_mode', $mode)
             ->whereIn('variant_id', $thresholds->keys())
+            ->when(true, fn ($q) => OutletFilter::apply($q, 'outlet_id'))
             ->where('created_at', '<', $earliest)
-            ->selectRaw('variant_id, MAX(id) as last_id')
-            ->groupBy('variant_id')
+            ->selectRaw('variant_id, outlet_id, MAX(id) as last_id')
+            ->groupBy('variant_id', 'outlet_id')
             ->get()
             ->each(function ($row) use (&$baseline) {
-                $baseline[$row->variant_id] = (int) DB::table('stock_movements')->where('id', $row->last_id)->value('stock_after');
+                $baseline[$row->variant_id.':'.$row->outlet_id] = (int) DB::table('stock_movements')->where('id', $row->last_id)->value('stock_after');
             });
 
         $movements = DB::table('stock_movements')
             ->where('data_mode', $mode)
             ->whereIn('variant_id', $thresholds->keys())
+            ->when(true, fn ($q) => OutletFilter::apply($q, 'outlet_id'))
             ->where('created_at', '>=', $earliest)
             ->where('created_at', '<=', $latest)
             ->orderBy('created_at')->orderBy('id')
-            ->get(['variant_id', 'stock_after', 'created_at']);
+            ->get(['variant_id', 'outlet_id', 'stock_after', 'created_at']);
 
         $level = $baseline;           // variant_id => stok terakhir yang diketahui
         $result = array_fill(0, count($instants), 0);
@@ -83,12 +99,12 @@ class LowStockHistory
         foreach ($sorted as $point) {
             $limit = $point['t']->format('Y-m-d H:i:s');
             while ($cursor < $count && (string) $movements[$cursor]->created_at <= $limit) {
-                $level[$movements[$cursor]->variant_id] = (int) $movements[$cursor]->stock_after;
+                $level[$movements[$cursor]->variant_id.':'.$movements[$cursor]->outlet_id] = (int) $movements[$cursor]->stock_after;
                 $cursor++;
             }
             $low = 0;
-            foreach ($level as $variantId => $stock) {
-                if ($stock <= (int) $thresholds[$variantId]) {
+            foreach ($level as $pair => $stock) {
+                if ($stock <= (int) $thresholds[(int) explode(':', (string) $pair)[0]]) {
                     $low++;
                 }
             }

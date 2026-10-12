@@ -30,7 +30,7 @@ class DashboardService
     public function summary(string $period): array
     {
         $period = in_array($period, self::PERIODS, true) ? $period : 'today';
-        $key = implode(':', ['dashboard.summary', ModeGate::current(), $period, BusinessDay::today(), BusinessDay::timezone(), BusinessDay::cutoff()]);
+        $key = implode(':', ['dashboard.summary', ModeGate::current(), $period, BusinessDay::today(), BusinessDay::timezone(), BusinessDay::cutoff(), 'outlets='.\App\Support\OutletFilter::cacheKey()]);
 
         return Cache::remember($key, self::CACHE_SECONDS, fn () => $this->compute($period));
     }
@@ -298,7 +298,7 @@ class DashboardService
 
     private function lowStock(int $cur, int $cmp, array $series, array $comparisonSeries): array
     {
-        return ['value' => $cur, 'comparison' => $cmp, 'change_abs' => $cur - $cmp, 'scope' => 'organisation',
+        return ['value' => $cur, 'comparison' => $cmp, 'change_abs' => $cur - $cmp, 'scope' => 'outlet',
             'series' => $series, 'comparison_series' => $comparisonSeries];
     }
 }

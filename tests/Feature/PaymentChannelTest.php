@@ -213,6 +213,7 @@ class PaymentChannelTest extends TestCase
         \Illuminate\Support\Facades\DB::table('payments')->insert([
             'order_id' => null,
             'preorder_id' => $preorder->id,
+            'outlet_id' => $preorder->outlet_id,
             'channel_id' => $channel->id,
             'method' => 'bank_transfer',
             'purpose' => 'full',

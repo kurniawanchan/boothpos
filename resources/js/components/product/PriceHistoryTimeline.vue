@@ -22,7 +22,10 @@ const { t } = useI18n();
 
 function title(e) {
   if (e.source === 'created') return t('products.history_created');
-  const price = t('products.history_price', { price: formatIDR(e.new_price) });
+  // 045: perubahan harga OUTLET menyebut outletnya; tanpa outlet_code = harga dasar.
+  const price = e.outlet_code
+    ? t('products.history_outlet_price', { outlet: e.outlet_code, price: formatIDR(e.new_price) })
+    : t('products.history_price', { price: formatIDR(e.new_price) });
   const head = props.multiVariant && e.variant ? `${e.variant} · ${price}` : price;
   return e.old_price !== null && e.old_price !== undefined ? `${head} (${t('products.history_price_prev', { price: formatIDR(e.old_price) })})` : head;
 }

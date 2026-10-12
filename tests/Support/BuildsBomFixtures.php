@@ -2,7 +2,7 @@
 
 namespace Tests\Support;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Material;
 use App\Models\Product;
@@ -20,9 +20,9 @@ use App\Support\ModeGate;
  */
 trait BuildsBomFixtures
 {
-    private function variantFor(Artist $artist, ?string $sku = null): ProductVariant
+    private function variantFor(Outlet $artist, ?string $sku = null): ProductVariant
     {
-        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => Category::factory()->create()->id]);
+        $product = Product::factory()->create(['home_outlet_id' => $artist->id, 'category_id' => Category::factory()->create()->id]);
 
         return $product->variants()->create([
             'sku' => $sku ?? 'VB'.fake()->unique()->numerify('########'),
@@ -35,17 +35,17 @@ trait BuildsBomFixtures
      *
      * @return PurchaseOrderItem[]
      */
-    private function po(?Artist $artist, string $status, array $lines, string $vendorName = 'Vendor X', ?string $orderedAt = null, ?string $number = null): array
+    private function po(?Outlet $artist, string $status, array $lines, string $vendorName = 'Vendor X', ?string $orderedAt = null, ?string $number = null): array
     {
         $po = PurchaseOrder::factory()->create(array_filter([
-            'artist_id' => $artist?->id,
+            'outlet_id' => $artist?->id,
             'status' => $status,
             'vendor_id' => Vendor::firstOrCreate(['name' => $vendorName], ['code' => strtoupper(substr(md5($vendorName.ModeGate::current()), 0, 6))])->id,
             'ordered_at' => $orderedAt,
             'po_number' => $number,
         ], fn ($v) => $v !== null));
         if ($artist === null) {
-            $po->update(['artist_id' => null]);
+            $po->update(['outlet_id' => null]);
         }
 
         return collect($lines)->map(function (array $l) use ($po) {

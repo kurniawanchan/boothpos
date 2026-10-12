@@ -28,9 +28,11 @@ class OrderResource extends JsonResource
             // null (kunci tetap ada) untuk pembeli walk-in; hilang bila relasi tak dimuat.
             'customer' => $this->whenLoaded('customer', fn ($c) => ['id' => $c->id, 'name' => $c->name, 'phone' => $c->phone, 'email' => $c->email]),
             'cashier' => $this->whenLoaded('cashier', fn ($u) => ['id' => $u->id, 'name' => $u->name]),
+            // 045 Stage 4 — outlet tempat penjualan (outlet shift); hanya bila relasinya dimuat (relationLoaded trap).
+            'outlet' => $this->whenLoaded('outlet', fn ($o) => ['id' => $o->id, 'code' => $o->code, 'name' => $o->name]),
             'event' => $this->whenLoaded('event', fn ($e) => ['id' => $e->id, 'name' => $e->name]),
             'items' => $this->whenLoaded('items', fn () => $this->items->map(fn ($i) => [
-                'id' => $i->id, 'variant_id' => $i->variant_id, 'artist_id' => $i->artist_id,
+                'id' => $i->id, 'variant_id' => $i->variant_id, 'home_outlet_id' => $i->home_outlet_id,
                 // product_id hanya terisi bila relasi variant dimuat (lihat
                 // OrderController::show()) — dibutuhkan popup "Produk Terjual"
                 // di Sales (009-ui-ux-refinements US2) untuk membuka
@@ -46,7 +48,7 @@ class OrderResource extends JsonResource
                 // Field tampilan — semuanya null-safe: varian/produk bisa saja sudah
                 // dihapus/dipindah kategori sejak transaksi terjadi. cost_price
                 // SENGAJA tidak disertakan (halaman ini terbuka untuk kasir).
-                'artist_name' => $i->relationLoaded('artist') ? $i->artist?->name : null,
+                'home_outlet_name' => $i->relationLoaded('homeOutlet') ? $i->homeOutlet?->name : null,
                 'category_name' => $i->relationLoaded('variant') ? $i->variant?->product?->category?->name : null,
                 'variant_name' => $i->relationLoaded('variant') ? $i->variant?->variant_name : null,
                 'image_url' => $i->relationLoaded('variant') ? $i->variant?->image_url : null,

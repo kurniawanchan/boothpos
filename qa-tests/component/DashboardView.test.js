@@ -5,13 +5,13 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import DashboardView from '../../resources/js/views/DashboardView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listEvents } from '../../resources/js/api/events';
-import { salesReport, profitReport, artistSettlements } from '../../resources/js/api/reports';
+import { salesReport, profitReport, outletSettlements } from '../../resources/js/api/reports';
 import { lowStock } from '../../resources/js/api/stock';
 import { listPreorders } from '../../resources/js/api/preorders';
 import { summary, attention, orders } from '../../resources/js/api/dashboard';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
-vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), artistSettlements: vi.fn() }));
+vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), outletSettlements: vi.fn() }));
 vi.mock('../../resources/js/api/stock', () => ({ lowStock: vi.fn(), listMovements: vi.fn() }));
 vi.mock('../../resources/js/api/preorders', () => ({ listPreorders: vi.fn() }));
 vi.mock('../../resources/js/api/dashboard', () => ({ summary: vi.fn(), attention: vi.fn(), orders: vi.fn(), downloadOrdersCsv: vi.fn(), exportDashboard: vi.fn() }));
@@ -49,7 +49,7 @@ describe('DashboardView — everything the old Dashboard showed is still reachab
     lowStock.mockResolvedValue({ data: [] });
     listPreorders.mockResolvedValue({ data: [], meta: { total: 0 } });
     profitReport.mockResolvedValue({ gross_profit: '0.00' });
-    artistSettlements.mockResolvedValue({ data: [] });
+    outletSettlements.mockResolvedValue({ data: [] });
   });
 
   it('shows only the shortcuts the current role has menu access to', async () => {
@@ -79,18 +79,18 @@ describe('DashboardView — everything the old Dashboard showed is still reachab
     await renderDashboard(['dashboard']);
     expect(await screen.findByRole('heading', { level: 2, name: 'Per event' })).toBeInTheDocument();
     expect(await screen.findByText('Penjualan per kategori')).toBeInTheDocument();
-    expect(screen.getByText('Penjualan per penjual')).toBeInTheDocument();
+    expect(screen.getByText('Penjualan per outlet')).toBeInTheDocument();
     expect(screen.getByText('Penjualan per event')).toBeInTheDocument();
     expect(screen.getAllByText(/lihat laporan lengkap/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/lihat pergerakan stok/i)).toBeInTheDocument();
     expect(screen.getByText(/lihat semua pre-order/i)).toBeInTheDocument();
   });
 
-  it('keeps the reports-only panels behind the reports menu (profit KPI, customer statistics, per-seller)', async () => {
+  it('keeps the reports-only panels behind the reports menu (profit KPI, customer statistics, per-outlet)', async () => {
     await renderDashboard(['dashboard']);
     await screen.findByText('Penjualan per kategori');
     expect(profitReport).not.toHaveBeenCalled();
     expect(screen.queryByText('Statistik per Pelanggan')).not.toBeInTheDocument();
-    expect(screen.queryByText('Hasil per penjual')).not.toBeInTheDocument();
+    expect(screen.queryByText('Hasil per outlet')).not.toBeInTheDocument();
   });
 });

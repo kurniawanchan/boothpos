@@ -34,8 +34,8 @@ describe('TabView — menu availability (043)', () => {
     getTab.mockResolvedValue(TAB);
     listProducts.mockResolvedValue({
       data: [
-        { id: 1, name: 'Es Kopi', category_id: 1, artist_name: 'R', image_url: null, variants: [variant(5)] },
-        { id: 2, name: 'Nasi Goreng', category_id: 1, artist_name: 'R', image_url: null, variants: [variant(6)] },
+        { id: 1, name: 'Es Kopi', category_id: 1, home_outlet_name: 'R', image_url: null, variants: [variant(5)] },
+        { id: 2, name: 'Nasi Goreng', category_id: 1, home_outlet_name: 'R', image_url: null, variants: [variant(6)] },
       ],
     });
     pollAvailability.mockResolvedValue({ etag: 'e1', menu_version: 1, sold_out: [{ product_id: 2, variant_ids: [6], reason_code: 'out_of_stock', expires_at: null }], discontinued_ids: [] });

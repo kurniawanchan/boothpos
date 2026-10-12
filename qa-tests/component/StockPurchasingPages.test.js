@@ -9,7 +9,7 @@ import { useAuthStore } from '../../resources/js/stores/auth';
 import { listMovements } from '../../resources/js/api/stock';
 import { listVendors } from '../../resources/js/api/vendors';
 import { listMaterials } from '../../resources/js/api/materials';
-import { listArtists } from '../../resources/js/api/artists';
+import { listOutlets } from '../../resources/js/api/outlets';
 import { listPurchaseOrders } from '../../resources/js/api/purchaseOrders';
 
 // 041 (US2, kelompok stok & pembelian) — struktur halaman baru: PageHeader, FilterBar/penghitung "N data",
@@ -21,7 +21,7 @@ vi.mock('../../resources/js/api/vendors', () => ({ listVendors: vi.fn(), createV
 vi.mock('../../resources/js/api/materials', () => ({
   listMaterials: vi.fn(), createMaterial: vi.fn(), updateMaterial: vi.fn(), deleteMaterial: vi.fn(), listBomLines: vi.fn(),
 }));
-vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
+vi.mock('../../resources/js/api/outlets', () => ({ listOutlets: vi.fn() }));
 vi.mock('../../resources/js/api/purchaseOrders', () => ({
   listPurchaseOrders: vi.fn(), getPurchaseOrder: vi.fn(), createPurchaseOrder: vi.fn(), updatePurchaseOrder: vi.fn(),
   deletePurchaseOrder: vi.fn(), updatePurchaseOrderStatus: vi.fn(), recordPurchaseOrderPayment: vi.fn(), getPurchaseOrderInvoice: vi.fn(),
@@ -43,7 +43,7 @@ async function userEv() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Seller A' }] });
+  listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A' }] });
   listVendors.mockResolvedValue({ data: [], meta: meta(0) });
   listMaterials.mockResolvedValue({ data: [], meta: meta(0) });
 });
@@ -149,7 +149,7 @@ describe.each([
 });
 
 describe('PurchaseOrdersView — struktur halaman (041)', () => {
-  const PO = (id, status, extra = {}) => ({ id, po_number: `PO-${id}`, vendor_name: 'Vendor X', artist_name: 'Seller A', status, total_amount: '1000.00', ...extra });
+  const PO = (id, status, extra = {}) => ({ id, po_number: `PO-${id}`, vendor_name: 'Vendor X', outlet_name: 'Outlet A', status, total_amount: '1000.00', ...extra });
 
   beforeEach(() => {
     listPurchaseOrders.mockResolvedValue({ data: [PO(1, 'draft'), PO(2, 'ordered')], meta: meta(9) });
@@ -183,22 +183,22 @@ describe('PurchaseOrdersView — struktur halaman (041)', () => {
     await waitFor(() => expect(listPurchaseOrders.mock.lastCall[0].status).toBeUndefined());
   });
 
-  it('filter seller mengirim artist_id, menyembunyikan chip jumlah tab, dan "Atur ulang" melepasnya (status tetap)', async () => {
+  it('filter outlet mengirim outlet_id, menyembunyikan chip jumlah tab, dan "Atur ulang" melepasnya (status tetap)', async () => {
     const user = await userEv();
     mount(PurchaseOrdersView, ['purchase_orders']);
     await screen.findByText('PO-1');
-    await waitFor(() => expect(listArtists).toHaveBeenCalled());
+    await waitFor(() => expect(listOutlets).toHaveBeenCalled());
     await user.click(screen.getByRole('tab', { name: 'Draft' }));
     await waitFor(() => expect(listPurchaseOrders).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'draft' })));
 
     await user.click(screen.getByRole('combobox'));
-    await user.click(await screen.findByRole('option', { name: 'Seller A' }));
-    await waitFor(() => expect(listPurchaseOrders).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'draft', artist_id: 1 })));
-    // jumlah tab menggambarkan seluruh bagian, jadi tak ditampilkan saat daftar difilter seller
+    await user.click(await screen.findByRole('option', { name: 'Outlet A' }));
+    await waitFor(() => expect(listPurchaseOrders).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'draft', outlet_id: 1 })));
+    // jumlah tab menggambarkan seluruh bagian, jadi tak ditampilkan saat daftar difilter outlet
     expect(screen.getByRole('tab', { name: 'Draft' }).textContent.trim()).toBe('Draft');
 
     await user.click(screen.getByRole('button', { name: /atur ulang filter/i }));
-    await waitFor(() => expect(listPurchaseOrders.mock.lastCall[0].artist_id).toBeUndefined());
+    await waitFor(() => expect(listPurchaseOrders.mock.lastCall[0].outlet_id).toBeUndefined());
     expect(listPurchaseOrders.mock.lastCall[0].status).toBe('draft');
   });
 

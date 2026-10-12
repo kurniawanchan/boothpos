@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Artist;
+use App\Models\Outlet;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
@@ -17,21 +17,21 @@ class VariantTrackStockTest extends TestCase
 {
     use RefreshDatabase;
 
-    private Artist $artist;
+    private Outlet $artist;
     private Category $category;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->actingAs(User::factory()->create(['role' => 'inventory']), 'sanctum');
-        $this->artist = Artist::factory()->create();
+        $this->homeOutlet = Outlet::factory()->create();
         $this->category = Category::factory()->create();
     }
 
     private function createProduct(array $variant): \Illuminate\Testing\TestResponse
     {
         return $this->postJson('/api/v1/products', [
-            'artist_id' => $this->artist->id, 'category_id' => $this->category->id, 'name' => 'Nasi Goreng',
+            'home_outlet_id' => $this->homeOutlet->id, 'category_id' => $this->category->id, 'name' => 'Nasi Goreng',
             'variants' => [array_merge(['variant_name' => 'Standard', 'sell_price' => 30000], $variant)],
         ]);
     }

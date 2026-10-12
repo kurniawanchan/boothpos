@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { getProduct, priceHistory, undoSoldOut, reactivateProduct } from '../api/products';
-import { listArtists } from '../api/artists';
+import { listOutlets } from '../api/outlets';
 import { listCategories } from '../api/categories';
 import { registerPageHeader } from '../composables/usePageHeader';
 import { useToastStore } from '../stores/toast';
@@ -136,7 +136,7 @@ function goBack() {
 
 // --- ubah item (drawer yang sudah ada) ---------------------------------------------------------------------------
 const drawer = ref(null);
-const artists = ref([]);
+const outlets = ref([]);
 const categories = ref([]);
 let referencesLoaded = false;
 
@@ -144,7 +144,7 @@ async function openEdit() {
   if (!referencesLoaded) {
     referencesLoaded = true;
     try {
-      artists.value = (await listArtists({ per_page: 100 })).data;
+      outlets.value = (await listOutlets({ per_page: 100 })).data;
       categories.value = (await listCategories({ per_page: 100 })).data;
     } catch {
       referencesLoaded = false; // coba lagi pada pembukaan berikutnya; drawer tetap terbuka dengan daftar yang ada
@@ -191,7 +191,10 @@ async function afterSoldOut() {
 async function performUndo() {
   busy.value = true;
   try {
-    await undoSoldOut(productId.value);
+    // 045: per outlet — hanya tanda 86 outlet-outlet yang sedang habis yang dibatalkan (tanda global: tanpa outlet_ids).
+    const marked = (product.value?.availability ?? []).filter((a) => a.state === 'sold_out' && a.outlet_id != null).map((a) => a.outlet_id);
+    if (marked.length) await undoSoldOut(productId.value, marked);
+    else await undoSoldOut(productId.value);
     showUndo.value = false;
     toast.success(t('products.undo_done', { name: product.value.name }));
     await loadCore();
@@ -291,7 +294,7 @@ async function onConflict() {
       </header>
 
       <ItemFacts :product="product" />
-      <VariantsSection :variants="product.variants ?? []" :can-edit="!!can.edit" @manage="showVariants = true" />
+      <VariantsSection :variants="product.variants ?? []" :can-edit="!!can.edit" :outlet-prices="product.outlet_prices ?? null" :release-on="!!product.release" @manage="showVariants = true" @changed="loadCore" />
       <ModifierSection :links="product.modifier_links ?? []" :can-edit="!!can.edit" @manage="showModifiers = true" />
       <AvailabilitySection :availability="product.availability ?? []" />
       <RecipeSection :product-id="product.id" :product-name="product.name" :recipe="product.recipe ?? null" :variants="product.variants ?? []" @changed="loadCore" />
@@ -329,6 +332,6 @@ async function onConflict() {
 
     <VariantsDrawer :open="showVariants" :product="product" @close="showVariants = false" @saved="afterVariantsSaved" />
     <ModifierLinksDrawer :open="showModifiers" :product="product" :links="product?.modifier_links ?? []" @close="showModifiers = false" @saved="afterModifiersSaved" />
-    <ProductFormDrawer ref="drawer" :artists="artists" :categories="categories" @saved="reloadAll" />
+    <ProductFormDrawer ref="drawer" :outlets="outlets" :categories="categories" @saved="reloadAll" />
   </div>
 </template>

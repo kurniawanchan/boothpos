@@ -43,7 +43,7 @@ class InvoiceService
     /**
      * 019-billing-system (research.md R3') — mirip persis
      * PreorderService::generateNumber(): format `INV-{YYYYMM}-{seq}`,
-     * dicek lintas DEMO/LIVE via withoutGlobalScope(DataModeScope::class)
+     * dicek lintas DEMO/LIVE via withoutGlobalScopes()
      * karena `invoice_number` punya UNIQUE constraint database-wide
      * sementara Invoice sendiri tetap ter-scope HasDataMode. Public
      * (bukan private) karena InvoiceExportImportService::import() (Phase 6)
@@ -65,7 +65,7 @@ class InvoiceService
     public function generateNumber(): string
     {
         $month = now()->format('Ym');
-        $countThisMonth = Invoice::withoutGlobalScope(DataModeScope::class)
+        $countThisMonth = Invoice::withoutGlobalScopes()
             ->withTrashed()
             ->where('invoice_number', 'like', "INV-{$month}-%")
             ->count();

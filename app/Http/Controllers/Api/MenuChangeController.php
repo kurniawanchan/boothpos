@@ -24,7 +24,7 @@ class MenuChangeController extends Controller
 
         return response()->json(['data' => $rows->map(fn (MenuChange $c) => [
             'id' => $c->id, 'kind' => $c->kind, 'status' => $c->status, 'subject_id' => $c->subject_id,
-            'product_name' => $c->payload['product_name'] ?? null, 'variant_name' => $c->payload['variant_name'] ?? null,
+            'product_name' => $c->payload['product_name'] ?? null, 'variant_name' => $c->payload['variant_name'] ?? null, 'outlet_code' => $c->payload['outlet_code'] ?? null,
             'old_price' => isset($c->payload['old_price']) ? number_format((float) $c->payload['old_price'], 2, '.', '') : null,
             'new_price' => isset($c->payload['new_price']) ? number_format((float) $c->payload['new_price'], 2, '.', '') : null,
             'effective_from' => $c->effective_from?->toDateString(),

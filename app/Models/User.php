@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Support\ModeGate;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Laravel\Sanctum\HasApiTokens;
@@ -57,6 +58,21 @@ class User extends Authenticatable
     public function role(): BelongsTo
     {
         return $this->belongsTo(Role::class);
+    }
+
+    /**
+     * 045 Stage 2 — outlet yang DITUGASKAN (pivot outlet_user). Owner/Admin tidak memerlukan baris:
+     * lihat App\Support\OutletContext::permittedIds(), yang memakai flag peran `all_outlets`.
+     */
+    public function outlets(): BelongsToMany
+    {
+        return $this->belongsToMany(Outlet::class, 'outlet_user');
+    }
+
+    /** 045 — peran ini melihat semua outlet aktif (flag `roles.all_outlets`), tanpa penugasan. */
+    public function hasAllOutlets(): bool
+    {
+        return (bool) $this->role?->all_outlets;
     }
 
     /**

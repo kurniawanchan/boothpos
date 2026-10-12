@@ -15,7 +15,7 @@ class CustomerPolicy
     public function update(User $user, Customer $customer): bool { return true; }
 
     // Hapus permanen dibatasi owner/admin saja, berbeda dari CRUD lain di
-    // atas — mengikuti pola guard hapus Artist/Category (lihat plan
+    // atas — mengikuti pola guard hapus Outlet/Category (lihat plan
     // 009-ui-ux-refinements T004).
     public function delete(User $user, Customer $customer): bool { return $user->isOwnerOrAdmin(); }
 }

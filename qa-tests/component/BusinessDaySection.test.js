@@ -131,11 +131,11 @@ describe('BusinessDaySection (042, T015)', () => {
     const store = useSettingsStore();
     expect(store.storeTimezone).toBe('Asia/Jakarta');
     expect(store.businessDayCutoff).toBe('00:00');
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false, store_timezone: 'Asia/Jayapura', business_day_cutoff: '05:00' });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 0, outlet_limit_reached: false, store_timezone: 'Asia/Jayapura', business_day_cutoff: '05:00' });
     await store.load();
     expect(store.storeTimezone).toBe('Asia/Jayapura');
     expect(store.businessDayCutoff).toBe('05:00');
-    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 0, artist_limit_reached: false });
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 0, outlet_limit_reached: false });
     await store.load();
     expect(store.storeTimezone).toBe('Asia/Jakarta');
   });

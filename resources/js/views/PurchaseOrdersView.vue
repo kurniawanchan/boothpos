@@ -8,7 +8,7 @@ import {
 } from '../api/purchaseOrders';
 import { listVendors } from '../api/vendors';
 import { listMaterials } from '../api/materials';
-import { listArtists } from '../api/artists';
+import { listOutlets } from '../api/outlets';
 import { useToastStore } from '../stores/toast';
 import { formatIDR } from '../utils/money';
 import DataTable from '../components/ui/DataTable.vue';
@@ -32,9 +32,9 @@ const toast = useToastStore();
 const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listPurchaseOrders);
 const vendors = ref([]);
 const materials = ref([]);
-const artists = ref([]);
+const outlets = ref([]);
 const statusFilter = ref('');
-const artistFilter = ref('');
+const outletFilter = ref('');
 
 const STATUSES = ['draft', 'ordered', 'received', 'paid', 'cancelled'];
 const STATUS_VARIANT = { draft: 'neutral', ordered: 'warning', received: 'info', paid: 'success', cancelled: 'danger' };
@@ -48,7 +48,7 @@ onMounted(async () => {
   await load();
   vendors.value = (await listVendors({ per_page: 100 })).data;
   materials.value = (await listMaterials({ per_page: 100 })).data;
-  artists.value = (await listArtists({ per_page: 100 })).data;
+  outlets.value = (await listOutlets({ per_page: 100 })).data;
 });
 
 function applyStatusFilter(status) {
@@ -58,25 +58,25 @@ function applyStatusFilter(status) {
 
 const vendorOptions = computed(() => vendors.value.map((v) => ({ value: v.id, label: v.name })));
 const materialOptions = computed(() => materials.value.map((m) => ({ value: m.id, label: m.name })));
-const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
-const artistFilterOptions = computed(() => [{ value: '', label: t('purchase_orders.all_sellers') }, ...artistOptions.value]);
+const outletOptions = computed(() => outlets.value.map((a) => ({ value: a.id, label: a.name })));
+const outletFilterOptions = computed(() => [{ value: '', label: t('purchase_orders.all_sellers') }, ...outletOptions.value]);
 
-function applyArtistFilter(value) {
-  artistFilter.value = value;
-  setFilter({ artist_id: value || undefined });
+function applyOutletFilter(value) {
+  outletFilter.value = value;
+  setFilter({ outlet_id: value || undefined });
 }
 
 // 041 — status menjadi TabBar (sebelumnya deretan chip). Nilai tab 'all' = tanpa filter status; semantiknya
-// identik dengan applyStatusFilter lama. Tab bukan "filter" di baris filter, jadi atur ulang hanya melepas seller.
+// identik dengan applyStatusFilter lama. Tab bukan "filter" di baris filter, jadi atur ulang hanya melepas outlet.
 const ALL_TAB = 'all';
 const statusTab = computed({
   get: () => statusFilter.value || ALL_TAB,
   set: (key) => applyStatusFilter(key === ALL_TAB ? '' : key),
 });
 // Jumlah per status TIDAK dimuat (daftar berpaginasi dan tak ada endpoint ringkasan), jadi chip jumlah hanya
-// dipasang pada tab yang sedang aktif memakai total dari server — dan hanya bila tak ada filter seller,
+// dipasang pada tab yang sedang aktif memakai total dari server — dan hanya bila tak ada filter outlet,
 // karena jumlah tab menggambarkan seluruh bagian, bukan tampilan yang difilter.
-const countKnown = computed(() => !loading.value && !error.value && !artistFilter.value);
+const countKnown = computed(() => !loading.value && !error.value && !outletFilter.value);
 const statusTabs = computed(() => [ALL_TAB, ...STATUSES].map((key) => ({
   key,
   label: key === ALL_TAB ? t('common.all') : t(`purchase_orders.status_${key}`),
@@ -84,13 +84,13 @@ const statusTabs = computed(() => [ALL_TAB, ...STATUSES].map((key) => ({
 })));
 
 function resetFilters() {
-  applyArtistFilter('');
+  applyOutletFilter('');
 }
 
 const columns = computed(() => [
   { key: 'po_number', label: t('purchase_orders.col_number') },
   { key: 'vendor_name', label: t('purchase_orders.col_vendor') },
-  { key: 'artist_name', label: t('purchase_orders.col_seller') },
+  { key: 'outlet_name', label: t('purchase_orders.col_seller') },
   { key: 'status', label: t('purchase_orders.col_status') },
   { key: 'total_amount', label: t('purchase_orders.col_total') },
   { key: 'actions', label: '' },
@@ -99,7 +99,7 @@ const columns = computed(() => [
 // --- Create/edit drawer -----------------------------------------------
 const showForm = ref(false);
 const editingPo = ref(null);
-const form = reactive({ vendor_id: '', artist_id: '', notes: '' });
+const form = reactive({ vendor_id: '', outlet_id: '', notes: '' });
 const itemRows = ref([]);
 const formErrors = reactive({});
 const saving = ref(false);
@@ -110,7 +110,7 @@ function blankRow() {
 
 function openCreate() {
   editingPo.value = null;
-  Object.assign(form, { vendor_id: '', artist_id: '', notes: '' });
+  Object.assign(form, { vendor_id: '', outlet_id: '', notes: '' });
   itemRows.value = [blankRow()];
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
@@ -131,7 +131,7 @@ async function openEdit(row) {
     return;
   }
   editingPo.value = po;
-  Object.assign(form, { vendor_id: po.vendor_id, artist_id: po.artist_id ?? '', notes: po.notes ?? '' });
+  Object.assign(form, { vendor_id: po.vendor_id, outlet_id: po.outlet_id ?? '', notes: po.notes ?? '' });
   itemRows.value = po.items.map((i) => ({
     line_type: i.line_type, material_id: i.material_id ?? '', product_id: i.product_id ?? '',
     description: i.description ?? '', qty: Number(i.qty), unit_price: Number(i.unit_price),
@@ -158,9 +158,9 @@ async function savePo() {
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   const payload = {
     vendor_id: Number(form.vendor_id),
-    // 034 — seller wajib (server menolak bila kosong); PO lama tanpa seller
+    // 034 — outlet wajib (server menolak bila kosong); PO lama tanpa outlet
     // boleh disimpan tanpa mengirimnya sampai pengguna menetapkannya.
-    ...(form.artist_id ? { artist_id: Number(form.artist_id) } : {}),
+    ...(form.outlet_id ? { outlet_id: Number(form.outlet_id) } : {}),
     notes: form.notes || null,
     ...(rowsLocked.value ? {} : {
       items: itemRows.value.map((r) => ({
@@ -184,7 +184,7 @@ async function savePo() {
     showForm.value = false;
     await load();
   } catch (err) {
-    // 035 — 409 yang membawa `errors` (mis. seller tidak bisa diubah karena
+    // 035 — 409 yang membawa `errors` (mis. outlet tidak bisa diubah karena
     // barisnya sudah dipakai BOM) ditampilkan di bawah kolomnya, drawer tetap
     // terbuka; toast 409 sudah ditampilkan interceptor bersama.
     if (err.isValidation || (err.isConflict && err.errors)) {
@@ -301,9 +301,9 @@ function openDetail(po) {
 
     <section class="mx-[26px] border-2 border-line bg-white">
       <TabBar v-model="statusTab" :tabs="statusTabs" :label="t('purchase_orders.col_status')" />
-      <FilterBar :searchable="false" :count="loading || error ? null : meta.total" :active="!!artistFilter" @reset="resetFilters">
+      <FilterBar :searchable="false" :count="loading || error ? null : meta.total" :active="!!outletFilter" @reset="resetFilters">
         <div class="w-[190px]">
-          <BaseSelect :model-value="artistFilter" :options="artistFilterOptions" :aria-label="t('purchase_orders.col_seller')" @update:model-value="applyArtistFilter" />
+          <BaseSelect :model-value="outletFilter" :options="outletFilterOptions" :aria-label="t('purchase_orders.col_seller')" @update:model-value="applyOutletFilter" />
         </div>
       </FilterBar>
 
@@ -318,8 +318,8 @@ function openDetail(po) {
         <template #cell-po_number="{ row }">
           <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active hover:underline" @click="openDetail(row)">{{ row.po_number }}</button>
         </template>
-        <template #cell-artist_name="{ row }">
-          <span v-if="row.artist_name">{{ row.artist_name }}</span>
+        <template #cell-outlet_name="{ row }">
+          <span v-if="row.outlet_name">{{ row.outlet_name }}</span>
           <span v-else class="text-[12px] italic text-muted-3">{{ t('purchase_orders.no_seller') }}</span>
         </template>
         <template #cell-status="{ row }">
@@ -348,7 +348,7 @@ function openDetail(po) {
     <BaseDrawer :open="showForm" :title="editingPo ? t('purchase_orders.edit_po') : t('purchase_orders.new_po')" @close="showForm = false">
       <form class="flex flex-col gap-4 px-6 py-5" @submit.prevent="savePo">
         <BaseSelect v-model="form.vendor_id" :label="t('purchase_orders.vendor')" required :options="vendorOptions" :error="formErrors.vendor_id" />
-        <BaseSelect v-model="form.artist_id" :label="t('purchase_orders.seller')" required :options="artistOptions" :placeholder="t('purchase_orders.seller_placeholder')" :hint="t('purchase_orders.seller_hint')" :error="formErrors.artist_id" />
+        <BaseSelect v-model="form.outlet_id" :label="t('purchase_orders.seller')" required :options="outletOptions" :placeholder="t('purchase_orders.seller_placeholder')" :hint="t('purchase_orders.seller_hint')" :error="formErrors.outlet_id" />
         <BaseTextarea v-model="form.notes" :label="t('master_data.notes')" :rows="2" :error="formErrors.notes" />
 
         <div class="flex items-center justify-between">

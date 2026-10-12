@@ -80,7 +80,7 @@ class Event extends Model
 
     public function settlements(): HasMany
     {
-        return $this->hasMany(ArtistSettlement::class);
+        return $this->hasMany(OutletSettlement::class);
     }
 
     /**

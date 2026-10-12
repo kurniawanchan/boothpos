@@ -5,8 +5,8 @@ import { DEFAULT_APP_NAME, resolveAppName } from '../utils/appName';
 
 /**
  * Cosmetic license-tier state only (tier label in the sidebar, the
- * artist-creation CTA, the Pro tier-notice banner). The real enforcement
- * is the server's 403 on POST /artists — this store must never be treated
+ * outlet-creation CTA, the Pro tier-notice banner). The real enforcement
+ * is the server's 403 on POST /outlets — this store must never be treated
  * as an authorization source. See LicenseGate.php / README "Lisensi Pro
  * vs Master".
  *
@@ -17,9 +17,9 @@ import { DEFAULT_APP_NAME, resolveAppName } from '../utils/appName';
  */
 export const useSettingsStore = defineStore('settings', {
   state: () => ({
-    multiArtistEnabled: null,
-    artistCount: 0,
-    artistLimitReached: false,
+    multiOutletEnabled: null,
+    outletCount: 0,
+    outletLimitReached: false,
     systemMode: 'live',
     themeAccentColor: null,
     receiptFooterText: '',
@@ -41,16 +41,16 @@ export const useSettingsStore = defineStore('settings', {
     loaded: false,
   }),
   getters: {
-    tierLabel: (state) => (state.multiArtistEnabled ? 'Master' : 'Pro'),
+    tierLabel: (state) => (state.multiOutletEnabled ? 'Master' : 'Pro'),
     isDemoMode: (state) => state.systemMode === 'demo',
   },
   actions: {
     async load() {
       try {
         const data = await featureFlags();
-        this.multiArtistEnabled = data.multi_artist_enabled;
-        this.artistCount = data.artist_count;
-        this.artistLimitReached = data.artist_limit_reached;
+        this.multiOutletEnabled = data.multi_outlet_enabled;
+        this.outletCount = data.outlet_count;
+        this.outletLimitReached = data.outlet_limit_reached;
         this.systemMode = data.system_mode ?? 'live';
         this.themeAccentColor = data.theme_accent_color ?? null;
         this.receiptFooterText = data.receipt_footer_text ?? '';

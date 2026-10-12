@@ -30,6 +30,7 @@ const props = defineProps({
   confirmLabel: { type: String, default: '' },
   danger: { type: Boolean, default: true },
   submit: { type: Function, required: true },
+  extraValid: { type: Boolean, default: true },
 });
 const emit = defineEmits(['close', 'done', 'conflict']);
 const { t } = useI18n();
@@ -86,9 +87,12 @@ async function onConfirm(payload) {
     :reasons="reasons"
     :danger="danger"
     :submitting="submitting"
+    :extra-valid="extraValid"
     @close="emit('close')"
     @confirm="onConfirm"
-  />
+  >
+    <template #extra><slot name="extra" /></template>
+  </ReasonDialog>
   <BaseModal v-else :open="open" :title="title" max-width-class="max-w-[460px]" @close="emit('close')">
     <LoadingState v-if="loadState === 'loading'" :rows="3" />
     <ErrorState v-else-if="loadState === 'error'" @retry="loadReasons" />

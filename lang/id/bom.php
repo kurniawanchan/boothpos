@@ -3,7 +3,7 @@
 // 034-seller-po-bom — pesan galat BOM bersumber purchase order.
 return [
     'not_authorized' => 'Anda tidak berhak mengelola BOM dari purchase order.',
-    'line_not_eligible' => 'Baris purchase order ini tidak bisa dipakai: bukan milik seller varian ini, atau purchase order-nya belum/tidak berstatus ordered, received, atau paid.',
+    'line_not_eligible' => 'Baris purchase order ini tidak bisa dipakai: bukan milik outlet varian ini, atau purchase order-nya belum/tidak berstatus ordered, received, atau paid.',
     'duplicate_line' => 'Baris purchase order ini sudah ada di BOM varian ini. Ubah jumlahnya pada baris yang ada.',
     'qty_must_be_positive' => 'Jumlah harus lebih besar dari nol.',
     'complete_empty' => 'BOM masih kosong, belum bisa ditandai selesai.',
@@ -15,7 +15,7 @@ return [
     'copy_requires_confirmation' => 'Varian tujuan sudah punya baris BOM. Konfirmasi untuk menggantinya.',
     'copy_no_next' => 'Tidak ada varian berikutnya untuk produk ini.',
     'copy_same_variant' => 'Varian sumber dan tujuan tidak boleh sama.',
-    'purchase_order_seller_in_use' => 'Seller purchase order ini tidak bisa diubah karena barisnya sudah dipakai BOM.',
+    'purchase_order_seller_in_use' => 'Outlet purchase order ini tidak bisa diubah karena barisnya sudah dipakai BOM.',
     'source_replace_not_allowed' => 'Baris ini tidak bisa diganti sumbernya.',
     'copy_source_empty' => 'BOM sumber masih kosong, tidak ada yang bisa disalin.',
     'line_not_found' => 'Salah satu baris BOM ini sudah tidak ada pada varian ini. Muat ulang lalu coba lagi.',

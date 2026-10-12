@@ -23,6 +23,17 @@ class Material extends Model
         'current_stock',
     ];
 
+    protected static function booted(): void
+    {
+        // 045 Stage 5 — stok awal/penulisan langsung dibukukan ke saldo outlet (invarian I2).
+        static::created(fn (Material $m) => \App\Support\OutletStockSync::materialChanged($m, (float) $m->current_stock));
+        static::updated(function (Material $m) {
+            if ($m->wasChanged('current_stock')) {
+                \App\Support\OutletStockSync::materialChanged($m, (float) $m->current_stock - (float) $m->getOriginal('current_stock'));
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [
@@ -46,6 +57,11 @@ class Material extends Model
     public function bomLines(): HasMany
     {
         return $this->hasMany(ProductVariantBomLine::class);
+    }
+
+    public function outletStock(): HasMany
+    {
+        return $this->hasMany(MaterialOutletStock::class);
     }
 
     public function stockMovements(): HasMany

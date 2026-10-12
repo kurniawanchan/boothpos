@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listRoles, createRole, updateRole, deleteRole } from '../api/roles';
 import { useAuthStore } from '../stores/auth';
+import { useOutletStore } from '../stores/outlet';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import DataTable from '../components/ui/DataTable.vue';
@@ -19,6 +20,7 @@ import RoleMenuPicker from '../components/settings/RoleMenuPicker.vue';
 import RolePermissionPicker from '../components/settings/RolePermissionPicker.vue';
 
 const auth = useAuthStore();
+const outletStore = useOutletStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
@@ -47,13 +49,16 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editingRole = ref(null);
-const form = reactive({ name: '', menu_keys: [], permissions: [] });
+const form = reactive({ name: '', menu_keys: [], permissions: [], all_outlets: false });
+// 045 — "Melihat semua outlet": hanya bila ada lebih dari satu outlet dan pengguna sendiri melihat semuanya (server menolak
+// selain itu); peran bawaan Owner/Admin selalu menyala, jadi kontrolnya disembunyikan untuk keduanya.
+const showAllOutlets = computed(() => outletStore.multi && outletStore.canSeeAll && !(editingRole.value?.all_outlets && editingRole.value?.is_system_default));
 const formErrors = reactive({});
 const saving = ref(false);
 
 function openCreate() {
   editingRole.value = null;
-  Object.assign(form, { name: '', menu_keys: [], permissions: [] });
+  Object.assign(form, { name: '', menu_keys: [], permissions: [], all_outlets: false });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -62,7 +67,7 @@ function openEdit(role) {
   editingRole.value = role;
   // `permissions` = izin yang BERLAKU menurut server (bawaan menurut nama peran bila belum diatur); menyimpan
   // mengunci daftar ini secara eksplisit.
-  Object.assign(form, { name: role.name, menu_keys: [...role.menu_keys], permissions: [...(role.permissions ?? [])] });
+  Object.assign(form, { name: role.name, menu_keys: [...role.menu_keys], permissions: [...(role.permissions ?? [])], all_outlets: role.all_outlets === true });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -70,7 +75,7 @@ function openEdit(role) {
 async function saveRole() {
   saving.value = true;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
-  const payload = { name: form.name, menu_keys: form.menu_keys, permissions: form.permissions };
+  const payload = { name: form.name, menu_keys: form.menu_keys, permissions: form.permissions, ...(showAllOutlets.value ? { all_outlets: form.all_outlets } : {}) };
   try {
     if (editingRole.value) {
       await updateRole(editingRole.value.id, payload);
@@ -175,6 +180,13 @@ async function performDelete() {
       <BaseInput v-model="form.name" :label="t('roles.role_name')" required maxlength="50" :error="formErrors.name" />
       <RoleMenuPicker v-model="form.menu_keys" :error="formErrors['menu_keys.0'] || formErrors.menu_keys" />
       <RolePermissionPicker v-model="form.permissions" :error="formErrors['permissions.0'] || formErrors.permissions" />
+      <label v-if="showAllOutlets" class="flex cursor-pointer items-start gap-2.5 text-[13px]" data-testid="role-all-outlets">
+        <input v-model="form.all_outlets" type="checkbox" class="mt-0.5 h-4 w-4 accent-brand" />
+        <span>
+          <span class="font-semibold">{{ t('roles.all_outlets') }}</span>
+          <span class="block text-[12px] text-muted-4">{{ t('roles.all_outlets_hint') }}</span>
+        </span>
+      </label>
       <div class="mt-1 flex justify-end gap-2">
         <BaseButton type="button" variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
         <BaseButton type="submit" :loading="saving">{{ t('common.save') }}</BaseButton>

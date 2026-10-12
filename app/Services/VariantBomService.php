@@ -58,14 +58,14 @@ class VariantBomService
     /**
      * Aturan seller: baris PO harus milik PO seller varian ini dan
      * berstatus ordered/received/paid. Memakai scope tunggal
-     * PurchaseOrderItem::eligibleForSeller() — dicek ULANG di server meski
+     * PurchaseOrderItem::eligibleForOutlet() — dicek ULANG di server meski
      * selector UI sudah menyaring, karena UI bukan batas keamanan.
      */
     public function assertEligible(ProductVariant $variant, PurchaseOrderItem $item, string $field = 'purchase_order_item_id'): void
     {
         $variant->loadMissing('product');
 
-        $eligible = PurchaseOrderItem::eligibleForSeller((int) $variant->product->artist_id)
+        $eligible = PurchaseOrderItem::eligibleForOutlet((int) $variant->product->home_outlet_id)
             ->whereKey($item->id)
             ->exists();
 
@@ -461,9 +461,9 @@ class VariantBomService
                 );
             }
 
-            $artistId = (int) $locked->product->artist_id;
+            $outletId = (int) $locked->product->home_outlet_id;
             $invalid = $lines->filter(fn (ProductVariantBomLine $l) => (float) $l->qty_needed <= 0
-                || (int) $l->purchaseOrderItem?->purchaseOrder?->artist_id !== $artistId);
+                || (int) $l->purchaseOrderItem?->purchaseOrder?->outlet_id !== $outletId);
             if ($invalid->isNotEmpty()) {
                 throw new BomRuleException(
                     __('bom.complete_invalid_row'),
@@ -596,7 +596,7 @@ class VariantBomService
         $serviceNames = $lines->where('line_type', 'service')->map(fn ($l) => mb_strtolower(trim((string) $l->item_name)))->unique()->values();
 
         $candidates = PurchaseOrderItem::query()
-            ->eligibleForSeller((int) $variant->product->artist_id)
+            ->eligibleForOutlet((int) $variant->product->home_outlet_id)
             ->with('purchaseOrder')
             ->where(fn ($q) => $q
                 ->where(fn ($m) => $m->where('line_type', 'material')->whereIn('material_id', $materialIds))
