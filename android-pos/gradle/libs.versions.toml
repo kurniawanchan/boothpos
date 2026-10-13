@@ -1,0 +1,14 @@
+// Version catalog for dependencies
+[versions]
+androidGradlePlugin = "8.2.0"
+kotlin = "2.0.20"
+androidxCore = "1.13.0"
+composeBom = "2024.09.00"
+
+[libraries]
+androidxCore = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
+composeBom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+
+[plugins]
+androidApplication = { id = "com.android.application", version.ref = "androidGradlePlugin" }
+kotlinAndroid = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
