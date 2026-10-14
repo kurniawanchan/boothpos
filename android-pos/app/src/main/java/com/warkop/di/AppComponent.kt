@@ -1,11 +1,8 @@
 package com.warkop.di
 
-import dagger.Module
-import dagger.hilt.InstallIn
-import dagger.hilt.components.SingletonComponent
-
-@Module
-@InstallIn(SingletonComponent::class)
+/**
+ * Application dependency injection module placeholder.
+ */
 object AppComponent {
-    // TODO: Provide app-wide dependencies here
+    // Placeholder: Define app-wide dependency injection providers here
 }
