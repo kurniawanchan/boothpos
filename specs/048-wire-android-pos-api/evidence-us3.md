@@ -64,3 +64,43 @@ ter-attribusi), sehingga hitungan benar Rp 150.000 akan ditolak `override_requir
 - Replay tutup dengan `Idempotency-Key` (tidak pernah sampai ke tahap tutup yang berhasil).
 - Logcat `AndroidRuntime` untuk `com.warkop.pos` (tidak diperiksa setelah instalasi terakhir).
 - Pengecekan layar 8"/13" dan telepon.
+
+## Run bersih T048 (2026-10-16) — 7 dari 8 langkah lulus; T048 TETAP [ ]
+
+Mode dicek read-only: `demo`. Tidak ada tab terbuka di awal. Setiap angka layar dibandingkan dengan DB (tinker, read-only).
+
+| # | Langkah | Hasil | Bukti |
+|---|---|---|---|
+| 1 | Login Rina, tanpa tab baru | LULUS | Log login hanya PIN, roster, floor, menu, produk, fitur; tidak ada `POST /tabs` |
+| 2 | Buka shift Rp 150.000 | LULUS | `POST /sessions` 201; sesi 8: opening 150000.00, outlet 4, device 1; pecahan 100000×1, 50000×1 |
+| 3a | Penjualan 1 Rp 8.000 uang pas | LULUS | Order 2018 completed, paid 8000, change 0, T01-000005; pembayaran session_id 8 |
+| 3b | Penjualan 2 Rp 12.000, diterima Rp 20.000 | LULUS | Order 2019 completed, paid 20000, change 8000, T01-000006; pembayaran session_id 8 |
+| 4 | Kas keluar petty_cash Rp 20.000 | LULUS | `POST` 201; baris 2: out, petty_cash, 20000.00 |
+| 5 | X-report tanpa kas seharusnya | LULUS | Layar: modal 150.000, struk 2, penjualan 20.000, kembalian 8.000, tunai diterima 28.000, kas keluar 20.000, void 0. Tidak ada baris "kas seharusnya". DB figures(): cash_received 28000, change 8000, cash_out 20000 |
+| 6 | Tutup buta Rp 150.000 | LULUS | Layar hitungan: Rp 150.000, tanpa angka seharusnya. Setelah kirim: `POST /close` 200; DB sesi 8 closed, expected 150000, counted 150000, variance 0, z_report tersimpan, toleransi 5000 |
+| 7 | Kas keluar Rp 250.000 di shift baru (shift 9) | LULUS | `POST` 409 (override_required, tidak tercatat); baris shift 9 = 0 |
+| 8 | Bayar tanpa shift terbuka → `shift_required` di layar | **TIDAK DAPAT DICAPAI** | Tidak ada tab yang bisa dibayar di sesi tertutup: penutupan ditolak bila ada tab terbuka, dan membuka tab tanpa shift diblokir di klien. Belum ada probe ke server |
+| 9 | logcat `AndroidRuntime` untuk com.warkop.pos | LULUS sejak clear terakhir | 0 baris |
+
+Catatan:
+- Setelah "Selesai" (lock), panggilan roster pertama gagal 401 ("Unauthenticated.") hingga "Coba lagi". Dugaan: `lock()` memanggil logout yang berbalapan dengan `loadRoster()`. Belum diperbaiki.
+- Pesan server masih berbahasa Inggris untuk pengguna ini (toast kas keluar, `open_tabs`).
+- Judul header "Shift 1 sejak …" masih teks contoh di layar tab/shell.
+- Shift 9 masih terbuka (sengaja, belum ditutup). Menutupnya atau mencoba langkah 8 dengan probe API memerlukan izin.
+
+## Re-check (2026-10-16, setelah perbaikan parent) — T048 TETAP [ ]
+
+| # | Pemeriksaan | Hasil | Bukti |
+|---|---|---|---|
+| 1 | Roster setelah lock tanpa 401 | LULUS | Log: `POST /auth/logout` 204, lalu `GET /staff/roster` 200 pada percobaan pertama |
+| 2 | Subjudul shell tanpa tanggal palsu | LULUS | Layar: "Rina (Kasir) · Shift dibuka 17:14" |
+| 3 | Tanggal layar PIN hari ini (Indonesia) | LULUS | Layar: "Jumat, 16 Oktober 2026" |
+| 4a | Kas keluar di atas batas → pesan Indonesia | LULUS | Toast: "Aksi ini butuh persetujuan, dan persetujuan belum tersedia di aplikasi ini." DB: 0 baris di shift 9 |
+| 4b | Tutup dengan tab terbuka → pesan Indonesia | LULUS | Toast: "Shift hanya bisa ditutup setelah semua tab terbuka dibayar, dibatalkan, atau diserahkan." Log `POST /sessions/9/close` 409; shift 9 tetap open |
+| 4c | Bayar tanpa shift → `shift_required` | BELUM DIUJI | Sama dengan langkah 8 sebelumnya |
+| 5 | Nol baris AndroidRuntime error untuk com.warkop.pos | LULUS | `E AndroidRuntime` dengan paket com.warkop.pos: 0. Baris `AndroidRuntime` lain berasal dari peluncur monkey |
+
+Catatan:
+- Tab 2020 dibuka hanya untuk pemeriksaan 4b, kosong, dan masih terbuka di shift 9. Perlu dibatalkan oleh parent.
+- Shift 9 tetap terbuka (tidak ditutup).
+- Mode sempat kembali `live` karena cache stale setelah uji parent. Hanya kunci cache `setting:system_mode` yang dihapus; DB tetap `demo`.

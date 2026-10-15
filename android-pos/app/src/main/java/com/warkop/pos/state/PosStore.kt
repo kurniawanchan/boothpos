@@ -148,10 +148,10 @@ class PosStore(
     fun lock() {
         availabilityJob?.cancel()
         floorJob?.cancel(); floor = Load.Idle; closedCache = emptyList(); keys.clear()
-        viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { } }
         session = null; user = null; shift = null; activeId = null; catalog = Load.Idle; soldOut = emptySet(); dest = Dest.PIN; sheet = null
         report = Load.Idle; cashMovements = Load.Idle; closeResult = null; limits = null
-        loadRoster()
+        // Daftar staf dimuat SETELAH logout selesai: sebelum itu token sesi lama masih terpasang dan server menolaknya (401).
+        viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { }; loadRoster() }
     }
 
     // ---------- PIN (server) ----------

@@ -130,7 +130,7 @@ private fun BrandPanel(store: PosStore, modifier: Modifier) {
             }
             Spacer(Modifier.weight(1f))
             Text(time, fontSize = 112.sp, fontWeight = FontWeight.Light, lineHeight = 112.sp)
-            Text("Sabtu, 31 Oktober 2026", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+            Text(java.text.SimpleDateFormat("EEEE, d MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date()), fontSize = 18.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 InfoChip(if (store.conn == Conn.ONLINE) Icons.Filled.Wifi else Icons.Filled.WifiOff, store.conn.label)
