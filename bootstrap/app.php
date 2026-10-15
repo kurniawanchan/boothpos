@@ -22,6 +22,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // sempat memproses apa pun.
         $middleware->api(prepend: [EnsureInstallationIsActivated::class]);
 
+        // 048 / api-gap B15 — `Idempotency-Key` untuk tambah/ubah baris dan kirim ke dapur.
+        $middleware->alias(['idempotent' => \App\Http\Middleware\EnsureIdempotent::class]);
+
         // 045 Stage 2 — konteks outlet HARUS terisi sebelum route-model binding, kalau tidak {order}/{session}
         // dst. di-resolve tanpa OutletScope dan kasir bisa membuka record outlet lain lewat id.
         $middleware->prependToPriorityList(

@@ -69,6 +69,14 @@ Route::prefix('v1')->group(function () {
         Route::put('/auth/password', [AuthController::class, 'updatePassword']);
         Route::post('/auth/photo', [AuthController::class, 'updatePhoto']);
 
+        // 048 / api-gap B1 — login PIN terminal. Butuh token (token terminal dari login kata sandi owner/admin);
+        // kunci 5-salah di PinAuthService adalah pertahanan utama, throttle hanya meredam banjir.
+        Route::get('/staff/roster', [\App\Http\Controllers\Api\PinAuthController::class, 'roster']);
+        Route::post('/auth/pin-sessions', [\App\Http\Controllers\Api\PinAuthController::class, 'login'])->middleware('throttle:30,1');
+        Route::post('/auth/pin-changes', [\App\Http\Controllers\Api\PinAuthController::class, 'change'])->middleware('throttle:10,1');
+        Route::post('/auth/token-refresh', [\App\Http\Controllers\Api\PinAuthController::class, 'refresh']);
+        Route::post('/users/{user}/pin-reset', [\App\Http\Controllers\Api\PinAuthController::class, 'reset']);
+
         Route::get('/settings/features', [SettingsController::class, 'features']);
         Route::get('/settings', [SettingsController::class, 'index']);
         Route::put('/settings', [SettingsController::class, 'update']);
@@ -307,13 +315,13 @@ Route::prefix('v1')->group(function () {
         Route::get('/tabs/{order}', [TabController::class, 'show']);
         Route::delete('/tabs/{order}', [TabController::class, 'destroy']);
         Route::post('/tabs/{order}/handover', [TabController::class, 'handover']);
-        Route::post('/tabs/{order}/send', [TabController::class, 'send']);
+        Route::post('/tabs/{order}/send', [TabController::class, 'send'])->middleware('idempotent');
         Route::post('/tabs/{order}/void', [TabController::class, 'void']);
         Route::post('/tabs/{order}/move', [TabController::class, 'move']);
         Route::post('/tabs/{order}/merge', [TabController::class, 'merge']);
         Route::post('/tabs/{order}/split', [TabPaymentController::class, 'split']);
-        Route::post('/tabs/{order}/items', [TabLineController::class, 'store']);
-        Route::patch('/tabs/{order}/items/{item}', [TabLineController::class, 'update'])->whereNumber('item');
+        Route::post('/tabs/{order}/items', [TabLineController::class, 'store'])->middleware('idempotent');
+        Route::patch('/tabs/{order}/items/{item}', [TabLineController::class, 'update'])->whereNumber('item')->middleware('idempotent');
         Route::delete('/tabs/{order}/items/{item}', [TabLineController::class, 'destroy'])->whereNumber('item');
         Route::post('/tabs/{order}/payments', [TabPaymentController::class, 'store']);
 
