@@ -196,6 +196,7 @@ class CashierSessionController extends Controller
             if ($openTabs->isNotEmpty()) {
                 return response()->json([
                     'message' => __('events_sessions.cannot_close_with_open_tabs'),
+                    'code' => 'open_tabs',
                     'open_tabs' => $openTabs->map(fn (Order $o) => [
                         'id' => $o->id,
                         'order_number' => $o->order_number,

@@ -1650,7 +1650,7 @@ paths:
                 type: object
                 properties:
                   message: { type: string }
-                  code: { type: string, enum: [pending_payments, override_required], nullable: true }
+                  code: { type: string, enum: [open_tabs, pending_payments, override_required], nullable: true }
                   variance: { type: string, nullable: true }
                   tolerance: { type: string, nullable: true }
                   open_tabs:

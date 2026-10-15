@@ -35,4 +35,19 @@ class ShiftRequiredTest extends TestCase
 
         $this->assertSame('open', Order::find($tab)->status, 'tab tidak boleh berubah saat pembayaran ditolak');
     }
+
+    public function test_closing_with_an_open_tab_answers_with_the_open_tabs_code(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier']);
+        $this->actingAs($cashier, 'sanctum');
+        $shift = $this->makeShift($cashier);
+        $this->apiOpenTab($shift->id)->assertCreated();
+
+        $this->postJson("/api/v1/sessions/{$shift->id}/close", ['counted_by_denomination' => []])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'open_tabs')
+            ->assertJsonCount(1, 'open_tabs');
+
+        $this->assertSame('open', $shift->fresh()->status);
+    }
 }
