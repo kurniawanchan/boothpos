@@ -22,6 +22,8 @@ class OpenTabRequest extends FormRequest
             'tab_label' => ['nullable', 'string', 'max:100'],
             'customer_id' => ['nullable', 'integer'],
             'local_ref' => ['nullable', 'uuid'],
+            // 048 — jumlah tamu (pax). Perangkat TIDAK dari body: dibaca dari header X-Device-Id dan dicek milik outlet pengguna.
+            'guest_count' => ['nullable', 'integer', 'min:1', 'max:99'],
         ];
     }
 }

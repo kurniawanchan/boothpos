@@ -321,6 +321,7 @@ Route::prefix('v1')->group(function () {
         Route::delete('/tabs/{order}', [TabController::class, 'destroy']);
         Route::post('/tabs/{order}/handover', [TabController::class, 'handover']);
         Route::post('/tabs/{order}/send', [TabController::class, 'send'])->middleware('idempotent');
+        Route::post('/tabs/{order}/prebill', [TabController::class, 'prebill']);
         Route::post('/tabs/{order}/void', [TabController::class, 'void']);
         Route::post('/tabs/{order}/move', [TabController::class, 'move']);
         Route::post('/tabs/{order}/merge', [TabController::class, 'merge']);

@@ -10,12 +10,12 @@ data class MenuCategory(val id: String, val name: String, val code: String, val 
 
 enum class Tone { INK, TINT, ACCENT, NEUTRAL, OUTLINE }
 
-data class ModOption(val name: String, val delta: Int)
+data class ModOption(val name: String, val delta: Int, val id: Long = 0)
 data class ModGroup(val id: String, val name: String, val min: Int, val max: Int, val options: List<ModOption>)
 
 data class Product(
     val id: String, val icon: String, val cat: String, val name: String, val price: Int,
-    val groups: List<String> = emptyList(), val is86: Boolean = false,
+    val groups: List<String> = emptyList(), val is86: Boolean = false, val imageUrl: String? = null,
 )
 
 data class StaffUser(
@@ -73,7 +73,13 @@ data class Order(
     }
 }
 
-data class Shift(val label: String, val openedAt: String, val schedule: String, val float: Int, val userId: String)
+data class Shift(val label: String, val openedAt: String, val schedule: String, val float: Int, val userId: String, val id: Long = 0)
+
+/** Katalog menu dari server untuk outlet aktif: kategori, item (satu kartu per varian), dan grup modifier. */
+data class MenuCatalog(val categories: List<MenuCategory>, val products: List<Product>, val groups: Map<String, ModGroup>)
+
+/** Item yang sedang habis (86), berisi id varian. `etag` dipakai untuk poll berikutnya. */
+data class Availability(val etag: String, val soldOutVariantIds: Set<String>)
 
 private val rpFormat = NumberFormat.getIntegerInstance(Locale("id", "ID"))
 

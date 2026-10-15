@@ -1,5 +1,8 @@
 package com.warkop.pos.data
 
+import com.warkop.pos.model.Availability
+import com.warkop.pos.model.MenuCatalog
+import com.warkop.pos.model.Shift
 import com.warkop.pos.model.StaffUser
 
 /** Hasil penyiapan terminal: outlet dan perangkat yang dipasangkan. */
@@ -37,4 +40,14 @@ interface PosBackend {
     suspend fun pinLogin(user: StaffUser, pin: String): PosSession
     suspend fun refreshSession(): Long
     suspend fun logout()
+
+    // --- katalog ---
+    suspend fun loadMenu(): MenuCatalog
+
+    /** null = tidak berubah sejak [since] (304). */
+    suspend fun availability(since: String?): Availability?
+
+    // --- shift (dasar) ---
+    suspend fun currentShift(): Shift?
+    suspend fun openShift(totalRupiah: Long): Shift
 }

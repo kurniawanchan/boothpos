@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Models\KitchenTicket;
 use App\Models\KitchenTicketItem;
 use App\Models\DiningTable;
+use App\Models\Device;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\ProductVariant;
@@ -35,6 +36,7 @@ use Illuminate\Validation\ValidationException;
 class TabService
 {
     public function __construct(
+        private \App\Services\ReceiptNumbering $numbering,
         private StockService $stockService,
         private OrderService $orderService,
         private ActivityLogger $activityLogger,
@@ -64,6 +66,16 @@ class TabService
         $session = CashierSession::findOrFail($data['session_id']);
         $this->assertSessionOpen($session);
 
+        // 048 — perangkat dari header X-Device-Id: harus terminal AKTIF milik outlet yang terlihat pengguna
+        // (Device ber-OutletScope → perangkat outlet lain tidak ditemukan). Tanpa header (SPA web) tetap berjalan.
+        $device = null;
+        if (! empty($data['device_header'])) {
+            $device = Device::query()->whereNull('revoked_at')->find((int) $data['device_header']);
+            if ($device === null) {
+                throw InputRejectedException::withMessages(['device_id' => __('devices.invalid_device')]);
+            }
+        }
+
         $table = null;
         if (! empty($data['table_id'])) {
             $table = DiningTable::findOrFail($data['table_id']);
@@ -82,20 +94,30 @@ class TabService
         }
 
         try {
-            $order = DB::transaction(fn () => Order::create([
-                'order_number' => $this->orderService->generateOrderNumber(),
-                'session_id' => $session->id,
-                'customer_id' => $data['customer_id'] ?? null,
-                'user_id' => $user->id,
-                'channel' => 'offline',
-                'service_type' => $table ? Order::SERVICE_DINE_IN : Order::SERVICE_TAKEAWAY,
-                'table_id' => $table?->id,
-                'tab_label' => isset($data['tab_label']) && trim($data['tab_label']) !== '' ? trim($data['tab_label']) : null,
-                'subtotal' => 0, 'discount_amount' => 0, 'total_amount' => 0, 'total_cost' => 0,
-                'paid_amount' => 0, 'change_amount' => 0,
-                'status' => Order::STATUS_OPEN,
-                'local_ref' => $data['local_ref'] ?? null,
-            ]));
+            $order = DB::transaction(function () use ($data, $session, $user, $table, $device) {
+                $order = new Order([
+                    'order_number' => $this->orderService->generateOrderNumber(),
+                    'session_id' => $session->id,
+                    'customer_id' => $data['customer_id'] ?? null,
+                    'user_id' => $user->id,
+                    'channel' => 'offline',
+                    'service_type' => $table ? Order::SERVICE_DINE_IN : Order::SERVICE_TAKEAWAY,
+                    'table_id' => $table?->id,
+                    'tab_label' => isset($data['tab_label']) && trim($data['tab_label']) !== '' ? trim($data['tab_label']) : null,
+                    'subtotal' => 0, 'discount_amount' => 0, 'total_amount' => 0, 'total_cost' => 0,
+                    'paid_amount' => 0, 'change_amount' => 0,
+                    'status' => Order::STATUS_OPEN,
+                    'local_ref' => $data['local_ref'] ?? null,
+                ]);
+                // 048 — kolom yang TIDAK fillable (diturunkan server): tamu, perangkat, nomor antrean (counter saja).
+                $order->forceFill([
+                    'guest_count' => $data['guest_count'] ?? null,
+                    'device_id' => $device?->id,
+                    'queue_no' => $table === null && $device !== null ? $this->numbering->queueFor((int) $session->outlet_id) : null,
+                ])->save();
+
+                return $order;
+            });
         } catch (UniqueConstraintViolationException $e) {
             // Dua pelayan membuka meja yang sama di detik yang sama: pemeriksaan
             // di atas sudah lolos untuk keduanya, indeks UNIQUE database yang
@@ -395,6 +417,21 @@ class TabService
     // --- tutup kosong / serah-terima ---------------------------------------
 
     /** Tab tanpa baris ditutup tanpa efek stok/penjualan; mejanya kosong lagi. */
+    /**
+     * 048 / B13 — tandai pra-bill tercetak. Tidak mengubah status, stok, atau total; hanya penanda untuk denah ("Bill
+     * tercetak") dan hitungan cetak. Boleh diulang (hitungan naik). Tab harus terbuka.
+     */
+    public function prebill(Order $tab, User $user): Order
+    {
+        return DB::transaction(function () use ($tab, $user) {
+            $tab = $this->lockOpen($tab);
+            $tab->forceFill(['prebill_at' => now(), 'prebill_count' => min(255, (int) $tab->prebill_count + 1)])->save();
+            $this->activityLogger->log($user->id, 'tab_prebill', 'Order', $tab->id, "Pra-bill {$tab->order_number} dicetak");
+
+            return $this->loaded($tab);
+        });
+    }
+
     public function closeEmpty(Order $tab, User $user): void
     {
         DB::transaction(function () use ($tab) {
@@ -561,27 +598,34 @@ class TabService
         }
     }
 
-    /** Menghitung ulang subtotal/total/biaya dari baris-barisnya (satu-satunya tempat). */
-    public function recalculate(Order $order): void
+    /**
+     * Menghitung ulang subtotal/diskon/pajak/total dari baris-barisnya (satu-satunya tempat — 048: termasuk pajak).
+     * `$discount` (opsional) menggantikan diskon tingkat-order yang tersimpan; selalu dibatasi subtotal.
+     * Total = subtotal − diskon + pajak eksklusif (TaxCalculator); pajak dan tarifnya disimpan sebagai snapshot.
+     */
+    public function recalculate(Order $order, ?float $discount = null): void
     {
         $items = $order->items()->get(['qty', 'cost_price', 'line_total']);
 
         $subtotal = round((float) $items->sum('line_total'), 2);
         $cost = round((float) $items->sum(fn ($i) => (float) $i->cost_price * $i->qty), 2);
-        // Diskon tingkat-order yang sudah tersimpan tidak boleh melebihi subtotal baru.
-        $discount = min((float) $order->discount_amount, $subtotal);
+        // Diskon tingkat-order tidak boleh melebihi subtotal baru.
+        $discount = min($discount ?? (float) $order->discount_amount, $subtotal);
+        $tax = \App\Support\TaxCalculator::compute($subtotal - $discount);
 
-        $order->update([
+        $order->forceFill([
             'subtotal' => $subtotal,
             'total_cost' => $cost,
             'discount_amount' => $discount,
-            'total_amount' => round($subtotal - $discount, 2),
-        ]);
+            'tax_amount' => $tax['tax'],
+            'tax_rate_snapshot' => $tax['rate'],
+            'total_amount' => round($subtotal - $discount + $tax['tax'], 2),
+        ])->save();
     }
 
     public function loaded(Order $order): Order
     {
-        return $order->fresh(['items.ticketItem.ticket.station', 'payments', 'table', 'cashier:id,name']);
+        return $order->fresh(['items.ticketItem.ticket.station', 'payments', 'table', 'cashier:id,name', 'device:id,code']);
     }
 
     private function assertTableFree(DiningTable $table): void

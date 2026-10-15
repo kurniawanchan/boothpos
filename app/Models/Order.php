@@ -48,6 +48,8 @@ class Order extends Model
             'total_amount' => 'decimal:2', 'total_cost' => 'decimal:2',
             'paid_amount' => 'decimal:2', 'change_amount' => 'decimal:2',
             'completed_at' => 'datetime',
+            'tax_amount' => 'decimal:2', 'tax_rate_snapshot' => 'decimal:2',
+            'prebill_at' => 'datetime',
         ];
     }
 
@@ -105,5 +107,11 @@ class Order extends Model
         }
 
         return CashierSession::withoutGlobalScopes()->whereKey($this->session_id)->value('outlet_id');
+    }
+
+    /** 048 — terminal POS yang membuka order (kunci meja lintas perangkat). */
+    public function device(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Device::class);
     }
 }

@@ -513,6 +513,12 @@ paths:
                   business_day_cutoff:
                     type: string
                     description: "042 — jam (HH:MM, waktu lokal toko) hari bisnis baru dimulai."
+                  tax_rate:
+                    type: number
+                    description: "048 — tarif pajak eksklusif (%), 0 bawaan. Angka tampilan; server selalu menghitung ulang."
+                  tax_label: { type: string, description: "048 — label pajak di layar/struk (bawaan `Pajak`)." }
+                  variance_tolerance: { type: integer, description: "048 — toleransi selisih kas saat tutup shift (Rp, bawaan 5000)." }
+                  cash_out_approval_threshold: { type: integer, description: "048 — kas keluar di atas ini butuh persetujuan atasan (Rp, bawaan 200000)." }
                   schema_update_required:
                     type: boolean
                     description: |
@@ -5719,6 +5725,25 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /tabs/{id}/prebill:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Tandai pra-bill tercetak (menu `floor`; 048/B13)
+      description: |
+        Hanya penanda: mengisi `prebill_at`, menaikkan `prebill_count`, dan menandai meja "Bill tercetak" di denah.
+        TIDAK mengubah status, stok, atau total; tidak butuh shift. Boleh diulang. Tab yang sudah lunas/dibatalkan → 409.
+      responses:
+        '200':
+          description: Tab terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   /tabs/{id}/move:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -7437,10 +7462,17 @@ components:
         customer_id: { type: integer, nullable: true }
         subtotal: { type: string }
         discount_amount: { type: string }
-        total_amount: { type: string }
+        tax_amount: { type: string, description: "048 — pajak eksklusif (snapshot saat transaksi), dihitung SETELAH diskon, dibulatkan per order." }
+        tax_rate: { type: string, description: "048 — tarif (%) yang dipakai untuk snapshot pajak." }
+        total_amount: { type: string, description: "subtotal − diskon + pajak." }
         paid_amount: { type: string }
         change_amount: { type: string }
         balance: { type: string, description: "max(0, total − dibayar)." }
+        queue_no: { type: string, nullable: true, example: A-024, description: "048 — nomor antrean order counter dari terminal; per outlet per hari bisnis." }
+        receipt_no: { type: string, nullable: true, example: T01-000124, description: "048 — nomor struk per terminal; terisi saat lunas." }
+        guest_count: { type: integer, nullable: true, minimum: 1, maximum: 99 }
+        prebill_at: { type: string, format: date-time, nullable: true }
+        device: { type: object, nullable: true, properties: { id: { type: integer }, code: { type: string } } }
         created_at: { type: string, format: date-time }
         lines: { type: array, items: { $ref: '#/components/schemas/TabLine' } }
         payments:
@@ -7463,6 +7495,7 @@ components:
         tab_label: { type: string, nullable: true, maxLength: 100 }
         customer_id: { type: integer, nullable: true }
         local_ref: { type: string, format: uuid, nullable: true }
+        guest_count: { type: integer, nullable: true, minimum: 1, maximum: 99, description: "048 — jumlah tamu. Terminal dikenali dari header `X-Device-Id` (bukan body)." }
 
     AddTabLineInput:
       type: object

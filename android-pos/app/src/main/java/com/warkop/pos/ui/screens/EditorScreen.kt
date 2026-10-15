@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.warkop.pos.model.*
+import com.warkop.pos.state.Load
 import com.warkop.pos.state.PosStore
 import com.warkop.pos.state.Sheet
 import com.warkop.pos.ui.*
@@ -36,28 +37,34 @@ import com.warkop.pos.ui.*
 fun EditorScreen(store: PosStore) {
     val order = store.active ?: return
     val size = windowSize()
-    var cat by remember { mutableStateOf(PosCatalog.categories.first().id) }
+    val catalog = store.menu
+    var cat by remember(catalog) { mutableStateOf(catalog?.categories?.firstOrNull()?.id ?: "") }
     var query by remember { mutableStateOf("") }
     var paneOpen by remember { mutableStateOf(false) }
-    val items = remember(cat, query) {
-        if (query.isNotBlank()) PosCatalog.products.filter { it.name.contains(query, ignoreCase = true) } else PosCatalog.products.filter { it.cat == cat }
+    val items = remember(cat, query, catalog) {
+        val all = catalog?.products.orEmpty()
+        if (query.isNotBlank()) all.filter { it.name.contains(query, ignoreCase = true) } else all.filter { it.cat == cat }
     }
     val qtyById = order.live.groupBy { it.itemId }.mapValues { (_, v) -> v.sumOf { it.qty } }
 
     val menu: @Composable (Modifier) -> Unit = { m ->
         Row(m) {
-            if (size == Size.EXPANDED || size == Size.LARGE) CategoryRail(cat, if (size == Size.LARGE) 160.dp else 150.dp) { cat = it; query = "" }
+            if (size == Size.EXPANDED || size == Size.LARGE) CategoryRail(catalog?.categories.orEmpty(), cat, if (size == Size.LARGE) 160.dp else 150.dp) { cat = it; query = "" }
             Column(Modifier.weight(1f)) {
                 if (size == Size.COMPACT || size == Size.MEDIUM) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PosCatalog.categories.forEach { c -> FilterChip(c.id == cat && query.isBlank(), { cat = c.id; query = "" }, { Text(c.name) }, shape = RoundedCornerShape(50)) }
+                        catalog?.categories.orEmpty().forEach { c -> FilterChip(c.id == cat && query.isBlank(), { cat = c.id; query = "" }, { Text(c.name) }, shape = RoundedCornerShape(50)) }
                     }
                 }
                 SearchField(query) { query = it }
                 Spacer(Modifier.height(10.dp))
-                if (items.isEmpty()) Text("Tidak ada menu \"$query\"", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                when (val c = store.catalog) {
+                    is Load.Failed -> ErrorState(c.error.message, onRetry = { store.loadMenu() }, modifier = Modifier.fillMaxWidth())
+                    is Load.Loading, is Load.Idle -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    is Load.Ready -> if (items.isEmpty()) Text(if (query.isBlank()) "Belum ada menu di kategori ini." else "Tidak ada menu \"$query\"", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 LazyVerticalGrid(GridCells.Fixed(size.menuColumns()), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = if (size == Size.COMPACT) 88.dp else 8.dp)) {
-                    items(items, key = { it.id }) { p -> MenuCard(p, qtyById[p.id] ?: 0, onTap = { store.tapProduct(p) }, onHold = { store.say(if (store.user?.isSupervisor == true) "Ketersediaan ${p.name} diubah." else "Mengubah ketersediaan perlu persetujuan Supervisor.") }) }
+                    items(items, key = { it.id }) { p -> MenuCard(p, catalog?.categories.orEmpty(), items, qtyById[p.id] ?: 0, p.id in store.soldOut, onTap = { store.tapProduct(p) }, onHold = { store.say(if (store.user?.isSupervisor == true) "Ketersediaan ${p.name} diubah." else "Mengubah ketersediaan perlu persetujuan Supervisor.") }) }
                 }
             }
         }
@@ -85,10 +92,10 @@ fun EditorScreen(store: PosStore) {
 }
 
 @Composable
-private fun CategoryRail(selected: String, width: androidx.compose.ui.unit.Dp, onSelect: (String) -> Unit) {
+private fun CategoryRail(categories: List<MenuCategory>, selected: String, width: androidx.compose.ui.unit.Dp, onSelect: (String) -> Unit) {
     Column(Modifier.width(width).padding(end = 12.dp)) {
         Text("Kategori", Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        PosCatalog.categories.forEach { c ->
+        categories.forEach { c ->
             val sel = c.id == selected
             Surface(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).height(52.dp), shape = RoundedCornerShape(50), color = if (sel) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent, onClick = { onSelect(c.id) }) {
                 Box(Modifier.padding(horizontal = 20.dp), contentAlignment = Alignment.CenterStart) { Text(c.name, fontWeight = FontWeight.Medium, fontSize = 17.sp) }
@@ -114,13 +121,13 @@ private fun SearchField(value: String, onChange: (String) -> Unit) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MenuCard(p: Product, qty: Int, onTap: () -> Unit, onHold: () -> Unit) {
-    val cat = PosCatalog.categories.first { it.id == p.cat }
-    val index = PosCatalog.products.filter { it.cat == p.cat }.indexOf(p) + 1
+private fun MenuCard(p: Product, categories: List<MenuCategory>, siblings: List<Product>, qty: Int, is86: Boolean, onTap: () -> Unit, onHold: () -> Unit) {
+    val cat = categories.firstOrNull { it.id == p.cat } ?: MenuCategory(p.cat, "", "?", Tone.OUTLINE)
+    val index = siblings.filter { it.cat == p.cat }.indexOf(p) + 1
     val (tileBg, tileFg) = toneColors(cat.tone)
-    val dim = if (p.is86) 0.55f else 1f
+    val dim = if (is86) 0.55f else 1f
     Surface(
-        Modifier.fillMaxWidth().combinedClickable(onClick = onTap, onLongClick = onHold).then(if (p.is86) Modifier.hatched(MaterialTheme.colorScheme.outlineVariant) else Modifier),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onTap, onLongClick = onHold).then(if (is86) Modifier.hatched(MaterialTheme.colorScheme.outlineVariant) else Modifier),
         shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(8.dp)) {
@@ -128,7 +135,7 @@ private fun MenuCard(p: Product, qty: Int, onTap: () -> Unit, onHold: () -> Unit
                 Text("${cat.code}$index", Modifier.padding(10.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tileFg.copy(alpha = dim))
                 Icon(productIcon(p.icon), null, Modifier.align(Alignment.Center).size(64.dp), tint = tileFg.copy(alpha = dim))
                 if (qty > 0) Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(30.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) { Text(qty.toString(), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
-                if (p.is86) Pill("Habis", MaterialTheme.colorScheme.surfaceContainerLowest, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.align(Alignment.BottomStart).padding(8.dp))
+                if (is86) Pill("Habis", MaterialTheme.colorScheme.surfaceContainerLowest, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.align(Alignment.BottomStart).padding(8.dp))
                 else if (p.groups.isNotEmpty()) Pill("Pilihan", MaterialTheme.colorScheme.surfaceContainerLowest, MaterialTheme.colorScheme.onSurface, Modifier.align(Alignment.BottomStart).padding(8.dp))
             }
             Spacer(Modifier.height(8.dp))

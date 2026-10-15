@@ -263,6 +263,13 @@ class OrderController extends Controller
             'customer_phone' => $order->customer?->phone,
             'customer_email' => $order->customer?->email,
             'order_number' => $order->order_number,
+            // 048 — nomor struk per terminal (T01-000124), nomor antrean counter, jumlah tamu, dan pajak eksklusif.
+            'receipt_no' => $order->receipt_no,
+            'queue_no' => $order->queue_no,
+            'guest_count' => $order->guest_count,
+            'tax_amount' => number_format((float) $order->tax_amount, 2, '.', ''),
+            'tax_rate' => number_format((float) $order->tax_rate_snapshot, 2, '.', ''),
+            'tax_label' => \App\Support\PosSettings::taxLabel(),
             // 028 — struk penjualan dari tab menampilkan meja/label takeaway.
             'service_type' => $order->service_type,
             'table' => $order->table ? ['id' => $order->table->id, 'name' => $order->table->name, 'area' => $order->table->area] : null,

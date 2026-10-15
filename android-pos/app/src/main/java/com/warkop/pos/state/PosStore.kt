@@ -112,6 +112,9 @@ class PosStore(
         }
     }
 
+    /** Hanya untuk layar penyiapan terminal. */
+    internal val backendForSetup: PosBackend? get() = backend
+
     internal fun setConfig(c: TerminalConfig) { config = c; dest = Dest.PIN; loadRoster() }
 
     /** Hanya untuk preset pembandingan visual (src/debug); tidak ada jalur produk yang memanggilnya. */
@@ -128,36 +131,85 @@ class PosStore(
     fun show(s: Sheet?) { sheet = s }
     fun say(msg: String) { toast = msg }
     fun clearToast() { toast = null }
-    fun lock() { user = null; activeId = null; dest = Dest.PIN; sheet = null }
+    fun lock() {
+        availabilityJob?.cancel()
+        viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { } }
+        session = null; user = null; shift = null; activeId = null; catalog = Load.Idle; soldOut = emptySet(); dest = Dest.PIN; sheet = null
+        loadRoster()
+    }
 
-    // ---------- PIN ----------
-    /** Demo desain: 6 digit apa saja kecuali 000000. Login sungguhan memakai POST /auth/pin-sessions (lihat PinAuthController). */
-    sealed interface PinResult { data object Ok : PinResult; data class Wrong(val left: Int) : PinResult; data object Locked : PinResult }
+    // ---------- PIN (server) ----------
+    /** Pesan galat login PIN untuk layar PIN: salah (sisa percobaan), terkunci, jaringan. */
+    fun loginPin(staff: StaffUser, pin: String, onFailure: (String) -> Unit) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                val s = b.pinLogin(staff, pin)
+                session = s
+                user = s.user
+                shift = try { b.currentShift() } catch (_: ApiError) { null }
+                dest = when {
+                    s.user.code == "CSH" && shift == null -> Dest.OPEN_SHIFT
+                    s.user.code == "CSH" -> { newCounter(); Dest.EDITOR }
+                    s.user.code == "WTR" -> Dest.TABLES
+                    else -> Dest.ORDERS
+                }
+                loadMenu()
+                startAvailabilityPolling()
+            } catch (e: ApiError) {
+                onFailure(pinMessage(e))
+                if (e is ApiError.TooMany || e is ApiError.Unauthorized) loadRoster()
+            }
+        }
+    }
 
-    fun submitPin(u: StaffUser, pin: String): PinResult {
-        val now = System.currentTimeMillis()
-        if ((lockedUntil ?: 0) > now) return PinResult.Locked
-        if (pin == "000000") {
-            pinFails++
-            if (pinFails >= 5) { lockedUntil = now + 15 * 60_000; pinFails = 0; return PinResult.Locked }
-            return PinResult.Wrong(5 - pinFails)
+    private fun pinMessage(e: ApiError): String = when {
+        e is ApiError.Unauthorized && e.code == "invalid_pin" -> e.attemptsRemaining?.let { "PIN salah. Sisa $it percobaan." } ?: "PIN salah."
+        e is ApiError.TooMany && e.code == "pin_locked" -> "Login dikunci 15 menit karena PIN salah 5 kali."
+        else -> e.message
+    }
+
+    // ---------- menu & ketersediaan ----------
+    var catalog by mutableStateOf<Load<MenuCatalog>>(Load.Idle); private set
+    var soldOut by mutableStateOf<Set<String>>(emptySet()); private set
+    private var availabilityEtag: String? = null
+    private var availabilityJob: kotlinx.coroutines.Job? = null
+
+    val menu: MenuCatalog? get() = (catalog as? Load.Ready)?.value
+
+    fun loadMenu() {
+        val b = backend ?: return
+        catalog = Load.Loading
+        viewModelScope.launch {
+            catalog = try { Load.Ready(b.loadMenu()) } catch (e: ApiError) { Load.Failed(e) }
         }
-        pinFails = 0
-        user = u
-        dest = when {
-            u.code == "CSH" && shift == null -> Dest.OPEN_SHIFT
-            u.code == "CSH" -> { newCounter(); Dest.EDITOR }
-            u.code == "WTR" -> Dest.TABLES
-            else -> Dest.ORDERS
+    }
+
+    /** Poll ±5 dtk selama ada sesi (SC-008); 304 = tak berubah. Gagal sesaat diabaikan: poll berikutnya mencoba lagi. */
+    private fun startAvailabilityPolling() {
+        val b = backend ?: return
+        availabilityJob?.cancel()
+        availabilityEtag = null
+        availabilityJob = viewModelScope.launch {
+            while (true) {
+                try {
+                    b.availability(availabilityEtag)?.let { a -> availabilityEtag = a.etag; soldOut = a.soldOutVariantIds }
+                } catch (_: ApiError) { /* poll berikutnya */ }
+                kotlinx.coroutines.delay(5_000)
+            }
         }
-        return PinResult.Ok
     }
 
     // ---------- shift ----------
     fun openShift(float: Int) {
-        shift = Shift("Shift 1", clock(), "07:00-15:00", float, user?.id ?: "")
-        say("Shift 1 dibuka dengan modal ${rp(float)}.")
-        go(Dest.TABLES)
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                shift = b.openShift(float.toLong())
+                say("Shift dibuka dengan modal ${rp(float)}.")
+                go(Dest.TABLES)
+            } catch (e: ApiError) { say(e.message) }
+        }
     }
 
     // ---------- order ----------
@@ -185,7 +237,7 @@ class PosStore(
     private fun updateActive(f: (Order) -> Order) { activeId?.let { update(it, f) } }
 
     fun tapProduct(p: Product) {
-        if (p.is86) { say("${p.name} sedang habis. Tahan untuk mengubah ketersediaan."); return }
+        if (p.id in soldOut) { say("${p.name} sedang habis. Tahan untuk mengubah ketersediaan."); return }
         if (p.groups.isEmpty()) addLine(p, emptyList(), "") else sheet = Sheet.Modifier(p)
     }
 

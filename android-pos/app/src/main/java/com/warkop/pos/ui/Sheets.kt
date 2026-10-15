@@ -128,7 +128,8 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
     var note by remember { mutableStateOf("") }
     var qty by remember { mutableIntStateOf(1) }
     var firstMissing by remember { mutableStateOf<String?>(null) }
-    val groups = p.groups.mapNotNull { PosCatalog.groups[it] }
+    val catalogGroups = store.menu?.groups.orEmpty()
+    val groups = p.groups.mapNotNull { catalogGroups[it] }
     val chosen = groups.flatMap { picks[it.id].orEmpty() }
     val unit = p.price + chosen.sumOf { it.delta }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
@@ -169,7 +170,7 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
-            firstMissing?.let { id -> Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error); Spacer(Modifier.width(8.dp)); Text("Pilih ${PosCatalog.groups[id]?.name?.lowercase()} dulu.", color = MaterialTheme.colorScheme.error, fontSize = 14.sp) } }
+            firstMissing?.let { id -> Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error); Spacer(Modifier.width(8.dp)); Text("Pilih ${catalogGroups[id]?.name?.lowercase()} dulu.", color = MaterialTheme.colorScheme.error, fontSize = 14.sp) } }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 QtyStepper(qty, { if (qty > 1) qty-- }, { qty++ }, Modifier.height(56.dp))
                 Spacer(Modifier.width(14.dp))

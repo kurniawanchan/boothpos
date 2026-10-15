@@ -1,11 +1,16 @@
 package com.warkop.pos.data
 
 import com.warkop.core.domain.ApiError
+import com.warkop.core.domain.Money
 import com.warkop.core.network.ApiClient
+import com.warkop.core.network.ApiErrorMapper
 import com.warkop.core.network.PosApi
 import com.warkop.core.network.RequestContext
 import com.warkop.core.network.apiCall
 import com.warkop.core.network.dto.*
+import com.warkop.pos.model.Availability
+import com.warkop.pos.model.MenuCatalog
+import com.warkop.pos.model.Shift
 import com.warkop.pos.model.StaffUser
 import java.time.Instant
 
@@ -103,6 +108,41 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         runCatching { if (sessionToken != null) apiCall { api().logout() } }
         sessionToken = null
         vault.clear(TokenVault.SESSION_TOKEN, TokenVault.SESSION_EXPIRES)
+    }
+
+    // --- katalog ---
+    override suspend fun loadMenu(): MenuCatalog {
+        val all = ArrayList<ProductDto>()
+        var page = 1
+        do {
+            val res = apiCall { api().products(page) }
+            all += res.data
+            page++
+        } while (res.meta.currentPage < res.meta.lastPage)
+        return MenuMapper.toCatalog(all)
+    }
+
+    override suspend fun availability(since: String?): Availability? {
+        val res = apiCall { api().availability(since) }
+        if (res.code() == 304) return null
+        if (!res.isSuccessful) throw ApiErrorMapper.fromHttp(res.code(), runCatching { res.errorBody()?.string() }.getOrNull())
+        val body = res.body() ?: return null
+        return Availability(body.etag, body.soldOut.flatMap { it.variantIds }.map { it.toString() }.toSet())
+    }
+
+    // --- shift ---
+    override suspend fun currentShift(): Shift? {
+        val res = apiCall { api().currentSession() }
+        if (res.code() == 404) return null
+        if (!res.isSuccessful) throw ApiErrorMapper.fromHttp(res.code(), runCatching { res.errorBody()?.string() }.getOrNull())
+        return res.body()?.let(::shift)
+    }
+
+    override suspend fun openShift(totalRupiah: Long): Shift = shift(apiCall { api().openSession(OpenSessionRequest(totalRupiah)) })
+
+    private fun shift(d: SessionDto): Shift {
+        val opened = d.openedAt?.let { runCatching { java.time.OffsetDateTime.parse(it).toLocalTime().toString().take(5) }.getOrNull() } ?: "--:--"
+        return Shift("Shift 1", opened, "", Money.parse(d.openingCash).toInt(), "", d.id)
     }
 
     private fun session(user: AuthUserDto, expires: Long) = PosSession(

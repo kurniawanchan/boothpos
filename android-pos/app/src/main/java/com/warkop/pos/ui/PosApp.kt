@@ -8,6 +8,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.warkop.pos.debug.DebugPresets
+import com.warkop.pos.setup.TerminalSetupScreen
 import com.warkop.pos.state.Dest
 import com.warkop.pos.state.PosStore
 import com.warkop.pos.theme.PosTheme
@@ -22,7 +23,7 @@ fun PosApp(store: PosStore, preset: String? = null) {
             Box(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                 when (store.dest) {
-                    Dest.SETUP -> Text("Penyiapan terminal")
+                    Dest.SETUP -> store.backendForSetup?.let { TerminalSetupScreen(it) { cfg -> store.setConfig(cfg) } }
                     Dest.PIN -> PinScreen(store)
                     Dest.OPEN_SHIFT -> OpenShiftScreen(store)
                     Dest.TABLES -> PosShell(store, "Meja") { TablesScreen(store) }

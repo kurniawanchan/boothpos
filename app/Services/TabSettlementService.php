@@ -19,6 +19,7 @@ use Illuminate\Validation\ValidationException;
 class TabSettlementService
 {
     public function __construct(
+        private ReceiptNumbering $numbering,
         private TabService $tabs,
         private PaymentRecorder $paymentRecorder,
         private OrderService $orders,
@@ -55,7 +56,7 @@ class TabSettlementService
                 if ($discount > (float) $order->subtotal) {
                     throw ValidationException::withMessages(['discount_amount' => __('orders_payments.discount_exceeds_subtotal')]);
                 }
-                $order->update(['discount_amount' => $discount, 'total_amount' => round((float) $order->subtotal - $discount, 2)]);
+                $this->tabs->recalculate($order, $discount);
             }
 
             $total = round((float) $order->total_amount, 2);
@@ -84,6 +85,7 @@ class TabSettlementService
                 }
 
                 $update += ['status' => Order::STATUS_COMPLETED, 'change_amount' => $change];
+                $order->forceFill(['receipt_no' => $this->receiptFor($order)]);
             }
 
             $order->update($update);
@@ -194,7 +196,7 @@ class TabSettlementService
                 if ($discount > (float) $paid->subtotal) {
                     throw ValidationException::withMessages(['discount_amount' => __('orders_payments.discount_exceeds_subtotal')]);
                 }
-                $paid->update(['discount_amount' => $discount, 'total_amount' => round((float) $paid->subtotal - $discount, 2)]);
+                $this->tabs->recalculate($paid, $discount);
             }
 
             $total = round((float) $paid->total_amount, 2);
@@ -214,6 +216,7 @@ class TabSettlementService
             if ($change > $cash + 0.01) {
                 throw ValidationException::withMessages(['payments' => __('orders_payments.change_exceeds_cash_received')]);
             }
+            $paid->forceFill(['device_id' => $order->device_id, 'receipt_no' => $this->receiptFor($order)]);
             $paid->update(['paid_amount' => $paidAmount, 'change_amount' => $change]);
 
             // Sisa tab: dihitung ulang; bila tak ada baris tersisa, tab (kini kosong) ditutup dan mejanya kosong.
@@ -224,5 +227,16 @@ class TabSettlementService
 
             return ['paid_order' => $this->tabs->loaded($paid), 'tab' => $this->tabs->loaded($order), 'replayed' => false];
         });
+    }
+
+    /** 048 — nomor struk dari terminal pembuka order; order tanpa terminal (SPA web) tidak bernomor terminal (null). */
+    private function receiptFor(Order $order): ?string
+    {
+        if ($order->device_id === null || $order->receipt_no !== null) {
+            return $order->receipt_no;
+        }
+        $device = \App\Models\Device::withoutGlobalScopes()->find($order->device_id);
+
+        return $device === null ? null : $this->numbering->receiptFor($device);
     }
 }
