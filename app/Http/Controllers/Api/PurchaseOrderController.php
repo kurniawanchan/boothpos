@@ -23,7 +23,8 @@ class PurchaseOrderController extends Controller
         $perPage = min((int) $request->integer('per_page', 25), 100);
 
         $orders = PurchaseOrder::query()
-            ->with('vendor')
+            ->with(['vendor', 'artist'])
+            ->when($request->filled('artist_id'), fn ($q) => $q->where('artist_id', $request->integer('artist_id')))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('vendor_id'), fn ($q) => $q->where('vendor_id', $request->integer('vendor_id')))
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
@@ -53,13 +54,13 @@ class PurchaseOrderController extends Controller
     {
         $this->authorize('view', $purchaseOrder);
 
-        return response()->json($this->present($purchaseOrder->load(['items.material', 'items.product', 'vendor', 'payments'])));
+        return response()->json($this->present($purchaseOrder->load(['items' => fn ($q) => $q->withCount('bomLines'), 'items.material', 'items.product', 'vendor', 'artist', 'payments'])));
     }
 
     public function update(UpdatePurchaseOrderRequest $request, PurchaseOrder $purchaseOrder): JsonResponse
     {
         try {
-            $po = $this->purchaseOrderService->update($purchaseOrder, $request->validated());
+            $po = $this->purchaseOrderService->update($purchaseOrder, $request->validated(), $request->user());
         } catch (ValidationException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 409);
         }
@@ -130,7 +131,7 @@ class PurchaseOrderController extends Controller
     {
         $this->authorize('view', $purchaseOrder);
 
-        return response()->json($this->present($purchaseOrder->load(['items.material', 'items.product', 'vendor', 'payments'])));
+        return response()->json($this->present($purchaseOrder->load(['items' => fn ($q) => $q->withCount('bomLines'), 'items.material', 'items.product', 'vendor', 'artist', 'payments'])));
     }
 
     private function present(PurchaseOrder $po): array
@@ -140,6 +141,11 @@ class PurchaseOrderController extends Controller
             'po_number' => $po->po_number,
             'vendor_id' => $po->vendor_id,
             'vendor_name' => $po->vendor?->name,
+            // 034-seller-po-bom — null = PO lama tanpa seller (tidak pernah
+            // ditawarkan sebagai sumber BOM). 'artist' ikut di-eager-load
+            // oleh pemanggil; relationLoaded() mencegah N+1 diam-diam.
+            'artist_id' => $po->artist_id,
+            'artist_name' => $po->relationLoaded('artist') ? $po->artist?->name : null,
             'status' => $po->status,
             'ordered_at' => $po->ordered_at?->toIso8601String(),
             'received_at' => $po->received_at?->toIso8601String(),
@@ -157,6 +163,7 @@ class PurchaseOrderController extends Controller
                 'material_name' => $item->relationLoaded('material') ? $item->material?->name : null,
                 'product_id' => $item->product_id,
                 'product_name' => $item->relationLoaded('product') ? $item->product?->name : null,
+                'used_in_bom_count' => (int) ($item->bom_lines_count ?? 0),
                 'description' => $item->description,
                 'qty' => (string) $item->qty,
                 'unit_price' => number_format((float) $item->unit_price, 2, '.', ''),

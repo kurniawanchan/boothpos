@@ -33,9 +33,8 @@ RUN composer install --no-interaction --prefer-dist --no-dev --optimize-autoload
 # --- Stage 2: runtime ------------------------------------------------
 # Same PHP extension set as the builder (and as docker/php/Dockerfile's
 # dev image), PLUS the MySQL client tools app:backup/app:restore shell
-# out to (research.md R5) — the dev image doesn't need these because
-# the native dev machine already has its own mysqldump path documented
-# in RUNBOOK.md §7.
+# out to (research.md R5). The dev image (docker/php/Dockerfile) now carries
+# the same client + ssl=0 config, so the Settings backup screen works there too.
 FROM php:8.4-cli
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -52,6 +51,12 @@ WORKDIR /var/www/html
 COPY --from=builder /var/www/html /var/www/html
 
 COPY docker/store/entrypoint.sh /var/www/html/docker/store/entrypoint.sh
+
+# Batas unggah PHP yang sama dengan image dev (026, code review): tanpa ini
+# PHP memakai default 2M, sehingga memulihkan dari berkas .sql (sampai 50 MB)
+# dan impor massal produk+gambar gagal sebelum sampai ke Laravel. Lihat
+# komentar di uploads.ini.
+COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/zz-uploads.ini
 RUN chmod +x /var/www/html/docker/store/entrypoint.sh \
     && mkdir -p storage/framework/{cache,sessions,testing,views} storage/logs bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
@@ -61,9 +66,9 @@ RUN chmod +x /var/www/html/docker/store/entrypoint.sh \
 # container: Debian's default-mysql-client (MariaDB client) mengaktifkan
 # SSL secara default dan menolak sertifikat self-signed milik MySQL 8
 # ("TLS/SSL error: self-signed certificate in certificate chain") —
-# gagal persis di command `mysqldump` yang dibangun `BackupPos.php`
-# (yang TIDAK BOLEH diubah, per FR-004: app:backup/app:restore harus
-# tetap sama persis dengan instalasi native). Solusi di level image,
+# gagal persis di command `mysqldump` (kini dibangun MysqlCliDumper,
+# dipakai bersama app:backup/app:restore dan layar Pengaturan sejak 026;
+# perilakunya harus tetap sama dengan instalasi native). Solusi di level image,
 # bukan di kode aplikasi: config client MySQL global yang men-disable
 # SSL untuk mysqldump/mysql/mysqladmin — aman karena ini jaringan
 # Compose lokal tanpa paparan eksternal, bukan koneksi yang butuh TLS.

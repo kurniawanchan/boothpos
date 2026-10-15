@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\ArtistController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BackupController;
 use App\Http\Controllers\Api\BusinessTypeController;
 use App\Http\Controllers\Api\CashierSessionController;
 use App\Http\Controllers\Api\CategoryController;
@@ -28,10 +29,12 @@ use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\StockController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Controllers\Api\VariantBomController;
 use App\Http\Controllers\Api\PosDraftController;
 use App\Http\Controllers\Api\PurchaseOrderController;
 use App\Http\Controllers\Api\VendorController;
 use App\Http\Middleware\SetLocaleFromUser;
+use App\Services\BackupService;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -64,6 +67,16 @@ Route::prefix('v1')->group(function () {
         Route::post('/settings/store-logo', [SettingsController::class, 'uploadStoreLogo']);
         Route::get('/settings/payment', [InvoicePaymentSettingController::class, 'show']);
         Route::put('/settings/payment', [InvoicePaymentSettingController::class, 'update']);
+
+        // Cadangan & pemulihan database (Pengaturan) — owner/admin, dicek di
+        // BackupController. 'restore-upload' didaftarkan sebelum rute ber-{id}
+        // dan {id} dibatasi polanya, jadi id sembarang (mis. '../x') 404 di rute.
+        Route::get('/backups', [BackupController::class, 'index']);
+        Route::post('/backups', [BackupController::class, 'store']);
+        Route::post('/backups/restore-upload', [BackupController::class, 'restoreUpload']);
+        Route::get('/backups/{id}/download', [BackupController::class, 'download'])->where('id', BackupService::ID_PATTERN);
+        Route::post('/backups/{id}/restore', [BackupController::class, 'restore'])->where('id', BackupService::ID_PATTERN);
+        Route::delete('/backups/{id}', [BackupController::class, 'destroy'])->where('id', BackupService::ID_PATTERN);
 
         Route::get('/activity-logs', [ActivityLogController::class, 'index']);
 
@@ -165,10 +178,23 @@ Route::prefix('v1')->group(function () {
         Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel']);
         Route::apiResource('invoices', InvoiceController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
 
-        Route::get('/variants/{variant}/bom', [MaterialController::class, 'bomIndex']);
+        // 034-seller-po-bom — BOM bersumber baris purchase order. Rute statis
+        // 'bom/eligible-lines' & 'bom/items' sengaja di atas rute lain yang
+        // berparameter. POST /variants/{variant}/bom (bahan + jumlah) tetap
+        // ada sebagai jalur LEGACY dan membuat baris legacy.
+        Route::get('/variants/{variant}/bom/eligible-lines', [VariantBomController::class, 'eligibleLines']);
+        Route::post('/variants/{variant}/bom/items', [VariantBomController::class, 'storeItems']);
+        Route::post('/variants/{variant}/bom/copy', [VariantBomController::class, 'copyFrom']);
+        Route::post('/variants/{variant}/bom/copy-out', [VariantBomController::class, 'copyOut']);
+        Route::post('/variants/{variant}/bom/complete', [VariantBomController::class, 'complete']);
+        Route::post('/variants/{variant}/bom/reopen', [VariantBomController::class, 'reopen']);
+        Route::get('/variants/{variant}/bom', [VariantBomController::class, 'index']);
+        // 036 — tombol Simpan dialog BOM: simpan banyak jumlah sekaligus (semua-atau-tidak-sama-sekali).
+        Route::put('/variants/{variant}/bom', [VariantBomController::class, 'updateQuantities']);
         Route::post('/variants/{variant}/bom', [MaterialController::class, 'storeBomLine']);
-        Route::put('/bom/{bomLine}', [MaterialController::class, 'updateBomLine']);
-        Route::delete('/bom/{bomLine}', [MaterialController::class, 'destroyBomLine']);
+        Route::put('/bom/{bomLine}', [VariantBomController::class, 'update']);
+        Route::post('/bom/{bomLine}/replace-source', [VariantBomController::class, 'replaceSource']);
+        Route::delete('/bom/{bomLine}', [VariantBomController::class, 'destroy']);
         Route::get('/variants/{variant}/cost-breakdown', [MaterialController::class, 'costBreakdown']);
 
         Route::apiResource('events', EventController::class);
@@ -195,6 +221,13 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('pos-drafts', PosDraftController::class)->only(['index', 'store', 'show', 'destroy']);
         Route::get('/orders/{order}', [OrderController::class, 'show']);
         Route::post('/orders/{order}/void', [OrderController::class, 'void']);
+        // 028-partial-split-payment — pembayaran susulan / koreksi untuk penjualan POS
+        // yang dibayar sebagian (hapus = owner/admin, dijaga di controller).
+        Route::post('/orders/{order}/payments', [OrderController::class, 'storePayment']);
+        Route::delete('/orders/{order}/payments/{payment}', [OrderController::class, 'destroyPayment']);
+        Route::patch('/orders/{order}/payments/{payment}/confirmation', [OrderController::class, 'updatePaymentConfirmation']);
+        Route::post('/orders/{order}/payments/{payment}/verify', [OrderController::class, 'verifyPayment']);
+        Route::post('/orders/verify-payments', [OrderController::class, 'verifyPayments']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
 
         // 007-preorder-import-export-notify — rute statis ('export',
@@ -219,10 +252,18 @@ Route::prefix('v1')->group(function () {
         Route::post('/preorders/bulk-invoices', [PreorderController::class, 'bulkInvoices']);
         Route::post('/preorders/bulk-email', [PreorderController::class, 'bulkEmailInvoices']);
 
+        // 027-preorder-duplicate-split — rute statis, WAJIB sebelum
+        // apiResource('preorders', ...) (alasan sama dengan 'bulk-*' di atas).
+        Route::post('/preorders/duplicate', [PreorderController::class, 'duplicate']);
+
         Route::apiResource('preorders', PreorderController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::patch('/preorders/{preorder}/status', [PreorderController::class, 'updateStatus']);
         Route::patch('/preorders/{preorder}/dispatch-status', [PreorderController::class, 'updateDispatchStatus']);
         Route::post('/preorders/{preorder}/payments', [PreorderController::class, 'storePayment']);
+        Route::delete('/preorders/{preorder}/payments/{payment}', [PreorderController::class, 'destroyPayment']);
+        Route::patch('/preorders/{preorder}/payments/{payment}/confirmation', [PreorderController::class, 'updatePaymentConfirmation']);
+        Route::post('/preorders/{preorder}/payments/{payment}/verify', [PreorderController::class, 'verifyPayment']);
+        Route::post('/preorders/{preorder}/split', [PreorderController::class, 'split']);
         Route::post('/preorders/{preorder}/shipment', [ShipmentController::class, 'store']);
         Route::get('/preorders/{preorder}/invoice', [PreorderController::class, 'invoice']);
         Route::post('/preorders/{preorder}/notifications/resend', [PreorderController::class, 'resendNotification']);
@@ -238,6 +279,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/imports/master-data', [MasterDataImportController::class, 'store']);
 
         Route::get('/reports/sales', [ReportController::class, 'sales']);
+        Route::post('/reports/sales/transactions/export', [ReportController::class, 'exportSalesTransactions']);
         Route::get('/reports/profit', [ReportController::class, 'profit']);
         Route::get('/reports/purchases', [ReportController::class, 'purchases']);
         Route::get('/reports/stock-by-artist', [ReportController::class, 'stockByArtist']);
@@ -248,7 +290,6 @@ Route::prefix('v1')->group(function () {
         // pre-order (status × kelengkapan pembayaran), gated sama seperti
         // laporan lain di atas (canAccessMenu('reports') di dalam method).
         Route::get('/reports/preorders', [ReportController::class, 'preorders']);
-        Route::post('/reports/artist-settlements/{settlement}/payment', [ReportController::class, 'recordSettlementPayment']);
         Route::get('/reports/{report}/export', [ReportController::class, 'export'])
             ->where('report', 'sales|profit|artist-settlements|artist-profit|purchases|stock-by-artist|preorder');
     });

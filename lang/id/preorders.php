@@ -55,4 +55,20 @@ return [
     'import_dispatch_date_not_applicable' => "Baris :row: :column tidak berlaku bila dispatch_status adalah ':status'.",
     'dispatch_status_shipping_mail_order_only' => "'Pengiriman berjalan' hanya berlaku untuk pre-order Mail Order.",
     'dispatch_status_cancelled' => 'Pre-order yang dibatalkan tidak lagi memiliki invoice atau pengiriman aktif untuk dilacak.',
+
+    // 027-preorder-duplicate-split
+    'duplicate_item_unavailable' => 'Barang ":item" sudah tidak bisa dijual (dihapus atau nonaktif), sehingga pre-order ini tidak diduplikasi.',
+    'duplicate_not_found' => 'Pre-order tidak ditemukan.',
+
+    // 027-preorder-duplicate-split (split)
+    'split_not_allowed_status' => 'Pre-order berstatus "Diserahkan" atau "Dibatalkan" tidak bisa dipisah lagi — transaksinya sudah ditutup.',
+    'split_not_allowed_has_payment' => 'Pre-order ini sudah punya pembayaran tercatat, sehingga tidak bisa dipisah. Tangani pembayarannya dulu (misalnya duplikat saja, atau batalkan).',
+    'split_item_not_in_order' => 'Salah satu barang yang dipilih bukan bagian dari pre-order ini.',
+    'split_qty_exceeds_line' => 'Tidak bisa memindahkan lebih dari :qty unit ":item" pada pre-order ini.',
+    'split_must_move_and_keep' => 'Minimal satu unit harus pindah ke pre-order baru dan minimal satu unit harus tetap di pre-order ini.',
+    'split_discount_exceeds_remaining' => 'Setelah dipisah, diskon pre-order ini akan lebih besar dari sisa tagihannya. Turunkan diskonnya dulu, lalu pisahkan lagi.',
+    'split_single_seller' => 'Semua barang di pre-order ini milik penjual yang sama, jadi tidak ada yang bisa dipisah per penjual.',
+
+    // Hapus pembayaran pre-order
+    'payment_delete_not_allowed_status' => 'Pembayaran pada pre-order berstatus "Diserahkan" atau "Dibatalkan" tidak bisa dihapus lagi — transaksinya sudah ditutup.',
 ];

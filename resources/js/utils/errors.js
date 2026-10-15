@@ -42,6 +42,14 @@ export class ApiError extends Error {
   get isLocked() {
     return this.status === 423;
   }
+
+  // 035-po-row-actions — database tertinggal dari versi aplikasi (migrasi
+  // belum diterapkan). Server menjawab 503 + code `schema_outdated` dengan
+  // pesan ramah; layar memakai getter ini untuk menampilkan status galat
+  // "coba lagi" alih-alih dialog kosong atau keadaan kosong yang menyesatkan.
+  get isSchemaOutdated() {
+    return this.status === 503 && this.code === 'schema_outdated';
+  }
 }
 
 const FALLBACK_MESSAGE = 'Terjadi kesalahan. Silakan coba lagi.';

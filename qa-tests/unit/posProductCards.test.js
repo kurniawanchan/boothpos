@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildProductCards, toCartItem } from '../../resources/js/utils/posProductCards';
+import { buildProductCards, buildSearchCards, toCartItem } from '../../resources/js/utils/posProductCards';
 
 const variant = (overrides = {}) => ({
   id: 1,
@@ -125,4 +125,67 @@ describe('toCartItem', () => {
     const item = toCartItem(card, variant({ image_url: null }));
     expect(item.image_url).toBe('https://example.test/product.png');
   });
+});
+
+// 030-fix-pos-search-product-image — kartu hasil pencarian dulu dibuat inline di PosView
+// dengan memilih sebagian field saja, sehingga `image_url` (yang sudah dikirim
+// GET /variants/lookup) hilang dan kartu menampilkan ikon placeholder.
+describe('buildSearchCards', () => {
+  const hit = (overrides = {}) => ({
+    variant_id: 7,
+    sku: 'SPF-PI-MCY-014',
+    label: 'MCYT — Slippery',
+    artist_name: 'sapphirefiless',
+    category_name: 'Pin',
+    sell_price: '15000.00',
+    current_stock: 20,
+    is_preorder: false,
+    image_url: 'http://localhost/storage/variants/slippery.png',
+    ...overrides,
+  });
+
+  it('carries the hit\'s image_url onto the card (the photo the lookup already resolved)', () => {
+    const [card] = buildSearchCards([hit()]);
+
+    expect(card.image_url).toBe('http://localhost/storage/variants/slippery.png');
+  });
+
+  it('gives image_url null when the hit has no photo (null or missing), so the placeholder shows', () => {
+    const [withNull, missing] = buildSearchCards([hit({ image_url: null }), hit({ variant_id: 8, image_url: undefined })]);
+
+    expect(withNull.image_url).toBeNull();
+    expect(missing.image_url).toBeNull();
+  });
+
+  it('carries the hit\'s category_name onto the card, null when the hit has none', () => {
+    const [withCategory, without, missing] = buildSearchCards([hit(), hit({ variant_id: 8, category_name: null }), hit({ variant_id: 9, category_name: undefined })]);
+
+    expect(withCategory.category_name).toBe('Pin');
+    expect(without.category_name).toBeNull();
+    expect(missing.category_name).toBeNull();
+  });
+
+  it('maps every other field exactly as before and keeps the order of the hits', () => {
+    const cards = buildSearchCards([hit({ variant_id: 1 }), hit({ variant_id: 2, label: 'MCYT — Slippery (40cm)', sell_price: '40000.00', current_stock: 9 })]);
+
+    expect(cards.map((c) => c.variant_id)).toEqual([1, 2]);
+    expect(cards[1]).toEqual({
+      variant_id: 2,
+      sku: 'SPF-PI-MCY-014',
+      name: 'MCYT — Slippery (40cm)',
+      artist_name: 'sapphirefiless',
+      sell_price: '40000.00',
+      current_stock: 9,
+      category_code: null,
+      category_name: 'Pin',
+      image_url: 'http://localhost/storage/variants/slippery.png',
+    });
+  });
+
+  it('returns an empty list for null/undefined/empty input', () => {
+    expect(buildSearchCards(null)).toEqual([]);
+    expect(buildSearchCards(undefined)).toEqual([]);
+    expect(buildSearchCards([])).toEqual([]);
+  });
+
 });

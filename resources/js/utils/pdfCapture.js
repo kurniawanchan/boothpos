@@ -27,6 +27,24 @@
 // never tainted, regardless of which host served the original image. The
 // LIVE, visible document is never touched — only the offscreen clone
 // html2canvas rasterizes.
+//
+// BUG YANG DITEMUKAN & DIPERBAIKI (029-fix-bulk-invoice-logo) — gambar yang
+// sudah di-fetch dulu disimpan dalam array lalu dicocokkan ke klon lewat
+// INDEKS: `clonedDoc.querySelectorAll('img')[i]`. Tapi argumen pertama
+// `onclone` adalah klon SELURUH halaman (html2canvas 1.4.1:
+// `onclone(documentClone, referenceElement)`), bukan hanya elemen yang
+// difoto. Satu saja gambar lain di halaman yang muncul SEBELUM dokumen
+// (avatar di header, thumbnail produk, gambar panel yang terbuka) menggeser
+// semua indeks: slot logo menerima data gambar QR, QR dibiarkan, dan PDF
+// faktur massal menampilkan QRIS di tempat logo toko. Unduh massal paling
+// kena karena container dokumennya ditempel di AKHIR <body>.
+//
+// Sekarang pencocokan memakai IDENTITAS gambar — atribut `src`-nya sendiri —
+// bukan posisi, dan hanya mencari di dalam klon elemen acuan bila html2canvas
+// menyediakannya. Sebuah gambar hanya bisa menerima byte miliknya sendiri,
+// berapa pun gambar lain di halaman; gambar yang gagal di-fetch dibiarkan
+// dengan src aslinya (tak pernah diganti gambar lain). URL yang sama
+// di-fetch sekali saja. JANGAN kembali ke pencocokan berdasarkan indeks.
 async function imageToDataUrl(src) {
   const res = await fetch(src);
   const blob = await res.blob();
@@ -46,19 +64,25 @@ async function imageToDataUrl(src) {
 export async function captureElementCanvas(el) {
   const { default: html2canvas } = await import('html2canvas');
 
-  const imgEls = Array.from(el.querySelectorAll('img'));
-  const dataUrls = await Promise.all(
-    imgEls.map((img) => (img.src ? imageToDataUrl(img.src).catch(() => null) : null))
+  // Kunci = atribut src MENTAH (html2canvas menyalin atribut apa adanya ke klon,
+  // jadi kunci yang sama ditemukan di sisi klon); fetch memakai URL hasil resolusi.
+  const imgEls = Array.from(el.querySelectorAll('img')).filter((img) => img.getAttribute('src'));
+  const bySrc = new Map();
+  await Promise.all(
+    [...new Map(imgEls.map((img) => [img.getAttribute('src'), img.src])).entries()].map(async ([rawSrc, resolvedSrc]) => {
+      const dataUrl = await imageToDataUrl(resolvedSrc).catch(() => null);
+      if (dataUrl) bySrc.set(rawSrc, dataUrl);
+    })
   );
 
   return html2canvas(el, {
     backgroundColor: '#ffffff',
     scale: 2,
     useCORS: true,
-    onclone: (clonedDoc) => {
-      const clonedImgs = clonedDoc.querySelectorAll('img');
-      clonedImgs.forEach((img, i) => {
-        if (dataUrls[i]) img.src = dataUrls[i];
+    onclone: (clonedDoc, clonedRoot) => {
+      (clonedRoot ?? clonedDoc).querySelectorAll('img').forEach((img) => {
+        const dataUrl = bySrc.get(img.getAttribute('src'));
+        if (dataUrl) img.src = dataUrl;
       });
     },
   });

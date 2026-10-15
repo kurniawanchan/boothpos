@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
+import id from '../../resources/js/locales/id.json';
 import ProductsView from '../../resources/js/views/ProductsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listProducts, getProduct, updateProduct, updateVariant, uploadVariantImage } from '../../resources/js/api/products';
+import { listProducts, getProduct, updateProduct, updateVariant, addVariant, uploadVariantImage } from '../../resources/js/api/products';
 import { listArtists } from '../../resources/js/api/artists';
 import { listCategories } from '../../resources/js/api/categories';
 
@@ -27,11 +28,11 @@ const PRODUCTS = [
   { id: 2, code_prefix: 'ARTKY002', name: 'Keychain B', artist_name: 'Artist A', category_name: 'Kategori A', is_preorder: false, is_active: true, image_url: null },
 ];
 
-function renderProducts() {
+function renderProducts({ extraMenus = [] } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const auth = useAuthStore();
-  auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'products'] };
+  auth.user = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'products', ...extraMenus] };
   return render(ProductsView, { global: { plugins: [pinia] } });
 }
 
@@ -52,6 +53,52 @@ describe('ProductsView — product images & clickable filters', () => {
     expect(img).toHaveAttribute('src', 'https://example.test/a.png');
     // Keychain B has no image_url — its row must not render an <img> for it.
     expect(screen.queryByAltText('Keychain B')).not.toBeInTheDocument();
+  });
+
+  // 036-bom-variant-stock-ux (US4) — daftar produk yang lebih mudah dibaca.
+  it('shows a translated Type header and never a raw translation key', async () => {
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    expect(screen.getByRole('columnheader', { name: 'Tipe' })).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/master_data\.col_type/i);
+  });
+
+  // 038 — gambar + kode dalam SATU kolom supaya gambar bisa lebih besar (96px, tadinya 56px).
+  it('has no picture-only column: the first column is "Kode" and holds the picture above the code', async () => {
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent.trim());
+    expect(headers.slice(0, 3)).toEqual(['Kode', 'SKU', 'Nama produk']);
+    expect(headers.filter((h) => h === '')).toHaveLength(1); // hanya kolom aksi di ujung kanan yang tanpa judul
+
+    const code = screen.getByText('ARTKY001');
+    const img = screen.getByAltText('Keychain A');
+    const cell = code.closest('td');
+    expect(cell).toContainElement(img);
+    expect(Boolean(img.compareDocumentPosition(code) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true); // gambar di atas kode
+  });
+
+  it('shows a 96px picture, and a same-size placeholder when there is none', async () => {
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    const img = screen.getByAltText('Keychain A');
+    expect(img).toHaveClass('h-24', 'w-24');
+    expect(img).not.toHaveClass('h-14');
+    const placeholder = document.querySelector('.ph-image').parentElement;
+    expect(placeholder).toHaveClass('h-24', 'w-24');
+    // placeholder juga berada di sel yang sama dengan kodenya
+    expect(screen.getByText('ARTKY002').closest('td')).toContainElement(placeholder);
+  });
+
+  it('keeps the product code on one line, with the full code available on hover', async () => {
+    renderProducts();
+    const code = await screen.findByText('ARTKY001');
+
+    expect(code).toHaveClass('whitespace-nowrap');
+    expect(code).toHaveAttribute('title', 'ARTKY001');
   });
 
   it('filters via the searchable artist dropdown and returns to "all" by re-selecting it', async () => {
@@ -226,3 +273,184 @@ describe('ProductsView — product images & clickable filters', () => {
     await waitFor(() => expect(uploadVariantImage).toHaveBeenCalledWith(10, file));
   });
 });
+
+// 034-seller-po-bom (US4) — varian dengan BOM selesai: harga modal mengikuti BOM.
+describe('ProductsView — variants with a completed BOM (034)', () => {
+  const PRODUCT = (variant) => ({
+    id: 1, artist_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KY-001',
+    description: '', is_preorder: false, preorder_eta: null, is_active: true, image_url: null,
+    variants: [{ id: 10, sku: 'ART-KY-001-001', variant_name: 'Standard', sell_price: '30000.00', current_stock: 5, low_stock_alert: null, is_active: true, image_url: null, ...variant }],
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProducts.mockResolvedValue({ data: PRODUCTS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+  });
+
+  async function openEditDrawer() {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderProducts();
+    await screen.findByText('Keychain A');
+    await user.click(screen.getAllByText('Edit')[0]);
+    await screen.findByDisplayValue('Standard');
+  }
+
+  it('locks the cost price and shows a "From BOM" badge when the BOM is complete', async () => {
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '1800.00', bom_complete: true, has_bom: true, bom_cost: '1800.00' }));
+    await openEditDrawer();
+
+    const cost = screen.getByDisplayValue('1800.00');
+    expect(cost).toBeDisabled();
+    expect(screen.getByText('Dari BOM')).toBeInTheDocument();
+    expect(screen.getByText(/mengikuti bom yang sudah selesai/i)).toBeInTheDocument();
+  });
+
+  it('keeps the cost price editable and shows the BOM cost beside it when the BOM is not complete', async () => {
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '1000.00', bom_complete: false, has_bom: true, bom_cost: '1800.00' }));
+    await openEditDrawer();
+
+    expect(screen.getByDisplayValue('1000.00')).not.toBeDisabled();
+    expect(screen.queryByText('Dari BOM')).not.toBeInTheDocument();
+    expect(screen.getByText('Biaya BOM: Rp 1.800')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buka BOM' })).toBeInTheDocument();
+  });
+
+  it('offers "Open BOM" for a saved variant but not for a variant that has no id yet', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '0.00', bom_complete: false, has_bom: false, bom_cost: null }));
+    await openEditDrawer();
+    expect(screen.getAllByRole('button', { name: 'Buka BOM' })).toHaveLength(1);
+
+    await user.click(screen.getByRole('button', { name: /tambah varian/i }));
+    expect(screen.getAllByRole('button', { name: 'Buka BOM' })).toHaveLength(1);
+  });
+
+  it('lets a new variant start empty or copy the BOM of a saved variant, and sends the choice on save', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '1800.00', bom_complete: false, has_bom: true, bom_cost: '1800.00' }));
+    addVariant.mockResolvedValue({ id: 11 });
+    updateProduct.mockResolvedValue({});
+    updateVariant.mockResolvedValue({ id: 10 });
+    renderProducts({ extraMenus: ['purchase_orders'] });
+    await screen.findByText('Keychain A');
+    await user.click(screen.getAllByText('Edit')[0]);
+    await screen.findByDisplayValue('Standard');
+
+    await user.click(screen.getByRole('button', { name: /tambah varian/i }));
+    await user.click(await screen.findByRole('combobox', { name: /bom untuk varian baru ini/i }));
+    await user.click(await screen.findByRole('option', { name: /salin bom dari ART-KY-001-001/i }));
+    await user.click(screen.getByText('Simpan produk'));
+
+    await waitFor(() => expect(addVariant).toHaveBeenCalled());
+    expect(addVariant.mock.calls[0][1]).toMatchObject({ copy_bom_from_variant_id: 10 });
+  });
+
+  it('does not offer the BOM choice for a new variant when no saved variant has a BOM', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getProduct.mockResolvedValue(PRODUCT({ cost_price: '0.00', bom_complete: false, has_bom: false, bom_cost: null }));
+    renderProducts({ extraMenus: ['purchase_orders'] });
+    await screen.findByText('Keychain A');
+    await user.click(screen.getAllByText('Edit')[0]);
+    await screen.findByDisplayValue('Standard');
+
+    await user.click(screen.getByRole('button', { name: /tambah varian/i }));
+
+    expect(screen.queryByText('BOM untuk varian baru ini')).not.toBeInTheDocument();
+  });
+});
+
+// 038-product-list-image-sku-tooltip (US2) — nama varian muncul saat SKU di-hover / difokus.
+describe('ProductsView — SKU tooltip shows the variant name (038)', () => {
+  const V = (n, name) => ({ id: 100 + n, sku: `VLC-SK-ARE-00${n}`, variant_name: name, sell_price: '20000.00', current_stock: 5, is_active: true, image_url: null });
+  const WITH_VARIANTS = [
+    {
+      id: 7, code_prefix: 'VLC-SK-ARE', name: 'Arekku', artist_name: 'Artist A', category_name: 'Kategori A', is_preorder: false, is_active: true, image_url: null,
+      variants: [V(1, 'Merah'), V(2, 'Biru'), V(3, 'Hijau'), V(4, 'Kuning'), V(5, 'Biru'), V(6, '')],
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProducts.mockResolvedValue({ data: WITH_VARIANTS, meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
+    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+  });
+
+  async function setup() {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderProducts();
+    await screen.findByText('Arekku');
+
+    return user;
+  }
+  const sku = (n) => screen.getByRole('button', { name: `VLC-SK-ARE-00${n}` });
+  const showMore = () => screen.getByRole('button', { name: new RegExp(`^${id.master_data.show_more_count.replace('{count}', '3').replace(/[+]/g, '\\+')}`) });
+
+  it('shows that variant\'s name when the SKU is hovered and hides it when the pointer leaves', async () => {
+    const user = await setup();
+
+    await user.hover(sku(2));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Biru');
+    await user.unhover(sku(2));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    await user.hover(sku(1));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Merah');
+  });
+
+  it('shows the same tooltip on keyboard focus and Escape hides it', async () => {
+    const user = await setup();
+
+    await user.tab(); // fokus ke tombol pertama pada halaman; arahkan ke SKU secara eksplisit
+    sku(3).focus();
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Hijau');
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('gives SKUs revealed by "+N more" their own variant name, and tells same-named variants apart by SKU', async () => {
+    const user = await setup();
+    await user.click(showMore());
+
+    await user.hover(sku(4));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Kuning');
+    await user.unhover(sku(4));
+
+    await user.hover(sku(2));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Biru');
+    await user.unhover(sku(2));
+    await user.hover(sku(5));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Biru'); // nama sama, tetapi SKU tetap tampil & berbeda
+    expect(sku(2)).not.toBe(sku(5));
+  });
+
+  it('still opens that variant\'s detail when the SKU is clicked while its tooltip is showing', async () => {
+    const user = await setup();
+
+    await user.hover(sku(2));
+    expect(screen.getByRole('tooltip')).toBeVisible();
+    await user.click(sku(2));
+
+    expect(await screen.findByRole('dialog', { name: 'VLC-SK-ARE-002' })).toBeInTheDocument();
+  });
+
+  it('gives the "+N more" toggle no tooltip, and a variant without a name none either', async () => {
+    const user = await setup();
+
+    await user.hover(showMore());
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    await user.click(showMore()); // membuka SKU yang tersembunyi (tombol berubah menjadi "lebih sedikit")
+
+    await user.hover(sku(6)); // variant_name = ''
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+});
+

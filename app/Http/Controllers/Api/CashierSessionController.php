@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CashierSession;
 use App\Models\Event;
+use App\Models\Order;
 use App\Models\Payment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -108,12 +109,30 @@ class CashierSessionController extends Controller
             'notes' => ['nullable', 'string'],
         ]);
 
-        $cashPaymentsTotal = Payment::whereHas('order', fn ($q) => $q->where('session_id', $session->id))
+        // BUG YANG DITEMUKAN & DIPERBAIKI (026, code review) — dulu menjumlah
+        // SEMUA pembayaran tunai terverifikasi apa adanya: `payments.amount` adalah
+        // uang yang DISERAHKAN pembeli (kembalian disimpan terpisah di
+        // `orders.change_amount`), dan order yang dibatalkan ikut terhitung.
+        // Akibatnya kas yang diharapkan melonjak sebesar total kembalian + tunai
+        // order batal tepat saat shift ditutup, tak cocok dengan panel shift di
+        // halaman Sales (useSalesFilters: tunai diterima MINUS kembalian, tanpa
+        // yang batal). Sekarang keduanya memakai rumus yang sama.
+        // 028-partial-split-payment (research Decision 7) — tunai dihitung di shift
+        // TEMPAT UANG DITERIMA (`payments.session_id`), bukan shift penjualan
+        // aslinya: pembayaran susulan atas penjualan lama masuk ke shift saat ini,
+        // dan shift yang sudah ditutup tak berubah. Kembalian tetap dikurangkan di
+        // shift penjualannya (kembalian hanya terjadi saat checkout). Order batal
+        // dikeluarkan seperti sebelumnya; pembayaran pre-order (session_id NULL)
+        // tetap di luar kas shift.
+        $cashPaymentsTotal = Payment::where('session_id', $session->id)
             ->where('method', 'cash')
             ->where('verification', 'verified')
+            ->whereHas('order', fn ($q) => $q->where('status', '!=', 'voided'))
             ->sum('amount');
 
-        $expectedCash = (float) $session->opening_cash + (float) $cashPaymentsTotal;
+        $changeGiven = Order::where('session_id', $session->id)->where('status', '!=', 'voided')->sum('change_amount');
+
+        $expectedCash = (float) $session->opening_cash + (float) $cashPaymentsTotal - (float) $changeGiven;
         $closingCash = (float) $validated['closing_cash'];
 
         $session->update([
@@ -139,7 +158,9 @@ class CashierSessionController extends Controller
 
         $orders = $session->orders()->where('status', 'completed')->get();
 
-        $byMethod = Payment::whereIn('order_id', $orders->pluck('id'))
+        // 028 — dikelompokkan menurut shift tempat pembayaran DITERIMA (bukan shift penjualan).
+        $byMethod = Payment::where('session_id', $session->id)
+            ->whereHas('order', fn ($q) => $q->where('status', 'completed'))
             ->where('verification', 'verified')
             ->selectRaw('method, count(*) as count, sum(amount) as amount')
             ->groupBy('method')

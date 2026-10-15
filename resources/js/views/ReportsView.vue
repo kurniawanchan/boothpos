@@ -12,14 +12,11 @@ import {
   purchasesReport,
   stockByArtistReport,
   preorderReport,
-  recordSettlementPayment,
   exportReport,
 } from '../api/reports';
-import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
+import { formatIDR, parseMoney } from '../utils/money';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
-import BaseModal from '../components/ui/BaseModal.vue';
-import BaseInput from '../components/ui/BaseInput.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import ArtistTransactionsModal from '../components/report/ArtistTransactionsModal.vue';
@@ -55,6 +52,8 @@ const preorderStats = ref(null);
 // sudah dipakai StockByArtistDetailModal di tab lain.
 const preorderView = ref('summary');
 const preorderByArtist = ref(null);
+// 039 — subtotal per penjual dari server (PreorderSellerSubtotals); layar hanya menempatkannya, tidak menghitung.
+const preorderBySubtotals = ref([]);
 const artists = ref([]);
 const purchasesStatusFilter = ref('');
 const loading = ref(false);
@@ -69,14 +68,19 @@ const artistFilter = ref('');
 // Field mana yang dijumlahkan (sebagai uang vs angka polos) untuk baris
 // Grand Total tiap tab — satu tempat, dipakai oleh computed *Totals di bawah,
 // supaya baris footer tidak menduplikasi logika sum per tab.
+// 039: uang dijumlahkan dalam SEN (bukan float) supaya Grand Total persis sama dengan jumlah semua
+// subtotal per penjual (yang dihitung server dalam sen). Nilai tampil tidak berubah untuk tabel lain:
+// semua masukan sudah bernilai 2 desimal.
 function sumRows(rows, moneyKeys = [], countKeys = []) {
+  const cents = {};
   const totals = {};
-  for (const k of moneyKeys) totals[k] = 0;
+  for (const k of moneyKeys) cents[k] = 0;
   for (const k of countKeys) totals[k] = 0;
   for (const row of rows) {
-    for (const k of moneyKeys) totals[k] += parseMoney(row[k]);
+    for (const k of moneyKeys) cents[k] += Math.round(parseMoney(row[k]) * 100);
     for (const k of countKeys) totals[k] += Number(row[k]) || 0;
   }
+  for (const k of moneyKeys) totals[k] = cents[k] / 100;
   return totals;
 }
 
@@ -194,6 +198,7 @@ async function loadPreorderByArtist() {
     ...row,
     id: `${row.artist_id}__${row.status}__${row.payment_completeness}`,
   }));
+  preorderBySubtotals.value = res.subtotals ?? [];
 }
 
 watch(preorderView, async (view) => {
@@ -216,12 +221,17 @@ watch(preorderView, async (view) => {
 const filteredSettlements = computed(() =>
   !artistFilter.value ? (settlements.value ?? []) : (settlements.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
 );
-const settlementTotals = computed(() => sumRows(filteredSettlements.value, ['total_sales', 'payable_amount', 'paid_amount', 'outstanding'], ['total_units']));
+const settlementTotals = computed(() => sumRows(filteredSettlements.value, ['total_sales'], ['total_units']));
 
 const filteredArtistProfit = computed(() =>
   !artistFilter.value ? (artistProfit.value ?? []) : (artistProfit.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
 );
-const artistProfitTotals = computed(() => sumRows(filteredArtistProfit.value, ['total_sales', 'modal', 'gross_profit']));
+const artistProfitTotals = computed(() => sumRows(filteredArtistProfit.value, [
+  'total_sales', 'modal', 'gross_profit',
+  'sales_pos', 'sales_preorder', 'modal_pos', 'modal_preorder', 'gross_profit_pos', 'gross_profit_preorder',
+]));
+// 033 — respons lama (tanpa rincian POS/pre-order) tidak menampilkan sub-baris di footer.
+const hasArtistProfitSplit = computed(() => (filteredArtistProfit.value ?? []).some((r) => r.sales_pos != null));
 
 const filteredStockByArtist = computed(() =>
   !artistFilter.value ? (stockByArtist.value ?? []) : (stockByArtist.value ?? []).filter((r) => String(r.artist_id) === String(artistFilter.value))
@@ -237,41 +247,30 @@ const filteredPreorderByArtist = computed(() =>
 );
 const preorderByArtistTotals = computed(() => sumRows(filteredPreorderByArtist.value, ['total_order_value', 'total_collected', 'total_outstanding'], ['preorder_count']));
 
+// 039 — baris yang DITAMPILKAN pada tabel Per Penjual: baris data (sesudah filter penjual) dengan satu baris
+// Subtotal sintetis disisipkan tepat sesudah baris terakhir tiap penjual (server menjamin baris satu
+// penjual berurutan). Baris sintetis TIDAK pernah dipakai Grand Total (membaca baris data saja) maupun
+// drill-down Detail (tombolnya disembunyikan untuk baris Subtotal).
+const preorderByArtistDisplayRows = computed(() => {
+  const rows = filteredPreorderByArtist.value;
+  const bySeller = new Map(preorderBySubtotals.value.map((s) => [String(s.artist_id), s]));
+  const out = [];
+  rows.forEach((row, i) => {
+    out.push(row);
+    const next = rows[i + 1];
+    if (next && String(next.artist_id) === String(row.artist_id)) return;
+    const sub = bySeller.get(String(row.artist_id));
+    if (sub) out.push({ ...sub, id: `subtotal__${sub.artist_id}`, _subtotal: true });
+  });
+  return out;
+});
+const preorderRowClass = (row) => (row._subtotal ? 'bg-surface-subtle font-semibold border-t border-line-2' : '');
+
 async function doExport(report) {
   try {
     await exportReport(report, { event_id: eventId.value || undefined });
   } catch {
     toast.error(t('reports.export_report_failed'));
-  }
-}
-
-const showSettlementPay = ref(false);
-const settlementTarget = ref(null);
-const settlementAmount = ref('0');
-const settlementNotes = ref('');
-const payingSettlement = ref(false);
-
-function openSettlementPay(row) {
-  settlementTarget.value = row;
-  settlementAmount.value = row.outstanding;
-  settlementNotes.value = '';
-  showSettlementPay.value = true;
-}
-
-async function submitSettlementPayment() {
-  payingSettlement.value = true;
-  try {
-    await recordSettlementPayment(settlementTarget.value.id, {
-      amount: toMoneyString(settlementAmount.value),
-      notes: settlementNotes.value || null,
-    });
-    toast.success(t('reports.payment_to_artist_recorded'));
-    showSettlementPay.value = false;
-    await loadActiveTab();
-  } catch (err) {
-    if (err.isValidation) toast.error(Object.values(err.errors)[0]?.[0] ?? err.message);
-  } finally {
-    payingSettlement.value = false;
   }
 }
 
@@ -396,10 +395,6 @@ function openPreorderDetail(row) {
             { key: 'artist_name', label: t('reports.col_artist') },
             { key: 'total_units', label: t('reports.col_unit') },
             { key: 'total_sales', label: t('reports.col_sales') },
-            { key: 'payable_amount', label: t('reports.col_payable') },
-            { key: 'paid_amount', label: t('reports.col_paid') },
-            { key: 'outstanding', label: t('reports.col_outstanding') },
-            { key: 'status', label: t('reports.col_status') },
             { key: 'actions', label: '' },
           ]"
           :rows="filteredSettlements"
@@ -407,13 +402,8 @@ function openPreorderDetail(row) {
           row-key="artist_id"
           :empty-message="t('reports.no_active_artists_settlement')"
         >
+          <!-- 040 — rekap ini POS-saja: tidak ada lagi kolom POS/pre-order. -->
           <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
-          <template #cell-payable_amount="{ row }">{{ formatIDR(row.payable_amount) }}</template>
-          <template #cell-paid_amount="{ row }">{{ formatIDR(row.paid_amount) }}</template>
-          <template #cell-outstanding="{ row }">{{ formatIDR(row.outstanding) }}</template>
-          <template #cell-status="{ row }">
-            <span class="text-[12px] font-semibold capitalize" :class="row.status === 'paid' ? 'text-brand-active' : 'text-warn-text'">{{ row.status }}</span>
-          </template>
           <template #cell-actions="{ row }">
             <div class="flex items-center justify-end gap-3">
               <!-- F11.6 — drill-down tersedia untuk artist manapun di rekap
@@ -423,11 +413,6 @@ function openPreorderDetail(row) {
                    diverifikasi langsung sebagai daftar kosong, bukan
                    kontrol yang hilang begitu saja. -->
               <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openArtistTransactions(row)">{{ t('reports.transaction_detail') }}</button>
-              <!-- id is null until a real settlement row exists (an artist
-                   with zero sales this event) — there is nothing to record a
-                   payment against yet, so the action must stay hidden rather
-                   than firing a request the backend can't resolve. -->
-              <button v-if="row.id !== null && parseMoney(row.outstanding) > 0" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="openSettlementPay(row)">{{ t('reports.record_payment_action') }}</button>
             </div>
           </template>
           <template #footer>
@@ -435,10 +420,6 @@ function openPreorderDetail(row) {
               <td class="px-4 py-3 text-[13px]">{{ t('reports.grand_total') }}</td>
               <td class="px-4 py-3 text-[13px]">{{ settlementTotals.total_units }}</td>
               <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.total_sales) }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.payable_amount) }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.paid_amount) }}</td>
-              <td class="px-4 py-3 text-[13px]">{{ formatIDR(settlementTotals.outstanding) }}</td>
-              <td class="px-4 py-3"></td>
               <td class="px-4 py-3"></td>
             </tr>
           </template>
@@ -450,9 +431,9 @@ function openPreorderDetail(row) {
     <template v-else-if="activeTab === 'profit'">
       <EmptyState v-if="!eventId" icon="ph-calendar-dots" :message="t('reports.pick_event_for_profit')" />
       <div v-else-if="profit" class="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.revenue') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.revenue) }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.cost_of_goods') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.cost_of_goods) }}</span></div>
-        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.gross_profit') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.gross_profit) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.revenue') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.revenue) }}</span><span v-if="profit.revenue_pos != null" class="text-[11.5px] text-muted-3">{{ t('reports.split_line', { pos: formatIDR(profit.revenue_pos), preorder: formatIDR(profit.revenue_preorder) }) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.cost_of_goods') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.cost_of_goods) }}</span><span v-if="profit.cost_of_goods_pos != null" class="text-[11.5px] text-muted-3">{{ t('reports.split_line', { pos: formatIDR(profit.cost_of_goods_pos), preorder: formatIDR(profit.cost_of_goods_preorder) }) }}</span></div>
+        <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.gross_profit') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.gross_profit) }}</span><span v-if="profit.gross_profit_pos != null" class="text-[11.5px] text-muted-3">{{ t('reports.split_line', { pos: formatIDR(profit.gross_profit_pos), preorder: formatIDR(profit.gross_profit_preorder) }) }}</span></div>
         <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.event_cost') }}</span><span class="text-[21px] font-extrabold tracking-tight">{{ formatIDR(profit.event_cost) }}</span></div>
         <div class="flex flex-col gap-1.5 rounded-card border border-mint-border bg-mint-50 p-4"><span class="text-[11.5px] font-semibold text-brand-active">{{ t('reports.net_profit') }}</span><span class="text-[21px] font-extrabold tracking-tight text-brand-active">{{ formatIDR(profit.net_profit) }}</span></div>
       </div>
@@ -469,11 +450,15 @@ function openPreorderDetail(row) {
              dari "Modal & Untung" tingkat event, padahal itu laporan lain. -->
         <div class="flex items-start gap-2.5 rounded-lg border border-line-2 bg-surface-subtle px-4 py-3">
           <i class="ph-duotone ph-info text-[16px] text-muted-3" aria-hidden="true"></i>
-          <p class="text-[12px] leading-relaxed text-muted-3">
-            <i18n-t keypath="reports.artist_profit_note" tag="span">
-              <template #bold><span class="font-semibold text-muted-4">{{ t('reports.artist_profit_note_bold') }}</span></template>
-            </i18n-t>
-          </p>
+          <div class="flex flex-col gap-1.5">
+            <p class="text-[12px] leading-relaxed text-muted-3">
+              <i18n-t keypath="reports.artist_profit_note" tag="span">
+                <template #bold><span class="font-semibold text-muted-4">{{ t('reports.artist_profit_note_bold') }}</span></template>
+              </i18n-t>
+            </p>
+            <!-- 033 — laporan ini kini juga menghitung bagian pre-order yang terbayar. -->
+            <p class="text-[12px] leading-relaxed text-muted-3">{{ t('reports.artist_profit_includes_preorder') }}</p>
+          </div>
         </div>
         <div class="overflow-hidden rounded-card border border-line-2 bg-white">
           <DataTable
@@ -488,15 +473,36 @@ function openPreorderDetail(row) {
             row-key="artist_id"
             :empty-message="t('reports.no_artist_sales')"
           >
-            <template #cell-total_sales="{ row }">{{ formatIDR(row.total_sales) }}</template>
-            <template #cell-modal="{ row }">{{ formatIDR(row.modal) }}</template>
-            <template #cell-gross_profit="{ row }"><span class="font-semibold text-brand-active">{{ formatIDR(row.gross_profit) }}</span></template>
+            <!-- 033 — total (POS + pre-order) dengan rincian ringkas di bawahnya;
+                 tiga metrik x tiga kolom akan terlalu lebar, jadi rincian dibuat
+                 sub-baris. Respons lama tanpa field rincian: sub-baris disembunyikan. -->
+            <template #cell-total_sales="{ row }">
+              {{ formatIDR(row.total_sales) }}
+              <div v-if="row.sales_pos != null" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(row.sales_pos), preorder: formatIDR(row.sales_preorder) }) }}</div>
+            </template>
+            <template #cell-modal="{ row }">
+              {{ formatIDR(row.modal) }}
+              <div v-if="row.modal_pos != null" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(row.modal_pos), preorder: formatIDR(row.modal_preorder) }) }}</div>
+            </template>
+            <template #cell-gross_profit="{ row }">
+              <span class="font-semibold text-brand-active">{{ formatIDR(row.gross_profit) }}</span>
+              <div v-if="row.gross_profit_pos != null" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(row.gross_profit_pos), preorder: formatIDR(row.gross_profit_preorder) }) }}</div>
+            </template>
             <template #footer>
               <tr class="border-t-2 border-line-2 bg-surface-subtle font-bold">
                 <td class="px-4 py-3 text-[13px]">{{ t('reports.grand_total') }}</td>
-                <td class="px-4 py-3 text-[13px]">{{ formatIDR(artistProfitTotals.total_sales) }}</td>
-                <td class="px-4 py-3 text-[13px]">{{ formatIDR(artistProfitTotals.modal) }}</td>
-                <td class="px-4 py-3 text-[13px] text-brand-active">{{ formatIDR(artistProfitTotals.gross_profit) }}</td>
+                <td class="px-4 py-3 text-[13px]">
+                  {{ formatIDR(artistProfitTotals.total_sales) }}
+                  <div v-if="hasArtistProfitSplit" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(artistProfitTotals.sales_pos), preorder: formatIDR(artistProfitTotals.sales_preorder) }) }}</div>
+                </td>
+                <td class="px-4 py-3 text-[13px]">
+                  {{ formatIDR(artistProfitTotals.modal) }}
+                  <div v-if="hasArtistProfitSplit" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(artistProfitTotals.modal_pos), preorder: formatIDR(artistProfitTotals.modal_preorder) }) }}</div>
+                </td>
+                <td class="px-4 py-3 text-[13px] text-brand-active">
+                  {{ formatIDR(artistProfitTotals.gross_profit) }}
+                  <div v-if="hasArtistProfitSplit" class="text-[11.5px] font-normal text-muted-3">{{ t('reports.split_line', { pos: formatIDR(artistProfitTotals.gross_profit_pos), preorder: formatIDR(artistProfitTotals.gross_profit_preorder) }) }}</div>
+                </td>
               </tr>
             </template>
           </DataTable>
@@ -645,17 +651,23 @@ function openPreorderDetail(row) {
             { key: 'total_outstanding', label: t('reports.preorder_col_outstanding') },
             { key: 'actions', label: '' },
           ]"
-          :rows="filteredPreorderByArtist"
+          :rows="preorderByArtistDisplayRows"
+          :row-class="preorderRowClass"
           :loading="loading"
           :empty-message="t('reports.no_preorder_report_data')"
         >
-          <template #cell-status="{ row }">{{ PREORDER_STATUS_LABEL[row.status] ?? row.status }}</template>
-          <template #cell-payment_completeness="{ row }">{{ PAYMENT_COMPLETENESS_LABEL[row.payment_completeness] ?? row.payment_completeness }}</template>
+          <!-- 039: baris Subtotal (sintetis) — label di kolom penjual, sel status/kelengkapan kosong, tanpa Detail. -->
+          <template #cell-artist_name="{ row }">
+            <span v-if="row._subtotal" class="font-bold">{{ t('reports.subtotal') }} — {{ row.artist_name }}</span>
+            <template v-else>{{ row.artist_name }}</template>
+          </template>
+          <template #cell-status="{ row }"><template v-if="!row._subtotal">{{ PREORDER_STATUS_LABEL[row.status] ?? row.status }}</template></template>
+          <template #cell-payment_completeness="{ row }"><template v-if="!row._subtotal">{{ PAYMENT_COMPLETENESS_LABEL[row.payment_completeness] ?? row.payment_completeness }}</template></template>
           <template #cell-total_order_value="{ row }">{{ formatIDR(row.total_order_value) }}</template>
           <template #cell-total_collected="{ row }">{{ formatIDR(row.total_collected) }}</template>
           <template #cell-total_outstanding="{ row }">{{ formatIDR(row.total_outstanding) }}</template>
           <template #cell-actions="{ row }">
-            <div class="flex justify-end">
+            <div v-if="!row._subtotal" class="flex justify-end">
               <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openPreorderDetail(row)">{{ t('reports.preorder_detail_action') }}</button>
             </div>
           </template>
@@ -699,20 +711,6 @@ function openPreorderDetail(row) {
         </DataTable>
       </div>
     </template>
-
-    <BaseModal :open="showSettlementPay" :title="t('reports.record_payment_to_artist')" max-width-class="max-w-[400px]" @close="showSettlementPay = false">
-      <div class="flex flex-col gap-3.5 px-6 py-5">
-        <p class="text-[13px] text-muted-4">{{ t('reports.remaining_amount', { artist: settlementTarget?.artist_name, amount: formatIDR(settlementTarget?.outstanding) }) }}</p>
-        <BaseInput v-model="settlementAmount" type="number" min="0" :label="t('reports.amount_paid_rp')" />
-        <BaseInput v-model="settlementNotes" :label="t('reports.notes_optional')" />
-      </div>
-      <template #footer>
-        <div class="flex justify-end gap-2.5">
-          <BaseButton variant="secondary" @click="showSettlementPay = false">{{ t('common.cancel') }}</BaseButton>
-          <BaseButton :loading="payingSettlement" @click="submitSettlementPayment">{{ t('common.save') }}</BaseButton>
-        </div>
-      </template>
-    </BaseModal>
 
     <ArtistTransactionsModal
       :open="showArtistTransactions"

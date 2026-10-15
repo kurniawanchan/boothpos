@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useSettingsStore } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
@@ -13,12 +13,34 @@ import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 import ThemeColorPicker from '../components/settings/ThemeColorPicker.vue';
+import BackupRestoreSection from '../components/settings/BackupRestoreSection.vue';
 
 const settings = useSettingsStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
 const changingTier = ref(false);
+
+// --- Nama aplikasi (merek produk) -------------------------------------
+// Bukan nama toko (itu identitas penjual di profil toko di bawah): ini yang
+// tampil di sidebar dan di teks "Powered by …" pada dokumen. Panjang maksimal
+// mencerminkan aturan server (App\Support\AppName::MAX_LENGTH).
+const APP_NAME_MAX_LENGTH = 50;
+const appNameInput = ref(settings.appName);
+watch(() => settings.appName, (name) => { appNameInput.value = name; });
+const savingAppName = ref(false);
+async function saveAppName() {
+  savingAppName.value = true;
+  try {
+    await settings.setAppName(appNameInput.value);
+    appNameInput.value = settings.appName;
+    toast.success(t('settings.app_name_saved'));
+  } catch (err) {
+    toast.error(err.message);
+  } finally {
+    savingAppName.value = false;
+  }
+}
 
 // --- Theme color (US6) ------------------------------------------------
 const themeColor = ref(settings.themeAccentColor || '#2f9e6e');
@@ -387,6 +409,13 @@ onMounted(async () => {
     </div>
 
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
+      <span class="text-[15px] font-bold tracking-tight">{{ t('settings.app_name_section_title') }}</span>
+      <BaseInput v-model="appNameInput" :label="t('settings.app_name_label')" :maxlength="APP_NAME_MAX_LENGTH" />
+      <p class="text-[12px] leading-relaxed text-muted-3">{{ t('settings.app_name_hint') }}</p>
+      <BaseButton size="sm" class="self-start" :loading="savingAppName" @click="saveAppName">{{ t('settings.save_app_name') }}</BaseButton>
+    </div>
+
+    <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
       <span class="text-[15px] font-bold tracking-tight">{{ t('settings.theme_section_title') }}</span>
       <ThemeColorPicker v-model="themeColor" />
       <BaseButton size="sm" class="self-start" :loading="savingTheme" @click="saveTheme">{{ t('settings.save_theme') }}</BaseButton>
@@ -467,6 +496,10 @@ onMounted(async () => {
       <BaseInput v-model="storeForm.store_contact_email" :label="t('settings.email')" type="email" :error="storeErrors.store_contact_email" />
       <BaseButton class="self-start" :loading="savingStore" @click="saveStoreIdentity">{{ t('common.save') }}</BaseButton>
     </div>
+
+    <!-- Cadangan & pemulihan database — halaman ini sudah digerbang menu
+         'settings' (owner/admin), dan server menegakkan owner/admin lagi. -->
+    <BackupRestoreSection />
 
     <ConfirmDialog
       :open="pendingMode !== null"

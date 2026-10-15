@@ -292,6 +292,24 @@ paths:
                       'live' bila baris settings `system_mode` belum
                       pernah dibuat (instalasi baru TIDAK PERNAH diam-diam
                       mulai dalam mode DEMO).
+                  app_name:
+                    type: string
+                    maxLength: 50
+                    description: |
+                      Nama aplikasi/merek produk (default `BoothPOS`), tampil di
+                      sidebar dan sebagai "Powered by …" pada dokumen. Bukan nama
+                      toko (`store_name`). Diubah owner/admin lewat `PUT /settings`
+                      (key `app_name`, maks. 50 karakter — lebih panjang ditolak
+                      422); kosong/spasi saja berarti kembali ke default.
+                  schema_update_required:
+                    type: boolean
+                    description: |
+                      035-po-row-actions — `true` hanya untuk pengguna yang boleh
+                      mengelola pengaturan (owner/admin) SAAT ada migrasi yang
+                      belum diterapkan; selalu `false` untuk peran lain dan bila
+                      database sudah mutakhir. Daftar migrasinya TIDAK PERNAH
+                      dikirim. Aplikasi tidak pernah menerapkan migrasi dari
+                      sebuah request — administrator yang melakukannya.
 
   /settings/payment:
     get:
@@ -458,6 +476,161 @@ paths:
   # ------------------------------------------------------------------
   # LOG AKTIVITAS (F13.4)
   # ------------------------------------------------------------------
+  # ------------------------------------------------------------------
+  # CADANGAN & PEMULIHAN DATABASE (Pengaturan)
+  # ------------------------------------------------------------------
+  /backups:
+    get:
+      tags: [Settings]
+      summary: Daftar cadangan database
+      description: |
+        Owner/admin saja (403 untuk peran lain) — cadangan memuat SELURUH data,
+        termasuk hash kata sandi dan data pelanggan. Terbaru dulu. Setiap
+        cadangan = satu folder di `BACKUP_PATH` (default `storage/app/backups`)
+        berisi `database.sql` dan, bila ada, `payment-proofs.tar.gz`.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Backup' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Settings]
+      summary: Buat cadangan sekarang
+      description: |
+        Sama dengan `php artisan app:backup` (dump MySQL + arsip bukti pembayaran
+        + salinan ke `BACKUP_EXTERNAL_PATH` bila diset). Butuh `mysqldump` di
+        server (image toko membawanya; image dev tidak). Gagal di tengah jalan
+        → folder setengah jadi dihapus dan 500 dengan `message`.
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Backup' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500':
+          description: mysqldump gagal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /backups/{id}:
+    parameters:
+      - { name: id, in: path, required: true, description: "Id cadangan (`Y-m-d_His`); pola lain → 404.", schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}_\d{6}(-\d+)?$' } }
+    delete:
+      tags: [Settings]
+      summary: Hapus satu cadangan
+      description: |
+        Menghapus folder cadangan beserta isinya (`database.sql` dan
+        `payment-proofs.tar.gz`). Tidak menyentuh database, bukti pembayaran ASLI,
+        maupun salinan di `BACKUP_EXTERNAL_PATH`. Tidak bisa dibatalkan. Owner/admin
+        saja; tercatat di log aplikasi (siapa & cadangan mana).
+      responses:
+        '204': { description: Dihapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /backups/{id}/download:
+    parameters:
+      - { name: id, in: path, required: true, description: "Id cadangan (`Y-m-d_His`, mis. `2026-09-30_100000`); pola lain → 404.", schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}_\d{6}(-\d+)?$' } }
+    get:
+      tags: [Settings]
+      summary: Unduh berkas database.sql sebuah cadangan
+      responses:
+        '200':
+          description: Berkas SQL
+          content:
+            application/sql:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /backups/{id}/restore:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: '^\d{4}-\d{2}-\d{2}_\d{6}(-\d+)?$' } }
+    post:
+      tags: [Settings]
+      summary: Pulihkan database dari sebuah cadangan
+      description: |
+        MENIMPA SELURUH database. Wajib `confirm: "RESTORE"` (persis, huruf besar;
+        selain itu 422 dan tidak ada yang disentuh). Urutannya SELALU: (1) buat
+        cadangan pengaman dari kondisi saat ini, (2) baru timpa. Bila cadangan
+        pengaman gagal, pemulihan TIDAK dijalankan (500 dengan pesan yang
+        menyebut pemulihan dibatalkan). Berkas bukti pembayaran hanya dicadangkan,
+        tidak dipulihkan. Sesi/token ikut tertimpa isi cadangan, jadi klien
+        sebaiknya memuat ulang dan siap diarahkan ke login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm: { type: string, enum: [RESTORE] }
+      responses:
+        '200':
+          description: Dipulihkan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRestoreResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: Kata konfirmasi salah/hilang
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Cadangan pengaman atau pemulihan gagal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /backups/restore-upload:
+    post:
+      tags: [Settings]
+      summary: Pulihkan database dari berkas .sql yang diunggah
+      description: |
+        Aturan sama dengan `POST /backups/{id}/restore` (kata konfirmasi,
+        cadangan pengaman dulu). Berkas harus berekstensi `.sql`, maks. 50 MB,
+        dan tampak seperti dump aplikasi ini — memuat tabel `settings` DAN
+        `users` — kalau tidak 422 pada `file` sebelum apa pun disentuh.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, confirm]
+              properties:
+                file: { type: string, format: binary }
+                confirm: { type: string, enum: [RESTORE] }
+      responses:
+        '200':
+          description: Dipulihkan (`source` = "upload")
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRestoreResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: Berkas/konfirmasi tidak valid
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Cadangan pengaman atau pemulihan gagal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /activity-logs:
     get:
       tags: [Settings]
@@ -812,6 +985,11 @@ paths:
     post:
       tags: [Master Data]
       summary: Tambah varian pada produk
+      description: |
+        034-seller-po-bom — `copy_bom_from_variant_id` (opsional): salin BOM
+        dari varian lain PRODUK YANG SAMA ke varian baru dalam satu transaksi
+        (422 bila bukan produk yang sama / sumber kosong; 403 tanpa menu
+        `purchase_orders`).
       requestBody:
         required: true
         content:
@@ -833,6 +1011,10 @@ paths:
         Perubahan `sell_price` atau `cost_price` tidak memengaruhi transaksi
         yang sudah tercatat, karena harga disimpan sebagai snapshot.
         `current_stock` tidak dapat diubah lewat endpoint ini.
+
+        034-seller-po-bom — selama BOM varian ditandai SELESAI, `cost_price`
+        mengikuti biaya BOM dan dikunci: nilai yang BERBEDA ditolak 409
+        `{code: cost_price_locked_by_bom}`; nilai yang sama diterima.
       requestBody:
         required: true
         content:
@@ -844,6 +1026,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Variant' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /variants/lookup:
     get:
@@ -872,6 +1055,18 @@ paths:
     get:
       tags: [Stock]
       summary: Riwayat pergerakan stok
+      description: |
+        036-bom-variant-stock-ux — dipakai layar Stok DAN riwayat transaksi per
+        varian (`variant_id`). Urutan: `created_at` terbaru dulu, lalu `id`
+        terbaru dulu (timestamp kembar tetap stabil). **Akses**: menu `stock`
+        ATAU `products` — peran lain 403 (dulu terbuka untuk semua peran yang
+        login, sehingga `user_name` tidak boleh ikut dibuka).
+
+        `reference` diselesaikan server menjadi nomor transaksi yang bisa dibaca
+        (penjualan/retur -> nomor order; tiba/serah terima/selisih edit pre-order ->
+        nomor pre-order) dan `null` bila tidak bisa dibuktikan menyangkut varian
+        ini (tidak pernah menampilkan nomor yang salah). Penyesuaian stok awal/manual
+        dan impor tidak punya referensi (alasan ada di `reason`).
       parameters:
         - { name: variant_id, in: query, schema: { type: integer } }
         - { name: type, in: query, schema: { type: string, enum: [purchase, sale, preorder_handover, adjustment, return, initial] } }
@@ -892,6 +1087,7 @@ paths:
                       data:
                         type: array
                         items: { $ref: '#/components/schemas/StockMovement' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /stock/adjustments:
     post:
@@ -1123,9 +1319,18 @@ paths:
       tags: [Event & Session]
       summary: Tutup sesi kasir
       description: |
-        Server menghitung `expected_cash` dari kas awal ditambah seluruh
-        pembayaran tunai pada sesi, lalu menghitung selisih terhadap
+        Server menghitung `expected_cash` dari kas awal ditambah pembayaran
+        tunai terverifikasi pada sesi DIKURANGI kembalian (`orders.change_amount`),
+        tanpa order yang dibatalkan (`voided`) — rumus yang sama dengan panel
+        shift di halaman Sales — lalu menghitung selisih terhadap
         `closing_cash` yang dilaporkan kasir.
+
+        028-partial-split-payment (PERUBAHAN PERILAKU): tunai dihitung di shift
+        TEMPAT UANG DITERIMA (`payments.session_id`), bukan shift penjualan
+        aslinya. Pembayaran susulan atas penjualan lama masuk ke shift saat ia
+        diterima; shift yang sudah ditutup tak pernah berubah. Kembalian tetap
+        dikurangkan di shift penjualannya. Pembayaran pre-order (tanpa shift)
+        tetap di luar kas shift.
       requestBody:
         required: true
         content:
@@ -1311,7 +1516,12 @@ paths:
     get:
       tags: [Payment]
       summary: Ambil berkas bukti pembayaran
-      description: Disajikan melalui pemeriksaan izin, bukan tautan langsung ke penyimpanan.
+      description: |
+        Disajikan melalui pemeriksaan izin, bukan tautan langsung ke penyimpanan. Boleh dibuka:
+        owner/admin, pengunggah berkas, dan (031-optional-payment-proof) pencatat pembayaran untuk
+        bukti yang BERLAKU pada pembayaran itu (bukti yang ditambahkan owner belakangan tetap bisa
+        dibuka kasir pemilik pembayarannya). Bukti yang sudah diganti (`superseded_at`) hanya untuk
+        owner/admin dan pengunggahnya. Pengguna lain → 403.
       responses:
         '200':
           description: Berkas gambar
@@ -1360,8 +1570,14 @@ paths:
         **Aturan yang ditegakkan server:**
         - Sesi kasir harus berstatus `open`
         - Harga diambil dari master, bukan dari kiriman klien
-        - Pembayaran non-tunai wajib menyertakan `proof_token`
-        - Total pembayaran harus menutup `total_amount`
+        - Pembayaran non-tunai wajib menyertakan `channel_id`; `proof_token` (foto/berkas bukti) OPSIONAL
+          sejak 031-optional-payment-proof — bisa ditambahkan belakangan lewat
+          `PATCH /orders/{id}/payments/{payment_id}/confirmation`. Token yang dikirim harus valid dan belum terpakai.
+        - Total pembayaran harus menutup `total_amount` — KECUALI penjualan memiliki
+          `customer_id` (028-partial-split-payment): penjualan boleh selesai
+          dibayar sebagian (`completed`, stok berkurang, `change_amount` 0) dan
+          sisanya dilunasi lewat `POST /orders/{id}/payments`. Tanpa pelanggan,
+          pembayaran kurang → 409 `customer_required_for_partial_payment`.
         - Stok tidak boleh menjadi negatif
 
         **Idempotensi** — sertakan `local_ref` berupa UUID yang dibuat
@@ -1425,12 +1641,186 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /orders/{id}/payments:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Sales]
+      summary: Pembayaran susulan atas penjualan POS yang dibayar sebagian (028-partial-split-payment, US5)
+      description: |
+        Mencatat SATU pembayaran dan mengembalikan penjualan terbaru dengan `payment_summary`.
+        Siapa saja yang login boleh mencatat (sama seperti checkout). Aturan, semuanya dinilai
+        setelah baris order dikunci:
+        - `client_ref` (UUID) yang sama pada order yang sama → **200** tanpa pembayaran baru
+          (idempotensi); ref milik transaksi lain → 422;
+        - order `voided` → 409; sudah lunas → 409; `amount` > sisa tagihan → 422 (`errors.amount`
+          menyebut maksimumnya);
+        - pembayaran **tunai** memerlukan sesi kasir TERBUKA milik pencatat (409 bila tidak ada) dan
+          disimpan di `payments.session_id` — uang dihitung di shift tempat ia diterima; non-tunai
+          mencatat sesi bila ada;
+        - non-tunai wajib `channel_id`; `proof_token` opsional (031) — bukti bisa ditambahkan belakangan.
+        Menulis baris `activity_logs` `payment_recorded` di transaksi yang sama.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentInput' }
+      responses:
+        '201':
+          description: Pembayaran baru tersimpan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '200':
+          description: Replay `client_ref` — tidak ada pembayaran baru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '409': { description: "Order batal, sudah lunas, atau tunai tanpa sesi kasir terbuka" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/{id}/payments/{payment_id}:
+    delete:
+      tags: [Sales]
+      summary: Hapus satu pembayaran penjualan POS (028-partial-split-payment)
+      description: |
+        Hanya owner/admin (403 untuk peran lain). 404 bila pembayaran bukan milik order ini. 409 untuk
+        order `voided`, dan untuk pembayaran **tunai** milik shift yang SUDAH ditutup (sudah direkonsiliasi —
+        menghapusnya akan merusak laporan shift). Menghapus baris pembayaran dan buktinya, menghitung ulang
+        `paid_amount`, dan menulis `activity_logs` `payment_deleted` (jumlah/status lama dan baru).
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Order sesudah dihitung ulang
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Order batal, atau tunai milik shift yang sudah ditutup" }
+
+  /orders/{id}/payments/{payment_id}/verify:
+    post:
+      tags: [Sales]
+      summary: Tandai satu pembayaran non-tunai penjualan POS terverifikasi (032-mark-payment-verified)
+      description: |
+        032-mark-payment-verified — menandai SATU pembayaran non-tunai yang masih `pending` sebagai
+        `verified` (sudah dicocokkan dengan mutasi bank/e-wallet). Tanpa body. **Satu arah dan FINAL:**
+        tidak ada route untuk membatalkan verifikasi (keputusan produk); jejaknya ada di activity log.
+
+        **Otorisasi:** owner/admin, atau pengguna mana pun KECUALI pencatat pembayaran itu
+        (`payments.recorded_by`) — pencatat → 403. Pembayaran lama tanpa pencatat boleh diverifikasi siapa pun.
+
+        **Aturan** (setelah baris transaksi dikunci, jadi dua klik serentak berlaku berurutan): pembayaran
+        milik transaksi ini (404 bila bukan); penjualan `voided` → 409; tunai → 422 (`errors.method`; tunai sudah
+        terverifikasi sejak dicatat); sudah `verified` → 409; `rejected` → 409.
+
+        Menulis `verified_by`/`verified_at` dan baris `activity_logs` `payment_verified` (nilai lama/baru) di
+        transaksi yang sama. Tidak mengubah jumlah, metode, kanal, status, total, kas yang diharapkan, atau
+        laporan; pembayaran itu kini muncul di rincian per-metode `GET /sessions/{id}/summary` (rincian itu
+        sejak awal hanya menghitung pembayaran terverifikasi).
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Penjualan sesudah diverifikasi (payments[] memuat verification, verified_by_name, verified_at, can_verify)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Penjualan batal, atau pembayaran sudah terverifikasi / ditolak" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/verify-payments:
+    post:
+      tags: [Sales]
+      summary: Verifikasi massal pembayaran non-tunai dari beberapa penjualan (032-mark-payment-verified, US3)
+      description: |
+        Untuk tiap penjualan terpilih (id dari daftar Sales), memverifikasi setiap pembayaran NON-TUNAI yang
+        masih `pending` lewat jalur satu-pembayaran yang sama (satu transaksi dan satu baris audit
+        `payment_verified` per pembayaran). Yang tak bisa diverifikasi pemanggil DILEWATI dan dihitung per
+        alasan, tidak menggagalkan sisanya: `voided` (penjualan batal), `rejected`, `already_verified`,
+        `own_payment` (dicatat pemanggil, kecuali owner/admin). Pembayaran tunai diabaikan (tidak dihitung).
+        Id yang tak ditemukan / milik mode DEMO-LIVE lain diabaikan. Satu arah dan final seperti verifikasi
+        tunggal. Hitungan adalah jumlah PEMBAYARAN, kecuali `verified_orders`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_ids]
+              properties:
+                order_ids: { type: array, minItems: 1, maxItems: 200, uniqueItems: true, items: { type: integer } }
+      responses:
+        '200':
+          description: Ringkasan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified: { type: integer }
+                  verified_orders: { type: integer }
+                  skipped:
+                    type: object
+                    properties:
+                      already_verified: { type: integer }
+                      own_payment: { type: integer }
+                      voided: { type: integer }
+                      rejected: { type: integer }
+                  skipped_total: { type: integer }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/{id}/payments/{payment_id}/confirmation:
+    patch:
+      tags: [Sales]
+      summary: Tambah / ubah / ganti konfirmasi pembayaran penjualan POS (031-optional-payment-proof)
+      description: |
+        031-optional-payment-proof — menambah, mengubah, atau mengganti KONFIRMASI sebuah pembayaran
+        non-tunai yang sudah tercatat: bukti (`proof_token` dari `POST /payment-proofs`), `reference`,
+        dan `notes`. Semua kunci opsional; minimal satu harus dikirim (422 `errors.confirmation`).
+        Mengirim `null` mengosongkan referensi/catatan, tetapi hasil akhirnya tidak boleh kosong
+        sama sekali (bukti, referensi, dan catatan semuanya tak ada → 422). Bukti tidak bisa
+        dihapus mentah, hanya diganti: bukti lama ditandai `superseded_at`, file dan barisnya
+        DIPERTAHANKAN untuk audit.
+
+        **Otorisasi:** owner/admin, atau pengguna yang mencatat pembayaran itu (`payments.recorded_by`);
+        pengguna lain → 403. Pembayaran lama tanpa pencatat → hanya owner/admin.
+
+        **Aturan** (setelah baris transaksi dikunci): pembayaran milik transaksi ini (404 bila bukan);
+        penjualan `voided` → 409; pembayaran tunai → 422 (`errors.method`); token bukti tak dikenal/sudah terpakai → 422.
+
+        Tidak pernah mengubah jumlah, metode, kanal, waktu, status, total, atau kas shift. Menulis
+        `activity_logs` `payment_confirmation_updated` (nilai lama dan baru) di transaksi yang sama.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentConfirmationInput' }
+      responses:
+        '200':
+          description: Penjualan sesudah diubah (payments[] memuat notes, proof_id, has_proof, can_view_proof, can_edit_confirmation)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Penjualan sudah dibatalkan" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /orders/{id}/receipt:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     get:
       tags: [Sales]
       summary: Data struk
-      description: Mengembalikan data siap tampil untuk struk di layar, termasuk identitas toko dari pengaturan.
+      description: Mengembalikan data siap tampil untuk struk di layar, termasuk identitas toko dari pengaturan dan `app_name` (nama aplikasi untuk teks "Powered by …"). 028-partial-split-payment — juga `paid_amount`, `balance_amount`, `payment_status` (`unpaid|partially_paid|fully_paid`) dan `reference`/`paid_at` per pembayaran; struk yang diambil ulang setelah pembayaran susulan memuatnya.
       responses:
         '200':
           description: Berhasil
@@ -1528,6 +1918,7 @@ paths:
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [draft, ordered, received, paid, cancelled] } }
         - { name: vendor_id, in: query, schema: { type: integer } }
+        - { name: artist_id, in: query, description: 034-seller-po-bom — saring menurut seller yang dibelikan., schema: { type: integer } }
         - { name: date_from, in: query, schema: { type: string, format: date } }
         - { name: date_to, in: query, schema: { type: string, format: date } }
         - $ref: '#/components/parameters/Page'
@@ -1554,6 +1945,11 @@ paths:
         wajib untuk baris `line_type=service` (FR-001). `product_id` selalu
         opsional apa pun `line_type`-nya (tautan bahan baku ke produk
         tertentu). `po_number` dibuat server, unik lintas mode DEMO/LIVE.
+
+        034-seller-po-bom — `artist_id` (seller yang dibelikan) WAJIB: satu
+        seller per purchase order. Seller inilah dasar filter selector BOM.
+        `product_id` ("Linked Product") tidak lagi ditawarkan UI, tetapi
+        tetap diterima dan disimpan.
       requestBody:
         required: true
         content:
@@ -1584,7 +1980,19 @@ paths:
     put:
       tags: [Purchase Order]
       summary: Perbarui purchase order
-      description: Baris item hanya boleh diubah selama status masih `draft` — 409 bila tidak.
+      description: |
+        Baris item hanya boleh diubah selama status masih `draft` — 409 bila tidak.
+
+        034-seller-po-bom — `artist_id`: menetapkan seller pada PO lama
+        (tanpa seller, `artist_id: null`) selalu boleh; MENGUBAH seller
+        ditolak 409 bila salah satu baris PO ini sudah dipakai baris BOM.
+        Setiap penetapan/perubahan ditulis ke activity log
+        (`purchase_order_seller_assigned` / `purchase_order_seller_changed`).
+
+        035-po-row-actions — PO berstatus APA PUN (kecuali dibatalkan, 409)
+        tetap bisa mengubah vendor, seller, dan catatan; baris dikunci setelah
+        `draft`. Perubahan vendor/total/baris ditulis ke activity log
+        (`purchase_order_updated`, nilai lama + baru) di transaksi yang sama.
       requestBody:
         required: true
         content:
@@ -1601,7 +2009,12 @@ paths:
     delete:
       tags: [Purchase Order]
       summary: Hapus purchase order
-      description: Hanya diizinkan selama status masih `draft` — 409 bila tidak.
+      description: |
+        Hanya diizinkan selama status masih `draft` — 409 bila tidak (pesan
+        menyarankan Batalkan untuk status lain). 035-po-row-actions: juga 409
+        bila PO sudah punya pembayaran, atau salah satu barisnya sudah dipakai
+        baris BOM varian — penghapusan tidak boleh meninggalkan data yatim.
+        Penghapusan ditulis ke activity log di transaksi yang sama.
       responses:
         '204': { description: Dihapus }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -2072,6 +2485,7 @@ paths:
                             account_number: { type: string, nullable: true }
                             qr_image_url: { type: string, nullable: true }
                       footer_text: { type: string, nullable: true, description: 022-preorder-invoice-crud-overhaul (US3, FR-010) — sama dengan receipt_footer_text yang sudah ada. }
+                      app_name: { type: string, description: "Nama aplikasi untuk teks 'Powered by …' (default BoothPOS) — ikut payload supaya dokumen unduhan massal sama dengan yang di layar." }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /preorders/bulk-invoices:
@@ -2143,6 +2557,57 @@ paths:
                       properties:
                         preorder_id: { type: integer }
                         status: { type: string, enum: [sent, skipped_no_email, skipped_not_configured, failed] }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /preorders/duplicate:
+    post:
+      tags: [Preorder]
+      summary: Duplikat satu atau banyak pre-order (027-preorder-duplicate-split, US1/US2)
+      description: |
+        Membuat SATU salinan baru per id yang dikirim (tidak pernah digabung).
+        Salinan dibangun lewat jalur `create()` yang sama dengan pre-order baru:
+        harga tiap barang diambil dari harga varian SAAT INI (bukan harga yang
+        tercatat di pesanan asal), status `ordered`, tanpa pembayaran, bukti
+        bayar, atau pengiriman, `dispatch_status` `pending`, nomor baru. Yang
+        disalin: pelanggan, event, fulfillment, hari jemput/kurir, expected_date,
+        ongkir, diskon, catatan, dan barang+qty. Event yang sudah dihapus →
+        salinan tanpa event (dan tanpa hari jemput); hari jemput di luar rentang
+        event dibuang. Semua status sumber boleh diduplikasi. Sumber tidak
+        berubah dan stok tidak disentuh. Tidak ada email yang dikirim; satu
+        baris `activity_logs` (`duplicated`) ditulis per salinan.
+
+        SELALU 200 dengan laporan per-pre-order (pola `/preorders/bulk-email`):
+        tiap salinan memakai transaksinya sendiri, jadi satu yang gagal tidak
+        menggagalkan yang lain. Penyebab gagal: barang/produk dihapus atau
+        nonaktif, diskon melebihi total hasil harga baru, atau id bukan milik
+        mode data (DEMO/LIVE) yang aktif ("tidak ditemukan").
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preorder_ids]
+              properties:
+                preorder_ids: { type: array, items: { type: integer }, minItems: 1, maxItems: 100 }
+      responses:
+        '200':
+          description: Laporan per-pre-order, urutan sama dengan permintaan (id ganda dibuang)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        source_id: { type: integer }
+                        source_number: { type: string, nullable: true }
+                        status: { type: string, enum: [created, failed] }
+                        preorder: { $ref: '#/components/schemas/Preorder', description: "Hanya bila status = created" }
+                        error: { type: string, description: "Hanya bila status = failed" }
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /preorders/summary:
@@ -2426,15 +2891,196 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
+  /preorders/{id}/split:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Preorder]
+      summary: Pisahkan sebagian unit pre-order ke pre-order baru (027-preorder-duplicate-split, US3/US4)
+      description: |
+        Dua mode. `items`: pengguna menyebut `item_id` + `qty` yang pindah ke SATU
+        pre-order baru (baris yang sama boleh disebut dua kali — dijumlahkan dulu).
+        `by_seller`: penjual dari baris dengan id terkecil tetap di pesanan asal,
+        setiap penjual lain menjadi satu pre-order baru berisi baris utuhnya.
+
+        Aturan (semua ditegakkan server di dalam satu transaksi dengan baris asal
+        terkunci — gagal di mana pun berarti tidak ada yang berubah):
+        - Ditolak `409` bila status `handed_over`/`cancelled`, bila pre-order
+          punya pembayaran APA PUN (tidak ada pembagian pembayaran), atau bila
+          diskon asal akan melebihi sisa subtotal + ongkir.
+        - Ditolak `422` bila item bukan milik pre-order ini, qty melebihi baris,
+          tidak ada unit yang pindah / tidak ada yang tersisa, atau `by_seller`
+          pada pre-order dengan satu penjual.
+        - Baris yang pindah seluruhnya memakai baris `preorder_items` yang SAMA
+          (id tetap, supaya rujukan pergerakan stok tetap benar); baris yang pindah
+          sebagian dikecilkan dan snapshot harga/modal/penjualnya disalin ke baris
+          baru. Harga TIDAK dihitung ulang.
+        - Pesanan baru: pelanggan/event/fulfillment/hari jemput/kurir/expected_date
+          disalin, `status` mewarisi pesanan asal, `shipping_cost` 0, `discount` 0,
+          tanpa catatan, `dispatch_status` `pending`, `user_id` = pengguna yang
+          memisahkan, `source.type` = `split`. Ongkir, diskon, catatan, data
+          pengiriman, dan penanda invoice tetap di pesanan asal.
+        - Stok TIDAK disentuh dan tidak ada pergerakan stok ditulis; tidak ada
+          email; satu baris `activity_logs` (`split`) ditulis pada pesanan asal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: { type: string, enum: [items, by_seller] }
+                items:
+                  type: array
+                  description: Wajib bila `mode` = `items`
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [item_id, qty]
+                    properties:
+                      item_id: { type: integer }
+                      qty: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Berhasil dipisah
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  original: { $ref: '#/components/schemas/Preorder', description: "Termasuk split_children" }
+                  created:
+                    type: array
+                    items: { $ref: '#/components/schemas/Preorder' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Status tertutup, sudah ada pembayaran, atau diskon melebihi sisa tagihan" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /preorders/{id}/payments/{payment_id}:
+    delete:
+      tags: [Preorder]
+      summary: Hapus satu pembayaran pre-order beserta bukti bayarnya
+      description: |
+        Hanya owner/admin (403 untuk peran lain). Menghapus baris pembayaran dan
+        bukti bayarnya (baris `payment_proofs` + file di disk privat, file dihapus
+        setelah commit), lalu menghitung ULANG `paid_amount` dari pembayaran yang
+        tersisa dan memundurkan status sejauh yang ditimbulkan pembayaran itu:
+        `settled` yang tak lagi lunas → `arrived`; `dp_paid` tanpa sisa pembayaran
+        → `ordered`; `arrived` tidak pernah mundur (stok sudah masuk). Ditolak
+        `409` untuk pre-order `handed_over`/`cancelled`; `404` bila pembayaran
+        bukan milik pre-order ini. Satu baris `activity_logs` (`payment_deleted`,
+        berisi status dan jumlah lama/baru) ditulis di transaksi yang sama.
+        Respons memuat `payment_summary` yang sudah dihitung ulang (028-partial-split-payment).
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Pre-order sesudah dihitung ulang
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Pre-order sudah diserahkan atau dibatalkan" }
+
+  /preorders/{id}/payments/{payment_id}/verify:
+    post:
+      tags: [Preorder]
+      summary: Tandai satu pembayaran non-tunai pre-order terverifikasi (032-mark-payment-verified)
+      description: |
+        032-mark-payment-verified — menandai SATU pembayaran non-tunai yang masih `pending` sebagai
+        `verified` (sudah dicocokkan dengan mutasi bank/e-wallet). Tanpa body. **Satu arah dan FINAL:**
+        tidak ada route untuk membatalkan verifikasi (keputusan produk); jejaknya ada di activity log.
+
+        **Otorisasi:** owner/admin, atau pengguna mana pun KECUALI pencatat pembayaran itu
+        (`payments.recorded_by`) — pencatat → 403. Pembayaran lama tanpa pencatat boleh diverifikasi siapa pun.
+
+        **Aturan** (setelah baris transaksi dikunci, jadi dua klik serentak berlaku berurutan): pembayaran
+        milik transaksi ini (404 bila bukan); pre-order `cancelled` → 409 (pre-order `handed_over` tetap boleh: tak ada uang yang bergerak); tunai → 422 (`errors.method`; tunai sudah
+        terverifikasi sejak dicatat); sudah `verified` → 409; `rejected` → 409.
+
+        Menulis `verified_by`/`verified_at` dan baris `activity_logs` `payment_verified` (nilai lama/baru) di
+        transaksi yang sama. Tidak mengubah jumlah, metode, kanal, status, total, kas yang diharapkan, atau
+        laporan; pembayaran itu kini muncul di rincian per-metode `GET /sessions/{id}/summary` (rincian itu
+        sejak awal hanya menghitung pembayaran terverifikasi).
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Pre-order sesudah diverifikasi (payments[] memuat verification, verified_by_name, verified_at, can_verify)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Pre-order batal, atau pembayaran sudah terverifikasi / ditolak" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /preorders/{id}/payments/{payment_id}/confirmation:
+    patch:
+      tags: [Preorder]
+      summary: Tambah / ubah / ganti konfirmasi pembayaran pre-order (031-optional-payment-proof)
+      description: |
+        031-optional-payment-proof — menambah, mengubah, atau mengganti KONFIRMASI sebuah pembayaran
+        non-tunai yang sudah tercatat: bukti (`proof_token` dari `POST /payment-proofs`), `reference`,
+        dan `notes`. Semua kunci opsional; minimal satu harus dikirim (422 `errors.confirmation`).
+        Mengirim `null` mengosongkan referensi/catatan, tetapi hasil akhirnya tidak boleh kosong
+        sama sekali (bukti, referensi, dan catatan semuanya tak ada → 422). Bukti tidak bisa
+        dihapus mentah, hanya diganti: bukti lama ditandai `superseded_at`, file dan barisnya
+        DIPERTAHANKAN untuk audit.
+
+        **Otorisasi:** owner/admin, atau pengguna yang mencatat pembayaran itu (`payments.recorded_by`);
+        pengguna lain → 403. Pembayaran lama tanpa pencatat → hanya owner/admin.
+
+        **Aturan** (setelah baris transaksi dikunci): pembayaran milik transaksi ini (404 bila bukan);
+        pre-order `cancelled` → 409 (pre-order `handed_over` tetap boleh: konfirmasi tak menggerakkan uang); pembayaran tunai → 422 (`errors.method`); token bukti tak dikenal/sudah terpakai → 422.
+
+        Tidak pernah mengubah jumlah, metode, kanal, waktu, status, total, atau kas shift. Menulis
+        `activity_logs` `payment_confirmation_updated` (nilai lama dan baru) di transaksi yang sama.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentConfirmationInput' }
+      responses:
+        '200':
+          description: Pre-order sesudah diubah (payments[] memuat notes, proof_id, has_proof, can_view_proof, can_edit_confirmation)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "Pre-order sudah dibatalkan" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /preorders/{id}/payments:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     post:
       tags: [Preorder]
       summary: Catat pembayaran pre-order
       description: |
-        Dipakai untuk DP maupun pelunasan. Pembayaran non-tunai wajib
-        menyertakan `proof_token`. Server memperbarui `paid_amount` dan
-        memindahkan status bila pembayaran melunasi tagihan.
+        Dipakai untuk DP maupun pelunasan. Setiap pembayaran tersimpan SENDIRI
+        dan LANGSUNG, berapa pun jumlahnya (028-partial-split-payment): tidak ada
+        lagi penahanan entri di klien sampai tagihan tertutup. Pembayaran
+        non-tunai wajib menyertakan kanal; `proof_token` opsional sejak
+        031-optional-payment-proof (bukti bisa ditambahkan belakangan lewat
+        `PATCH /preorders/{id}/payments/{payment_id}/confirmation`). Server menghitung
+        ulang `paid_amount` dari entri, memindahkan status (pembayaran pertama →
+        `dp_paid`; melunasi pre-order `arrived` → `settled`), menulis baris
+        `activity_logs` `payment_recorded`, dan mengembalikan pre-order lengkap
+        dengan `payment_summary` serta `payments[]` (referensi, pencatat, status).
+        Pre-order `handed_over`/`cancelled` → 409.
+
+        Pengaman (028): jumlah harus > 0 dan ≤ sisa tagihan (dinilai ulang setelah
+        baris pre-order dikunci, jadi dua staf yang membayar bersamaan tak bisa
+        melebihi tagihan); `client_ref` (UUID, opsional di server, selalu dikirim
+        SPA) membuat klik ganda / coba-ulang aman — kunci yang sama pada
+        pre-order yang sama menjawab 200 tanpa menambah pembayaran.
       requestBody:
         required: true
         content:
@@ -2442,11 +3088,17 @@ paths:
             schema: { $ref: '#/components/schemas/PaymentInput' }
       responses:
         '201':
-          description: Tersimpan
+          description: Tersimpan — pre-order terbaru dengan `payment_summary`
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Payment' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '200':
+          description: Replay idempotensi — `client_ref` yang sama sudah tercatat pada pre-order ini; tidak ada pembayaran baru, isinya keadaan terkini (sama seperti 201).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Preorder' }
+        '409': { description: "Pre-order sudah diserahkan/dibatalkan, atau sudah lunas (tidak ada sisa tagihan)" }
+        '422': { description: "Bentuk salah, `amount` melebihi sisa tagihan (`errors.amount` menyebut maksimum yang bisa dibayar; PERUBAHAN 028 — dulu kelebihan bayar diterima), atau `client_ref` sudah dipakai transaksi lain" }
 
   /preorders/{id}/shipment:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -2511,12 +3163,60 @@ paths:
         - { name: date_from, in: query, schema: { type: string, format: date } }
         - { name: date_to, in: query, schema: { type: string, format: date } }
         - { name: group_by, in: query, schema: { type: string, enum: [product, category, artist, day, event, customer], default: product } }
+        - { name: include_voided, in: query, description: "1 = sertakan order berstatus `voided` di `transactions[]` (untuk audit). Transaksi batal TIDAK PERNAH ikut `totals`/`rows`.", schema: { type: integer, enum: [0, 1] } }
       responses:
         '200':
           description: Berhasil
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SalesReport' }
+
+  /reports/sales/transactions/export:
+    post:
+      tags: [Report]
+      summary: Ekspor daftar transaksi Sales (.xlsx)
+      description: |
+        Berkas berisi PERSIS baris yang tampil di halaman Sales (hanya transaksi dari POS; pre-order
+        tidak ada di halaman itu, jadi kunci `preorder:*` ditolak 422). Klien hanya mengirim KUNCI baris
+        (`keys`: "order:12"); seluruh isi dibangun ulang di server lewat service yang sama
+        dengan `GET /reports/sales`, jadi nominal tak bisa dipalsukan dan berkas tak pernah berbeda
+        dari layar. Kunci yang tak ada atau di luar filter `event_id`/tanggal DIABAIKAN. Tanpa `keys`
+        = seluruh transaksi sesuai filter. Maks. 5000 kunci.
+
+        Kolom: `transaction_no, status, time, customer, sellers, cashier, items` (SEMUA baris
+        item, "Nama ×qty; …"), `units, discount, payment_methods, payment_status, cash, non_cash, total`;
+        pengguna yang boleh melihat laporan juga mendapat `cost, margin`. Kontak pelanggan
+        (telepon/email) SENGAJA tidak ikut. Nominal berupa angka agar bisa dijumlah di Excel.
+
+        028-partial-split-payment: kolom `payment_status` kini berisi `unpaid|partially_paid|fully_paid`
+        (dulu status verifikasi mentah) dan ditambah `paid`, `balance` (setelah `total`, sebelum `cost, margin`).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event_id: { type: integer, nullable: true }
+                date_from: { type: string, format: date, nullable: true }
+                date_to: { type: string, format: date, nullable: true }
+                include_voided: { type: boolean, nullable: true }
+                keys:
+                  type: array
+                  maxItems: 5000
+                  items: { type: string, pattern: '^order:\d+$' }
+      responses:
+        '200':
+          description: Berkas .xlsx
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422':
+          description: Kunci tidak valid / lebih dari 5000
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /reports/profit:
     get:
@@ -2532,7 +3232,14 @@ paths:
         pendapatan yang benar-benar terkumpul (bukan nilai penuh
         pre-order) beserta `cost_price` yang diproporsikan dengan rasio
         yang sama, memakai aturan diakui/proporsi yang sama seperti
-        `GET /reports/sales` di atas. Bentuk respons tidak berubah.
+        `GET /reports/sales` di atas.
+
+        033-seller-recap-pos-preorder-split — `revenue`, `cost_of_goods`
+        dan `gross_profit` juga dipisah menurut jenisnya lewat field
+        `*_pos` (penjualan POS) dan `*_preorder` (porsi pre-order yang
+        terbayar). Bagian pre-order adalah SISA dari total yang tampil
+        (dalam sen), jadi POS + pre-order persis sama dengan totalnya.
+        `event_cost` dan `net_profit` milik seluruh event dan tidak dipisah.
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -2549,10 +3256,22 @@ paths:
       summary: Laporan modal dan laba kotor per artist (F9.5)
       description: |
         Untuk setiap artist dengan minimal satu `order_items` 'completed'
-        pada event ini: `total_sales` (SUM `line_total`), `modal` (SUM
-        `cost_price * qty`, snapshot yang sama dipakai `GET /reports/profit`
-        — bukan modal BOM hidup, lihat docblock `ReportController::
-        artistProfit()`), dan `gross_profit = total_sales - modal`.
+        ATAU pre-order non-`cancelled` yang sudah terbayar pada event ini:
+        `total_sales` (SUM `line_total`), `modal` (SUM `cost_price * qty`,
+        snapshot yang sama dipakai `GET /reports/profit` — bukan modal BOM
+        hidup, lihat docblock `ReportController::artistProfit()`), dan
+        `gross_profit = total_sales - modal`.
+
+        033-seller-recap-pos-preorder-split — **PERUBAHAN PERILAKU**: laporan
+        ini dulu HANYA membaca `order_items` (POS). Kini `total_sales`,
+        `modal` dan `gross_profit` adalah POS + porsi pre-order yang sudah
+        terbayar (aturan diakui/proporsi sama seperti `GET /reports/profit`).
+        040 — `GET /reports/artist-settlements` sejak itu POS-SAJA, jadi
+        `total_sales` laporan ini TIDAK lagi sama dengan Rekap Seller bila
+        event punya pre-order; yang tetap sama adalah `sales_pos` dengan
+        `total_sales` Rekap. Rinciannya ada di `*_pos` (sama dengan angka lama) dan `*_preorder`
+        (sisa dari total, tepat sampai sen). Seller yang hanya punya
+        pre-order kini ikut tampil. Urut nama.
 
         `event_cost` TIDAK dikurangkan di laporan ini sama sekali (sudah
         diperhitungkan terpisah pada `GET /reports/profit`, F9.3) — sengaja
@@ -2578,6 +3297,12 @@ paths:
                         total_sales: { $ref: '#/components/schemas/Money' }
                         modal: { $ref: '#/components/schemas/Money' }
                         gross_profit: { $ref: '#/components/schemas/Money' }
+                        sales_pos: { $ref: '#/components/schemas/Money' }
+                        sales_preorder: { $ref: '#/components/schemas/Money' }
+                        modal_pos: { $ref: '#/components/schemas/Money' }
+                        modal_preorder: { $ref: '#/components/schemas/Money' }
+                        gross_profit_pos: { $ref: '#/components/schemas/Money' }
+                        gross_profit_preorder: { $ref: '#/components/schemas/Money' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /reports/purchases:
@@ -2699,6 +3424,15 @@ paths:
         2. `?status=&payment_completeness=` (opsional `artist_id`) —
            drill-down: daftar preorder INDIVIDUAL yang menyusun satu baris
            ringkasan/breakdown, bukan agregat.
+
+        039-preorder-seller-subtotal — dengan `?breakdown=artist`, baris
+        diurutkan per seller (nama lalu `artist_id`, sehingga seluruh baris
+        satu seller BERURUTAN) dan respons membawa `subtotals[]`: satu entri
+        per seller, dijumlahkan di server dari baris yang sama dalam sen
+        (`App\Support\PreorderSellerSubtotals`). `total_outstanding` adalah
+        jumlah `total_outstanding` baris (bukan nilai − terkumpul), sehingga
+        subtotal selalu sama dengan penjumlahan tangan baris yang tampil.
+        Bentuk default dan drill-down tidak berubah.
       parameters:
         - { name: event_id, in: query, schema: { type: integer }, description: 'Filter ke satu event (FR-014).' }
         - { name: breakdown, in: query, schema: { type: string, enum: [artist] }, description: '012 US2 — pecah baris ringkasan per seller.' }
@@ -2747,6 +3481,21 @@ paths:
                             order_value: { type: string, example: '75000.00' }
                             collected: { type: string, example: '75000.00' }
                             outstanding: { type: string, example: '0.00' }
+                  subtotals:
+                    type: array
+                    description: |
+                      039 — hanya ada saat `breakdown=artist`. Satu entri per
+                      seller (urutan sama dengan kemunculan pertama di `rows`);
+                      penjumlahan semua entri sama dengan penjumlahan semua baris.
+                    items:
+                      type: object
+                      properties:
+                        artist_id: { type: integer }
+                        artist_name: { type: string }
+                        preorder_count: { type: integer }
+                        total_order_value: { type: string, example: '1500000.00' }
+                        total_collected: { type: string, example: '500000.00' }
+                        total_outstanding: { type: string, example: '1000000.00' }
                     items:
                       type: object
                       properties:
@@ -2766,17 +3515,27 @@ paths:
         Angka dihitung ulang dari `order_items` setiap kali dibaca, tanpa
         potongan komisi.
 
-        Daftar memuat **seluruh artist aktif**, termasuk yang belum punya
-        penjualan sama sekali di event ini (seluruh nilai uang `"0.00"`,
-        `total_units` 0, `status` `unpaid`, `id` `null`). Artist nonaktif
-        hanya ikut bila punya baris settlement di event ini.
+        040-recap-pos-transactions-only — rekap ini HANYA memuat penjualan
+        POS (order `completed`, bukan void): `total_sales`/`total_units`
+        dan snapshot yang disimpan di `artist_settlements` semuanya POS-saja.
+        Pre-order tidak menyumbang apa pun (membalik 010/033; pre-order tetap
+        ada di `GET /reports/preorders*`, `/reports/profit` dan
+        `/reports/artist-profit`).
 
-        010-split-payment-preorder-reports (US5) — `total_sales`/
-        `total_units` sejak fitur ini juga memuat kontribusi Pre-order,
-        dihitung ulang dari `preorder_items`/`payments` dengan aturan
-        diakui/proporsi yang sama seperti `GET /reports/sales`
-        (pre-order `cancelled` menyumbang nol). Bentuk respons tidak
-        berubah.
+        Tindak lanjut 040 — tiap baris HANYA `artist_id`, `artist_name`,
+        `total_sales`, `total_units`. Field `id`, `deduction`,
+        `payable_amount`, `paid_amount`, `outstanding`, `status` dan
+        endpoint `POST /reports/artist-settlements/{id}/payment` DIHAPUS
+        (layar rekap hanya Penjual / Unit / Penjualan). `paid_amount` lama
+        di tabel tidak disentuh.
+
+        Daftar memuat **seluruh artist aktif**, termasuk yang belum punya
+        penjualan sama sekali di event ini (`total_sales` `"0.00"`,
+        `total_units` 0). Artist nonaktif hanya ikut bila punya baris
+        settlement di event ini.
+
+        Field 033 `pos_units`, `preorder_units`, `pos_sales` dan
+        `preorder_sales` DIHAPUS (tidak ada lagi pemisahan).
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -2808,18 +3567,11 @@ paths:
         pada setiap baris HANYA memuat item milik artist yang diminta —
         bukan seluruh isi order tersebut. Hanya peran owner dan admin.
 
-        012-seller-preorder-report-detail-export (US1) — `transactions[]`
-        sekarang juga menyertakan entri bersumber Pre-order (bukan hanya
-        Order), dibedakan lewat `source`. Field pengidentifikasi berganti
-        nama dari `order_id`/`order_total_for_artist` menjadi `key`/
-        `amount_for_artist` karena entri pre-order tidak punya `order_id`.
-        Nilai `amount_for_artist` untuk entri pre-order adalah porsi yang
-        SUDAH TERKUMPUL (diproporsikan, research.md R1 di 010 & 012),
-        bukan nilai penuh preorder — konsisten dengan `total_sales` di
-        `GET /reports/artist-settlements`. Preorder berstatus `cancelled`
-        tidak pernah muncul di sini. Perbaikan sekaligus: query ini
-        sebelumnya tidak memfilter `data_mode` sama sekali (celah lama,
-        ditutup di fitur ini).
+        040 — HANYA transaksi POS, sehingga jumlah `amount_for_artist`
+        sama dengan `total_sales` seller itu di `GET /reports/artist-settlements`.
+        Entri pre-order (012) dan field `source` dihapus. Field pengidentifikasi
+        tetap `key` ("order-<id>") / `amount_for_artist`. Query memfilter
+        `data_mode` (celah lama ditutup di 012).
       parameters:
         - { name: event_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -2841,9 +3593,8 @@ paths:
                     items:
                       type: object
                       properties:
-                        key: { type: string, example: 'order-42', description: '"order-<id>" atau "preorder-<id>".' }
-                        number: { type: string, description: 'order_number atau preorder_number.' }
-                        source: { type: string, enum: [order, preorder] }
+                        key: { type: string, example: 'order-42', description: '"order-<id>".' }
+                        number: { type: string, description: 'order_number.' }
                         created_at: { type: string, format: date-time, nullable: true }
                         items:
                           type: array
@@ -2857,29 +3608,6 @@ paths:
                         amount_for_artist:
                           $ref: '#/components/schemas/Money'
         '403': { $ref: '#/components/responses/Forbidden' }
-
-  /reports/artist-settlements/{id}/payment:
-    parameters: [{ $ref: '#/components/parameters/Id' }]
-    post:
-      tags: [Report]
-      summary: Catat pembayaran ke artist
-      description: Menandai berapa yang sudah diserahkan ke artist. Tidak mengubah `total_sales`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [amount]
-              properties:
-                amount: { type: string, example: "1250000.00" }
-                notes: { type: string, nullable: true }
-      responses:
-        '200':
-          description: Diperbarui
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ArtistSettlement' }
 
   /reports/{report}/export:
     parameters:
@@ -2900,6 +3628,15 @@ paths:
         item per order, lintas semua artist di event ini: artist_name,
         order_number, date, item_name, qty, line_total).
 
+        040 — sheet "Rekap" berisi kolom `artist_id, artist_name,
+        total_sales, total_units` (kolom pos/pre-order dari 033 dan, pada
+        tindak lanjut, id/deduction/payable/paid/outstanding/status dihapus;
+        nilainya sama dengan `GET /reports/artist-settlements`, POS-saja).
+        Sheet "Detail Transaksi" memang hanya memuat item POS dan kini
+        jumlahnya sama dengan sheet "Rekap". Ekspor `profit` dan
+        `artist-profit` otomatis membawa field `*_pos`/`*_preorder` baru
+        sebagai kolom tambahan setelah kolom lama.
+
         012-seller-preorder-report-detail-export (US4) — tiga tipe laporan
         yang sebelumnya sama sekali tidak bisa diekspor:
         - `report=purchases` — satu sheet, baris sama seperti
@@ -2909,7 +3646,10 @@ paths:
           tidak pernah memakai bentuk detail per-varian.
         - `report=preorder` — DUA sheet seperti `artist-settlements`:
           "Ringkasan" (bentuk `GET /reports/preorders` default) dan
-          "Per Seller" (bentuk `?breakdown=artist`).
+          "Per Seller" (bentuk `?breakdown=artist`). Sheet "Per Seller"
+          (039) memuat satu baris "Subtotal — <nama seller>" setelah baris
+          terakhir tiap seller (nilai dari `subtotals[]` yang sama dengan
+          layar; kolom status/kelengkapan kosong, `artist_id` kosong).
       parameters:
         - { name: event_id, in: query, schema: { type: integer } }
       responses:
@@ -3874,29 +4614,92 @@ paths:
       responses:
         '204': { description: Berhasil }
 
+  # ------------------------------------------------------------------
+  # 034-seller-po-bom — BOM bersumber BARIS PURCHASE ORDER.
+  #
+  # Baris BOM menunjuk satu baris PO milik SELLER varian itu (PO berstatus
+  # ordered/received/paid) dan menyimpan SNAPSHOT item/tipe/nomor PO/vendor/
+  # biaya satuan. Biaya tidak pernah mengikuti PO yang berubah; hanya
+  # replace-source (eksplisit) yang mengubahnya. Baris tanpa baris PO adalah
+  # baris LEGACY (is_legacy: true). Membaca BOM butuh menu `products`;
+  # SEMUA aksi lain butuh menu `products` DAN `purchase_orders` (403 bila
+  # tidak). Respons baca/mutasi berbentuk VariantBom { data, summary }.
+  # ------------------------------------------------------------------
+
   /variants/{variant}/bom:
     parameters:
       - { name: variant, in: path, required: true, schema: { type: integer } }
     get:
       tags: [Vendor & Bahan Baku]
-      summary: Daftar baris BOM suatu varian
+      summary: BOM suatu varian (baris + ringkasan biaya)
+      description: |
+        `summary` memisahkan biaya bahan dan jasa. Baris LEGACY dihitung
+        dengan harga acuan vendor hidup (perilaku lama); baris bersumber PO
+        memakai snapshot `unit_cost`. `newer_price` dan `source_cancelled`
+        adalah ISYARAT yang dihitung saat dibaca (tidak mengubah baris).
       responses:
         '200':
           description: Berhasil
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items: { $ref: '#/components/schemas/BomLine' }
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Vendor & Bahan Baku]
+      summary: Simpan jumlah per unit beberapa baris BOM sekaligus (tombol Simpan)
+      description: |
+        036-bom-variant-stock-ux. Semua-atau-tidak-sama-sekali dalam SATU
+        transaksi: varian dikunci sekali; setiap `id` dibuktikan milik varian ini
+        SEBELUM ada yang ditulis; nilai yang tidak berubah dilewati (tanpa jejak
+        audit); tiap baris yang berubah dicatat `bom_qty_changed`; bila BOM sudah
+        SELESAI, harga modal disinkronkan SEKALI di akhir (`cost_price_synced`).
+        Hanya `qty_needed` yang berubah; biaya/vendor/sumber tidak tersentuh.
+        Penyimpan terakhir menang (tanpa versi optimistis). Perlu menu `products`
+        DAN `purchase_orders`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lines]
+              properties:
+                lines:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [id, qty_needed]
+                    properties:
+                      id: { type: integer, description: id baris BOM; harus unik dalam permintaan. }
+                      qty_needed: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Disimpan; BOM yang dimuat ulang.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Salah satu id bukan baris varian ini (mis. dihapus orang lain) — `code` = `bom_line_not_found`; tidak ada yang disimpan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Bentuk atau jumlah tidak valid (kunci galat `lines.N.qty_needed`); tidak ada yang disimpan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
     post:
       tags: [Vendor & Bahan Baku]
-      summary: Tambah baris BOM (bahan + jumlah per unit) ke suatu varian
+      deprecated: true
+      summary: "[LEGACY] Tambah baris BOM lama (bahan + jumlah per unit)"
       description: |
-        BOM diikat ke VARIAN, bukan produk induk — varian ukuran/warna
-        berbeda dari produk yang sama bisa butuh jumlah bahan berbeda.
+        Jalur lama; membuat baris LEGACY (tanpa baris PO) dan tercatat di
+        activity log (`bom_item_added`). Satu baris legacy per bahan. 409
+        bila BOM varian sudah SELESAI. UI tidak lagi menawarkannya — pakai
+        `POST /variants/{variant}/bom/items`.
       requestBody:
         required: true
         content:
@@ -3908,6 +4711,229 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BomLine' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /variants/{variant}/bom/eligible-lines:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Baris PO yang boleh dipilih untuk BOM varian ini
+      description: |
+        HANYA baris PO milik seller varian ini dengan status ordered,
+        received, atau paid (bukan draft/cancelled/PO tanpa seller/seller
+        lain/mode lain). `in_bom` menandai baris yang sudah dipakai BOM
+        varian ini.
+      parameters:
+        - { name: q, in: query, description: Teks item/bahan/deskripsi jasa., schema: { type: string } }
+        - { name: purchase_order, in: query, description: Sebagian nomor PO., schema: { type: string } }
+        - { name: vendor_id, in: query, schema: { type: integer } }
+        - { name: line_type, in: query, schema: { type: string, enum: [material, service] } }
+        - { name: date_from, in: query, description: Tanggal PO (ordered_at, kalau belum ada created_at)., schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: per_page, in: query, description: Maksimal 100., schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/EligibleBomLine' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /variants/{variant}/bom/items:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Tambah satu atau banyak baris PO ke BOM
+      description: |
+        Biaya satuan, vendor, nomor PO, dan nama item DISALIN SERVER dari
+        baris PO (snapshot) — `unit_cost` dari klien diabaikan. `qty` =
+        jumlah per SATU unit produk jadi (default 1; bilangan bulat >= 1 — 036: pecahan ditolak 422).
+        Semua-atau-tidak-sama-sekali: satu baris yang ditolak membatalkan
+        seluruh permintaan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [purchase_order_item_id]
+                    properties:
+                      purchase_order_item_id: { type: integer }
+                      qty: { type: integer, minimum: 1, nullable: true, description: Bilangan bulat >= 1 (angka bulat berbentuk 2.0 / "2" diterima). }
+      responses:
+        '201':
+          description: Dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Baris PO itu sudah ada di BOM varian ini.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: Bukan milik seller varian ini, PO belum/tidak ordered-received-paid, baris tidak dikenal, qty tidak valid, atau duplikat dalam permintaan.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /variants/{variant}/bom/complete:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Tandai BOM selesai (harga modal mengikuti BOM)
+      description: |
+        Sejak itu `cost_price` varian = biaya BOM, disinkronkan otomatis pada
+        setiap perubahan BOM, dan dikunci terhadap edit manual (PUT /variants
+        → 409). Transaksi yang sudah tercatat tidak berubah. Idempoten.
+        409 dengan `code`: `empty` (BOM kosong), `has_legacy` (masih ada
+        baris legacy; `rows` menyebut baris itu), `invalid_row` (jumlah ≤ 0
+        atau sumber PO bukan milik seller varian ini). PO sumber yang
+        DIBATALKAN tidak menghalangi.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Belum memenuhi syarat (lihat `code`).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  code: { type: string, enum: [empty, has_legacy, invalid_row] }
+                  rows:
+                    type: array
+                    items: { type: object, properties: { id: { type: integer }, item_name: { type: string, nullable: true } } }
+
+  /variants/{variant}/bom/reopen:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Buka kembali BOM
+      description: Melepas kunci `cost_price`; nilainya TETAP pada angka terakhir. Idempoten.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /variants/{variant}/bom/copy:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Salin BOM varian lain KE varian ini
+      description: |
+        Hanya antar varian PRODUK YANG SAMA (422 bila beda produk, varian
+        sama, atau BOM sumber kosong). Baris digandakan lengkap dengan
+        snapshot; sesudahnya tiap varian berdiri sendiri. Target yang sudah
+        punya baris butuh `confirm_replace: true` (409
+        `{code: requires_confirmation, variants: [...]}`). Salinan tidak
+        pernah menandai target selesai dan MEMBUKA KEMBALI target yang
+        selesai (harga modal tetap).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode, source_variant_id]
+              properties:
+                mode: { type: string, enum: [from] }
+                source_variant_id: { type: integer }
+                confirm_replace: { type: boolean }
+      responses:
+        '200':
+          description: Berhasil — VariantBom varian ini ditambah `results`.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/VariantBom'
+                  - type: object
+                    properties:
+                      results: { type: array, items: { $ref: '#/components/schemas/BomCopyResult' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /variants/{variant}/bom/copy-out:
+    parameters:
+      - { name: variant, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Salin BOM varian ini ke varian berikutnya / semua varian lain / varian pilihan
+      description: |
+        `next` = varian berikutnya (id lebih besar) pada produk yang sama;
+        `all` = semua varian lain. Semua-atau-tidak-sama-sekali dalam satu
+        transaksi; aturan konfirmasi dan pembukaan kembali sama dengan
+        `/bom/copy`.
+
+        037-variant-drawer-bom-ui — `selected` = hanya varian di `variant_ids`
+        (wajib untuk mode ini: 1..200 id berbeda dan ada; diabaikan oleh mode
+        lain). Varian pilihan harus produk yang sama dan bukan varian sumber
+        sendiri (422); satu id yang tidak ditemukan menggagalkan seluruh
+        permintaan (422, tidak ada yang disalin). Varian pilihan yang sudah
+        punya baris BOM menghasilkan 409 `requires_confirmation` + `variants[]`
+        sampai `confirm_replace: true`. Salinan tidak pernah menandai target
+        selesai (target yang selesai dibuka kembali); varian yang tidak dipilih
+        tidak pernah tersentuh; satu audit `bom_copied` per target.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode: { type: string, enum: [next, all, selected] }
+                variant_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items: { type: integer }
+                  description: Wajib bila mode = selected; id varian TUJUAN (produk yang sama, bukan sumber, berbeda satu sama lain).
+                confirm_replace: { type: boolean }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results: { type: array, items: { $ref: '#/components/schemas/BomCopyResult' } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /bom/{bomLine}:
@@ -3915,23 +4941,75 @@ paths:
       - { name: bomLine, in: path, required: true, schema: { type: integer } }
     put:
       tags: [Vendor & Bahan Baku]
-      summary: Perbarui jumlah/notes satu baris BOM
+      summary: Ubah jumlah/catatan satu baris BOM
+      description: |
+        Hanya `qty_needed` dan `notes`; biaya/vendor/sumber tidak pernah
+        berubah di sini. KONTRAK BERUBAH (034): respons kini BOM yang dimuat
+        ulang (VariantBom), bukan satu baris datar. 036: `qty_needed` bilangan
+        bulat >= 1; UI memakai `PUT /variants/{variant}/bom` (Simpan) untuk
+        banyak baris sekaligus.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/BomLineInput' }
+            schema:
+              type: object
+              properties:
+                qty_needed: { type: integer, minimum: 1 }
+                notes: { type: string, nullable: true }
       responses:
         '200':
           description: Diperbarui
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/BomLine' }
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Vendor & Bahan Baku]
       summary: Hapus baris BOM
+      description: |
+        KONTRAK BERUBAH (034): 200 dengan BOM yang dimuat ulang (dulu 204).
+        BOM SELESAI yang menjadi kosong dibuka kembali otomatis
+        (`summary.reopened: true`; harga modal tetap pada nilai terakhir).
       responses:
-        '204': { description: Berhasil }
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /bom/{bomLine}/replace-source:
+    parameters:
+      - { name: bomLine, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Vendor & Bahan Baku]
+      summary: Ganti sumber (baris PO) sebuah baris BOM — tindakan eksplisit
+      description: |
+        Satu-satunya cara biaya/vendor/PO sebuah baris berubah (mis. "pakai
+        harga terbaru", atau mengganti baris LEGACY dengan baris PO).
+        Jumlah per unit tetap. Aturan seller + status sama dengan menambah
+        baris; baris PO yang sudah dipakai baris lain BOM ini → 409; sumber
+        yang sama → tanpa perubahan. Tercatat (`bom_source_replaced`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purchase_order_item_id]
+              properties:
+                purchase_order_item_id: { type: integer }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariantBom' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /variants/{variant}/cost-breakdown:
     parameters:
@@ -3947,9 +5025,12 @@ paths:
         tanpa harga vendor sama sekali dihitung sebagai biaya nol dan
         ditandai `has_price: false`.
 
-        **`bom_cost` TIDAK PERNAH menimpa `cost_price`** — keduanya
-        disajikan berdampingan di response ini supaya pemilik toko bisa
-        membandingkan dan merekonsiliasi manual.
+        **`bom_cost` TIDAK menimpa `cost_price` saat BOM belum selesai** —
+        keduanya disajikan berdampingan. 034-seller-po-bom: begitu BOM
+        ditandai SELESAI (`POST /variants/{variant}/bom/complete`),
+        `cost_price` mengikuti `bom_cost` otomatis. Baris bersumber PO memakai
+        SNAPSHOT `unit_cost`; baris LEGACY tetap memakai harga vendor acuan.
+        `material_cost` + `service_cost` = `bom_cost`.
       responses:
         '200':
           description: Berhasil
@@ -4228,6 +5309,22 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    SchemaOutdated:
+      description: |
+        035-po-row-actions — struktur database TERTINGGAL dari versi aplikasi
+        (migrasi belum diterapkan; kolom/tabel belum ada). Bisa muncul dari
+        endpoint API MANA PUN yang menyentuh bagian skema yang belum ada.
+        Hanya SQLSTATE 42S22/42S02 yang dikonversi; galat database lain tetap
+        500. Pesan ramah tanpa SQL/nama tabel/kolom; detail lengkap hanya di
+        log server. Klien menampilkan status galat + "Coba lagi", bukan layar
+        kosong atau keadaan kosong yang menyesatkan.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+              code: { type: string, enum: [schema_outdated] }
     ValidationError:
       description: Validasi gagal
       content:
@@ -4656,6 +5753,90 @@ components:
         material_unit: { type: string, readOnly: true }
         qty_needed: { type: string, example: "2.5000", description: Per satu unit produk jadi; boleh pecahan. }
         notes: { type: string, nullable: true }
+        is_legacy: { type: boolean, description: 034 — tanpa baris PO. }
+        line_type: { type: string, enum: [material, service] }
+        item_name: { type: string, nullable: true }
+        purchase_order_item_id: { type: integer, nullable: true }
+        po_number: { type: string, nullable: true }
+        vendor_id: { type: integer, nullable: true }
+        vendor_name: { type: string, nullable: true }
+        unit_cost: { type: string, nullable: true, description: Snapshot biaya satuan baris PO. }
+
+    VariantBom:
+      type: object
+      description: BOM varian — baris + ringkasan biaya (034-seller-po-bom).
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/VariantBomRow' }
+        summary: { $ref: '#/components/schemas/VariantBomSummary' }
+
+    VariantBomRow:
+      type: object
+      properties:
+        id: { type: integer }
+        product_variant_id: { type: integer }
+        line_type: { type: string, enum: [material, service] }
+        item_name: { type: string, nullable: true }
+        is_legacy: { type: boolean }
+        material_id: { type: integer, nullable: true }
+        material_unit: { type: string, nullable: true }
+        purchase_order_item_id: { type: integer, nullable: true }
+        po_number: { type: string, nullable: true }
+        vendor_id: { type: integer, nullable: true }
+        vendor_name: { type: string, nullable: true }
+        unit_cost: { type: string, example: "500.00", description: SNAPSHOT baris PO (baris LEGACY — harga vendor acuan hidup). }
+        qty_needed: { type: string, example: "1.0000", description: Per SATU unit produk jadi. }
+        item_cost: { type: string, example: "500.00", description: unit_cost x qty_needed (dibulatkan ke sen). }
+        po_qty: { type: number, nullable: true, description: Jumlah yang dibeli di baris PO — hanya rujukan, tidak membatasi. }
+        notes: { type: string, nullable: true }
+        source_cancelled: { type: boolean, description: PO sumber dibatalkan; biaya tercatat tetap dipakai. }
+        newer_price:
+          type: object
+          nullable: true
+          description: Baris PO TERBARU (seller sama, bahan/jasa sama) dengan harga berbeda; hanya isyarat.
+          properties:
+            purchase_order_item_id: { type: integer }
+            po_number: { type: string }
+            unit_price: { type: string }
+
+    VariantBomSummary:
+      type: object
+      properties:
+        material_cost: { type: string, example: "800.00" }
+        service_cost: { type: string, example: "1000.00" }
+        bom_cost: { type: string, example: "1800.00" }
+        has_legacy: { type: boolean }
+        bom_complete: { type: boolean }
+        cost_price: { type: string, example: "1800.00" }
+        current_stock: { type: integer, readOnly: true, description: "036 — stok varian saat dibaca; hanya-baca (tidak ada aksi BOM yang mengubah stok)." }
+        reopened: { type: boolean, description: true bila BOM selesai dibuka kembali otomatis oleh permintaan ini (menjadi kosong). }
+
+    EligibleBomLine:
+      type: object
+      properties:
+        purchase_order_item_id: { type: integer }
+        purchase_order_id: { type: integer }
+        po_number: { type: string }
+        po_status: { type: string, enum: [ordered, received, paid] }
+        po_date: { type: string, format: date-time, nullable: true }
+        vendor_id: { type: integer }
+        vendor_name: { type: string, nullable: true }
+        line_type: { type: string, enum: [material, service] }
+        item_name: { type: string, nullable: true }
+        material_id: { type: integer, nullable: true }
+        unit_price: { type: string, example: "500.00" }
+        po_qty: { type: number }
+        in_bom: { type: boolean }
+
+    BomCopyResult:
+      type: object
+      properties:
+        variant_id: { type: integer }
+        sku: { type: string }
+        status: { type: string, enum: [copied] }
+        rows: { type: integer }
+        reopened: { type: boolean }
 
     BomLineInput:
       type: object
@@ -4663,7 +5844,7 @@ components:
       description: material_id wajib hanya saat membuat (POST); tidak berlaku saat update (PUT).
       properties:
         material_id: { type: integer }
-        qty_needed: { type: number, exclusiveMinimum: 0 }
+        qty_needed: { type: integer, minimum: 1, description: "036 — bilangan bulat >= 1 (pecahan ditolak 422). Baris lama yang sudah berpecahan tetap terbaca dan terhitung apa adanya." }
         notes: { type: string, nullable: true }
 
     BomCostBreakdown:
@@ -4677,15 +5858,23 @@ components:
         sku: { type: string }
         cost_price: { type: string, example: "12345.00", description: Modal manual yang sudah ada, tidak diubah oleh endpoint ini. }
         bom_cost: { type: string, example: "16000.00", description: "Jumlah qty_needed * unit_cost seluruh baris BOM." }
+        material_cost: { type: string, example: "16000.00" }
+        service_cost: { type: string, example: "0.00" }
+        has_legacy: { type: boolean, description: Ada baris tanpa baris PO (legacy). }
         lines:
           type: array
           items:
             type: object
             properties:
               bom_line_id: { type: integer }
-              material_id: { type: integer }
-              material_name: { type: string }
-              unit: { type: string }
+              line_type: { type: string, enum: [material, service] }
+              is_legacy: { type: boolean }
+              purchase_order_item_id: { type: integer, nullable: true }
+              po_number: { type: string, nullable: true }
+              item_name: { type: string, nullable: true }
+              material_id: { type: integer, nullable: true }
+              material_name: { type: string, nullable: true }
+              unit: { type: string, nullable: true }
               qty_needed: { type: string }
               unit_cost: { type: string, description: Harga vendor acuan (preferred, atau termurah bila tidak ada yang preferred). }
               line_cost: { type: string }
@@ -4728,6 +5917,9 @@ components:
         current_stock: { type: integer, readOnly: true }
         low_stock_alert: { type: integer, nullable: true }
         is_active: { type: boolean }
+        bom_complete: { type: boolean, description: "034 — BOM ditandai selesai; cost_price mengikuti biaya BOM dan dikunci." }
+        has_bom: { type: boolean, description: "034 — hanya ada pada GET/PUT produk untuk pengguna menu products (baris BOM dimuat)." }
+        bom_cost: { type: string, nullable: true, example: "1800.00", description: "034 — biaya BOM; null bila belum ada baris. Hanya bila has_bom ikut dikirim." }
 
     VariantInput:
       type: object
@@ -4738,6 +5930,7 @@ components:
         sell_price: { $ref: '#/components/schemas/Money' }
         low_stock_alert: { type: integer, nullable: true }
         is_active: { type: boolean, default: true }
+        copy_bom_from_variant_id: { type: integer, nullable: true, description: "034 — hanya pada POST /products/{id}/variants." }
 
     VariantLookup:
       type: object
@@ -4747,9 +5940,11 @@ components:
         sku: { type: string }
         label: { type: string, example: Keychain Sakura — Varian A }
         artist_name: { type: string }
+        category_name: { type: string, nullable: true, description: "Nama kategori produk induk (untuk membedakan produk bernama sama)" }
         sell_price: { $ref: '#/components/schemas/Money' }
         current_stock: { type: integer }
         is_preorder: { type: boolean }
+        image_url: { type: string, nullable: true, description: "Foto varian sendiri; bila tidak ada, foto produk induk; bila tidak ada, null. Layar kasir memakainya di kartu hasil pencarian dan baris keranjang." }
 
     Product:
       type: object
@@ -4797,10 +5992,19 @@ components:
         qty_change: { type: integer }
         stock_before: { type: integer }
         stock_after: { type: integer }
-        reference_type: { type: string, nullable: true }
-        reference_id: { type: integer, nullable: true }
         reason: { type: string, nullable: true }
-        user_name: { type: string, nullable: true, readOnly: true }
+        user_name: { type: string, nullable: true, readOnly: true, description: Pengguna pencatat; null bila penggunanya sudah dihapus. }
+        variant_name: { type: string, nullable: true, readOnly: true }
+        product_id: { type: integer, nullable: true, readOnly: true, description: null bila produknya sudah dihapus (layar Stok memberi pesan jelas). }
+        product_name: { type: string, nullable: true, readOnly: true }
+        reference:
+          type: object
+          nullable: true
+          readOnly: true
+          properties:
+            type: { type: string, enum: [order, preorder] }
+            id: { type: integer, description: id order / pre-order }
+            number: { type: string, example: "TRX-20261004-0007" }
         created_at: { type: string, format: date-time }
 
     Event:
@@ -4916,9 +6120,10 @@ components:
 
     PurchaseOrderInput:
       type: object
-      required: [vendor_id, items]
+      required: [vendor_id, artist_id, items]
       properties:
         vendor_id: { type: integer }
+        artist_id: { type: integer, description: 034 — seller yang dibelikan (wajib saat membuat; pada PUT boleh dikirim untuk menetapkan/mengubah seller). }
         notes: { type: string, nullable: true }
         items:
           type: array
@@ -4941,6 +6146,8 @@ components:
         po_number: { type: string, example: PO-20261012-0001 }
         vendor_id: { type: integer }
         vendor_name: { type: string }
+        artist_id: { type: integer, nullable: true, description: "034 — seller yang dibelikan; null = PO lama tanpa seller (tidak pernah ditawarkan sebagai sumber BOM)." }
+        artist_name: { type: string, nullable: true }
         status: { type: string, enum: [draft, ordered, received, paid, cancelled] }
         ordered_at: { type: string, format: date-time, nullable: true }
         received_at: { type: string, format: date-time, nullable: true }
@@ -4962,6 +6169,7 @@ components:
               material_name: { type: string, nullable: true }
               product_id: { type: integer, nullable: true }
               product_name: { type: string, nullable: true }
+              used_in_bom_count: { type: integer, description: 034 — jumlah baris BOM yang memakai baris PO ini. }
               description: { type: string, nullable: true }
               qty: { type: string }
               unit_price: { $ref: '#/components/schemas/Money' }
@@ -4993,12 +6201,40 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Wajib untuk metode non-tunai. Diperoleh dari POST /payment-proofs.
+          description: Opsional (031-optional-payment-proof; dulu wajib untuk non-tunai pada penjualan dan pre-order — pembayaran PURCHASE ORDER non-tunai tetap wajib bukti). Diperoleh dari POST /payment-proofs; bila dikirim harus valid dan belum terpakai (422).
         notes:
           type: string
           nullable: true
           description: 006-purchase-order-and-ops (US5) — catatan bebas per entri pembayaran, mis. nomor referensi transfer.
         notes: { type: string, nullable: true }
+        reference:
+          type: string
+          nullable: true
+          maxLength: 100
+          description: 028-partial-split-payment — nomor referensi / transaksi pembayaran (opsional).
+        client_ref:
+          type: string
+          format: uuid
+          nullable: true
+          description: 028 — kunci idempotensi buatan klien. Pembayaran ber-`client_ref` yang sama pada transaksi yang sama tidak pernah tercatat dua kali.
+
+    PaymentConfirmationInput:
+      type: object
+      description: 031-optional-payment-proof — hanya kunci yang berubah; minimal satu kunci.
+      properties:
+        proof_token: { type: string, format: uuid, nullable: true, description: "Dari POST /payment-proofs; menjadi bukti yang berlaku dan menandai bukti sebelumnya superseded." }
+        reference: { type: string, nullable: true, maxLength: 100 }
+        notes: { type: string, nullable: true, maxLength: 1000 }
+
+    PaymentSummary:
+      type: object
+      description: 028-partial-split-payment — ringkasan turunan dari entri pembayaran (tidak pernah disimpan untuk order). Entri `rejected` tidak dihitung; untuk order, total terbayar = jumlah entri − kembalian.
+      properties:
+        grand_total: { $ref: '#/components/schemas/Money' }
+        total_paid: { $ref: '#/components/schemas/Money' }
+        remaining: { $ref: '#/components/schemas/Money' }
+        status: { type: string, enum: [unpaid, partially_paid, fully_paid] }
+        payment_count: { type: integer }
 
     Payment:
       type: object
@@ -5007,10 +6243,19 @@ components:
         method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
         purpose: { type: string, enum: [full, down_payment, settlement] }
         channel_provider: { type: string, nullable: true, readOnly: true }
+        provider: { type: string, nullable: true, readOnly: true, description: "Nama kanal (bank/e-wallet) pembayaran ini pada GET /orders/{id}; null untuk tunai." }
         amount: { $ref: '#/components/schemas/Money' }
         verification: { type: string, enum: [pending, verified, rejected] }
         paid_at: { type: string, format: date-time }
-        proof_id: { type: integer, nullable: true, description: "024-invoice-layout-shipping-slip — id PaymentProof yang ditautkan (jika ada), dipakai frontend untuk GET /payment-proofs/{id}/file." }
+        proof_id: { type: integer, nullable: true, description: "024-invoice-layout-shipping-slip — id PaymentProof yang BERLAKU (jika ada; 031: bukti lama yang sudah diganti tidak ikut), dipakai frontend untuk GET /payment-proofs/{id}/file. Pada GET /orders/{id} juga tersedia sejak 031. Dihilangkan bila endpoint tak memuat relasi bukti." }
+        reference: { type: string, nullable: true, maxLength: 100 }
+        notes: { type: string, nullable: true, description: "031 — catatan pembayaran (sebelumnya tersimpan tetapi tak dikirim)." }
+        has_proof: { type: boolean, description: "031 — apakah pembayaran ini punya bukti yang berlaku. Dihilangkan bila relasi bukti tak dimuat (bukan 'tidak ada bukti')." }
+        can_view_proof: { type: boolean, description: "031 — dihitung server untuk pengguna yang meminta: boleh membuka berkas bukti (owner/admin, pengunggah, atau pencatat pembayaran untuk bukti yang berlaku)." }
+        verified_by_name: { type: string, nullable: true, description: "032 — nama pengguna yang memverifikasi; null untuk tunai/pending/verifier yang sudah dihapus. Dihilangkan bila relasi `payments.verifier` tak dimuat." }
+        verified_at: { type: string, format: date-time, nullable: true, description: "032 — kapan diverifikasi (null untuk tunai dan yang masih pending)." }
+        can_verify: { type: boolean, description: "032 — dihitung server untuk pengguna yang meminta: pembayaran non-tunai masih pending, transaksi tidak batal, dan pengguna boleh (owner/admin, atau bukan pencatat pembayaran itu)." }
+        can_edit_confirmation: { type: boolean, description: "031 — dihitung server: pengguna boleh menambah/mengubah/mengganti konfirmasi (non-tunai; owner/admin atau pencatat pembayaran; transaksi tidak batal)." }
         proofs:
           type: array
           items:
@@ -5051,11 +6296,14 @@ components:
         id: { type: integer }
         variant_id: { type: integer }
         artist_id: { type: integer }
-        artist_name: { type: string, readOnly: true }
+        artist_name: { type: string, nullable: true, readOnly: true }
+        category_name: { type: string, nullable: true, readOnly: true, description: "Hanya di GET /orders/{id}." }
+        variant_name: { type: string, nullable: true, readOnly: true, description: "Hanya di GET /orders/{id}." }
+        image_url: { type: string, nullable: true, readOnly: true, description: "Foto varian (bila ada). Hanya di GET /orders/{id}." }
         sku_snapshot: { type: string }
         name_snapshot: { type: string }
         qty: { type: integer }
-        cost_price: { $ref: '#/components/schemas/Money' }
+        cost_price: { $ref: '#/components/schemas/Money', description: "TIDAK dikembalikan oleh GET /orders/{id} (terbuka untuk kasir); hanya laporan owner/admin." }
         sell_price: { $ref: '#/components/schemas/Money' }
         discount_amount: { $ref: '#/components/schemas/Money' }
         line_total: { $ref: '#/components/schemas/Money' }
@@ -5086,17 +6334,52 @@ components:
         change_amount: { $ref: '#/components/schemas/Money' }
         status: { type: string, enum: [completed, voided] }
         void_reason: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        channel: { type: string }
         created_at: { type: string, format: date-time }
+        customer:
+          type: object
+          nullable: true
+          description: "Hanya di GET /orders/{id}. `null` (kunci tetap ada) untuk pembeli walk-in."
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            phone: { type: string, nullable: true }
+            email: { type: string, nullable: true }
+        cashier:
+          type: object
+          description: "Hanya di GET /orders/{id}."
+          properties: { id: { type: integer }, name: { type: string } }
+        event:
+          type: object
+          description: "Hanya di GET /orders/{id}."
+          properties: { id: { type: integer }, name: { type: string } }
         items:
           type: array
           items: { $ref: '#/components/schemas/OrderItem' }
         payments:
           type: array
+          description: Entri pembayaran dalam urutan dicatat; tiap entri membawa `reference`, `recorded_by_name`, `status` (`paid`/`rejected`), dan `session_id` (shift tempat uang diterima).
           items: { $ref: '#/components/schemas/Payment' }
+        payment_summary: { $ref: '#/components/schemas/PaymentSummary' }
 
+    Backup:
+      type: object
+      properties:
+        id: { type: string, description: "Nama folder cadangan, `Y-m-d_His` (+ `-N` bila dua dalam detik yang sama)." }
+        created_at: { type: string, format: date-time }
+        size_bytes: { type: integer, description: Ukuran database.sql }
+        has_payment_proofs: { type: boolean, description: Ada payment-proofs.tar.gz di cadangan ini }
+        external_copied: { type: boolean, nullable: true, description: "Hanya di respons POST /backups. true = disalin ke BACKUP_EXTERNAL_PATH, false = path diset tapi tak ditemukan/gagal, null = tak dikonfigurasi." }
+    BackupRestoreResult:
+      type: object
+      properties:
+        source: { type: string, description: "Id cadangan sumber, atau 'upload'." }
+        safety_backup: { $ref: '#/components/schemas/Backup' }
     Receipt:
       type: object
       properties:
+        app_name: { type: string, description: "Nama aplikasi untuk teks 'Powered by …' (default BoothPOS)." }
         store_name: { type: string }
         store_contact: { type: string, nullable: true }
         # 001-user-store-settings User Story 3 / SC-004 — field ini
@@ -5177,6 +6460,8 @@ components:
         fulfillment: { type: string, enum: [pickup, courier] }
         total_amount: { $ref: '#/components/schemas/Money' }
         paid_amount: { $ref: '#/components/schemas/Money' }
+        customer_address: { type: string, nullable: true, description: "Alamat pelanggan (Customer.address) — dipakai popup bendera Mail Order 'ongkir/alamat belum diisi'; sudah tersedia tanpa query tambahan karena pelanggan dimuat untuk tiap baris." }
+        has_payments: { type: boolean, description: "027-preorder-duplicate-split — true bila ADA baris pembayaran apa pun (bahkan bernilai kecil). Dipakai UI untuk menonaktifkan aksi Split; satu subquery EXISTS untuk seluruh halaman." }
         outstanding: { $ref: '#/components/schemas/Money' }
         created_at: { type: string, format: date-time }
         sellers:
@@ -5198,6 +6483,23 @@ components:
         status: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] }
         fulfillment: { type: string, enum: [pickup, courier] }
         created_at: { type: string, format: date-time, description: "024-invoice-layout-shipping-slip — ditambahkan ke present() (sebelumnya hanya ada di PreorderSummary/index())." }
+        notes: { type: string, nullable: true, description: "Catatan pesanan. Sebelumnya hanya ada di PreorderSummary (list); kini juga di payload detail agar panel detail bisa menampilkannya." }
+        source:
+          type: object
+          nullable: true
+          description: "027-preorder-duplicate-split — asal pre-order ini; null untuk pre-order biasa. `preorder_id` null bila sumbernya sudah dihapus (nomor tetap ada sebagai snapshot)."
+          properties:
+            type: { type: string, enum: [duplicate, split] }
+            preorder_id: { type: integer, nullable: true }
+            preorder_number: { type: string }
+        split_children:
+          type: array
+          description: "027 — pre-order yang dipisahkan DARI pre-order ini. Hanya terisi di GET /preorders/{id} dan respons split; kosong di tempat lain."
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              preorder_number: { type: string }
         store_identity:
           type: object
           nullable: true
@@ -5243,7 +6545,9 @@ components:
               line_total: { $ref: '#/components/schemas/Money' }
         payments:
           type: array
+          description: Entri pembayaran dalam urutan dicatat. Tiap entri membawa `reference`, `recorded_by_name`, dan `status` (`paid`/`rejected`).
           items: { $ref: '#/components/schemas/Payment' }
+        payment_summary: { $ref: '#/components/schemas/PaymentSummary' }
         shipment:
           allOf:
             - $ref: '#/components/schemas/Shipment'
@@ -5301,6 +6605,21 @@ components:
         `null` untuk order walk-in (tanpa pelanggan tercatat).
       properties:
         event: { $ref: '#/components/schemas/Event' }
+        sessions:
+          type: array
+          description: "Shift kasir dari order yang tercantum di `transactions[]`, terbaru dulu (untuk filter shift & ringkasan kas)."
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              cashier_name: { type: string, nullable: true }
+              opened_at: { type: string, format: date-time }
+              closed_at: { type: string, format: date-time, nullable: true }
+              status: { type: string }
+              opening_cash: { $ref: '#/components/schemas/Money' }
+              closing_cash: { $ref: '#/components/schemas/Money', nullable: true }
+              expected_cash: { $ref: '#/components/schemas/Money', nullable: true }
+              cash_received: { $ref: '#/components/schemas/Money', description: "028-partial-split-payment — tunai yang DITERIMA di shift ini (pembayaran tunai terverifikasi dengan `session_id` = shift, tanpa order batal) dikurangi kembalian order shift ini; mencakup pelunasan susulan atas penjualan shift lain dan tidak bergantung pada filter. Shift yang hanya menerima pelunasan susulan juga tercantum." }
         group_by: { type: string, enum: [product, category, artist, day, event, customer] }
         group_label:
           type: string
@@ -5316,7 +6635,10 @@ components:
             unit_count: { type: integer }
             gross_sales: { $ref: '#/components/schemas/Money' }
             discount_total: { $ref: '#/components/schemas/Money' }
-            net_sales: { $ref: '#/components/schemas/Money' }
+            net_sales: { $ref: '#/components/schemas/Money', description: "Order POS + pendapatan pre-order yang diakui (dipakai Dashboard & Laporan)." }
+            pos_unit_count: { type: number, description: "Unit terjual dari order POS SAJA. Halaman Sales memakai `pos_*` karena hanya menampilkan transaksi POS." }
+            pos_gross_sales: { $ref: '#/components/schemas/Money', description: Penjualan kotor order POS saja. }
+            pos_net_sales: { $ref: '#/components/schemas/Money', description: Penjualan bersih order POS saja. }
         rows:
           type: array
           description: |
@@ -5347,6 +6669,9 @@ components:
           items:
             type: object
             properties:
+              paid_amount: { $ref: '#/components/schemas/Money', description: "028 — uang yang sudah dibayar (jumlah entri non-ditolak dikurangi kembalian)." }
+              balance_amount: { $ref: '#/components/schemas/Money', description: "028 — sisa tagihan." }
+              payment_status: { type: string, enum: [unpaid, partially_paid, fully_paid], description: "028 — status pembayaran turunan; berbeda dari `payment_state` (status verifikasi)." }
               id: { type: integer }
               order_number: { type: string }
               created_at: { type: string, format: date-time }
@@ -5361,8 +6686,37 @@ components:
                   frontend atas array `transactions[]` yang sudah
                   diambil (nomor transaksi/nama pelanggan/nama kasir);
                   tidak ada parameter pencarian sisi server yang baru.
-              item_count: { type: integer }
-              total_amount: { $ref: '#/components/schemas/Money' }
+              customer_id: { type: integer, nullable: true }
+              customer_phone: { type: string, nullable: true }
+              customer_email: { type: string, nullable: true }
+              item_count: { type: integer, description: "Jumlah BARIS item (bukan jumlah unit)." }
+              unit_count: { type: number, description: "Jumlah unit (SUM qty) semua item di transaksi ini." }
+              cashier_id: { type: integer, nullable: true }
+              discount_amount: { $ref: '#/components/schemas/Money', description: "Total diskon yang diterima pembeli = diskon per item + diskon tingkat order (tidak dobel: orders.subtotal sudah pasca-diskon-item)." }
+              payment_methods:
+                type: array
+                items: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+                description: Metode pembayaran unik yang dipakai transaksi ini (bisa lebih dari satu untuk pembayaran terpisah).
+              channel: { type: string, description: "Saluran transaksi (mis. 'offline')." }
+              artist_names: { type: array, items: { type: string }, description: Nama penjual unik yang barangnya ada di transaksi ini. }
+              total_amount: { $ref: '#/components/schemas/Money', description: Total transaksi. }
+              key: { type: string, description: "Kunci baris `order:{id}` — dipakai untuk memilih baris dan mengekspornya." }
+              status: { type: string, enum: [completed, voided] }
+              void_reason: { type: string, nullable: true }
+              payment_state: { type: string, enum: [verified, pending, rejected, none], description: "Verifikasi TERBURUK di antara pembayaran (rejected > pending > verified); `none` bila belum ada pembayaran." }
+              cash_amount: { $ref: '#/components/schemas/Money', description: "Tunai BERSIH: tunai diterima dikurangi kembalian (pembayaran rejected tidak dihitung)." }
+              noncash_amount: { $ref: '#/components/schemas/Money' }
+              session_id: { type: integer, nullable: true, description: Shift kasir tempat order dibuat. }
+              items_preview: { type: array, description: "Dua baris item terbesar.", items: { type: object, properties: { name: { type: string }, qty: { type: number } } } }
+              items_more: { type: integer, description: "Jumlah baris item di luar pratinjau." }
+              cost_total: { $ref: '#/components/schemas/Money', description: "HANYA untuk pengguna yang boleh melihat laporan (`canAccessMenu('reports')`); tidak dikirim ke kasir." }
+              margin_amount: { $ref: '#/components/schemas/Money', description: "Sama: hanya pengguna yang boleh melihat laporan." }
+              margin_percent: { type: number, description: "Sama: hanya pengguna yang boleh melihat laporan." }
+            description: |
+              Halaman Sales menyaring dan mengurutkan daftar ini di frontend (kasir, penjual,
+              metode bayar, jenis pelanggan, rentang tanggal & total), tanpa memuat ulang —
+              karena itu setiap baris membawa field-field di atas. SENGAJA tanpa modal/untung:
+              halaman ini terbuka untuk semua peran termasuk kasir.
 
     SalesReportCustomerRow:
       type: object
@@ -5393,29 +6747,20 @@ components:
         gross_profit: { $ref: '#/components/schemas/Money' }
         event_cost: { $ref: '#/components/schemas/Money' }
         net_profit: { $ref: '#/components/schemas/Money' }
+        revenue_pos: { $ref: '#/components/schemas/Money' }
+        revenue_preorder: { $ref: '#/components/schemas/Money' }
+        cost_of_goods_pos: { $ref: '#/components/schemas/Money' }
+        cost_of_goods_preorder: { $ref: '#/components/schemas/Money' }
+        gross_profit_pos: { $ref: '#/components/schemas/Money' }
+        gross_profit_preorder: { $ref: '#/components/schemas/Money' }
 
     ArtistSettlement:
       type: object
       properties:
-        id:
-          type: integer
-          nullable: true
-          description: |
-            ID baris `artist_settlements` — dipakai sebagai `{id}` pada
-            `POST /reports/artist-settlements/{id}/payment`. Bernilai `null`
-            untuk artist aktif yang belum punya penjualan di event ini
-            (barisnya belum ada, dan memang tidak ada yang perlu dibayar).
-            Pakai `artist_id` sebagai kunci baris di tabel UI.
         artist_id: { type: integer }
         artist_name: { type: string }
         total_sales: { $ref: '#/components/schemas/Money' }
         total_units: { type: integer }
-        deduction: { $ref: '#/components/schemas/Money' }
-        payable_amount: { $ref: '#/components/schemas/Money' }
-        paid_amount: { $ref: '#/components/schemas/Money' }
-        outstanding: { $ref: '#/components/schemas/Money' }
-        status: { type: string, enum: [unpaid, partial, paid] }
-        calculated_at: { type: string, format: date-time, nullable: true }
 
     Setting:
       type: object

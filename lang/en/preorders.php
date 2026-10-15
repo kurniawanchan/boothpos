@@ -54,4 +54,20 @@ return [
     'import_dispatch_date_not_applicable' => "Row :row: :column does not apply when dispatch_status is ':status'.",
     'dispatch_status_shipping_mail_order_only' => "'Shipping in progress' only applies to Mail Order preorders.",
     'dispatch_status_cancelled' => 'A cancelled preorder no longer has an active invoice or shipment to track.',
+
+    // 027-preorder-duplicate-split
+    'duplicate_item_unavailable' => 'Item ":item" can no longer be sold (deleted or inactive), so this pre-order was not duplicated.',
+    'duplicate_not_found' => 'Pre-order not found.',
+
+    // 027-preorder-duplicate-split (split)
+    'split_not_allowed_status' => 'A "Handed over" or "Cancelled" pre-order can no longer be split — this transaction is closed.',
+    'split_not_allowed_has_payment' => 'This pre-order already has a recorded payment, so it cannot be split. Handle the payment first (for example duplicate it instead, or cancel it).',
+    'split_item_not_in_order' => 'One of the selected items does not belong to this pre-order.',
+    'split_qty_exceeds_line' => 'You cannot move more than the :qty unit(s) of ":item" in this pre-order.',
+    'split_must_move_and_keep' => 'At least one unit must move to the new pre-order and at least one unit must stay on this one.',
+    'split_discount_exceeds_remaining' => 'After the split, the discount on this pre-order would be larger than what is left to pay. Lower the discount first, then split again.',
+    'split_single_seller' => 'All items in this pre-order belong to the same seller, so there is nothing to split by seller.',
+
+    // Hapus pembayaran pre-order
+    'payment_delete_not_allowed_status' => 'Payments of a "Handed over" or "Cancelled" pre-order can no longer be deleted — this transaction is closed.',
 ];

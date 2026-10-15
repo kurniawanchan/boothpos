@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Setting;
+use App\Support\AppName;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -69,6 +70,13 @@ class UpdateSettingsRequest extends FormRequest
                     // baru (lihat contracts/settings-system-mode.md).
                     if ($key === 'system_mode' && ! in_array($value, ['demo', 'live'], true)) {
                         $fail('Mode sistem harus salah satu dari: demo, live.');
+                    }
+
+                    // Nama aplikasi ditampilkan di sidebar dan dokumen — dibatasi
+                    // panjangnya supaya tidak merusak tata letak. Kosong BOLEH
+                    // (= kembali ke default, lihat App\Support\AppName).
+                    if ($key === 'app_name' && is_string($value) && mb_strlen($value) > AppName::MAX_LENGTH) {
+                        $fail('Nama aplikasi maksimal '.AppName::MAX_LENGTH.' karakter.');
                     }
 
                     // 006-purchase-order-and-ops (US6) — pola closure yang

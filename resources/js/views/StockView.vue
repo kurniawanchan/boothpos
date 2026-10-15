@@ -19,6 +19,8 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
+import ProductDetailModal from '../components/product/ProductDetailModal.vue';
+import { MOVEMENT_TYPES, movementTypeLabelKey, movementTypeVariant } from '../utils/stockMovements';
 
 const auth = useAuthStore();
 const { t } = useI18n();
@@ -47,15 +49,35 @@ async function afterImport() {
   await load();
 }
 
-const TYPE_VARIANT = { purchase: 'mint', sale: 'neutral', preorder_handover: 'warn', adjustment: 'neutral', return: 'mint', initial: 'neutral' };
-const TYPE_LABEL = computed(() => ({
-  purchase: t('master_data.type_purchase'),
-  sale: t('master_data.type_sale'),
-  preorder_handover: t('master_data.type_preorder_handover'),
-  adjustment: t('master_data.type_adjustment'),
-  return: t('master_data.type_return'),
-  initial: t('master_data.type_initial'),
-}));
+// Tipe pergerakan (warna + label) satu definisi bersama riwayat varian: utils/stockMovements.js.
+// Filter tipe: nilai terikat (v-model) dan ada opsi "Semua tipe" — dulu pilihan tidak tampil di kotaknya
+// (tetap "Semua tipe") dan tidak ada jalan kembali ke semua (BUG yang ditemukan lewat browser, 036).
+const typeFilter = ref('');
+const typeOptions = computed(() => [
+  { value: '', label: t('master_data.all_types') },
+  ...MOVEMENT_TYPES.map((value) => ({ value, label: t(movementTypeLabelKey(value)) })),
+]);
+
+// 036 — klik SKU membuka detail produknya dengan varian itu disorot. State-nya lokal di layar ini,
+// jadi daftar, filter, dan posisi gulir tidak tersentuh saat dialog ditutup. Tanpa akses `products`
+// SKU hanya teks (kontrol yang tidak bisa dipakai disembunyikan, bukan dinonaktifkan).
+const canOpenProduct = computed(() => auth.canAccessMenu('products'));
+const detailProductId = ref(null);
+const detailVariantId = ref(null);
+
+function openSku(row) {
+  if (!row.product_id) {
+    toast.error(t('master_data.product_gone'));
+    return;
+  }
+  detailVariantId.value = row.variant_id;
+  detailProductId.value = row.product_id;
+}
+
+function closeDetail() {
+  detailProductId.value = null;
+  detailVariantId.value = null;
+}
 
 const columns = computed(() => [
   { key: 'sku', label: t('master_data.col_sku') },
@@ -136,9 +158,10 @@ async function submitAdjustment() {
   <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
     <div class="flex flex-wrap items-center gap-2.5">
       <BaseSelect
+        v-model="typeFilter"
         class="w-52"
         :placeholder="t('master_data.all_types')"
-        :options="Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label }))"
+        :options="typeOptions"
         @update:model-value="(v) => applyFilters({ type: v || undefined })"
       />
       <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
@@ -162,17 +185,32 @@ async function submitAdjustment() {
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
       <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_stock_movements')">
-        <template #cell-sku="{ row }"><span class="font-mono text-[12px] font-semibold">{{ row.sku }}</span></template>
-        <template #cell-type="{ row }"><StatusPill :variant="TYPE_VARIANT[row.type]">{{ TYPE_LABEL[row.type] ?? row.type }}</StatusPill></template>
+        <template #cell-sku="{ row }">
+          <button
+            v-if="canOpenProduct"
+            type="button"
+            class="font-mono text-[12px] font-semibold underline decoration-dotted hover:text-brand-active"
+            @click="openSku(row)"
+          >{{ row.sku }}</button>
+          <span v-else class="font-mono text-[12px] font-semibold">{{ row.sku }}</span>
+        </template>
+        <template #cell-type="{ row }"><StatusPill :variant="movementTypeVariant(row.type)">{{ t(movementTypeLabelKey(row.type)) }}</StatusPill></template>
         <template #cell-qty_change="{ row }">
           <span class="font-mono text-[13px] font-bold" :class="row.qty_change >= 0 ? 'text-brand-active' : 'text-danger-text'">{{ row.qty_change >= 0 ? '+' : '' }}{{ row.qty_change }}</span>
         </template>
         <template #cell-range="{ row }"><span class="font-mono text-[12.5px] text-muted-4">{{ row.stock_before }} → {{ row.stock_after }}</span></template>
-        <template #cell-reason="{ row }">{{ row.reason || row.reference_type || '—' }}</template>
+        <template #cell-reason="{ row }">
+          <span v-if="row.reference" class="font-mono text-[12px] font-bold text-brand-active">{{ row.reference.number }}</span>
+          <span v-if="row.reason" class="block text-[12.5px]">{{ row.reason }}</span>
+          <span v-if="!row.reference && !row.reason" class="text-muted-3">—</span>
+        </template>
+        <template #cell-user_name="{ row }">{{ row.user_name || '—' }}</template>
         <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
+
+    <ProductDetailModal :open="detailProductId !== null" :product-id="detailProductId" :highlight-variant-id="detailVariantId" @close="closeDetail" />
 
     <BaseModal :open="showAdjust" :title="t('master_data.stock_adjustment')" max-width-class="max-w-[640px]" @close="showAdjust = false">
       <div class="flex flex-col gap-4 px-6 py-5">

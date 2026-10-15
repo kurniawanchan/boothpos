@@ -4,12 +4,19 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreOrderRequest;
+use App\Http\Requests\StorePaymentRequest;
+use App\Http\Requests\UpdatePaymentConfirmationRequest;
+use App\Http\Requests\VerifyOrderPaymentsRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
+use App\Models\Payment;
 use App\Models\Setting;
 use App\Services\ImageUploadService;
 use App\Services\OrderService;
+use App\Services\PaymentService;
+use App\Support\AppName;
 use App\Support\ModeGate;
+use App\Support\PaymentSummary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -19,6 +26,7 @@ class OrderController extends Controller
     public function __construct(
         private OrderService $orderService,
         private ImageUploadService $imageUploadService,
+        private PaymentService $paymentService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -64,7 +72,110 @@ class OrderController extends Controller
         // per item — dibutuhkan oleh popup "Produk Terjual" di halaman Sales
         // (009-ui-ux-refinements US2) supaya klik nama produk bisa membuka
         // ProductDetailModal tanpa endpoint baru.
-        return response()->json(new OrderResource($order->load(['items.variant', 'payments'])));
+        // Relasi tambahan untuk tampilan detail transaksi di halaman Sales
+        // (siapa, di mana, produk apa dari penjual mana, dibayar bagaimana).
+        // Semuanya opt-in lewat whenLoaded() di OrderResource, jadi endpoint
+        // lain yang memakai resource ini tidak berubah bentuk.
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist',
+            'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+        ])));
+    }
+
+    /**
+     * 028-partial-split-payment (US5) — pembayaran SUSULAN atas penjualan POS yang
+     * baru dibayar sebagian. Semua aturan (sisa tagihan, idempotensi `client_ref`,
+     * shift kasir untuk tunai, order batal = tertutup) ada di PaymentService;
+     * di sini hanya memetakan ValidationException ke kode statusnya. 201 = baru,
+     * 200 = replay `client_ref`.
+     */
+    public function storePayment(StorePaymentRequest $request, Order $order): JsonResponse
+    {
+        try {
+            $order = $this->paymentService->addPayment($order, $request->validated(), $request->user(), $replayed);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+        ])), $replayed ? 200 : 201);
+    }
+
+    /**
+     * Hapus satu pembayaran penjualan POS — hanya owner/admin (menghapus catatan
+     * uang). 409 untuk order batal dan untuk uang tunai milik shift yang sudah
+     * ditutup (sudah direkonsiliasi); 404 bila bukan pembayaran order ini.
+     */
+    public function destroyPayment(Request $request, Order $order, Payment $payment): JsonResponse
+    {
+        abort_unless($request->user()->isOwnerOrAdmin(), 403, __('orders_payments.not_authorized_void'));
+
+        try {
+            $order = $this->paymentService->deletePayment($order, $payment, $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+        ])));
+    }
+
+    /**
+     * 032-mark-payment-verified (US3) — verifikasi massal dari daftar Sales. Hanya id penjualan yang
+     * dikirim klien; semua aturan per pembayaran ada di PaymentService::verifyOrderPayments() (yang
+     * tak bisa diverifikasi pemanggil dilewati dan dihitung per alasan, bukan 4xx). 422 hanya untuk
+     * bentuk permintaan yang salah.
+     */
+    public function verifyPayments(VerifyOrderPaymentsRequest $request): JsonResponse
+    {
+        return response()->json($this->paymentService->verifyOrderPayments($request->validated('order_ids'), $request->user()));
+    }
+
+    /**
+     * 032-mark-payment-verified — tandai SATU pembayaran non-tunai terverifikasi. Boleh: owner/admin
+     * atau pengguna mana pun KECUALI pencatat pembayaran itu (403) — dijaga di sini DAN diulang di
+     * PaymentService. Satu arah dan final: tidak ada route pembatalan. Aturan lain (batal 409, tunai
+     * 422, sudah terverifikasi/ditolak 409) ada di service; di sini hanya memetakan ValidationException
+     * ke kode statusnya, sama seperti destroyPayment().
+     */
+    public function verifyPayment(Request $request, Order $order, Payment $payment): JsonResponse
+    {
+        abort_unless($payment->mayVerify($request->user()), 403, __('orders_payments.payment_verify_not_allowed'));
+
+        try {
+            $order = $this->paymentService->markVerified($order, $payment, $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+        ])));
+    }
+
+    /**
+     * 031-optional-payment-proof — tambah / ubah / ganti konfirmasi (bukti, referensi,
+     * catatan) satu pembayaran non-tunai. Hanya owner/admin atau PENCATAT pembayaran itu
+     * (403 untuk yang lain — dijaga di sini DAN diulang di PaymentService). Semua aturan
+     * lain (transaksi batal 409, tunai 422, hasil tak boleh kosong 422, bukti lama
+     * di-supersede bukan dihapus) ada di service; di sini hanya memetakan
+     * ValidationException ke kode statusnya, sama seperti destroyPayment().
+     */
+    public function updatePaymentConfirmation(UpdatePaymentConfirmationRequest $request, Order $order, Payment $payment): JsonResponse
+    {
+        abort_unless($payment->mayManageConfirmation($request->user()), 403, __('orders_payments.payment_confirmation_not_allowed'));
+
+        try {
+            $order = $this->paymentService->updateConfirmation($order, $payment, $request->validated(), $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'event',
+        ])));
     }
 
     public function void(Request $request, Order $order): JsonResponse
@@ -98,6 +209,7 @@ class OrderController extends Controller
     public function receipt(Order $order): JsonResponse
     {
         $order->load(['items.artist', 'payments', 'cashier', 'event', 'customer']);
+        $summary = PaymentSummary::for($order);
 
         return response()->json([
             // 003-seed-demo-live follow-up — nama toko DEMO dan LIVE
@@ -127,6 +239,7 @@ class OrderController extends Controller
             'store_contact_phone' => Setting::get('store_contact_phone'),
             'store_contact_email' => Setting::get('store_contact_email'),
             'receipt_footer_text' => Setting::get('receipt_footer_text'),
+            'app_name' => AppName::current(),
             // 003-seed-demo-live follow-up 2 (FR-024) — BUG YANG DITEMUKAN
             // & DIPERBAIKI: footer struk sebelumnya HANYA menampilkan
             // store_contact_person/phone/email (kontak TOKO, bukan
@@ -177,8 +290,14 @@ class OrderController extends Controller
             'total_amount' => number_format((float) $order->total_amount, 2, '.', ''),
             'payment_summary' => $order->payments->map(fn ($p) => [
                 'method' => $p->method, 'amount' => number_format((float) $p->amount, 2, '.', ''),
+                // 028 — struk yang dicetak ulang setelah pembayaran susulan memuat entri baru.
+                'reference' => $p->reference, 'paid_at' => $p->paid_at,
             ]),
             'change_amount' => number_format((float) $order->change_amount, 2, '.', ''),
+            // 028 — jumlah terbayar, sisa tagihan, dan status untuk struk penjualan sebagian.
+            'paid_amount' => $summary['total_paid'],
+            'balance_amount' => $summary['remaining'],
+            'payment_status' => $summary['status'],
         ]);
     }
 }

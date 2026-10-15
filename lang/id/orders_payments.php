@@ -17,4 +17,27 @@ return [
     'discount_exceeds_line_value' => 'Diskon untuk varian :sku melebihi nilai baris itu sendiri.',
     'discount_exceeds_subtotal' => 'Diskon transaksi melebihi subtotal.',
     'channel_in_use' => 'Kanal ini sedang dipakai dan tidak dapat dihapus.',
+
+    // 028-partial-split-payment
+    'payment_exceeds_balance' => 'Jumlah melebihi sisa tagihan. Maksimal yang bisa dibayar :max.',
+    'payment_already_fully_paid' => 'Transaksi ini sudah lunas.',
+    'payment_target_closed' => 'Transaksi ini sudah ditutup (diserahkan, dibatalkan, atau dibatalkan/void), sehingga pembayaran tidak bisa ditambah atau dihapus lagi.',
+    'payment_session_required' => 'Pembayaran tunai membutuhkan sesi kasir yang terbuka. Buka sesi kasir dulu, lalu catat pembayarannya.',
+    'payment_client_ref_conflict' => 'Kunci referensi pembayaran ini sudah dipakai untuk transaksi lain.',
+    'customer_required_for_partial_payment' => 'Penjualan yang tidak dibayar penuh wajib memiliki pelanggan, supaya jelas siapa yang masih berutang.',
+    'payment_delete_closed_shift' => 'Pembayaran tunai ini milik shift kasir yang sudah ditutup dan direkonsiliasi, sehingga tidak bisa dihapus.',
+
+    // 031-optional-payment-proof
+    'channel_required_for_non_cash' => 'Kanal pembayaran wajib untuk metode non-tunai.',
+    'payment_confirmation_not_allowed' => 'Hanya owner/admin atau pengguna yang mencatat pembayaran ini yang boleh mengubah konfirmasinya.',
+    'payment_confirmation_empty' => 'Isi minimal satu: bukti, referensi, atau catatan; konfirmasi tidak boleh dikosongkan.',
+    'payment_confirmation_cash' => 'Pembayaran tunai tidak punya konfirmasi untuk ditambahkan.',
+    'payment_confirmation_target_closed' => 'Transaksi ini sudah dibatalkan; konfirmasinya tidak bisa diubah lagi.',
+
+    // 032-mark-payment-verified
+    'payment_verify_not_allowed' => 'Anda yang mencatat pembayaran ini, jadi orang lain yang harus memverifikasinya.',
+    'payment_verify_cash' => 'Pembayaran tunai sudah terverifikasi saat dicatat.',
+    'payment_already_verified' => 'Pembayaran ini sudah terverifikasi.',
+    'payment_rejected_cannot_verify' => 'Pembayaran yang ditolak tidak bisa diverifikasi.',
+    'payment_verify_target_closed' => 'Transaksi ini sudah dibatalkan; pembayarannya tidak bisa diverifikasi lagi.',
 ];

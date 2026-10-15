@@ -34,6 +34,7 @@ class StoreOrderRequest extends FormRequest
             'payments.*.amount' => ['required', 'numeric', 'min:0.01'],
             'payments.*.proof_token' => ['nullable', 'uuid'],
             'payments.*.notes' => ['nullable', 'string', 'max:1000'],
+            'payments.*.reference' => ['nullable', 'string', 'max:100'],
         ];
     }
 }

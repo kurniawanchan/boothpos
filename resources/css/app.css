@@ -67,6 +67,13 @@
   --color-danger-border: #f3d6d3;
   --color-danger-border-hover: #c9756c;
 
+  /* Chip colours untuk kartu varian (037): SKU = sky, margin = violet. Pasangan teks/latar
+     diukur >= 4.5:1 (sky 5.92, violet 6.80); markup memakai mint, biaya BOM memakai warn. */
+  --color-sky-text: #1f5f8b;
+  --color-sky-bg: #e6f0f7;
+  --color-violet-text: #5b3f99;
+  --color-violet-bg: #efeaf8;
+
   /* Dark-panel accents (login hero, product-code generator panel) */
   --color-dark-muted: #93a79d;
   --color-dark-muted-2: #6e8579;

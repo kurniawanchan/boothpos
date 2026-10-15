@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Services\BomCostCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -26,6 +27,18 @@ class ProductVariantResource extends JsonResource
             'low_stock_alert' => $this->low_stock_alert,
             'is_low_stock' => $this->isLowStock(),
             'is_active' => $this->is_active,
+            // 034-seller-po-bom — selama true, cost_price mengikuti biaya BOM
+            // dan dikunci terhadap edit manual.
+            'bom_complete' => (bool) $this->bom_complete,
+            // has_bom/bom_cost hanya ada bila baris BOM sengaja dimuat
+            // pemanggil (ProductController::variantRelations) — daftar
+            // produk/POS tidak menarik BOM varian satu per satu.
+            $this->mergeWhen($this->relationLoaded('bomLines'), fn () => [
+                'has_bom' => $this->bomLines->isNotEmpty(),
+                'bom_cost' => $this->bomLines->isNotEmpty()
+                    ? app(BomCostCalculator::class)->breakdown($this->resource)['bom_cost']
+                    : null,
+            ]),
         ];
     }
 }

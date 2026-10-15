@@ -14,8 +14,13 @@ class PaymentProof extends Model
 
     protected $fillable = [
         'proof_token', 'payment_id', 'file_path', 'original_name',
-        'mime_type', 'file_size', 'captured_via', 'uploaded_by', 'created_at',
+        'mime_type', 'file_size', 'captured_via', 'uploaded_by', 'created_at', 'superseded_at',
     ];
+
+    protected function casts(): array
+    {
+        return ['created_at' => 'datetime', 'superseded_at' => 'datetime'];
+    }
 
     public function payment(): BelongsTo { return $this->belongsTo(Payment::class); }
     public function uploader(): BelongsTo { return $this->belongsTo(User::class, 'uploaded_by'); }

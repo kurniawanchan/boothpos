@@ -8,6 +8,7 @@ import { listPreorders } from '../../api/preorders';
 import { listEvents } from '../../api/events';
 import AppSidebar from './AppSidebar.vue';
 import AppTopbar from './AppTopbar.vue';
+import SchemaUpdateBanner from './SchemaUpdateBanner.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -111,6 +112,7 @@ async function handleLogout() {
         @show-sidebar="setSidebarVisible(true)"
         @logout="handleLogout"
       />
+      <SchemaUpdateBanner v-if="settings.schemaUpdateRequired" />
       <main class="min-h-0 flex-1 overflow-auto">
         <RouterView />
       </main>

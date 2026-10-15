@@ -63,6 +63,30 @@ class OrderTest extends TestCase
         $this->assertDatabaseHas('stock_movements', ['variant_id' => $this->variant->id, 'type' => 'sale', 'qty_change' => -2]);
     }
 
+    public function test_closing_a_shift_expects_cash_net_of_change_and_without_voided_orders(): void
+    {
+        $this->session->update(['opening_cash' => 100000]);
+
+        // Bayar 30.000 tunai untuk 25.000 -> kembalian 5.000; laci bertambah 25.000.
+        $this->postJson('/api/v1/orders', $this->basePayload([
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 30000]],
+        ]))->assertCreated();
+
+        // Order tunai kedua yang lalu dibatalkan — uangnya dikembalikan, tak ada di laci.
+        $voidedId = $this->postJson('/api/v1/orders', $this->basePayload([
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
+            'payments' => [['method' => 'cash', 'amount' => 25000]],
+        ]))->assertCreated()->json('id');
+        app(\App\Services\OrderService::class)->void(\App\Models\Order::findOrFail($voidedId), 'salah input', $this->cashier);
+
+        $response = $this->postJson("/api/v1/sessions/{$this->session->id}/close", ['closing_cash' => 125000]);
+
+        $response->assertOk();
+        $this->assertEquals(125000, $response->json('expected_cash'));
+        $this->assertEquals(0, $response->json('cash_difference'));
+    }
+
     public function test_order_price_uses_server_master_data_not_client_input(): void
     {
         // Klien mencoba mengirim variant_id yang benar tapi tidak ada
@@ -118,7 +142,9 @@ class OrderTest extends TestCase
         $this->assertDatabaseCount('orders', 0);
     }
 
-    public function test_non_cash_payment_without_proof_token_is_rejected(): void
+    // 031-optional-payment-proof — bukti bayar (foto/berkas) TIDAK lagi wajib untuk
+    // pembayaran non-tunai; bisa ditambahkan belakangan dari detail Sales.
+    public function test_non_cash_payment_without_proof_token_is_accepted(): void
     {
         $channel = PaymentChannel::factory()->create(['type' => 'bank_transfer']);
 
@@ -126,7 +152,52 @@ class OrderTest extends TestCase
             'payments' => [['method' => 'bank_transfer', 'channel_id' => $channel->id, 'amount' => 50000]],
         ]));
 
+        $response->assertCreated();
+        $this->assertDatabaseHas('payments', ['method' => 'bank_transfer', 'channel_id' => $channel->id, 'verification' => 'pending']);
+        $this->assertDatabaseCount('payment_proofs', 0);
+    }
+
+    public function test_split_checkout_accepts_a_proofless_and_a_proof_bearing_non_cash_entry_together(): void
+    {
+        $channel = PaymentChannel::factory()->create(['type' => 'qr_ewallet']);
+        $token = $this->postJson('/api/v1/payment-proofs', [
+            'file' => \Illuminate\Http\UploadedFile::fake()->image('bukti.jpg'), 'captured_via' => 'upload',
+        ])->json('proof_token');
+
+        $this->postJson('/api/v1/orders', $this->basePayload([
+            'payments' => [
+                ['method' => 'qr_ewallet', 'channel_id' => $channel->id, 'amount' => 20000],
+                ['method' => 'qr_ewallet', 'channel_id' => $channel->id, 'amount' => 30000, 'proof_token' => $token],
+            ],
+        ]))->assertCreated();
+
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertDatabaseCount('payment_proofs', 1);
+        $this->assertDatabaseMissing('payment_proofs', ['proof_token' => $token, 'payment_id' => null]);
+    }
+
+    public function test_non_cash_payment_with_an_unknown_proof_token_is_still_refused(): void
+    {
+        $channel = PaymentChannel::factory()->create(['type' => 'bank_transfer']);
+
+        $response = $this->postJson('/api/v1/orders', $this->basePayload([
+            'payments' => [[
+                'method' => 'bank_transfer', 'channel_id' => $channel->id, 'amount' => 50000,
+                'proof_token' => (string) \Illuminate\Support\Str::uuid(),
+            ]],
+        ]));
+
         $response->assertStatus(409);
+        $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_non_cash_payment_without_a_channel_is_refused_cleanly_not_as_a_database_error(): void
+    {
+        $response = $this->postJson('/api/v1/orders', $this->basePayload([
+            'payments' => [['method' => 'bank_transfer', 'amount' => 50000]],
+        ]));
+
+        $response->assertStatus(409); // OrderController memetakan semua ValidationException service ke 409
         $this->assertDatabaseCount('orders', 0);
     }
 
@@ -295,6 +366,17 @@ class OrderTest extends TestCase
             ->assertJsonPath('store_contact_phone', '0812-3456-7890')
             ->assertJsonPath('store_contact_email', 'toko@contoh.com');
         $this->assertStringContainsString('store-logo/logo-test.png', $response->json('store_logo_url'));
+    }
+
+    public function test_receipt_carries_the_app_name_defaulting_to_boothpos_and_following_the_setting(): void
+    {
+        $order = $this->postJson('/api/v1/orders', $this->basePayload())->json();
+
+        $this->getJson("/api/v1/orders/{$order['id']}/receipt")->assertOk()->assertJsonPath('app_name', 'BoothPOS');
+
+        Setting::updateOrCreate(['key' => 'app_name'], ['value' => 'Kasir Sakana', 'type' => 'string', 'group' => 'general']);
+
+        $this->getJson("/api/v1/orders/{$order['id']}/receipt")->assertJsonPath('app_name', 'Kasir Sakana');
     }
 
     public function test_receipt_omits_store_profile_fields_gracefully_when_unconfigured(): void

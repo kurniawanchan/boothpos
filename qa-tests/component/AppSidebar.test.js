@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import AppSidebar from '../../resources/js/components/layout/AppSidebar.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
+import { useSettingsStore } from '../../resources/js/stores/settings';
 
 // 004-sidebar-menu-reorg — AppSidebar.vue was never unit-tested before this
 // feature (it calls useRoute()/RouterLink, which need a real router
@@ -111,5 +112,31 @@ describe('AppSidebar — order and grouping (004-sidebar-menu-reorg)', () => {
     const kasirKeys = ['dashboard', 'pos', 'session', 'events', 'customers', 'preorders', 'sales'];
     await renderSidebar(kasirKeys);
     expect(screen.queryByText('Pembelian')).not.toBeInTheDocument();
+  });
+});
+
+describe('AppSidebar — brand name follows the configurable app name', () => {
+  async function renderWithAppName(appName) {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useAuthStore().user = { id: 1, name: 'Test User', username: 'test', role: 'Owner', menu_keys: ['dashboard'] };
+    if (appName !== undefined) useSettingsStore().appName = appName;
+    const router = makeRouter();
+    router.push('/dashboard');
+    await router.isReady();
+    return render(AppSidebar, { global: { plugins: [pinia, router] } });
+  }
+
+  it('shows BoothPOS by default', async () => {
+    await renderWithAppName(undefined);
+
+    expect(screen.getByText('BoothPOS')).toBeInTheDocument();
+  });
+
+  it('shows the configured name instead of the hard-coded one', async () => {
+    await renderWithAppName('Kasir Sakana');
+
+    expect(screen.getByText('Kasir Sakana')).toBeInTheDocument();
+    expect(screen.queryByText('BoothPOS')).not.toBeInTheDocument();
   });
 });

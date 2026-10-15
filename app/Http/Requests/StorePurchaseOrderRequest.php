@@ -27,6 +27,8 @@ class StorePurchaseOrderRequest extends FormRequest
     {
         return [
             'vendor_id' => ['required', 'integer', 'exists:vendors,id'],
+            // 034-seller-po-bom — seller yang dibelikan; dasar filter BOM.
+            'artist_id' => ['required', 'integer', Rule::exists('artists', 'id')->whereNull('deleted_at')],
             'notes' => ['nullable', 'string'],
 
             'items' => ['required', 'array', 'min:1'],

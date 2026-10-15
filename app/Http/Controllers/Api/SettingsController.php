@@ -8,8 +8,10 @@ use App\Http\Resources\SettingResource;
 use App\Models\Setting;
 use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
+use App\Support\AppName;
 use App\Support\LicenseGate;
 use App\Support\ModeGate;
+use App\Support\SchemaStatus;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -33,13 +35,15 @@ class SettingsController extends Controller
      * owner/admin (yang berwenang MENGUBAHNYA tetap hanya lewat
      * PUT /settings, digerbang SettingPolicy seperti biasa).
      */
-    public function features(): JsonResponse
+    public function features(Request $request): JsonResponse
     {
         return response()->json([
             'multi_artist_enabled' => LicenseGate::multiArtistEnabled(),
             'artist_count' => LicenseGate::activeArtistCount(),
             'artist_limit_reached' => LicenseGate::artistLimitReached(),
             'system_mode' => ModeGate::current(),
+            // Merek produk yang bisa diganti owner/admin (sidebar, "Powered by").
+            'app_name' => AppName::current(),
             // 006-purchase-order-and-ops (US6/US7) — disurfacekan di sini
             // (bukan hanya lewat GET /settings) supaya bisa diterapkan
             // SEBELUM layar Pengaturan penuh dimuat, sama seperti
@@ -53,6 +57,10 @@ class SettingsController extends Controller
             // menimpa. Disurfacekan di sini (bukan hanya GET /settings)
             // supaya tersedia app-wide tanpa endpoint owner/admin-only.
             'store_name' => Setting::get(ModeGate::current() === 'demo' ? 'store_name_demo' : 'store_name'),
+            // 035-po-row-actions — database tertinggal dari versi aplikasi? Hanya
+            // owner/admin (menu `settings`) yang diberi tahu — itu yang berwenang
+            // menerapkannya; daftar migrasinya sendiri tidak pernah dikirim.
+            'schema_update_required' => (bool) $request->user()?->canAccessMenu('settings') && SchemaStatus::pendingMigrations() !== [],
         ]);
     }
 

@@ -14,7 +14,7 @@ class PurchaseOrder extends Model
     use HasDataMode, HasFactory, SoftDeletes;
 
     protected $fillable = [
-        'po_number', 'vendor_id', 'status', 'ordered_at', 'received_at', 'paid_at',
+        'po_number', 'vendor_id', 'artist_id', 'status', 'ordered_at', 'received_at', 'paid_at',
         'cancelled_at', 'cancel_reason', 'subtotal', 'total_amount', 'notes', 'created_by',
     ];
 
@@ -33,6 +33,15 @@ class PurchaseOrder extends Model
     public function vendor(): BelongsTo
     {
         return $this->belongsTo(Vendor::class);
+    }
+
+    /**
+     * Seller yang dibelikan. withTrashed(): artist yang sudah dihapus
+     * (soft delete) tetap harus terbaca namanya di PO lama.
+     */
+    public function artist(): BelongsTo
+    {
+        return $this->belongsTo(Artist::class)->withTrashed();
     }
 
     public function items(): HasMany

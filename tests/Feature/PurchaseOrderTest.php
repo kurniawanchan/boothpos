@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Artist;
 use App\Models\Material;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
@@ -31,6 +32,7 @@ class PurchaseOrderTest extends TestCase
 
         $response = $this->postJson('/api/v1/purchase-orders', [
             'vendor_id' => $vendor->id,
+            'artist_id' => Artist::factory()->create()->id,
             'items' => [
                 ['line_type' => 'material', 'material_id' => $material->id, 'product_id' => $product->id, 'qty' => 10, 'unit_price' => 5000],
                 ['line_type' => 'service', 'description' => 'Ongkos kirim', 'qty' => 1, 'unit_price' => 20000],
@@ -52,6 +54,7 @@ class PurchaseOrderTest extends TestCase
 
         $this->postJson('/api/v1/purchase-orders', [
             'vendor_id' => $vendor->id,
+            'artist_id' => Artist::factory()->create()->id,
             'items' => [['line_type' => 'material', 'qty' => 1, 'unit_price' => 1000]],
         ])->assertStatus(422)->assertJsonValidationErrors('items.0.material_id');
     }
@@ -63,6 +66,7 @@ class PurchaseOrderTest extends TestCase
 
         $this->postJson('/api/v1/purchase-orders', [
             'vendor_id' => $vendor->id,
+            'artist_id' => Artist::factory()->create()->id,
             'items' => [['line_type' => 'service', 'qty' => 1, 'unit_price' => 1000]],
         ])->assertStatus(422)->assertJsonValidationErrors('items.0.description');
     }
@@ -137,6 +141,7 @@ class PurchaseOrderTest extends TestCase
 
         $response = $this->postJson('/api/v1/purchase-orders', [
             'vendor_id' => $vendor->id,
+            'artist_id' => Artist::factory()->create()->id,
             'items' => [['line_type' => 'material', 'material_id' => $material->id, 'qty' => 1, 'unit_price' => 1000]],
         ]);
         $poId = $response->json('id');

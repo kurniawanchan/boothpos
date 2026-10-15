@@ -295,6 +295,51 @@ class ProductTest extends TestCase
         $this->assertSame($category->name, $response->json('data.0.category_name'));
     }
 
+    // 030-fix-pos-search-product-image — layar POS bergantung pada `image_url` hasil
+    // pencarian: foto varian sendiri, kalau tak ada foto produk induk, kalau tak
+    // ada keduanya null. Dulu tak ada tes untuk aturan ini (field-nya malah
+    // terbuang di sisi view POS tanpa ada yang menyadari).
+    public function test_variant_lookup_image_url_prefers_the_variants_own_photo(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Slippery', 'image_path' => 'products/induk.png']);
+        $product->variants()->create(['sku' => 'SPFIMG0001', 'variant_name' => 'Besar', 'sell_price' => 40000, 'current_stock' => 9, 'image_path' => 'variants/sendiri.png']);
+
+        $response = $this->getJson('/api/v1/variants/lookup?q=SPFIMG0001');
+
+        $response->assertOk();
+        $this->assertStringEndsWith('variants/sendiri.png', $response->json('data.0.image_url'));
+    }
+
+    public function test_variant_lookup_image_url_falls_back_to_the_products_photo(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Slippery', 'image_path' => 'products/induk.png']);
+        $product->variants()->create(['sku' => 'SPFIMG0002', 'variant_name' => 'Kecil', 'sell_price' => 15000, 'current_stock' => 20]);
+
+        // dicari lewat nama produk DAN lewat potongan SKU: foto yang sama
+        $byName = $this->getJson('/api/v1/variants/lookup?q=Slippery');
+        $bySku = $this->getJson('/api/v1/variants/lookup?q=IMG0002');
+
+        $this->assertStringEndsWith('products/induk.png', $byName->json('data.0.image_url'));
+        $this->assertStringEndsWith('products/induk.png', $bySku->json('data.0.image_url'));
+    }
+
+    public function test_variant_lookup_image_url_is_null_when_neither_variant_nor_product_has_a_photo(): void
+    {
+        $this->actingAsRole('cashier');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'name' => 'Slippery', 'image_path' => null]);
+        $product->variants()->create(['sku' => 'SPFIMG0003', 'sell_price' => 5000, 'current_stock' => 20]);
+
+        $response = $this->getJson('/api/v1/variants/lookup?q=SPFIMG0003');
+
+        $response->assertOk();
+        $this->assertNull($response->json('data.0.image_url'));
+    }
+
     public function test_variant_lookup_only_returns_active_variants(): void
     {
         $this->actingAsRole('cashier');

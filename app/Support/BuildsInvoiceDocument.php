@@ -36,6 +36,9 @@ trait BuildsInvoiceDocument
             'store_identity' => $this->buildStoreIdentity($imageUploadService),
             'payment_channels' => $this->buildPaymentChannels($imageUploadService),
             'footer_text' => Setting::get('receipt_footer_text'),
+            // Untuk teks "Powered by …" di dokumen; ikut payload supaya dokumen
+            // hasil unduh massal (dirender dari payload) sama dengan yang di layar.
+            'app_name' => AppName::current(),
         ];
     }
 

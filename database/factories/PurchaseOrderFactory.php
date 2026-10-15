@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Artist;
 use App\Models\Vendor;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -14,10 +15,17 @@ class PurchaseOrderFactory extends Factory
         return [
             'po_number' => 'PO-'.now()->format('Ymd').'-'.fake()->unique()->numberBetween(1000, 9999),
             'vendor_id' => Vendor::factory(),
+            'artist_id' => Artist::factory(),
             'status' => 'draft',
             'subtotal' => 0,
             'total_amount' => 0,
             'created_by' => \App\Models\User::factory(),
         ];
+    }
+
+    /** PO yang dibuat sebelum fitur seller (tidak punya seller). */
+    public function legacy(): static
+    {
+        return $this->state(fn () => ['artist_id' => null]);
     }
 }

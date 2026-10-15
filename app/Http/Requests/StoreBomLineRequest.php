@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\WholeBomQuantity;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -27,9 +28,13 @@ class StoreBomLineRequest extends FormRequest
         return [
             'material_id' => [
                 'required', 'integer', 'exists:materials,id',
-                Rule::unique('product_variant_bom_lines', 'material_id')->where('product_variant_id', $variantId),
+                // Hanya baris LEGACY yang dibatasi satu per bahan; baris bersumber
+                // PO boleh memakai bahan yang sama (harga/vendor berbeda).
+                Rule::unique('product_variant_bom_lines', 'material_id')
+                    ->where('product_variant_id', $variantId)
+                    ->whereNull('purchase_order_item_id'),
             ],
-            'qty_needed' => ['required', 'numeric', 'gt:0'],
+            'qty_needed' => ['required', new WholeBomQuantity],
             'notes' => ['nullable', 'string'],
         ];
     }

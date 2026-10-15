@@ -37,6 +37,7 @@ function onHeaderClick(col) {
             v-for="col in columns"
             :key="col.key"
             scope="col"
+            :aria-sort="col.sortable && sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined"
             class="whitespace-nowrap border-b border-line-2 bg-surface-subtle px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-muted-2"
             :class="{ 'cursor-pointer select-none hover:text-ink': col.sortable }"
             @click="onHeaderClick(col)"

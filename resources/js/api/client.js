@@ -9,6 +9,9 @@ import { useToastStore } from '../stores/toast';
 // serve` during `npm run dev` only.
 const client = axios.create({ baseURL: '/api/v1' });
 
+let lastSchemaToastAt = 0;
+const SCHEMA_TOAST_COOLDOWN_MS = 10_000;
+
 client.interceptors.request.use((config) => {
   const token = getToken();
   if (token) {
@@ -41,6 +44,17 @@ client.interceptors.response.use(
     // remember to toast it themselves.
     if (apiError.isConflict) {
       useToastStore().error(apiError.message);
+    }
+
+    // 035-po-row-actions — database tertinggal dari versi aplikasi: satu toast
+    // ramah (pesan server, tanpa SQL). Dibatasi agar halaman yang memuat
+    // beberapa data sekaligus tidak menumpuk toast identik.
+    if (apiError.isSchemaOutdated) {
+      const now = Date.now();
+      if (now - lastSchemaToastAt > SCHEMA_TOAST_COOLDOWN_MS) {
+        lastSchemaToastAt = now;
+        useToastStore().error(apiError.message);
+      }
     }
 
     // 403 on an object-level check we couldn't predict client-side

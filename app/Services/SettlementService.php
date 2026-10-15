@@ -12,6 +12,21 @@ use Illuminate\Support\Facades\DB;
  * dari order_items setiap dipanggil. artist_settlements berfungsi sebagai
  * cache + tempat mencatat status pembayaran ke artist, BUKAN sumber
  * kebenaran nilai penjualan — sumber kebenarannya selalu order_items.
+ *
+ * 040-recap-pos-transactions-only — settlement HANYA memuat penjualan POS.
+ * Fitur 033 sempat menambahkan bagian pre-order yang sudah terbayar ke
+ * total_sales/total_units; itu dibalik atas permintaan pemilik produk
+ * (rekap = apa yang terjual lewat kasir). Total tersimpan, Payable, dan
+ * "Record payment" harus sama dengan kolom Penjualan di layar, jadi
+ * agregasi pre-order dihapus dari jalur ini sepenuhnya (bukan sekadar
+ * disembunyikan di UI). Laporan Modal Seller / Laba-Rugi punya agregasi
+ * pre-order sendiri di ReportController dan tidak terpengaruh.
+ *
+ * Tindak lanjut 040: rekap di layar/API/ekspor kini hanya Penjual, Unit,
+ * Penjualan — endpoint "Record payment" dan field payable/paid/outstanding/
+ * status dihapus dari API. Kolom-kolomnya di artist_settlements tetap
+ * dipelihara di sini (tanpa migrasi) sebagai snapshot saat event ditutup;
+ * paid_amount lama tidak pernah disentuh.
  */
 class SettlementService
 {
@@ -22,7 +37,9 @@ class SettlementService
         // artist yang order-nya dibatalkan seluruhnya akan tetap punya
         // total_sales lama yang basi, karena query agregasi di bawah
         // hanya meng-update baris yang MUNCUL di hasil GROUP BY — baris
-        // yang datanya sudah hilang tidak pernah tersentuh.
+        // yang datanya sudah hilang tidak pernah tersentuh. Sejak 040 ini
+        // juga yang membersihkan total lama seller yang dulu punya angka
+        // dari pre-order; paid_amount tidak pernah disentuh.
         ArtistSettlement::where('event_id', $event->id)->get()->each(function (ArtistSettlement $s) {
             $resetPayable = max(0, 0 - (float) $s->deduction);
             $s->update([
@@ -34,70 +51,15 @@ class SettlementService
             ]);
         });
 
-        $rows = DB::table('order_items')
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.event_id', $event->id)
-            ->where('orders.status', 'completed')
-            ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat ReportController::sales()
-            ->selectRaw('order_items.artist_id, SUM(order_items.line_total) as total_sales, SUM(order_items.qty) as total_units')
-            ->groupBy('order_items.artist_id')
-            ->get()
-            ->keyBy('artist_id');
-
-        // 010-split-payment-preorder-reports (US5, research.md R1) —
-        // agregasi PARALEL atas preorder_items, memakai proporsi
-        // "uang benar-benar terkumpul di payments (bukan cache
-        // preorders.paid_amount) / subtotal preorder" yang sama seperti
-        // ReportController::sales()/profit(). Preorder 'cancelled'
-        // dikeluarkan sepenuhnya. Hasilnya DITAMBAHKAN ke total_sales/
-        // total_units per artist dari order_items di atas — bukan
-        // menggantikannya — supaya penjualan reguler dan preorder sama-sama
-        // terhitung di settlement artist yang sama.
-        $collected = DB::table('payments')
-            ->select('preorder_id', DB::raw('SUM(amount) as collected'))
-            ->whereNotNull('preorder_id')
-            ->where('verification', '!=', 'rejected')
-            ->where('data_mode', ModeGate::current())
-            ->groupBy('preorder_id');
-
-        $fraction = 'CASE WHEN preorders.subtotal > 0 THEN COALESCE(pc.collected, 0) / preorders.subtotal ELSE 0 END';
-
-        $preorderRows = DB::table('preorder_items')
-            ->join('preorders', 'preorders.id', '=', 'preorder_items.preorder_id')
-            ->leftJoinSub($collected, 'pc', 'pc.preorder_id', '=', 'preorders.id')
-            ->where('preorders.event_id', $event->id)
-            ->where('preorders.status', '!=', 'cancelled')
-            ->where('preorder_items.data_mode', ModeGate::current())
-            ->selectRaw("
-                preorder_items.artist_id,
-                SUM(preorder_items.line_total * ({$fraction})) as total_sales,
-                SUM(preorder_items.qty * ({$fraction})) as total_units
-            ")
-            ->groupBy('preorder_items.artist_id')
-            ->get()
-            ->keyBy('artist_id');
-
-        $artistIds = $rows->keys()->merge($preorderRows->keys())->unique();
-
-        foreach ($artistIds as $artistId) {
-            $orderRow = $rows->get($artistId);
-            $preorderRow = $preorderRows->get($artistId);
-
-            $totalSales = (float) ($orderRow->total_sales ?? 0) + (float) ($preorderRow->total_sales ?? 0);
-            $totalUnits = (float) ($orderRow->total_units ?? 0) + (float) ($preorderRow->total_units ?? 0);
-
+        foreach ($this->posSalesForEvent($event) as $artistId => $pos) {
             $settlement = ArtistSettlement::firstOrNew([
                 'event_id' => $event->id,
                 'artist_id' => $artistId,
             ]);
 
-            $settlement->total_sales = $totalSales;
-            // Unit preorder diproporsikan (bisa pecahan saat pembayaran
-            // baru sebagian) — dibulatkan ke integer di titik tulis ini
-            // karena kolomnya integer, konsisten dengan bagaimana uang
-            // yang diakui juga bertambah bertahap seiring pembayaran.
-            $settlement->total_units = (int) round($totalUnits);
-            $settlement->payable_amount = $totalSales - $settlement->deduction;
+            $settlement->total_sales = $pos['sales'];
+            $settlement->total_units = (int) $pos['units'];
+            $settlement->payable_amount = $pos['sales'] - $settlement->deduction;
             $settlement->calculated_at = now();
 
             if (! $settlement->exists) {
@@ -111,17 +73,27 @@ class SettlementService
         }
     }
 
-    public function recordPayment(ArtistSettlement $settlement, float $amount): ArtistSettlement
+    /**
+     * Penjualan POS per artist di satu event: order_items dari order
+     * 'completed' (nilai penuh; order void tidak ikut). Query tangan-tulis →
+     * filter data_mode EKSPLISIT (tidak mewarisi global scope Eloquent).
+     *
+     * @return \Illuminate\Support\Collection<int, array{sales: float, units: float}>
+     */
+    public function posSalesForEvent(Event $event): \Illuminate\Support\Collection
     {
-        $newPaid = (float) $settlement->paid_amount + $amount;
-
-        $settlement->update([
-            'paid_amount' => $newPaid,
-            'status' => $this->deriveStatus($newPaid, (float) $settlement->payable_amount),
-            'paid_at' => now(),
-        ]);
-
-        return $settlement->fresh();
+        return DB::table('order_items')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.event_id', $event->id)
+            ->where('orders.status', 'completed')
+            ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat ReportController::sales()
+            ->selectRaw('order_items.artist_id, SUM(order_items.line_total) as total_sales, SUM(order_items.qty) as total_units')
+            ->groupBy('order_items.artist_id')
+            ->get()
+            ->mapWithKeys(fn ($row) => [$row->artist_id => [
+                'sales' => (float) $row->total_sales,
+                'units' => (float) $row->total_units,
+            ]]);
     }
 
     private function deriveStatus(float $paid, float $payable): string

@@ -6,6 +6,7 @@ import SettingsView from '../../resources/js/views/SettingsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listSettings, updateSettings, uploadStoreLogo, featureFlags } from '../../resources/js/api/settings';
 import { listPaymentChannels, deletePaymentChannel } from '../../resources/js/api/payments';
+import { listBackups } from '../../resources/js/api/backups';
 import id from '../../resources/js/locales/id.json';
 import en from '../../resources/js/locales/en.json';
 
@@ -14,6 +15,13 @@ vi.mock('../../resources/js/api/settings', () => ({
   listSettings: vi.fn(),
   updateSettings: vi.fn(),
   uploadStoreLogo: vi.fn(),
+}));
+vi.mock('../../resources/js/api/backups', () => ({
+  listBackups: vi.fn(() => Promise.resolve({ data: [] })),
+  createBackup: vi.fn(),
+  downloadBackup: vi.fn(),
+  restoreBackup: vi.fn(),
+  restoreFromUpload: vi.fn(),
 }));
 vi.mock('../../resources/js/api/payments', () => ({
   listPaymentChannels: vi.fn(),
@@ -210,5 +218,58 @@ describe('SettingsView — payment channel deletion (024 US6)', () => {
     await waitFor(() => {
       expect(useToastStore().items.some((i) => i.message === 'Cannot delete')).toBe(true);
     });
+  });
+});
+
+describe('SettingsView — nama aplikasi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 1, artist_limit_reached: false, app_name: 'BoothPOS' });
+    listPaymentChannels.mockResolvedValue({ data: [] });
+    listSettings.mockResolvedValue({ data: [], store_logo_url: null });
+  });
+
+  it('shows the current app name and saves a new one through the bulk settings call', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    updateSettings.mockResolvedValue({ data: [] });
+    renderSettings();
+
+    const input = await screen.findByLabelText('Nama aplikasi');
+    expect(input).toHaveValue('BoothPOS');
+
+    await user.clear(input);
+    await user.type(input, 'Kasir Sakana');
+    await user.click(screen.getByRole('button', { name: 'Simpan nama aplikasi' }));
+
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenCalledWith([{ key: 'app_name', value: 'Kasir Sakana', type: 'string', group: 'general' }]),
+    );
+  });
+
+  it('caps the input at 50 characters, matching the server rule', async () => {
+    renderSettings();
+
+    const input = await screen.findByLabelText('Nama aplikasi');
+
+    expect(input).toHaveAttribute('maxlength', '50');
+  });
+});
+
+describe('SettingsView — cadangan & pemulihan', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    featureFlags.mockResolvedValue({ multi_artist_enabled: false, artist_count: 1, artist_limit_reached: false, app_name: 'BoothPOS' });
+    listPaymentChannels.mockResolvedValue({ data: [] });
+    listSettings.mockResolvedValue({ data: [], store_logo_url: null });
+    listBackups.mockResolvedValue({ data: [] });
+  });
+
+  it('offers the database backup & restore section on the settings screen', async () => {
+    renderSettings();
+
+    expect(await screen.findByText('Cadangan & pemulihan database')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Buat cadangan sekarang' })).toBeInTheDocument();
+    await waitFor(() => expect(listBackups).toHaveBeenCalled());
   });
 });

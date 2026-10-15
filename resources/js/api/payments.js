@@ -58,3 +58,33 @@ export function uploadPaymentProof(file, capturedVia) {
 export function getPaymentProofBlobUrl(proofId) {
   return client.get(`/payment-proofs/${proofId}/file`, { responseType: 'blob' }).then((r) => URL.createObjectURL(r.data));
 }
+
+/**
+ * 031-optional-payment-proof — tambah / ubah / ganti konfirmasi (bukti, referensi,
+ * catatan) satu pembayaran yang sudah tercatat. `kind` = 'orders' (penjualan POS) atau
+ * 'preorders'. Payload hanya berisi kunci yang berubah (`proof_token`, `reference`,
+ * `notes`; `null` mengosongkan). Mengembalikan transaksi terbaru.
+ */
+export function updatePaymentConfirmation(kind, targetId, paymentId, payload) {
+  return client.patch(`/${kind}/${targetId}/payments/${paymentId}/confirmation`, payload).then((r) => r.data);
+}
+
+/**
+ * 032-mark-payment-verified — tandai SATU pembayaran non-tunai terverifikasi (`kind` = 'orders'
+ * atau 'preorders'). Satu arah dan final: tidak ada pasangan "batalkan verifikasi". Mengembalikan
+ * transaksi terbaru; 403 untuk pencatat pembayaran itu, 409 bila sudah terverifikasi/ditolak/batal.
+ */
+export function verifyPayment(kind, targetId, paymentId) {
+  return client.post(`/${kind}/${targetId}/payments/${paymentId}/verify`).then((r) => r.data);
+}
+
+/**
+ * 032-mark-payment-verified (US3) — verifikasi massal dari daftar Sales: kirim id penjualan yang
+ * dipilih; server memverifikasi pembayaran non-tunai pending yang boleh dan melewati sisanya.
+ * Mengembalikan { verified, verified_orders, skipped: { already_verified, own_payment, voided,
+ * rejected }, skipped_total } (hitungan PEMBAYARAN, kecuali verified_orders).
+ */
+export function verifyOrderPayments(orderIds) {
+  return client.post('/orders/verify-payments', { order_ids: orderIds }).then((r) => r.data);
+}
+

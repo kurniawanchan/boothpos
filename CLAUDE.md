@@ -88,6 +88,8 @@ Vue 3 SPA (`resources/js/`: `api/`, `stores/` (Pinia), `router/`, `composables/`
 - **Frontend tests live in `qa-tests/`; backend tests in `tests/Feature/`.**
 - One central error handler maps the 422/409/403/401 convention above; `usePaginatedList` handles the pagination envelope. Reuse them rather than re-implementing per screen.
 - Login posts a **`username`**, not an email.
+- **Bentuk kartu POS dan item keranjang (`buildProductCards`, `buildSearchCards`, `toCartItem`) hidup di `utils/posProductCards.js`.** Jangan membuat kartu dengan `map` inline di view: kartu hasil pencarian pernah dibuat begitu, memilih sebagian field saja, dan `image_url` yang sudah dikirim `GET /variants/lookup` terbuang sehingga kartu dan baris keranjang tanpa foto (feature 030).
+- **Semua unduhan dokumen (invoice, payment invoice, surat jalan, struk, PO, invoice billing) lewat `utils/pdfCapture.js`.** Gambar ditukar ke data URL di klon html2canvas berdasarkan `src`-nya sendiri, **JANGAN PERNAH berdasarkan indeks**: argumen pertama `onclone` adalah klon SELURUH halaman, jadi gambar lain di halaman (avatar, thumbnail) menggeser indeks dan QR pembayaran tampil di slot logo (feature 029). Tes regresinya memakai gambar umpan (`qa-tests/unit/pdfCapture.test.js`). Dokumen invoice dan payment invoice pre-order didefinisikan SEKALI di `components/preorder/PreorderInvoiceDocument.vue` / `PreorderPaymentDocument.vue` — dipakai modalnya DAN unduh massal (`PreordersView.vue::mountBulkDocument`); jangan buat tata letak kedua (`utils/invoiceDocument.js` kini hanya berisi surat jalan).
 
 ## Scope discipline
 
@@ -132,11 +134,18 @@ All gated on `canManageMasterData()`, same tier as Products/Categories/Stock.
   unique on `(vendor_id, material_id)`). One vendor per material may be
   flagged `is_preferred`; flagging one automatically unflags any other for
   the same material (enforced in `MaterialController`, not a DB constraint).
-- **`bom_cost` is a separate, read-only figure — it never writes to
-  `cost_price`.** `cost_price` already feeds the profit report and artist
-  settlements throughout this codebase; silently overwriting it from BOM
-  data would be a correctness risk to code that's already tested elsewhere.
-  See `App\Services\BomCostCalculator`'s docblock for the full rationale.
+- **`bom_cost` is a separate, read-only figure — it does not write to
+  `cost_price`, EXCEPT for a variant whose BOM was explicitly marked
+  COMPLETE (feature 034, see "BOM from purchase orders" below).** `cost_price`
+  already feeds the profit report and artist settlements throughout this
+  codebase; silently overwriting it from BOM data would be a correctness risk
+  to code that's already tested elsewhere, so only the explicit "complete"
+  action (via `VariantBomService`, never `BomCostCalculator`) syncs it. See
+  `App\Services\BomCostCalculator`'s docblock for the full rationale.
+- **Since 034 a BOM row normally references a PURCHASE ORDER LINE** (price =
+  the recorded purchase price, vendor/PO traceable). The rows described here
+  — material + quantity priced from the vendor price list — are now the
+  **legacy** rows (kept, flagged, still costed this way).
 - **Price selection when a material has >1 vendor**: the vendor flagged
   `is_preferred`, else the *cheapest* price (a defensive/optimistic default
   for a cost estimate, not a purchasing recommendation) — documented in
@@ -207,6 +216,151 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
   `OrderService`/`PreorderService::create()` now re-fetch the customer via
   `Customer::findOrFail()` before writing, specifically to close this gap.
 
+## BOM from purchase orders (feature 034, 2026-10-05)
+
+A variant's BOM is the traceable list of PURCHASE-ORDER LINES that produce it (seller → variant → BOM row → PO line → vendor → purchase cost). Rules (all in `VariantBomService` / `PurchaseOrderItem::eligibleForSeller()` / `BomCostCalculator`):
+
+- **`VariantBomService` is the ONLY BOM writer** (add PO lines, qty, remove, replace-source, copy, complete, reopen, and the legacy create). Each call locks the variant row and, in ONE transaction, writes the rows, syncs `cost_price` if the BOM is complete, and writes the `activity_logs` row. Never write `product_variant_bom_lines` or a complete variant's `cost_price` anywhere else (the Excel `bom` sheet is the one bulk exception and only touches LEGACY rows of non-complete variants).
+- **Seller rule:** a PO has ONE seller (`purchase_orders.artist_id`, required on create, NULL = legacy and never offered). A BOM row may only use a line of a PO whose seller = the variant's product's seller AND whose status is ordered/received/paid (drafts are excluded because their lines are deleted and recreated on every edit; cancelled POs aren't real purchases). The selector AND add/replace-source both use the single scope `PurchaseOrderItem::eligibleForSeller()` — the UI filter is not the boundary. A PO whose lines feed a BOM cannot change seller (409).
+- **Rows store a SNAPSHOT** (item name, line type, PO number, vendor, `unit_cost`); a recorded cost never changes by itself — not on a PO price edit, a cancelled PO, or a vendor rename. Only the explicit `replace-source` action re-snapshots. "Newer price" and "source cancelled" are READ-TIME cues (one batched query, `sourceCues()`), never stored.
+- **Row identity:** unique `(variant, purchase_order_item_id)` — the same PO line twice is refused (409) but two lines of the SAME material at different prices may coexist. `qty_needed` is per ONE finished unit (> 0, ≤ 4 decimals); the PO's purchased qty is shown for reference only (no consumption tracking yet).
+- **Legacy rows** (`purchase_order_item_id` NULL) are derived, not flagged: kept, costed from the vendor price list live, counted as material cost, block "complete", replaceable one by one. The Excel `bom` sheet and `POST /variants/{v}/bom` still create/update them (one per material; a PO row of the same material does not conflict) and are refused for a complete variant.
+- **Complete = cost price follows the BOM** (`product_variants.bom_complete`): needs ≥1 row, no legacy row, every row valid (qty > 0, source still the seller's); a cancelled source does NOT block. While complete `cost_price` = BOM cost, re-synced on every change (logged `cost_price_synced`) and locked: `PUT /variants/{id}` with a different value → 409 `cost_price_locked_by_bom` (the SPA sends the whole variant, so an unchanged value is accepted); the products Excel sheet likewise. Removing the last row auto-reopens (value kept); a copy onto a complete variant reopens it. Recorded `order_items`/`preorder_items` keep their own `cost_price` snapshot, so past reports never change.
+- **Copy** (`/bom/copy`, `/bom/copy-out`, or `copy_bom_from_variant_id` on variant create): same product only, all-or-nothing, target with rows needs `confirm_replace`, never completes the target, independent afterwards (no shared template).
+- **Authorization:** reading a BOM needs the `products` menu; EVERY other BOM action (incl. the selector, which exposes PO prices/vendors) needs `products` AND `purchase_orders` — one helper, `VariantBomController::authorizeBom()`. Typed business errors use `BomRuleException` (409 + machine-readable `code`).
+- **`ProductVariantResource`** always carries `bom_complete`; `has_bom`/`bom_cost` appear only when `bomLines` was eager-loaded (`ProductController::variantRelations()`, products-menu users on show/update) — the `relationLoaded()` trap again.
+- "Linked Product" is gone from the PO form but `purchase_order_items.product_id` stays (API still accepts it; the form carries an existing value through when a draft is edited).
+
+## BOM quantities, batch save, variant history (feature 036, 2026-10-05)
+
+- **BOM quantity is a WHOLE number ≥ 1 everywhere it is written** — one rule, `App\Rules\WholeBomQuantity` (accepts `2`, `"2"`, `2.0`, `"11.0000"`; refuses `1.5`, `0`, `-1`). It is NOT Laravel's `integer` (that rejects `"11.0000"`/`2.0`, exactly what the DB and Excel hand back). Used by `PUT /bom/{id}`, `POST …/bom/items`, the legacy `POST /variants/{v}/bom`, the batch save and the Excel `bom` sheet (per-row error, all-or-nothing import unchanged). **Stored legacy fractions are never rewritten** (still read and costed as stored; editing that row needs a whole number) — `BomCostTest` keeps a model-level `2.5` fixture on purpose.
+- **Save is one all-or-nothing batch:** `PUT /variants/{variant}/bom` → `VariantBomService::updateQuantities()` (one lock, ids proven to belong to the variant BEFORE any write → 409 `bom_line_not_found`, unchanged values skipped, one `bom_qty_changed` audit row per changed line, `cost_price` re-synced ONCE when complete). Last writer wins (no optimistic version). The dialog keeps quantities as a DRAFT (no blur-save), shows an unsaved indicator and routes close / add / remove / replace / copy / complete / reopen through one `guard()` that asks before discarding. `summary.current_stock` is read-only — nothing in the BOM dialog changes stock or deducts materials. Cost labels say "per 1 product"; the maths is unchanged. A `watch(..., {immediate:true})` that resets state must come AFTER the refs it touches are declared (TDZ crash seen in 135 unrelated tests).
+- **`GET /stock/movements` is the one ledger source** for the Stock screen and the per-variant history (`VariantHistoryModal`, opened from the variant row in `ProductDetailModal`). It is now gated to the `stock` OR `products` menu (it was open to every logged-in role) and returns `user_name` (the Stock screen's BY column was always blank — the OpenAPI promised it, the controller never sent it), `variant_name`, `product_id` (null when the product is deleted), `product_name`, and a resolved `reference {type: order|preorder, id, number}`.
+- **`reference_id` means different things per writer**, so `StockMovementReferences` resolves by (movement type, reference_type) and proves the order/item really involves the movement's variant, else `null` (never a wrong number): `sale`+`order_item` = order id; `return`+`order_item` = order-item id; `purchase`/`preorder_handover`+`preorder_item` = pre-order-item id; `purchase`+`preorder` = pre-order id (written by the pre-order edit delta since 036; older edit rows were stored as `preorder_item` holding a pre-order id — ambiguous, resolved as an item with the variant guard). Known limitation: editing a pre-order after arrival rebuilds its items, so the earlier arrival movement points at a deleted item and shows no reference. `purchase_order_item` references exist only on MATERIAL movements.
+- **`BaseSelect`** no longer closes when its own list scrolls (the window-level capture scroll listener used to catch it) and has an opt-in `searchable` mode (default off; the 8 other callers are unchanged). `BomCopyMenu` uses it.
+- **i18n guard:** `qa-tests/unit/localeKeys.test.js` fails when any literal `t('a.b')` is missing from `en.json`/`id.json` (`master_data.col_type` was the only one — it surfaced as the raw header `MASTER_DATA.COL_TYPE`). Dynamic keys are not checked.
+- Stock list: the SKU is a button (opens `ProductDetailModal` with the variant highlighted) only with the `products` menu, plain text otherwise; Products list: 56 px thumbnail and a one-line (truncated, titled) code.
+
+## Variant drawer and BOM copy tool (feature 037, 2026-10-05)
+
+- **Variant card (`ProductsView.vue` Edit-product drawer, `max-w-[1040px]`):** white bordered `rounded-card shadow-sm` cards on a `surface-subtle` tray. Header chips are colour-coded by role — SKU `sky`, markup `mint` (danger when negative), margin `violet` (danger when negative), BOM cost `warn` (only for a saved variant with a BOM) — via the new `--color-sky-*` / `--color-violet-*` `@theme` pairs (contrast ≥ 4.5:1; every chip keeps its text label). Header actions, right side, exact order: **Open BOM** (`BaseButton` inside `BaseTooltip`, saved variants only) · **Apply markup** · delete. Fields: name · stock · cost · sell. Picture 66 px (+50 %) with a same-size placeholder. `data-testid="variant-card"` / `"variant-header"` are used by the tests.
+- **`BaseTooltip`** (`components/ui`): hover/focus tooltip (`role="tooltip"`, `aria-describedby`, Escape closes) — the native `title` is not keyboard-accessible; reuse it instead of `title` for explanatory text. **038:** the bubble is Teleported to `body` with `position: fixed` (below the trigger, flips above when < 90 px below, clamped to the viewport, closes on scroll/resize, never shown for blank `text`) because absolutely-positioned bubbles are clipped by scroll containers such as `DataTable`'s `overflow-auto`. The Products list uses it on every SKU (variant name); its first column is the picture (96 px) above the one-line code.
+- **Duplicate variant** has NO endpoint: `duplicateVariantRow()` splices an UNSAVED card below the source (name `"<name> (copy)"`, prices, low-stock alert, status, and the source's STOCK — product-owner decision — with `original_stock = 0`), so saving reuses the new-variant flow: `POST /products/{id}/variants` with `copy_bom_from_variant_id` (the server copies the BOM in the same transaction, never marks it complete, and re-checks products + purchase_orders) and the shared stock-adjustment reason for the copied stock. Picture, SKU and history are never copied. BOM is promised only when the source is a saved variant WITH a BOM and the user has `purchase_orders`. `VariantDuplicateFlowTest` pins these server guarantees.
+- **`BaseSelect` fits the screen:** the fixed panel flips upward when there is < 220 px below and more room above, and its height is capped to the available space (140–320 px). The reported "copy picker can't scroll to the bottom" was the panel running off the viewport (it always opened downward at a fixed height). Options may carry `thumb` (URL or `null`) to show thumbnails/placeholders — opt-in.
+- **Copy to chosen variants:** `POST /variants/{v}/bom/copy-out` with `mode: "selected"` + `variant_ids[]` (`CopyBomRequest`, `VariantBomService::copyTargets()` loads exactly those ids — a missing one fails the whole request; `copy()` still enforces same product / not the source / confirm-replace / never complete). UI: `VariantPickList` (inline checkbox list with pictures, search, select-all of the VISIBLE rows, own scroll container) inside `BomCopyMenu`, behind the same unsaved-changes `guard`. **Add BOM item** shares one row with **Save changes** in `VariantBomModal` (`data-testid="bom-actions-row"`).
+
+## App name ("Powered by") and the backup/restore screen (added post-MVP, 2026-09-30)
+
+- **`app_name`** is one more `settings` row (single value for the whole install, NOT per DEMO/LIVE like `store_name`), read only through `App\Support\AppName::current()` — trimmed, blank means the default `BoothPOS`, max 50 characters (validated in `UpdateSettingsRequest`). It is exposed to every role via `GET /settings/features`, and rides along inside the invoice payloads (`BuildsInvoiceDocument`, so bulk downloads match the screen) and `GET /orders/{id}/receipt`. Frontend: `stores/settings.js` (`appName`), the sidebar brand, and a "Powered by {name}" line on the pre-order invoice, payment invoice, sales receipt and the bulk-download HTML (`utils/invoiceDocument.js`). The frontend default lives in `utils/appName.js` (`resolveAppName`) — keep it equal to `AppName::DEFAULT`. The bulk builder HTML-escapes the name (it is user-typed). Not applied to the billing `InvoiceDetailModal` (the vendor's licence invoice) or the license-key e-mail.
+- **Backup/restore** lives in `App\Services\BackupService`, shared by `app:backup`, `app:restore` and `BackupController` (`/backups`, owner/admin only, `isOwnerOrAdmin()`). The `mysqldump`/`mysql` calls sit behind `App\Services\Backup\DatabaseDumper` (real implementation `MysqlCliDumper`, bound in `AppServiceProvider`). **The dev `app` image now bundles the MySQL client** (`default-mysql-client` + a `ssl=0` client config, same as the store image — Debian's MariaDB client otherwise rejects MySQL 8's self-signed certificate), so the screen works in dev; before that it failed with `sh: 1: mysqldump: not found`. Every test still swaps in `Tests\Support\FakeDatabaseDumper` — never call the real restore from a test, it overwrites the database. A real round trip was verified once against `boothpos_test` with `BACKUP_PATH` pointed at a temp dir.
+- **Dev container identity (licence gate):** the licence activation binds to a fingerprint of `/etc/machine-id`, and a recreated container has none, so the app answered 423 "belum diaktivasi" after an image rebuild. `docker/php/entrypoint.sh` now writes the well-known dev value (the one `license:dev-activate` prints) when the file is missing, so activation survives `docker compose up --build`/`--force-recreate`. Tests also point `config('backup.path')` at a temp dir and use `Storage::fake('local')`, so they never touch real backups or payment proofs.
+- **Restore safety rules (all enforced server-side):** the request must carry `confirm: "RESTORE"` (422 otherwise); a safety backup of the current state is taken FIRST and the restore is aborted if it fails; an uploaded file must look like this app's dump (has `settings` and `users` tables) — checked against a real `mysqldump`. Backup ids are validated against `BackupService::ID_PATTERN` (route `where` + service) before touching the filesystem. `app:restore` deliberately skips the safety backup so disaster recovery is never blocked by a dump that fails on a damaged database. Payment-proof files are backed up but never restored by the UI. A restore replaces the users/tokens tables too, so the frontend reloads (`utils/reloadApp.js`) and may land on the login page. `MysqlCliDumper::restore()` runs `mysql --binary-mode` so an uploaded file cannot run client commands (`\!` shell escapes); `MysqlCliDumperTest` asserts the flag — don't drop it.
+- **A restore brings back `license_activations` too, on purpose** (product-owner decision, 2026-10-01): all data is restored as-is, and a dump from another machine (or one made before activation) leaves the app locked (423) until it is re-activated with a licence key. The restore dialog warns about this (`backup.restore_warning_license`); do NOT "fix" it by preserving the current activation rows across a restore.
+- **Upload size:** `BackupController` allows 50 MB; `docker/php/uploads.ini` (`upload_max_filesize = 64M`) is installed in BOTH the dev and the store image so PHP doesn't reject the file first (the store image used to have no ini at all → PHP's 2M default). A PHP-rejected upload returns 422 with `backups.upload_failed`.
+- **Deleting a backup** (`DELETE /backups/{id}`, `BackupService::delete()`) removes only the LOCAL folder (database.sql + proofs archive) — never the database, the real payment proofs, or the copy in `BACKUP_EXTERNAL_PATH` — and writes a warning log line with who/which. It reuses `sqlPath()` for id validation, so it is covered by the same path-traversal guard as download/restore. No typed confirmation (unlike restore): a plain confirm dialog is enough for a copy.
+- **Shared-code fix worth knowing:** `useFocusTrap` no longer steals focus from an element the user already focused inside a dialog, and prefers a `[data-autofocus]` element for initial focus (the restore dialog uses it on the confirmation field).
+
+## Sales page: POS transactions only — filters, export, void (added post-MVP, 2026-09-30)
+
+- **The Sales page shows transactions created from the POS only. Pre-orders are deliberately NOT on it** (they live on the Pre-orders screen). An earlier iteration listed pre-orders as rows and was reverted at the product owner's request — don't reintroduce it. The 4 summary cards follow suit: they read `totals.pos_unit_count` / `pos_gross_sales` / `pos_net_sales`, while the shared `unit_count` / `gross_sales` / `net_sales` keep including recognised pre-order revenue (feature 010) because Dashboard and Reports rely on that. Older responses without `pos_*` fall back to the shared keys.
+- **One source for the list AND its export:** `App\Services\SalesTransactionsService::build()` produces the rows for `GET /reports/sales` (`transactions[]`, `sessions[]`) and for `POST /reports/sales/transactions/export`, so the file can never differ from the screen. The client only sends row KEYS (`order:12`; `preorder:*` is rejected with 422) and the server rebuilds everything, ignoring keys outside the filters. Contact details (phone/email) are deliberately NOT exported.
+- **Voided orders** are excluded by default and NEVER counted in `totals` or the on-screen summary; `include_voided=1` (a server param, toggled by "Tampilkan transaksi batal") lists them for audit. Voiding itself lives in `TransactionItemsModal` (button gated on the `settings` menu — the same rule `OrderController::void()` enforces), and the customer history screen reloads via the modal's `changed` event.
+- **Cashier-safe by construction:** the page is open to every role, so cost/margin (`cost_total`, `margin_amount`, `margin_percent`) is added by the service ONLY when `canAccessMenu('reports')` (same gate as `profit()`), never hidden in the frontend. The Margin column exists only when rows carry it. `GET /orders/{id}` has no cost either (`SalesPageDataTest`, `SalesTransactionsTest`).
+- **Money fields on rows:** `discount_amount` = item discounts + order-level discount (no double count: `orders.subtotal` is already net of item discounts); `cash_amount` = cash received MINUS change (rejected payments excluded); `payment_state` = worst verification among payments (rejected > pending > verified, `none` if unpaid). A shift's "expected cash" is opening cash + that shift's cash sales for an open shift, and the server-stored `expected_cash`/`closing_cash` for a closed one.
+- **Filtering, sorting, summary, shift panel and URL sync are client-side** in `composables/useSalesFilters.js` over the loaded array (a booth event's list is small; no pagination). AND across filters, OR within one; empty values sort last in either direction; dates compare the user's LOCAL day (`toLocalDateKey`). State lives in the address bar (`?cashier=2&sort=total_amount…`); unknown/invalid values (including the retired `type` param) are ignored, not fatal. The "Showing X of Y…" line is exactly the filtered rows.
+- **Not built, on purpose: return/refund of part of a sale.** `OrderService::void()` reverses a whole order (stock `return` movements). A partial return moves money, stock and artist settlements and needs business rules first (refund channel, effect on settlements/reports, per-item limits).
+- **`TransactionItemsModal`** is reused by the customer history modal, so its receipt button opens `ReceiptModal` from inside itself. `OrderResource` additions are `whenLoaded`/null-safe.
+
+## Pre-order duplicate and split (added post-MVP, 2026-10-01)
+
+`POST /preorders/duplicate` (one or many ids) and `POST /preorders/{id}/split` (manual `items` or `by_seller`). Non-obvious rules, all in `PreorderService`:
+
+- **Duplicate wraps `create()`** (`duplicate()`), it does not `replicate()`: the copy is re-priced at the variant's CURRENT price (product-owner decision), starts `ordered` with no payments/shipment/dispatch marker, and inherits create()'s numbering, discount cap, pickup-day/courier rules and DEMO/LIVE stamping. Stale input degrades (deleted event → no event, out-of-range pickup day dropped); a deleted/inactive variant or product FAILS that order. The endpoint always answers `200` with a per-order report (`bulk-email` pattern) — a failure is `status: failed`, not an HTTP error.
+- **Split is refused (409) while the pre-order has ANY payment row** (product-owner decision: no payment-allocation logic), and for `handed_over`/`cancelled`. It also 409s if the original's discount would exceed its remaining subtotal + shipping. Discount, shipping, notes, shipment and the dispatch marker stay on the original. `ValidationException::status(409)` is how the service marks conflicts vs. plain 422s; the controller just returns `$e->status`.
+- **Split never touches stock** — no `StockService` call. A whole line moves by re-parenting the same `preorder_items` row (stock movements reference its id); a partial line is shrunk and its snapshot cloned. The new order inherits `status`.
+- Origin lives in `preorders.source_preorder_id` (nullOnDelete) / `source_type` / `source_preorder_number` (snapshot). `present()` returns `source` always and `split_children` only when `splitChildren` is eager-loaded (`show()` and the split response) — the usual relationLoaded trap.
+- List rows carry `has_payments` (one `withExists('payments')` subquery) so the UI can disable Split without N+1. Activity-log actions: `duplicated`, `split` (written inside the transaction).
+- Row actions: Split is hidden for closed statuses but DISABLED with a tooltip when paid; Duplicate exists for every status — which is why a handed-over row now has a "More" menu.
+
+## Payment ledger — partial and split payments (added post-MVP, 2026-10-04)
+
+Pre-orders AND POS sales share one payment ledger. Rules (all in `PaymentService` / `PaymentSummary`):
+
+- **Single write path.** `PaymentRecorder::record()` is still the only creator of `payments` rows; `PaymentService::addPayment()/deletePayment()` wrap it for BOTH targets (row lock, closed-state guard, cache recompute, pre-order lifecycle, audit row — all in one transaction). `PreorderService::recordPayment()/deletePayment()` are thin delegates. Never `Payment::create()` elsewhere.
+- **The summary is derived, never stored for orders.** `PaymentSummary::for($target)` = grand total / total paid / remaining / status (`unpaid|partially_paid|fully_paid`) / count. Rejected entries are excluded; non-cash `pending` entries count (nothing ever verifies them); for an ORDER total paid = Σ entries − `change_amount` (payments store the tendered cash). `preorders.paid_amount` / `orders.paid_amount` are caches rewritten from it (the order cache keeps the tendered semantic).
+- **Overpayment is refused** (422 `errors.amount` naming the max; a fully paid or closed target is 409). This deliberately REVERSED the old "no overpay guard" pre-order behaviour — see the rewritten `PreorderTest` case.
+- **Idempotency**: optional client UUID `client_ref` (SPA always sends it; reused on retry, regenerated per open). Same ref + same target → `200` replay, no new row; ref on another target → 422; `payments.client_ref` is UNIQUE across modes (lookup uses `withoutGlobalScopes()`).
+- **Shift cash follows `payments.session_id`** (the shift the money was RECEIVED in), not `orders.session_id`. Checkout payments get the sale's shift; a later cash payment needs the recording user's OPEN shift (409 otherwise); non-cash records it if present; pre-order payments stay NULL (outside shift cash). `close()`, `summary()` and `SalesTransactionsService` (`sessions[].cash_received`, which also lists shifts that only received late payments) use it. Deleting a CASH payment of a CLOSED shift is refused (409) — it would break the stored reconciliation.
+- **Partial POS sale** (`POST /orders` with paid < total) requires `customer_id` (409 otherwise — `OrderController::store()` maps every service `ValidationException` to 409). It stays `completed`, so every report still counts it at completion; only the Sales page shows `paid_amount` / `balance_amount` / `payment_status`. POS checkout payments are NOT written to `activity_logs` (the order is the audit trail); later payments and every delete are.
+- `PaymentSummaryCard` + `PaymentHistoryList` + `AddPaymentModal` are shared by Pre-orders and the Sales detail modal; `RecordPaymentModal` (client-side accumulation) no longer exists. History entries' money (amount/method/channel/date) has no edit path; Delete is owner/admin only. What CAN change later is the *confirmation* (see below).
+
+### Payment confirmation: optional proof, addable later (feature 031, 2026-10-04)
+
+- **The proof (photo/file) is OPTIONAL** for non-cash sale and pre-order payments (reference and notes always were). `PaymentRecorder` no longer demands a `proof_token`, but a *supplied* token must be valid and unlinked, a non-cash payment must carry a `channel_id` (explicit 422/409 instead of the DB's `chk_payments_channel` 500), and **purchase-order payments keep the old rule** (non-cash still needs a proof). `PaymentPanel` mirrors it (Confirm no longer waits for a proof, only for an in-flight upload).
+- **Confirmation path**: `PATCH /orders|preorders/{id}/payments/{payment}/confirmation` → `PaymentService::updateConfirmation()` (row-locked, activity log `payment_confirmation_updated` inside the transaction). Body keys `proof_token` / `reference` / `notes`, all optional, at least one; `null` clears reference/notes but the result may never be entirely empty. Allowed for **non-cash** payments only, for **owner/admin or the user who recorded that payment** (`Payment::mayManageConfirmation()` / `confirmationEditableBy()` — the single definition; legacy `recorded_by` NULL ⇒ owner/admin only), while the target is not a voided sale / cancelled pre-order (a handed-over pre-order is still allowed — no money moves). It can **never** change amount, method, channel, date, status, totals or shift cash.
+- **Replacing a proof supersedes, never deletes**: the old `payment_proofs` row gets `superseded_at` (file kept for audit); `Payment::currentProof()` is the one definition of "the proof" used by both payload presenters. `deletePayment()` still removes every proof row and file of the payment.
+- **Viewing**: `GET /payment-proofs/{id}/file` stays owner/admin or uploader (BOLA protection) **plus the payment's recorder for the current proof** (`Payment::proofViewableBy()`); superseded proofs only owner/admin/uploader. Payment payloads (`OrderResource`, `PreorderController::present()`) carry server-computed `notes`, `proof_id`, `has_proof`, `can_view_proof`, `can_edit_confirmation` — the SPA never derives permission from the role. The proof-dependent fields appear only when `payments.proofs` is eager-loaded (omitted, not "no proof", otherwise — the usual `relationLoaded` trap), so every endpoint that returns payments must load it.
+- UI: `PaymentHistoryList` shows "No proof yet", notes, and the add/edit action; `PaymentConfirmationModal` (reuses `ProofCapture`) is shared by the Sales detail (`TransactionItemsModal`) and the Pre-order detail.
+
+### Payment verification: mark verified (feature 032, 2026-10-04)
+
+- **Every non-cash payment is stored `verification = 'pending'`** (cash is `verified` when recorded) and shows "Not verified" until the shop checks it against the bank/e-wallet statement. The action is `POST /orders|preorders/{id}/payments/{payment}/verify` → `PaymentService::markVerified()` (row-locked, activity log `payment_verified` in the same transaction); bulk `POST /orders/verify-payments` (`PaymentService::verifyOrderPayments()`, the Sales list selection) is a LOOP over that single path that skips (with per-reason counts: `already_verified`, `own_payment`, `voided`, `rejected`) instead of failing; cash is ignored.
+- **One-way and FINAL (product-owner decision):** only `pending → verified`; there is no un-verify route, service method or UI, and the guard makes a repeat/stale request a harmless 409 (no second log row). `rejected` is an existing state this feature never enters or leaves (rejecting is out of scope).
+- **Who may verify** — `Payment::mayVerify()` (the single definition; `isVerifiable()` is "non-cash and pending"): owner/admin always (even payments they recorded), anyone else EXCEPT the payment's recorder (separation of duties); a payment with `recorded_by` NULL can be verified by anyone. Payloads carry server-computed `can_verify` plus `verified_by_name` (only when `payments.verifier` is eager-loaded — the relationLoaded trap again) and `verified_at`; the SPA never derives permission from the role.
+- **Money is untouched** (amount, status, totals, expected shift cash, reports). One intended visible effect: `CashierSessionController::summary()` has always counted only VERIFIED payments in its per-method breakdown, so a verified QRIS payment now appears there; expected cash is cash-only and unaffected.
+- UI: `PaymentHistoryList` shows "Not verified"/"Verified" + "Verified by X · date" and the "Mark verified" action (always behind a "cannot be undone" `ConfirmDialog`), in the Sales detail and the Pre-order payment history; the Sales list has "Mark verified (N)" next to Export, meant to be used with the existing "Needs verification" (`pstate=pending`) filter + Select all.
+
+## Seller Recap is POS-only (feature 040, 2026-10-06)
+
+**This REVERSES the Seller Recap half of feature 033 below** (product-owner decision: "change to only show POS transaction", whole recap, not just the detail list). Rules:
+
+- `SettlementService::recalculateForEvent()` aggregates **completed, non-voided POS `order_items` only** (`posSalesForEvent()`, explicit `data_mode` filter). The pre-order aggregation, `salesBreakdownForEvent()` and the remainder rules no longer exist for the recap. So the stored `artist_settlements` (`total_sales`, `total_units`, `payable_amount = total_sales − deduction`) and the totals written on **event close** are POS-only. The existing "reset every settlement row first" step zeroes a seller that used to have pre-order-derived totals; `paid_amount` is never touched.
+- `GET /reports/artist-settlements` no longer returns the 033 fields `pos_units`/`preorder_units`/`pos_sales`/`preorder_sales` (and, after the follow-up below, nothing but `artist_id, artist_name, total_sales, total_units`). The recap table has Unit / Sales only; the "Transaction detail" list (`artistSettlementTransactions()`) and the recap export lose their pre-order parts (no `source` field, no type badge).
+- **Follow-up (2026-10-06, product-owner request): the recap is now ONLY Seller · Unit · Sales (+ "Transaction detail") on the screen, in the API and in the export.** Removed everywhere: the Status and Payable/Paid/Outstanding columns, the "Record payment" link/dialog, `api/reports.js::recordSettlementPayment`, the `POST /reports/artist-settlements/{id}/payment` route + `ReportController::recordSettlementPayment()` + `SettlementService::recordPayment()`, and the response fields `id`, `deduction`, `payable_amount`, `paid_amount`, `outstanding`, `status` (rows are `artist_id, artist_name, total_sales, total_units`; the export "Rekap" sheet has exactly those 4 columns). The earlier `outstanding = max(0, …)` clamp is therefore moot. **Left in place (no migration):** `SettlementService::recalculateForEvent()` still writes the POS-only snapshot into `artist_settlements` (incl. payable/status; `paid_amount` is never touched) on every read and on event close — those columns are now vestigial and can be dropped in a later cleanup.
+- **Not changed, on purpose:** the Pre-order report, Cost & Profit and Seller Cost keep the 033 POS + pre-order split. So **Seller Cost's `total_sales` no longer equals the recap's** for an event with pre-orders (its `sales_pos` still does). The Dashboard "Results per seller" panel reads the recap's `total_sales` and therefore became POS-only too.
+- Consequence to remember: **pre-order revenue no longer produces a payable amount on the recap**; settling sellers for pre-order sales has to happen outside that screen (the Pre-order report still shows what was collected per seller).
+
+## Reports: POS vs pre-order split (feature 033, 2026-10-04)
+
+> **040 (2026-10-06):** the Seller Recap part of this section is superseded — see "Seller Recap is POS-only" above. Cost & Profit and Seller Cost below are unchanged.
+
+The Seller Recap, Cost & Profit and Seller Cost (owner/admin only) show the **POS** part and the **pre-order** part next to the total. Rules (all in `SettlementService` / `ReportController` / `App\Support\ReportSplit`):
+
+- **One source.** *(Superseded for the recap by 040: `salesBreakdownForEvent()` was deleted and the settlement is POS-only. Cost & Profit / Seller Cost keep their own aggregations in `ReportController`.)* It used to be `SettlementService::salesBreakdownForEvent()` running the two aggregations (completed `order_items`; non-cancelled `preorder_items` × paid fraction), with `recalculateForEvent()` built on it. Never add a second formula for "POS vs pre-order".
+- **The pre-order part is the REMAINDER of the shown total** (`total − POS`: integer units, cents for money via `ReportSplit::remainder()`), never an independently rounded figure. `artist_settlements.total_units` is a rounded integer, so independent rounding can drift by 1; the remainder makes POS + pre-order equal the total exactly. Don't "fix" pre-order units to decimals.
+- **Seller Cost (`GET /reports/artist-profit`) used to be POS-only** and now includes the paid part of pre-orders (product-owner decision) — at the time so its `total_sales` equalled the Recap's (no longer true since 040: only `sales_pos` equals the recap); `sales_pos`/`modal_pos`/`gross_profit_pos` equal the old figures, and pre-order-only sellers now appear. It does one extra `GROUP BY` query over `preorderRecognizedRevenueBase()` with the explicit `data_mode` filter.
+- Cost & Profit adds flat `*_pos` / `*_preorder` keys (flat so the generic export gets real columns); `event_cost` / `net_profit` are whole-event figures and are NOT split.
+- Exports: ~~the Recap summary sheet appends `pos_units, preorder_units, pos_sales, preorder_sales`~~ (removed in 040; the "Detail Transaksi" sheet was always POS-only and now agrees with the summary). The seller drill-down rounds per row, so its by-kind sums can differ from the column by ≤ 1 cent per row for sub-cent pre-order fractions (display rounding only; pinned by a test).
+
+## Purchase-order row actions and stale-schema handling (feature 035, 2026-10-05)
+
+- **Every PO row offers Detail / Edit / Delete** through the shared `PreorderRowActions.vue` (generic `{key,label,danger?,disabled?,title?}[]`) — never a second row-menu component. Actions that are not available stay VISIBLE but disabled with a reason: Delete is enabled for `draft` only (`purchase_orders.delete_draft_only`). Edit opens at any status; non-draft orders keep lines locked and save only vendor/seller/notes (already the server rule, now audited as `purchase_order_updated` inside the transaction).
+- **`PurchaseOrderService::delete()` guards (409):** not draft, has payments, or any line is referenced by a BOM line (`ProductVariantBomLine::withoutGlobalScopes()` — a lock check must see BOTH data modes).
+- **Stale database is explained, not exposed.** `bootstrap/app.php` converts a `QueryException` with SQLSTATE `42S22`/`42S02` on an API request into **503 `{code:'schema_outdated'}`** with a generic message (`lang/*/system.php`, never SQL/table/column names); every other database error stays a 500, and reporting is untouched (full detail stays in the log). `App\Support\SchemaStatus::pendingMigrations()` (files minus ran, `[]` if the `migrations` table is missing, never throws) feeds `GET /settings/features` → `schema_update_required`, true **only** for users with the `settings` menu (owner/admin), never listing names. **The app never runs migrations from a web request** — the admin does (`docker/php/entrypoint.sh` migrates only when the container STARTS; see RUNBOOK §"Setelah menarik perubahan kode"). Root cause of the two screenshots that started this feature was exactly that, not a code bug.
+- **A failed load is a failure state, not an empty state.** `PurchaseOrderDetailModal`, `AddBomItemModal` and `VariantBomModal` keep a `loadError` and render the message + **Retry** (`common.retry`); the selector must never answer a failed request with "no eligible lines". `ApiError.isSchemaOutdated` + one cooldown-limited toast in `api/client.js`; `settings.schemaUpdateRequired` drives `SchemaUpdateBanner.vue` in `AppShell.vue`.
+
+## Pre-order report: per-seller subtotals (feature 039, 2026-10-05)
+
+Reports → Pre-order → By Seller shows a **Subtotal row after each seller's last row**; the Grand Total footer is unchanged. Rules (all in `App\Support\PreorderSellerSubtotals` / `ReportController`):
+
+- **One implementation, server-side.** `PreorderSellerSubtotals::fromRows()` sums the SAME rows the response returns, per `artist_id`, in integer cents (`ReportSplit::cents()/money()`); the API returns them as `subtotals[]` and the Excel "Per Seller" sheet inserts them as `Subtotal — <name>` rows. The SPA only PLACES them — never re-derive a subtotal client-side from a different source.
+- **`total_outstanding` is the SUM of the rows' (already clamped) outstanding**, not `order value − collected`: a Paid row can have collected > order value, so the subtraction would disagree with hand addition of the visible column.
+- **Rows of one seller must be contiguous.** `preordersByArtist()` orders by `artists.name` THEN `preorder_items.artist_id` — two sellers with the same name used to interleave their rows (found in 039), which would have put a subtotal in the middle of another seller's block.
+- The seller filter on the screen hides rows and their seller's subtotal together; the filtered subtotal/Grand Total still equal the visible rows. The default (summary) and drill-down shapes of `GET /reports/preorders` are untouched; the Summary sheet of the export is untouched.
+
+## Clone LIVE → DEMO (added 2026-10-11)
+
+`php artisan app:clone-live-to-demo [--force] [--yes]` replaces ALL `data_mode='demo'` rows with an exact mirror of LIVE (`App\Services\DemoClone\*`, spec in `docs/superpowers/specs/2026-10-11-clone-live-to-demo-design.md`). Non-obvious rules:
+
+- **LIVE is read-only.** All queries use `DB::table()` + `CloneRegistry::scope()`, never the `DataModeScope` (it follows the active mode). A LIVE fingerprint (`LiveFingerprint`) is taken before and after inside the transaction; any difference rolls back. **Add a new `HasDataMode` table to `CloneRegistry::tables()` in FK order**, or it is silently not mirrored (the parity check only covers registered tables). The cloner also aborts BEFORE wiping anything if a LIVE row references a DEMO row (ON DELETE SET NULL/CASCADE would silently alter LIVE data).
+- **`artists.code` is `char(3)`, `categories.code` is `char(2)`**, both UNIQUE across modes: demo codes are *allocated* (`CodeAllocator`: `Z`+first letters, then `Y`…), and `products.code_prefix` / `product_variants.sku` are rebuilt from them. Document numbers and vendor/material codes get `-DM`; `local_ref`/`client_ref`/`proof_token` get new UUIDs.
+- **Files are copied, never shared** (`FileCopier`): sharing a path would let a demo delete remove the LIVE file. A demo wipe deletes an old file only if no row in either mode still references it.
+- **Customer PII is copied verbatim** (product-owner decision) — keep DEMO data local. Error output never contains row values (`SafeError`).
+- Stock-movement `reference_id` is remapped by (type, reference_type); unknown non-null references become `NULL` (counted), a LIVE id is never copied.
+- **Snapshot columns are copied VERBATIM (Task-5 ruling), so they still carry LIVE values in DEMO:** `order_items.sku_snapshot`, `preorder_items.sku_snapshot`, `preorders.source_preorder_number`, and the BOM snapshot columns on `product_variant_bom_lines` (`po_number`, `item_name`, `line_type`, `vendor_name`, `unit_cost`). Consequence (verified in code): anything that reads `sku_snapshot` instead of the variant's live `sku` sees the LIVE SKU — e.g. the Pre-orders list search (`PreorderController` `items.sku_snapshot LIKE`, ~line 522) will NOT find a pre-order by its DEMO SKU (it will by the LIVE SKU), and every export/report line that prints `sku_snapshot` (pre-order export, `ReportController` ~line 612) shows the LIVE SKU. Do not "fix" by rewriting snapshots in the cloner without a spec change: a snapshot is a historical record.
+- **`LiveToDemoCloner::run()` must be called outside an outer DB transaction** (post-commit deletion of old DEMO files assumes the inner `DB::transaction` is the real commit; tests are wrapped by `RefreshDatabase`, so it is not enforced in code). A failure while deleting old files AFTER commit does not throw: the report carries `files_cleanup_failed` and the command prints a warning instead of "rolled back".
+- **`CloneRegistryDriftTest` fails when the schema and `CloneRegistry` drift apart** (a FK into a registered table not declared, a registered table pointing at an unregistered non-shared parent, a `data_mode` table neither registered nor on the exclusion list). Its three allowlists (`UNREGISTERED_CHILDREN`, `SHARED_PARENTS`, `EXCLUDED_DATA_MODE_TABLES`) are the explicit decisions; extend them only deliberately.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -214,7 +368,216 @@ silently ignores the DEMO/LIVE boundary. `users`, `roles`, `settings`,
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/025-preorder-dispatch-status-list-refinements/plan.md`
+Active feature plan: `specs/040-recap-pos-transactions-only/plan.md`
+(branch `040-recap-pos-transactions-only`, from `develop` after PR #33) — the Seller Recap becomes POS-ONLY
+(product-owner decision: whole recap, not just the detail list). `SettlementService` aggregates completed POS
+order items only (the 033 pre-order aggregation/breakdown is deleted, `salesBreakdownForEvent` → `posSalesForEvent`),
+so the stored settlement (`total_sales/total_units/payable_amount`), Payable/Paid/Outstanding, "Record payment" and
+event close are POS-only. `GET /reports/artist-settlements` drops `pos_units/preorder_units/pos_sales/preorder_sales`
+and clamps `outstanding` at 0 (a seller already paid against the old pre-order-inclusive payable keeps `paid_amount`
+untouched); the seller "Transaction detail" and the export lose their pre-order parts; the Dashboard "Results per
+seller" panel follows (it reads the same `total_sales`). Seller Cost / Cost & Profit / Pre-order report are
+UNCHANGED and still include pre-orders, so Seller Cost's total no longer equals the recap's Sales. Consequence:
+pre-order revenue no longer yields a payable amount on the recap. No migration. See research.md.
+
+Previous feature: `specs/039-preorder-seller-subtotal/plan.md`
+(branch `039-preorder-seller-subtotal`, from `develop` after PR #32) — Reports → Pre-order → By Seller
+gets a "Subtotal — <seller>" row after each seller's rows (also in the Excel "Per Seller" sheet — product-owner
+decision). ONE implementation: `App\Support\PreorderSellerSubtotals::fromRows()` sums the four figures per seller
+in cents (reusing `ReportSplit`), `GET /reports/preorders?breakdown=artist` adds `subtotals` (additive; `rows`
+unchanged and now contiguous per seller) and the export interleaves the same subtotals; the SPA only places them.
+Outstanding is the SUM of the rows' clamped outstanding values, not value − collected (a paid row can have
+collected > order value). Grand Total unchanged = Σ subtotals (client `sumRows` made cent-exact). No migration.
+See research.md.
+
+Previous feature: `specs/038-product-list-image-sku-tooltip/plan.md`
+(branch `038-product-list-image-sku-tooltip`, from `develop` after PR #31) — Products list: the
+picture-only column is merged into the Code column (96 px picture above the one-line code, so the
+table gets narrower, not wider) and each SKU shows its variant name in a `BaseTooltip` on hover /
+keyboard focus (click still opens the variant detail). `BaseTooltip` now teleports its bubble to
+`body` with fixed positioning (below the trigger, flips above, clamped to the viewport, closes on
+scroll/resize, never shown for blank text) because `DataTable`'s `overflow-auto` wrapper would
+clip an absolutely-positioned bubble. Frontend only. See research.md.
+
+Previous feature: `specs/037-variant-drawer-bom-ui/plan.md`
+(branch `037-variant-drawer-bom-ui`, branched from `036-bom-variant-stock-ux`) — UI pass on the
+Edit-product variant cards and the BOM dialog: bounded cards, four distinct chip colours (new
+`sky`/`violet` token pairs; SKU blue, markup green, margin violet, BOM cost amber), header actions
+`Open BOM (button + BaseTooltip) · Apply markup · delete`, fields name → stock → cost → sell, drawer
+820 → 1040 px, variant picture 44 → 66 px. **Duplicate variant** reuses the existing new-variant
+save flow (unsaved card seeded from the source incl. its stock — product-owner decision — with
+`copy_bom_from` so the server copies the BOM; no new endpoint). BOM copy: `BaseSelect` now flips
+above / caps its height to the space on screen (the picker used to run off the bottom of the
+viewport) and supports option thumbnails; new `mode=selected` + `variant_ids[]` on
+`POST /variants/{v}/bom/copy-out` (still `VariantBomService::copy()`), UI `VariantPickList`;
+**Add BOM item** moves onto the Save changes row. No migration. See research.md.
+
+Previous feature: `specs/036-bom-variant-stock-ux/plan.md`
+(branch `036-bom-variant-stock-ux`, branched from `develop` after PR #30) — UX/correctness
+pass on the BOM dialog, variant history and the product/stock lists. BOM quantities become
+WHOLE numbers through one shared rule (`App\Rules\WholeBomQuantity`, every HTTP + Excel
+entry point; stored legacy fractions are never rewritten); quantity edits become a draft
+saved by an explicit Save through ONE all-or-nothing batch endpoint
+(`PUT /variants/{variant}/bom` → `VariantBomService::updateQuantities()`), with an
+unsaved-changes guard, the variant's current stock (read-only, `summary.current_stock`) and
+"per 1 product" labels (cost maths untouched). Root causes found: the copy picker could not
+scroll because `BaseSelect` closed on ANY scroll event, including its own list (fixed +
+opt-in `searchable` mode); `master_data.col_type` was never defined (the only missing literal
+i18n key — a static test now guards all keys). Variant history reuses
+`GET /stock/movements` (adds `user_name`, product/variant names, a safely-resolved
+`reference`; now gated to the `stock`/`products` menu — it was open to every role).
+SKU on the Stock list opens `ProductDetailModal`; Products list gets a larger thumbnail and a
+one-line code. No migration. See research.md.
+
+Previous feature: `specs/035-po-row-actions/plan.md`
+(branch `035-po-row-actions`, branched from `develop` after PR #29) — Purchase Orders
+list gets Detail / Edit / Delete on every row (reusing `PreorderRowActions`; unavailable
+actions stay visible with a reason). Edit is no longer draft-only (after draft: vendor,
+seller, notes; lines locked); Delete stays draft-only server-side (message now says
+"Cancel it instead", plus payment/BOM guards); edits write `purchase_order_updated`.
+The two reported errors were NOT code bugs: the dev DB had 4 pending migrations (the
+container started before PR #29; the entrypoint only migrates on start). To stop a stale
+schema from looking like a bug: a global renderer maps database "unknown column / table
+not found" (SQLSTATE 42S22/42S02) on API requests to **503 `schema_outdated`** with a
+friendly message (SQL stays in the log); `SchemaStatus` feeds
+`GET /settings/features.schema_update_required` (owner/admin only) for an app-shell
+banner; the PO detail dialog and the BOM selector/modal show the error + Retry instead of a
+blank dialog / a misleading "no eligible lines". See research.md.
+
+Previous feature: `specs/034-seller-po-bom/plan.md`
+(branch `034-seller-po-bom`, branched from `develop` after PR #28) — a variant's
+BOM becomes the traceable list of PURCHASE-ORDER LINES that produce it. A PO gets a
+seller (`purchase_orders.artist_id`, one per PO, required on create, NULL = legacy and
+never offered as a source); BOM rows (`product_variant_bom_lines`, EXTENDED, not
+replaced) gain `purchase_order_item_id` plus a SNAPSHOT of item/type/PO number/vendor/
+unit cost, so a row that has no PO line is a flagged "legacy" row (kept, costed from the
+vendor price list as before, blocks completion). `VariantBomService` is the only BOM
+writer (add several PO lines, qty, remove, replace-source, copy from/next/all, complete,
+reopen) and does cost-price sync + audit in the same transaction. When a variant's BOM is
+COMPLETE its `cost_price` = BOM cost, auto-synced and locked against hand edits (409,
+also through the Excel import); past sales keep their recorded cost. Eligible sources: the
+variant's seller's POs in ordered/received/paid status only (never draft/cancelled).
+Nothing reprices by itself — "newer price" and "source cancelled" are read-time cues.
+"Linked Product" leaves the PO form (stored values stay). See research.md.
+
+Previous feature: `specs/033-seller-recap-pos-preorder-split/plan.md`
+(branch `033-seller-recap-pos-preorder-split`, branched from `develop` after PR #27) —
+the Seller Recap's Unit/Sales, Cost & Profit's revenue/cost/gross profit blend POS
+sales with the paid portion of pre-orders but only show the sum. No new storage:
+`SettlementService::salesBreakdownForEvent()` exposes the two aggregations it already
+runs (and `recalculateForEvent()` is built on it, so totals = POS + pre-order by
+construction); the reports add `pos_*`/`preorder_*` parts, the pre-order part always
+derived as the REMAINDER of the shown total (integer units, cents) so POS + pre-order
+equals the total with zero drift despite the stored unit total being a rounded
+integer. **Seller Cost (`artist-profit`) used to be POS-only** — by the requester's
+decision it now includes pre-orders (POS parts = the old figures, plus a pre-order
+part and a combined total), matching the Seller Recap. UI: four columns on the Recap,
+"POS · Pre-order" sub-lines on Cost & Profit and Seller Cost; exports append the new
+columns. See research.md.
+
+Previous feature: `specs/032-mark-payment-verified/plan.md`
+(branch `032-mark-payment-verified`, branched from `develop` after PR #26) — the
+"Not verified" badge on non-cash sales never cleared because nothing could change
+`payments.verification`. Adds the missing, **one-way** action (no schema change: the
+columns `verified_by`/`verified_at` already exist): `POST /orders|preorders/{id}/
+payments/{payment}/verify` → `PaymentService::markVerified()` (row-locked,
+`pending → verified` only, non-cash only, not for voided/cancelled targets, audit
+`payment_verified` in the same transaction) and a bulk `POST /orders/verify-payments`
+for the Sales list selection (loop over the single path; skips own/already-verified/
+voided/rejected with a per-reason summary). Allowed for owner/admin or any user EXCEPT
+the payment's recorder (`Payment::mayVerify`); there is deliberately NO undo (product-
+owner decision). Verification never touches amounts, status, totals, shift cash or
+reports. Payloads gain `verified_by_name`, `verified_at`, `can_verify`. See research.md.
+
+Previous feature: `specs/031-optional-payment-proof/plan.md`
+(branch `031-optional-payment-proof`, branched from `develop` after PR #25) — the
+payment proof (photo/file) becomes OPTIONAL for non-cash sales and pre-order
+payments (reference and notes already were): `PaymentRecorder` no longer demands
+a `proof_token` (an invalid one is still refused; purchase-order payments keep the
+rule) and `PaymentPanel` no longer gates the Confirm button on it. A confirmation
+(proof, reference, notes) can then be added or changed LATER from the Sales detail
+(and the Pre-order payment history, same `PaymentHistoryList`) through
+`PATCH /orders|preorders/{id}/payments/{payment}/confirmation`
+(`PaymentService::updateConfirmation()`, row-locked, audited in the same transaction),
+allowed only for owner/admin or the cashier who recorded that payment, for non-cash
+payments of a not-voided sale / not-cancelled pre-order. Replacing a proof marks the
+old `payment_proofs` row `superseded_at` (file kept for audit). It never touches
+amount/method/status/totals/shift cash. The proof viewing rule (owner/admin or
+uploader) is kept and extended to the payment's recorder; payloads carry server-
+computed `can_view_proof` / `can_edit_confirmation`. See research.md.
+
+Previous feature: `specs/030-fix-pos-search-product-image/plan.md`
+(branch `030-fix-pos-search-product-image`, branched from `develop` after PR #24) —
+a frontend fix: POS search result cards showed the placeholder icon and the cart
+line had no photo for items added from a search. `GET /variants/lookup` already
+returns `image_url` (variant's own, else the product's, via
+`ProductVariant::image_url`), but `PosView.vue`'s inline `searchCards` map copied
+only a subset of fields and dropped it (the cart inherits the gap because the
+card is pushed into `posCart`). The fix builds the search card in
+`utils/posProductCards.js` (`buildSearchCards`, beside `buildProductCards` /
+`toCartItem`, where every card/cart shape lives) and ignores responses of
+superseded searches. Search cards also show the category name (follow-up
+request, FR-009), the same label browse cards have. OpenAPI `VariantLookup`
+gains the already-returned `image_url`/`category_name`. See research.md.
+
+Previous feature: `specs/029-fix-bulk-invoice-logo/plan.md`
+(branch `029-fix-bulk-invoice-logo`, branched from `develop` after PR #23) — a
+frontend-only defect fix: bulk-downloaded invoice PDFs showed the payment QR
+image in the store-logo slot. Root cause is in the shared
+`utils/pdfCapture.js::captureElementCanvas()`: it swapped the pre-fetched
+`data:` images into html2canvas's clone BY INDEX over
+`clonedDoc.querySelectorAll('img')`, but `onclone`'s first argument is a clone
+of the WHOLE page, so any other `<img>` on the page (avatar, product
+thumbnails) shifted every index. The fix keys the swap by each image's own
+`src` (identity, not position), so an image can only ever get its own bytes;
+all eight document-download call sites inherit it. Never reintroduce
+index-based matching between `el.querySelectorAll('img')` and the clone. See
+research.md.
+
+Previous feature: `specs/028-partial-split-payment/plan.md`
+(branch `028-partial-split-payment`, branched from `develop` after PR #22) —
+payments become an independently saved ledger for BOTH pre-orders and POS
+sales. One `PaymentService` records/deletes payments (amount ≤ remaining,
+row-locked, idempotent via a client `client_ref` UUID, audited inside the
+transaction) on top of the single row-writer `PaymentRecorder`, and returns a
+derived `payment_summary` (grand total / total paid / remaining / status
+unpaid|partially_paid|fully_paid / count) that is NEVER stored for orders
+(pre-order and order `paid_amount` stay as caches recomputed from the
+entries). Deliberate reversals: pre-order overpayment is now refused (422; the
+old "no overpay guard" test is rewritten) and cash shift attribution moves
+from `orders.session_id` to a new `payments.session_id` (the shift the money
+was RECEIVED in) so a late cash payment cannot corrupt a closed shift's
+reconciliation; `close()`, `summary()` and the Sales shift panel are rebased
+on it. A POS sale may be completed partly paid only with a customer attached
+(it stays `completed`, so every report still counts it at completion), and is
+settled later from the Sales page. `RecordPaymentModal` (client-side
+accumulation + sequential submit) is replaced by a single-click
+`AddPaymentModal` plus shared `PaymentSummaryCard`/`PaymentHistoryList`. See
+research.md Decisions 1–12.
+
+Previous feature: `specs/027-preorder-duplicate-split/plan.md`
+(merged, PR #22) — two new pre-order actions. **Duplicate** (one row or the
+checkbox selection, `POST /preorders/duplicate`) is built ON TOP of
+`PreorderService::create()`, not `replicate()`, so every copy is re-priced at
+today's variant price (product-owner answer), starts `ordered` with no
+payments/shipment/dispatch marker, and reuses create()'s numbering, discount
+cap, pickup-day rules and DEMO/LIVE stamping; stale inputs degrade (missing
+event → no event, out-of-range pickup day dropped) while a deleted/inactive
+item fails THAT order only — bulk is always `200` with a per-order report, like
+`bulk-email`. **Split** (`POST /preorders/{id}/split`, manual units or
+`by_seller`) is refused with 409 for `handed_over`/`cancelled` AND for any
+order that has a recorded payment (product-owner answer: no payment
+allocation logic), moves whole lines by re-parenting the `preorder_items` row
+(keeps the id stock movements reference) and partial lines by shrinking +
+cloning the snapshot, keeps discount/shipping/shipment/notes on the original
+(409 if the discount would then exceed the original's total), and NEVER calls
+`StockService` — total qty per variant is unchanged. Origin is three nullable
+columns on `preorders` (`source_preorder_id` nullOnDelete, `source_type`,
+`source_preorder_number` snapshot); `present()` hides `split_children` unless
+`show()`/the split response eager-load it. Neither action sends email. See
+research.md Decisions 1–8.
+
+Previous feature: `specs/025-preorder-dispatch-status-list-refinements/plan.md`
 (branch `025-preorder-dispatch-status-list-refinements` — not yet created; the
 work sits uncommitted on `develop` on top of feature 024's tip) — a manual,
 three-value marker on pre-orders (`preorders.dispatch_status`: `pending` /

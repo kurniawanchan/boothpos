@@ -16,9 +16,12 @@ use App\Models\ProductVariant;
 use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
 use App\Services\ProductCodeGenerator;
+use App\Services\VariantBomService;
+use App\Support\ReportSplit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
 
 class ProductController extends Controller
@@ -27,6 +30,7 @@ class ProductController extends Controller
         private ProductCodeGenerator $codeGenerator,
         private ActivityLogger $activityLogger,
         private ImageUploadService $imageUploadService,
+        private VariantBomService $bomService,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -121,14 +125,28 @@ class ProductController extends Controller
             return $product;
         });
 
-        return response()->json(new ProductResource($product->load(['artist', 'category', 'variants'])), 201);
+        return response()->json(new ProductResource($product->load(['artist', 'category', ...$this->variantRelations($request)])), 201);
     }
 
-    public function show(Product $product): JsonResponse
+    public function show(Request $request, Product $product): JsonResponse
     {
         $this->authorize('view', $product);
 
-        return response()->json(new ProductResource($product->load(['artist', 'category', 'variants'])));
+        return response()->json(new ProductResource($product->load(['artist', 'category', ...$this->variantRelations($request)])));
+    }
+
+    /**
+     * 034-seller-po-bom — baris BOM ikut dimuat (untuk has_bom/bom_cost pada
+     * varian) HANYA bagi pengguna yang boleh mengelola produk; daftar
+     * produk/POS tidak pernah menariknya. ProductVariantResource menyajikan
+     * field itu hanya bila relasinya termuat (relationLoaded), jadi yang
+     * memuatnya harus eksplisit di sini.
+     *
+     * @return array<int, string>
+     */
+    private function variantRelations(Request $request): array
+    {
+        return $request->user()?->canAccessMenu('products') ? ['variants.bomLines.material'] : ['variants'];
     }
 
     public function update(UpdateProductRequest $request, Product $product): JsonResponse
@@ -153,7 +171,7 @@ class ProductController extends Controller
             );
         });
 
-        return response()->json(new ProductResource($product->fresh(['artist', 'category', 'variants'])));
+        return response()->json(new ProductResource($product->fresh(['artist', 'category', ...$this->variantRelations($request)])));
     }
 
     public function destroy(Request $request, Product $product): JsonResponse
@@ -189,21 +207,55 @@ class ProductController extends Controller
 
     public function storeVariant(StoreVariantRequest $request, Product $product): JsonResponse
     {
+        $copyFromId = $request->validated('copy_bom_from_variant_id');
+
+        // Menyalin BOM menyentuh data PO (harga beli, vendor) — butuh kedua
+        // menu, sama dengan semua aksi BOM lain (VariantBomController).
+        if ($copyFromId && ! ($request->user()->canAccessMenu('products') && $request->user()->canAccessMenu('purchase_orders'))) {
+            return response()->json(['message' => __('bom.not_authorized')], 403);
+        }
+
         $sku = $this->codeGenerator->nextVariantSku($product);
 
-        $variant = $product->variants()->create([
-            'sku' => $sku,
-            'variant_name' => $request->validated('variant_name'),
-            'cost_price' => $request->validated('cost_price') ?? 0,
-            'sell_price' => $request->validated('sell_price'),
-            'low_stock_alert' => $request->validated('low_stock_alert'),
-        ]);
+        // Varian + salinan BOM dalam satu transaksi: salinan yang ditolak
+        // (produk lain, sumber kosong) tidak boleh meninggalkan varian setengah jadi.
+        try {
+            $variant = DB::transaction(function () use ($request, $product, $sku, $copyFromId) {
+                $variant = $product->variants()->create([
+                    'sku' => $sku,
+                    'variant_name' => $request->validated('variant_name'),
+                    'cost_price' => $request->validated('cost_price') ?? 0,
+                    'sell_price' => $request->validated('sell_price'),
+                    'low_stock_alert' => $request->validated('low_stock_alert'),
+                ]);
+
+                if ($copyFromId) {
+                    $this->bomService->copy(ProductVariant::findOrFail($copyFromId), [$variant], false, $request->user());
+                }
+
+                return $variant;
+            });
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
 
         return response()->json(new ProductVariantResource($variant), 201);
     }
 
     public function updateVariant(UpdateVariantRequest $request, ProductVariant $variant): JsonResponse
     {
+        // 034-seller-po-bom — selama BOM varian SELESAI, cost_price mengikuti
+        // biaya BOM dan tidak boleh diubah tangan. Nilai yang SAMA diterima
+        // (SPA mengirim seluruh varian); yang berbeda ditolak 409.
+        if ($variant->bom_complete
+            && $request->has('cost_price')
+            && ReportSplit::cents($request->validated('cost_price')) !== ReportSplit::cents($variant->cost_price)) {
+            return response()->json([
+                'message' => __('bom.cost_price_locked'),
+                'code' => 'cost_price_locked_by_bom',
+            ], 409);
+        }
+
         // F13.4 — "ubah harga" (price_changed): satu-satunya endpoint yang
         // menyentuh cost_price/sell_price. Snapshot ditulis apa adanya
         // (bukan hanya diff kolom harga) supaya operator bisa melihat

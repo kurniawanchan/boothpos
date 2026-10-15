@@ -279,11 +279,34 @@ php artisan app:restore <path> --force   # lewati konfirmasi interaktif, untuk a
 **MENIMPA seluruh isi database tujuan** — jangan jalankan ke database
 `boothpos` produksi tanpa yakin.
 
+**Lewat layar (Pengaturan → Cadangan & pemulihan database)**, owner/admin
+bisa membuat cadangan, mengunduhnya, memulihkan dari daftar, atau memulihkan
+dari berkas `.sql` yang diunggah (mis. dari laptop lain). Layar memakai logika
+yang SAMA dengan `app:backup` (satu `BackupService`), jadi butuh `mysqldump`/
+`mysql` di server yang sama seperti perintahnya. Bedanya dengan CLI: pemulihan
+lewat layar SELALU membuat cadangan pengaman dari kondisi saat ini lebih dulu,
+meminta mengetik `RESTORE`, dan dibatalkan (tanpa mengubah apa pun) bila cadangan
+pengaman itu gagal. Untuk pemulihan bencana (database rusak sampai `mysqldump`
+pun gagal) tetap gunakan `app:restore` — sengaja tanpa langkah pengaman itu.
+**Lisensi ikut dipulihkan.** Pemulihan mengganti SELURUH database, termasuk
+`license_activations` yang terikat ke sidik jari mesin. Memulihkan cadangan dari
+perangkat lain (atau yang dibuat sebelum aplikasi diaktivasi) membuat aplikasi
+terkunci (423) sampai diaktivasi ulang dengan kunci lisensi — siapkan kuncinya
+atau minta kunci baru ke vendor. Ini disengaja (keputusan product owner, 026);
+dialog pemulihan memperingatkannya. Berkas unggahan dibatasi 50 MB; kedua image
+Docker memasang `docker/php/uploads.ini` (`upload_max_filesize = 64M`) supaya
+PHP tidak menolaknya lebih dulu.
+Setiap cadangan juga bisa dihapus dari daftar (hanya salinan lokal; salinan di
+`BACKUP_EXTERNAL_PATH` tidak ikut terhapus). Folder cadangan lokal bisa diatur lewat `BACKUP_PATH` (default
+`storage/app/backups`).
+
 Kedua perintah butuh `mysqldump`/`mysql` tersedia di `PATH` proses PHP
 yang menjalankan `artisan` — ini asumsi yang BENAR untuk instalasi toko
-sungguhan (server lokal dengan MySQL terpasang normal). Di mesin dev ini
-yang hanya punya MySQL di dalam container Docker, `mysqldump` TIDAK ada
-di host secara langsung. **Jangan pasang `mysql-client` lewat Homebrew
+sungguhan (server lokal dengan MySQL terpasang normal) DAN untuk container
+`app` dev (image `docker/php/Dockerfile` kini memasang `default-mysql-client`
++ konfigurasi `ssl=0`; kalau Anda baru menarik perubahan ini, jalankan
+`docker compose up -d --build app` sekali). Di host macOS dev, `mysqldump`
+TIDAK ada secara langsung. **Jangan pasang `mysql-client` lewat Homebrew
 untuk mengakalinya** — itu sempat terjadi di sesi sebelumnya dan sudah
 di-uninstall lagi atas permintaan eksplisit. Kalau perlu menguji
 `app:backup`/`app:restore` di mesin seperti ini, proxy sementara ke
@@ -303,12 +326,32 @@ pertama, bukan sesuatu yang diam-diam dianggap selesai):
   nyata) — yang sudah diverifikasi baru penyalinan ke folder lokal
   pengganti.
 
+### Setelah menarik perubahan kode (migrasi database)
+
+Cabang baru sering membawa migrasi. Terapkan sebelum mencoba layar baru:
+
+```bash
+php artisan migrate                              # native
+docker compose exec app php artisan migrate      # Docker dev
+```
+
+Pada Docker, `docker/php/entrypoint.sh` hanya menjalankan migrasi saat
+container **dimulai** — container yang sudah berjalan sebelum `git pull`
+tidak mendapat migrasi baru sampai di-restart (`docker compose restart app`)
+atau perintah di atas dijalankan. Gejalanya: layar yang memakai kolom baru
+gagal. Sejak fitur 035 API menjawab **503 `schema_outdated`** dengan pesan
+ramah (bukan galat SQL), dialog menampilkan "Coba lagi", dan owner/admin
+melihat banner "Database perlu diperbarui" di atas halaman. Setelah migrasi
+diterapkan, "Coba lagi" langsung bekerja tanpa memuat ulang halaman. Aplikasi
+sendiri TIDAK PERNAH menjalankan migrasi dari request web.
+
 ## 8. Troubleshooting cepat
 
 | Gejala | Penyebab | Solusi |
 |---|---|---|
 | Migration gagal dengan error dekat `CHECK` / `ALTER TABLE` | `DB_CONNECTION` masih `sqlite` (default `.env.example`) | Set ke `mysql`, lihat §2 |
 | `php artisan test` gagal total sejak migration awal | `.env.testing` belum dibuat, atau menunjuk ke database yang sama dengan `.env` aplikasi | Buat `.env.testing` terpisah, lihat §5 |
+| Layar/dialog gagal dengan "Database perlu diperbarui" (503 `schema_outdated`) | Migrasi belum diterapkan (container berjalan sebelum `git pull`) | Terapkan migrasi, lihat bagian "Setelah menarik perubahan kode" di atas |
 | Login selalu 422 "field required" | Mengirim `email` alih-alih `username` | Field login adalah `username`, lihat §4 |
 | `app:backup` gagal "mysqldump: command not found" | Tidak ada `mysqldump` di `PATH` | Untuk instalasi toko sungguhan: pasang MySQL client normal di server. Untuk mesin dev dengan MySQL di Docker: lihat §7, JANGAN `brew install mysql-client` |
 | Upload bukti pembayaran / backup melewatkan file bukti pembayaran | Path disk `local` berbeda antar versi Laravel (`storage/app` vs `storage/app/private`) | Sudah diperbaiki di `BackupPos` sesi ini (ambil path dari disk, bukan hardcode) — kalau muncul lagi, cek `config/filesystems.php` |
@@ -419,3 +462,56 @@ trik `docker exec` ke container lain seperti di §7 untuk mesin dev), dan
 persis lewat `docker-compose.store.yml` — arahkan ke titik mount drive
 eksternal fisik yang sungguhan tercolok di laptop toko, bukan folder di
 disk yang sama (persis peringatan §9).
+
+## Salin data LIVE ke DEMO (`app:clone-live-to-demo`)
+
+Mengganti SELURUH data mode DEMO dengan salinan persis data mode LIVE: baris
+(termasuk yang soft-deleted), gambar produk/varian/kategori, dan bukti bayar.
+Data LIVE hanya dibaca — sidik jari tabel LIVE dicek sebelum dan sesudah, dan
+proses dibatalkan bila ada selisih.
+
+    php artisan app:clone-live-to-demo           # simulasi: tampilkan jumlah per tabel dan jumlah/ukuran berkas, tidak menulis
+    php artisan app:clone-live-to-demo --force   # tulis (minta konfirmasi)
+    php artisan app:clone-live-to-demo --force --yes   # tanpa pertanyaan
+
+Di Docker dev: `docker compose exec app php artisan app:clone-live-to-demo ...`
+(ini BUKAN suite test, jadi aturan `-e DB_DATABASE=boothpos_test` tidak berlaku).
+
+- **Konfirmasi:** `--yes` melewati pertanyaan. Menjalankan `--force` TANPA
+  `--yes` di konteks non-interaktif (`--no-interaction`, cron, `docker exec -T`)
+  langsung gagal dengan galat sebelum ada pertanyaan, cadangan, atau penulisan.
+- **Peringatan PII:** data pelanggan disalin APA ADANYA (telepon, email, akun
+  sosial, alamat). Jangan bagikan DB, screenshot, atau cadangan yang berisi DEMO.
+- Cadangan pengaman dibuat otomatis lebih dulu (id dicetak); pulihkan dengan
+  `php artisan app:restore <path/database.sql>`. Gambar produk di disk publik
+  TIDAK ikut dicadangkan oleh `app:backup` — gambar DEMO lama yang tidak dipakai
+  siapa pun memang dihapus (DEMO dibangun ulang), gambar LIVE tidak pernah disentuh.
+- Kode artist/kategori DEMO berbeda dari LIVE (kolomnya UNIQUE lintas mode dan
+  hanya 3/2 huruf): mis. `VLC` → `ZVL`; `code_prefix`/SKU DEMO disusun ulang dari
+  kode itu. Nomor dokumen DEMO berakhiran `-DM`.
+- Tidak disalin: `companies`, `invoices`, `pos_drafts`, riwayat `activity_logs`,
+  `preorder_notifications`, `users`, `payment_channels`, `settings`.
+- Pemeriksaan sebelum penghapusan: bila ada baris LIVE yang merujuk baris DEMO,
+  perintah dibatalkan SEBELUM menghapus apa pun (data lintas mode akan diubah
+  diam-diam oleh foreign key `ON DELETE SET NULL/CASCADE`). Perbaiki rujukan itu
+  lebih dulu.
+- Hentikan pemakaian aplikasi saat menjalankan. Perintah berjalan dalam satu
+  transaksi (REPEATABLE READ), jadi tulisan dari koneksi LAIN selama proses TIDAK
+  terlihat olehnya dan TIDAK terdeteksi: pemeriksaan sidik jari LIVE hanya
+  membuktikan bahwa proses ini sendiri tidak menulis ke LIVE. Untuk itu pemakaian
+  aplikasi (kasir, impor, tab lain) harus dihentikan selama menjalankannya.
+- Bila proses mati mendadak (galat fatal / Ctrl-C) di tengah jalan, DB kembali
+  sendiri (rollback; LIVE tak terpengaruh), tetapi salinan gambar/bukti bayar yang
+  sempat dibuat dapat tertinggal di disk dengan nama UUID acak. Tidak dipakai baris
+  mana pun; aman dihapus manual, atau dibiarkan.
+- Bila pembersihan berkas DEMO lama gagal SESUDAH penggantian selesai, perintah
+  tetap berhasil dan mencetak peringatan (DEMO sudah diganti; berkas lama mungkin
+  tersisa di disk). Itu bukan rollback.
+- Laporan akhir mencetak pemetaan kode artist/kategori LIVE → DEMO (`Kode Artis: VLC → ZVL`).
+- Memulihkan cadangan pengaman mengembalikan baris DEMO, tetapi TIDAK berkas
+  gambar yang sudah dihapus dari disk publik (`app:backup` tidak mengarsipkannya).
+- `app:restore` juga memulihkan `license_activations`: bila dump berasal dari mesin
+  lain atau dibuat sebelum aktivasi, aplikasi bisa terkunci (423) sampai
+  diaktivasi ulang dengan kunci lisensi (lihat catatan restore di CLAUDE.md).
+- Simulasi (tanpa `--force`) TIDAK memeriksa baris LIVE yang merujuk baris DEMO;
+  pembatalan karena rujukan lintas mode itu hanya terjadi saat `--force`.

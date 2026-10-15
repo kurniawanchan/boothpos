@@ -80,3 +80,21 @@ export function bulkPreorderInvoices(preorderIds, document = 'invoice') {
 export function bulkEmailPreorderInvoices(preorderIds, document = 'invoice') {
   return client.post('/preorders/bulk-email', { preorder_ids: preorderIds, document }).then((r) => r.data);
 }
+
+// 027-preorder-duplicate-split — selalu mengembalikan laporan per-pre-order
+// ({ data: [{ source_id, source_number, status, preorder|error }] }); satu
+// pre-order yang gagal tidak menggagalkan yang lain.
+export function duplicatePreorders(preorderIds) {
+  return client.post('/preorders/duplicate', { preorder_ids: preorderIds }).then((r) => r.data);
+}
+
+// payload: { mode: 'items', items: [{ item_id, qty }] } atau { mode: 'by_seller' }
+export function splitPreorder(id, payload) {
+  return client.post(`/preorders/${id}/split`, payload).then((r) => r.data);
+}
+
+// Hapus satu pembayaran (+ bukti bayarnya) lalu hitung ulang status — owner/admin saja
+// (server menegakkan; 409 untuk pre-order yang sudah diserahkan/dibatalkan).
+export function deletePreorderPayment(preorderId, paymentId) {
+  return client.delete(`/preorders/${preorderId}/payments/${paymentId}`).then((r) => r.data);
+}

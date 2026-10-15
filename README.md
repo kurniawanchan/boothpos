@@ -703,3 +703,145 @@ Semua empat ditemukan lewat eksekusi sungguhan (`docker compose up`/
 `docker compose exec ... test`), sesuai Constitution Principle II — bug
 #4 khususnya adalah pengingat bahwa "selalu hijau di satu mesin" tidak
 membuktikan test itu benar-benar terisolasi satu sama lain.
+
+## Bug yang ditemukan saat eksekusi fitur 034-seller-po-bom (2026-10-05)
+
+Tiga ditemukan lewat verifikasi browser sungguhan (server terisolasi + DB
+tes, alur nyata PO → BOM → selesai → salin → isyarat harga) atau lewat tes
+yang sengaja ditulis untuk aturan baru — bukan sekadar membaca kode:
+
+1. **`resources/js/views/PurchaseOrdersView.vue` — drawer "Edit" draft
+   purchase order selalu terbuka TANPA baris item (Total Rp 0), dan
+   menyimpannya mengirim `items: []` (422).** `GET /purchase-orders`
+   (daftar) tidak memuat `items`, tetapi `openEdit()` membaca `po.items`
+   dari baris daftar itu. Bug ini SUDAH ADA sebelum fitur 034 (tidak
+   tertangkap karena tidak ada tes tampilan PO); ketahuan karena fitur ini
+   menjanjikan `product_id` ("Linked Product") lama tetap terbawa saat
+   draft diedit. Diperbaiki: `openEdit()` memuat detail lengkap lewat
+   `GET /purchase-orders/{id}` dulu (pola `ProductsView.openEdit()`). Tes
+   `PurchaseOrderForm.test.js` kini memakai baris daftar TANPA items —
+   seperti API sungguhan — sebab versi pertamanya memakai baris daftar yang
+   sudah berisi items sehingga bug ini lolos.
+2. **`VariantBomModal.vue` — sebelum BOM ditandai selesai, teks bantuan
+   berbunyi "Harga modal mengikuti biaya BOM. Buka kembali BOM…"** padahal
+   harga modal baru mengikuti BOM SETELAH ditandai selesai (menyesatkan).
+   Diperbaiki dengan teks terpisah ("Tandai BOM selesai agar harga modal
+   mengikuti biaya BOM") + tes regresi untuk kedua keadaan.
+3. **`MasterDataImportService` — sheet `bom` mencocokkan baris yang ada
+   hanya per bahan.** Sejak baris BOM bisa bersumber PO (yang juga punya
+   `material_id`), impor akan menimpa jumlah baris PO diam-diam, melewati
+   `VariantBomService` (tanpa audit, tanpa sinkron harga modal). Diperbaiki:
+   pencocokan dibatasi pada baris LEGACY (`purchase_order_item_id` null);
+   dipaku tes `test_the_bom_sheet_cannot_touch_a_complete_variant_and_never_
+   overwrites_a_po_row`.
+
+Jebakan skema yang tercatat: MySQL menolak menghapus
+`UNIQUE(product_variant_id, material_id)` selama tidak ada index lain yang
+bisa dipakai FK `product_variant_id`, dan menolak menghapus index komposit
+`(artist_id, status)` sebelum FK-nya dilepas — urutan langkah di migrasi
+`2026_11_02_000001/2` dan `down()`-nya sengaja begitu.
+
+**Dicatat, BUKAN diperbaiki (di luar cakupan):** panggilan API tanpa token
+DAN tanpa header `Accept: application/json` menjawab 500 (bukan 401) —
+ASSUMPTION: redirect ke route `login` yang tidak terdaftar; tidak
+diverifikasi penyebabnya. Aplikasi sendiri selalu mengirim kedua header itu.
+
+## Bug yang ditemukan saat eksekusi fitur 036-bom-variant-stock-ux (2026-10-05)
+
+Ditemukan lewat membaca penulis data dan menulis tes untuk aturan baru (bukan
+sekadar membaca kode); butir 5 lewat browser dan butir 6 ditangkap suite tes penuh:
+
+1. **`master_data.col_type` tidak pernah didefinisikan** di `en.json`/`id.json`,
+   padahal dipakai `ProductsView.vue` dan `StockView.vue` — header kolom
+   tampil mentah sebagai `MASTER_DATA.COL_TYPE`. Pindai semua `t('a.b')`
+   literal: hanya kunci inilah yang hilang. Diperbaiki + tes statis
+   `qa-tests/unit/localeKeys.test.js` agar kunci hilang tidak bisa lolos lagi.
+2. **`BaseSelect.vue` menutup dirinya saat daftarnya sendiri digulung.**
+   Listener scroll window (capture) menangkap scroll di dalam panel, jadi
+   daftar panjang (produk dengan 8+ varian, mis. "Salin dari varian lain")
+   tidak bisa dipakai. Daftar pendek tidak pernah perlu digulung, makanya
+   tidak ada yang melihatnya. Diperbaiki (scroll dari dalam panel diabaikan).
+3. **`GET /stock/movements` tidak pernah mengirim `user_name`** (OpenAPI
+   menjanjikannya; kolom "Oleh" selalu kosong) dan **terbuka untuk semua
+   peran yang login** tanpa pemeriksaan menu di server. Diperbaiki: field
+   dikirim, endpoint dibatasi menu `stock`/`products`.
+4. **`stock_movements.reference_id` bermakna berbeda per penulis:** penjualan
+   menyimpan id ORDER di bawah `order_item`, retur menyimpan id ITEM order;
+   tiba/serah terima pre-order menyimpan id ITEM, sedangkan selisih qty saat
+   EDIT pre-order menyimpan id PRE-ORDER di bawah `preorder_item` (bentrok
+   makna). Penulis jalur edit kini memakai `reference_type = 'preorder'`;
+   baris lama tetap ambigu dan diselesaikan dengan penjaga varian (nomor
+   tidak pernah salah, paling buruk tidak ada). **Keterbatasan yang dicatat,
+   BUKAN diperbaiki:** mengedit pre-order setelah barang tiba membangun ulang
+   item-nya, sehingga baris pergerakan "tiba" sebelumnya menunjuk item yang
+   sudah tidak ada dan tampil tanpa referensi.
+5. **`StockView.vue` — filter tipe tidak pernah menampilkan pilihannya**
+   (kotak tetap bertuliskan "Semua tipe" setelah memilih "Penjualan") dan tidak
+   ada jalan kembali ke semua tipe: `BaseSelect` tidak diikat (`v-model`) dan
+   tidak punya opsi kosong. Ketahuan lewat browser sungguhan. Diperbaiki
+   (terikat + opsi "Semua tipe"; `BaseSelect` menyembunyikan baris placeholder
+   bawaannya bila pemanggil sudah punya opsi kosong, supaya tidak ada dua baris
+   kembar).
+6. **`VariantBomModal.vue` (kode fitur ini sendiri) — `watch(..., {immediate:
+   true})` mereset `qtyDrafts` yang dideklarasikan SETELAHNYA** → "Cannot
+   access 'qtyDrafts' before initialization" pada setiap layar yang memasang
+   dialog dalam keadaan tertutup (135 tes tak terkait gagal). Dideklarasikan
+   sebelum watcher, dengan komentar sebabnya.
+
+## Bug yang ditemukan saat eksekusi fitur 037-variant-drawer-bom-ui (2026-10-05)
+
+1. **`BaseSelect.vue` — panel dropdown selalu terbuka DI BAWAH pemicu dengan tinggi
+   tetap 256px**, tanpa memeriksa ruang yang tersedia. Di dekat tepi bawah layar
+   (mis. "Salin dari varian lain" di dasar dialog BOM) daftarnya keluar layar dan —
+   karena `position: fixed` — tidak bisa dijangkau dengan menggulung halaman maupun
+   dialog, sehingga entri terakhir tak terjangkau ("tidak bisa di-scroll sampai
+   bawah"). Fitur 036 hanya memperbaiki penutupan-sendiri saat daftar digulung; akar
+   kedua ini baru kelihatan di browser sungguhan pada dialog yang panjang. Diperbaiki:
+   panel membuka ke ATAS bila ruang bawah < 220px dan ruang atas lebih lega, dan
+   tingginya dibatasi sesuai ruang (140–320px). Diverifikasi di browser: pemicu di
+   y=679 pada layar 800px -> panel 353–673px, menggulung sampai entri terakhir.
+2. **Dicatat, bukan diperbaiki:** `public/storage` di mesin dev ini adalah symlink ke
+   path Docker (`/var/www/html/...`) yang tidak ada di host, jadi gambar unggahan tidak
+   termuat saat aplikasi dijalankan native (`php artisan serve`). Verifikasi gambar
+   varian memakai berkas sementara di `public/` yang dihapus setelahnya.
+
+## Bug yang ditemukan saat eksekusi fitur 039-preorder-seller-subtotal (2026-10-05)
+
+1. **`ReportController::preordersByArtist()` — baris dua penjual BERNAMA SAMA saling
+   menyelang.** Urutan hanya `artists.name`, jadi dua penjual dengan nama sama tetapi
+   `artist_id` berbeda bisa bercampur baris-barisnya. Sebelum fitur ini hanya tampil
+   sebagai daftar yang agak aneh; dengan subtotal per penjual, baris subtotal akan
+   jatuh di tengah blok penjual lain. Ketahuan oleh tes kontiguitas. Diperbaiki:
+   kunci urut kedua `preorder_items.artist_id`. Diverifikasi di browser dengan dua
+   penjual "Ccc Kembar" — tiap penjual mendapat blok dan subtotalnya sendiri.
+2. **Dicatat, bukan diperbaiki:** baris pre-order berstatus Paid bisa menampilkan
+   *terkumpul > nilai order* (di data uji: Rp 65.000 terkumpul untuk order Rp 60.000;
+   dibuat dengan mengubah nominal payment langsung di DB uji, karena jalur aplikasi
+   menolak overpayment). Outstanding baris sudah di-clamp ke 0, sehingga subtotal
+   outstanding sengaja = JUMLAH outstanding baris, bukan nilai − terkumpul (keduanya
+   akan berbeda untuk seller tsb). Perilaku laporan lama, tidak diubah.
+
+## Bug yang ditemukan saat eksekusi fitur 040-recap-pos-transactions-only (2026-10-06)
+
+1. **`ReportController::artistSettlements()` — `outstanding` bisa NEGATIF.** Rumusnya
+   `payable − paid` tanpa batas bawah. Selama Payable ikut memuat pre-order hal ini
+   jarang terlihat, tetapi begitu Payable menjadi POS-saja, seller yang sudah dibayar
+   terhadap angka lama langsung punya `paid > payable`. Diperbaiki: `max(0, …)` (lalu
+   tidak relevan lagi: permintaan lanjutan menghapus kolom Payable/Paid/Outstanding/Status,
+   field-nya di API/ekspor, dan endpoint pembayaran);
+   `paid_amount` yang tercatat tidak diubah. Diverifikasi di browser dengan seller
+   yang dibayar Rp 50.000 terhadap Payable Rp 30.000 (Sisa tampil Rp 0, status paid).
+2. **Dicatat, bukan diperbaiki — Dashboard menampilkan dua angka seller yang berbeda.**
+   Panel "Hasil per penjual" membaca `total_sales` dari endpoint rekap, jadi kini POS-saja
+   (Aaa Mixed: Rp 30.000), sedangkan "Penjualan per penjual" dan kartu "Net sales" di
+   halaman yang sama masih memuat pre-order (Aaa Mixed ±Rp 270.000). Keputusan
+   perencanaan 040 (research.md R5); bila ingin keduanya sama, panel itu butuh field
+   pre-order-inklusif tersendiri atau ikut dibuat POS-saja.
+3. **Dicatat, bukan diperbaiki — sheet "Rekap" menulis `total_units` 0 sebagai sel
+   KOSONG** (pembanding null non-strict di `SheetArrayExport`; tampak pada seller tanpa
+   penjualan di ekspor). Perilaku lama yang sudah didokumentasikan di 033; uang `0.00`
+   tetap tertulis sebagai 0.
+4. **Konsekuensi, bukan bug:** pendapatan pre-order tidak lagi menghasilkan jumlah
+   yang wajib dibayar di rekap; pembayaran ke seller untuk pre-order harus diurus di
+   luar layar itu (laporan Pre-order tetap menampilkan jumlah terkumpul per seller).
+

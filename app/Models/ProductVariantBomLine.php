@@ -19,6 +19,13 @@ class ProductVariantBomLine extends Model
     protected $fillable = [
         'product_variant_id',
         'material_id',
+        'purchase_order_item_id',
+        'line_type',
+        'item_name',
+        'po_number',
+        'vendor_id',
+        'vendor_name',
+        'unit_cost',
         'qty_needed',
         'notes',
     ];
@@ -27,7 +34,28 @@ class ProductVariantBomLine extends Model
     {
         return [
             'qty_needed' => 'decimal:4',
+            'unit_cost' => 'decimal:2',
         ];
+    }
+
+    /**
+     * 034-seller-po-bom — baris tanpa baris purchase order adalah baris
+     * LEGACY (dibuat sebelum fitur ini / lewat impor Excel): diturunkan,
+     * bukan disimpan sebagai flag yang bisa melenceng dari kenyataan.
+     */
+    public function isLegacy(): bool
+    {
+        return $this->purchase_order_item_id === null;
+    }
+
+    public function purchaseOrderItem(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseOrderItem::class);
+    }
+
+    public function vendor(): BelongsTo
+    {
+        return $this->belongsTo(Vendor::class);
     }
 
     public function variant(): BelongsTo

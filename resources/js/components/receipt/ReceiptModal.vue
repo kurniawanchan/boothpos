@@ -1,9 +1,10 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import { getReceipt } from '../../api/orders';
 import { formatIDR } from '../../utils/money';
+import { resolveAppName } from '../../utils/appName';
 import { formatDate, formatDateTime, formatDateRange } from '../../utils/date';
 import { downloadElementAsPdf, downloadElementAsPng } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
@@ -36,6 +37,7 @@ const emit = defineEmits(['close']);
 
 const toast = useToastStore();
 const receipt = ref(null);
+const appName = computed(() => resolveAppName(receipt.value?.app_name));
 const loading = ref(false);
 const receiptEl = ref(null);
 const downloadingImage = ref(false);
@@ -164,9 +166,16 @@ watch(
           <span class="text-[30px] font-extrabold tracking-tight">{{ formatIDR(receipt.total_amount) }}</span>
         </div>
         <div v-for="(p, idx) in receipt.payment_summary" :key="idx" class="flex justify-between pt-1.5 text-[13.5px]">
-          <span class="text-muted">{{ METHOD_LABELS[p.method] ?? p.method }}</span><span class="font-semibold">{{ formatIDR(p.amount) }}</span>
+          <span class="text-muted">{{ METHOD_LABELS[p.method] ?? p.method }}<span v-if="p.reference" class="text-[11.5px]" data-testid="receipt-payment-ref"> · Ref {{ p.reference }}</span></span><span class="font-semibold">{{ formatIDR(p.amount) }}</span>
         </div>
         <div class="flex justify-between text-[13.5px]"><span class="text-muted">Kembalian</span><span class="font-semibold">{{ formatIDR(receipt.change_amount) }}</span></div>
+        <!-- 028-partial-split-payment — penjualan yang belum lunas: jumlah dibayar, sisa tagihan,
+             dan status. Struk lunas tak berubah. Struk selalu berbahasa Indonesia. -->
+        <template v-if="receipt.payment_status === 'partially_paid'">
+          <div class="flex justify-between border-t border-dashed border-line-3 pt-2 text-[13.5px]" data-testid="receipt-paid"><span class="text-muted">Sudah dibayar</span><span class="font-semibold">{{ formatIDR(receipt.paid_amount) }}</span></div>
+          <div class="flex justify-between text-[13.5px]" data-testid="receipt-balance"><span class="font-bold">Sisa tagihan</span><span class="font-extrabold text-warn-text">{{ formatIDR(receipt.balance_amount) }}</span></div>
+          <p class="text-center text-[12px] font-bold uppercase tracking-wider text-warn-text" data-testid="receipt-status">Dibayar sebagian</p>
+        </template>
       </div>
 
       <!-- Follow-up 2 (FR-024) — pembeli transaksi INI, bukan kontak toko
@@ -187,6 +196,8 @@ watch(
       <p v-if="receipt.receipt_footer_text" class="border-t border-dashed border-line-2 pt-3 text-center text-[11.5px] leading-relaxed text-muted-3">
         {{ receipt.receipt_footer_text }}
       </p>
+
+      <p class="text-center text-[10.5px] text-muted-3">Powered by {{ appName }}</p>
 
     </div>
 

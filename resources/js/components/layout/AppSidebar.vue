@@ -145,7 +145,7 @@ watch(
         <i class="ph-duotone ph-storefront" aria-hidden="true"></i>
       </div>
       <div class="flex min-w-0 flex-1 flex-col leading-tight">
-        <span class="text-[15.5px] font-extrabold tracking-tight">BoothPOS</span>
+        <span class="text-[15.5px] font-extrabold tracking-tight">{{ settings.appName }}</span>
         <span class="text-[10.5px] font-semibold tracking-wide text-muted-3">{{ settings.tierLabel }}</span>
       </div>
       <!-- Toggle sembunyikan sidebar — state & persistensi ditangani

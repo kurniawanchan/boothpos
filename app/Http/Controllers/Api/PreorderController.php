@@ -4,10 +4,15 @@ namespace App\Http\Controllers\Api;
 
 use App\Exports\GenericArrayExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\DuplicatePreordersRequest;
+use App\Http\Requests\SplitPreorderRequest;
+use App\Http\Requests\StorePaymentRequest;
+use App\Http\Requests\UpdatePaymentConfirmationRequest;
 use App\Http\Requests\StorePreorderRequest;
 use App\Http\Requests\UpdatePreorderRequest;
 use App\Http\Resources\CustomerResource;
 use App\Mail\PreorderInvoiceMail;
+use App\Models\Payment;
 use App\Models\Preorder;
 use App\Models\PreorderNotification;
 use App\Services\ImageUploadService;
@@ -16,6 +21,7 @@ use App\Services\PreorderNotifier;
 use App\Services\PreorderService;
 use App\Support\BuildsInvoiceDocument;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -40,7 +46,11 @@ class PreorderController extends Controller
         // 013-preorder-list-filters-receipt (T005) — eager-load items.artist
         // supaya sellersFor() tidak lazy-load per baris di list yang
         // dipaginasi (risiko N+1).
-        $query = Preorder::query()->with(['customer', 'items.artist']);
+        // 027-preorder-duplicate-split — withExists: satu subquery EXISTS untuk
+        // seluruh halaman, bukan satu query payments per baris (N+1). Dipakai
+        // frontend untuk menonaktifkan aksi Split, karena pembayaran apa pun
+        // (bahkan yang bernilai kecil) menghalangi pemisahan.
+        $query = Preorder::query()->with(['customer', 'items.artist'])->withExists('payments');
         $query = $this->applyFilters($query, $request);
         $query = $this->applySort($query, $request);
 
@@ -56,6 +66,7 @@ class PreorderController extends Controller
             'fulfillment' => $p->fulfillment,
             'total_amount' => number_format((float) $p->total_amount, 2, '.', ''),
             'paid_amount' => number_format((float) $p->paid_amount, 2, '.', ''),
+            'has_payments' => (bool) $p->payments_exists,
             'outstanding' => number_format($p->outstanding(), 2, '.', ''),
             'created_at' => $p->created_at,
             'sellers' => $this->sellersFor($p),
@@ -66,6 +77,10 @@ class PreorderController extends Controller
             // (keeps the same field usable regardless of fulfillment).
             'shipping_cost' => number_format((float) $p->shipping_cost, 2, '.', ''),
             'customer_has_address' => filled($p->customer->address),
+            // Alamat pelanggan sendiri (bukan hanya ada/tidaknya) supaya popup
+            // bendera "ongkir/alamat belum diisi" bisa langsung menampilkannya —
+            // pelanggan sudah dimuat untuk baris ini, jadi tanpa query tambahan.
+            'customer_address' => $p->customer->address,
             // Requested: clicking the flag above shows shipping cost +
             // notes — staff sometimes write the customer's actual address
             // into free-text notes as a workaround when it was never
@@ -88,9 +103,80 @@ class PreorderController extends Controller
         return response()->json($this->present($preorder), 201);
     }
 
+    /**
+     * 027-preorder-duplicate-split (US1/US2, research.md Decision 3) —
+     * SELALU 200 dengan laporan per-pre-order, mengikuti bulkEmailInvoices():
+     * tiap salinan memakai transaksinya sendiri, jadi satu pre-order yang
+     * gagal (barang sudah dihapus, diskon melebihi total baru, id milik mode
+     * lain) tidak menggagalkan sisanya. Tidak ada email yang dikirim.
+     */
+    public function duplicate(DuplicatePreordersRequest $request): JsonResponse
+    {
+        $ids = array_values(array_unique(array_map('intval', $request->validated()['preorder_ids'])));
+
+        // Query ber-scope mode: id milik mode lain tak ikut terambil dan
+        // dilaporkan "tidak ditemukan" di bawah, bukan diduplikasi.
+        $sources = Preorder::with('items')->whereIn('id', $ids)->get()->keyBy('id');
+
+        $results = [];
+        foreach ($ids as $id) {
+            $source = $sources->get($id);
+
+            if (! $source) {
+                $results[] = ['source_id' => $id, 'source_number' => null, 'status' => 'failed', 'error' => __('preorders.duplicate_not_found')];
+                continue;
+            }
+
+            try {
+                $copy = $this->preorderService->duplicate($source, $request->user());
+                $results[] = [
+                    'source_id' => $source->id, 'source_number' => $source->preorder_number,
+                    'status' => 'created', 'preorder' => $this->present($copy),
+                ];
+            } catch (ValidationException $e) {
+                $results[] = [
+                    'source_id' => $source->id, 'source_number' => $source->preorder_number,
+                    'status' => 'failed', 'error' => (string) collect($e->errors())->flatten()->first(),
+                ];
+            } catch (ModelNotFoundException) {
+                // Pelanggan/varian terhapus di sela-sela pengecekan dan penyimpanan.
+                $results[] = [
+                    'source_id' => $source->id, 'source_number' => $source->preorder_number,
+                    'status' => 'failed', 'error' => __('preorders.duplicate_not_found'),
+                ];
+            }
+        }
+
+        return response()->json(['data' => $results]);
+    }
+
+    /**
+     * 027-preorder-duplicate-split (US3/US4, research.md Decisions 4–5) —
+     * semua aturan ada di PreorderService; di sini hanya memetakan
+     * ValidationException ke kode statusnya. Service sendiri yang menandai
+     * konflik bisnis dengan ->status(409) (status/pembayaran/diskon), sisanya
+     * tetap 422 (salah bentuk/nilai) sesuai konvensi API di CLAUDE.md.
+     */
+    public function split(SplitPreorderRequest $request, Preorder $preorder): JsonResponse
+    {
+        try {
+            $validated = $request->validated();
+            $result = $validated['mode'] === 'by_seller'
+                ? $this->preorderService->splitBySeller($preorder, $request->user())
+                : $this->preorderService->split($preorder, $validated['items'], $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json([
+            'original' => $this->present($result['original']),
+            'created' => array_map(fn (Preorder $p) => $this->present($p), $result['created']),
+        ], 201);
+    }
+
     public function show(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items.variant.product.category', 'payments.proofs', 'shipment', 'customer', 'notifications']);
+        $preorder->load(['items.variant.product.category', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer', 'notifications', 'splitChildren']);
 
         return response()->json([
             ...$this->present($preorder),
@@ -145,7 +231,7 @@ class PreorderController extends Controller
      */
     public function invoice(Preorder $preorder): JsonResponse
     {
-        $preorder->load(['items', 'payments.proofs', 'customer', 'event']);
+        $preorder->load(['items', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'customer', 'event']);
 
         return response()->json($this->invoicePayload($preorder));
     }
@@ -165,7 +251,7 @@ class PreorderController extends Controller
             'document' => ['required', 'in:invoice,payment_invoice'],
         ]);
 
-        $preorders = Preorder::with(['items', 'payments.proofs', 'customer', 'event'])
+        $preorders = Preorder::with(['items', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'customer', 'event'])
             ->whereIn('id', $validated['preorder_ids'])
             ->get();
 
@@ -191,7 +277,7 @@ class PreorderController extends Controller
             'document' => ['required', 'in:invoice,payment_invoice'],
         ]);
 
-        $preorders = Preorder::with(['items', 'customer', 'payments.proofs'])
+        $preorders = Preorder::with(['items', 'customer', 'payments.proofs', 'payments.recorder', 'payments.verifier'])
             ->whereIn('id', $validated['preorder_ids'])
             ->get();
 
@@ -594,28 +680,80 @@ class PreorderController extends Controller
         return response()->json($this->present(
             // Eager-load sama persis dengan show() — present() menyembunyikan
             // relasi yang tak dimuat secara diam-diam (lihat CLAUDE.md).
-            $preorder->fresh(['items.variant.product.category', 'payments.proofs', 'shipment', 'customer'])
+            $preorder->fresh(['items.variant.product.category', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer'])
         ));
     }
 
-    public function storePayment(Request $request, Preorder $preorder): JsonResponse
+    /**
+     * Hapus satu pembayaran pre-order (+ bukti bayarnya) dan hitung ulang
+     * status. Hanya owner/admin: ini menghapus catatan uang, jadi kasir tidak
+     * boleh menyembunyikan pemasukan lewat sini. Konflik status → 409.
+     */
+    public function destroyPayment(Request $request, Preorder $preorder, Payment $payment): JsonResponse
     {
-        $validated = $request->validate([
-            'method' => ['required', 'in:cash,bank_transfer,qr_ewallet'],
-            'channel_id' => ['nullable', 'integer', 'exists:payment_channels,id'],
-            'purpose' => ['sometimes', 'in:full,down_payment,settlement'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
-            'proof_token' => ['nullable', 'uuid'],
-            'notes' => ['nullable', 'string'],
-        ]);
+        abort_unless($request->user()->isOwnerOrAdmin(), 403, __('preorders.not_authorized'));
 
         try {
-            $preorder = $this->preorderService->recordPayment($preorder, $validated);
+            $preorder = $this->preorderService->deletePayment($preorder, $payment, $request->user());
         } catch (ValidationException $e) {
-            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
         }
 
-        return response()->json($this->present($preorder), 201);
+        return response()->json($this->present($preorder));
+    }
+
+    /**
+     * 032-mark-payment-verified — tandai SATU pembayaran non-tunai pre-order terverifikasi; kembaran
+     * OrderController::verifyPayment(). Boleh: owner/admin atau pengguna mana pun KECUALI pencatat
+     * pembayaran itu (403). Satu arah dan final. Pre-order `handed_over` tetap boleh (tak ada uang
+     * bergerak); `cancelled` → 409.
+     */
+    public function verifyPayment(Request $request, Preorder $preorder, Payment $payment): JsonResponse
+    {
+        abort_unless($payment->mayVerify($request->user()), 403, __('orders_payments.payment_verify_not_allowed'));
+
+        try {
+            $preorder = $this->preorderService->markPaymentVerified($preorder, $payment, $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json($this->present($preorder));
+    }
+
+    /**
+     * 031-optional-payment-proof — tambah / ubah / ganti konfirmasi (bukti, referensi,
+     * catatan) satu pembayaran non-tunai pre-order; kembaran OrderController::
+     * updatePaymentConfirmation(). Hanya owner/admin atau PENCATAT pembayaran itu (403),
+     * dijaga di sini dan diulang di PaymentService; sisanya (pre-order batal 409, tunai 422,
+     * hasil tak boleh kosong 422) ada di service. Pre-order yang sudah diserahkan tetap boleh:
+     * konfirmasi tak menggerakkan uang.
+     */
+    public function updatePaymentConfirmation(UpdatePaymentConfirmationRequest $request, Preorder $preorder, Payment $payment): JsonResponse
+    {
+        abort_unless($payment->mayManageConfirmation($request->user()), 403, __('orders_payments.payment_confirmation_not_allowed'));
+
+        try {
+            $preorder = $this->preorderService->updatePaymentConfirmation($preorder, $payment, $request->validated(), $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json($this->present($preorder));
+    }
+
+    public function storePayment(StorePaymentRequest $request, Preorder $preorder): JsonResponse
+    {
+        try {
+            $preorder = $this->preorderService->recordPayment($preorder, $request->validated(), $request->user(), $replayed);
+        } catch (ValidationException $e) {
+            // Service menandai konflik status dengan ->status(409); selebihnya 422.
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        // 200 = replay `client_ref` (pembayarannya sudah tercatat, tak ada baris baru);
+        // 201 = pembayaran baru.
+        return response()->json($this->present($preorder), $replayed ? 200 : 201);
     }
 
     private function present(Preorder $preorder): array
@@ -652,6 +790,9 @@ class PreorderController extends Controller
             'total_amount' => number_format((float) $preorder->total_amount, 2, '.', ''),
             'paid_amount' => number_format((float) $preorder->paid_amount, 2, '.', ''),
             'outstanding' => number_format($preorder->outstanding(), 2, '.', ''),
+            // 028-partial-split-payment — ringkasan turunan dari entri pembayaran
+            // (grand total / total terbayar / sisa / status / jumlah entri).
+            'payment_summary' => $preorder->paymentSummary(),
             'expected_date' => $preorder->expected_date?->toDateString(),
             // 021-preorder-form-updates — tanggal ASLI (bukan label "Day 1"),
             // diturunkan dari rentang tanggal event saat create() (research.md
@@ -663,6 +804,24 @@ class PreorderController extends Controller
             // sungguhan dibuat — research.md Decision 1).
             'courier_name' => $preorder->courier_name,
             'cancel_reason' => $preorder->cancel_reason,
+            // Catatan pesanan — sebelumnya hanya ada di baris list (index()),
+            // padahal panel detail memuat dari show()/present() sehingga
+            // `notes` selalu kosong di sana.
+            'notes' => $preorder->notes,
+            // 027-preorder-duplicate-split — asal pre-order (null untuk yang
+            // dibuat biasa). Nomor diambil dari snapshot, jadi tetap tampil
+            // meski pre-order sumbernya sudah dihapus (preorder_id jadi null).
+            'source' => $preorder->source_type ? [
+                'type' => $preorder->source_type,
+                'preorder_id' => $preorder->source_preorder_id,
+                'preorder_number' => $preorder->source_preorder_number,
+            ] : null,
+            // Hanya terisi bila relasinya di-eager-load (show() dan respons
+            // split) — present() menyembunyikan relasi yang tak dimuat secara
+            // diam-diam, lihat CLAUDE.md.
+            'split_children' => $preorder->relationLoaded('splitChildren')
+                ? $preorder->splitChildren->map(fn ($c) => ['id' => $c->id, 'preorder_number' => $c->preorder_number])->all()
+                : [],
             // 013-preorder-list-filters-receipt (T004) — daftar penjual unik
             // yang muncul di preorder ini, dipakai frontend untuk kolom
             // seller di list & tampilan invoice per-item.
@@ -693,19 +852,51 @@ class PreorderController extends Controller
             // saat integrasi frontend, bukan lewat test yang sudah ada.
             'customer' => $preorder->relationLoaded('customer') && $preorder->customer
                 ? new CustomerResource($preorder->customer) : null,
-            'payments' => $preorder->relationLoaded('payments') ? $preorder->payments->map(fn ($p) => [
-                'id' => $p->id, 'method' => $p->method, 'purpose' => $p->purpose,
-                'amount' => number_format((float) $p->amount, 2, '.', ''),
-                'verification' => $p->verification, 'paid_at' => $p->paid_at,
-                // 024-invoice-layout-shipping-slip (US-payment-proof) —
-                // bukti pembayaran diunggah SEBELUM payment dibuat lalu
-                // ditautkan lewat proof_token (PaymentRecorder); satu
-                // payment paling banyak punya satu proof. File-nya sendiri
-                // TIDAK pernah dikirim langsung di sini (disk privat) —
-                // frontend mengambilnya lewat endpoint otorisasi
-                // /payment-proofs/{id}/file yang sudah ada.
-                'proof_id' => $p->relationLoaded('proofs') ? $p->proofs->first()?->id : null,
-            ]) : [],
+            'payments' => $preorder->relationLoaded('payments') ? $preorder->payments->map(function ($p) use ($preorder) {
+                $user = request()->user();
+                $row = [
+                    'id' => $p->id, 'method' => $p->method, 'purpose' => $p->purpose,
+                    'amount' => number_format((float) $p->amount, 2, '.', ''),
+                    'verification' => $p->verification, 'paid_at' => $p->paid_at,
+                    // 028-partial-split-payment — jejak buku besar: nomor referensi,
+                    // pencatat (null untuk baris lama), dan status entri. Entri
+                    // `rejected` tidak dihitung ke total terbayar (PaymentSummary);
+                    // selain itu semuanya "paid" (research Decision 9).
+                    'reference' => $p->reference,
+                    // 031 — catatan pembayaran; sebelumnya tersimpan tetapi tak pernah dikirim.
+                    'notes' => $p->notes,
+                    'recorded_by_name' => $p->relationLoaded('recorder') ? $p->recorder?->name : null,
+                    'status' => $p->verification === 'rejected' ? 'rejected' : 'paid',
+                    // 031 — dihitung SERVER per pembayaran (SPA tak menebak dari peran);
+                    // pre-order batal tak bisa diubah, yang sudah diserahkan tetap boleh.
+                    'can_edit_confirmation' => $user !== null && $preorder->status !== 'cancelled' && $p->confirmationEditableBy($user),
+                    // 032 — boleh diverifikasi oleh pengguna yang meminta (dihitung SERVER): non-tunai, masih pending, pre-order tidak batal, bukan pencatatnya.
+                    'can_verify' => $user !== null && $preorder->status !== 'cancelled' && $p->isVerifiable() && $p->mayVerify($user),
+                    // 032 — kapan diverifikasi (NULL untuk tunai/pending); nama verifier hanya bila relasinya dimuat.
+                    'verified_at' => $p->verified_at,
+                ];
+
+                // 032 — siapa yang memverifikasi; dihilangkan (bukan diisi null) bila `payments.verifier` tak dimuat.
+                if ($p->relationLoaded('verifier')) {
+                    $row['verified_by_name'] = $p->verifier?->name;
+                }
+
+                // 024-invoice-layout-shipping-slip (US-payment-proof) — bukti pembayaran
+                // diunggah SEBELUM payment dibuat lalu ditautkan lewat proof_token
+                // (PaymentRecorder). File-nya sendiri TIDAK pernah dikirim langsung di sini
+                // (disk privat) — frontend mengambilnya lewat endpoint otorisasi
+                // /payment-proofs/{id}/file. 031: `proof_id` = bukti yang BERLAKU (yang lama
+                // ditandai superseded_at, bukan dihapus), plus flag has_proof/can_view_proof;
+                // dihilangkan (bukan diisi "tak ada bukti") bila relasi `proofs` tak dimuat.
+                if ($p->relationLoaded('proofs')) {
+                    $current = $p->currentProof();
+                    $row['proof_id'] = $current?->id;
+                    $row['has_proof'] = $current !== null;
+                    $row['can_view_proof'] = $user !== null && $current !== null && $p->proofViewableBy($user, $current);
+                }
+
+                return $row;
+            })->all() : [],
             'shipment' => $preorder->relationLoaded('shipment') && $preorder->shipment ? [
                 'id' => $preorder->shipment->id,
                 'courier_name' => $preorder->shipment->courier_name,

@@ -26,6 +26,9 @@ class UpdatePurchaseOrderRequest extends FormRequest
     {
         return [
             'vendor_id' => ['sometimes', 'integer', 'exists:vendors,id'],
+            // 034-seller-po-bom — menetapkan seller PO lama atau mengubahnya
+            // (ditolak service bila baris PO sudah dipakai BOM).
+            'artist_id' => ['sometimes', 'integer', Rule::exists('artists', 'id')->whereNull('deleted_at')],
             'notes' => ['nullable', 'string'],
 
             'items' => ['sometimes', 'array', 'min:1'],

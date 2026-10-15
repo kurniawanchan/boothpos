@@ -16,6 +16,7 @@ import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseDrawer from '../components/ui/BaseDrawer.vue';
+import BaseTooltip from '../components/ui/BaseTooltip.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
@@ -23,6 +24,7 @@ import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
+import VariantBomModal from '../components/product/VariantBomModal.vue';
 import VariantDetailModal from '../components/product/VariantDetailModal.vue';
 import ImageLightbox from '../components/ui/ImageLightbox.vue';
 
@@ -155,7 +157,6 @@ async function afterImport() {
 }
 
 const columns = computed(() => [
-  { key: 'image_url', label: '' },
   { key: 'code_prefix', label: t('master_data.col_code') },
   { key: 'sku', label: t('master_data.col_sku') },
   { key: 'name', label: t('master_data.col_product_name') },
@@ -166,7 +167,7 @@ const columns = computed(() => [
   { key: 'actions', label: '' },
 ]);
 
-const emptyVariant = () => ({ id: null, variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, image_file: null, image_error: '' });
+const emptyVariant = () => ({ id: null, copy_bom_from: '', variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, image_file: null, image_error: '' });
 
 const showDrawer = ref(false);
 const editingProduct = ref(null);
@@ -287,8 +288,69 @@ async function openEdit(product) {
   showDrawer.value = true;
 }
 
+// --- 034-seller-po-bom: BOM varian dari drawer edit ---------------------------
+// Varian yang BOM-nya SELESAI: harga modal mengikuti biaya BOM dan dikunci
+// (server menolak edit manual dengan 409). BOM dibuka lewat modal yang sama
+// dengan Detail Produk; setelah berubah, hanya field turunan BOM baris yang
+// disegarkan — isian lain yang sedang diedit tidak ditimpa.
+const showBom = ref(false);
+const bomRow = ref(null);
+
+// Pilihan "salin BOM dari" untuk varian BARU pada produk yang sudah ada:
+// hanya varian tersimpan yang sudah punya BOM, dan hanya untuk pengguna yang
+// boleh mengelola BOM (butuh menu purchase_orders juga — server menegakkan).
+// "Mulai dengan BOM kosong" adalah placeholder select (nilai kosong), bukan opsi kedua.
+const copySourceOptions = computed(() =>
+  variantRows.value.filter((v) => v.id && v.has_bom).map((v) => ({ value: v.id, label: t('master_data.bom_copy_from_new', { name: `${v.sku} — ${v.variant_name}` }) })),
+);
+const canCopyBomOnCreate = computed(() => !!editingProduct.value && auth.canAccessMenu('purchase_orders') && copySourceOptions.value.length > 0);
+
+function openBomFor(row) {
+  bomRow.value = row;
+  showBom.value = true;
+}
+
+async function refreshBomState() {
+  if (!editingProduct.value) return;
+  const fresh = await getProduct(editingProduct.value.id);
+  for (const row of variantRows.value) {
+    const updated = fresh.variants.find((v) => v.id === row.id);
+    if (!updated) continue;
+    Object.assign(row, {
+      cost_price: updated.cost_price,
+      bom_complete: updated.bom_complete,
+      has_bom: updated.has_bom,
+      bom_cost: updated.bom_cost,
+    });
+  }
+}
+
 function addVariantRow() {
   variantRows.value.push(emptyVariant());
+}
+
+// 037 — Duplikat varian: kartu BELUM TERSIMPAN tepat di bawah sumbernya, dibenihi dari sumber (nama + penanda
+// salinan, harga, batas stok rendah, status dan STOK — keputusan pemilik produk: stok ikut disalin). Tidak ada
+// endpoint duplikat: penyimpanan memakai alur varian-baru yang sudah ada — `copy_bom_from` membuat server
+// menyalin BOM (satu transaksi, tidak pernah menandai selesai) dan stok masuk lewat penyesuaian stok bersama
+// beserta alasannya (original_stock = 0, jadi selisihnya = seluruh stok salinan). Gambar, SKU, dan riwayat
+// tidak disalin. BOM hanya dijanjikan bila sumbernya varian tersimpan ber-BOM DAN pengguna boleh mengelola BOM.
+function duplicateVariantRow(index) {
+  const source = variantRows.value[index];
+  const copyBom = !!(editingProduct.value && source.id && source.has_bom && auth.canAccessMenu('purchase_orders'));
+  variantRows.value.splice(index + 1, 0, {
+    ...emptyVariant(),
+    variant_name: t('master_data.variant_copy_suffix', { name: source.variant_name }),
+    cost_price: source.cost_price,
+    sell_price: source.sell_price,
+    low_stock_alert: source.low_stock_alert ?? '',
+    current_stock: source.current_stock,
+    original_stock: 0,
+    is_active: true,
+    copy_bom_from: copyBom ? source.id : '',
+    is_duplicate: true,
+    duplicated_from_sku: source.sku ?? null,
+  });
 }
 
 function removeVariantRow(index) {
@@ -369,7 +431,8 @@ async function saveProduct() {
           low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
           is_active: row.is_active,
         };
-        const variantId = row.id ? (await updateVariant(row.id, payload)).id : (await addVariant(editingProduct.value.id, payload)).id;
+        const newVariantPayload = row.copy_bom_from ? { ...payload, copy_bom_from_variant_id: Number(row.copy_bom_from) } : payload;
+        const variantId = row.id ? (await updateVariant(row.id, payload)).id : (await addVariant(editingProduct.value.id, newVariantPayload)).id;
         if (row.image_file) pendingVariantImages.push({ variantId, file: row.image_file });
         queueStockAdjustment(row, variantId);
       }
@@ -512,21 +575,28 @@ async function performDelete() {
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
       <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_products')">
-        <template #cell-image_url="{ row }">
-          <button
-            v-if="row.image_url"
-            type="button"
-            class="cursor-zoom-in"
-            :aria-label="t('master_data.enlarge_product_image', { name: row.name })"
-            @click="openImageLightbox(row)"
-          >
-            <img :src="row.image_url" :alt="row.name" class="h-9 w-9 rounded-md border border-line-2 object-cover" />
-          </button>
-          <div v-else class="flex h-9 w-9 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
-            <i class="ph-duotone ph-image text-[16px]" aria-hidden="true"></i>
+        <!-- 038: gambar dan kode digabung dalam SATU kolom (gambar di atas, kode tepat di bawahnya) supaya
+             gambar bisa lebih besar — 56px (036) -> 96px — tanpa melebarkan tabel: kolom khusus gambar
+             dihapus. 036: kode SELALU satu baris (tadinya "SPF-KC-" / "DMC" terpotong di tanda hubung);
+             kode yang sangat panjang dipotong dengan kode lengkap di tooltip, tidak pernah dibungkus.
+             Placeholder satu ukuran supaya baris tetap sejajar. -->
+        <template #cell-code_prefix="{ row }">
+          <div class="flex flex-col items-center gap-1.5">
+            <button
+              v-if="row.image_url"
+              type="button"
+              class="cursor-zoom-in"
+              :aria-label="t('master_data.enlarge_product_image', { name: row.name })"
+              @click="openImageLightbox(row)"
+            >
+              <img :src="row.image_url" :alt="row.name" class="h-24 w-24 rounded-md border border-line-2 object-cover" />
+            </button>
+            <div v-else class="flex h-24 w-24 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
+              <i class="ph-duotone ph-image text-[30px]" aria-hidden="true"></i>
+            </div>
+            <span class="inline-block max-w-[190px] truncate whitespace-nowrap font-mono text-[12px] font-bold text-brand-active" :title="row.code_prefix">{{ row.code_prefix }}</span>
           </div>
         </template>
-        <template #cell-code_prefix="{ row }"><span class="font-mono text-[12px] font-bold text-brand-active">{{ row.code_prefix }}</span></template>
         <!-- 024-invoice-layout-shipping-slip — SKU sungguhan per varian
              (bukan sekadar code_prefix bersama); satu produk = satu atau
              lebih varian. Hanya SKU_PREVIEW_COUNT pertama ditampilkan
@@ -538,11 +608,15 @@ async function performDelete() {
               v-for="(v, i) in (expandedSkuRowIds.has(row.id) ? row.variants : row.variants.slice(0, SKU_PREVIEW_COUNT))"
               :key="v.id"
             >
-              <button
-                type="button"
-                class="font-mono text-[11.5px] text-muted-3 underline decoration-dotted hover:text-brand-active"
-                @click="openVariantDetail(row, v)"
-              >{{ v.sku }}</button><span
+              <!-- 038: nama varian muncul saat SKU di-hover / difokus (BaseTooltip yang di-teleport, jadi tidak
+                   terpotong wadah gulir tabel); klik tetap membuka detail varian. Nama kosong = tanpa tooltip. -->
+              <BaseTooltip :text="v.variant_name ?? ''">
+                <button
+                  type="button"
+                  class="font-mono text-[11.5px] text-muted-3 underline decoration-dotted hover:text-brand-active"
+                  @click="openVariantDetail(row, v)"
+                >{{ v.sku }}</button>
+              </BaseTooltip><span
                 v-if="i < (expandedSkuRowIds.has(row.id) ? row.variants.length : Math.min(row.variants.length, SKU_PREVIEW_COUNT)) - 1"
                 class="text-[11.5px] text-muted-3"
               >,</span>
@@ -578,6 +652,7 @@ async function performDelete() {
 
     <BaseDrawer
       :open="showDrawer"
+      max-width-class="max-w-[1040px]"
       :title="editingProduct ? editingProduct.name : t('master_data.new_product')"
       :subtitle="editingProduct ? editingProduct.code_prefix : t('master_data.code_generated_by_server')"
       @close="showDrawer = false"
@@ -643,7 +718,9 @@ async function performDelete() {
           </div>
         </div>
 
-        <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
+        <!-- 037: baki abu-abu muda + kartu putih bergaris tipis dan bayangan lembut, jarak antar-kartu
+             lega — batas antar-varian jelas tanpa blok warna berat. -->
+        <div class="flex flex-col gap-5 rounded-card border border-line-2 bg-surface-subtle p-5">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <span class="text-[14.5px] font-bold">{{ t('master_data.variants_and_prices') }}</span>
             <label class="flex items-center gap-2 text-[12.5px] text-muted">
@@ -653,43 +730,81 @@ async function performDelete() {
             </label>
           </div>
 
-          <div v-for="(row, idx) in variantRows" :key="idx" class="flex flex-col gap-3 rounded-lg border border-line-3 bg-surface-subtle p-3.5" :class="{ 'opacity-50': row.id && !row.is_active }">
-            <div class="flex items-center gap-2.5">
-              <span v-if="row.sku" class="rounded-md bg-mint-100 px-2.5 py-1 font-mono text-[12px] font-semibold text-brand-active">{{ row.sku }}</span>
+          <div
+            v-for="(row, idx) in variantRows"
+            :key="idx"
+            data-testid="variant-card"
+            class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5 shadow-sm"
+            :class="{ 'opacity-50': row.id && !row.is_active }"
+          >
+            <div data-testid="variant-header" class="flex flex-wrap items-center gap-2.5">
+              <span v-if="row.sku" class="rounded-md bg-sky-bg px-2.5 py-1 font-mono text-[12px] font-semibold text-sky-text">{{ row.sku }}</span>
+              <span v-if="row.bom_complete" class="rounded-md bg-mint-100 px-2 py-1 text-[11px] font-bold text-brand-active">{{ t('master_data.bom_from_bom') }}</span>
               <span v-if="markupFor(row) !== null" class="rounded-md px-2 py-1 text-[11px] font-bold" :class="markupFor(row) >= 0 ? 'bg-mint-100 text-brand-active' : 'bg-danger-bg text-danger-text'">
                 {{ t('master_data.markup_value', { value: markupFor(row) }) }}
               </span>
-              <span v-if="marginFor(row) !== null" class="rounded-md px-2 py-1 text-[11px] font-bold" :class="marginFor(row) >= 0 ? 'bg-mint-100 text-brand-active' : 'bg-danger-bg text-danger-text'">
+              <span v-if="marginFor(row) !== null" class="rounded-md px-2 py-1 text-[11px] font-bold" :class="marginFor(row) >= 0 ? 'bg-violet-bg text-violet-text' : 'bg-danger-bg text-danger-text'">
                 {{ t('master_data.margin', { value: marginFor(row) }) }}
               </span>
+              <span v-if="row.id && row.has_bom" class="rounded-md bg-warn-bg px-2 py-1 text-[11px] font-bold text-warn-text">{{ t('master_data.bom_cost_label', { cost: formatIDR(row.bom_cost) }) }}</span>
               <span class="flex-1"></span>
+              <!-- Urutan aksi sesuai permintaan: Buka BOM · Terapkan markup · hapus. -->
+              <BaseTooltip v-if="row.id" :text="t('master_data.bom_open_tip')" align="right">
+                <BaseButton variant="secondary" size="sm" @click="openBomFor(row)">
+                  <i class="ph-duotone ph-stack text-[14px]" aria-hidden="true"></i>
+                  {{ t('master_data.bom_open') }}
+                </BaseButton>
+              </BaseTooltip>
+              <BaseButton variant="secondary" size="sm" @click="applyMarkup(row)">{{ t('master_data.apply_markup') }}</BaseButton>
               <button type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('master_data.delete_variant', { name: row.variant_name })" @click="removeVariantRow(idx)">
                 <i class="ph-duotone ph-trash text-[14px]" aria-hidden="true"></i>
               </button>
             </div>
-            <div class="grid grid-cols-[1.4fr_1fr_1fr] items-end gap-2.5">
-              <BaseInput v-model="row.variant_name" :label="t('master_data.variant_name')" />
-              <BaseInput v-model="row.cost_price" type="number" min="0" :label="t('master_data.cost_price')" />
+            <div class="grid grid-cols-2 items-end gap-3 lg:grid-cols-[1.6fr_0.8fr_1fr_1fr]">
+              <BaseInput v-model="row.variant_name" class="col-span-2 lg:col-span-1" :label="t('master_data.variant_name')" />
+              <BaseInput v-model="row.current_stock" type="number" min="0" :label="t('master_data.col_stock')" />
+              <BaseInput
+                v-model="row.cost_price"
+                type="number"
+                min="0"
+                :label="t('master_data.cost_price')"
+                :disabled="!!row.bom_complete"
+                :hint="row.bom_complete ? t('master_data.bom_cost_price_locked_hint') : ''"
+              />
               <BaseInput v-model="row.sell_price" type="number" min="0" :label="t('master_data.sell_price')" />
             </div>
-            <div class="grid grid-cols-[1fr_auto] items-end gap-2.5">
-              <BaseInput v-model="row.current_stock" type="number" min="0" :label="t('master_data.col_stock')" />
-              <BaseButton variant="secondary" size="sm" @click="applyMarkup(row)">{{ t('master_data.apply_markup') }}</BaseButton>
-            </div>
+            <BaseSelect
+              v-if="!row.id && canCopyBomOnCreate"
+              v-model="row.copy_bom_from"
+              :label="t('master_data.bom_new_variant_label')"
+              :options="copySourceOptions"
+              :placeholder="t('master_data.bom_start_empty')"
+            />
+            <!-- 037: catatan pada kartu salinan — apa yang akan terjadi saat disimpan. -->
+            <p v-if="row.is_duplicate && row.copy_bom_from && row.duplicated_from_sku" class="rounded-md bg-mint-50 px-3 py-2 text-[12px] font-semibold text-brand-active">
+              {{ t('master_data.duplicate_bom_note', { sku: row.duplicated_from_sku }) }}
+            </p>
+            <p v-if="row.is_duplicate && Number(row.current_stock) > 0" class="rounded-md bg-warn-bg px-3 py-2 text-[12px] font-semibold text-warn-text">
+              {{ t('master_data.duplicate_stock_note', { qty: row.current_stock }) }}
+            </p>
             <!-- Per-variant image, added at the product owner's explicit
                  request — each variant (e.g. a different design/motif) can
                  show its own picture, independent of the product's own
-                 image above. -->
+                 image above. 037: 44px -> 66px (+50%), placeholder satu ukuran
+                 supaya kartu tetap sejajar. -->
             <div class="flex items-center gap-3">
               <button
                 v-if="row.image_url && !row.image_file"
                 type="button"
-                class="h-11 w-11 flex-none cursor-zoom-in"
+                class="h-[66px] w-[66px] flex-none cursor-zoom-in"
                 :aria-label="t('master_data.enlarge_variant_image', { name: row.variant_name })"
                 @click="openVariantImageLightbox(row)"
               >
-                <img :src="row.image_url" :alt="t('master_data.current_variant_image')" class="h-11 w-11 rounded-md border border-line-2 object-cover" />
+                <img :src="row.image_url" :alt="t('master_data.current_variant_image')" class="h-[66px] w-[66px] rounded-md border border-line-2 object-cover" />
               </button>
+              <div v-else class="flex h-[66px] w-[66px] flex-none items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
+                <i class="ph-duotone ph-image text-[24px]" aria-hidden="true"></i>
+              </div>
               <input
                 type="file"
                 accept="image/*"
@@ -698,6 +813,12 @@ async function performDelete() {
               />
             </div>
             <p v-if="row.image_error" class="text-[12px] font-semibold text-danger-text">{{ row.image_error }}</p>
+            <div class="flex justify-end border-t border-line-3 pt-3">
+              <BaseButton variant="secondary" size="sm" @click="duplicateVariantRow(idx)">
+                <i class="ph-duotone ph-copy text-[14px]" aria-hidden="true"></i>
+                {{ t('master_data.duplicate_variant') }}
+              </BaseButton>
+            </div>
           </div>
           <button type="button" class="flex h-11 items-center justify-center gap-2 rounded-lg border border-dashed border-disabled-2 text-[13.5px] font-bold text-muted-5 hover:border-brand hover:text-brand-active" @click="addVariantRow">
             <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
@@ -742,6 +863,15 @@ async function performDelete() {
       :artist-name="detailVariantProduct?.artist_name"
       :category-name="detailVariantProduct?.category_name"
       @close="showVariantDetail = false"
+    />
+    <VariantBomModal
+      :open="showBom"
+      :variant-id="bomRow?.id"
+      :variant-sku="bomRow?.sku"
+      :variant-name="bomRow?.variant_name"
+      :siblings="variantRows.filter((v) => v.id)"
+      @close="showBom = false"
+      @changed="refreshBomState"
     />
     <ImageLightbox :open="!!lightboxSrc" :src="lightboxSrc" :alt="lightboxAlt" @close="lightboxSrc = null" />
   </div>

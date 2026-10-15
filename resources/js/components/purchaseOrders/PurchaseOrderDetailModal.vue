@@ -1,12 +1,13 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseInput from '../ui/BaseInput.vue';
 import BaseSelect from '../ui/BaseSelect.vue';
 import StatusPill from '../ui/StatusPill.vue';
-import { getPurchaseOrder, recordPurchaseOrderPayment } from '../../api/purchaseOrders';
+import { getPurchaseOrder, recordPurchaseOrderPayment, updatePurchaseOrder } from '../../api/purchaseOrders';
+import { listArtists } from '../../api/artists';
 import { formatIDR } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { downloadElementAsPdf } from '../../utils/pdfCapture';
@@ -28,6 +29,8 @@ const toast = useToastStore();
 
 const po = ref(null);
 const loading = ref(false);
+// 035: gagal memuat = status galat + Coba lagi, bukan dialog kosong.
+const loadError = ref('');
 const invoiceEl = ref(null);
 const downloadingPdf = ref(false);
 
@@ -39,16 +42,53 @@ async function load() {
     return;
   }
   loading.value = true;
+  loadError.value = '';
   try {
     po.value = await getPurchaseOrder(props.purchaseOrderId);
   } catch (err) {
-    toast.error(err.message);
+    po.value = null;
+    loadError.value = err.message || t('schema.load_failed');
   } finally {
     loading.value = false;
   }
 }
 
 watch(() => [props.open, props.purchaseOrderId], ([open]) => { if (open) load(); }, { immediate: true });
+
+// --- 034-seller-po-bom: PO lama tanpa seller bisa ditetapkan di sini -------
+// Tanpa seller, PO tidak pernah ditawarkan sebagai sumber BOM. Penetapan
+// pertama selalu diizinkan server; MENGUBAH seller yang sudah ada tidak
+// ditawarkan di sini (ditolak server bila sudah dipakai BOM).
+const artists = ref([]);
+const assignArtistId = ref('');
+const assigningSeller = ref(false);
+const canAssignSeller = computed(() => po.value && po.value.artist_id === null && po.value.status !== 'cancelled');
+const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+
+watch(canAssignSeller, async (can) => {
+  if (can && !artists.value.length) {
+    try {
+      artists.value = (await listArtists({ per_page: 100 })).data;
+    } catch (err) {
+      toast.error(err.message);
+    }
+  }
+}, { immediate: true });
+
+async function assignSeller() {
+  if (!assignArtistId.value) return;
+  assigningSeller.value = true;
+  try {
+    po.value = await updatePurchaseOrder(props.purchaseOrderId, { artist_id: Number(assignArtistId.value) });
+    toast.success(t('purchase_orders.seller_assigned'));
+    assignArtistId.value = '';
+    emit('changed');
+  } catch (err) {
+    toast.error(err.message);
+  } finally {
+    assigningSeller.value = false;
+  }
+}
 
 async function downloadInvoicePdf() {
   if (!invoiceEl.value) return;
@@ -95,6 +135,10 @@ async function submitPayment() {
 <template>
   <BaseModal :open="open" :title="po?.po_number" max-width-class="max-w-[560px]" @close="emit('close')">
     <div v-if="loading" class="px-6 py-14 text-center text-[13px] text-muted-3">{{ t('common.loading_data') }}</div>
+    <div v-else-if="loadError" role="alert" class="flex flex-col items-center gap-3 px-6 py-12 text-center">
+      <span class="text-[13px] font-semibold text-danger-text">{{ loadError }}</span>
+      <BaseButton variant="secondary" size="sm" @click="load">{{ t('common.retry') }}</BaseButton>
+    </div>
     <div v-else-if="po" class="flex flex-col gap-4 px-6 py-5">
       <div class="flex items-center justify-between">
         <StatusPill :variant="STATUS_VARIANT[po.status]">{{ t(`purchase_orders.status_${po.status}`) }}</StatusPill>
@@ -102,6 +146,21 @@ async function submitPayment() {
           <i class="ph-duotone ph-file-pdf text-[15px]" aria-hidden="true"></i>
           {{ t('purchase_orders.print_invoice') }}
         </BaseButton>
+      </div>
+
+      <!-- Di luar invoiceEl: seller tidak ikut tercetak pada faktur PDF. -->
+      <div class="flex flex-col gap-2 rounded-lg border border-line-3 bg-surface-subtle px-3.5 py-3">
+        <div class="flex items-center justify-between gap-3 text-[13px]">
+          <span class="text-muted">{{ t('purchase_orders.seller') }}</span>
+          <span v-if="po.artist_name" class="font-semibold">{{ po.artist_name }}</span>
+          <span v-else class="text-[12.5px] italic text-muted-3">{{ t('purchase_orders.no_seller') }}</span>
+        </div>
+        <form v-if="canAssignSeller" class="flex items-end gap-2" @submit.prevent="assignSeller">
+          <div class="flex-1">
+            <BaseSelect v-model="assignArtistId" :options="artistOptions" :placeholder="t('purchase_orders.seller_placeholder')" />
+          </div>
+          <BaseButton size="sm" :loading="assigningSeller" :disabled="!assignArtistId" @click="assignSeller">{{ t('purchase_orders.assign_seller') }}</BaseButton>
+        </form>
       </div>
 
       <div ref="invoiceEl" class="flex flex-col gap-4 bg-white p-4">
@@ -117,6 +176,7 @@ async function submitPayment() {
             <div class="flex flex-1 flex-col gap-0.5">
               <span class="text-[13.5px] font-semibold leading-snug">{{ item.line_type === 'material' ? item.material_name : item.description }}</span>
               <span v-if="item.product_name" class="text-[11.5px] text-muted-3">{{ t('purchase_orders.linked_product') }}: {{ item.product_name }}</span>
+              <span v-if="item.used_in_bom_count" data-html2canvas-ignore="true" class="text-[11.5px] text-muted-3">{{ t('purchase_orders.used_in_bom', { count: item.used_in_bom_count }) }}</span>
             </div>
             <span class="text-[13.5px] font-bold">{{ formatIDR(item.line_total) }}</span>
           </div>

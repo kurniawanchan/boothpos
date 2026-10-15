@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed, onMounted, watch } from 'vue';
+import { reactive, ref, computed, onMounted, watch, h, render, getCurrentInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { usePaginatedList } from '../composables/usePaginatedList';
@@ -18,9 +18,12 @@ import {
   getPreorderSummary,
   bulkPreorderInvoices,
   bulkEmailPreorderInvoices,
+  duplicatePreorders,
+  deletePreorderPayment,
+  createPreorderPayment,
 } from '../api/preorders';
 import { createShipment, updateShipment } from '../api/shipments';
-import { getPaymentProofBlobUrl } from '../api/payments';
+import { getPaymentProofBlobUrl, verifyPayment } from '../api/payments';
 import { lookupVariants } from '../api/products';
 import { getCustomer } from '../api/customers';
 import { listArtists } from '../api/artists';
@@ -34,7 +37,9 @@ import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDate, formatDateTime } from '../utils/date';
 import { downloadElementAsPdf, captureElementCanvas } from '../utils/pdfCapture';
-import { buildInvoiceHtml, buildShippingSlipHtml } from '../utils/invoiceDocument';
+import { buildShippingSlipHtml } from '../utils/invoiceDocument';
+import PreorderInvoiceDocument from '../components/preorder/PreorderInvoiceDocument.vue';
+import PreorderPaymentDocument from '../components/preorder/PreorderPaymentDocument.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
@@ -48,10 +53,15 @@ import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import CustomerSearchDropdown from '../components/preorder/CustomerSearchDropdown.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
-import RecordPaymentModal from '../components/payment/RecordPaymentModal.vue';
+import AddPaymentModal from '../components/payment/AddPaymentModal.vue';
+import PaymentConfirmationModal from '../components/payment/PaymentConfirmationModal.vue';
+import PaymentSummaryCard from '../components/payment/PaymentSummaryCard.vue';
+import PaymentHistoryList from '../components/payment/PaymentHistoryList.vue';
 import PreorderStatusStepper from '../components/preorder/PreorderStatusStepper.vue';
 import PreorderPrintMenu from '../components/preorder/PreorderPrintMenu.vue';
 import PreorderRowActions from '../components/preorder/PreorderRowActions.vue';
+import PreorderDuplicateResultModal from '../components/preorder/PreorderDuplicateResultModal.vue';
+import PreorderSplitModal from '../components/preorder/PreorderSplitModal.vue';
 
 const toast = useToastStore();
 const auth = useAuthStore();
@@ -487,6 +497,114 @@ async function performDeletePreorder() {
   }
 }
 
+// --- Duplikat (027-preorder-duplicate-split) -------------------------------
+// Satu endpoint untuk satu maupun banyak pre-order; server SELALU membalas 200
+// dengan laporan per-pre-order, jadi kegagalan satu baris dibaca dari `status`,
+// bukan dari kode HTTP. Harga salinan diambil dari harga varian SAAT INI.
+const duplicating = ref(false);
+const duplicateResults = ref([]);
+const showDuplicateResults = ref(false);
+
+async function doDuplicate(ids) {
+  if (!ids.length || duplicating.value) return;
+  duplicating.value = true;
+  try {
+    const { data: results } = await duplicatePreorders(ids);
+
+    if (results.length === 1) {
+      const [only] = results;
+      if (only.status === 'created') {
+        toast.success(t('preorders.duplicate_success', { number: only.preorder.preorder_number }));
+        // Langsung buka salinannya supaya bisa ditinjau/diedit (spec US1 #3).
+        await openDetailById(only.preorder.id);
+      } else {
+        toast.error(only.error || t('preorders.duplicate_failed'));
+      }
+    } else {
+      // Banyak sekaligus: ringkasan per-pre-order (yang gagal tetap terlihat).
+      duplicateResults.value = results;
+      showDuplicateResults.value = true;
+    }
+
+    await load();
+    loadSummary(); // kartu ringkasan harus ikut menghitung salinan baru (FR-024)
+    return results;
+  } catch (err) {
+    toast.error(err.message || t('preorders.duplicate_failed'));
+  } finally {
+    duplicating.value = false;
+  }
+}
+
+// --- Hapus pembayaran --------------------------------------------------------
+// Owner/admin saja dan hanya selama pre-order belum diserahkan/dibatalkan;
+// server menegakkan keduanya (403/409), ini cermin UX supaya tombolnya tak
+// ditawarkan. Status dihitung ulang server dari pembayaran yang tersisa.
+const canDeletePayments = computed(
+  () => isOwnerOrAdmin.value && !!detail.value && !['handed_over', 'cancelled'].includes(detail.value.status),
+);
+const paymentDeleteTarget = ref(null);
+const showPaymentDeleteConfirm = ref(false);
+const deletingPayment = ref(false);
+
+function confirmDeletePayment(payment) {
+  paymentDeleteTarget.value = payment;
+  showPaymentDeleteConfirm.value = true;
+}
+
+async function performDeletePayment() {
+  if (!detail.value || !paymentDeleteTarget.value) return;
+  deletingPayment.value = true;
+  try {
+    const fresh = await deletePreorderPayment(detail.value.id, paymentDeleteTarget.value.id);
+    detail.value = { ...detail.value, ...fresh };
+    showPaymentDeleteConfirm.value = false;
+    toast.success(t('preorders.payment_deleted', { status: STATUS_LABEL.value[fresh.status] ?? fresh.status }));
+    await load();
+    loadSummary();
+  } catch {
+    // 409 sudah ditoast interceptor global; dialog tetap terbuka.
+  } finally {
+    deletingPayment.value = false;
+  }
+}
+
+// --- Pisah (027-preorder-duplicate-split US3) ------------------------------
+// Baris list tidak membawa item, jadi dialog selalu dibuka dari payload detail.
+const showSplit = ref(false);
+const splitTarget = ref(null);
+
+async function openSplit(id) {
+  try {
+    splitTarget.value = await getPreorder(id);
+    showSplit.value = true;
+  } catch (err) {
+    toast.error(err.message || t('preorders.load_failed'));
+  }
+}
+
+async function onSplitDone(result) {
+  showSplit.value = false;
+  const numbers = result.created.map((c) => c.preorder_number).join(', ');
+  toast.success(t('preorders.split_success', { number: numbers }));
+  // Bila panel detail sedang menampilkan pesanan ini, segarkan supaya daftar
+  // "Dipisah menjadi" muncul.
+  if (showDetail.value && detail.value?.id === result.original.id) await refreshDetail();
+  await load();
+  loadSummary();
+}
+
+async function doDuplicateSelected() {
+  const ids = [...selectedIds.value];
+  const results = await doDuplicate(ids);
+  if (results) selectedIds.value = new Set();
+}
+
+async function openDuplicateResult(id) {
+  showDuplicateResults.value = false;
+  await openDetailById(id);
+}
+
 // --- Detail drawer -------------------------------------------------------
 const showDetail = ref(false);
 const detail = ref(null);
@@ -583,6 +701,18 @@ function rowActions(row) {
   ];
   if (!['handed_over', 'cancelled'].includes(row.status)) actions.push({ key: 'edit', label: t('common.edit') });
   if (['ordered', 'cancelled'].includes(row.status)) actions.push({ key: 'delete', label: t('common.delete'), danger: true });
+  actions.push({ key: 'duplicate', label: t('preorders.duplicate') });
+  // 027 — Split disembunyikan untuk status tertutup (pasti ditolak server) tetapi
+  // DINONAKTIFKAN dengan alasan bila sudah ada pembayaran, seperti "Invoice pembayaran".
+  if (!['handed_over', 'cancelled'].includes(row.status)) {
+    const paid = !!row.has_payments || parseMoney(row.paid_amount) > 0;
+    actions.push({
+      key: 'split',
+      label: t('preorders.split'),
+      disabled: paid,
+      title: paid ? t('preorders.split_disabled_has_payment') : '',
+    });
+  }
   actions.push({ key: 'detail', label: t('preorders.detail') });
   return actions;
 }
@@ -592,6 +722,8 @@ function onRowAction(row, key) {
   else if (key === 'payment_invoice') openPaymentReceipt(null, row.id);
   else if (key === 'edit') openEdit(row);
   else if (key === 'delete') confirmDeletePreorder(row);
+  else if (key === 'duplicate') doDuplicate([row.id]);
+  else if (key === 'split') openSplit(row.id);
   else if (key === 'detail') openDetail(row);
 }
 
@@ -633,6 +765,30 @@ function toggleSelected(id) {
   selectedIds.value = next;
 }
 
+// 029-fix-bulk-invoice-logo — unduh massal merender KOMPONEN yang sama dengan
+// modalnya (PreorderInvoiceDocument / PreorderPaymentDocument), jadi PDF-nya
+// identik dengan dokumen di layar (logo/identitas toko, header dua kolom,
+// kartu "Cara pembayaran"). appContext diteruskan agar vue-i18n tersedia di
+// render terpisah ini. Lebar = lebar dokumen di modal 720px: invoice berada
+// di dalam padding px-6 (672px), payment invoice membawa paddingnya sendiri.
+const appContext = getCurrentInstance().appContext;
+const BULK_DOCUMENTS = {
+  invoice: { component: PreorderInvoiceDocument, width: 672 },
+  payment_invoice: { component: PreorderPaymentDocument, width: 720 },
+};
+function mountBulkDocument(invoice, documentType) {
+  const { component, width } = BULK_DOCUMENTS[documentType];
+  const container = document.createElement('div');
+  container.style.position = 'fixed';
+  container.style.left = '-9999px';
+  container.style.width = `${width}px`;
+  document.body.appendChild(container);
+  const vnode = h(component, { invoice });
+  vnode.appContext = appContext;
+  render(vnode, container);
+  return { container, dispose: () => { render(null, container); container.remove(); } };
+}
+
 async function doBulkDownload() {
   const ids = [...selectedIds.value];
   if (!ids.length) return;
@@ -647,13 +803,13 @@ async function doBulkDownload() {
     // Sequential, not parallel — rendering N canvases at once would freeze
     // the tab for a realistic batch size (plan.md Performance Goals).
     for (const invoice of invoices) {
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.innerHTML = buildInvoiceHtml(invoice, bulkDocumentType.value);
-      document.body.appendChild(container);
-      const canvas = await captureElementCanvas(container);
-      document.body.removeChild(container);
+      const { container, dispose } = mountBulkDocument(invoice, bulkDocumentType.value);
+      let canvas;
+      try {
+        canvas = await captureElementCanvas(container);
+      } finally {
+        dispose();
+      }
 
       const imgData = canvas.toDataURL('image/png');
       const widthPt = (canvas.width * 72) / 96;
@@ -921,14 +1077,66 @@ async function submitCancel() {
 
 const paymentPurpose = computed(() => (detail.value?.status === 'arrived' ? 'settlement' : 'down_payment'));
 
-// 010-split-payment-preorder-reports (US2/T007) — RecordPaymentModal now
-// submits each split entry itself (sequential calls to the existing
-// POST /preorders/{id}/payments, research.md R2) and only asks the parent
-// to refresh once every entry has succeeded.
-async function handlePaymentSaved() {
-  showRecordPayment.value = false;
-  await Promise.all([refreshDetail(), load()]);
+// 028-partial-split-payment — AddPaymentModal menyimpan SATU pembayaran per klik
+// lewat POST /preorders/{id}/payments dan mengembalikan pre-order terbaru; kita
+// pakai itu langsung (ringkasan + riwayat segar) lalu menyegarkan list dan kartu
+// ringkasan di atas tabel.
+function submitPreorderPayment(payload) {
+  return createPreorderPayment(detail.value.id, payload);
 }
+
+async function handlePaymentSaved(result) {
+  showRecordPayment.value = false;
+  if (result?.payment_summary) detail.value = { ...detail.value, ...result };
+  else await refreshDetail();
+  await load();
+  loadSummary();
+}
+
+// 031-optional-payment-proof — bukti bayar opsional; bukti/referensi/catatan sebuah pembayaran
+// non-tunai ditambah atau diubah belakangan lewat dialog yang sama dengan detail Sales. Server
+// menentukan siapa yang boleh (`can_edit_confirmation`) dan mengembalikan pre-order terbaru.
+const confirmationTarget = ref(null);
+
+async function handleConfirmationSaved(result) {
+  if (result?.id) detail.value = { ...detail.value, ...result };
+  else await refreshDetail();
+  await load();
+}
+
+// 032-mark-payment-verified — pembayaran non-tunai "Belum terverifikasi" ditandai terverifikasi
+// setelah dicocokkan dengan mutasi bank/e-wallet. Satu arah dan FINAL, jadi lewat konfirmasi; siapa
+// yang boleh dihitung SERVER per pembayaran (`can_verify`; pencatat tak boleh memverifikasi miliknya).
+const verifyTarget = ref(null);
+const verifying = ref(false);
+
+async function performVerify() {
+  if (!detail.value || !verifyTarget.value || verifying.value) return;
+  verifying.value = true;
+  try {
+    const result = await verifyPayment('preorders', detail.value.id, verifyTarget.value.id);
+    detail.value = { ...detail.value, ...result };
+    toast.success(t('payment_ledger.verify_done'));
+    await load();
+    loadSummary();
+  } catch (err) {
+    // 403/409/422 sudah di-toast interceptor global; 409 = layar basi → ambil ulang keadaan sebenarnya.
+    if (err?.isConflict) {
+      try { await refreshDetail(); } catch { /* biarkan tampilan lama */ }
+      await load();
+    }
+  } finally {
+    verifyTarget.value = null;
+    verifying.value = false;
+  }
+}
+
+// Tombol Tambah pembayaran: hanya selama masih ada sisa tagihan DAN pre-order
+// belum ditutup (server menolak dengan 409 untuk handed_over/cancelled).
+const canAddPayment = computed(
+  () => !!detail.value && !['handed_over', 'cancelled'].includes(detail.value.status)
+    && parseMoney(detail.value.payment_summary?.remaining ?? detail.value.outstanding) > 0,
+);
 
 function openShipmentForm() {
   // 022-preorder-invoice-crud-overhaul (US2, FR-005) — nama/telepon/alamat
@@ -1133,6 +1341,11 @@ async function saveShipmentChanges() {
       <BaseButton variant="secondary" size="sm" :loading="bulkEmailing" @click="doBulkEmail">
         <i class="ph-duotone ph-envelope-simple text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.bulk_email_action') }}
+      </BaseButton>
+      <!-- 027 — salinan dibuat satu per pre-order terpilih (tidak digabung). -->
+      <BaseButton variant="secondary" size="sm" :loading="duplicating" data-testid="bulk-duplicate" @click="doDuplicateSelected">
+        <i class="ph-duotone ph-copy text-[15px]" aria-hidden="true"></i>
+        {{ t('preorders.duplicate_selected') }}
       </BaseButton>
     </div>
 
@@ -1364,6 +1577,13 @@ async function saveShipmentChanges() {
         </div>
       </template>
     </BaseModal>
+    <PreorderSplitModal :open="showSplit" :preorder="splitTarget" @close="showSplit = false" @done="onSplitDone" />
+    <PreorderDuplicateResultModal
+      :open="showDuplicateResults"
+      :results="duplicateResults"
+      @close="showDuplicateResults = false"
+      @open="openDuplicateResult"
+    />
     <!-- Detail drawer -->
     <BaseDrawer
       :open="showDetail"
@@ -1377,16 +1597,56 @@ async function saveShipmentChanges() {
         <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
           <div class="flex items-center justify-between gap-3">
             <span class="text-[14.5px] font-bold">{{ t('preorders.preorder_status') }}</span>
-            <PreorderPrintMenu
-              :has-payment="lastPaymentId != null"
-              @print-invoice="openInvoice(detail)"
-              @print-payment="openPaymentReceipt(lastPaymentId)"
-            />
+            <div class="flex items-center gap-2">
+              <BaseButton variant="secondary" size="sm" :loading="duplicating" data-testid="detail-duplicate" @click="doDuplicate([detail.id])">
+                <i class="ph-duotone ph-copy" aria-hidden="true"></i>
+                {{ t('preorders.duplicate') }}
+              </BaseButton>
+              <BaseButton
+                v-if="!['handed_over', 'cancelled'].includes(detail.status)"
+                variant="secondary"
+                size="sm"
+                :disabled="(detail.payments ?? []).length > 0"
+                :title="(detail.payments ?? []).length > 0 ? t('preorders.split_disabled_has_payment') : undefined"
+                data-testid="detail-split"
+                @click="openSplit(detail.id)"
+              >
+                <i class="ph-duotone ph-arrows-split" aria-hidden="true"></i>
+                {{ t('preorders.split') }}
+              </BaseButton>
+              <PreorderPrintMenu
+                :has-payment="lastPaymentId != null"
+                @print-invoice="openInvoice(detail)"
+                @print-payment="openPaymentReceipt(lastPaymentId)"
+              />
+            </div>
           </div>
           <PreorderStatusStepper :status="detail.status" />
           <div class="flex flex-wrap gap-x-6 gap-y-1 text-[12px] text-muted-3">
             <span>{{ t('preorders.detail_created_label') }}: <span class="font-semibold text-muted-4">{{ formatDateTime(detail.created_at) }}</span></span>
             <span>{{ t('preorders.detail_updated_label') }}: <span class="font-semibold text-muted-4">{{ formatDateTime(detail.updated_at) }}</span></span>
+            <span v-if="detail.split_children?.length" data-testid="detail-split-children">
+              {{ t('preorders.split_into') }}:
+              <button
+                v-for="child in detail.split_children"
+                :key="child.id"
+                type="button"
+                class="mr-1.5 font-semibold text-brand-active underline"
+                @click="openDetailById(child.id)"
+              >{{ child.preorder_number }}</button>
+            </span>
+            <!-- 027 — asal pre-order ini. Nomor memakai snapshot, jadi tetap
+                 terbaca bila pre-order sumbernya sudah dihapus (tanpa tautan). -->
+            <span v-if="detail.source" data-testid="detail-source">
+              {{ detail.source.type === 'split' ? t('preorders.split_from') : t('preorders.duplicated_from') }}:
+              <button
+                v-if="detail.source.preorder_id"
+                type="button"
+                class="font-semibold text-brand-active underline"
+                @click="openDetailById(detail.source.preorder_id)"
+              >{{ detail.source.preorder_number }}</button>
+              <span v-else class="font-semibold text-muted-4">{{ detail.source.preorder_number }}</span>
+            </span>
           </div>
           <div v-if="!['handed_over', 'cancelled'].includes(detail.status)" class="flex flex-wrap items-center gap-2.5 pt-1.5">
             <BaseButton v-if="detail.status === 'dp_paid'" size="sm" :loading="transitioning" @click="markArrived">{{ t('preorders.mark_arrived') }}</BaseButton>
@@ -1420,6 +1680,35 @@ async function saveShipmentChanges() {
             <span v-if="detail.shipping_at">{{ t('preorders.dispatch_shipping_on', { date: formatDateTime(detail.shipping_at) }) }}</span>
           </div>
           <p class="text-[11.5px] leading-relaxed text-muted-3">{{ t('preorders.dispatch_status_note') }}</p>
+        </div>
+
+        <!-- Pelanggan & fulfillment sekilas di panel detail, supaya tak perlu
+             membuka modal info pelanggan atau mencari hari jemput/kurir di
+             rincian total. Data pelanggan datang dari show() (CustomerResource). -->
+        <div class="grid grid-cols-1 gap-4 rounded-card border border-line-2 bg-white p-5 sm:grid-cols-2" data-testid="detail-customer-fulfillment">
+          <div class="flex flex-col gap-2.5" data-testid="detail-customer">
+            <span class="text-[14.5px] font-bold">{{ t('preorders.customer_section') }}</span>
+            <span class="text-[13.5px] font-semibold">{{ detail.customer?.name || detail.customer_name || '—' }}</span>
+            <div class="flex flex-col gap-1.5 text-[12.5px]">
+              <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('events_sessions.phone') }}</span><span class="font-medium">{{ detail.customer?.phone || '—' }}</span></div>
+              <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('events_sessions.email') }}</span><span class="break-all text-right font-medium">{{ detail.customer?.email || '—' }}</span></div>
+              <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('events_sessions.social_handle') }}</span><span class="font-medium">{{ detail.customer?.social_handle || '—' }}</span></div>
+              <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('events_sessions.address') }}</span><span class="text-right font-medium">{{ detail.customer?.address || '—' }}</span></div>
+            </div>
+          </div>
+          <div class="flex flex-col gap-2.5" data-testid="detail-fulfillment">
+            <span class="text-[14.5px] font-bold">{{ t('preorders.fulfillment_section') }}</span>
+            <span class="text-[13.5px] font-semibold">{{ FULFILLMENT_LABEL[detail.fulfillment] ?? '—' }}</span>
+            <div class="flex flex-col gap-1.5 text-[12.5px]">
+              <div v-if="detail.fulfillment === 'pickup'" class="flex justify-between gap-3"><span class="text-muted-3">{{ t('preorders.pickup_day_label') }}</span><span class="font-medium">{{ detail.pickup_day ? formatDate(detail.pickup_day) : '—' }}</span></div>
+              <template v-else>
+                <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('preorders.courier') }}</span><span class="font-medium">{{ detail.courier_name || '—' }}</span></div>
+                <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('preorders.shipping_cost') }}</span><span class="font-medium">{{ formatIDR(detail.shipping_cost) }}</span></div>
+              </template>
+              <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('preorders.expected_date_label') }}</span><span class="font-medium">{{ detail.expected_date ? formatDate(detail.expected_date) : '—' }}</span></div>
+              <div v-if="detail.notes" class="flex flex-col gap-1 border-t border-dashed border-line-2 pt-2"><span class="text-muted-3">{{ t('preorders.notes') }}</span><span class="font-medium">{{ detail.notes }}</span></div>
+            </div>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.35fr_1fr]">
@@ -1461,51 +1750,27 @@ async function saveShipmentChanges() {
 
           <div class="flex flex-col gap-3.5 rounded-card border border-line-2 bg-white p-5">
             <span class="text-[14.5px] font-bold">{{ t('preorders.payment') }}</span>
+            <PaymentSummaryCard v-if="detail.payment_summary" :summary="detail.payment_summary" />
             <p class="text-[12px] leading-relaxed text-muted-3">
               {{ t('preorders.payment_history_note') }}
             </p>
 
-            <!-- 010-split-payment-preorder-reports (US4, T020) — setiap
-                 entri pembayaran (termasuk split-payment, FR-005) tampil
-                 satu per satu dengan tombol cetak struk per entri. -->
-            <div v-if="(detail.payments ?? []).length" class="flex flex-col gap-2">
-              <div
-                v-for="p in detail.payments"
-                :key="p.id"
-                class="flex items-center justify-between gap-2 rounded-lg border border-line-2 px-3 py-2.5"
-              >
-                <div class="flex flex-col gap-0.5">
-                  <span class="text-[12.5px] font-semibold">
-                    {{ p.purpose === 'settlement' ? t('preorders.payment_event_settlement') : t('preorders.payment_event_down_payment') }}
-                    · {{ formatIDR(p.amount) }}
-                  </span>
-                  <span class="text-[11px] text-muted-3">{{ formatDateTime(p.paid_at) }}</span>
-                </div>
-                <div class="flex items-center gap-3">
-                  <button
-                    v-if="p.proof_id"
-                    type="button"
-                    class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active disabled:opacity-50"
-                    :disabled="loadingProofId === p.proof_id"
-                    @click="viewPaymentProof(p.proof_id)"
-                  >
-                    {{ t('preorders.view_proof') }}
-                  </button>
-                  <button
-                    type="button"
-                    class="whitespace-nowrap text-[12px] font-semibold text-muted-4 hover:text-brand-active"
-                    @click="openPaymentReceipt(p.id)"
-                  >
-                    {{ t('preorders.print_payment_receipt') }}
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p v-else class="text-[12px] text-muted-3">{{ t('preorders.payment_history_empty') }}</p>
+            <!-- 028-partial-split-payment (US3) — riwayat pembayaran bersama (juga dipakai
+                 di Sales): tiap entri berdiri sendiri, tanpa aksi ubah; Hapus hanya
+                 owner/admin dan diaudit server. -->
+            <PaymentHistoryList
+              :payments="detail.payments ?? []"
+              :can-delete="canDeletePayments"
+              @view-proof="(p) => viewPaymentProof(p.proof_id)"
+              @edit-confirmation="(p) => (confirmationTarget = p)"
+              @verify="(p) => (verifyTarget = p)"
+              @print="(p) => openPaymentReceipt(p.id)"
+              @delete="confirmDeletePayment"
+            />
 
-            <BaseButton v-if="parseMoney(detail.outstanding) > 0" @click="showRecordPayment = true">
+            <BaseButton v-if="canAddPayment" data-testid="add-payment" @click="showRecordPayment = true">
               <i class="ph-duotone ph-plus-circle text-[17px]" aria-hidden="true"></i>
-              {{ t('preorders.record_settlement') }}
+              {{ t('payment_ledger.add_payment') }}
             </BaseButton>
           </div>
 
@@ -1612,15 +1877,35 @@ async function saveShipmentChanges() {
       </template>
     </BaseModal>
 
-    <RecordPaymentModal
+    <AddPaymentModal
       v-if="detail"
       :open="showRecordPayment"
-      :preorder-id="detail.id"
-      :due-amount="detail.outstanding"
+      :remaining="detail.payment_summary?.remaining ?? detail.outstanding"
       :purpose="paymentPurpose"
-      :title="t('preorders.record_preorder_settlement')"
+      :title="detail.payment_summary?.payment_count > 0 ? t('payment_ledger.add_another_payment') : t('payment_ledger.add_payment')"
+      :submit-fn="submitPreorderPayment"
       @close="showRecordPayment = false"
       @saved="handlePaymentSaved"
+    />
+
+    <ConfirmDialog
+      :open="verifyTarget !== null"
+      :title="t('payment_ledger.verify_confirm_title')"
+      :message="t('payment_ledger.verify_confirm_message', { amount: formatIDR(verifyTarget?.amount ?? 0) })"
+      :confirm-label="t('payment_ledger.verify_confirm_label')"
+      :loading="verifying"
+      @close="verifyTarget = null"
+      @confirm="performVerify"
+    />
+
+    <PaymentConfirmationModal
+      v-if="detail"
+      :open="confirmationTarget !== null"
+      :payment="confirmationTarget"
+      kind="preorders"
+      :target-id="detail.id"
+      @close="confirmationTarget = null"
+      @saved="handleConfirmationSaved"
     />
 
     <PreorderInvoiceModal
@@ -1646,6 +1931,16 @@ async function saveShipmentChanges() {
       @confirm="performDeletePreorder"
     />
 
+    <ConfirmDialog
+      :open="showPaymentDeleteConfirm"
+      :title="t('preorders.delete_payment')"
+      :message="t('preorders.delete_payment_confirm', { amount: formatIDR(paymentDeleteTarget?.amount ?? 0), number: detail?.preorder_number ?? '' })"
+      :confirm-label="t('common.delete')"
+      :loading="deletingPayment"
+      @close="showPaymentDeleteConfirm = false"
+      @confirm="performDeletePayment"
+    />
+
     <ImageLightbox :open="!!proofLightboxSrc" :src="proofLightboxSrc" :alt="t('preorders.view_proof')" @close="closeProofLightbox" />
     <ImageLightbox :open="!!itemLightboxSrc" :src="itemLightboxSrc" :alt="itemLightboxAlt" @close="itemLightboxSrc = null" />
 
@@ -1669,11 +1964,15 @@ async function saveShipmentChanges() {
     </BaseModal>
 
     <!-- Requested: clicking the missing-shipping-info flag shows shipping
-         cost + notes right away, instead of a trip into the full detail
+         cost + customer address + notes right away, instead of a trip into the full detail
          drawer. -->
     <BaseModal :open="showShippingFlagInfo" :title="t('preorders.missing_shipping_info_flag')" max-width-class="max-w-[420px]" @close="showShippingFlagInfo = false">
       <div v-if="shippingFlagInfoRow" class="flex flex-col gap-3 px-6 py-5 text-[13px]">
         <div class="flex justify-between gap-3"><span class="text-muted-3">{{ t('preorders.shipping_cost') }}</span><span class="font-semibold">{{ formatIDR(shippingFlagInfoRow.shipping_cost) }}</span></div>
+        <div class="flex flex-col gap-1 border-t border-dashed border-line-2 pt-2.5">
+          <span class="text-muted-3">{{ t('preorders.customer_address') }}</span>
+          <span class="font-medium" data-testid="flag-customer-address">{{ shippingFlagInfoRow.customer_address || '—' }}</span>
+        </div>
         <div class="flex flex-col gap-1 border-t border-dashed border-line-2 pt-2.5">
           <span class="text-muted-3">{{ t('preorders.notes') }}</span>
           <span class="font-medium">{{ shippingFlagInfoRow.notes || '—' }}</span>

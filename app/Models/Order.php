@@ -32,4 +32,10 @@ class Order extends Model
     public function session(): BelongsTo { return $this->belongsTo(CashierSession::class, 'session_id'); }
     public function customer(): BelongsTo { return $this->belongsTo(Customer::class); }
     public function cashier(): BelongsTo { return $this->belongsTo(User::class, 'user_id'); }
+
+    /** 028 — ringkasan pembayaran turunan (lihat App\Support\PaymentSummary). */
+    public function paymentSummary(): array
+    {
+        return \App\Support\PaymentSummary::for($this);
+    }
 }

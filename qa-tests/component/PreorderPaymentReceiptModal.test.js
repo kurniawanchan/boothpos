@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/vue';
 import { createI18n } from 'vue-i18n';
+import { getPreorderInvoice } from '../../resources/js/api/preorders';
 import PreorderPaymentReceiptModal from '../../resources/js/components/preorder/PreorderPaymentReceiptModal.vue';
 import id from '../../resources/js/locales/id.json';
 import en from '../../resources/js/locales/en.json';
@@ -175,5 +176,18 @@ describe('PreorderPaymentReceiptModal', () => {
 
     await screen.findAllByText('PO-0007');
     expect(screen.queryByText(id.preorders.shipping_slip_title)).not.toBeInTheDocument();
+  });
+
+  it('shows "Powered by" with the configured app name', async () => {
+    getPreorderInvoice.mockResolvedValueOnce({ ...mockPreorder, app_name: 'Kasir Sakana' });
+    renderModal({ open: true, preorderId: 7, paymentId: 102 });
+
+    expect(await screen.findByText('Powered by Kasir Sakana')).toBeInTheDocument();
+  });
+
+  it('falls back to "Powered by BoothPOS" when the payload has no app name', async () => {
+    renderModal({ open: true, preorderId: 7, paymentId: 102 });
+
+    expect(await screen.findByText('Powered by BoothPOS')).toBeInTheDocument();
   });
 });
