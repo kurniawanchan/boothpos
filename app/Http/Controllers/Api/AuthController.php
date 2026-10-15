@@ -129,7 +129,7 @@ class AuthController extends Controller
         return response()->json($this->userPayload($user->fresh('role')));
     }
 
-    private function userPayload(User $user): array
+    public function userPayload(User $user): array
     {
         return [
             'id' => $user->id,

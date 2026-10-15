@@ -40,6 +40,7 @@ class User extends Authenticatable
 
     protected $hidden = [
         'password',
+        'pin_hash',
         'remember_token',
     ];
 
@@ -51,6 +52,8 @@ class User extends Authenticatable
         return [
             'is_active' => 'boolean',
             'last_login_at' => 'datetime',
+            'pin_locked_until' => 'datetime',
+            'pin_changed_at' => 'datetime',
             'password' => 'hashed',
         ];
     }

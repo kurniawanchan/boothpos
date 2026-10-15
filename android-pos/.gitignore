@@ -1,0 +1,18 @@
+# Keluaran build & cache Gradle
+.gradle/
+build/
+**/build/
+.kotlin/
+
+# Pengaturan lokal IDE & mesin (berisi path SDK pribadi)
+.idea/
+local.properties
+*.iml
+
+# Keystore & rahasia penandatanganan — tidak boleh masuk repo
+*.jks
+*.keystore
+keystore.properties
+
+# Berkas OS
+.DS_Store
