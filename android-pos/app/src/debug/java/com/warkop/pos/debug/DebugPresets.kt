@@ -29,7 +29,7 @@ object DebugPresets {
         val closed2 = Order("z2", OrderKind.DINE_IN, "1", 2, null, "Andi", "08:30", listOf(l(22, "k3", 1, fired = true), l(23, "m4", 1, fired = true)), closed = true, receiptNo = "T01-000123", closedAt = "08:50", tenders = listOf(Tender(3, TenderMethod.CASH, 36_300, TenderStatus.OK, received = 40_000)))
         var orders = seeds + counter + paid + closed1 + closed2
         var active: String? = "c24"; var dest = Dest.EDITOR; var sheet: Sheet? = null; var conn = Conn.ONLINE
-        var dark: Boolean? = null; var tab = 0; var close: PosStore.CloseResult? = null
+        var dark: Boolean? = null; var tab = 0; var close: CloseOutcome? = null
         when (id) {
             "05" -> orders = orders.map { if (it.id == "c24") it.copy(lines = emptyList()) else it }
             "06" -> sheet = Sheet.Modifier(PosCatalog.product("m1"))
@@ -48,10 +48,10 @@ object DebugPresets {
             "19" -> dest = Dest.ORDERS
             "20" -> { dest = Dest.ORDERS; tab = 1 }
             "21" -> dest = Dest.SHIFT
-            "22" -> { dest = Dest.SHIFT; sheet = Sheet.CashOut }
+            "22" -> { dest = Dest.SHIFT; sheet = Sheet.CashOut(inflow = false) }
             "23" -> dest = Dest.XREPORT
             "24" -> dest = Dest.CLOSE_SHIFT
-            "25" -> { close = PosStore.CloseResult(362_900, 359_900, 85_800, 85_800); dest = Dest.CLOSE_RESULT }
+            "25" -> { close = CloseOutcome(362_900, 359_900, -3_000, 5_000, 85_800); dest = Dest.CLOSE_RESULT }
             "26" -> { conn = Conn.OFFLINE; dest = Dest.SYNC }
             "27" -> dark = true
             "28" -> conn = Conn.OFFLINE_LIMITED

@@ -34,9 +34,18 @@ interface PosApi {
     @GET("menu/availability?pos=1")
     suspend fun availability(@Query("since") since: String?): Response<AvailabilityDto>
 
-    // --- shift (dasar; pecahan/kas/X-report di S2) ---
+    // --- shift & kas (S2 / US3) ---
     @GET("sessions/current") suspend fun currentSession(): Response<SessionDto>
     @POST("sessions") suspend fun openSession(@Body body: OpenSessionRequest): SessionDto
+    @GET("sessions/{id}/x-report") suspend fun xReport(@Path("id") id: Long): XReportDto
+    @GET("sessions/{id}/cash-movements") suspend fun cashMovements(@Path("id") id: Long): CashMovementPage
+    /** Kunci per niat: permintaan ulang dengan kunci sama tidak mencatat baris kedua (server: EnsureIdempotent). */
+    @POST("sessions/{id}/cash-movements")
+    suspend fun recordCashMovement(@Path("id") id: Long, @Header("Idempotency-Key") key: String, @Body body: CashMovementRequest): CashMovementDto
+    /** Kunci per niat tutup: server menjawab ulang dengan hasil tersimpan bila permintaan diulang (bukan 409). */
+    @POST("sessions/{id}/close")
+    suspend fun closeSession(@Path("id") id: Long, @Header("Idempotency-Key") key: String, @Body body: CloseSessionRequest): ClosedSessionDto
+    @GET("settings/features") suspend fun features(): FeaturesDto
 
     // --- denah & pesanan (S1/US2) ---
     /** `version` = penanda denah terakhir; jawaban `unchanged=true` bila tak berubah. */

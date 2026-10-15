@@ -84,6 +84,35 @@ data class Shift(
     val id: Long = 0,
 )
 
+/** 048 / S2 — angka shift dari server (X-report). Semua rupiah bilangan bulat; tidak ada angka yang dihitung ulang di klien. */
+data class ShiftReport(
+    val openingCash: Int, val orderCount: Int, val totalSales: Int, val voidCount: Int, val voidTotal: Int,
+    val changeGiven: Int, val cashReceived: Int, val cashIn: Int, val cashOut: Int,
+    val byMethod: List<MethodTotal>, val hourly: List<HourlyTotal>,
+) {
+    /** Tunai bersih di laci = tunai diterima dikurangi kembalian. */
+    val netCash: Int get() = cashReceived - changeGiven
+    fun amountOf(method: String): Int = byMethod.firstOrNull { it.method == method }?.amount ?: 0
+}
+
+data class MethodTotal(val method: String, val count: Int, val amount: Int)
+
+/** Penjualan per jam dinding toko (jam dengan penjualan saja). `hour` 0–23. */
+data class HourlyTotal(val hour: Int, val orderCount: Int, val total: Int)
+
+/** Kas masuk/keluar yang sudah tercatat di server. */
+data class CashMovement(
+    val id: Long, val inflow: Boolean, val reasonCode: String, val note: String?, val amount: Int, val by: String?, val at: String,
+)
+
+/** Hasil tutup shift dari server: hanya angka yang dikembalikan server, tidak ada yang diisi dari layar. */
+data class CloseOutcome(
+    val expected: Int, val counted: Int, val variance: Int, val tolerance: Int?, val edcBatch: Int?,
+)
+
+/** Batas dari pengaturan server. null = belum terbaca; layar memakai teks umum, bukan angka tebakan. */
+data class ShiftLimits(val varianceTolerance: Int?, val cashOutThreshold: Int?)
+
 /** Katalog menu dari server untuk outlet aktif: kategori, item (satu kartu per varian), dan grup modifier. */
 data class MenuCatalog(val categories: List<MenuCategory>, val products: List<Product>, val groups: Map<String, ModGroup>)
 

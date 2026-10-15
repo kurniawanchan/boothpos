@@ -33,8 +33,8 @@ fun OpenShiftScreen(store: PosStore) {
     val compact = windowSize() == Size.COMPACT
 
     fun open() {
-        if (total == 0) store.show(Sheet.Confirm("Buka shift dengan modal Rp 0?", "Pastikan memang tidak ada uang kembalian di kasir.", "Buka shift") { store.openShift(0) })
-        else store.openShift(total)
+        if (total == 0) store.show(Sheet.Confirm("Buka shift dengan modal Rp 0?", "Pastikan memang tidak ada uang kembalian di kasir.", "Buka shift") { store.openShift(emptyMap()) })
+        else store.openShift(counts.toMap())
     }
 
     @Composable
@@ -56,7 +56,7 @@ fun OpenShiftScreen(store: PosStore) {
             Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
                 Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Schedule, null, Modifier.size(32.dp)); Spacer(Modifier.width(18.dp))
-                    Column { Text("Shift 1 · 07:00 – 15:00", fontSize = 20.sp, fontWeight = FontWeight.SemiBold); Text("Diusulkan dari jadwal outlet hari Sabtu", fontSize = 14.sp) }
+                    Column { Text("Shift baru · ${store.user?.name}", fontSize = 20.sp, fontWeight = FontWeight.SemiBold); Text("Modal dicatat server sebagai rincian pecahan", fontSize = 14.sp) }
                 }
             }
             SectionLabel("Hitung modal per pecahan", Modifier.padding(start = 6.dp, top = 22.dp, bottom = 10.dp))
@@ -73,7 +73,7 @@ fun OpenShiftScreen(store: PosStore) {
             Column(Modifier.padding(28.dp)) {
                 Text("Total modal", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(num(total), fontSize = 76.sp, fontWeight = FontWeight.Light, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
-                Text("Shift bisa dibuka saat offline. Pembayaran hanya bisa diterima setelah shift terbuka.", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 24.sp)
+                Text("Pembayaran hanya bisa diterima setelah shift terbuka di server.", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 24.sp)
                 Spacer(Modifier.weight(1f, fill = !compact)); Spacer(Modifier.height(16.dp))
                 PrimaryPill("Buka shift", ::open, Modifier.fillMaxWidth(), icon = Icons.Filled.Check)
                 TextButton(onClick = { store.go(Dest.TABLES) }, Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)) { Text("Lewati, ambil order saja", fontWeight = FontWeight.SemiBold, fontSize = 16.sp) }

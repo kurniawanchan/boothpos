@@ -58,5 +58,3 @@ import kotlinx.serialization.Serializable
     @SerialName("opening_cash") val openingCash: String = "0.00",
     val status: String = "open",
 )
-
-@Serializable data class OpenSessionRequest(@SerialName("opening_cash") val openingCash: Long)

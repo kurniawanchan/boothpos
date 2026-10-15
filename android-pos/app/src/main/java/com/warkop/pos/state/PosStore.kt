@@ -39,7 +39,8 @@ sealed interface Sheet {
     data object QrisRecord : Sheet
     data class QrisVerify(val tenderId: Int) : Sheet
     data class Receipt(val orderId: String) : Sheet
-    data object CashOut : Sheet
+    /** Kas masuk ([inflow] = true) atau keluar; arah menentukan daftar alasan dan teks ambang. */
+    data class CashOut(val inflow: Boolean) : Sheet
     data class Confirm(val title: String, val body: String, val confirm: String, val onConfirm: () -> Unit) : Sheet
 }
 
@@ -72,8 +73,6 @@ class PosStore(
     var toast by mutableStateOf<String?>(null); private set
     var pinFails by mutableIntStateOf(0); private set
     var lockedUntil by mutableStateOf<Long?>(null); private set
-    var cashMovements by mutableStateOf<List<CashMovement>>(emptyList()); private set
-    var closeResult by mutableStateOf<CloseResult?>(null); private set
     // Antrean sinkron & cetak (status perangkat). Saat online, event langsung dianggap terkirim; saat offline menumpuk
     // di antrean — sampai outbox sungguhan (api-gap B16) dibangun, ini hanya cermin tampilan, bukan penyimpan data.
     data class OutboxEvent(val title: String, val type: String, val at: String, val synced: Boolean)
@@ -135,7 +134,7 @@ class PosStore(
     /** Hanya untuk preset pembandingan visual (src/debug); tidak ada jalur produk yang memanggilnya. */
     internal fun debugInstall(
         user: StaffUser?, shift: Shift?, orders: List<Order>, activeId: String?, dest: Dest, sheet: Sheet?, conn: Conn,
-        dark: Boolean?, ordersTab: Int, closeResult: CloseResult?,
+        dark: Boolean?, ordersTab: Int, closeResult: CloseOutcome?,
     ) {
         this.user = user; this.shift = shift; this.orders = orders; this.activeId = activeId; this.dest = dest; this.sheet = sheet
         this.conn = conn; this.darkOverride = dark; this.ordersTab = ordersTab; this.closeResult = closeResult; this.toast = null
@@ -151,6 +150,7 @@ class PosStore(
         floorJob?.cancel(); floor = Load.Idle; closedCache = emptyList(); keys.clear()
         viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { } }
         session = null; user = null; shift = null; activeId = null; catalog = Load.Idle; soldOut = emptySet(); dest = Dest.PIN; sheet = null
+        report = Load.Idle; cashMovements = Load.Idle; closeResult = null; limits = null
         loadRoster()
     }
 
@@ -173,6 +173,7 @@ class PosStore(
                 loadMenu()
                 startAvailabilityPolling()
                 startFloorPolling()
+                loadLimits()
             } catch (e: ApiError) {
                 onFailure(pinMessage(e))
                 if (e is ApiError.TooMany || e is ApiError.Unauthorized) loadRoster(silent = true)
@@ -218,14 +219,30 @@ class PosStore(
     }
 
     // ---------- shift ----------
-    fun openShift(float: Int) {
+    /** Buka shift dengan rincian pecahan kas awal (server menurunkan jumlahnya). Kosong = modal Rp 0. */
+    fun openShift(denominations: Map<Int, Int>) {
         val b = backend ?: return
+        val rows = denominations.filter { it.value > 0 }.map { it.key to it.value }
+        val modal = rows.sumOf { it.first * it.second }
         viewModelScope.launch {
             try {
-                shift = b.openShift(float.toLong())
-                say("Shift dibuka dengan modal ${rp(float)}.")
+                shift = b.openShift(rows)
+                report = Load.Idle; cashMovements = Load.Idle
+                say("Shift dibuka dengan modal ${rp(modal)}.")
                 go(Dest.TABLES)
-            } catch (e: ApiError) { say(e.message) }
+            } catch (e: ApiError) {
+                // Koneksi putus SETELAH server menerima: periksa dulu agar tidak membuka shift kedua.
+                if (e is ApiError.Network) {
+                    conn = Conn.OFFLINE
+                    val opened = try { b.currentShift() } catch (_: ApiError) { null }
+                    if (opened != null) {
+                        shift = opened; go(Dest.TABLES)
+                        say("Shift sudah terbuka di server.")
+                        return@launch
+                    }
+                }
+                say(e.message)
+            }
         }
     }
 
@@ -282,10 +299,15 @@ class PosStore(
                 after(o)
             } catch (e: ApiError) {
                 if (e is ApiError.Network) conn = Conn.OFFLINE
-                say(e.message)
+                say(writeErrorText(e))
             }
         }
     }
+
+    /** Server menolak tulis tab karena shift tidak terbuka: pesan khusus (pembayaran ditolak), bukan galat umum. */
+    private fun writeErrorText(e: ApiError): String =
+        if (e is ApiError.Conflict && e.code == "shift_required") "Pembayaran ditolak: shift sudah ditutup. Buka shift untuk menerima pembayaran."
+        else e.message
 
     fun newCounter() {
         val b = backend ?: return
@@ -454,35 +476,110 @@ class PosStore(
         }
     }
 
-    // ---------- kas & shift ----------
-    data class CashMovement(val inflow: Boolean, val reason: String, val amount: Int, val at: String)
-    data class CloseResult(val expected: Int, val counted: Int, val edcSystem: Int, val edcBatch: Int) {
-        val variance get() = counted - expected
-        val withinTolerance get() = kotlin.math.abs(variance) <= PosCatalog.VARIANCE_TOLERANCE
+    // ---------- kas & shift (048 / S2: US3) ----------
+    // Semua angka shift berasal dari server (X-report, daftar kas, jawaban tutup). Tidak ada hitungan kas di klien:
+    // layar yang belum berhasil memuat menampilkan keadaan memuat/galat, bukan angka lama.
+    var report by mutableStateOf<Load<ShiftReport>>(Load.Idle); private set
+    var cashMovements by mutableStateOf<Load<List<CashMovement>>>(Load.Idle); private set
+    var closeResult by mutableStateOf<CloseOutcome?>(null); private set
+    /** Batas dari pengaturan server; null sampai terbaca. Layar tidak memakai angka tetap sebagai gantinya. */
+    var limits by mutableStateOf<ShiftLimits?>(null); private set
+
+    /** Batas toleransi dan ambang kas keluar. Gagal dimuat = tetap null (teks umum di layar). */
+    fun loadLimits() {
+        val b = backend ?: return
+        viewModelScope.launch { limits = try { b.shiftLimits() } catch (_: ApiError) { null } }
     }
 
-    fun cashMove(inflow: Boolean, reason: String, amount: Int) { notWired("Kas masuk/keluar"); return }
-    @Suppress("unused") private fun cashMoveLocal(inflow: Boolean, reason: String, amount: Int) {
-        val go = { cashMovements = cashMovements + CashMovement(inflow, reason, amount, clock()); sheet = null; say("${if (inflow) "Kas masuk" else "Kas keluar"} ${rp(amount)} dicatat.") }
-        if (!inflow && amount > PosCatalog.CASH_OUT_THRESHOLD && user?.isSupervisor != true) sheet = Sheet.Override("Kas keluar ${rp(amount)} · $reason", null, go) else go()
+    /** X-report shift terbuka. Gagal = keadaan galat dengan Coba lagi. */
+    fun refreshShiftReport() {
+        val b = backend ?: return
+        val sid = shift?.id ?: return
+        report = Load.Loading
+        viewModelScope.launch {
+            report = try { Load.Ready(retryNetwork { b.shiftReport(sid) }) } catch (e: ApiError) { Load.Failed(e) }
+        }
     }
 
-    val salesOrders: List<Order> get() = orders.filter { it.closed && it.cancelledReason == null }
-    fun cashSales() = salesOrders.sumOf { o -> o.tenders.filter { it.method == TenderMethod.CASH && it.status == TenderStatus.OK }.sumOf { it.amount } }
-    fun edcSales() = salesOrders.sumOf { o -> o.tenders.filter { it.method == TenderMethod.EDC && it.status == TenderStatus.OK }.sumOf { it.amount } }
-    fun qrisSales() = salesOrders.sumOf { o -> o.tenders.filter { it.method == TenderMethod.QRIS && it.status == TenderStatus.OK }.sumOf { it.amount } }
-    fun cashIn() = cashMovements.filter { it.inflow }.sumOf { it.amount }
-    fun cashOut() = cashMovements.filter { !it.inflow }.sumOf { it.amount }
-    fun expectedCash() = (shift?.float ?: 0) + cashSales() + cashIn() - cashOut()
+    fun refreshCashMovements() {
+        val b = backend ?: return
+        val sid = shift?.id ?: return
+        cashMovements = Load.Loading
+        viewModelScope.launch {
+            cashMovements = try { Load.Ready(retryNetwork { b.cashMovements(sid) }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /**
+     * Kas masuk/keluar lewat server. Kunci per niat (arah, alasan, jumlah, catatan): coba-ulang jaringan memakai kunci
+     * yang sama sehingga tidak tercatat dua kali. Jawaban galat server (mis. override_required) melepas kunci dan
+     * membiarkan lembar terbuka: kasir mengubah isian, bukan menekan ulang.
+     */
+    fun cashMove(inflow: Boolean, reason: String, note: String?, amount: Int) {
+        val b = backend ?: return
+        val sid = shift?.id ?: run { say("Buka shift dulu sebelum mencatat kas."); return }
+        val intent = "cash:$sid:${if (inflow) "in" else "out"}:$reason:$amount:${note.orEmpty()}"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                retryNetwork { b.recordCashMovement(sid, inflow, reason, note, amount, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                sheet = null
+                say("${if (inflow) "Kas masuk" else "Kas keluar"} ${rp(amount)} dicatat.")
+                refreshCashMovements(); refreshShiftReport()
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE else keys.settled(intent)
+                say(e.message)
+            }
+        }
+    }
+
+    /**
+     * Tutup shift dengan hitungan buta. Server yang menjumlahkan dan menilai selisih. Penutupan tidak idempoten di
+     * server, jadi tidak ada coba-ulang otomatis: jika koneksi putus, status dianggap belum diketahui.
+     */
+    fun submitCount(counts: Map<Int, Int>, edcBatch: Int?) {
+        val b = backend ?: return
+        val sid = shift?.id ?: return
+        val rows = counts.filter { it.value > 0 }.map { it.key to it.value }
+        // Satu kunci per niat tutup: coba-ulang jaringan memakai kunci yang sama, server menjawab dengan hasil tersimpan.
+        val intent = "close:$sid"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val outcome = retryNetwork { b.closeShift(sid, rows, edcBatch, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                closeResult = outcome
+                report = Load.Idle
+                sheet = null
+                dest = Dest.CLOSE_RESULT
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) {
+                    conn = Conn.OFFLINE
+                    say("Koneksi terputus. Kirim hitungan lagi; server tidak akan menutup dua kali.")
+                } else if (e is ApiError.Conflict) {
+                    keys.settled(intent)
+                    // Penutupan pertama mungkin sudah diterima server (jawaban hilang di jalan): cek status dulu.
+                    val stillOpen = try { b.currentShift() != null } catch (_: ApiError) { true }
+                    if (stillOpen) {
+                        say(e.message)
+                    } else {
+                        shift = null; report = Load.Idle; cashMovements = Load.Idle; sheet = null
+                        go(Dest.SHIFT)
+                        say("Shift sudah tertutup di server. Angka penutupan ada di back office.")
+                    }
+                } else {
+                    say(e.message)
+                }
+            }
+        }
+    }
+
     fun hasPendingPayment() = orders.any { !it.closed && it.hasPendingQris }
 
-    fun submitCount(counted: Int, edcBatch: Int) { notWired("Tutup shift"); return }
-    @Suppress("unused") private fun submitCountLocal(counted: Int, edcBatch: Int) {
-        closeResult = CloseResult(expectedCash(), counted, edcSales(), edcBatch)
-        dest = Dest.CLOSE_RESULT; sheet = null
-    }
-
-    fun finishShift() { shift = null; closeResult = null; cashMovements = emptyList(); lock() }
+    fun finishShift() { shift = null; closeResult = null; report = Load.Idle; cashMovements = Load.Idle; lock() }
 
     private fun clock(): String = SimpleDateFormat("HH:mm", Locale.US).format(Date())
 }

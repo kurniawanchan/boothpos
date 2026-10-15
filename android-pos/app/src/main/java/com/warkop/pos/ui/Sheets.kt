@@ -36,7 +36,7 @@ fun SheetHost(store: PosStore) {
     Box(Modifier.fillMaxSize().background(scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { store.show(null) }) {
         val consume = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
         when (sheet) {
-            is Sheet.Modifier, is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, Sheet.Discount, Sheet.CashOut ->
+            is Sheet.Modifier, is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, Sheet.Discount, is Sheet.CashOut ->
                 if (compact) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 640.dp).then(consume), shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
                 else Surface(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(if (windowSize() == Size.MEDIUM) 400.dp else 440.dp).then(consume), shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
             else -> Surface(Modifier.align(Alignment.Center).widthIn(max = 480.dp).fillMaxWidth(0.92f).then(consume), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
@@ -47,7 +47,7 @@ fun SheetHost(store: PosStore) {
 @Composable
 private fun SheetBody(store: PosStore, s: Sheet) {
     if (s is Sheet.Modifier) { ModifierSheet(store, s); return }
-    if (s is Sheet.CashOut) { CashOutSheet(store); return }
+    if (s is Sheet.CashOut) { CashOutSheet(store, s.inflow); return }
     when (s) {
         is Sheet.LineActions -> { LineActionsSheet(store, s); return }
         Sheet.OrderActions -> { OrderActionsSheet(store); return }
@@ -66,7 +66,7 @@ private fun SheetBody(store: PosStore, s: Sheet) {
             Sheet.QrisRecord -> QrisRecordDialog(store)
             is Sheet.QrisVerify -> QrisVerifyDialog(store, s)
             is Sheet.Receipt -> ReceiptDialog(store, s)
-            Sheet.CashOut -> Unit
+            is Sheet.CashOut -> Unit
             is Sheet.Confirm -> ConfirmDialog(store, s)
         }
     }
@@ -418,25 +418,42 @@ private fun ColumnScope.ConfirmDialog(store: PosStore, s: Sheet.Confirm) {
 }
 
 @Composable
-private fun CashOutSheet(store: PosStore) {
-    var inflow by remember { mutableStateOf(false) }
+private fun CashOutSheet(store: PosStore, startInflow: Boolean) {
+    // Kode alasan dikirim ke server apa adanya (CashMovement::REASONS); label hanya untuk layar.
+    var inflow by remember(startInflow) { mutableStateOf(startInflow) }
     var reason by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     val value = amount.toIntOrNull() ?: 0
     val reasons = if (inflow) PosCatalog.cashInReasons else PosCatalog.cashOutReasons
+    val threshold = store.limits?.cashOutThreshold
+    val needsNote = reason == "other"
+    val canSave = reason != null && value > 0 && (!needsNote || note.isNotBlank())
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 20.dp)) {
-            Title("Kas ${if (inflow) "masuk" else "keluar"}", "Dicatat ke Shift 1 · ${store.user?.name}", { store.show(null) })
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(inflow, { inflow = true; reason = null }, { Text("Kas masuk") }, shape = RoundedCornerShape(50)); FilterChip(!inflow, { inflow = false; reason = null }, { Text("Kas keluar") }, shape = RoundedCornerShape(50)) }
+            Title("Kas ${if (inflow) "masuk" else "keluar"}", "Dicatat ke shift · ${store.user?.name}", { store.show(null) })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(inflow, { inflow = true; reason = null }, { Text("Kas masuk") }, shape = RoundedCornerShape(50))
+                FilterChip(!inflow, { inflow = false; reason = null }, { Text("Kas keluar") }, shape = RoundedCornerShape(50))
+            }
             SectionLabel("Alasan", Modifier.padding(top = 12.dp, bottom = 2.dp))
-            reasons.forEach { r -> RadioRow(r, reason == r, { reason = r }) }
+            reasons.forEach { (code, label) -> RadioRow(label, reason == code, { reason = code }) }
+            if (needsNote) {
+                OutlinedTextField(note, { note = it.take(200) }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true,
+                    label = { Text("Catatan (wajib)") }, shape = RoundedCornerShape(8.dp))
+            }
             Text(rp(value), Modifier.fillMaxWidth().padding(vertical = 6.dp), fontSize = 30.sp, textAlign = TextAlign.End, fontWeight = FontWeight.Light)
-            if (!inflow && value > PosCatalog.CASH_OUT_THRESHOLD) Text("Di atas Rp 200.000: perlu persetujuan Supervisor.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
+            // Batas dari server. Bila belum terbaca, tidak ada angka tebakan; server tetap menolak di atas ambang.
+            if (!inflow && threshold != null && value > threshold) {
+                Text("Di atas ${rp(threshold)}: perlu persetujuan. Persetujuan belum tersedia di aplikasi ini.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
+            } else if (!inflow && threshold == null) {
+                Text("Kas keluar di atas batas server perlu persetujuan.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
+            }
             Keypad({ d -> if (amount.length < 9) amount = (amount + d).trimStart('0') }, { amount = amount.dropLast(1) }, Modifier.fillMaxWidth(), extraKey = "000", keyHeight = 40.dp, shape = RoundedCornerShape(12.dp))
             Spacer(Modifier.height(12.dp))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        PrimaryPill("Simpan", { reason?.let { store.cashMove(inflow, it, value) } }, Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), enabled = reason != null && value > 0)
+        PrimaryPill("Simpan", { reason?.let { store.cashMove(inflow, it, note.takeIf { _ -> needsNote }?.trim(), value) } }, Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), enabled = canSave)
     }
 }
 

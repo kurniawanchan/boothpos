@@ -4,6 +4,9 @@ import com.warkop.core.domain.ApiError
 import com.warkop.core.network.ApiClient
 import com.warkop.core.network.ApiErrorMapper
 import com.warkop.core.network.dto.AddLineRequestDto
+import com.warkop.core.network.dto.CashMovementRequest
+import com.warkop.core.network.dto.CloseSessionRequest
+import com.warkop.core.network.dto.DenominationQtyDto
 import com.warkop.core.network.dto.OpenTabRequestDto
 import com.warkop.core.network.dto.PayRequestDto
 import com.warkop.core.network.dto.PaymentInputDto
@@ -17,7 +20,11 @@ import com.warkop.pos.model.Availability
 import com.warkop.pos.model.FloorSnapshot
 import com.warkop.pos.model.Order
 import com.warkop.pos.model.MenuCatalog
+import com.warkop.pos.model.CashMovement
+import com.warkop.pos.model.CloseOutcome
 import com.warkop.pos.model.Shift
+import com.warkop.pos.model.ShiftLimits
+import com.warkop.pos.model.ShiftReport
 import com.warkop.pos.model.StaffUser
 import java.time.Instant
 
@@ -145,11 +152,35 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         return res.body()?.let(::shift)
     }
 
-    override suspend fun openShift(totalRupiah: Long): Shift = shift(apiCall { api().openSession(OpenSessionRequest(totalRupiah)) })
+    override suspend fun openShift(denominations: List<Pair<Int, Int>>): Shift = shift(apiCall {
+        api().openSession(OpenSessionRequest(openingDenominations = denominations.filter { it.second > 0 }.map { DenominationQtyDto(it.first, it.second) }))
+    })
+
+    override suspend fun shiftReport(sessionId: Long): ShiftReport = ShiftMapper.report(apiCall { api().xReport(sessionId) })
+
+    override suspend fun cashMovements(sessionId: Long): List<CashMovement> =
+        apiCall { api().cashMovements(sessionId) }.data.map(ShiftMapper::movement)
+
+    override suspend fun recordCashMovement(sessionId: Long, inflow: Boolean, reasonCode: String, note: String?, amount: Int, key: String): CashMovement =
+        ShiftMapper.movement(apiCall {
+            api().recordCashMovement(sessionId, key, CashMovementRequest(
+                direction = if (inflow) "in" else "out", reasonCode = reasonCode, reasonNote = note?.takeIf { it.isNotBlank() }, amount = amount.toLong(),
+            ))
+        })
+
+    override suspend fun closeShift(sessionId: Long, counted: List<Pair<Int, Int>>, edcBatch: Int?, key: String): CloseOutcome =
+        ShiftMapper.close(apiCall {
+            api().closeSession(sessionId, key, CloseSessionRequest(
+                countedByDenomination = counted.filter { it.second > 0 }.map { DenominationQtyDto(it.first, it.second) },
+                edcBatchTotal = edcBatch?.toLong(),
+            ))
+        })
+
+    override suspend fun shiftLimits(): ShiftLimits = ShiftMapper.limits(apiCall { api().features() })
 
     private fun shift(d: SessionDto): Shift {
         val opened = d.openedAt?.let { runCatching { java.time.OffsetDateTime.parse(it).toLocalTime().toString().take(5) }.getOrNull() } ?: "--:--"
-        return Shift("Shift 1", opened, "", Money.parse(d.openingCash).toInt(), "", d.id)
+        return Shift("Shift kasir", opened, "", Money.parse(d.openingCash).toInt(), "", d.id)
     }
 
     private fun session(user: AuthUserDto, expires: Long) = PosSession(

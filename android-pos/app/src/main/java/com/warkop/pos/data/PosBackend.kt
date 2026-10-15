@@ -1,10 +1,14 @@
 package com.warkop.pos.data
 
 import com.warkop.pos.model.Availability
+import com.warkop.pos.model.CashMovement
+import com.warkop.pos.model.CloseOutcome
 import com.warkop.pos.model.FloorSnapshot
 import com.warkop.pos.model.MenuCatalog
 import com.warkop.pos.model.Order
 import com.warkop.pos.model.Shift
+import com.warkop.pos.model.ShiftLimits
+import com.warkop.pos.model.ShiftReport
 import com.warkop.pos.model.StaffUser
 
 /** Hasil penyiapan terminal: outlet dan perangkat yang dipasangkan. */
@@ -49,9 +53,16 @@ interface PosBackend {
     /** null = tidak berubah sejak [since] (304). */
     suspend fun availability(since: String?): Availability?
 
-    // --- shift (dasar) ---
+    // --- shift & kas (048 / S2: US3). Angka selalu dari server; kunci niat dibawa tiap tulis. ---
     suspend fun currentShift(): Shift?
-    suspend fun openShift(totalRupiah: Long): Shift
+    /** [denominations]: pasangan (pecahan, jumlah); server menurunkan kas awal dari situ. */
+    suspend fun openShift(denominations: List<Pair<Int, Int>>): Shift
+    suspend fun shiftReport(sessionId: Long): ShiftReport
+    suspend fun cashMovements(sessionId: Long): List<CashMovement>
+    suspend fun recordCashMovement(sessionId: Long, inflow: Boolean, reasonCode: String, note: String?, amount: Int, key: String): CashMovement
+    /** Hitungan buta: pasangan (pecahan, jumlah). Server menjumlahkan dan menentukan selisih. */
+    suspend fun closeShift(sessionId: Long, counted: List<Pair<Int, Int>>, edcBatch: Int?, key: String): CloseOutcome
+    suspend fun shiftLimits(): ShiftLimits
 
     // --- denah & pesanan (S1/US2). Semua tulis membawa kunci niat (Idempotency-Key / client_ref / local_ref). ---
     /** null = denah tidak berubah sejak [version]. */
