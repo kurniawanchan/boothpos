@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\CashierSession;
+use App\Models\Device;
 use App\Models\DiningTable;
 use App\Models\KitchenTicket;
 use App\Models\Order;
@@ -22,7 +23,7 @@ final class OutletScopeRegistry
     /** Model yang memakai BelongsToOutlet (kolom `outlet_id` NOT NULL). */
     public const MODELS = [
         CashierSession::class, Order::class, Payment::class, KitchenTicket::class,
-        DiningTable::class, Station::class,
+        DiningTable::class, Station::class, Device::class,
     ];
 
     /** Tabel ber-outlet (nama tabel), diturunkan dari MODELS agar tak ada daftar kedua. */
@@ -50,6 +51,7 @@ final class OutletScopeRegistry
         'price_history' => 'riwayat harga: ProductController::priceHistory menyaring outlet yang boleh dilihat',
         'preorders' => 'riwayat diam sejak 046 (modul pre-order dihapus): tidak ada jalur baca/tulis lagi; tabel dipertahankan apa adanya',
         'purchase_orders' => 'outlet = PENJUAL PO (atribusi item), bukan outlet operasional; menu purchase_orders',
+        'outlet_queue_counters' => 'urutan antrean per outlet/hari bisnis: hanya ditulis ReceiptNumbering (satu jalur) pada outlet order itu sendiri',
         'session_opening_cash_entries' => 'kas awal per outlet ASAL (penjual) milik satu shift; ikut aksesnya',
     ];
 

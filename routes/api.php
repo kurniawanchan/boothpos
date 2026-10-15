@@ -77,6 +77,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/token-refresh', [\App\Http\Controllers\Api\PinAuthController::class, 'refresh']);
         Route::post('/users/{user}/pin-reset', [\App\Http\Controllers\Api\PinAuthController::class, 'reset']);
 
+        // 048 / B14 — terminal POS (owner/admin; outlet diturunkan server).
+        Route::get('/devices', [\App\Http\Controllers\Api\DeviceController::class, 'index']);
+        Route::post('/devices/pairings', [\App\Http\Controllers\Api\DeviceController::class, 'pair']);
+        Route::delete('/devices/{device}', [\App\Http\Controllers\Api\DeviceController::class, 'destroy']);
+
         Route::get('/settings/features', [SettingsController::class, 'features']);
         Route::get('/settings', [SettingsController::class, 'index']);
         Route::put('/settings', [SettingsController::class, 'update']);

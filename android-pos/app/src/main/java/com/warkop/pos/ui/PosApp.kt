@@ -7,7 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import com.warkop.pos.debug.DebugPresets
 import com.warkop.pos.state.Dest
 import com.warkop.pos.state.PosStore
 import com.warkop.pos.theme.PosTheme
@@ -15,13 +15,14 @@ import com.warkop.pos.ui.screens.*
 import kotlinx.coroutines.delay
 
 @Composable
-fun PosApp(store: PosStore = viewModel(), preset: String? = null) {
-    LaunchedEffect(preset) { if (preset != null) store.debugPreset(preset) }
+fun PosApp(store: PosStore, preset: String? = null) {
+    LaunchedEffect(preset) { if (preset != null) DebugPresets.apply(store, preset) else store.bootstrap() }
     PosTheme(dark = store.darkOverride ?: autoDark()) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Box(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                 when (store.dest) {
+                    Dest.SETUP -> Text("Penyiapan terminal")
                     Dest.PIN -> PinScreen(store)
                     Dest.OPEN_SHIFT -> OpenShiftScreen(store)
                     Dest.TABLES -> PosShell(store, "Meja") { TablesScreen(store) }

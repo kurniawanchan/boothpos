@@ -18,7 +18,10 @@ data class Product(
     val groups: List<String> = emptyList(), val is86: Boolean = false,
 )
 
-data class StaffUser(val id: String, val name: String, val role: String, val code: String) {
+data class StaffUser(
+    val id: String, val name: String, val role: String, val code: String,
+    val hasPin: Boolean = true, val locked: Boolean = false,
+) {
     val initials: String get() = name.take(2).uppercase()
     val isSupervisor: Boolean get() = code == "SPV" || code == "OMG"
 }

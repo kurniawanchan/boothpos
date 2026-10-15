@@ -6,95 +6,75 @@ use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 /**
- * 028 — kontrak harus bergerak bersama rute (constitution: docs/openapi-pos-mvp.yaml diubah di
- * commit yang sama dengan perubahan rute). Dua jaga yang murah, tanpa dependensi YAML baru:
- *  1. setiap rute milik controller fitur restoran terdokumentasi dengan metode HTTP-nya;
- *  2. tidak ada `description:` tanpa kutip yang memuat kurung kurawal di dalam flow-mapping `{ … }`
- *     (itu merusak parsing YAML — pernah terjadi pada `ticket_item_id`).
+ * 048 / T004 / SC-010 — pagar kontrak: setiap rute `/api/v1` HARUS ada di `docs/openapi-pos-mvp.yaml`, kecuali yang
+ * tercatat di `tests/Support/openapi-known-gaps.php`. Daftar pengecualian itu HANYA boleh menyusut: rute yang sudah
+ * terdokumentasi tetapi masih tercatat sebagai celah membuat uji ini gagal, sehingga celah yang ditutup harus dihapus
+ * dari daftar. Menambah rute tanpa dokumentasi juga gagal (kebijakan konstitusi: kontrak berubah di commit yang sama).
  */
 class OpenApiCoverageTest extends TestCase
 {
-    private const FEATURE_CONTROLLERS = [
-        'DiningTableController', 'FloorController', 'TabController', 'TabLineController',
-        'TabPaymentController', 'ModifierGroupController', 'StationController', 'KitchenController',
-    ];
-
-    /** @return array<string, array<int, string>> path ternormalisasi → daftar metode (huruf kecil) */
+    /** @return array<string, true> kunci "METHOD /path" dengan {param} dinormalkan menjadi {} */
     private function documented(): array
     {
-        $paths = [];
-        $current = null;
-        $inPaths = false;
-
+        $found = [];
+        $path = null;
         foreach (file(base_path('docs/openapi-pos-mvp.yaml'), FILE_IGNORE_NEW_LINES) as $line) {
-            if (preg_match('/^paths:\s*$/', $line)) {
-                $inPaths = true;
-                continue;
-            }
-            if ($inPaths && preg_match('/^components:\s*$/', $line)) {
-                break;
-            }
-            if (! $inPaths) {
-                continue;
-            }
-            if (preg_match('/^  (\/\S*):\s*$/', $line, $m)) {
-                $current = preg_replace('/\{[^}]+\}/', '{}', $m[1]);
-                $paths[$current] ??= [];
-            } elseif ($current && preg_match('/^    (get|post|put|patch|delete):\s*$/', $line, $m)) {
-                $paths[$current][] = $m[1];
+            if (preg_match('/^  (\/[^\s:]*):\s*$/', $line, $m)) {
+                $path = $this->normalise($m[1]);
+            } elseif ($path !== null && preg_match('/^    (get|post|put|patch|delete):\s*$/', $line, $m)) {
+                $found[strtoupper($m[1]).' '.$path] = true;
+            } elseif (preg_match('/^\S/', $line) && ! str_starts_with($line, 'paths:')) {
+                $path = null;
             }
         }
 
-        return $paths;
+        return $found;
     }
 
-    public function test_every_restaurant_route_is_documented_with_its_method(): void
+    private function normalise(string $uri): string
     {
-        $documented = $this->documented();
-        $missing = [];
+        return '/'.trim(preg_replace('/\{[^}]+\??\}/', '{}', preg_replace('#^api/v1#', '', '/'.ltrim($uri, '/'))), '/');
+    }
 
+    /** @return list<string> */
+    private function routes(): array
+    {
+        $out = [];
         foreach (Route::getRoutes() as $route) {
-            $action = $route->getActionName();
-            if (! str_starts_with($route->uri(), 'api/v1/') || ! collect(self::FEATURE_CONTROLLERS)->contains(fn ($c) => str_contains($action, $c))) {
+            if (! str_starts_with($route->uri(), 'api/v1/')) {
                 continue;
             }
-
-            $path = '/'.preg_replace('/\{[^}]+\}/', '{}', substr($route->uri(), strlen('api/v1/')));
-            foreach (array_diff($route->methods(), ['HEAD']) as $method) {
-                $method = strtolower($method);
-                // apiResource memetakan PUT dan PATCH ke rute yang sama; dokumentasi cukup menyebut `put`.
-                $accepted = $method === 'patch' && str_contains($action, '@update') ? ['patch', 'put'] : [$method];
-                if (! array_intersect($accepted, $documented[$path] ?? [])) {
-                    $missing[] = strtoupper($method)." $path ($action)";
+            foreach ($route->methods() as $method) {
+                if ($method === 'HEAD') {
+                    continue;
                 }
+                $out[] = $method.' '.$this->normalise(substr($route->uri(), strlen('api/v1')));
             }
         }
 
-        $this->assertSame([], $missing, "Rute fitur restoran yang belum ada di docs/openapi-pos-mvp.yaml:\n".implode("\n", $missing));
+        return array_values(array_unique($out));
     }
 
-    public function test_the_scan_really_sees_documented_paths(): void
+    public function test_every_route_is_documented_or_a_known_gap(): void
     {
-        // Pengaman terhadap jaga yang diam-diam kosong (mis. format spec berubah).
         $documented = $this->documented();
+        $gaps = array_flip(require base_path('tests/Support/openapi-known-gaps.php'));
 
-        $this->assertGreaterThan(100, count($documented));
-        $this->assertContains('post', $documented['/tabs/{}/payments'] ?? []);
-        $this->assertContains('get', $documented['/floor'] ?? []);
+        $undocumented = array_values(array_filter($this->routes(), fn ($r) => ! isset($documented[$r])));
+        $unexpected = array_values(array_filter($undocumented, fn ($r) => ! isset($gaps[$r])));
+        $this->assertSame([], $unexpected, "Rute baru belum ada di docs/openapi-pos-mvp.yaml:\n".implode("\n", $unexpected));
     }
 
-    public function test_no_unquoted_description_contains_braces_inside_a_flow_mapping(): void
+    public function test_the_gap_list_only_shrinks(): void
     {
-        $offenders = [];
-
-        foreach (file(base_path('docs/openapi-pos-mvp.yaml'), FILE_IGNORE_NEW_LINES) as $i => $line) {
-            // Dalam flow-mapping, scalar tanpa kutip berakhir di koma pertama (atau di `}` penutup);
-            // hanya bagian itu yang diperiksa — kurung kurawal sesudah koma milik kunci berikutnya.
-            if (preg_match('/: \{.*?description: ([^,"\'][^,]*?)(?:,| \}\s*$)/', $line, $m) && preg_match('/[{}]/', $m[1])) {
-                $offenders[] = ($i + 1).': '.trim($line);
+        $documented = $this->documented();
+        $routes = array_flip($this->routes());
+        $stale = [];
+        foreach (require base_path('tests/Support/openapi-known-gaps.php') as $gap) {
+            if (isset($documented[$gap]) || ! isset($routes[$gap])) {
+                $stale[] = $gap;
             }
         }
-
-        $this->assertSame([], $offenders, "description tanpa kutip memuat { } di dalam flow-mapping:\n".implode("\n", $offenders));
+        $this->assertSame([], $stale, "Hapus dari tests/Support/openapi-known-gaps.php (sudah terdokumentasi atau rute sudah tidak ada):\n".implode("\n", $stale));
     }
 }

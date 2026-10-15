@@ -5,12 +5,19 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.warkop.core.domain.ApiError
+import com.warkop.pos.data.PosBackend
+import com.warkop.pos.data.PosSession
+import com.warkop.pos.data.RemoteBackend
+import com.warkop.pos.data.TerminalConfig
 import com.warkop.pos.model.*
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class Dest { PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, SHIFT, XREPORT, CLOSE_SHIFT, CLOSE_RESULT, SYNC }
+enum class Dest { SETUP, PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, SHIFT, XREPORT, CLOSE_SHIFT, CLOSE_RESULT, SYNC }
 enum class Conn(val label: String) { ONLINE("Online"), OFFLINE("Offline"), OFFLINE_LIMITED("Offline terbatas") }
 
 /** Lembar/dialog di atas layar. Satu pada satu waktu — sama seperti prototipe (satu `sheet` aktif). */
@@ -31,15 +38,30 @@ sealed interface Sheet {
     data class Confirm(val title: String, val body: String, val confirm: String, val onConfirm: () -> Unit) : Sheet
 }
 
-class PosStore : ViewModel() {
+/** Keadaan satu sumber data: belum dimuat / memuat / siap / GAGAL (bukan "kosong") — kontrak galat di android-client.md. */
+sealed interface Load<out T> {
+    data object Idle : Load<Nothing>
+    data object Loading : Load<Nothing>
+    data class Ready<T>(val value: T) : Load<T>
+    data class Failed(val error: ApiError) : Load<Nothing>
+}
+
+class PosStore(
+    private val backend: PosBackend? = null,
+    private val remote: RemoteBackend? = null,
+) : ViewModel() {
     var dest by mutableStateOf(Dest.PIN); private set
+    /** Terminal yang sudah disiapkan (URL + outlet + perangkat); null → layar penyiapan. */
+    var config by mutableStateOf<TerminalConfig?>(null); private set
+    var session by mutableStateOf<PosSession?>(null); private set
+    var roster by mutableStateOf<Load<List<StaffUser>>>(Load.Idle); private set
     var user by mutableStateOf<StaffUser?>(null); private set
     var shift by mutableStateOf<Shift?>(null); private set
     var conn by mutableStateOf(Conn.ONLINE)
     /** null = otomatis (malam hari gelap); dipakai preset debug untuk memaksa tema. */
     var darkOverride by mutableStateOf<Boolean?>(null)
     var ordersTab by mutableIntStateOf(0)
-    var orders by mutableStateOf<List<Order>>(seedOrders()); private set
+    var orders by mutableStateOf<List<Order>>(emptyList()); private set
     var activeId by mutableStateOf<String?>(null); private set
     var sheet by mutableStateOf<Sheet?>(null); private set
     var toast by mutableStateOf<String?>(null); private set
@@ -70,6 +92,36 @@ class PosStore : ViewModel() {
     val active: Order? get() = orders.firstOrNull { it.id == activeId }
     val openOrders: List<Order> get() = orders.filter { !it.closed }
     val closedOrders: List<Order> get() = orders.filter { it.closed }.sortedByDescending { it.closedAt }
+
+    // ---------- awal & sesi ----------
+    /** Dipanggil sekali saat aplikasi mulai: terminal belum disiapkan → penyiapan; sudah → PIN dengan roster dimuat. */
+    fun bootstrap() {
+        val saved = remote?.savedConfig()
+        config = saved
+        if (saved == null) { dest = Dest.SETUP; return }
+        if (dest == Dest.SETUP) dest = Dest.PIN
+        loadRoster()
+    }
+
+    /** Roster staf dari server. Gagal = keadaan galat dengan Coba lagi, BUKAN daftar kosong. */
+    fun loadRoster() {
+        val b = backend ?: return
+        roster = Load.Loading
+        viewModelScope.launch {
+            roster = try { Load.Ready(b.roster()) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    internal fun setConfig(c: TerminalConfig) { config = c; dest = Dest.PIN; loadRoster() }
+
+    /** Hanya untuk preset pembandingan visual (src/debug); tidak ada jalur produk yang memanggilnya. */
+    internal fun debugInstall(
+        user: StaffUser?, shift: Shift?, orders: List<Order>, activeId: String?, dest: Dest, sheet: Sheet?, conn: Conn,
+        dark: Boolean?, ordersTab: Int, closeResult: CloseResult?,
+    ) {
+        this.user = user; this.shift = shift; this.orders = orders; this.activeId = activeId; this.dest = dest; this.sheet = sheet
+        this.conn = conn; this.darkOverride = dark; this.ordersTab = ordersTab; this.closeResult = closeResult; this.toast = null
+    }
 
     // ---------- navigasi & umpan balik ----------
     fun go(d: Dest) { dest = d; sheet = null }
@@ -332,71 +384,5 @@ class PosStore : ViewModel() {
 
     fun finishShift() { shift = null; closeResult = null; cashMovements = emptyList(); lock() }
 
-    /**
-     * HANYA untuk pembandingan visual dengan design/screens (dipanggil dari MainActivity bila build debuggable lewat
-     * `--es preset NN`). Menyusun kondisi awal tiap tangkapan desain; bukan jalur produk.
-     */
-    fun debugPreset(id: String) {
-        val rina = PosCatalog.users[0]
-        user = if (id in setOf("08x")) PosCatalog.users[2] else rina
-        shift = Shift("Shift 1", "07:02", "07:00-15:00", 200_000, rina.id)
-        conn = Conn.ONLINE; darkOverride = null; sheet = null; ordersTab = 0; toast = null
-        fun l(i: Int, item: String, qty: Int, vararg m: ModOption, note: String = "", fired: Boolean = false): OrderLine {
-            val p = PosCatalog.product(item)
-            return OrderLine(i, p.id, p.name, p.price, qty, m.toList(), note, fired = fired, firedAt = if (fired) "10:40" else null)
-        }
-        fun m(n: String, d: Int = 0) = ModOption(n, d)
-        val lines = listOf(l(11, "k3", 2, m("Kurang manis"), m("Sedikit es")), l(12, "m1", 1, m("Pedas"), m("Telur", 4000), note = "Telur setengah matang"), l(13, "k1", 1))
-        val counter = Order("c24", OrderKind.COUNTER, null, 0, "A-024", "Rina", "10:38", lines)
-        val paid = counter.copy(id = "c24p", closed = true, receiptNo = "T01-000124", closedAt = "10:44", tenders = listOf(Tender(1, TenderMethod.CASH, 66_000, TenderStatus.OK, received = 100_000)))
-        val closed1 = Order("z1", OrderKind.DINE_IN, "5", 4, null, "Andi", "09:20", listOf(l(21, "m3", 2, m("Pedas"), fired = true)), closed = true, receiptNo = "T01-000122", closedAt = "09:55", tenders = listOf(Tender(2, TenderMethod.EDC, 48_400, TenderStatus.OK, ref = "448231")))
-        val closed2 = Order("z2", OrderKind.DINE_IN, "1", 2, null, "Andi", "08:30", listOf(l(22, "k3", 1, fired = true), l(23, "m4", 1, fired = true)), closed = true, receiptNo = "T01-000123", closedAt = "08:50", tenders = listOf(Tender(3, TenderMethod.CASH, 36_300, TenderStatus.OK, received = 40_000)))
-        val seeds = seedOrders().map { if (it.id == "a2") it.copy(otherDevice = "T02") else it }
-        orders = seeds + counter + paid + closed1 + closed2
-        activeId = "c24"; dest = Dest.EDITOR
-        when (id) {
-            "05" -> orders = orders.map { if (it.id == "c24") it.copy(lines = emptyList()) else it }
-            "06" -> sheet = Sheet.Modifier(PosCatalog.product("m1"))
-            "07" -> sheet = Sheet.LineActions(12)
-            "08" -> sheet = Sheet.OrderActions
-            "09" -> sheet = Sheet.Split
-            "10" -> sheet = Sheet.Discount
-            "11" -> { activeId = "a1"; sheet = Sheet.Void(1) }
-            "12" -> { activeId = "a1"; sheet = Sheet.Override("Void 1× Nasi Goreng Kampung · Rp 22.000 · Alasan: Salah input · belum dibuat") {} }
-            "13" -> dest = Dest.TENDER
-            "14" -> { dest = Dest.TENDER; sheet = Sheet.Edc }
-            "15" -> { dest = Dest.TENDER; sheet = Sheet.QrisRecord }
-            "16" -> { dest = Dest.TENDER; orders = orders.map { if (it.id == "c24") it.copy(tenders = listOf(Tender(9, TenderMethod.QRIS, 66_000, TenderStatus.PENDING))) else it }; sheet = Sheet.QrisVerify(9) }
-            "17" -> { activeId = "c24p"; dest = Dest.DONE }
-            "18" -> { activeId = "c24p"; dest = Dest.DONE; orders = orders.map { if (it.id == "c24p") it.copy(reprints = 1) else it }; sheet = Sheet.Receipt("c24p") }
-            "19" -> dest = Dest.ORDERS
-            "20" -> { dest = Dest.ORDERS; ordersTab = 1 }
-            "21" -> dest = Dest.SHIFT
-            "22" -> { dest = Dest.SHIFT; sheet = Sheet.CashOut }
-            "23" -> dest = Dest.XREPORT
-            "24" -> dest = Dest.CLOSE_SHIFT
-            "25" -> { closeResult = CloseResult(362_900, 359_900, 85_800, 85_800); dest = Dest.CLOSE_RESULT }
-            "26" -> { conn = Conn.OFFLINE; dest = Dest.SYNC }
-            "27" -> darkOverride = true
-            "28" -> conn = Conn.OFFLINE_LIMITED
-            "03" -> dest = Dest.TABLES
-            "35", "36" -> {}
-        }
-    }
-
     private fun clock(): String = SimpleDateFormat("HH:mm", Locale.US).format(Date())
-
-    private fun seedOrders(): List<Order> {
-        fun l(id: Int, item: String, qty: Int, vararg mods: ModOption): OrderLine {
-            val p = PosCatalog.product(item)
-            return OrderLine(id, p.id, p.name, p.price, qty, mods.toList(), fired = true, firedAt = "10:12")
-        }
-        fun m(n: String, d: Int = 0) = ModOption(n, d)
-        // Angka mengikuti desain 03: Meja 3 = Rp 37.400 (2 tamu), Meja 5 = Rp 52.800 (4 tamu).
-        return listOf(
-            Order("a1", OrderKind.DINE_IN, "3", 2, null, "Andi", "18:42", listOf(l(1, "m3", 1, m("Sedang")), l(2, "n2", 1))),
-            Order("a2", OrderKind.DINE_IN, "5", 4, null, "Andi", "18:55", listOf(l(3, "m3", 2, m("Pedas")), l(4, "e1", 1))),
-            Order("a3", OrderKind.DINE_IN, "T2", 3, null, "Andi", "18:30", listOf(l(5, "m5", 3, m("Sedang")), l(6, "s2", 1)), billPrinted = true),
-        )
-    }
 }

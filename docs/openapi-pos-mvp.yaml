@@ -35,6 +35,7 @@ servers:
     description: Instalasi lokal pada laptop operasional
 
 tags:
+  - name: Devices
   - name: Dashboard
   - name: Menu
   - name: License
@@ -143,6 +144,175 @@ paths:
                   user: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /staff/roster:
+    get:
+      tags: [Auth]
+      summary: Daftar staf aktif satu outlet untuk layar pilih-nama terminal (048/B1)
+      description: |
+        Hanya data layar pilih-staf — tanpa username dan tanpa hash PIN. Butuh token (token penyiapan terminal dari
+        login owner/admin). Staf = pengguna aktif yang ditugaskan ke outlet itu, atau yang perannya melihat semua outlet.
+      parameters:
+        - { name: outlet_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Daftar staf
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        role: { type: string, nullable: true }
+                        has_pin: { type: boolean }
+                        locked: { type: boolean, description: Login PIN sedang terkunci }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Outlet tidak ada atau tidak aktif }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/pin-sessions:
+    post:
+      tags: [Auth]
+      summary: Masuk dengan PIN 6 digit (048/B1)
+      description: |
+        Mengeluarkan token sesi PIN berumur 12 jam. Lima PIN salah berturut-turut mengunci login PIN staf itu 15
+        menit (429 `pin_locked`); kata sandi tetap dapat dipakai lewat `/auth/login`. Pengguna yang tidak ada, tidak
+        aktif, atau bukan staf outlet dijawab sama (401 `invalid_pin`) tanpa hitungan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outlet_id, user_id, pin]
+              properties:
+                outlet_id: { type: integer }
+                user_id: { type: integer }
+                pin: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_at: { type: string, format: date-time }
+                  user: { $ref: '#/components/schemas/AuthenticatedUser' }
+        '401': { description: "PIN salah (`code: invalid_pin`, `attempts_remaining` bila ada)" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { description: "Terkunci (`code: pin_locked`, `locked_until`)" }
+
+  /auth/pin-changes:
+    post:
+      tags: [Auth]
+      summary: Atur atau ganti PIN sendiri (048/B1)
+      description: Sudah punya PIN → wajib `current_pin` (salah dihitung ke kunci yang sama). Belum punya → wajib `current_password`. PIN lemah (angka sama / berurutan) ditolak.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_pin]
+              properties:
+                new_pin: { type: string, pattern: '^[0-9]{6}$' }
+                current_pin: { type: string, nullable: true }
+                current_password: { type: string, nullable: true, format: password }
+      responses:
+        '200': { description: PIN diubah }
+        '401': { description: Kata sandi atau PIN saat ini salah }
+        '422': { description: "PIN lemah (`pin_too_weak`) atau `current_pin_required`" }
+        '429': { description: Terkunci }
+
+  /auth/token-refresh:
+    post:
+      tags: [Auth]
+      summary: Perpanjang token sesi PIN (048/B1)
+      description: Hanya untuk token hasil PIN; token kata sandi tidak kedaluwarsa dan dijawab 403.
+      responses:
+        '200':
+          description: Token baru; token lama dicabut
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_at: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Bukan token PIN (`token_not_refreshable`) }
+
+  /users/{id}/pin-reset:
+    post:
+      tags: [Auth]
+      summary: Reset PIN seorang staf (owner/admin) (048/B1)
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '204': { description: PIN dan kunci dihapus; sesi PIN staf itu dicabut }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /devices:
+    get:
+      tags: [Devices]
+      summary: Daftar terminal POS pada outlet yang berlaku (owner/admin) (048/B14)
+      responses:
+        '200':
+          description: Daftar
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Device' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /devices/pairings:
+    post:
+      tags: [Devices]
+      summary: Daftarkan terminal POS (owner/admin) (048/B14)
+      description: |
+        Outlet diturunkan server dari konteks (satu-satunya outlet, atau `X-Outlet-Id`), TIDAK dari body. Admin yang
+        melihat banyak outlet wajib memilih satu lewat header. Kode `T01`, `T02`… otomatis bila kosong, unik per outlet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 80 }
+                code: { type: string, maxLength: 12, nullable: true }
+      responses:
+        '201':
+          description: Terminal terdaftar
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /devices/{id}:
+    delete:
+      tags: [Devices]
+      summary: Cabut terminal POS (jejak audit tetap ada) (048/B14)
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '204': { description: Dicabut (idempoten) }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /auth/logout:
     post:
@@ -5732,6 +5902,17 @@ components:
                   items: { type: string }
 
   schemas:
+    Device:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, example: T01 }
+        name: { type: string }
+        outlet_id: { type: integer }
+        app_version: { type: string, nullable: true }
+        last_seen_at: { type: string, format: date-time, nullable: true }
+        revoked: { type: boolean }
+
     DashboardKpi:
       type: object
       properties:
