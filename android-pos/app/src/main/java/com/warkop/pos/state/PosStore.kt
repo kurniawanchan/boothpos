@@ -166,7 +166,9 @@ class PosStore(
                 shift = try { b.currentShift() } catch (_: ApiError) { null }
                 dest = when {
                     s.user.code == "CSH" && shift == null -> Dest.OPEN_SHIFT
-                    s.user.code == "CSH" -> { newCounter(); Dest.EDITOR }
+                    // Tidak membuka tab otomatis saat login: tab kosong yang terbuka akan menghalangi tutup shift (409 open_tabs).
+                    // Counter dibuka hanya saat kasir menekan tombol order baru.
+                    s.user.code == "CSH" -> Dest.TABLES
                     s.user.code == "WTR" -> Dest.TABLES
                     else -> Dest.ORDERS
                 }
