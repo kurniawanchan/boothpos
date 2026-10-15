@@ -45,7 +45,7 @@ fun PinScreen(store: PosStore) {
     var busy by remember { mutableStateOf(false) }
 
     // Pilihan awal = staf pertama yang bisa masuk; dijaga bila daftar berubah (mis. setelah dimuat ulang).
-    LaunchedEffect(staff) { if (selected == null || staff.none { it.id == selected?.id }) selected = staff.firstOrNull() }
+    LaunchedEffect(staff, store.roster) { if (store.roster is Load.Ready && (selected == null || staff.none { it.id == selected?.id })) selected = staff.firstOrNull() }
 
     fun submit() {
         val u = selected ?: run { error = "Pilih nama Anda terlebih dahulu."; return }

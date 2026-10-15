@@ -104,11 +104,13 @@ class PosStore(
     }
 
     /** Roster staf dari server. Gagal = keadaan galat dengan Coba lagi, BUKAN daftar kosong. */
-    fun loadRoster() {
+    fun loadRoster(silent: Boolean = false) {
         val b = backend ?: return
-        roster = Load.Loading
+        // `silent`: muat ulang tanpa mengganti daftar dengan 'memuat' (dipakai setelah PIN salah agar pilihan staf tak hilang).
+        if (!(silent && roster is Load.Ready)) roster = Load.Loading
         viewModelScope.launch {
-            roster = try { Load.Ready(b.roster()) } catch (e: ApiError) { Load.Failed(e) }
+            val fresh = try { Load.Ready(b.roster()) } catch (e: ApiError) { if (silent && roster is Load.Ready) roster else Load.Failed(e) }
+            roster = fresh
         }
     }
 
@@ -158,7 +160,7 @@ class PosStore(
                 startAvailabilityPolling()
             } catch (e: ApiError) {
                 onFailure(pinMessage(e))
-                if (e is ApiError.TooMany || e is ApiError.Unauthorized) loadRoster()
+                if (e is ApiError.TooMany || e is ApiError.Unauthorized) loadRoster(silent = true)
             }
         }
     }

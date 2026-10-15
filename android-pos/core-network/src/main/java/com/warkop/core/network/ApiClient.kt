@@ -49,7 +49,9 @@ object ApiClient {
 
     /** "http://10.0.2.2:8010" → ".../api/v1/" (Retrofit butuh garis miring akhir). */
     fun normalise(url: String): String {
-        val trimmed = url.trim().trimEnd('/')
+        // Alamat tanpa skema ("192.168.1.10:8010") dilengkapi http:// — instalasi lokal umumnya tanpa TLS.
+        val withScheme = url.trim().let { if ("://" in it) it else "http://$it" }
+        val trimmed = withScheme.trimEnd('/')
         return if (trimmed.endsWith("/api/v1")) "$trimmed/" else "$trimmed/api/v1/"
     }
 

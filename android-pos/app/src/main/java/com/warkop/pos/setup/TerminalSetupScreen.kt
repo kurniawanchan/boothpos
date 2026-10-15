@@ -37,7 +37,7 @@ private enum class Step { SERVER, OUTLET }
 fun TerminalSetupScreen(backend: PosBackend, onDone: (TerminalConfig) -> Unit) {
     val scope = rememberCoroutineScope()
     var step by remember { mutableStateOf(Step.SERVER) }
-    var url by remember { mutableStateOf("http://") }
+    var url by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -65,7 +65,7 @@ fun TerminalSetupScreen(backend: PosBackend, onDone: (TerminalConfig) -> Unit) {
                 )
                 if (step == Step.SERVER) {
                     OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth(), label = { Text("Alamat server") }, singleLine = true, enabled = !busy,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), supportingText = { Text("Contoh: http://192.168.1.10:8010 (emulator: http://10.0.2.2:8010)") })
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), placeholder = { Text("192.168.1.10:8010") }, supportingText = { Text("Alamat server outlet (emulator: 10.0.2.2:8010)") })
                     OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("Username") }, singleLine = true, enabled = !busy)
                     OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("Kata sandi") }, singleLine = true, enabled = !busy,
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -89,7 +89,7 @@ fun TerminalSetupScreen(backend: PosBackend, onDone: (TerminalConfig) -> Unit) {
                         chosen = outlets.firstOrNull()
                         step = Step.OUTLET
                     }
-                }, Modifier.fillMaxWidth(), enabled = url.length > 8 && username.isNotBlank() && password.isNotEmpty())
+                }, Modifier.fillMaxWidth(), enabled = url.length > 3 && username.isNotBlank() && password.isNotEmpty())
                 else PrimaryPill("Daftarkan terminal", {
                     val o = chosen ?: return@PrimaryPill
                     run { onDone(backend.pairTerminal(o, terminalName.ifBlank { "Terminal" })) }

@@ -51,4 +51,10 @@ class ApiErrorMapperTest {
         val original = ApiError.Forbidden("tidak boleh")
         assertSame(original, ApiErrorMapper.fromThrowable(original))
     }
+
+    @Test fun `alamat server dinormalkan ke api v1 dengan skema`() {
+        assertEquals("http://10.0.2.2:8010/api/v1/", ApiClient.normalise("10.0.2.2:8010"))
+        assertEquals("http://10.0.2.2:8010/api/v1/", ApiClient.normalise("http://10.0.2.2:8010/"))
+        assertEquals("https://pos.toko.id/api/v1/", ApiClient.normalise("https://pos.toko.id/api/v1"))
+    }
 }
