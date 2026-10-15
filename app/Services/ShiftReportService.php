@@ -75,8 +75,9 @@ class ShiftReportService
             ->filter(fn (Order $o) => $o->completed_at !== null)
             ->groupBy(fn (Order $o) => $o->completed_at->timezone(BusinessDay::timezone())->format('H'))
             ->sortKeys()
+            // Kunci grup angka-string ("09") diubah PHP menjadi integer; kontrak API menjanjikan string.
             ->map(fn ($group, $hour) => [
-                'hour' => $hour,
+                'hour' => (string) $hour,
                 'order_count' => $group->count(),
                 'total' => $this->money($group->sum('total_amount')),
             ])
