@@ -9,7 +9,13 @@ use App\Services\DeviceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** 048 — pendaftaran terminal POS. Semua rute: owner/admin. */
+/**
+ * 048 — pendaftaran terminal POS. Semua rute: owner/admin.
+ *
+ * Pembatasan outlet: `Device` memakai BelongsToOutlet → OutletScope, jadi daftar dan route-model binding (`destroy`)
+ * hanya melihat outlet yang diizinkan permintaan (penugasan pengguna ∩ X-Outlet-Id). Perangkat outlet lain → 404.
+ * Dibuktikan oleh DevicePairingTest (…_scoped_to_the_selected_outlet, …_outlet_assigned_admin_…).
+ */
 class DeviceController extends Controller
 {
     public function __construct(private DeviceService $devices) {}

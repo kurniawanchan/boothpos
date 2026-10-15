@@ -84,4 +84,32 @@ class DevicePairingTest extends TestCase
 
         $this->postJson('/api/v1/devices/pairings', ['name' => 'B'])->assertCreated()->assertJsonPath('code', 'T02');
     }
+
+    public function test_list_and_revoke_are_scoped_to_the_selected_outlet(): void
+    {
+        $other = Outlet::factory()->create();
+        $mine = Device::forceCreate(['outlet_id' => $this->outlet->id, 'code' => 'T01', 'name' => 'a']);
+        $theirs = Device::forceCreate(['outlet_id' => $other->id, 'code' => 'T01', 'name' => 'b']);
+
+        // X-Outlet-Id menyempit: hanya perangkat outlet itu terlihat, dan perangkat outlet lain 404 (bukan 403/204).
+        $ids = collect($this->getJson('/api/v1/devices', ['X-Outlet-Id' => $this->outlet->id])->json('data'))->pluck('id')->all();
+        $this->assertSame([$mine->id], $ids);
+        $this->deleteJson("/api/v1/devices/{$theirs->id}", [], ['X-Outlet-Id' => $this->outlet->id])->assertNotFound();
+        $this->assertNull($theirs->fresh()->revoked_at);
+    }
+
+    public function test_an_outlet_assigned_admin_cannot_see_or_revoke_another_outlets_terminals(): void
+    {
+        $other = Outlet::factory()->create();
+        $theirs = Device::forceCreate(['outlet_id' => $other->id, 'code' => 'T01', 'name' => 'b']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $role = $admin->role()->first();
+        $role->forceFill(['all_outlets' => false])->save();
+        $admin->outlets()->sync([$this->outlet->id]);
+        $this->actingAs($admin->fresh(), 'sanctum');
+
+        $this->assertSame([], $this->getJson('/api/v1/devices')->json('data'));
+        $this->deleteJson("/api/v1/devices/{$theirs->id}")->assertNotFound();
+        $this->assertNull($theirs->fresh()->revoked_at);
+    }
 }
