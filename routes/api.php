@@ -269,8 +269,12 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/sessions/current', [CashierSessionController::class, 'current']);
         Route::post('/sessions', [CashierSessionController::class, 'store']);
-        Route::post('/sessions/{session}/close', [CashierSessionController::class, 'close']);
+        // 048 — `idempotent`: pengiriman ulang setelah respons hilang mengembalikan hasil tutup yang tersimpan, bukan 409.
+        Route::post('/sessions/{session}/close', [CashierSessionController::class, 'close'])->middleware('idempotent');
         Route::get('/sessions/{session}/summary', [CashierSessionController::class, 'summary']);
+        Route::get('/sessions/{session}/x-report', [CashierSessionController::class, 'xReport']);
+        Route::get('/sessions/{session}/cash-movements', [\App\Http\Controllers\Api\CashMovementController::class, 'index']);
+        Route::post('/sessions/{session}/cash-movements', [\App\Http\Controllers\Api\CashMovementController::class, 'store'])->middleware('idempotent');
 
         Route::get('/payment-channels', [PaymentChannelController::class, 'index']);
         Route::post('/payment-channels', [PaymentChannelController::class, 'store']);

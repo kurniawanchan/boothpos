@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\CashierSession;
+use App\Models\CashMovement;
 use App\Models\Device;
 use App\Models\DiningTable;
 use App\Models\KitchenTicket;
@@ -23,7 +24,7 @@ final class OutletScopeRegistry
     /** Model yang memakai BelongsToOutlet (kolom `outlet_id` NOT NULL). */
     public const MODELS = [
         CashierSession::class, Order::class, Payment::class, KitchenTicket::class,
-        DiningTable::class, Station::class, Device::class,
+        DiningTable::class, Station::class, Device::class, CashMovement::class,
     ];
 
     /** Tabel ber-outlet (nama tabel), diturunkan dari MODELS agar tak ada daftar kedua. */

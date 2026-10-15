@@ -593,8 +593,10 @@ class TabService
 
     public function assertSessionOpen(CashierSession $session): void
     {
+        // 048 — kode mesin `shift_required` (409) agar terminal menampilkan tindakan yang tepat; respons
+        // dirender oleh bootstrap/app.php untuk ShiftRuleException di rute API.
         if ($session->status !== 'open') {
-            throw ValidationException::withMessages(['session_id' => __('orders_payments.session_not_open')]);
+            throw new \App\Exceptions\ShiftRuleException(__('orders_payments.session_not_open'), 'shift_required');
         }
     }
 

@@ -1525,13 +1525,25 @@ paths:
         `cashier_sessions`, bukan satu sesi per artist). Bila diisi, jumlah
         seluruh `amount` WAJIB persis sama dengan `opening_cash` (422 bila
         tidak).
+
+        048 / S2 — kas awal boleh diberikan sebagai `opening_denominations[]` (pecahan × qty); jumlahnya
+        DIHITUNG SERVER (`opening_cash` diturunkan darinya). `opening_cash` lama tetap diterima; bila keduanya
+        dikirim, harus sama (422). Pecahan di luar {100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100}
+        dan pecahan ganda ditolak 422. Header `X-Device-Id` (opsional) mencatat terminal pembuka; terminal yang
+        dicabut atau milik outlet lain → 422 `errors.device_id`.
+      parameters:
+        - name: X-Device-Id
+          in: header
+          required: false
+          description: 048 — id terminal (`devices.id`) yang membuka shift. Tanpa header (SPA web) tetap berjalan.
+          schema: { type: string, example: "1" }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [opening_cash]
+              description: "Isi salah satu: `opening_cash` ATAU `opening_denominations`."
               properties:
                 outlet_id:
                   type: integer
@@ -1541,7 +1553,18 @@ paths:
                     (penugasan atau header X-Outlet-Id); lebih dari satu → 422 `errors.outlet_id`. Di luar outlet
                     yang boleh dilihat → 403 `outlet_forbidden`. Pengguna non-admin tanpa penugasan → 409
                     `outlet_unassigned`. Order, pembayaran dan tiket di shift ini mewarisi outletnya.
-                opening_cash: { type: string, example: "500000.00" }
+                opening_cash: { type: string, example: "500000.00", nullable: true }
+                opening_denominations:
+                  type: array
+                  nullable: true
+                  description: 048 — hitungan kas awal per pecahan. Baris ber-qty nol diabaikan.
+                  maxItems: 10
+                  items:
+                    type: object
+                    required: [denomination, qty]
+                    properties:
+                      denomination: { type: integer, enum: [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100] }
+                      qty: { type: integer, minimum: 0, maximum: 100000 }
                 opening_cash_entries:
                   type: array
                   nullable: true
@@ -1577,15 +1600,41 @@ paths:
         **028 — `409` bila shift masih memegang tab terbuka**; badan respons memuat
         `open_tabs` (id, nomor, meja/label) supaya UI bisa menautkannya. Tab harus
         dibayar, dibatalkan, atau diserahkan ke shift lain dulu.
+
+        **048 / S2 — hitungan buta.** Kirim `counted_by_denomination[]` (kasir menghitung per pecahan tanpa
+        melihat angka seharusnya). Server menjumlahkan hitungan itu sendiri, lalu:
+        - `409 pending_payments` bila masih ada pembayaran QRIS (`qr_ewallet`) berstatus `pending` di shift ini;
+        - `409 override_required` bila |selisih| > `variance_tolerance` (`GET /settings/features`, bawaan Rp 5.000);
+          shift TIDAK ditutup. Persetujuan selisih belum tersedia (S3/US4).
+        Hanya protokol hitungan buta yang memeriksa dua aturan itu. Bentuk lama (`closing_cash` saja) tetap
+        seperti sebelumnya. Salah satu dari `closing_cash` atau `counted_by_denomination` wajib (422).
+
+        Menerima header `Idempotency-Key` (satu UUID per niat tutup): pengiriman ulang dengan kunci yang sama
+        mengembalikan hasil tutup yang tersimpan, bukan 409. `expected_cash` hanya muncul di respons ini (dan
+        di Z-report), tidak di ringkasan atau X-report sebelum hitungan dikirim.
+
+        Respons memuat `z_report`: salinan angka shift saat tutup (sama dengan X-report plus hitungan, selisih,
+        toleransi, `edc_batch_total`, dan `closed_at`), disimpan supaya laporan lama tidak ikut berubah.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [closing_cash]
+              description: Isi `counted_by_denomination` (hitungan buta) ATAU `closing_cash` (bentuk lama).
               properties:
-                closing_cash: { type: string, example: "2350000.00" }
+                closing_cash: { type: string, nullable: true, example: "2350000.00" }
+                counted_by_denomination:
+                  type: array
+                  nullable: true
+                  maxItems: 10
+                  items:
+                    type: object
+                    required: [denomination, qty]
+                    properties:
+                      denomination: { type: integer, enum: [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100] }
+                      qty: { type: integer, minimum: 0, maximum: 100000 }
+                edc_batch_total: { type: string, nullable: true, description: "048 — total batch EDC untuk dicocokkan dengan mesin; tidak ikut menghitung selisih." }
                 notes: { type: string, nullable: true }
       responses:
         '200':
@@ -1594,13 +1643,16 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CashierSession' }
         '409':
-          description: Sesi sudah ditutup, ATAU masih ada tab terbuka (memuat `open_tabs`).
+          description: Sesi sudah ditutup, ATAU masih ada tab terbuka (memuat `open_tabs`), ATAU (048) `pending_payments`/`override_required`.
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   message: { type: string }
+                  code: { type: string, enum: [pending_payments, override_required], nullable: true }
+                  variance: { type: string, nullable: true }
+                  tolerance: { type: string, nullable: true }
                   open_tabs:
                     type: array
                     items:
@@ -1610,6 +1662,121 @@ paths:
                         order_number: { type: string }
                         table: { type: string, nullable: true, description: Nama meja; null untuk takeaway. }
                         tab_label: { type: string, nullable: true }
+
+  /sessions/{id}/x-report:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Session]
+      summary: X-report shift (048 — dihitung langsung, tidak disimpan)
+      description: |
+        Angka shift saat ini, dihitung dengan rumus yang SAMA dengan `summary` dan Z-report saat tutup
+        (ShiftReportService). Tidak menutup shift dan tidak menyimpan apa pun. Pemilik shift atau owner/admin.
+        **Tanpa `expected_cash`**: kas seharusnya baru tampil setelah hitungan buta dikirim (respons tutup dan Z-report).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at: { type: string, format: date-time }
+                  session_id: { type: integer }
+                  status: { type: string, enum: [open, closed] }
+                  opening_cash: { $ref: '#/components/schemas/Money' }
+                  order_count: { type: integer }
+                  total_sales: { $ref: '#/components/schemas/Money' }
+                  void_count: { type: integer }
+                  void_total: { $ref: '#/components/schemas/Money' }
+                  change_given: { $ref: '#/components/schemas/Money' }
+                  cash_received: { $ref: '#/components/schemas/Money' }
+                  cash_in: { $ref: '#/components/schemas/Money' }
+                  cash_out: { $ref: '#/components/schemas/Money' }
+                  by_method:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+                        count: { type: integer }
+                        amount: { $ref: '#/components/schemas/Money' }
+                  hourly:
+                    type: array
+                    description: Penjualan per jam dinding toko (jam dengan penjualan saja).
+                    items:
+                      type: object
+                      properties:
+                        hour: { type: string, example: "09" }
+                        order_count: { type: integer }
+                        total: { $ref: '#/components/schemas/Money' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /sessions/{id}/cash-movements:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Session]
+      summary: Daftar kas masuk/keluar shift (048)
+      description: Pemilik shift atau owner/admin. Diurutkan menurut urutan pencatatan.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CashMovement' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Session]
+      summary: Catat kas masuk atau keluar (048 — api-gap B3)
+      description: |
+        Kas masuk/keluar di luar penjualan (uang kecil, setor bank, tambah modal). Hanya di shift TERBUKA milik
+        pengguna. Alasan wajib dan harus sah untuk arahnya; `other` wajib catatan.
+        Kas keluar di atas `cash_out_approval_threshold` (`GET /settings/features`) ditolak `409 override_required`
+        dan TIDAK dicatat; persetujuan belum tersedia (S3/US4). Menerima `Idempotency-Key`: permintaan yang
+        diulang dengan kunci sama hanya dicatat sekali.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: UUID per niat. Permintaan ulang dengan kunci sama tidak mencatat baris kedua.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction, reason_code, amount]
+              properties:
+                direction: { type: string, enum: [in, out] }
+                reason_code:
+                  type: string
+                  description: "in → float_topup | change_exchange | other; out → petty_cash | supplier | bank_deposit | other"
+                reason_note: { type: string, nullable: true, maxLength: 200, description: "Wajib bila reason_code = other." }
+                amount: { type: string, example: "30000.00", description: "Harus > 0, paling banyak dua desimal." }
+      responses:
+        '201':
+          description: Kas dicatat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CashMovement' }
+        '403':
+          description: Shift milik pengguna lain (`code` = session_not_owner).
+        '409':
+          description: Shift sudah ditutup (`session_closed`), atau kas keluar di atas ambang (`override_required`, tidak dicatat).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  code: { type: string, enum: [session_closed, override_required] }
+                  threshold: { type: string, nullable: true }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /sessions/{id}/summary:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -5412,7 +5579,8 @@ paths:
         Bila total yang dibayar ≥ total tab → status `completed`, `change_amount` dihitung, meja kosong.
         Bila kurang → tab tetap `open` dengan `balance`. `client_ref` WAJIB: pengiriman ulang dengan
         `client_ref` yang sama tidak mencatat pembayaran lagi (mengembalikan keadaan terkini).
-        Tab kosong / shift tidak terbuka / bukan `open` → `409`.
+        Tab kosong / bukan `open` → `409`. Shift tidak terbuka → `409` dengan `code` = `shift_required` (048; terminal
+        menampilkan tindakan yang tepat tanpa mengurai kalimat galat).
       requestBody:
         required: true
         content:
@@ -6716,6 +6884,30 @@ components:
         expected_cash: { $ref: '#/components/schemas/Money' }
         cash_difference: { $ref: '#/components/schemas/Money' }
         status: { type: string, enum: [open, closed] }
+        counted_total: { $ref: '#/components/schemas/Money', nullable: true, description: '048 — jumlah hitungan buta (null untuk penutupan bentuk lama).' }
+        edc_batch_total: { $ref: '#/components/schemas/Money', nullable: true }
+        variance: { $ref: '#/components/schemas/Money', nullable: true }
+        z_report: { type: object, nullable: true, description: '048 — salinan angka shift saat tutup.' }
+        device_id: { type: integer, nullable: true }
+        opening_denominations:
+          type: array
+          items:
+            type: object
+            properties:
+              denomination: { type: integer }
+              qty: { type: integer }
+
+    CashMovement:
+      type: object
+      properties:
+        id: { type: integer }
+        session_id: { type: integer }
+        direction: { type: string, enum: [in, out] }
+        reason_code: { type: string }
+        reason_note: { type: string, nullable: true }
+        amount: { $ref: '#/components/schemas/Money' }
+        created_by_name: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
 
     SessionSummary:
       type: object
@@ -6723,6 +6915,9 @@ components:
         session: { $ref: '#/components/schemas/CashierSession' }
         order_count: { type: integer }
         total_sales: { $ref: '#/components/schemas/Money' }
+        cash_in: { $ref: '#/components/schemas/Money' }
+        cash_out: { $ref: '#/components/schemas/Money' }
+        change_given: { $ref: '#/components/schemas/Money' }
         by_method:
           type: array
           items:

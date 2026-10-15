@@ -44,6 +44,16 @@ return Application::configure(basePath: dirname(__DIR__))
         // render tidak menghentikan report), jadi detail lengkap tetap ada di
         // log untuk administrator. Hanya SQLSTATE 42S22 (kolom tidak ada) dan
         // 42S02 (tabel tidak ada); galat database lain TIDAK disamarkan.
+        // 048 — aturan shift yang membawa kode mesin (mis. shift_required, pending_payments): JSON
+        // { message, code, ...context } dengan status dari exception. Di luar rute API tidak diubah.
+        $exceptions->render(function (\App\Exceptions\ShiftRuleException $e, Request $request) {
+            if (! $request->is('api/*') && ! $request->expectsJson()) {
+                return null;
+            }
+
+            return response()->json(['message' => $e->getMessage(), 'code' => $e->reason] + $e->context, $e->status);
+        });
+
         $exceptions->render(function (QueryException $e, Request $request) {
             $isApi = $request->is('api/*') || $request->expectsJson();
 
