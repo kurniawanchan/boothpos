@@ -1,14 +1,21 @@
 package com.warkop.pos.data
 
 import com.warkop.core.domain.ApiError
-import com.warkop.core.domain.Money
 import com.warkop.core.network.ApiClient
 import com.warkop.core.network.ApiErrorMapper
+import com.warkop.core.network.dto.AddLineRequestDto
+import com.warkop.core.network.dto.OpenTabRequestDto
+import com.warkop.core.network.dto.PayRequestDto
+import com.warkop.core.network.dto.PaymentInputDto
+import com.warkop.core.network.dto.UpdateLineRequestDto
 import com.warkop.core.network.PosApi
 import com.warkop.core.network.RequestContext
 import com.warkop.core.network.apiCall
 import com.warkop.core.network.dto.*
+import com.warkop.core.domain.Money
 import com.warkop.pos.model.Availability
+import com.warkop.pos.model.FloorSnapshot
+import com.warkop.pos.model.Order
 import com.warkop.pos.model.MenuCatalog
 import com.warkop.pos.model.Shift
 import com.warkop.pos.model.StaffUser
@@ -152,6 +159,61 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
 
     private fun parseInstant(iso: String): Long = runCatching { Instant.parse(iso).toEpochMilli() }
         .getOrElse { runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }.getOrDefault(System.currentTimeMillis() + 12 * 3_600_000L) }
+
+    // --- denah & pesanan ---
+    private val myDeviceCode: String? get() = vault.get(TokenVault.DEVICE_CODE)
+
+    override suspend fun floor(version: String?): FloorSnapshot? {
+        val res = apiCall { api().floor(version) }
+        if (res.unchanged) return null
+        val mine = myDeviceCode
+        return FloorSnapshot(
+            version = res.version,
+            tables = res.areas.flatMap { area -> area.tables.map { OrderMapper.floorTable(it, area.area, mine) } },
+            takeaway = res.takeawayTabs.map { OrderMapper.floorTab(it, mine, null) },
+        )
+    }
+
+    override suspend fun openTab(sessionId: Long, tableId: Long?, guests: Int?, localRef: String): Order =
+        OrderMapper.tab(
+            apiCall { api().openTab(OpenTabRequestDto(sessionId = sessionId, tableId = tableId, guestCount = guests, localRef = localRef)) },
+            myDeviceCode,
+        )
+
+    override suspend fun tab(id: String): Order = OrderMapper.tab(apiCall { api().tab(id.toLong()) }, myDeviceCode)
+
+    override suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order =
+        OrderMapper.tab(
+            apiCall {
+                api().addLine(tabId.toLong(), key, AddLineRequestDto(variantId = variantId.toLong(), qty = qty, note = note.ifBlank { null }, modifierOptionIds = modifierIds))
+            },
+            myDeviceCode,
+        )
+
+    override suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order =
+        OrderMapper.tab(
+            apiCall { api().updateLine(tabId.toLong(), lineId.toLong(), key, UpdateLineRequestDto(qty = qty, note = note)) },
+            myDeviceCode,
+        )
+
+    override suspend fun removeLine(tabId: String, lineId: Int, key: String): Order =
+        OrderMapper.tab(apiCall { api().removeLine(tabId.toLong(), lineId.toLong(), key) }, myDeviceCode)
+
+    override suspend fun sendToKitchen(tabId: String, key: String): Order =
+        OrderMapper.tab(apiCall { api().send(tabId.toLong(), key).tab }, myDeviceCode)
+
+    override suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String): Order =
+        OrderMapper.tab(
+            apiCall {
+                api().pay(tabId.toLong(), PayRequestDto(clientRef = clientRef, payments = listOf(PaymentInputDto(method, Money.toServer(amount.toLong())))))
+            },
+            myDeviceCode,
+        )
+
+    override suspend fun prebill(tabId: String): Order = OrderMapper.tab(apiCall { api().prebill(tabId.toLong()) }, myDeviceCode)
+
+    override suspend fun closedOrders(): List<Order> =
+        apiCall { api().closedOrders(25) }.data.map { OrderMapper.closed(it) }
 
     companion object {
         /** Kode peran untuk logika tampilan sementara (supervisor, batas diskon contoh). Server tetap penegak. */

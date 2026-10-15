@@ -466,7 +466,7 @@ private fun ColumnScope.ReceiptDialog(store: PosStore, s: Sheet.Receipt) {
             Dash()
             Line("Subtotal", num(o.gross)); if (o.discount > 0) Line("Diskon", "-" + num(o.discount)); Line("Pajak 10%", num(o.tax)); Line("TOTAL", num(o.total), bold = true, size = 17)
             o.tenders.filter { it.status == com.warkop.pos.model.TenderStatus.OK }.forEach { Line(it.method.label + (it.ref?.let { r -> " · $r" } ?: ""), num(it.received ?: it.amount)) }
-            val change = o.tenders.sumOf { (it.received ?: it.amount) - it.amount }
+            val change = o.serverChange ?: 0
             if (change > 0) Line("Kembalian", num(change))
             Text("Terima kasih", Modifier.padding(top = 10.dp), fontFamily = mono, fontSize = 14.sp, color = ink)
         }

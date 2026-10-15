@@ -1,7 +1,9 @@
 package com.warkop.pos.data
 
 import com.warkop.pos.model.Availability
+import com.warkop.pos.model.FloorSnapshot
 import com.warkop.pos.model.MenuCatalog
+import com.warkop.pos.model.Order
 import com.warkop.pos.model.Shift
 import com.warkop.pos.model.StaffUser
 
@@ -50,4 +52,17 @@ interface PosBackend {
     // --- shift (dasar) ---
     suspend fun currentShift(): Shift?
     suspend fun openShift(totalRupiah: Long): Shift
+
+    // --- denah & pesanan (S1/US2). Semua tulis membawa kunci niat (Idempotency-Key / client_ref / local_ref). ---
+    /** null = denah tidak berubah sejak [version]. */
+    suspend fun floor(version: String?): FloorSnapshot?
+    suspend fun openTab(sessionId: Long, tableId: Long?, guests: Int?, localRef: String): Order
+    suspend fun tab(id: String): Order
+    suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order
+    suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order
+    suspend fun removeLine(tabId: String, lineId: Int, key: String): Order
+    suspend fun sendToKitchen(tabId: String, key: String): Order
+    suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String): Order
+    suspend fun prebill(tabId: String): Order
+    suspend fun closedOrders(): List<Order>
 }

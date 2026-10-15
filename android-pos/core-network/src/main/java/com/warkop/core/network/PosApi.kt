@@ -3,8 +3,12 @@ package com.warkop.core.network
 import com.warkop.core.network.dto.*
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
+import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
@@ -33,4 +37,20 @@ interface PosApi {
     // --- shift (dasar; pecahan/kas/X-report di S2) ---
     @GET("sessions/current") suspend fun currentSession(): Response<SessionDto>
     @POST("sessions") suspend fun openSession(@Body body: OpenSessionRequest): SessionDto
+
+    // --- denah & pesanan (S1/US2) ---
+    /** `version` = penanda denah terakhir; jawaban `unchanged=true` bila tak berubah. */
+    @GET("floor") suspend fun floor(@Query("version") version: String?): FloorDto
+    @POST("tabs") suspend fun openTab(@Body body: OpenTabRequestDto): TabDto
+    @GET("tabs/{id}") suspend fun tab(@Path("id") id: Long): TabDto
+    @POST("tabs/{id}/items")
+    suspend fun addLine(@Path("id") id: Long, @Header("Idempotency-Key") key: String, @Body body: AddLineRequestDto): TabDto
+    @PATCH("tabs/{id}/items/{item}")
+    suspend fun updateLine(@Path("id") id: Long, @Path("item") item: Long, @Header("Idempotency-Key") key: String, @Body body: UpdateLineRequestDto): TabDto
+    @DELETE("tabs/{id}/items/{item}")
+    suspend fun removeLine(@Path("id") id: Long, @Path("item") item: Long, @Header("Idempotency-Key") key: String): TabDto
+    @POST("tabs/{id}/send") suspend fun send(@Path("id") id: Long, @Header("Idempotency-Key") key: String): SendResponseDto
+    @POST("tabs/{id}/payments") suspend fun pay(@Path("id") id: Long, @Body body: PayRequestDto): TabDto
+    @POST("tabs/{id}/prebill") suspend fun prebill(@Path("id") id: Long): TabDto
+    @GET("orders") suspend fun closedOrders(@Query("per_page") perPage: Int): ClosedOrdersPage
 }

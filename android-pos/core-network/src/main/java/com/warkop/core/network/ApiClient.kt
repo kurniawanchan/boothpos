@@ -72,7 +72,7 @@ class RedactedLogInterceptor(private val log: (String) -> Unit) : Interceptor {
         return try {
             chain.proceed(request).also { log("${request.method} ${request.url.encodedPath} → ${it.code} (${(System.nanoTime() - start) / 1_000_000} ms)") }
         } catch (t: Throwable) {
-            log("${request.method} ${request.url.encodedPath} → gagal (${t.javaClass.simpleName})")
+            log("${request.method} ${request.url.encodedPath} → gagal (${t.javaClass.simpleName}: ${t.message?.take(120)} / ${t.cause?.javaClass?.simpleName}: ${t.cause?.message?.take(120)})")
             throw t
         }
     }

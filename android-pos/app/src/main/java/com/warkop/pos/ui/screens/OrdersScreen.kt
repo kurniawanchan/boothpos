@@ -29,6 +29,7 @@ fun OrdersScreen(store: PosStore) {
     val open = store.openOrders
     val closed = store.closedOrders
     val compact = windowSize() == Size.COMPACT
+    LaunchedEffect(tab) { if (tab == 1) store.loadClosed() }
     PosShell(store, title = "Order") {
         Column(Modifier.fillMaxSize()) {
             ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp, containerColor = androidx.compose.ui.graphics.Color.Transparent) {

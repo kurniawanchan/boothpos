@@ -5,7 +5,7 @@ import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 
-/** Bentuk data layar POS. Uang selalu Int rupiah (tanpa pecahan), sama seperti prototipe desain. */
+/** Bentuk data layar POS. Uang selalu Int rupiah (tanpa pecahan). Angka uang dari server diutamakan (Konstitusi IV). */
 data class MenuCategory(val id: String, val name: String, val code: String, val tone: Tone)
 
 enum class Tone { INK, TINT, ACCENT, NEUTRAL, OUTLINE }
@@ -30,14 +30,16 @@ data class OrderLine(
     val id: Int, val itemId: String, val name: String, val basePrice: Int, val qty: Int,
     val mods: List<ModOption> = emptyList(), val note: String = "", val discPct: Int = 0,
     val fired: Boolean = false, val firedAt: String? = null, val voided: Boolean = false,
+    /** Total baris dari server (sudah termasuk modifier). Bila ada, dipakai apa adanya. */
+    val lineTotal: Int? = null,
 ) {
     val unit: Int get() = basePrice + mods.sumOf { it.delta }
     val gross: Int get() = unit * qty
-    val net: Int get() = (gross * (100 - discPct) / 100.0).roundToInt()
+    val net: Int get() = lineTotal ?: (gross * (100 - discPct) / 100.0).roundToInt()
     val modLabel: String get() = mods.joinToString(", ") { it.name }
 }
 
-enum class TenderMethod(val label: String) { CASH("Tunai"), EDC("EDC BCA"), QRIS("QRIS GoPay") }
+enum class TenderMethod(val label: String) { CASH("Tunai"), EDC("EDC BCA"), QRIS("QRIS GoPay"), TRANSFER("Transfer bank") }
 enum class TenderStatus { OK, PENDING, FAIL }
 
 data class Tender(
@@ -54,32 +56,49 @@ data class Order(
     val billPrinted: Boolean = false, val closed: Boolean = false, val cancelledReason: String? = null,
     val receiptNo: String? = null, val otherDevice: String? = null, val reprints: Int = 0,
     val closedAt: String? = null, val refunded: Boolean = false,
+    // Angka dari server (null = belum ada; dihitung lokal hanya sebagai cadangan tampilan).
+    val serverSubtotal: Int? = null, val serverDiscount: Int? = null, val serverTax: Int? = null,
+    val serverTotal: Int? = null, val serverPaid: Int? = null, val serverChange: Int? = null,
 ) {
-    val label: String get() = if (kind == OrderKind.COUNTER) "Counter ${queue ?: ""}".trim() else "Meja $table"
+    val label: String get() = if (kind == OrderKind.COUNTER) "Counter ${queue ?: ""}".trim() else "Meja ${table ?: ""}"
     val live: List<OrderLine> get() = lines.filter { !it.voided }
-    val gross: Int get() = live.sumOf { it.net }
-    val discount: Int get() = (gross * discPct / 100.0).roundToInt()
+    val gross: Int get() = serverSubtotal ?: live.sumOf { it.net }
+    val discount: Int get() = serverDiscount ?: (gross * discPct / 100.0).roundToInt()
     val base: Int get() = gross - discount
-    val tax: Int get() = (base * TAX_RATE).roundToInt()
-    val total: Int get() = base + tax
-    val paid: Int get() = tenders.filter { it.status == TenderStatus.OK }.sumOf { it.amount }
+    val tax: Int get() = serverTax ?: (base * TAX_RATE).roundToInt()
+    val total: Int get() = serverTotal ?: (base + tax)
+    val paid: Int get() = serverPaid ?: tenders.filter { it.status == TenderStatus.OK }.sumOf { it.amount }
     val remaining: Int get() = (total - paid).coerceAtLeast(0)
     val unsent: List<OrderLine> get() = live.filter { !it.fired }
     val sent: List<OrderLine> get() = live.filter { it.fired }
     val hasPendingQris: Boolean get() = tenders.any { it.method == TenderMethod.QRIS && it.status == TenderStatus.PENDING }
 
     companion object {
+        /** Cadangan tampilan saja; pajak yang tersimpan selalu dari server. */
         const val TAX_RATE = 0.10
     }
 }
 
-data class Shift(val label: String, val openedAt: String, val schedule: String, val float: Int, val userId: String, val id: Long = 0)
+data class Shift(
+    val label: String, val openedAt: String, val schedule: String, val float: Int, val userId: String,
+    val id: Long = 0,
+)
 
 /** Katalog menu dari server untuk outlet aktif: kategori, item (satu kartu per varian), dan grup modifier. */
 data class MenuCatalog(val categories: List<MenuCategory>, val products: List<Product>, val groups: Map<String, ModGroup>)
 
 /** Item yang sedang habis (86), berisi id varian. `etag` dipakai untuk poll berikutnya. */
 data class Availability(val etag: String, val soldOutVariantIds: Set<String>)
+
+/** Tab di denah. `otherDevice` terisi bila tab dibuka terminal lain. */
+data class FloorTab(
+    val id: Long, val label: String?, val tableName: String?, val total: Int, val paid: Int, val pax: Int,
+    val billPrinted: Boolean, val otherDevice: String?, val queue: String?, val unsent: Int, val ready: Int, val openedAt: String,
+)
+
+data class FloorTable(val id: Long, val name: String, val area: String, val seats: Int, val active: Boolean, val tab: FloorTab?)
+
+data class FloorSnapshot(val version: String, val tables: List<FloorTable>, val takeaway: List<FloorTab>)
 
 private val rpFormat = NumberFormat.getIntegerInstance(Locale("id", "ID"))
 

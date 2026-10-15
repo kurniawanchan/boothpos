@@ -12,6 +12,11 @@ import com.warkop.pos.data.PosSession
 import com.warkop.pos.data.RemoteBackend
 import com.warkop.pos.data.TerminalConfig
 import com.warkop.pos.model.*
+import com.warkop.core.network.IntentKeys
+import com.warkop.core.network.retryNetwork
+import com.warkop.pos.data.OrderMapper
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -90,8 +95,16 @@ class PosStore(
     private var closedCount = 0
 
     val active: Order? get() = orders.firstOrNull { it.id == activeId }
-    val openOrders: List<Order> get() = orders.filter { !it.closed }
-    val closedOrders: List<Order> get() = orders.filter { it.closed }.sortedByDescending { it.closedAt }
+    /** Tab terbuka: yang sudah dibuka di terminal ini, ditambah tab lain dari denah (ringkasan sampai dimuat penuh). */
+    val openOrders: List<Order> get() {
+        val mine = orders.filter { !it.closed }
+        val known = mine.map { it.id }.toSet()
+        val fromFloor = (floor as? Load.Ready)?.value?.let { s -> s.takeaway + s.tables.mapNotNull { it.tab } }.orEmpty()
+        val others = fromFloor.filter { it.id.toString() !in known }.map { OrderMapper.stub(it) }
+        return (mine + others).sortedBy { it.id.toLongOrNull() ?: 0L }
+    }
+    val closedOrders: List<Order> get() =
+        (closedCache + orders.filter { it.closed }).distinctBy { it.id }.sortedByDescending { it.id.toLongOrNull() ?: 0L }
 
     // ---------- awal & sesi ----------
     /** Dipanggil sekali saat aplikasi mulai: terminal belum disiapkan → penyiapan; sudah → PIN dengan roster dimuat. */
@@ -135,6 +148,7 @@ class PosStore(
     fun clearToast() { toast = null }
     fun lock() {
         availabilityJob?.cancel()
+        floorJob?.cancel(); floor = Load.Idle; closedCache = emptyList(); keys.clear()
         viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { } }
         session = null; user = null; shift = null; activeId = null; catalog = Load.Idle; soldOut = emptySet(); dest = Dest.PIN; sheet = null
         loadRoster()
@@ -158,6 +172,7 @@ class PosStore(
                 }
                 loadMenu()
                 startAvailabilityPolling()
+                startFloorPolling()
             } catch (e: ApiError) {
                 onFailure(pinMessage(e))
                 if (e is ApiError.TooMany || e is ApiError.Unauthorized) loadRoster(silent = true)
@@ -214,115 +229,181 @@ class PosStore(
         }
     }
 
-    // ---------- order ----------
-    fun newCounter() {
-        counterSeq++
-        val o = Order("c$counterSeq", OrderKind.COUNTER, null, 0, "A-${counterSeq.toString().padStart(3, '0')}", user?.name ?: "", clock())
-        orders = orders + o; activeId = o.id; dest = Dest.EDITOR
-    }
+    // ---------- pesanan di server (048 / S1: US2) ----------
+    // Semua tulis pesanan lewat server (Konstitusi IV). Angka di layar diganti jawaban server; tidak ada hitung uang
+    // otoritatif di sini. Kunci per niat (IntentKeys) dipakai ulang saat coba-ulang sehingga tidak ada ganda.
+    var floor by mutableStateOf<Load<FloorSnapshot>>(Load.Idle); private set
+    var closedCache by mutableStateOf<List<Order>>(emptyList()); private set
+    private var floorVersion: String? = null
+    private var floorJob: Job? = null
+    private val keys = IntentKeys()
 
-    fun openTable(table: String, pax: Int) {
-        val o = Order("t$table-${System.nanoTime()}", OrderKind.DINE_IN, table, pax, null, user?.name ?: "", clock())
-        orders = orders + o; activeId = o.id; sheet = null; dest = Dest.EDITOR
-    }
+    /** Meja (dengan tab bila ada) dari denah terakhir. */
+    val tables: List<FloorTable> get() = (floor as? Load.Ready)?.value?.tables.orEmpty()
 
-    fun openOrder(id: String) {
-        val o = orders.first { it.id == id }
-        if (o.otherDevice != null && conn != Conn.ONLINE) { say("Meja ${o.table} dikelola perangkat ${o.otherDevice}. Tidak dapat dibuka saat offline."); return }
-        activeId = id
-        dest = if (o.hasPendingQris) Dest.TENDER else Dest.EDITOR
-    }
-
-    fun orderAtTable(table: String) = orders.firstOrNull { !it.closed && it.table == table }
-
-    private fun update(id: String, f: (Order) -> Order) { orders = orders.map { if (it.id == id) f(it) else it } }
-    private fun updateActive(f: (Order) -> Order) { activeId?.let { update(it, f) } }
-
-    fun tapProduct(p: Product) {
-        if (p.id in soldOut) { say("${p.name} sedang habis. Tahan untuk mengubah ketersediaan."); return }
-        if (p.groups.isEmpty()) addLine(p, emptyList(), "") else sheet = Sheet.Modifier(p)
-    }
-
-    /** Baris yang sama (item, modifier, belum terkirim, tanpa catatan/diskon) digabung — aturan prototipe. */
-    fun addLine(p: Product, mods: List<ModOption>, note: String, qty: Int = 1) {
-        updateActive { o ->
-            val twin = o.lines.firstOrNull { !it.voided && !it.fired && it.itemId == p.id && it.mods == mods && it.note.isBlank() && note.isBlank() && it.discPct == 0 }
-            if (twin != null) o.copy(lines = o.lines.map { if (it.id == twin.id) it.copy(qty = it.qty + qty) else it })
-            else o.copy(lines = o.lines + OrderLine(++lineSeq, p.id, p.name, p.price, qty, mods, note.trim()))
-        }
+    /** Fitur yang belum tersambung ke server (cerita berikutnya). Tidak mengubah data lokal. */
+    private fun notWired(what: String) {
+        say("$what belum tersambung ke server — dikerjakan di cerita berikutnya.")
         sheet = null
     }
 
+    /** Denah diperbarui tiap 3 dtk (penanda `version`; tak berubah = tanpa beban). */
+    fun startFloorPolling() {
+        val b = backend ?: return
+        floorJob?.cancel()
+        if (floor !is Load.Ready) floor = Load.Loading
+        floorJob = viewModelScope.launch {
+            while (true) {
+                try {
+                    b.floor(floorVersion)?.let { snap -> floorVersion = snap.version; floor = Load.Ready(snap) }
+                    conn = Conn.ONLINE
+                } catch (e: ApiError) {
+                    if (e is ApiError.Network) conn = Conn.OFFLINE
+                    if (floor !is Load.Ready) floor = Load.Failed(e)
+                }
+                delay(3_000)
+            }
+        }
+    }
+
+    private fun upsert(o: Order) { orders = orders.filter { it.id != o.id } + o }
+
+    /**
+     * Satu niat tulis ke server. Gangguan jaringan dicoba ulang dengan kunci yang sama (server mengembalikan jawaban
+     * tersimpan); galat server ditampilkan apa adanya. Kunci dilepas hanya bila niat terkonfirmasi.
+     */
+    private fun send(intent: String, action: suspend () -> Order, retry: Boolean = true, after: (Order) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val o = if (retry) retryNetwork(block = action) else action()
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(o)
+                after(o)
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                say(e.message)
+            }
+        }
+    }
+
+    fun newCounter() {
+        val b = backend ?: return
+        val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka order."); return }
+        val intent = "open:counter"
+        val key = keys.keyFor(intent)
+        send(intent, { b.openTab(sid, null, null, key) }) { o -> activeId = o.id; dest = Dest.EDITOR; sheet = null }
+    }
+
+    /** Pilih jumlah tamu: tab terbuka di meja itu dibuka; meja kosong membuka tab baru. */
+    fun openTable(table: String, pax: Int) {
+        val b = backend ?: return
+        val ft = tables.firstOrNull { it.name == table } ?: run { say("Meja $table tidak ditemukan."); return }
+        ft.tab?.let { openOrder(it.id.toString()); sheet = null; return }
+        val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka order."); return }
+        val intent = "open:table:${ft.id}:$pax"
+        val key = keys.keyFor(intent)
+        send(intent, { b.openTab(sid, ft.id, pax, key) }) { o -> activeId = o.id; dest = Dest.EDITOR; sheet = null }
+    }
+
+    fun openOrder(id: String) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                val o = retryNetwork { b.tab(id) }
+                upsert(o)
+                activeId = o.id
+                dest = if (o.hasPendingQris) Dest.TENDER else Dest.EDITOR
+            } catch (e: ApiError) { say(e.message) }
+        }
+    }
+
+    fun tapProduct(p: Product) {
+        if (p.id in soldOut) { say("${p.name} sedang habis."); return }
+        if (p.groups.isEmpty()) addLine(p, emptyList(), "") else sheet = Sheet.Modifier(p)
+    }
+
+    /** Tambah baris ke tab aktif. Server menggabungkan baris identik (belum terkirim) sesuai aturannya sendiri. */
+    fun addLine(p: Product, mods: List<ModOption>, note: String, qty: Int = 1) {
+        val b = backend ?: return
+        val tab = activeId ?: return
+        val intent = "line:add:$tab:${p.id}:$qty:${mods.map { it.id }}:${note.trim()}"
+        val key = keys.keyFor(intent)
+        sheet = null
+        send(intent, { b.addLine(tab, p.id, qty, note.trim(), mods.map { it.id }, key) })
+    }
+
+    private fun updateLine(tabId: String, line: OrderLine, qty: Int, note: String) {
+        val b = backend ?: return
+        val intent = "line:patch:$tabId:${line.id}:$qty:$note"
+        val key = keys.keyFor(intent)
+        send(intent, { b.updateLine(tabId, line.id, qty, note, key) })
+    }
+
     fun qtyDelta(lineId: Int, d: Int) {
-        val line = active?.lines?.firstOrNull { it.id == lineId } ?: return
-        if (d < 0 && line.fired) { say("Mengurangi jumlah dilakukan lewat void."); return }
-        if (d < 0 && line.qty == 1) { removeLine(lineId); return }
-        updateActive { o -> o.copy(lines = o.lines.map { if (it.id == lineId) it.copy(qty = it.qty + d) else it }) }
-    }
-
-    fun removeLine(lineId: Int) { updateActive { o -> o.copy(lines = o.lines.filter { it.id != lineId }) }; sheet = null }
-
-    fun saveLine(lineId: Int, qty: Int, note: String, discPct: Int) {
-        val me = user ?: return
-        val limit = PosCatalog.discountLimit[me.code] ?: 0
-        val apply = {
-            updateActive { o -> o.copy(lines = o.lines.map { if (it.id == lineId) it.copy(qty = qty, note = note.trim(), discPct = discPct) else it }) }
-            sheet = null
-        }
-        if (discPct > limit) sheet = Sheet.Override("Diskon $discPct% pada item", discPct, apply) else apply()
-    }
-
-    fun voidLine(lineId: Int, reason: String, made: Boolean) {
-        val me = user ?: return
-        val go = {
-            updateActive { o -> o.copy(lines = o.lines.map { if (it.id == lineId) it.copy(voided = true) else it }) }
-            sheet = null; say("Item di-void · $reason${if (made) " · wastage" else ""}. Slip BATAL dicetak ke station.")
-        }
-        val ln = active?.lines?.firstOrNull { it.id == lineId }
-        val tail = if (made) "sudah dibuat" else "belum dibuat"
-        if (me.isSupervisor) go() else sheet = Sheet.Override("Void ${ln?.qty ?: 1}× ${ln?.name ?: "item"} · ${rp(ln?.net ?: 0)} · Alasan: $reason · $tail", null, go)
-    }
-
-    fun cancelOrder(reason: String) {
         val o = active ?: return
-        if (o.paid > 0) { say("Order dengan pembayaran tidak dapat dibatalkan. Gunakan refund setelah lunas."); sheet = null; return }
-        val go = {
-            update(o.id) { it.copy(closed = true, cancelledReason = reason, closedAt = clock()) }
-            sheet = null; activeId = null; dest = if (o.kind == OrderKind.DINE_IN) Dest.TABLES else Dest.ORDERS
-            say("Order dibatalkan · $reason.")
-        }
-        if (user?.isSupervisor == true) go() else sheet = Sheet.Override("Batalkan ${o.label}: $reason", null, go)
+        val line = o.lines.firstOrNull { it.id == lineId } ?: return
+        if (line.fired && d < 0) { say("Mengurangi jumlah dilakukan lewat void."); return }
+        val next = line.qty + d
+        if (next < 1) { removeLine(lineId); return }
+        if (next > 999) return
+        updateLine(o.id, line, next, line.note)
     }
 
+    fun removeLine(lineId: Int) {
+        val b = backend ?: return
+        val o = active ?: return
+        val line = o.lines.firstOrNull { it.id == lineId } ?: return
+        sheet = null
+        if (line.fired) { say("Item sudah dikirim ke dapur — batalkan lewat void."); return }
+        val intent = "line:del:${o.id}:$lineId"
+        val key = keys.keyFor(intent)
+        send(intent, { b.removeLine(o.id, lineId, key) })
+    }
+
+    /** Simpan jumlah dan catatan baris. Diskon item menunggu cerita diskon (5). */
+    fun saveLine(lineId: Int, qty: Int, note: String, discPct: Int) {
+        val o = active ?: return
+        val line = o.lines.firstOrNull { it.id == lineId } ?: return
+        sheet = null
+        if (discPct != line.discPct) say("Diskon item belum tersambung ke server.")
+        if (qty == line.qty && note.trim() == line.note.trim()) return
+        if (line.fired) { say("Item sudah dikirim — perubahan lewat void."); return }
+        updateLine(o.id, line, qty, note.trim())
+    }
+
+    fun voidLine(lineId: Int, reason: String, made: Boolean) = notWired("Void item")
+
+    fun cancelOrder(reason: String) = notWired("Batalkan order")
+
+    /** Kirim semua baris belum terkirim ke dapur. Kunci mengikuti himpunan baris, jadi item baru = niat baru. */
     fun fire() {
+        val b = backend ?: return
         val o = active ?: return
         val n = o.unsent.size
         if (n == 0) return
-        val t = clock()
-        update(o.id) { it.copy(lines = it.lines.map { l -> if (!l.voided && !l.fired) l.copy(fired = true, firedAt = t) else l }) }
-        emit("${o.label} · $n item", "order.fired"); printed("KOT ${o.label} · Dapur"); say("$n item dikirim ke dapur. KOT tercetak.")
+        val intent = "send:${o.id}:${o.unsent.map { it.id }.sorted()}"
+        val key = keys.keyFor(intent)
+        send(intent, { b.sendToKitchen(o.id, key) }) { _ ->
+            emit("${o.label} · $n item", "order.fired")
+            say("$n item dikirim ke dapur. Cetak KOT belum tersedia.")
+        }
     }
 
-    fun printPrebill() { updateActive { it.copy(billPrinted = true) }; sheet = null; say("Pre-bill tercetak · BELUM LUNAS.") }
-
-    fun applyOrderDiscount(p: DiscountPreset?) {
-        val me = user ?: return
-        val pct = p?.pct ?: 0
-        val apply = { updateActive { it.copy(discPct = pct, discReason = p?.reason) }; sheet = null }
-        if (pct > (PosCatalog.discountLimit[me.code] ?: 0)) sheet = Sheet.Override("Diskon order $pct% · ${p?.label}", pct, apply) else apply()
-    }
-
-    fun splitByItem(lineIds: Set<Int>) {
+    /** Pra-bill: penanda di server (tanpa cetak fisik). Tidak diulang otomatis agar hitungan cetak tidak ganda. */
+    fun printPrebill() {
+        val b = backend ?: return
         val o = active ?: return
-        if (o.paid > 0) { say("Bill dengan pembayaran tidak dapat dibagi per item."); return }
-        if (lineIds.isEmpty() || lineIds.size >= o.live.size) { say("Pilih minimal 1 item dan sisakan minimal 1 item."); return }
-        val moved = o.lines.filter { it.id in lineIds }
-        val child = Order("${o.id}-b", o.kind, o.table, o.pax, o.queue, o.waiter, o.openedAt, lines = moved)
-        orders = orders.map { if (it.id == o.id) it.copy(lines = it.lines.filter { l -> l.id !in lineIds }) else it } + child
-        sheet = null; say("${moved.size} item dipindahkan ke Bill B.")
+        sheet = null
+        send("prebill:${o.id}", { b.prebill(o.id) }, retry = false) { _ ->
+            say("Pra-bill ditandai · BELUM LUNAS. Cetak fisik belum tersedia.")
+        }
     }
 
-    // ---------- pembayaran ----------
+    fun applyOrderDiscount(p: DiscountPreset?) = notWired("Diskon order")
+
+    fun splitByItem(lineIds: Set<Int>) = notWired("Bagi bill")
+
     fun goPay() {
         val o = active ?: return
         if (user?.code == "WTR") { printPrebill(); return }
@@ -334,80 +415,43 @@ class PosStore(
         dest = Dest.TENDER
     }
 
-    /** Tunai memberi kembalian; jumlah tercatat dibatasi sisa tagihan (aturan prototipe). */
+    /** Tunai: server menghitung kembalian sendiri. Pembayaran ber-`client_ref`, aman diulang. */
     fun payCash(received: Int) {
+        val b = backend ?: return
         val o = active ?: return
-        if (conn == Conn.OFFLINE_LIMITED) { say("Batas tunai offline tercapai. Gunakan EDC atau tunggu sinkron."); return }
-        val amount = minOf(received, o.remaining)
-        if (amount <= 0) return
-        record(Tender(tenderSeq++, TenderMethod.CASH, amount, TenderStatus.OK, received = received))
-    }
-
-    fun payEdc(code: String): Boolean {
-        val o = active ?: return false
-        val amount = o.remaining
-        val dup = o.tenders.any { it.method == TenderMethod.EDC && it.amount == amount && System.currentTimeMillis() - it.atMillis < 120_000 }
-        val save = { record(Tender(tenderSeq++, TenderMethod.EDC, amount, TenderStatus.OK, ref = code.uppercase())); sheet = null }
-        if (dup) { sheet = Sheet.Confirm("Pembayaran mungkin ganda", "Pembayaran EDC ${rp(amount)} sudah dicatat kurang dari 2 menit lalu. Catat lagi?", "Catat lagi", save); return false }
-        save(); return true
-    }
-
-    fun recordQris() {
-        val o = active ?: return
-        if (conn != Conn.ONLINE) { say("QRIS tidak tersedia saat offline. Tunai dan EDC tetap bisa dipakai."); return }
-        val t = Tender(tenderSeq++, TenderMethod.QRIS, o.remaining, TenderStatus.PENDING)
-        updateActive { it.copy(tenders = it.tenders + t) }
-        sheet = null; say("QRIS dicatat · menunggu verifikasi.")
-    }
-
-    fun verifyQris(tenderId: Int, ref: String) {
-        val go = {
-            updateActive { o -> o.copy(tenders = o.tenders.map { if (it.id == tenderId) it.copy(status = TenderStatus.OK, ref = ref) else it }) }
-            sheet = null; checkClosed(); say("QRIS terverifikasi.")
+        if (received <= 0) return
+        val intent = "pay:${o.id}:cash:$received"
+        val ref = keys.keyFor(intent)
+        send(intent, { b.pay(o.id, "cash", received, ref) }) { o2 ->
+            if (o2.closed) {
+                emit("${o2.receiptNo.orEmpty()} · ${rp(o2.total)}", "payment.recorded")
+                dest = Dest.DONE
+            } else {
+                say("Sisa ${rp(o2.remaining)}.")
+            }
         }
-        if (user?.isSupervisor == true) go() else sheet = Sheet.Override("Verifikasi QRIS · ref $ref", null, go)
     }
 
-    fun failQris(tenderId: Int) {
-        updateActive { o -> o.copy(tenders = o.tenders.map { if (it.id == tenderId) it.copy(status = TenderStatus.FAIL) else it }) }
-        sheet = null; say("QRIS ditandai gagal. Pilih metode lain.")
-    }
+    fun payEdc(code: String): Boolean { notWired("Pembayaran EDC"); return false }
 
-    private fun record(t: Tender) { updateActive { it.copy(tenders = it.tenders + t) }; emit("${t.method.label} ${rp(t.amount)}", "payment.recorded"); checkClosed() }
+    fun recordQris() = notWired("QRIS")
 
-    private fun checkClosed() {
-        val o = active ?: return
-        if (o.remaining > 0 || o.total == 0) return
-        val no = "T01-" + (receiptSeq++).toString().padStart(6, '0')
-        update(o.id) { cur ->
-            // Order counter menembak baris yang belum terkirim otomatis saat lunas (KOT) — aturan prototipe.
-            val t = clock()
-            cur.copy(closed = true, receiptNo = no, closedAt = t, lines = cur.lines.map { if (!it.voided && !it.fired) it.copy(fired = true, firedAt = t) else it })
+    fun verifyQris(tenderId: Int, ref: String) = notWired("Verifikasi QRIS")
+
+    fun failQris(tenderId: Int) = notWired("Verifikasi QRIS")
+
+    fun reprint(orderId: String) = notWired("Cetak ulang struk")
+
+    fun refund(orderId: String) = notWired("Refund")
+
+    fun approve(pin: String, approver: StaffUser): String? { notWired("Persetujuan"); return null }
+
+    /** Daftar penjualan selesai dari server (layar Order → Selesai). */
+    fun loadClosed() {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try { closedCache = retryNetwork { b.closedOrders() } } catch (e: ApiError) { say(e.message) }
         }
-        closedCount++
-        emit("$no · ${rp(o.total)}", "order.closed"); printed("Struk $no")
-        dest = Dest.DONE
-    }
-
-    fun reprint(orderId: String) {
-        val o = orders.first { it.id == orderId }
-        val free = 1
-        val go = { update(orderId) { it.copy(reprints = it.reprints + 1) }; sheet = Sheet.Receipt(orderId) }
-        if (o.reprints >= free && user?.isSupervisor != true) sheet = Sheet.Override("Cetak ulang struk ${o.receiptNo} (salinan ke-${o.reprints + 1})", null, go) else go()
-    }
-
-    fun refund(orderId: String) {
-        if (conn != Conn.ONLINE) { say("Refund tidak tersedia saat offline."); return }
-        val go = { update(orderId) { it.copy(refunded = true) }; sheet = null; say("Refund dicatat.") }
-        if (user?.isSupervisor == true) go() else sheet = Sheet.Override("Refund penuh order", null, go)
-    }
-
-    fun approve(pin: String, approver: StaffUser): String? {
-        val s = sheet as? Sheet.Override ?: return null
-        if (pin == "000000") return "PIN salah. Sisa 4 percobaan."
-        val limit = PosCatalog.discountLimit[approver.code] ?: 0
-        if (s.minDiscount != null && limit < s.minDiscount) return "Batas diskon ${approver.name} hanya $limit%."
-        sheet = null; s.onApproved(); return null
     }
 
     // ---------- kas & shift ----------
@@ -417,7 +461,8 @@ class PosStore(
         val withinTolerance get() = kotlin.math.abs(variance) <= PosCatalog.VARIANCE_TOLERANCE
     }
 
-    fun cashMove(inflow: Boolean, reason: String, amount: Int) {
+    fun cashMove(inflow: Boolean, reason: String, amount: Int) { notWired("Kas masuk/keluar"); return }
+    @Suppress("unused") private fun cashMoveLocal(inflow: Boolean, reason: String, amount: Int) {
         val go = { cashMovements = cashMovements + CashMovement(inflow, reason, amount, clock()); sheet = null; say("${if (inflow) "Kas masuk" else "Kas keluar"} ${rp(amount)} dicatat.") }
         if (!inflow && amount > PosCatalog.CASH_OUT_THRESHOLD && user?.isSupervisor != true) sheet = Sheet.Override("Kas keluar ${rp(amount)} · $reason", null, go) else go()
     }
@@ -431,7 +476,8 @@ class PosStore(
     fun expectedCash() = (shift?.float ?: 0) + cashSales() + cashIn() - cashOut()
     fun hasPendingPayment() = orders.any { !it.closed && it.hasPendingQris }
 
-    fun submitCount(counted: Int, edcBatch: Int) {
+    fun submitCount(counted: Int, edcBatch: Int) { notWired("Tutup shift"); return }
+    @Suppress("unused") private fun submitCountLocal(counted: Int, edcBatch: Int) {
         closeResult = CloseResult(expectedCash(), counted, edcSales(), edcBatch)
         dest = Dest.CLOSE_RESULT; sheet = null
     }
