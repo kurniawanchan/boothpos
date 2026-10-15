@@ -427,7 +427,10 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - A remote `origin` (github.com/kurniawanchan/boothpos) exists (dated note 2026-10-11; the earlier "no remote" line was outdated), but **pushing and opening PRs need the developer's explicit per-instance authorization** (constitution; the harness may also deny them) — never push on your own initiative.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/047-android-pos-tablet/plan.md`
+Active feature plan: `specs/048-wire-android-pos-api/plan.md`
+(branch `048-wire-android-pos-api`, from 047) — menghubungkan aplikasi Android POS ke data server dan melengkapi API yang belum ada (B2–B14, B17–B19, B21), dalam empat irisan S1–S4; satu `PosBackend` (Remote/Sample), persetujuan di tempat lewat `OverrideGate` (token sekali pakai terikat hash aksi), pajak eksklusif + penomoran struk/antrean, perangkat/terminal. Lihat research.md D1–D14.
+
+Previous feature: `specs/047-android-pos-tablet/plan.md`
 (branch `047-android-pos-tablet`, from 046) — native Android (Kotlin + Compose, Material 3) POS for the Warkop WJM 3 tablet pilot, built **online-first on the EXISTING API** with **no backend change in this phase**; the source lives in the separate, self-contained folder `android-pos/` (to be moved to another repository later; `android/` = the old 008 WebView shell, untouched). Design source: `/Users/chan/www/warkopwjm/design/{spec,screens}`. API that does not exist yet (PIN login, supervisor approvals, cash in/out, X/Z reports, EDC, QRIS pending, tax, receipt/queue numbers, device registry, offline sync …) is listed in `specs/047-android-pos-tablet/api-gap.md` (B1–B21) and will be built after this phase; the app exposes those paths behind `ApiCapabilities` flags ("menunggu API"). No Android SDK/Gradle exists on this machine, so builds are not verified here. See research.md D1–D18.
 
 Previous feature: `specs/046-hide-events-preorders/plan.md`
