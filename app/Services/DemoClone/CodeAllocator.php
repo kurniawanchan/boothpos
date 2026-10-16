@@ -2,6 +2,7 @@
 
 namespace App\Services\DemoClone;
 
+use App\Support\ProductSegment;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -46,14 +47,18 @@ final class CodeAllocator
 
     public function productPrefix(string $livePrefix, int $productId): string
     {
-        if (! preg_match('/^([A-Za-z]{3})-([A-Za-z]{2})-([A-Za-z]{3})$/', $livePrefix, $m)) {
-            throw new CloneException("products id {$productId}: code_prefix tidak berbentuk AAA-BB-CCC.");
+        // Segmen 1–3 huruf (spec 042) — aturan tunggal ProductSegment. Diperiksa
+        // dalam huruf besar; pemisah '-' tidak berubah oleh strtoupper, jadi
+        // bagian asli dipakai untuk pencarian peta kode LIVE.
+        if (! preg_match(ProductSegment::CODE_PATTERN, strtoupper($livePrefix))) {
+            throw new CloneException("products id {$productId}: code_prefix tidak berbentuk AAA-BB-SEG (segmen 1-3 huruf).");
         }
+        [$artistPart, $categoryPart, $segmentPart] = explode('-', $livePrefix);
 
         // Tiap bagian prefix dicari lewat peta kode LIVE-nya sendiri (bukan lewat
         // artist/kategori produk sekarang): kode bersifat permanen (F19.4), jadi
         // artist/kategori produk bisa saja sudah berganti setelah prefix dibuat.
-        return $this->artist($m[1]).'-'.$this->category($m[2]).'-'.strtoupper($m[3]);
+        return $this->artist($artistPart).'-'.$this->category($categoryPart).'-'.strtoupper($segmentPart);
     }
 
     public function sku(string $liveSku, string $livePrefix, string $demoPrefix, int $variantId): string

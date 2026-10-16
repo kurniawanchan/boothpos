@@ -902,8 +902,10 @@ paths:
       description: |
         `code_prefix` dan `sku` dihasilkan server, tidak dikirim klien.
         `code_prefix` = artist.code + "-" + category.code + "-" + product_segment
-        (format "ART-CA-SEG", 10 karakter). `sku` = code_prefix + "-" + urutan
-        varian 3 digit (format "ART-CA-SEG-001", 14 karakter).
+        (format "ART-CA-SEG", 8–10 karakter; segmen 1–3 huruf, disimpan apa
+        adanya, tidak dipad — spec 042). `sku` = code_prefix + "-" + urutan
+        varian 3 digit (format "ART-CA-SEG-001", 12–14 karakter). Segmen
+        kosong diturunkan dari nama produk (3 huruf, dipad 'X').
       requestBody:
         required: true
         content:
@@ -5992,7 +5994,7 @@ components:
         artist_name: { type: string, readOnly: true }
         category_id: { type: integer }
         category_name: { type: string, readOnly: true }
-        code_prefix: { type: string, minLength: 10, maxLength: 10, readOnly: true, example: RYU-KY-SAK }
+        code_prefix: { type: string, minLength: 8, maxLength: 10, readOnly: true, example: RYU-KY-SAK }
         name: { type: string }
         description: { type: string, nullable: true }
         image_path: { type: string, nullable: true, description: "Diisi via POST /products/{id}/image atau impor massal (Task 6)." }
@@ -6010,6 +6012,13 @@ components:
       properties:
         artist_id: { type: integer }
         category_id: { type: integer }
+        product_segment:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 3
+          pattern: '^[A-Za-z]{1,3}$'
+          description: 1–3 huruf; disimpan huruf besar tanpa pad. Kosong = diturunkan dari name.
         name: { type: string, maxLength: 150 }
         description: { type: string, nullable: true }
         is_preorder: { type: boolean, default: false }

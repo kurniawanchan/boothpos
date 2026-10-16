@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Concerns\DataModeScope;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Support\ProductSegment;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -13,8 +14,8 @@ use Illuminate\Validation\ValidationException;
  * digabung tanpa pemisah — lihat migration
  * 2026_10_25_000001_widen_product_code_and_sku_columns_for_dashed_format
  * untuk riwayat perubahan lebar kolom):
- *   code_prefix = artist.code(3) + "-" + category.code(2) + "-" + product_segment(3)
- *   sku         = code_prefix(10) + "-" + urutan 3 digit
+ *   code_prefix = artist.code(3) + "-" + category.code(2) + "-" + product_segment(1–3)
+ *   sku         = code_prefix(8–10) + "-" + urutan 3 digit
  *
  * Kode bersifat PERMANEN setelah dibuat (F19.4) — service ini hanya
  * dipanggil sekali saat entitas dibuat, tidak pernah untuk regenerasi.
@@ -47,8 +48,10 @@ class ProductCodeGenerator
     {
         $prefix = strtoupper($artistCode).'-'.strtoupper($categoryCode).'-'.strtoupper($productSegment);
 
-        if (strlen($prefix) !== 10) {
-            throw new \InvalidArgumentException('Kombinasi kode artist, kategori, dan segmen produk harus menghasilkan 10 karakter (format ART-CA-SEG).');
+        // Bentuk diperiksa lewat ProductSegment::CODE_PATTERN (segmen 1–3 huruf,
+        // spec 042) — bukan panjang tetap, karena segmen kini bervariasi.
+        if (! preg_match(ProductSegment::CODE_PATTERN, $prefix)) {
+            throw new \InvalidArgumentException('Kombinasi kode artist, kategori, dan segmen produk harus berbentuk ART-CA-SEG (segmen 1–3 huruf).');
         }
 
         // 003-seed-demo-live — withoutGlobalScope: code_prefix UNIQUE lintas

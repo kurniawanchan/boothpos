@@ -368,7 +368,11 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/041-product-export-columns/plan.md`
+Active feature plan: `specs/042-product-segment-1-3/plan.md`
+(branch `050-product-segment-1-3`, stacked on `049-product-export-columns`) — a product segment is 1–3 letters,
+stored as typed (no `X` padding); the SKU follows it (`SPF-SH-S-001`). One rule in `App\Support\ProductSegment`.
+
+Previous feature: `specs/041-product-export-columns/plan.md`
 (branch `049-product-export-columns`, from `develop`) — the products master-data EXPORT (`GET /exports/products`)
 gets a new column layout (artist/category names, `code` and `item_label` from the SKU tail, `profit_margin`;
 eight columns removed). Export-only (product-owner decision A): `MasterDataSheets::PRODUCTS` and the import/template
