@@ -63,6 +63,23 @@ class CodeAllocatorTest extends TestCase
         $this->assertSame('ZK', $allocator->category('KC'));
     }
 
+    /** Spec 042 (T013): segmen 1–3 huruf diterima dan dipertahankan panjangnya. */
+    public function test_product_prefix_accepts_a_short_segment_and_keeps_its_length(): void
+    {
+        $allocator = new CodeAllocator;
+
+        $this->assertSame('ZVL-ZK-L', $allocator->productPrefix('VLC-KC-L', 7));
+        $this->assertSame('ZVL-ZK-LO', $allocator->productPrefix('VLC-KC-LO', 7));
+    }
+
+    public function test_a_segment_longer_than_three_letters_still_aborts(): void
+    {
+        $this->expectException(CloneException::class);
+        $this->expectExceptionMessage('products id 9');
+
+        (new CodeAllocator)->productPrefix('VLC-KC-ABCD', 9);
+    }
+
     public function test_a_prefix_with_the_wrong_shape_aborts_with_the_product_id(): void
     {
         $this->expectException(CloneException::class);

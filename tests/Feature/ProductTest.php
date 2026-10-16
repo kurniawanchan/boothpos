@@ -6,6 +6,7 @@ use App\Models\Artist;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
+use App\Support\ModeGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -97,6 +98,137 @@ class ProductTest extends TestCase
         $response = $this->postJson('/api/v1/products', $payload);
 
         $response->assertStatus(422)->assertJsonValidationErrors('product_segment');
+    }
+
+    /** @return array<string, mixed> */
+    private function productPayload(int $artistId, int $categoryId, array $overrides = []): array
+    {
+        return array_merge([
+            'artist_id' => $artistId,
+            'category_id' => $categoryId,
+            'name' => 'Produk Uji',
+            'variants' => [['variant_name' => 'Standard', 'sell_price' => 15000]],
+        ], $overrides);
+    }
+
+    /** Spec 042 US1 (FR-001..FR-003): segmen 1–3 huruf disimpan apa adanya. */
+    public function test_short_segment_is_saved_as_typed_and_builds_the_code(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'product_segment' => 'S',
+        ]))->assertCreated()
+            ->assertJsonPath('code_prefix', 'RYU-KY-S')
+            ->assertJsonPath('variants.0.sku', 'RYU-KY-S-001');
+    }
+
+    public function test_lowercase_segment_is_stored_uppercase(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'product_segment' => ' sh ',
+        ]))->assertCreated()
+            ->assertJsonPath('code_prefix', 'RYU-KY-SH');
+
+        $this->assertDatabaseHas('products', ['code_prefix' => 'RYU-KY-SH', 'product_segment' => 'SH']);
+    }
+
+    public function test_segment_longer_than_three_letters_is_refused_and_nothing_is_saved(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'product_segment' => 'ABCD',
+        ]))->assertStatus(422)->assertJsonValidationErrors('product_segment');
+
+        $this->assertSame(0, Product::count());
+    }
+
+    public function test_segment_with_digits_or_symbols_is_refused(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        foreach (['S1', 'S-', 'S H'] as $segment) {
+            $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+                'product_segment' => $segment,
+            ]))->assertStatus(422)->assertJsonValidationErrors('product_segment');
+        }
+
+        $this->assertSame(0, Product::count());
+    }
+
+    /** Spec 042 US2 (FR-004, FR-005): SKU = kode produk + urutan 3 digit, segmen apa adanya. */
+    public function test_skus_follow_a_short_segment_across_variants(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'product_segment' => 'S',
+            'variants' => [
+                ['variant_name' => 'A', 'sell_price' => 15000],
+                ['variant_name' => 'B', 'sell_price' => 15000],
+            ],
+        ]))->assertCreated()
+            ->assertJsonPath('variants.0.sku', 'RYU-KY-S-001')
+            ->assertJsonPath('variants.1.sku', 'RYU-KY-S-002');
+    }
+
+    public function test_segment_three_letters_is_not_shortened_in_the_sku(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'product_segment' => 'SPF',
+        ]))->assertCreated()
+            ->assertJsonPath('code_prefix', 'RYU-KY-SPF')
+            ->assertJsonPath('variants.0.sku', 'RYU-KY-SPF-001');
+    }
+
+    /** Spec 042 US3 (FR-007): segmen kosong tetap diturunkan dari nama, 3 huruf dengan 'X'. */
+    public function test_blank_segment_derives_three_letters_from_the_name(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'name' => 'Conan',
+        ]))->assertCreated()->assertJsonPath('code_prefix', 'RYU-KY-CON');
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'name' => 'Ai',
+        ]))->assertCreated()->assertJsonPath('code_prefix', 'RYU-KY-AIX');
+    }
+
+    /** Spec 042 FR-010 + edge case: tabrakan kode dicek lintas DEMO dan LIVE. */
+    public function test_short_segment_colliding_with_a_demo_product_is_refused(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        ModeGate::runAs('demo', fn () => Product::factory()->create([
+            'artist_id' => $artist->id,
+            'category_id' => $category->id,
+            'code_prefix' => 'RYU-KY-S',
+            'product_segment' => 'S',
+            'name' => 'Demo Produk',
+        ]));
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'product_segment' => 'S',
+        ]))->assertStatus(422)->assertJsonValidationErrors('product_segment');
+
+        // Segmen lain yang berbeda tidak bertabrakan.
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'product_segment' => 'SX',
+        ]))->assertCreated()->assertJsonPath('code_prefix', 'RYU-KY-SX');
     }
 
     public function test_product_requires_at_least_one_variant(): void

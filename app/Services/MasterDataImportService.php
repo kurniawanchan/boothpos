@@ -6,6 +6,7 @@ use App\Exceptions\MasterDataImportRowException;
 use App\Imports\MasterDataSheetsImport;
 use App\Models\Artist;
 use App\Models\Category;
+use App\Support\ProductSegment;
 use App\Models\Material;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -721,9 +722,11 @@ class MasterDataImportService
 
             $segment = null;
             if ($this->filled($values, 'product_segment')) {
-                $segment = strtoupper($this->stringValue($values, 'product_segment'));
-                if (strlen($segment) !== 3 || ! ctype_alpha($segment)) {
-                    $this->addError($sheet, $row, 'product_segment', "Segmen produk '{$segment}' harus tepat 3 huruf.");
+                // Aturan yang sama dengan POST /products (spec 042): 1–3 huruf,
+                // disimpan apa adanya — bukan lagi tepat 3 huruf.
+                $segment = ProductSegment::normalise($this->stringValue($values, 'product_segment'));
+                if ($segment === null || ! preg_match(ProductSegment::PATTERN, $segment)) {
+                    $this->addError($sheet, $row, 'product_segment', "Segmen produk '{$segment}' harus 1 sampai 3 huruf (A–Z).");
                     $rowIsBroken = true;
                 }
             } elseif ($productName !== null) {

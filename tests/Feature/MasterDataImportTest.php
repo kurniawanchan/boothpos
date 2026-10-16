@@ -308,6 +308,48 @@ class MasterDataImportTest extends TestCase
         $this->assertDatabaseHas('products', ['code_prefix' => 'ZZZ-ZZ-AAA']);
     }
 
+    /** Spec 042 US4 (FR-008): segmen 1 huruf lewat impor dan menghasilkan SKU sesuai. */
+    public function test_import_accepts_a_one_letter_segment_and_builds_the_sku(): void
+    {
+        $this->actingAsRole('owner');
+        $this->enableMultiArtist();
+
+        $file = $this->workbook([
+            'artists' => ['rows' => [['code' => 'SPF', 'name' => 'Sapphire Filess']]],
+            'categories' => ['rows' => [['code' => 'SH', 'name' => 'Sticker Sheet']]],
+            'products' => ['rows' => [
+                ['artist_code' => 'SPF', 'category_code' => 'SH', 'product_segment' => 'S', 'product_name' => 'Conan', 'variant_name' => 'Standard', 'sell_price' => 25000],
+            ]],
+        ]);
+
+        $this->postImport($file)->assertOk()->assertJsonPath('applied', true);
+
+        $this->assertDatabaseHas('products', ['code_prefix' => 'SPF-SH-S', 'product_segment' => 'S']);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'SPF-SH-S-001']);
+    }
+
+    /** Spec 042 US4 (FR-008): segmen 4 huruf = galat baris, seluruh impor dibatalkan. */
+    public function test_import_refuses_a_four_letter_segment_and_writes_nothing(): void
+    {
+        $this->actingAsRole('owner');
+        $this->enableMultiArtist();
+
+        $file = $this->workbook([
+            'artists' => ['rows' => [['code' => 'SPF', 'name' => 'Sapphire Filess']]],
+            'categories' => ['rows' => [['code' => 'SH', 'name' => 'Sticker Sheet']]],
+            'products' => ['rows' => [
+                ['artist_code' => 'SPF', 'category_code' => 'SH', 'product_segment' => 'ABCD', 'product_name' => 'Conan', 'variant_name' => 'Standard', 'sell_price' => 25000],
+            ]],
+        ]);
+
+        $this->postImport($file)->assertJsonPath('applied', false)
+            ->assertJsonPath('errors.0.sheet', 'products')
+            ->assertJsonPath('errors.0.column', 'product_segment');
+
+        $this->assertDatabaseMissing('products', ['code_prefix' => 'SPF-SH-ABCD']);
+        $this->assertDatabaseMissing('artists', ['code' => 'SPF']);
+    }
+
     public function test_sheet_names_are_matched_case_insensitively_and_extras_are_ignored(): void
     {
         $this->actingAsRole('owner');

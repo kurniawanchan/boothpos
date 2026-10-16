@@ -49,6 +49,37 @@ class LiveToDemoClonerTest extends TestCase
         $this->assertSame($this->oldDemo['order'], $this->demo('orders')->id);
     }
 
+    /**
+     * Spec 042 (T014): produk LIVE bersegmen 1 huruf tidak boleh menggagalkan
+     * seluruh klon. Fixture memakai segmen 3 huruf; di sini segmen LIVE diubah
+     * menjadi "A" (kode dan SKU ikut diubah) sebelum klon dijalankan.
+     */
+    public function test_a_live_product_with_a_one_letter_segment_clones_and_keeps_its_length(): void
+    {
+        DB::table('products')->where('data_mode', 'live')->update([
+            'code_prefix' => 'LIV-LC-A',
+            'product_segment' => 'A',
+        ]);
+        DB::table('product_variants')->where('data_mode', 'live')->get()->each(function ($variant) {
+            DB::table('product_variants')->where('id', $variant->id)->update([
+                'sku' => str_replace('LIV-LC-ABC-', 'LIV-LC-A-', $variant->sku),
+            ]);
+        });
+
+        (new LiveToDemoCloner)->run();
+
+        $demo = DB::table('products')->where('data_mode', 'demo')->first();
+        $this->assertNotNull($demo);
+        $this->assertSame('A', $demo->product_segment);
+        $this->assertMatchesRegularExpression('/^[A-Z]{3}-[A-Z]{2}-A$/', $demo->code_prefix);
+
+        $skus = DB::table('product_variants')->where('data_mode', 'demo')->pluck('sku');
+        $this->assertCount(2, $skus);
+        foreach ($skus as $sku) {
+            $this->assertMatchesRegularExpression('/^[A-Z]{3}-[A-Z]{2}-A-00\d$/', $sku);
+        }
+    }
+
     public function test_old_demo_rows_are_replaced_and_every_table_mirrors_live(): void
     {
         $report = (new LiveToDemoCloner)->run();

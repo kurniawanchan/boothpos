@@ -27,6 +27,7 @@ import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 import VariantBomModal from '../components/product/VariantBomModal.vue';
 import VariantDetailModal from '../components/product/VariantDetailModal.vue';
 import ImageLightbox from '../components/ui/ImageLightbox.vue';
+import { previewSegment } from '../utils/productSegment';
 
 const auth = useAuthStore();
 const { t } = useI18n();
@@ -200,11 +201,8 @@ const hasStockChanges = computed(() =>
   variantRows.value.some((row) => Number(row.current_stock) !== Number(row.original_stock ?? 0))
 );
 
-function deriveSegment(name) {
-  const letters = (name || '').replace(/[^A-Za-z]/g, '').toUpperCase();
-  return letters.slice(0, 3).padEnd(3, 'X');
-}
-const effectiveSegment = computed(() => (productForm.product_segment || deriveSegment(productForm.name)).toUpperCase().slice(0, 3).padEnd(3, 'X'));
+// Pratinjau kode: segmen yang diketik tidak dipad (spec 042); aturan ada di utils/productSegment.js.
+const effectiveSegment = computed(() => previewSegment(productForm.product_segment, productForm.name));
 const artistCode = computed(() => artists.value.find((a) => a.id === Number(productForm.artist_id))?.code ?? '···');
 const categoryCode = computed(() => categories.value.find((c) => c.id === Number(productForm.category_id))?.code ?? '··');
 const codePreview = computed(() => `${artistCode.value}-${categoryCode.value}-${effectiveSegment.value}-001`);
