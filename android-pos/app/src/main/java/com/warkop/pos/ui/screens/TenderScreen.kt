@@ -95,7 +95,7 @@ fun TenderScreen(store: PosStore) {
                 PrimaryPill("Terima tunai", { store.payCash(value); amount = "" }, Modifier.fillMaxWidth(), enabled = value > 0, icon = Icons.Filled.Payments, trailing = rp(value))
             }
             if (pending) Surface(Modifier.fillMaxWidth().padding(top = 10.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.pos.warnContainer, contentColor = MaterialTheme.pos.onWarnContainer) {
-                Text("QRIS menunggu verifikasi memblokir pembayaran non-tunai lain dan penutupan shift.", Modifier.padding(16.dp), fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text("QRIS menunggu verifikasi memblokir pembayaran non-tunai lain pada tab ini, dan penutupan shift.", Modifier.padding(16.dp), fontSize = 16.sp, fontWeight = FontWeight.Medium)
             }
         }
     }

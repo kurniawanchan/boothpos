@@ -52,3 +52,10 @@ Status: **BELUM LULUS** — T057 tetap `[ ]`. Emulator `wjm_tablet` berjalan dan
 - Tab 2044 tanpa nomor struk: dibuka lewat API tanpa header X-Device-Id, jadi tidak mendapat nomor terminal. Ini artefak pengujian, bukan cacat aplikasi.
 - Residu: tab 2039–2044 selesai (tidak ada yang dibatalkan), shift 11 open, QRIS channel id 3 (dibuat untuk tes).
 
+## Penutupan T057 (2026-10-16, siang WIB)
+- **Langkah 1, stok kembali (lewat API, izin Sari):** varian 30 (WJMK1-001) diaktifkan pelacakan stok dan ditambah 10 lewat StockService di outlet 4 (dev, disetujui). Tab 2045: +2 varian 30 dan +1 varian 31; kirim dapur; void baris 30 dengan persetujuan void_line (stock_decision=return) → 200; tunai Rp 12.000 → tab selesai. Ledger varian 30 outlet 4: adjustment +10 → 10; sale −2 (order_item 6048) → 8; return +2 (order_item 6048) → 10. Stok kembali ke angka sebelum penjualan.
+- **Langkah 3:** QRIS 2029 (tab 2043) diverifikasi REF9876 dengan persetujuan Sari. Shift 11 kini tanpa tab terbuka dan tanpa QRIS tertunda.
+- **Penutupan shift 11** (buta, izin Rina): kas seharusnya 170.000 (modal 150.000 + tunai 8.000 + 12.000), hitungan 170.000, selisih 0; status closed.
+- Salinan label: teks layar tender diperbaiki sesuai aturan per tab untuk pembayaran dan penutupan shift untuk tutup (keputusan pemilik).
+- Status akhir: langkah 1 LULUS (void di perangkat, stok kembali lewat API); langkah 2 tercakup OverrideGateTest (disetujui); langkah 3 LULUS di server (pending_payments, pending_qris lewat API; tombol di perangkat dinonaktifkan oleh klien, disetujui); langkah 4 LULUS (perangkat).
+
