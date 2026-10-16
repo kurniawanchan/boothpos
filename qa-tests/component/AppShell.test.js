@@ -144,3 +144,40 @@ describe('AppShell — sidebar show/hide toggle', () => {
     expect(screen.getByRole('button', { name: /tampilkan sidebar/i })).toBeInTheDocument();
   });
 });
+
+// Spec 043 (US1): rute dengan meta.fullHeight (POS) memakai tinggi viewport;
+// rute lain tetap min-h-screen seperti sebelumnya.
+async function renderAtRoute(path) {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const auth = useAuthStore();
+  auth.user = { id: 1, name: 'Test User', username: 'test', role: 'Owner', menu_keys: ['dashboard'] };
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/dashboard', name: 'dashboard', component: { template: '<div>Beranda</div>' } },
+      { path: '/pos', name: 'pos', meta: { menuKey: 'pos', fullHeight: true }, component: { template: '<div>Kasir</div>' } },
+      { path: '/products', name: 'products', component: { template: '<div>Produk</div>' } },
+      { path: '/profile', name: 'profile', component: { template: '<div>Profil</div>' } },
+    ],
+  });
+  router.push(path);
+  await router.isReady();
+  return render(AppShell, { global: { plugins: [pinia, router] } });
+}
+
+describe('AppShell fixed-height routes (043)', () => {
+  it('runs the POS route at viewport height', async () => {
+    const { container } = await renderAtRoute('/pos');
+    const shell = container.firstElementChild;
+    expect(shell.classList).toContain('h-dvh');
+    expect(shell.classList).not.toContain('min-h-screen');
+  });
+
+  it('keeps other routes growing with their content', async () => {
+    const { container } = await renderAtRoute('/products');
+    const shell = container.firstElementChild;
+    expect(shell.classList).toContain('min-h-screen');
+    expect(shell.classList).not.toContain('h-dvh');
+  });
+});

@@ -368,7 +368,12 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/042-product-segment-1-3/plan.md`
+Active feature plan: `specs/043-pos-cart-pinned-summary/plan.md`
+(branch `051-pos-cart-pinned-summary`, stacked on `050-product-segment-1-3`) — on the POS screen the cart's total
+and Pay button stay visible without scrolling the page. The POS route carries `meta.fullHeight`; `AppShell` then
+runs at viewport height and `<main>` is the only scroll area. Other routes are unchanged.
+
+Previous feature: `specs/042-product-segment-1-3/plan.md`
 (branch `050-product-segment-1-3`, stacked on `049-product-export-columns`) — a product segment is 1–3 letters,
 stored as typed (no `X` padding); the SKU follows it (`SPF-SH-S-001`). One rule in `App\Support\ProductSegment`.
 

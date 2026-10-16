@@ -72,4 +72,19 @@ describe('PosCartPanel', () => {
     const enlarged = await screen.findAllByAltText('Produk A');
     expect(enlarged.length).toBeGreaterThan(1);
   });
+
+  // Spec 043 (US2): daftar item gulir sendiri, ringkasan (tombol Bayar) tidak ikut menyusut.
+  it('scrolls the item list on its own and keeps the summary from shrinking', async () => {
+    const { pinia } = renderPanel();
+    const cart = usePosCartStore(pinia);
+    cart.add({ variant_id: 1, sku: 'SKU1', name: 'Produk Uji Gulir', sell_price: '10000.00', current_stock: 5 });
+    await Promise.resolve();
+
+    const itemList = screen.getByText('Produk Uji Gulir').closest('.overflow-auto');
+    expect(itemList).toHaveClass('flex-1');
+
+    const summary = screen.getByRole('button', { name: /bayar/i }).closest('.flex-none');
+    expect(summary).not.toBeNull();
+    expect(summary).toHaveClass('flex-none');
+  });
 });
