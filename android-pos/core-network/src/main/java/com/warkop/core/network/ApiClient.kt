@@ -1,6 +1,8 @@
 package com.warkop.core.network
 
 import com.warkop.core.domain.ApiError
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -78,9 +80,14 @@ class RedactedLogInterceptor(private val log: (String) -> Unit) : Interceptor {
     }
 }
 
-/** Menjalankan panggilan Retrofit dan memetakan SEMUA kegagalan ke [ApiError]. */
+/**
+ * Menjalankan panggilan Retrofit dan memetakan SEMUA kegagalan ke [ApiError].
+ * Blok (termasuk penulisan body kotlinx.serialization dan pemuatan kelas DTO pertama kali) berjalan di Dispatchers.IO,
+ * bukan di main thread: pada 2026-10-16 "Order counter baru" membuat UI membeku (ANR) karena verifikasi kelas
+ * OpenTabRequestDto memakan 9,8 dtk di main thread.
+ */
 suspend fun <T> apiCall(block: suspend () -> T): T = try {
-    block()
+    withContext(Dispatchers.IO) { block() }
 } catch (e: HttpException) {
     throw ApiErrorMapper.fromHttp(e.code(), runCatching { e.response()?.errorBody()?.string() }.getOrNull())
 } catch (e: ApiError) {

@@ -24,6 +24,7 @@ import com.warkop.pos.model.Order
 import com.warkop.pos.model.MenuCatalog
 import com.warkop.pos.model.Approver
 import com.warkop.pos.model.ReasonCode
+import com.warkop.pos.model.BankChannel
 import com.warkop.pos.model.CashMovement
 import com.warkop.pos.model.CloseOutcome
 import com.warkop.pos.model.Shift
@@ -273,6 +274,11 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
 
     override suspend fun qrisChannelId(): Long? =
         apiCall { api().paymentChannels() }.data.firstOrNull { it.type == "qr_ewallet" }?.id
+
+    override suspend fun bankChannels(): List<BankChannel> =
+        apiCall { api().paymentChannels() }.data
+            .filter { it.type == "bank_transfer" }
+            .map { BankChannel(it.id, it.provider?.takeIf { p -> p.isNotBlank() } ?: it.accountName.orEmpty().ifBlank { "Bank ${it.id}" }) }
 
     override suspend fun verifyPayment(tabId: String, paymentId: Long, reference: String, overrideToken: String?): Order =
         OrderMapper.tab(apiCall { api().verifyPayment(tabId.toLong(), paymentId, VerifyPaymentRequestDto(reference = reference, overrideToken = overrideToken)) }, myDeviceCode)

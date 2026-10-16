@@ -63,6 +63,7 @@ private fun SheetBody(store: PosStore, s: Sheet) {
             is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, Sheet.Discount -> Unit
             is Sheet.Void -> VoidDialog(store, s)
             is Sheet.Override -> OverrideDialog(store, s)
+            is Sheet.SoldOut -> SoldOutDialog(store, s)
             Sheet.Edc -> EdcDialog(store)
             Sheet.QrisRecord -> QrisRecordDialog(store)
             is Sheet.QrisVerify -> QrisVerifyDialog(store, s)
@@ -313,6 +314,32 @@ private fun ColumnScope.VoidDialog(store: PosStore, s: Sheet.Void) {
 }
 
 @Composable
+private fun ColumnScope.SoldOutDialog(store: PosStore, s: Sheet.SoldOut) {
+    var reason by remember(s) { mutableStateOf<ReasonCode?>(null) }
+    Icon(Icons.Filled.WarningAmber, null, Modifier.align(Alignment.CenterHorizontally).size(36.dp), tint = MaterialTheme.colorScheme.primary)
+    Text("Tandai ${s.product.name} habis?", Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp, bottom = 6.dp), fontSize = 26.sp)
+    Text("Pilih alasan. Item tidak bisa dipesan sampai dibuka lagi.", Modifier.padding(bottom = 10.dp), fontSize = 16.sp)
+    when (val r = store.soldOutReasons) {
+        is Load.Ready -> if (r.value.isEmpty()) {
+            // Tidak ada alasan di server: item TIDAK ditandai habis (tidak ada id yang dikarang).
+            Text("Server belum punya alasan 86 aktif (kategori sold_out). Item tidak bisa ditandai habis dari sini.", color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
+        } else {
+            r.value.forEach { ra -> RadioRow(ra.label, reason?.id == ra.id, { reason = ra }, big = true) }
+        }
+        is Load.Failed -> ErrorState(r.error.message, { store.loadSoldOutReasons() }, Modifier.fillMaxWidth())
+        else -> Text("Memuat alasan…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Spacer(Modifier.height(16.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+        TextButton({ store.show(null) }) { Text("Batal", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
+        Spacer(Modifier.width(12.dp))
+        Button({ reason?.let { store.confirmSoldOut(s.product, it.id) } }, Modifier.height(52.dp), enabled = reason != null) {
+            Text("Tandai habis", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+        }
+    }
+}
+
+@Composable
 private fun ColumnScope.OverrideDialog(store: PosStore, s: Sheet.Override) {
     val me = store.user
     var who by remember(s) { mutableStateOf<Approver?>(null) }
@@ -368,17 +395,40 @@ private fun ColumnScope.EdcDialog(store: PosStore) {
     val o = store.active ?: return
     var code by remember { mutableStateOf("") }
     var err by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf<BankChannel?>(null) }
+    LaunchedEffect(Unit) { store.loadEdcBanks() }
+    val banks = (store.edcBanks as? Load.Ready)?.value.orEmpty()
+    // Satu bank: dipilih otomatis. Lebih dari satu: kasir memilih dulu; kode approval baru bisa diisi setelah itu.
+    val bank = if (banks.size == 1) banks.single() else picked?.takeIf { p -> banks.any { it.id == p.id } }
     Icon(Icons.Filled.CreditCard, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-    Text("EDC BCA", Modifier.padding(top = 10.dp), fontSize = 30.sp)
+    Text("EDC", Modifier.padding(top = 10.dp), fontSize = 30.sp)
     Text("Masukkan nominal ini di mesin EDC", Modifier.padding(top = 18.dp), fontSize = 17.sp)
     Text(rp(o.remaining), Modifier.padding(vertical = 6.dp), fontSize = 56.sp, fontWeight = FontWeight.Light)
-    SectionLabel("Kode approval dari slip EDC", Modifier.padding(start = 8.dp, top = 10.dp, bottom = 6.dp))
-    OutlinedTextField(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(12); err = false }, Modifier.fillMaxWidth(), isError = err, singleLine = true, shape = RoundedCornerShape(8.dp),
-        supportingText = { Text(if (err) "Kode approval 6-12 huruf atau angka." else "Nomor kartu tidak pernah dicatat di aplikasi.") })
+    when (val loaded = store.edcBanks) {
+        is Load.Failed -> ErrorState(loaded.error.message, { store.loadEdcBanks() }, Modifier.fillMaxWidth())
+        is Load.Ready -> if (loaded.value.isEmpty()) {
+            // Tanpa kanal bank di server, pembayaran EDC tidak dikirim (tidak ada channel_id yang dikarang).
+            Text("Server belum punya kanal bank (bank_transfer). Pembayaran EDC tidak bisa dicatat dari sini.", color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
+        } else {
+            if (banks.size > 1) {
+                SectionLabel("Bank mesin EDC", Modifier.padding(start = 8.dp, top = 10.dp, bottom = 6.dp))
+                banks.forEach { b -> RadioRow(b.name, bank?.id == b.id, { picked = b }, big = true) }
+            }
+            if (bank != null) {
+                SectionLabel("Kode approval dari slip EDC", Modifier.padding(start = 8.dp, top = 10.dp, bottom = 6.dp))
+                OutlinedTextField(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(12); err = false }, Modifier.fillMaxWidth(), isError = err, singleLine = true, shape = RoundedCornerShape(8.dp),
+                    supportingText = { Text(if (err) "Kode approval 6-12 huruf atau angka." else "Nomor kartu tidak pernah dicatat di aplikasi.") })
+            } else Text("Pilih bank mesin EDC dulu, lalu isi kode approval.", Modifier.padding(top = 10.dp), fontSize = 15.sp)
+        }
+        else -> Text("Memuat bank…", Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     Spacer(Modifier.height(14.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
         TextButton({ store.show(null) }) { Text("Batal", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }; Spacer(Modifier.width(12.dp))
-        Button({ if (code.length in 6..12) store.payEdc(code) else err = true }, Modifier.height(52.dp)) { Text("Simpan pembayaran", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
+        Button({
+            val b = bank ?: return@Button
+            if (code.length in 6..12) store.payEdc(b.id, code) else err = true
+        }, Modifier.height(52.dp), enabled = bank != null) { Text("Simpan pembayaran", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
     }
 }
 

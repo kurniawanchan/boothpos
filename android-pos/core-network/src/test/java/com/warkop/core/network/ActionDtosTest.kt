@@ -2,6 +2,7 @@ package com.warkop.core.network
 
 import com.warkop.core.network.dto.CancelTabRequestDto
 import com.warkop.core.network.dto.FailPaymentRequestDto
+import com.warkop.core.network.dto.PayRequestDto
 import com.warkop.core.network.dto.PaymentChannelsPage
 import com.warkop.core.network.dto.PaymentInputDto
 import com.warkop.core.network.dto.ReasonCodesPage
@@ -44,6 +45,13 @@ class ActionDtosTest {
         assertTrue(edc, edc.contains("\"confirm_duplicate\":true"))
         val tunai = json.encodeToString(PaymentInputDto.serializer(), PaymentInputDto("cash", "8000.00"))
         assertEquals("{\"method\":\"cash\",\"amount\":\"8000.00\"}", tunai)
+    }
+
+    @Test fun `badan permintaan EDC selalu membawa channel_id bank`() {
+        val body = json.encodeToString(PayRequestDto.serializer(), PayRequestDto(clientRef = "k-edc", payments = listOf(
+            PaymentInputDto("edc", "8000.00", approvalCode = "ABC123XYZ", channelId = 1),
+        )))
+        assertEquals("{\"client_ref\":\"k-edc\",\"payments\":[{\"method\":\"edc\",\"amount\":\"8000.00\",\"approval_code\":\"ABC123XYZ\",\"channel_id\":1}]}", body)
     }
 
     @Test fun `verifikasi QRIS dan tandai tidak ditemukan membawa referensi dan token`() {

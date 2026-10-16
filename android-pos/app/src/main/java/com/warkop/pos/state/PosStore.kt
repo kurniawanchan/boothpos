@@ -45,6 +45,8 @@ sealed interface Sheet {
      * [onApproved] menjalankan aksi lagi dengan token sekali pakai yang diterima.
      */
     data class Override(val summary: String, val action: String, val subject: JsonObject, val onApproved: (token: String) -> Unit) : Sheet
+    /** 86: pilih alasan dari server sebelum item ditandai habis. */
+    data class SoldOut(val product: Product) : Sheet
     data object Edc : Sheet
     data object QrisRecord : Sheet
     data class QrisVerify(val tenderId: Int) : Sheet
@@ -516,17 +518,31 @@ class PosStore(
         }
     }
 
-    /** EDC: nominal = sisa tab, kode approval dari slip. Duplikat 2 menit → konfirmasi kasir, lalu kirim ulang dengan confirm_duplicate. */
-    fun payEdc(code: String, confirmDuplicate: Boolean = false) {
+    /** 048 — bank mesin EDC dari `GET /payment-channels` (bank_transfer). Dimuat setiap dialog EDC dibuka. */
+    var edcBanks by mutableStateOf<Load<List<BankChannel>>>(Load.Idle); private set
+
+    fun loadEdcBanks() {
+        val b = backend ?: return
+        edcBanks = Load.Loading
+        viewModelScope.launch {
+            edcBanks = try { Load.Ready(retryNetwork { b.bankChannels() }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /**
+     * EDC: nominal = sisa tab, kode approval dari slip, [channelId] = bank mesin EDC (wajib; tidak pernah null).
+     * Duplikat 2 menit → konfirmasi kasir, lalu kirim ulang dengan confirm_duplicate.
+     */
+    fun payEdc(channelId: Long, code: String, confirmDuplicate: Boolean = false) {
         val b = backend ?: return
         val o = active ?: return
         val amount = o.remaining
         if (amount <= 0) return
-        val intent = "edc:${o.id}:$code:$amount:$confirmDuplicate"
+        val intent = "edc:${o.id}:$channelId:$code:$amount:$confirmDuplicate"
         val ref = keys.keyFor(intent)
         viewModelScope.launch {
             try {
-                val updated = retryNetwork { b.pay(o.id, "edc", amount, ref, code, confirmDuplicate.takeIf { it }, null) }
+                val updated = retryNetwork { b.pay(o.id, "edc", amount, ref, code, confirmDuplicate.takeIf { it }, channelId) }
                 keys.settled(intent)
                 conn = Conn.ONLINE
                 upsert(updated)
@@ -540,7 +556,7 @@ class PosStore(
                 keys.settled(intent)
                 if (e.code == "duplicate_edc") {
                     sheet = Sheet.Confirm("Kode approval sudah dipakai?", "Kode $code sudah dicatat dalam 2 menit terakhir. Lanjutkan jika ini transaksi berbeda.", "Lanjutkan") {
-                        payEdc(code, confirmDuplicate = true)
+                        payEdc(channelId, code, confirmDuplicate = true)
                     }
                 } else say(e.message)
             }
@@ -611,23 +627,24 @@ class PosStore(
         }
     }
 
-    /** 86 dari layar menu: alasan aktif pertama dari server (`sold_out`). Server menentukan apakah perlu persetujuan. */
+    /** 86: alasan dipilih kasir dari daftar server (`GET /reason-codes?category=sold_out`). Tidak ada id yang dikarang di klien. */
+    var soldOutReasons by mutableStateOf<Load<List<ReasonCode>>>(Load.Idle); private set
+
     fun markSoldOut(p: Product) {
+        sheet = Sheet.SoldOut(p)
+        loadSoldOutReasons()
+    }
+
+    fun loadSoldOutReasons() {
         val b = backend ?: return
+        soldOutReasons = Load.Loading
         viewModelScope.launch {
-            try {
-                val reason = b.reasonCodes("sold_out").firstOrNull() ?: run { say("Alasan 86 belum diatur di server."); return@launch }
-                sheet = Sheet.Confirm("Tandai ${p.name} habis?", "Alasan: ${reason.label}. Item tidak bisa dipesan sampai dibuka lagi.", "Tandai habis") {
-                    soldOutNow(p, reason.id)
-                }
-            } catch (e: ApiError) {
-                if (e is ApiError.Network) conn = Conn.OFFLINE
-                say(e.message)
-            }
+            soldOutReasons = try { Load.Ready(retryNetwork { b.reasonCodes("sold_out") }) } catch (e: ApiError) { Load.Failed(e) }
         }
     }
 
-    private fun soldOutNow(p: Product, reasonCodeId: Long, overrideToken: String? = null) {
+    /** Tandai habis dengan alasan yang dipilih. Server menjawab 409 override_required bila peminta tak punya izin. */
+    fun confirmSoldOut(p: Product, reasonCodeId: Long, overrideToken: String? = null) {
         val b = backend ?: return
         viewModelScope.launch {
             try {
@@ -639,7 +656,7 @@ class PosStore(
                 if (e is ApiError.Network) conn = Conn.OFFLINE
                 if (e.code == "override_required") {
                     sheet = Sheet.Override(summary = "Tandai ${p.name} habis", action = "availability",
-                        subject = availabilitySubject(p.id.toLong(), reasonCodeId)) { token -> soldOutNow(p, reasonCodeId, token) }
+                        subject = availabilitySubject(p.id.toLong(), reasonCodeId)) { token -> confirmSoldOut(p, reasonCodeId, token) }
                 } else say(e.message)
             }
         }

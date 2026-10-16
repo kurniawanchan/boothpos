@@ -113,6 +113,9 @@ data class CloseOutcome(
 /** 048 / S3 — alasan dari server (id untuk 86). */
 data class ReasonCode(val id: Long, val label: String)
 
+/** 048 — kanal bank dari `GET /payment-channels` (type bank_transfer). EDC wajib membawa id-nya; nama dari server. */
+data class BankChannel(val id: Long, val name: String)
+
 /** 048 / S3 — penyetuju yang memenuhi syarat untuk satu aksi (tanpa peminta). */
 data class Approver(val id: Long, val name: String, val role: String)
 
