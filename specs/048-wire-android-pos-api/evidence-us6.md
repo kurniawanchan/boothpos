@@ -46,3 +46,21 @@ Status: **BELUM SELESAI — terhalang kondisi host/emulator.** Tidak ada skenari
 - Putus jaringan di tengah tiap langkah tulis di perangkat, token kedaluwarsa di perangkat, layar PIN setelah staf dinonaktifkan, dan layar Sinkronisasi dengan nilai nyata. Ditunda sampai beban host turun (keputusan pemilik).
 - T066 tetap `[ ]` sampai bagian perangkat selesai.
 
+
+## T066 — pelaksanaan di perangkat (2026-10-16, ~09:10 WIB, outlet 4, shift 12)
+Status: **SEBAGIAN — dihentikan karena load host 1 mnt > 25** (33,25 setelah langkah 1b). Skenario 2–4 belum dijalankan.
+
+Metode: `svc wifi disable` → ketuk aksi (permintaan tidak sampai ke server) → tunggu → `svc wifi enable` → ketuk aksi yang sama (kunci Idempotency-Key tertahan, niat sama) → hitung DB. Hanya menguji jalur coba-ulang untuk permintaan yang tidak pernah sampai; jalur "server sudah menerima tetapi respons hilang" belum diuji.
+
+| Langkah | Sebelum | Saat putus | Sesudah coba-ulang | Hasil |
+|---|---|---|---|---|
+| 1a Buka order (`open:counter`) | 7 order di shift 12 | 7 | 8 (order 2053) | LULUS: tepat satu |
+| 1b Tambah baris Kopi Susu | 0 baris di order 2053 | 0 | 1 baris, qty 1 | LULUS: tepat satu |
+| 1c Kirim ke dapur | — | — | — | BELUM |
+| 1d Bayar tunai | — | — | — | BELUM |
+| 1e Tutup shift 12 | — | — | — | BELUM |
+| 2 Sesi dicabut mid-order | — | — | — | BELUM |
+| 3 Budi dinonaktifkan | — | — | — | BELUM |
+| 4 Layar Sinkronisasi | — | — | — | BELUM |
+
+Order uji terbuka: **2053** (1 baris Kopi Susu, belum dikirim, belum dibayar). Tidak di-void, tidak dibatalkan; harus diselesaikan atau dibiarkan terbuka sebagai residu uji (dilaporkan).
