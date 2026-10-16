@@ -1663,6 +1663,173 @@ paths:
                         table: { type: string, nullable: true, description: Nama meja; null untuk takeaway. }
                         tab_label: { type: string, nullable: true }
 
+  /overrides:
+    post:
+      tags: [Override]
+      summary: Terbitkan persetujuan di titik aksi (048 / S3)
+      description: |
+        Penyetuju memasukkan PIN-nya; server menghitung hash subjek SENDIRI dari `subject` (id objek + bidang body aksi), dan
+        mengembalikan `override_token` sekali pakai, berlaku **120 detik**, terikat ke aksi, bidang body itu, outlet
+        aktif peminta, dan peminta. Token hanya dikembalikan sekali; server hanya menyimpan hash-nya.
+
+        `subject` = identitas objek (id path: tab, sesi, baris, produk, pembayaran) SERTA bidang body aksi yang dijaga.
+        Token terikat ke objek itu: persetujuan untuk baris A tidak berlaku untuk baris B (422 `override_mismatch`).
+        Daftar per aksi: void_line → tab_id, line_id, reason_code, kitchen_status, stock_decision, reason;
+        cancel_order → tab_id, reason_code, reason; cash_out → session_id, direction, amount, reason_code;
+        variance → session_id, counted_by_denomination; availability → product_id, reason_code_id, note, outlet_ids;
+        qris_verify → tab_id, payment_id, reference; qris_fail → tab_id, payment_id.
+        Server tidak pernah menerima hash dari klien. Aksi yang dijaga memanggil `override_token` dari body-nya dan
+        menghitung ulang subjek dari body-nya sendiri; tidak cocok → `422 override_mismatch`.
+
+        **Batasan yang disadari**: karena parameter path tidak ikut dalam subjek, token tidak terikat ke tab/baris/
+        sesi/produk tertentu; terikat ke aksi, bidang body, outlet, peminta, 120 dtk, dan sekali pakai.
+
+        Aksi: `void_line` (reason_code, kitchen_status, stock_decision, reason), `cancel_order` (reason_code, reason),
+        `cash_out` (direction, amount, reason_code), `variance` (counted_by_denomination), `availability`
+        (reason_code_id, note, outlet_ids), `qris_verify` (reference), `qris_fail` (tanpa bidang).
+
+        Penyetuju harus aktif, berada di outlet yang sama, memegang izin aksi, dan bukan peminta. PIN penyetuju memakai
+        kunci 5-salah yang sama dengan login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, subject, approver_user_id, pin]
+              properties:
+                action: { type: string, enum: [void_line, cancel_order, cash_out, variance, availability, qris_verify, qris_fail] }
+                subject: { type: object, description: "Identitas objek (id path) + bidang body aksi yang dijaga (lihat deskripsi)." }
+                approver_user_id: { type: integer }
+                pin: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '201':
+          description: Token diterbitkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  override_token: { type: string }
+                  expires_at: { type: string, format: date-time }
+        '401': { description: "PIN penyetuju salah (`code` = invalid_pin; `attempts_remaining` menyertai)." }
+        '403': { description: "Penyetuju tidak berwenang (`approver_not_permitted`) atau outlet di luar jangkauan (`outlet_forbidden`)." }
+        '409': { description: "Penyetuju sama dengan peminta (`same_person`)." }
+        '422': { description: Validasi body. }
+        '429': { description: "PIN penyetuju terkunci setelah 5 kali salah (`pin_locked`, `locked_until`)." }
+
+  /overrides/approvers:
+    get:
+      tags: [Override]
+      summary: Daftar penyetuju yang memenuhi syarat untuk aksi (048 / S3)
+      description: |
+        Respons berupa **larik polos** `[{id, name, role}]` (bukan dibungkus `data`). Hanya penyetuju aktif yang punya
+        PIN, di outlet aktif (header `X-Outlet-Id`), memegang izin aksi, dan bukan peminta.
+      parameters:
+        - { name: action, in: query, required: true, schema: { type: string, enum: [void_line, cancel_order, cash_out, variance, availability, qris_verify, qris_fail] } }
+        - { name: X-Outlet-Id, in: header, required: false, schema: { type: integer } }
+      responses:
+        '200':
+          description: Larik penyetuju
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    name: { type: string }
+                    role: { type: string, nullable: true }
+
+  /tabs/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Restaurant]
+      summary: Batalkan seluruh tab terbuka (048 / S3)
+      description: |
+        Menjalankan pembatalan tab (stok kembali hanya untuk item yang belum dimasak). `409 has_payments` bila tab sudah
+        dibayar (tanpa alur refund). Peminta tanpa izin `order.cancel` wajib `override_token` dari `POST /overrides`
+        (aksi `cancel_order`, bidang body: reason_code, reason); tanpa itu `409 override_required`. Token dan pembatalan
+        dalam satu transaksi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason_code]
+              properties:
+                reason_code: { type: string, enum: [wrong_item, customer_request, kitchen_error, other] }
+                reason: { type: string, maxLength: 255 }
+                override_token: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Tab dibatalkan (status voided)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '409': { description: "`has_payments`, `override_required`, `override_expired`, atau tab tidak terbuka." }
+        '422': { description: "`override_mismatch` atau validasi body." }
+
+  /tabs/{id}/payments/{payment}/verify:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: payment, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Restaurant]
+      summary: Verifikasi pembayaran tab; QRIS wajib referensi dan persetujuan (048 / S3)
+      description: |
+        Non-QRIS: perilaku lama. QRIS (`qr_ewallet`): `reference` minimal 4 karakter (422 bila kurang) dan persetujuan
+        `qris_verify` bila peminta tanpa `payment.qris.verify` (`409 override_required` bila tidak ada). Pencatat
+        pembayaran tidak boleh memverifikasi sendiri (403).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reference: { type: string, minLength: 4, maxLength: 40 }
+                override_token: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Pembayaran terverifikasi
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: "`override_required`, `override_expired`, atau pembayaran sudah terverifikasi." }
+        '422': { description: "`override_mismatch` atau referensi kurang dari 4 karakter." }
+
+  /tabs/{id}/payments/{payment}/fail:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: payment, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Restaurant]
+      summary: Tandai QRIS tidak ditemukan di mutasi (048 / S3)
+      description: |
+        Hanya QRIS, hanya selama tab masih terbuka. Pembayaran menjadi `rejected` dan keluar dari total terbayar.
+        Butuh persetujuan `qris_fail` bila peminta tanpa `payment.qris.verify`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                override_token: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Pembayaran ditandai rejected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: "`override_required`, `override_expired`, tab tidak terbuka, atau pembayaran bukan pending." }
+        '422': { description: "`override_mismatch` atau pembayaran bukan QRIS." }
+
   /sessions/{id}/x-report:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     get:
@@ -2875,7 +3042,9 @@ paths:
       tags: [Menu]
       summary: Menandai item habis (86)
       description: |
-        Izin `menu.item.86` (403 bila tidak). Alasan wajib dari kategori `sold_out`. Berlaku sampai akhir hari
+        048 / S3 — izin `menu.availability.set`. Tanpa izin itu, `override_token` dari `POST /overrides` (aksi
+        `availability`, bidang body: reason_code_id, note, outlet_ids) WAJIB; tanpa itu `409 override_required`.
+        Alasan wajib dari kategori `sold_out`. Berlaku sampai akhir hari
         bisnis (zona waktu toko + cut-off) atau sampai dibatalkan; item tidak bisa ditambahkan ke order/tab
         baru (409) tetapi baris yang sudah ada tidak berubah. 409 bila item didiskontinu atau sudah ditandai.
 
@@ -2891,7 +3060,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [reason_code_id], properties: { reason_code_id: { type: integer }, note: { type: string, maxLength: 255 } } }
+            schema: { type: object, required: [reason_code_id], properties: { reason_code_id: { type: integer }, note: { type: string, maxLength: 255 }, override_token: { type: string, maxLength: 64 } } }
       responses:
         '201': { description: Ditandai }
         '403': { description: Tanpa izin }
@@ -5543,8 +5712,11 @@ paths:
       description: |
         - **Belum dikirim**: dihapus bebas, stok kembali penuh, `reason` tidak wajib.
         - **Sudah dikirim, item dapur masih `new`**: izin `floor`, `reason` WAJIB (`422` bila kosong), stok kembali.
-        - **Sudah dikirim, item dapur `preparing`/`ready`/`served`**: hanya owner/admin (`403` selain itu), `reason`
-          WAJIB, stok TIDAK kembali (bahan sudah terpakai).
+        - **Sudah dikirim (048 / S3)**: body WAJIB `reason_code` (wrong_item|customer_request|kitchen_error|other),
+          `kitchen_status` (not_started|started|made; harus sama dengan status dapur sebenarnya, 422 bila berbeda), dan
+          `stock_decision` (return|waste; `return` hanya bila belum dimasak). Pemegang izin `order.void` lewat; selain
+          itu wajib `override_token` dari `POST /overrides` (aksi `void_line`). Tanpa token → `409 override_required`.
+        - `override_token` dibaca dari BODY JSON (DELETE membawa body), bukan dari query.
 
         Baris dihapus dari order; item tiket dapurnya menjadi `cancelled` (siapa/kapan/alasan) dan tetap tampil di
         layar stasiun agar tak dimasak. Pembatalan item yang sudah dikirim dicatat di log aktivitas
@@ -5557,7 +5729,11 @@ paths:
             schema:
               type: object
               properties:
-                reason: { type: string, maxLength: 255, description: Wajib untuk baris yang sudah dikirim. }
+                reason: { type: string, maxLength: 255, description: Catatan bebas (opsional). }
+                reason_code: { type: string, enum: [wrong_item, customer_request, kitchen_error, other], description: Wajib untuk baris yang sudah dikirim. }
+                kitchen_status: { type: string, enum: [not_started, started, made], description: Wajib untuk baris yang sudah dikirim; harus sama dengan status dapur. }
+                stock_decision: { type: string, enum: [return, waste], description: Wajib untuk baris yang sudah dikirim. }
+                override_token: { type: string, maxLength: 64, description: "Dari POST /overrides (void_line) bila peminta tanpa order.void." }
       responses:
         '200':
           description: Tab terbaru
@@ -5581,6 +5757,11 @@ paths:
         `client_ref` yang sama tidak mencatat pembayaran lagi (mengembalikan keadaan terkini).
         Tab kosong / bukan `open` → `409`. Shift tidak terbuka → `409` dengan `code` = `shift_required` (048; terminal
         menampilkan tindakan yang tepat tanpa mengurai kalimat galat).
+
+        048 / S3 — metode `edc`: `approval_code` (6–12 huruf kapital atau angka; format salah → 422; nomor kartu TIDAK
+        pernah diterima maupun disimpan) dan `confirm_duplicate` (boolean). Kode yang sama dalam
+        `edc_duplicate_window_seconds` → `409 duplicate_edc` kecuali `confirm_duplicate: true`. Selama ada QRIS `pending`
+        di tab, non-tunai lain → `409 pending_qris` (tunai tetap boleh). Non-tunai tidak boleh melebihi sisa tagihan (409).
       requestBody:
         required: true
         content:

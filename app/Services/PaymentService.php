@@ -459,6 +459,76 @@ class PaymentService
     }
 
     /** Cache paid_amount ditulis ulang dari rumus yang sama (bukan ditambah). */
+    /**
+     * 048 / S3 — verifikasi pembayaran tab. QRIS: referensi minimal 4 karakter dan persetujuan `qris_verify`
+     * di titik aksi (pemegang payment.qris.verify lewat). Non-QRIS: perilaku lama (markVerified). Konsumsi
+     * token dan verifikasi berada dalam satu transaksi.
+     */
+    public function verifyWithApproval(Order $target, Payment $payment, User $user, ?string $reference, ?string $overrideToken): Order
+    {
+        return DB::transaction(function () use ($target, $payment, $user, $reference, $overrideToken) {
+            $locked = $this->lock($target);
+            $entry = $locked->payments()->whereKey($payment->id)->firstOrFail();
+
+            if ($entry->method === 'qr_ewallet') {
+                if (! $entry->mayVerify($user)) {
+                    throw ValidationException::withMessages(['verification' => __('orders_payments.payment_verify_not_allowed')])->status(403);
+                }
+                $ref = trim((string) $reference);
+                if (mb_strlen($ref) < 4) {
+                    throw ValidationException::withMessages(['reference' => __('overrides.reference_min')]);
+                }
+                app(OverrideGate::class)->requireFor('qris_verify', ['tab_id' => $locked->id, 'payment_id' => $entry->id, 'reference' => $ref], $overrideToken, $user, (int) $locked->outlet_id, "payment:{$entry->id}");
+                $entry->forceFill(['reference' => $ref])->save();
+            }
+
+            return $this->markVerified($locked, $entry, $user);
+        });
+    }
+
+    /**
+     * 048 / S3 — QRIS tidak ditemukan di mutasi: ditandai `rejected` (keluar dari total terbayar). Hanya QRIS;
+     * hanya selama tab masih terbuka (tab yang sudah selesai tidak boleh berubah diam-diam); dan butuh
+     * persetujuan `qris_fail` bila peminta tanpa payment.qris.verify.
+     */
+    public function markRejected(Order $target, Payment $payment, User $user, ?string $overrideToken): Order
+    {
+        return DB::transaction(function () use ($target, $payment, $user, $overrideToken) {
+            $locked = $this->lock($target);
+            $entry = $locked->payments()->whereKey($payment->id)->firstOrFail();
+
+            if ($entry->method !== 'qr_ewallet') {
+                throw ValidationException::withMessages(['method' => __('overrides.fail_only_qris')]);
+            }
+            if ($locked->status !== 'open') {
+                throw ValidationException::withMessages(['status' => __('overrides.fail_only_open_tab')])->status(409);
+            }
+            if ($entry->verification !== 'pending') {
+                throw ValidationException::withMessages(['verification' => __('orders_payments.payment_already_verified')])->status(409);
+            }
+            if (! $entry->mayVerify($user)) {
+                throw ValidationException::withMessages(['verification' => __('orders_payments.payment_verify_not_allowed')])->status(403);
+            }
+
+            app(OverrideGate::class)->requireFor('qris_fail', ['tab_id' => $locked->id, 'payment_id' => $entry->id], $overrideToken, $user, (int) $locked->outlet_id, "payment:{$entry->id}");
+
+            $entry->update(['verification' => 'rejected', 'verified_by' => $user->id, 'verified_at' => now()]);
+            $this->syncCache($locked, PaymentSummary::for($locked));
+
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'payment_rejected',
+                entityType: 'Order',
+                entityId: $locked->id,
+                description: 'Menandai tidak ditemukan pembayaran QRIS Rp '.number_format((float) $entry->amount, 0, ',', '.'),
+                oldValues: ['payment_id' => $entry->id, 'verification' => 'pending'],
+                newValues: ['payment_id' => $entry->id, 'verification' => 'rejected'],
+            );
+
+            return $this->reload($locked);
+        });
+    }
+
     private function syncCache(Order $target, array $summary): void
     {
         $target->update(['paid_amount' => $this->cachedPaid($target, $summary)]);

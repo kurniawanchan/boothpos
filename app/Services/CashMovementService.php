@@ -54,10 +54,15 @@ class CashMovementService
             $amount = round((float) $data['amount'], 2);
             $threshold = PosSettings::cashOutApprovalThreshold();
             if ($direction === CashMovement::OUT && $amount > $threshold) {
-                throw new ShiftRuleException(
-                    __('events_sessions.cash_out_needs_approval'),
-                    'override_required',
-                    ['threshold' => number_format($threshold, 2, '.', '')],
+                // 048 / S3 — persetujuan `cash_out` di titik aksi, terikat ke arah, jumlah, dan alasan; dikonsumsi
+                // dalam transaksi pencatatan ini (token ikut habis hanya bila kas tercatat).
+                app(OverrideGate::class)->requireFor(
+                    'cash_out',
+                    ['session_id' => $locked->id, 'direction' => $direction, 'amount' => $amount, 'reason_code' => $reason],
+                    $data['override_token'] ?? null,
+                    $user,
+                    (int) $locked->outlet_id,
+                    "session:{$locked->id}",
                 );
             }
 

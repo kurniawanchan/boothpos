@@ -114,7 +114,9 @@ class DashboardAttentionTest extends TestCase
         $this->postJson("/api/v1/tabs/{$tab}/send")->assertOk();
 
         $lineId = Order::findOrFail($tab)->items()->value('id');
-        $this->deleteJson("/api/v1/tabs/{$tab}/items/{$lineId}", ['reason' => 'pelanggan batal'])->assertOk();
+        $kitchen = match (\App\Models\KitchenTicketItem::where('order_item_id', $lineId)->value('status')) { 'preparing' => 'started', 'ready', 'served' => 'made', default => 'not_started' };
+            $stock = $kitchen === 'not_started' ? 'return' : 'waste';
+            $this->deleteJson("/api/v1/tabs/{$tab}/items/{$lineId}", ['reason_code' => 'customer_request', 'kitchen_status' => $kitchen, 'stock_decision' => $stock, 'reason' => 'pelanggan batal'])->assertOk();
 
         $item = $this->item($this->attention(), 'void_after_fire');
 

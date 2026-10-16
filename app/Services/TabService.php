@@ -268,24 +268,20 @@ class TabService
     }
 
     /**
-     * Menghapus/membatalkan sebuah baris tab.
+     * Menghapus/membatalkan satu baris tab.
      *
-     *  - BELUM dikirim: dihapus bebas, stok kembali penuh, tanpa alasan.
-     *  - SUDAH dikirim dan item dapurnya masih `new` (belum dimasak): boleh siapa pun dengan izin `floor`,
-     *    alasan WAJIB, stok kembali.
-     *  - SUDAH dikirim dan item dapurnya `preparing`/`ready`/`served`: hanya owner/admin, alasan WAJIB,
-     *    stok TIDAK kembali (bahan sudah terpakai) — mirip void penjualan.
-     * Baris dihapus dari order_items (supaya tak ada laporan yang perlu menyaring "baris batal");
-     * item tiket dapurnya menjadi `cancelled` dengan siapa/kapan/alasan, dan layar stasiun tetap
-     * menampilkannya agar tak ada yang memasaknya. Semua perubahan + baris log berada dalam SATU
-     * transaksi: penolakan di akhir (total < sudah dibayar) membatalkan semuanya, termasuk log.
+     * - Baris BELUM dikirim: dihapus bebas, stok kembali (tanpa persetujuan).
+     * - Baris SUDAH dikirim (048 / S3): wajib `reason_code`; `kitchen_status` harus sama dengan status dapur
+     *   sebenarnya (dihitung server, 422 bila berbeda); `stock_decision` wajib (`return` hanya bila belum mulai
+     *   dimasak). Persetujuan `void_line` diperiksa di titik aksi; pemegang izin order.void lewat tanpa token.
      *
-     * @throws AuthorizationException membatalkan item yang sudah dimasak tanpa hak owner/admin
-     * @throws InputRejectedException alasan kosong untuk item yang sudah dikirim
+     * Perubahan, konsumsi token, dan baris log berada dalam SATU transaksi.
+     *
+     * @param  array<string, mixed>  $input  reason_code, reason, kitchen_status, stock_decision (bidang body)
      */
-    public function removeLine(Order $tab, int $itemId, User $user, ?string $reason = null): Order
+    public function removeLine(Order $tab, int $itemId, User $user, array $input = [], ?string $overrideToken = null): Order
     {
-        return DB::transaction(function () use ($tab, $itemId, $user, $reason) {
+        return DB::transaction(function () use ($tab, $itemId, $user, $input, $overrideToken) {
             $order = $this->lockOpen($tab);
             $line = $order->items()->with('ticketItem')->findOrFail($itemId);
 
@@ -298,31 +294,45 @@ class TabService
                 return $this->loaded($order);
             }
 
+            $kitchenStatus = self::kitchenStatusFor($line->ticketItem);
+            $reasonCode = $input['reason_code'] ?? null;
+            $stockDecision = $input['stock_decision'] ?? null;
+
+            if ($reasonCode === null) {
+                throw InputRejectedException::withMessages(['reason_code' => [__('restaurant.cancel_reason_required')]]);
+            }
+            if (($input['kitchen_status'] ?? null) !== $kitchenStatus) {
+                throw ValidationException::withMessages(['kitchen_status' => [__('overrides.kitchen_status_changed')]]);
+            }
+            if ($stockDecision === null) {
+                throw ValidationException::withMessages(['stock_decision' => [__('overrides.stock_decision_required')]]);
+            }
+            if ($stockDecision === 'return' && $kitchenStatus !== 'not_started') {
+                throw ValidationException::withMessages(['stock_decision' => [__('overrides.stock_return_after_prep')]]);
+            }
+
+            // Subjek = id objek (tab, baris) + bidang body mentah, sama dengan saat persetujuan diterbitkan.
+            app(OverrideGate::class)->requireFor(
+                'void_line',
+                ['tab_id' => $order->id, 'line_id' => $line->id, 'reason_code' => $reasonCode, 'kitchen_status' => $kitchenStatus, 'stock_decision' => $stockDecision, 'reason' => $input['reason'] ?? null],
+                $overrideToken,
+                $user,
+                (int) $order->outlet_id,
+                "order:{$order->id}:line:{$line->id}",
+            );
+
             $ticketItem = $line->ticketItem;
-            $kitchenStatus = $ticketItem?->status ?? KitchenTicketItem::NEW;
-            $started = $kitchenStatus !== KitchenTicketItem::NEW;
-
-            if ($started && ! $user->isOwnerOrAdmin()) {
-                throw new AuthorizationException(__('restaurant.cancel_after_prep_forbidden'));
-            }
-
-            $reason = $this->cleanNote($reason);
-            if ($reason === null) {
-                throw InputRejectedException::withMessages(['reason' => [__('restaurant.cancel_reason_required')]]);
-            }
-
-            if (! $started) {
+            if ($stockDecision === 'return') {
                 $this->returnStock($line, $line->qty, $user);
             }
-
             $ticketItem?->update([
                 'status' => KitchenTicketItem::CANCELLED,
                 'cancelled_at' => now(),
                 'cancelled_by' => $user->id,
-                'cancel_reason' => $reason,
+                'cancel_reason' => $reasonCode,
             ]);
 
-            $snapshot = ['line_id' => $line->id, 'name' => $line->name_snapshot, 'qty' => $line->qty, 'kitchen_status' => $kitchenStatus, 'stock_restored' => ! $started];
+            $snapshot = ['line_id' => $line->id, 'name' => $line->name_snapshot, 'qty' => $line->qty, 'kitchen_status' => $kitchenStatus, 'stock_decision' => $stockDecision];
             $line->delete();
             $this->recalculate($order);
             $this->assertNotBelowPaid($order);
@@ -333,13 +343,48 @@ class TabService
                 action: 'item_cancelled',
                 entityType: 'Order',
                 entityId: $order->id,
-                description: "Membatalkan {$snapshot['qty']}× {$snapshot['name']} dari tab {$order->order_number} (status dapur: {$kitchenStatus}). "
-                    .'Stok '.($started ? 'tidak dikembalikan (sudah dimasak)' : 'dikembalikan').". Alasan: {$reason}.",
+                description: "Membatalkan {$snapshot['qty']}× {$snapshot['name']} dari tab {$order->order_number} (status dapur: {$kitchenStatus}). Stok: {$stockDecision}. Alasan: {$reasonCode}.",
                 oldValues: $snapshot,
-                newValues: ['reason' => $reason],
+                newValues: ['reason_code' => $reasonCode, 'reason' => $this->cleanNote($input['reason'] ?? null)],
             );
 
             return $this->loaded($order);
+        });
+    }
+
+    /** Status dapur item dalam kosa kata kontrak: not_started | started | made. */
+    public static function kitchenStatusFor(?KitchenTicketItem $item): string
+    {
+        return match ($item?->status) {
+            null, KitchenTicketItem::NEW => 'not_started',
+            KitchenTicketItem::PREPARING => 'started',
+            default => 'made',
+        };
+    }
+
+    /**
+     * 048 / S3 — membatalkan SELURUH tab terbuka (`POST /tabs/{id}/cancel`). 409 `has_payments` bila sudah
+     * dibayar (tanpa alur refund). Selain itu persetujuan `cancel_order` bila peminta tanpa order.cancel.
+     * Konsumsi token dan pembatalan dalam satu transaksi.
+     */
+    public function cancelTab(Order $tab, User $user, string $reasonCode, ?string $note, ?string $overrideToken): Order
+    {
+        return DB::transaction(function () use ($tab, $user, $reasonCode, $note, $overrideToken) {
+            $order = $this->lockOpen($tab);
+            if ($order->payments()->exists()) {
+                throw new \App\Exceptions\ShiftRuleException(__('overrides.has_payments'), 'has_payments', [], 409);
+            }
+
+            app(OverrideGate::class)->requireFor(
+                'cancel_order',
+                ['tab_id' => $order->id, 'reason_code' => $reasonCode, 'reason' => $note],
+                $overrideToken,
+                $user,
+                (int) $order->outlet_id,
+                "order:{$order->id}",
+            );
+
+            return $this->voidTab($order, $note !== null && $note !== '' ? $reasonCode.' — '.$note : $reasonCode, $user);
         });
     }
 

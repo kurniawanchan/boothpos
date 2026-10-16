@@ -72,6 +72,16 @@ class PinAuthService
         return $this->issueToken($user);
     }
 
+    /**
+     * 048 / S3 — PIN penyetuju untuk persetujuan di titik aksi. Memakai kunci 5-salah yang SAMA dengan login
+     * (satu penghitung). Mengembalikan galat, bukan melempar, supaya hitungan salah tidak ikut batal dari
+     * transaksi pemanggil.
+     */
+    public function verifyApproverPin(User $approver, string $pin): ?PinRejectedException
+    {
+        return $this->verifyAndCount($approver, $pin, fn () => new PinRejectedException(__('auth.invalid_pin'), 'invalid_pin', 401));
+    }
+
     /** Ganti/atur PIN sendiri. Sudah punya PIN → `current_pin`; belum → `current_password`. */
     public function change(User $user, string $newPin, ?string $currentPin, ?string $currentPassword): void
     {

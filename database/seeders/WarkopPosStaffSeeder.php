@@ -6,6 +6,7 @@ use App\Models\Outlet;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\ModeGate;
+use App\Support\PermissionCatalog;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -24,8 +25,16 @@ class WarkopPosStaffSeeder extends Seeder
     private const ROLES = [
         'Kasir' => [['dashboard', 'pos', 'session', 'customers', 'sales', 'floor'], []],
         'Waiter' => [['dashboard', 'pos', 'customers', 'floor'], []],
-        'Supervisor' => [['dashboard', 'pos', 'session', 'customers', 'sales', 'floor', 'reports'], []],
-        'Outlet Manager' => [['dashboard', 'pos', 'session', 'customers', 'sales', 'floor', 'reports', 'products', 'stock'], []],
+        'Supervisor' => [['dashboard', 'pos', 'session', 'customers', 'sales', 'floor', 'reports'], [
+            PermissionCatalog::ORDER_VOID, PermissionCatalog::ORDER_CANCEL, PermissionCatalog::CASH_OUT_APPROVE,
+            PermissionCatalog::ORDER_REPRINT_APPROVE, PermissionCatalog::PAYMENT_QRIS_VERIFY,
+            PermissionCatalog::MENU_AVAILABILITY_SET, PermissionCatalog::SHIFT_VARIANCE_APPROVE,
+        ]],
+        'Outlet Manager' => [['dashboard', 'pos', 'session', 'customers', 'sales', 'floor', 'reports', 'products', 'stock'], [
+            PermissionCatalog::ORDER_VOID, PermissionCatalog::ORDER_CANCEL, PermissionCatalog::CASH_OUT_APPROVE,
+            PermissionCatalog::ORDER_REPRINT_APPROVE, PermissionCatalog::PAYMENT_QRIS_VERIFY, PermissionCatalog::ORDER_REFUND,
+            PermissionCatalog::MENU_AVAILABILITY_SET, PermissionCatalog::SHIFT_VARIANCE_APPROVE, PermissionCatalog::DISCOUNT_LIMIT_PCT,
+        ]],
     ];
 
     /** username => [nama, peran, PIN contoh] */
@@ -47,6 +56,13 @@ class WarkopPosStaffSeeder extends Seeder
                 $roles[$name] = Role::firstOrCreate(['name' => $name], [
                     'menu_keys' => $menuKeys, 'permissions' => $permissions ?: null, 'is_system_default' => false, 'all_outlets' => false,
                 ]);
+            }
+
+            // Peran dev yang sudah ada: perbarui izin dari konstanta di atas (firstOrCreate tidak mengubah baris lama).
+            foreach (self::ROLES as $name => [, $permissions]) {
+                if ($permissions !== []) {
+                    $roles[$name]->forceFill(['permissions' => $permissions])->save();
+                }
             }
 
             foreach (self::STAFF as $username => [$name, $role, $pin]) {

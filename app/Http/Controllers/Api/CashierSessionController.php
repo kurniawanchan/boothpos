@@ -161,6 +161,8 @@ class CashierSessionController extends Controller
             'counted_by_denomination.*.denomination' => ['required', 'integer', Rule::in(CashDenominations::VALUES)],
             'counted_by_denomination.*.qty' => ['required', 'integer', 'min:0', 'max:'.CashDenominations::MAX_QTY],
             'edc_batch_total' => ['nullable', 'numeric', 'min:0', 'max:999999999999.99'],
+            // 048 / S3 — persetujuan selisih di atas toleransi (token dari POST /overrides, action variance).
+            'variance_override_token' => ['nullable', 'string', 'max:64'],
             'notes' => ['nullable', 'string'],
         ]);
 
@@ -235,14 +237,18 @@ class CashierSessionController extends Controller
             $variance = round($closingCash - $expectedCash, 2);
             $tolerance = PosSettings::varianceTolerance();
 
-            // 048 — selisih di atas toleransi butuh persetujuan (override, S3/US4); sampai itu ditolak.
+            // 048 / S3 — selisih di atas toleransi: persetujuan `variance` di titik aksi, terikat ke hitungan (body),
+            // dikonsumsi dalam transaksi tutup ini. Pemegang shift.variance.approve lewat tanpa token.
+            $varianceApprovalId = null;
             if ($blind && abs($variance) > $tolerance) {
-                return response()->json([
-                    'message' => __('events_sessions.variance_needs_approval'),
-                    'code' => 'override_required',
-                    'variance' => $report->money($variance),
-                    'tolerance' => $report->money($tolerance),
-                ], 409);
+                $varianceApprovalId = app(\App\Services\OverrideGate::class)->requireFor(
+                    'variance',
+                    ['session_id' => $locked->id, 'counted_by_denomination' => $validated['counted_by_denomination']],
+                    $validated['variance_override_token'] ?? null,
+                    $request->user(),
+                    (int) $locked->outlet_id,
+                    "session:{$locked->id}",
+                );
             }
 
             // Z-report: salinan angka saat tutup, disimpan supaya laporan lama tak berubah bila data berubah.
@@ -266,6 +272,7 @@ class CashierSessionController extends Controller
                 'counted_total' => $blind ? $closingCash : null,
                 'edc_batch_total' => $edcBatch,
                 'variance' => $blind ? $variance : null,
+                'variance_override_id' => $varianceApprovalId,
                 'z_report' => $zReport,
             ]);
 

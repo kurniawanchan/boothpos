@@ -16,7 +16,27 @@ class TabPaymentController extends Controller
 {
     use HandlesTabErrors;
 
-    public function __construct(private TabSettlementService $settlement) {}
+    public function __construct(private TabSettlementService $settlement, private \App\Services\PaymentService $payments) {}
+
+    /** 048 / S3 — verifikasi QRIS (referensi ≥ 4; persetujuan qris_verify bila perlu). */
+    public function verify(\App\Http\Requests\TabPaymentActionRequest $request, Order $order, \App\Models\Payment $payment): JsonResponse
+    {
+        abort_unless($payment->order_id === $order->id, 404);
+
+        return $this->guarded(fn () => new \App\Http\Resources\TabResource($this->payments->verifyWithApproval(
+            $order, $payment, $request->user(), $request->validated('reference'), $request->validated('override_token'),
+        )));
+    }
+
+    /** 048 / S3 — QRIS tidak ditemukan di mutasi: ditandai rejected (persetujuan qris_fail bila perlu). */
+    public function fail(\App\Http\Requests\TabPaymentActionRequest $request, Order $order, \App\Models\Payment $payment): JsonResponse
+    {
+        abort_unless($payment->order_id === $order->id, 404);
+
+        return $this->guarded(fn () => new \App\Http\Resources\TabResource($this->payments->markRejected(
+            $order, $payment, $request->user(), $request->validated('override_token'),
+        )));
+    }
 
     /** Pisah tagihan: 201 membuat penjualan terpisah; 200 bila ini pengiriman ulang (client_ref sama). */
     public function split(SplitTabRequest $request, Order $order): JsonResponse

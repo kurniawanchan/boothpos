@@ -157,7 +157,7 @@ class KitchenTicketsTest extends TestCase
 
         $this->patchJson("/api/v1/tabs/{$this->tab}/items/{$line}", ['qty' => 5])->assertStatus(409);
         // Menghapus baris yang sudah dikirim = MEMBATALKAN: alasan wajib (aturan lengkapnya di TabVoidAndCancelTest).
-        $this->deleteJson("/api/v1/tabs/{$this->tab}/items/{$line}")->assertStatus(422)->assertJsonValidationErrors(['reason']);
+        $this->deleteJson("/api/v1/tabs/{$this->tab}/items/{$line}")->assertStatus(422)->assertJsonValidationErrors(['reason_code']);
         $this->apiAddLine($this->tab, $this->makeMenuItem()->id)->assertCreated();
     }
 

@@ -26,6 +26,8 @@ class RecordCashMovementRequest extends FormRequest
             'reason_code' => ['required', 'string', 'max:40'],
             'reason_note' => ['nullable', 'string', 'max:200'],
             'amount' => ['required', 'numeric', 'gt:0', 'max:999999999999.99', 'decimal:0,2'],
+            // 048 / S3 — persetujuan kas keluar di atas ambang (diperiksa OverrideGate).
+            'override_token' => ['nullable', 'string', 'max:64'],
         ];
     }
 }

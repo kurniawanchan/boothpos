@@ -115,6 +115,14 @@ class TabController extends Controller
     }
 
     /** Batalkan seluruh tab terbuka (owner/admin, alasan wajib; 409 bila sudah ada pembayaran). */
+    /** 048 / S3 — batal seluruh tab: 409 has_payments bila sudah dibayar; persetujuan cancel_order bila perlu. */
+    public function cancel(\App\Http\Requests\CancelTabRequest $request, Order $order): JsonResponse
+    {
+        return $this->guarded(fn () => new TabResource($this->tabs->cancelTab(
+            $order, $request->user(), $request->validated('reason_code'), $request->validated('reason'), $request->validated('override_token'),
+        )));
+    }
+
     public function void(VoidTabRequest $request, Order $order): JsonResponse
     {
         return $this->guarded(fn () => new TabResource($this->tabs->voidTab($order, $request->validated('reason'), $request->user())));

@@ -13,6 +13,7 @@ use App\Models\Station;
 use App\Models\StockMovement;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\RestaurantFixtures;
 use Tests\TestCase;
@@ -20,9 +21,9 @@ use Tests\TestCase;
 /**
  * 028 US6 — membatalkan item yang sudah dikirim dan membatalkan tab (FR-018, FR-019, FR-036, FR-037).
  *
- * Aturan stok: dikembalikan HANYA bila item belum mulai dimasak (`new`); begitu `preparing` atau
- * lebih, bahan sudah terpakai → stok tidak kembali, dan pembatalannya hanya boleh owner/admin
- * dengan alasan, tercatat di log aktivitas di dalam transaksi yang sama.
+ * 048 / S3 — pembatalan baris TERKIRIM kini wajib `reason_code`, `kitchen_status` (sama dengan status dapur
+ * sebenarnya), dan `stock_decision`; pemegang order.void (pemilik/admin) lewat langsung, selain itu butuh
+ * token persetujuan `void_line` dari penyetuju. Pembatalan tab seluruhnya (`/tabs/{id}/void`) tidak berubah.
  */
 class TabVoidAndCancelTest extends TestCase
 {
@@ -56,9 +57,38 @@ class TabVoidAndCancelTest extends TestCase
         return [max($ids), $variant];
     }
 
-    private function cancel(int $line, ?string $reason = 'salah pesan', ?int $tab = null)
+    /** Body pembatalan baris terkirim sesuai kontrak. `stock_decision` default: return bila belum dimasak, selain itu waste. */
+    private function cancelBody(string $kitchen = 'not_started', ?string $reason = 'salah pesan', ?string $code = 'wrong_item', ?string $stock = null): array
     {
-        return $this->deleteJson('/api/v1/tabs/'.($tab ?? $this->tab)."/items/{$line}", $reason === null ? [] : ['reason' => $reason]);
+        $body = ['kitchen_status' => $kitchen, 'stock_decision' => $stock ?? ($kitchen === 'not_started' ? 'return' : 'waste')];
+        if ($code !== null) {
+            $body['reason_code'] = $code;
+        }
+        if ($reason !== null) {
+            $body['reason'] = $reason;
+        }
+
+        return $body;
+    }
+
+    private function cancel(int $line, array $body, ?int $tab = null)
+    {
+        return $this->deleteJson('/api/v1/tabs/'.($tab ?? $this->tab)."/items/{$line}", $body);
+    }
+
+    /** Token persetujuan `void_line` untuk body ini: penyetuju = pemilik (memegang order.void) dengan PIN dev. */
+    /** Subjek void = id tab + id baris (identitas objek, sejak S3 tinjauan) + bidang body yang dijaga. */
+    private function approvalFor(array $body, int $line, ?int $tab = null): string
+    {
+        $approver = User::factory()->create(['role' => 'owner']);
+        $approver->forceFill(['pin_hash' => Hash::make('482916'), 'pin_failed_attempts' => 0, 'pin_locked_until' => null])->save();
+        $approver->outlets()->syncWithoutDetaching([$this->session->outlet_id]);
+
+        $subject = ['tab_id' => $tab ?? $this->tab, 'line_id' => $line] + array_intersect_key($body, array_flip(['reason_code', 'kitchen_status', 'stock_decision', 'reason']));
+
+        return $this->postJson('/api/v1/overrides', [
+            'action' => 'void_line', 'subject' => $subject, 'approver_user_id' => $approver->id, 'pin' => '482916',
+        ])->assertCreated()->json('override_token');
     }
 
     private function setKitchenStatus(int $line, string $status): void
@@ -73,11 +103,26 @@ class TabVoidAndCancelTest extends TestCase
 
     // ====================== batal item yang sudah dikirim ==========================
 
-    public function test_cancelling_a_sent_item_before_it_is_cooked_needs_only_a_reason_and_returns_its_stock(): void
+    public function test_an_approval_for_one_sent_line_cannot_void_another_line(): void
+    {
+        // Persetujuan untuk baris A tidak boleh dipakai membatalkan baris B yang alasannya sama (celah S3 yang ditutup).
+        [$lineA] = $this->sentLine(stock: 10, qty: 1);
+        [$lineB] = $this->sentLine(stock: 10, qty: 1);
+        $body = $this->cancelBody();
+        $tokenForA = $this->approvalFor($body, $lineA);
+
+        $this->cancel($lineB, $body + ['override_token' => $tokenForA])
+            ->assertStatus(422)->assertJsonPath('code', 'override_mismatch');
+
+        $this->assertSame(1, OrderItem::find($lineB)->qty, 'baris B tidak boleh berubah');
+    }
+
+    public function test_cancelling_a_sent_item_before_it_is_cooked_needs_approval_and_returns_its_stock(): void
     {
         [$line, $variant] = $this->sentLine(stock: 10, qty: 2); // stok 10 → 8
+        $body = $this->cancelBody();
 
-        $res = $this->cancel($line)->assertOk();
+        $res = $this->cancel($line, $body + ['override_token' => $this->approvalFor($body, $line)])->assertOk();
 
         $res->assertJsonCount(0, 'lines')->assertJsonPath('total_amount', '0.00');
         $this->assertSame(10, $variant->fresh()->current_stock);
@@ -86,31 +131,43 @@ class TabVoidAndCancelTest extends TestCase
 
         $item = KitchenTicketItem::first();
         $this->assertSame('cancelled', $item->status);
-        $this->assertSame('salah pesan', $item->cancel_reason);
+        $this->assertSame('wrong_item', $item->cancel_reason);
         $this->assertSame($this->cashier->id, $item->cancelled_by);
         $this->assertNotNull($item->cancelled_at);
         $this->assertNull($item->order_item_id); // barisnya sudah tidak ada; snapshot tiket tetap
         $this->assertSame(2, $item->qty);
     }
 
+    public function test_a_cashier_cannot_cancel_a_sent_item_without_an_approval(): void
+    {
+        [$line, $variant] = $this->sentLine(stock: 10, qty: 2);
+
+        $this->cancel($line, $this->cancelBody())->assertStatus(409)->assertJsonPath('code', 'override_required');
+
+        $this->assertNotNull(OrderItem::find($line));
+        $this->assertSame(8, $variant->fresh()->current_stock);
+        $this->assertSame('new', KitchenTicketItem::first()->status);
+    }
+
     public function test_the_station_still_sees_the_cancelled_item_so_nobody_cooks_it(): void
     {
         [$line] = $this->sentLine();
-        $this->cancel($line, 'pelanggan batal')->assertOk();
+        $body = $this->cancelBody('not_started', 'pelanggan batal', 'customer_request');
+        $this->cancel($line, $body + ['override_token' => $this->approvalFor($body, $line)])->assertOk();
 
         $this->actingAs(User::factory()->create(['role' => 'cashier']), 'sanctum'); // Kasir punya `kitchen`
         $items = collect($this->getJson("/api/v1/stations/{$this->kitchen->id}/tickets")->json('tickets.0.items'));
 
         $this->assertSame('cancelled', $items[0]['status']);
-        $this->assertSame('pelanggan batal', $items[0]['cancel_reason']);
+        $this->assertSame('customer_request', $items[0]['cancel_reason']);
     }
 
-    public function test_a_reason_is_required_for_a_sent_item(): void
+    public function test_a_reason_code_is_required_for_a_sent_item(): void
     {
         [$line, $variant] = $this->sentLine();
 
-        $this->cancel($line, null)->assertStatus(422)->assertJsonValidationErrors(['reason']);
-        $this->cancel($line, '   ')->assertStatus(422)->assertJsonValidationErrors(['reason']);
+        $this->cancel($line, $this->cancelBody('not_started', 'salah pesan', null))->assertStatus(422)->assertJsonValidationErrors(['reason_code']);
+        $this->cancel($line, $this->cancelBody('not_started', 'salah pesan', '  '))->assertStatus(422)->assertJsonValidationErrors(['reason_code']);
 
         $this->assertNotNull(OrderItem::find($line));
         $this->assertSame(8, $variant->fresh()->current_stock);
@@ -122,7 +179,7 @@ class TabVoidAndCancelTest extends TestCase
         $variant = $this->makeMenuItem(categoryStation: $this->kitchen);
         $line = max($this->apiAddLine($this->tab, $variant->id)->json('lines.*.id'));
 
-        $this->cancel($line, null)->assertOk()->assertJsonCount(0, 'lines');
+        $this->cancel($line, [])->assertOk()->assertJsonCount(0, 'lines');
     }
 
     /** @return array<string, array{0: string}> */
@@ -131,13 +188,18 @@ class TabVoidAndCancelTest extends TestCase
         return ['preparing' => ['preparing'], 'ready' => ['ready'], 'served' => ['served']];
     }
 
+    private static function kitchenOf(string $status): string
+    {
+        return $status === 'preparing' ? 'started' : 'made';
+    }
+
     #[DataProvider('startedStatuses')]
     public function test_once_cooking_has_started_a_cashier_may_not_cancel_the_item(string $status): void
     {
         [$line, $variant] = $this->sentLine();
         $this->setKitchenStatus($line, $status);
 
-        $this->cancel($line)->assertForbidden();
+        $this->cancel($line, $this->cancelBody(self::kitchenOf($status)))->assertStatus(409)->assertJsonPath('code', 'override_required');
 
         $this->assertNotNull(OrderItem::find($line));
         $this->assertSame($status, KitchenTicketItem::first()->status);
@@ -150,9 +212,10 @@ class TabVoidAndCancelTest extends TestCase
     {
         [$line, $variant] = $this->sentLine(stock: 10, qty: 2);
         $this->setKitchenStatus($line, $status);
+        $kitchen = self::kitchenOf($status);
         $this->asOwner();
 
-        $res = $this->cancel($line, 'dikembalikan pelanggan')->assertOk();
+        $res = $this->cancel($line, $this->cancelBody($kitchen, 'dikembalikan pelanggan', 'customer_request'))->assertOk();
 
         $res->assertJsonCount(0, 'lines');
         $this->assertSame(8, $variant->fresh()->current_stock);                                  // bahan sudah terpakai
@@ -160,36 +223,39 @@ class TabVoidAndCancelTest extends TestCase
         $item = KitchenTicketItem::first();
         $this->assertSame('cancelled', $item->status);
         $this->assertSame($this->owner->id, $item->cancelled_by);
-        $this->assertSame('dikembalikan pelanggan', $item->cancel_reason);
+        $this->assertSame('customer_request', $item->cancel_reason);
 
         $log = ActivityLog::where('action', 'item_cancelled')->first();
         $this->assertNotNull($log, 'pembatalan setelah dimasak wajib tercatat');
         $this->assertSame($this->owner->id, $log->user_id);
-        $this->assertStringContainsString('dikembalikan pelanggan', $log->description);
-        $this->assertStringContainsString($status, json_encode($log->old_values));
+        $this->assertStringContainsString('customer_request', $log->description);
+        $this->assertStringContainsString($kitchen, json_encode($log->old_values));
     }
 
     public function test_cancelling_before_cooking_is_also_logged(): void
     {
         [$line] = $this->sentLine();
+        $body = $this->cancelBody();
 
-        $this->cancel($line, 'salah pesan')->assertOk();
+        $this->cancel($line, $body + ['override_token' => $this->approvalFor($body, $line)])->assertOk();
 
         $log = ActivityLog::where('action', 'item_cancelled')->first();
         $this->assertSame($this->cashier->id, $log->user_id);
-        $this->assertStringContainsString('salah pesan', $log->description);
+        $this->assertStringContainsString('wrong_item', $log->description);
     }
 
     public function test_a_refused_cancellation_leaves_no_trace_anywhere(): void
     {
         // Tab sudah dibayar sebagian: membatalkan baris ini akan membuat total < dibayar → ditolak
         // DI AKHIR transaksi, setelah stok/tiket/baris sempat diubah. Semuanya harus ikut mundur,
-        // termasuk baris log (log tidak boleh mengklaim sesuatu yang tidak terjadi).
+        // termasuk token persetujuan (konsumsinya ikut dibatalkan) dan baris log.
         [$line, $variant] = $this->sentLine(stock: 10, qty: 2, price: 10000);   // 20.000
-        $other = $this->apiAddLine($this->tab, $this->makeMenuItem(price: 10000)->id)->assertCreated();    // total 30.000
+        $this->apiAddLine($this->tab, $this->makeMenuItem(price: 10000)->id)->assertCreated();    // total 30.000
         $this->apiPay($this->tab, [['method' => 'cash', 'amount' => 25000]])->assertOk()->assertJsonPath('status', 'open');
 
-        $this->cancel($line)->assertStatus(409); // total jadi 10.000 < dibayar 25.000
+        $body = $this->cancelBody();
+        $token = $this->approvalFor($body, $line);
+        $this->cancel($line, $body + ['override_token' => $token])->assertStatus(409); // total jadi 10.000 < dibayar 25.000
 
         $this->assertNotNull(OrderItem::find($line));
         $this->assertSame('new', KitchenTicketItem::first()->status);
@@ -197,6 +263,7 @@ class TabVoidAndCancelTest extends TestCase
         $this->assertSame(8, $variant->fresh()->current_stock);
         $this->assertSame(0, StockMovement::where('type', 'return')->count());
         $this->assertSame(0, ActivityLog::where('action', 'item_cancelled')->count());
+        $this->assertNull(\App\Models\Override::where('token_hash', hash('sha256', $token))->first()->consumed_at, 'token tidak boleh terkonsumsi bila aksi gagal');
     }
 
     public function test_a_line_of_a_completed_order_cannot_be_cancelled_through_the_tab_flow(): void
@@ -205,7 +272,7 @@ class TabVoidAndCancelTest extends TestCase
         $this->apiPay($this->tab, [['method' => 'cash', 'amount' => 20000]])->assertOk()->assertJsonPath('status', 'completed');
         $this->asOwner();
 
-        $this->cancel($line, 'terlambat')->assertStatus(409);
+        $this->cancel($line, $this->cancelBody('not_started', 'terlambat'))->assertStatus(409);
 
         $this->assertNotNull(OrderItem::find($line));
     }
@@ -215,8 +282,9 @@ class TabVoidAndCancelTest extends TestCase
         $dish = $this->makeMenuItem(categoryStation: $this->kitchen, stock: 0, variantOverrides: ['track_stock' => false]);
         $line = max($this->apiAddLine($this->tab, $dish->id)->json('lines.*.id'));
         $this->postJson("/api/v1/tabs/{$this->tab}/send")->assertOk();
+        $body = $this->cancelBody();
 
-        $this->cancel($line)->assertOk();
+        $this->cancel($line, $body + ['override_token' => $this->approvalFor($body, $line)])->assertOk();
 
         $this->assertSame(0, StockMovement::count());
     }
@@ -226,12 +294,12 @@ class TabVoidAndCancelTest extends TestCase
         [$line] = $this->sentLine();
         $otherTab = $this->apiOpenTab($this->session->id)->json('id');
 
-        $this->cancel($line, 'x', $otherTab)->assertNotFound();
-        $this->cancel(999999)->assertNotFound();
+        $this->cancel($line, $this->cancelBody(), $otherTab)->assertNotFound();
+        $this->cancel(999999, $this->cancelBody())->assertNotFound();
         $this->assertNotNull(OrderItem::find($line));
     }
 
-    // ====================== batal tab ===============================================
+    // ====================== batal tab (tidak berubah) ===============================
 
     private function voidTab(?string $reason = 'tamu pergi', ?int $tab = null)
     {

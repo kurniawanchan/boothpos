@@ -197,7 +197,10 @@ class TabReportsExclusionTest extends TestCase
         $this->apiAddLine($tab, $keep->id)->assertCreated();
         $dropLine = max($this->apiAddLine($tab, $drop->id)->json('lines.*.id'));
         $this->postJson("/api/v1/tabs/{$tab}/send")->assertOk();
-        $this->deleteJson("/api/v1/tabs/{$tab}/items/{$dropLine}", ['reason' => 'salah pesan'])->assertOk();
+        $this->actingAs($this->owner, 'sanctum'); // pembatalan baris terkirim: hak order.void (pemilik)
+        $kitchen = match (\App\Models\KitchenTicketItem::where('order_item_id', $dropLine)->value('status')) { 'preparing' => 'started', 'ready', 'served' => 'made', default => 'not_started' };
+            $stock = $kitchen === 'not_started' ? 'return' : 'waste';
+            $this->deleteJson("/api/v1/tabs/{$tab}/items/{$dropLine}", ['reason_code' => 'wrong_item', 'kitchen_status' => $kitchen, 'stock_decision' => $stock, 'reason' => 'salah pesan'])->assertOk();
 
         $this->apiPay($tab, [['method' => 'cash', 'amount' => 10000]])->assertOk()->assertJsonPath('status', 'completed');
 

@@ -24,7 +24,7 @@ final class OutletScopeRegistry
     /** Model yang memakai BelongsToOutlet (kolom `outlet_id` NOT NULL). */
     public const MODELS = [
         CashierSession::class, Order::class, Payment::class, KitchenTicket::class,
-        DiningTable::class, Station::class, Device::class, CashMovement::class,
+        DiningTable::class, Station::class, Device::class, CashMovement::class, \App\Models\Override::class,
     ];
 
     /** Tabel ber-outlet (nama tabel), diturunkan dari MODELS agar tak ada daftar kedua. */

@@ -20,7 +20,7 @@ class CashierSession extends Model
     protected $fillable = [
         'user_id', 'opened_at', 'closed_at', 'opening_cash',
         'closing_cash', 'expected_cash', 'cash_difference', 'status', 'notes',
-        'counted_by_denomination', 'counted_total', 'edc_batch_total', 'variance', 'z_report',
+        'counted_by_denomination', 'counted_total', 'edc_batch_total', 'variance', 'variance_override_id', 'z_report',
     ];
 
     protected function casts(): array

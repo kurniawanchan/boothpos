@@ -7,6 +7,7 @@ use App\Models\KitchenTicketItem;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Support\PosSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -63,6 +64,38 @@ class TabSettlementService
             $newPaid = round((float) collect($data['payments'])->sum('amount'), 2);
             $paidTotal = round((float) $order->paid_amount + $newPaid, 2);
             $completes = $paidTotal >= $total;
+
+            // 048 / S3 — non-tunai: satu QRIS tertunda memblokir non-tunai lain; non-tunai tak boleh melebihi sisa.
+            $nonCash = collect($data['payments'])->where('method', '!=', 'cash');
+            if ($nonCash->isNotEmpty()) {
+                if (Payment::where('order_id', $order->id)->where('method', 'qr_ewallet')->where('verification', 'pending')->exists()) {
+                    throw new \App\Exceptions\ShiftRuleException(__('overrides.pending_qris'), 'pending_qris', [], 409);
+                }
+                $remaining = round($total - (float) $order->paid_amount, 2);
+                if (round((float) $nonCash->sum('amount'), 2) > $remaining + 0.005) {
+                    throw ValidationException::withMessages(['payments' => __('overrides.non_cash_exceeds_remaining')]);
+                }
+            }
+
+            // 048 / S3 — EDC: kode approval saja; kode ganda dalam jendela waktu → 409 kecuali dikonfirmasi.
+            foreach ($data['payments'] as $input) {
+                if (($input['method'] ?? null) !== 'edc') {
+                    continue;
+                }
+                $code = (string) ($input['approval_code'] ?? '');
+                if (preg_match('/^[A-Z0-9]{6,12}$/', $code) !== 1) {
+                    throw ValidationException::withMessages(['payments' => __('overrides.approval_code_invalid')]);
+                }
+                $duplicate = Payment::withoutGlobalScopes()
+                    ->where('method', 'edc')
+                    ->where('approval_code', $code)
+                    ->where('verification', '!=', 'rejected')
+                    ->where('paid_at', '>=', now()->subSeconds(PosSettings::edcDuplicateWindowSeconds()))
+                    ->exists();
+                if ($duplicate && empty($input['confirm_duplicate'])) {
+                    throw new \App\Exceptions\ShiftRuleException(__('overrides.duplicate_edc'), 'duplicate_edc', [], 409);
+                }
+            }
 
             foreach ($data['payments'] as $input) {
                 // 'full' hanya untuk pembayaran yang menuntaskan tab; sebelumnya uang muka.

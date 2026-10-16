@@ -75,6 +75,8 @@ class PaymentRecorder
             // 028-partial-split-payment — jejak buku besar. Semuanya opsional supaya
             // pemanggil lama (mis. PurchaseOrderService) tetap berfungsi apa adanya.
             'reference' => $input['reference'] ?? null,
+            // 048 / S3 — kode approval EDC saja (nomor kartu tidak pernah diterima maupun disimpan).
+            'approval_code' => $input['approval_code'] ?? null,
             'client_ref' => $input['client_ref'] ?? null,
             'session_id' => $input['session_id'] ?? null,
             'recorded_by' => $input['recorded_by'] ?? null,

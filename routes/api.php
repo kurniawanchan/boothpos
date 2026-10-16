@@ -327,6 +327,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/tabs/{order}/send', [TabController::class, 'send'])->middleware('idempotent');
         Route::post('/tabs/{order}/prebill', [TabController::class, 'prebill']);
         Route::post('/tabs/{order}/void', [TabController::class, 'void']);
+        // 048 / S3 — batal seluruh tab (409 has_payments bila sudah dibayar), persetujuan di titik aksi, dan
+        // verifikasi/penandaan QRIS tab.
+        Route::post('/tabs/{order}/cancel', [TabController::class, 'cancel']);
+        Route::post('/tabs/{order}/payments/{payment}/verify', [TabPaymentController::class, 'verify']);
+        Route::post('/tabs/{order}/payments/{payment}/fail', [TabPaymentController::class, 'fail']);
+        Route::post('/overrides', [\App\Http\Controllers\Api\OverrideController::class, 'store']);
+        Route::get('/overrides/approvers', [\App\Http\Controllers\Api\OverrideController::class, 'approvers']);
         Route::post('/tabs/{order}/move', [TabController::class, 'move']);
         Route::post('/tabs/{order}/merge', [TabController::class, 'merge']);
         Route::post('/tabs/{order}/split', [TabPaymentController::class, 'split']);

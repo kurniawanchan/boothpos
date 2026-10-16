@@ -32,6 +32,26 @@ class PermissionCatalog
 
     public const TRANSFER_CANCEL = 'stock.transfer.cancel';
 
+    /** 048 / S3 — izin penyetuju di titik aksi (research D11). Pemegang izin tidak butuh token persetujuan. */
+    public const ORDER_VOID = 'order.void';
+
+    public const ORDER_CANCEL = 'order.cancel';
+
+    public const CASH_OUT_APPROVE = 'cash.out.approve';
+
+    public const ORDER_REPRINT_APPROVE = 'order.reprint.approve';
+
+    public const PAYMENT_QRIS_VERIFY = 'payment.qris.verify';
+
+    public const ORDER_REFUND = 'order.refund';
+
+    public const MENU_AVAILABILITY_SET = 'menu.availability.set';
+
+    public const SHIFT_VARIANCE_APPROVE = 'shift.variance.approve';
+
+    /** Batas diskon per peran (nilai persen, diatur per peran; US5). */
+    public const DISCOUNT_LIMIT_PCT = 'discount_limit_pct';
+
     /** key => label manusiawi (Indonesia). */
     public const ALL = [
         self::ITEM_MANAGE => 'Mengelola item (diskontinu, aktifkan kembali)',
@@ -43,6 +63,15 @@ class PermissionCatalog
         self::TRANSFER_DISPATCH => 'Mengirim transfer stok antar outlet',
         self::TRANSFER_RECEIVE => 'Menerima transfer stok antar outlet',
         self::TRANSFER_CANCEL => 'Membatalkan transfer stok yang belum diterima',
+        self::ORDER_VOID => 'Membatalkan (void) baris yang sudah dikirim ke dapur',
+        self::ORDER_CANCEL => 'Membatalkan seluruh tab terbuka',
+        self::CASH_OUT_APPROVE => 'Menyetujui kas keluar di atas batas',
+        self::ORDER_REPRINT_APPROVE => 'Menyetujui cetak ulang struk',
+        self::PAYMENT_QRIS_VERIFY => 'Memverifikasi atau menandai tidak ditemukan pembayaran QRIS',
+        self::ORDER_REFUND => 'Refund penuh order lunas',
+        self::MENU_AVAILABILITY_SET => 'Menandai item habis (sold out) tanpa persetujuan',
+        self::SHIFT_VARIANCE_APPROVE => 'Menyetujui selisih kas tutup shift di atas toleransi',
+        self::DISCOUNT_LIMIT_PCT => 'Batas diskon persen per transaksi',
     ];
 
     /** @return list<string> */
@@ -66,7 +95,7 @@ class PermissionCatalog
     {
         return match (mb_strtolower(trim($roleName))) {
             'owner', 'admin' => self::keys(),
-            'inventory' => [self::ITEM_MANAGE, self::ITEM_86, self::RECIPE_EDIT, self::TRANSFER_DISPATCH, self::TRANSFER_RECEIVE],
+            'inventory' => [self::ITEM_MANAGE, self::ITEM_86, self::RECIPE_EDIT, self::TRANSFER_DISPATCH, self::TRANSFER_RECEIVE, self::MENU_AVAILABILITY_SET],
             default => [],
         };
     }
