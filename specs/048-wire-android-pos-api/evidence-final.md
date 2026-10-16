@@ -25,3 +25,6 @@ Flag cache diperlukan: tanpanya `tests/TestCase.php` menolak berjalan (lihat CLA
 - `allowBackup="false"` pada manifes rilis; `debuggable` tidak diaktifkan pada rilis.
 - `:app:assembleRelease` BERHASIL (APK rilis tak ditandatangani, 12,4 MB). Preset contoh (`DebugPresets`) pada rilis adalah stub kosong; tidak ada referensi preset contoh di dex rilis.
 - **KEPUTUSAN TERBUKA**: `network_security_config.xml` mengizinkan HTTP polos (`cleartextTrafficPermitted="true"`) untuk SEMUA build, termasuk rilis. Token melintas di LAN tanpa enkripsi. Pilihan: (a) pertahankan untuk pilot LAN outlet dan tetap dicatat; (b) wajibkan HTTPS di rilis (TLS di server; cleartext hanya pada varian debug).
+
+## Keputusan cleartext (2026-10-16 malam, WIB)
+- Pemilik memutuskan: **pertahankan HTTP untuk pilot LAN outlet**, dengan catatan risiko di bagian T069 di atas dan di RUNBOOK. Wajibkan HTTPS ditunda sampai toko membutuhkan akses internet.
