@@ -31,6 +31,8 @@ php artisan app:backup
 php artisan app:restore <path/database.sql> [--force]
 ```
 
+> **Dated note — 2026-10-16 (feature 048, T066).** Perintah tes di dalam kontainer WAJIB menyertakan `-e CACHE_STORE=array -e SESSION_DRIVER=array`. Tanpanya tes menulis setting bawaan (`system_mode = live`) ke cache file yang juga dibaca API dev, sehingga mode dan outlet dev berubah diam-diam. `tests/TestCase.php` menolak berjalan tanpa flag ini.
+
 ## Non-negotiable environment constraints
 
 - **Dated note — 2026-10-11 (constitution 2.0.0):** the premise "one machine per store" is extended to one organisation with one or more outlets, on one machine or one shared server (one server, one database per organisation). The bullets below still apply unchanged.
@@ -38,7 +40,7 @@ php artisan app:restore <path/database.sql> [--force]
 - **`.env.testing` must exist and point at a separate database** (`warkop_wjm_test`). It is gitignored. The suite runs `RefreshDatabase`, so pointing it at the app DB destroys real data.
 - **Running `php artisan test` INSIDE the `app` Docker container is destructive unless you pass explicit `-e` overrides — this has actually wiped the dev database twice (020-customer-data-import-export, and again 2026-09-27).** `docker-compose.yml`'s `app` service uses `env_file: .env`, which injects `DB_DATABASE=warkop_wjm` (the real dev DB) as a real OS-level environment variable inside the container. phpdotenv never overwrites an environment variable that's already set, so `.env.testing` — and even `-e APP_ENV=testing` alone — silently do **nothing**; `RefreshDatabase` then drops and rebuilds `warkop_wjm` itself. The ONLY safe way to run tests inside the container:
   ```bash
-  docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test app php artisan test
+  docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test app php artisan test -e CACHE_STORE=array -e SESSION_DRIVER=array
   ```
   `tests/TestCase.php::guardAgainstWrongDatabase()` is a hard technical backstop that refuses to run any test at all unless the resolved database name contains `test` — but treat that as a last-resort safety net, not permission to skip the `-e` flags above. If data does go missing, recover with `php artisan db:seed` + `php artisan db:seed --class=SakanaFridgeDemoSeeder` (docs/RUNBOOK.md §Mode C has the full recovery note).
 - On this dev machine MySQL runs in the `warkop_wjm-mysql-1` Docker container, exposed to the host at `127.0.0.1:3308` (container-internal port stays `3306` — that's what `mysql`/`DB_HOST=mysql` inside the `app` container resolves to). **Do not `brew install mysql-client`** — that was done once and deliberately reverted. If a CLI tool like `mysqldump` is needed, proxy through `docker exec`, and keep that shim out of committed code.

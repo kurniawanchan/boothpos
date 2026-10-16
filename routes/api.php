@@ -57,7 +57,7 @@ Route::prefix('v1')->group(function () {
     // SetLocaleFromUser HANYA di sini, bukan pada POST /auth/login di
     // atas — layar login selalu Bahasa Indonesia (FR-001), locale
     // per-akun baru berlaku setelah $request->user() resolve.
-    Route::middleware(['auth:sanctum', SetLocaleFromUser::class, \App\Http\Middleware\ResolveOutletContext::class])->group(function () {
+    Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserIsActive::class, SetLocaleFromUser::class, \App\Http\Middleware\ResolveOutletContext::class])->group(function () {
         // 045 Stage 2 — outlet yang boleh dilihat pengguna dan pilihan X-Outlet-Id (contracts/api-scope.md).
         Route::get('/me/scope', [\App\Http\Controllers\Api\MeScopeController::class, 'show']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);

@@ -74,6 +74,16 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // 048 / T066 — tes HARUS memakai cache array. Dengan cache file (CACHE_STORE dari env_file container),
+        // setiap tes menulis setting bawaan (system_mode = live, saat baris belum ada di DB uji) ke cache yang
+        // juga dibaca API dev, dan Cache::flush() di bawah mengosongkan cache dev. Jalankan dengan
+        // `-e CACHE_STORE=array -e SESSION_DRIVER=array` (lihat CLAUDE.md). Gagal keras lebih baik daripada
+        // diam-diam mengubah mode aplikasi yang sedang dipakai.
+        if (config('cache.default') !== 'array') {
+            throw new \RuntimeException('Tes harus memakai cache array: tambahkan -e CACHE_STORE=array -e SESSION_DRIVER=array pada perintah php artisan test.');
+        }
+
         Cache::flush();
 
         // BUG YANG DITEMUKAN & DIPERBAIKI (018-license-activation) —
