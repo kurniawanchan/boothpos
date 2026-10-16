@@ -104,3 +104,12 @@ Catatan:
 - Tab 2020 dibuka hanya untuk pemeriksaan 4b, kosong, dan masih terbuka di shift 9. Perlu dibatalkan oleh parent.
 - Shift 9 tetap terbuka (tidak ditutup).
 - Mode sempat kembali `live` karena cache stale setelah uji parent. Hanya kunci cache `setting:system_mode` yang dihapus; DB tetap `demo`.
+
+## Keputusan dan pembersihan dev (disetujui pengguna, 2026-10-16)
+- **Langkah 4c** (pembayaran tanpa shift → `shift_required`) diterima sebagai **tercakup tes otomatis** (`ShiftRequiredTest`) dan guard klien (tombol Bayar menolak tanpa shift sebelum permintaan dikirim). Tidak diuji di perangkat karena tutup shift ditolak selama ada tab terbuka; tidak ada cara aman mencapainya di perangkat tanpa menulis data dev.
+- Tab **2020** (kosong, residu verifikasi 4b) dibatalkan lewat `TabService::voidTab` dengan aktor owner dan alasan "Residu uji US3 (dev)".
+- Tab **2026** (kosong, shift 9, dibuat saat verifikasi) juga dibatalkan dengan alasan yang sama. Persetujuan pengguna menyebut tab 2020; tab 2026 dibatalkan karena tanpa itu shift 9 tidak bisa ditutup. Dicatat di sini secara eksplisit.
+- Shift **9** ditutup dengan hitungan buta Rp 150.000: `expected_cash` 150.000, `counted_total` 150.000, selisih 0.
+- Catatan: penutupan pertama memakai kunci idempotensi yang sama dengan penolakan `open_tabs` sebelumnya dan memutar ulang 409 lama (perilaku `idempotent` yang disengaja, diuji di `IdempotencyKeyTest`). Klien harus memakai kunci baru untuk setiap percobaan baru setelah penolakan. Perlu dicek di penanganan kunci Android.
+- Cache mode: `setting:system_mode` basi sempat kembali `live` setelah suite penuh; satu tes pembaca mode tidak mereproduksinya (cache tidak bertambah). Penyebab belum diketahui; kunci cache dihapus, DB tetap `demo`.
+
