@@ -7,6 +7,7 @@ import TrendLine from '../page/TrendLine.vue';
 import EmptyState from '../ui/EmptyState.vue';
 import ErrorState from '../ui/ErrorState.vue';
 import LoadingState from '../ui/LoadingState.vue';
+import RevenueBreakdown from '../report/RevenueBreakdown.vue';
 
 /**
  * 042-dashboard-revamp (US1) — empat angka utama Dashboard: label, catatan satuan, nilai, chip perubahan dan garis
@@ -30,6 +31,8 @@ const props = defineProps({
   summary: { type: Object, default: null },
   state: { type: String, default: 'loading' },
   outletSelected: { type: Boolean, default: false },
+  // 048 — label pajak dari settings, dikirim induk (DashboardView) untuk baris Net · Diskon · Pajak · Bruto.
+  taxLabel: { type: String, default: '' },
 });
 defineEmits(['retry']);
 const { t } = useI18n();
@@ -128,5 +131,7 @@ const empty = computed(() => props.state === 'ready' && !props.summary?.kpis);
         </div>
       </div>
     </div>
+    <!-- 048 — pendapatan periode dengan pajak; hanya bila server mengirim `revenue` (respons lama tidak punya). -->
+    <RevenueBreakdown v-if="state === 'ready' && summary?.revenue" :revenue="summary.revenue" :tax-label="taxLabel" />
   </section>
 </template>

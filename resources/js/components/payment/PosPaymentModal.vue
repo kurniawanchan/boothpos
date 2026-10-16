@@ -16,6 +16,10 @@ const props = defineProps({
   // 028-partial-split-payment (US5) — pelanggan yang terpasang pada penjualan ini.
   // Tanpa pelanggan, penjualan tak bisa diselesaikan dengan pembayaran kurang.
   customerName: { type: String, default: '' },
+  // 048 — pajak eksklusif untuk pratinjau (dari utils/posTotals.js); server menghitung ulang saat order dibuat.
+  taxAmount: { type: String, default: '0.00' },
+  taxRate: { type: Number, default: 0 },
+  taxLabel: { type: String, default: '' },
 });
 const emit = defineEmits(['close', 'submit']);
 
@@ -70,6 +74,7 @@ defineExpose({ reset: () => { pendingPartial.value = null; panelRef.value?.reset
         <div class="flex flex-col gap-2 border-t border-dashed border-line-2 pt-3.5">
           <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('pos.subtotal') }}</span><span class="font-semibold">{{ formatIDR(subtotal) }}</span></div>
           <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('pos.discount') }}</span><span class="font-semibold text-danger-text">{{ formatIDR(discountAmount) }}</span></div>
+          <div v-if="taxRate > 0" class="flex justify-between text-[12.5px]"><span class="text-muted">{{ taxLabel || t('pos.tax') }} ({{ taxRate }}%)</span><span class="font-semibold">{{ formatIDR(taxAmount) }}</span></div>
           <div class="flex items-baseline justify-between border-t border-line-3 pt-2.5">
             <span class="text-[13.5px] font-bold">{{ t('pos.total') }}</span>
             <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(total) }}</span>

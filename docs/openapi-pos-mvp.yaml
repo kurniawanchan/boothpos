@@ -6462,12 +6462,14 @@ components:
             from: { type: string, format: date }
             to: { type: string, format: date }
             up_to: { type: string, description: "HH:MM, hanya same_time_yesterday." }
-        # 048 — pendapatan periode dengan pajak: net (pra-pajak), tax_total, dan grand_total = net + tax_total. Sama
-        # definisinya dengan `totals` di GET /reports/sales (refund mengurangi pada tanggal refund).
+        # 048 — pendapatan periode dengan pajak: net (pra-pajak), order_discount_total, tax_total, dan
+        # grand_total = net_sales − order_discount_total + tax_total (= total struk). Sama definisinya dengan `totals`
+        # di GET /reports/sales (refund mengurangi pada tanggal refund).
         revenue:
           type: object
           properties:
             net_sales: { $ref: '#/components/schemas/Money' }
+            order_discount_total: { $ref: '#/components/schemas/Money' }
             tax_total: { $ref: '#/components/schemas/Money' }
             grand_total: { $ref: '#/components/schemas/Money' }
         kpis:
@@ -7658,12 +7660,12 @@ components:
             pos_unit_count: { type: number, description: "Unit terjual dari order POS SAJA. Halaman Sales memakai `pos_*` karena hanya menampilkan transaksi POS." }
             pos_gross_sales: { $ref: '#/components/schemas/Money', description: Penjualan kotor order POS saja. }
             pos_net_sales: { $ref: '#/components/schemas/Money', description: Penjualan bersih order POS saja. }
-            # 048 (keputusan pemilik) — pajak eksklusif. net_sales = pra-pajak; grand_total = net_sales + tax_total
-            # (angka yang sama dengan struk untuk order tanpa diskon tingkat-order). Refund mengurangi ketiganya pada
-            # tanggal refund. order_discount_total = diskon tingkat-order, TIDAK dikurangkan dari net_sales (keputusan O3).
+            # 048 (keputusan pemilik) — pajak eksklusif. net_sales = pra-pajak, TANPA diskon tingkat-order (keputusan O3).
+            # grand_total = net_sales − order_discount_total + tax_total = total struk. Refund mengurangi keempatnya
+            # pada tanggal refund dengan nilai yang sama.
             tax_total: { $ref: '#/components/schemas/Money', description: Pajak order selesai (dikurangi refund pada tanggal refund). }
-            grand_total: { $ref: '#/components/schemas/Money', description: net_sales + tax_total. }
-            order_discount_total: { $ref: '#/components/schemas/Money', description: Diskon tingkat-order (di luar net_sales, keputusan O3). }
+            grand_total: { $ref: '#/components/schemas/Money', description: net_sales − order_discount_total + tax_total (= total struk). }
+            order_discount_total: { $ref: '#/components/schemas/Money', description: Diskon tingkat-order, tampil sebagai baris sendiri dan dikurangkan pada grand_total. }
         rows:
           type: array
           description: |

@@ -69,9 +69,9 @@ class SalesFigures
     /**
      * Totalan POS dari sebuah basis (`posBase()` yang boleh sudah dipersempit pemanggil).
      *
-     * 048 / S4 — `tax_total` dan `grand_total` (= net + pajak, angka yang sama dengan struk) ditambahkan di sini.
-     * `net_sales` TETAP tanpa diskon tingkat-order (keputusan O3, dikunci SalesTotalsCharacterizationTest);
-     * `order_discount_total` ditampilkan terpisah supaya selisih dengan struk terlihat.
+     * 048 / S4 — `tax_total` dan `grand_total` ditambahkan di sini. `net_sales` TETAP tanpa diskon tingkat-order
+     * (keputusan O3, dikunci SalesTotalsCharacterizationTest). `grand_total` = net_sales − order_discount_total +
+     * tax_total, sama dengan total struk; diskon tingkat-order tampil sebagai baris tersendiri.
      */
     public static function totals(Builder $base): object
     {
@@ -88,7 +88,7 @@ class SalesFigures
         $orderLevel = self::orderLevelSums($base);
         $totals->order_discount_total = $orderLevel->discount;
         $totals->tax_total = $orderLevel->tax;
-        $totals->grand_total = (float) ($totals->net_sales ?? 0) + $orderLevel->tax;
+        $totals->grand_total = self::grandTotal((float) ($totals->net_sales ?? 0), $orderLevel->discount, $orderLevel->tax);
 
         return $totals;
     }
@@ -110,15 +110,24 @@ class SalesFigures
     }
 
     /**
-     * 048 / S4 — pajak bersih (penjualan − refund) pada rentang TANGGAL BISNIS [from, to], untuk kartu Dashboard
-     * periode. Refund dikurangkan pada tanggal refund, sama dengan netByDay().
+     * 048 / S4 — diskon dan pajak tingkat-order BERSIH (penjualan − refund) pada rentang TANGGAL BISNIS [from, to],
+     * untuk kartu Dashboard periode. Refund dikurangkan pada tanggal refund, sama dengan netByDay().
      */
-    public static function taxTotalBetween(string $from, string $to): float
+    public static function orderAdjustmentsBetween(string $from, string $to): object
     {
-        $sales = self::orderLevelSums(self::leanBase(['date_from' => $from, 'date_to' => $to]))->tax;
-        $refunds = self::orderLevelSums(self::refundLeanBase(['date_from' => $from, 'date_to' => $to]))->tax;
+        $sales = self::orderLevelSums(self::leanBase(['date_from' => $from, 'date_to' => $to]));
+        $refunds = self::orderLevelSums(self::refundLeanBase(['date_from' => $from, 'date_to' => $to]));
 
-        return $sales - $refunds;
+        return (object) ['discount' => $sales->discount - $refunds->discount, 'tax' => $sales->tax - $refunds->tax];
+    }
+
+    /**
+     * Grand total = net (pra-pajak, tanpa diskon tingkat-order, keputusan O3) − diskon tingkat-order + pajak.
+     * Satu-satunya rumus; dipakai laporan, Dashboard, dan pengurangan refund supaya selalu sama dengan struk.
+     */
+    public static function grandTotal(float $net, float $orderDiscount, float $tax): float
+    {
+        return $net - $orderDiscount + $tax;
     }
 
     /**
@@ -211,16 +220,20 @@ class SalesFigures
             ->selectRaw('SUM(order_items.line_total + order_items.discount_amount) as gross, SUM(order_items.line_total) as net, SUM(order_items.cost_price * order_items.qty) as cost')
             ->first();
 
+        $orderLevel = self::orderLevelSums($base);
+
         return (object) [
             'gross' => (float) ($row->gross ?? 0),
             'net' => (float) ($row->net ?? 0),
             'cost' => (float) ($row->cost ?? 0),
-            'tax' => self::orderLevelSums($base)->tax,
+            'discount' => $orderLevel->discount,
+            'tax' => $orderLevel->tax,
         ];
     }
 
     /**
-     * Kurangi refund dari totalan penjualan (gross, net, pajak) untuk [from, to]. Panggil SEBELUM angka diformat.
+     * Kurangi refund dari totalan penjualan (gross, net, diskon tingkat-order, pajak) untuk [from, to]. Panggil SEBELUM
+     * angka diformat. Refund mengurangi grand total dengan nilai yang sama seperti penjualannya (net − diskon + pajak).
      * Units dan jumlah order tetap menghitung transaksi (keputusan: refund hanya mengurangi uang).
      */
     public static function netOfRefunds(object $totals, ?string $from, ?string $to): object
@@ -228,8 +241,9 @@ class SalesFigures
         $refund = self::refundTotals($from, $to);
         $totals->gross_sales = (float) ($totals->gross_sales ?? 0) - $refund->gross;
         $totals->net_sales = (float) ($totals->net_sales ?? 0) - $refund->net;
+        $totals->order_discount_total = (float) ($totals->order_discount_total ?? 0) - $refund->discount;
         $totals->tax_total = (float) ($totals->tax_total ?? 0) - $refund->tax;
-        $totals->grand_total = (float) $totals->net_sales + $totals->tax_total;
+        $totals->grand_total = self::grandTotal((float) $totals->net_sales, (float) $totals->order_discount_total, (float) $totals->tax_total);
 
         return $totals;
     }
@@ -291,27 +305,27 @@ class SalesFigures
      * Dipanggil hanya untuk satu hari bisnis (ratusan–ribuan baris); pengelompokan per jam dilakukan
      * di PHP karena konversi zona waktu di SQL butuh tabel zona MySQL yang tidak dijamin ada.
      *
-     * @return list<array{at: string, net: float, tax: float}>  `at` = completed_at (UTC, 'Y-m-d H:i:s'); `tax` = pajak order (negatif untuk refund)
+     * @return list<array{at: string, net: float, discount: float, tax: float}>  `at` = completed_at (UTC, 'Y-m-d H:i:s'); `discount` = diskon tingkat-order dan `tax` = pajak order (keduanya negatif untuk refund)
      */
     public static function completedNetBetween(CarbonInterface $start, CarbonInterface $end): array
     {
         $sales = self::leanBase()
             ->where('orders.completed_at', '>=', $start->utc()->format('Y-m-d H:i:s'))
             ->where('orders.completed_at', '<', $end->utc()->format('Y-m-d H:i:s'))
-            ->selectRaw('orders.id, orders.completed_at as at, SUM(order_items.line_total) as net, MAX(orders.tax_amount) as tax')
+            ->selectRaw('orders.id, orders.completed_at as at, SUM(order_items.line_total) as net, MAX(orders.discount_amount) as discount, MAX(orders.tax_amount) as tax')
             ->groupBy('orders.id', 'orders.completed_at')
             ->get()
-            ->map(fn ($r) => ['at' => (string) $r->at, 'net' => (float) $r->net, 'tax' => (float) $r->tax])
+            ->map(fn ($r) => ['at' => (string) $r->at, 'net' => (float) $r->net, 'discount' => (float) $r->discount, 'tax' => (float) $r->tax])
             ->all();
 
         // 048 / S4 — refund dalam jendela ini muncul sebagai pengurangan pada instan refund itu sendiri.
         $refunds = self::refundLeanBase()
             ->where('orders.refunded_at', '>=', $start->utc()->format('Y-m-d H:i:s'))
             ->where('orders.refunded_at', '<', $end->utc()->format('Y-m-d H:i:s'))
-            ->selectRaw('orders.id, orders.refunded_at as at, SUM(order_items.line_total) as net, MAX(orders.tax_amount) as tax')
+            ->selectRaw('orders.id, orders.refunded_at as at, SUM(order_items.line_total) as net, MAX(orders.discount_amount) as discount, MAX(orders.tax_amount) as tax')
             ->groupBy('orders.id', 'orders.refunded_at')
             ->get()
-            ->map(fn ($r) => ['at' => (string) $r->at, 'net' => -(float) $r->net, 'tax' => -(float) $r->tax])
+            ->map(fn ($r) => ['at' => (string) $r->at, 'net' => -(float) $r->net, 'discount' => -(float) $r->discount, 'tax' => -(float) $r->tax])
             ->all();
 
         return array_merge($sales, $refunds);

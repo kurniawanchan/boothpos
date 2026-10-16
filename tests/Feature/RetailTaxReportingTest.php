@@ -119,22 +119,54 @@ class RetailTaxReportingTest extends TestCase
         $this->assertSame('77000.00', $totals['grand_total']);
     }
 
-    public function test_an_order_level_discount_is_taxed_on_the_discounted_base_and_stays_out_of_net_per_decision_o3(): void
+    public function test_an_order_level_discount_is_taxed_on_the_discounted_base_and_grand_total_equals_the_receipt(): void
     {
         $this->setTax('10');
 
-        // 60.000 − diskon 6.000 = 54.000; pajak 10% dari 54.000 = 5.400; total 59.400 (sama dengan struk).
-        $sale = $this->sale([['variant_id' => $this->variantId, 'qty' => 3]], 59400, discount: 6000);
+        // 60.000 − diskon tingkat-order 10.000 = 50.000; pajak 10% dari 50.000 = 5.000; total 55.000.
+        $sale = $this->sale([['variant_id' => $this->variantId, 'qty' => 3]], 55000, discount: 10000);
 
-        $this->assertSame('5400.00', $sale['tax_amount']);
-        $this->assertSame('59400.00', $sale['total_amount']);
+        $this->assertSame('5000.00', $sale['tax_amount']);
+        $this->assertSame('55000.00', $sale['total_amount']);
+
+        $this->getJson("/api/v1/orders/{$sale['id']}/receipt")->assertOk()->assertJsonPath('total_amount', '55000.00');
+
+        // Keputusan O3 (dikunci SalesTotalsCharacterizationTest): net tetap 60.000; diskon tampil sebagai baris sendiri.
+        $totals = $this->sales(BusinessDay::today())->json('totals');
+        $this->assertSame('60000.00', $totals['net_sales']);
+        $this->assertSame('10000.00', $totals['order_discount_total']);
+        $this->assertSame('5000.00', $totals['tax_total']);
+        $this->assertSame('55000.00', $totals['grand_total'], 'grand total = net − diskon tingkat-order + pajak = total struk');
+    }
+
+    public function test_a_refund_of_a_discounted_order_nets_out_its_grand_total_on_the_refund_date(): void
+    {
+        $this->setTax('10');
+        $sale = $this->sale([['variant_id' => $this->variantId, 'qty' => 3]], 55000, discount: 10000);
+        $this->assertSame('55000.00', $this->sales(BusinessDay::today())->json('totals.grand_total'));
+
+        $this->refund($sale['id']);
 
         $totals = $this->sales(BusinessDay::today())->json('totals');
-        $this->assertSame('60000.00', $totals['net_sales'], 'keputusan O3: diskon tingkat-order tidak mengurangi net');
-        $this->assertSame('5400.00', $totals['tax_total']);
-        $this->assertSame('6000.00', $totals['order_discount_total']);
-        // Selisih 6.000 terhadap struk (59.400) ada di sini; menunggu keputusan pemilik soal O3.
-        $this->assertSame('65400.00', $totals['grand_total']);
+        $this->assertSame('0.00', $totals['net_sales'], 'refund 60.000 mengurangi net');
+        $this->assertSame('0.00', $totals['order_discount_total'], 'refund 10.000 mengurangi diskon tingkat-order');
+        $this->assertSame('0.00', $totals['tax_total'], 'refund 5.000 mengurangi pajak');
+        $this->assertSame('0.00', $totals['grand_total'], 'refund mengurangi grand total 55.000 (net − diskon + pajak)');
+    }
+
+    public function test_the_dashboard_revenue_block_shows_the_order_discount_and_grand_total_for_a_discounted_order(): void
+    {
+        $this->setTax('10');
+        $this->sale([['variant_id' => $this->variantId, 'qty' => 3]], 55000, discount: 10000);
+
+        $this->actingAs($this->owner, 'sanctum');
+        foreach (['today', '7d'] as $period) {
+            $this->getJson("/api/v1/dashboard/summary?period={$period}")->assertOk()
+                ->assertJsonPath('revenue.net_sales', '60000.00')
+                ->assertJsonPath('revenue.order_discount_total', '10000.00')
+                ->assertJsonPath('revenue.tax_total', '5000.00')
+                ->assertJsonPath('revenue.grand_total', '55000.00');
+        }
     }
 
     public function test_a_refund_takes_its_tax_out_of_tax_total_and_grand_total_on_the_refund_day(): void
