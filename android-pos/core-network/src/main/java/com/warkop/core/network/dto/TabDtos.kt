@@ -31,6 +31,7 @@ import kotlinx.serialization.Serializable
     val method: String = "cash",
     val amount: String = "0.00",
     val verification: String = "verified",
+    @SerialName("paid_at") val paidAt: String? = null,
 )
 
 @Serializable data class DeviceRefDto(val id: Long = 0, val code: String = "")

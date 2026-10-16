@@ -60,6 +60,11 @@ class S4DtosTest {
         assertTrue(body, body.contains("\"override_token\":\"tok-r\""))
     }
 
+    @Test fun `pembayaran tab membaca paid_at dari server untuk tanggal struk`() {
+        val t = json.decodeFromString(com.warkop.core.network.dto.TabPaymentDto.serializer(), """{"id":2031,"method":"cash","amount":"66000.00","paid_at":"2026-10-16T09:23:54+00:00"}""")
+        assertEquals("2026-10-16T09:23:54+00:00", t.paidAt)
+    }
+
     @Test fun `bagi per item membawa baris yang dipindah dan pembayaran tunai`() {
         val body = json.encodeToString(
             SplitItemsRequestDto.serializer(),

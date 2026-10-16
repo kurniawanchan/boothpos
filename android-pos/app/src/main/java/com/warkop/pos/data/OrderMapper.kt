@@ -25,6 +25,19 @@ import java.time.format.DateTimeFormatter
  */
 object OrderMapper {
     private val HHMM = DateTimeFormatter.ofPattern("HH:mm")
+    private val RECEIPT_DATE_TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+    /** Zona toko; sama dengan nilai bawaan `store_timezone` di server (Asia/Jakarta). */
+    val STORE_ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Jakarta")
+
+    /**
+     * Tanggal struk = waktu pembayaran TERAKHIR dari server (paid_at), dalam zona toko. Tidak ada tanggal tetap;
+     * tanpa pembayaran yang punya waktu → null (struk tidak menampilkan tanggal).
+     */
+    fun receiptDateTime(paidAtIso: List<String?>): String? =
+        paidAtIso.mapNotNull { iso -> runCatching { OffsetDateTime.parse(iso) }.getOrNull() }
+            .maxOrNull()
+            ?.atZoneSameInstant(STORE_ZONE)
+            ?.format(RECEIPT_DATE_TIME)
 
     fun hhmm(iso: String?): String =
         iso?.let { runCatching { OffsetDateTime.parse(it).format(HHMM) }.getOrNull() } ?: "--:--"
@@ -48,6 +61,7 @@ object OrderMapper {
             tenders = t.payments.map { tender(it) },
             billPrinted = t.prebillAt != null,
             closed = completed || voided || refunded,
+            receiptDateTime = receiptDateTime(t.payments.map { it.paidAt }),
             refunded = refunded,
             refundTotal = t.refundTotal?.let { rp(it) },
             cashReturned = t.cashReturned?.let { rp(it) },

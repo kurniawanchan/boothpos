@@ -46,6 +46,9 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     private var sessionToken: String? = vault.get(TokenVault.SESSION_TOKEN)
     private var outletId: Long? = vault.get(TokenVault.OUTLET_ID)?.toLongOrNull()
     private var deviceId: Long? = vault.get(TokenVault.DEVICE_ID)?.toLongOrNull()
+    // Kode perangkat dibaca SEKALI dari brankas (saat konstruksi) lalu disimpan di memori: pembacaan Keystore
+    // tidak boleh dilakukan di main thread setiap kali tulisan selesai (sumber ANR saat persetujuan).
+    private var myDeviceCode: String? = vault.get(TokenVault.DEVICE_CODE)
     private var apiFor: Pair<String, PosApi>? = null
 
     /** Terminal yang sudah disiapkan (URL + outlet + perangkat), atau null → layar penyiapan. */
@@ -62,7 +65,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     fun resetTerminal() {
         vault.clear(TokenVault.SERVER_URL, TokenVault.ADMIN_TOKEN, TokenVault.SESSION_TOKEN, TokenVault.SESSION_EXPIRES,
             TokenVault.OUTLET_ID, TokenVault.OUTLET_NAME, TokenVault.DEVICE_ID, TokenVault.DEVICE_CODE)
-        serverUrl = null; adminToken = null; sessionToken = null; outletId = null; deviceId = null; apiFor = null
+        serverUrl = null; adminToken = null; sessionToken = null; outletId = null; deviceId = null; apiFor = null; myDeviceCode = null
     }
 
     private fun api(): PosApi {
@@ -96,6 +99,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         vault.put(TokenVault.OUTLET_NAME, outlet.name)
         vault.put(TokenVault.DEVICE_ID, device.id.toString())
         vault.put(TokenVault.DEVICE_CODE, device.code)
+        myDeviceCode = device.code
         return TerminalConfig(serverUrl.orEmpty(), outlet.id, outlet.name, device.id, device.code)
     }
 
@@ -208,7 +212,6 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         .getOrElse { runCatching { java.time.OffsetDateTime.parse(iso).toInstant().toEpochMilli() }.getOrDefault(System.currentTimeMillis() + 12 * 3_600_000L) }
 
     // --- denah & pesanan ---
-    private val myDeviceCode: String? get() = vault.get(TokenVault.DEVICE_CODE)
 
     override suspend fun floor(version: String?): FloorSnapshot? {
         val res = apiCall { api().floor(version) }

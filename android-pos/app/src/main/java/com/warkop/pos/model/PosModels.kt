@@ -56,6 +56,8 @@ data class Order(
     val billPrinted: Boolean = false, val closed: Boolean = false, val cancelledReason: String? = null,
     val receiptNo: String? = null, val otherDevice: String? = null, val reprints: Int = 0,
     val closedAt: String? = null, val refunded: Boolean = false,
+    /** Tanggal & jam struk (dd/MM/yyyy HH:mm, zona toko) dari server; null bila belum ada pembayaran. */
+    val receiptDateTime: String? = null,
     val refundTotal: Int? = null, val cashReturned: Int? = null,
     // Angka dari server (null = belum ada; dihitung lokal hanya sebagai cadangan tampilan).
     val serverSubtotal: Int? = null, val serverDiscount: Int? = null, val serverTax: Int? = null,
@@ -149,6 +151,12 @@ data class FloorTable(val id: Long, val name: String, val area: String, val seat
 data class FloorSnapshot(val version: String, val tables: List<FloorTable>, val takeaway: List<FloorTab>)
 
 private val rpFormat = NumberFormat.getIntegerInstance(Locale("id", "ID"))
+
+/**
+ * Label diskon untuk ringkasan. Persentase hanya ditampilkan bila SERVER mengirimkannya (> 0); tab di server saat ini
+ * hanya membawa jumlah diskon (`discount_amount`), jadi label tanpa persen — tidak pernah "0%" atau persen karangan.
+ */
+fun discountLabel(percent: Int): String = if (percent > 0) "Diskon $percent%" else "Diskon"
 
 fun rp(n: Int): String = (if (n < 0) "-Rp " else "Rp ") + rpFormat.format(kotlin.math.abs(n))
 fun num(n: Int): String = rpFormat.format(n)

@@ -174,7 +174,7 @@ fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null)
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
             MoneyRow("Subtotal", rp(o.gross))
-            if (o.discount > 0) MoneyRow("Diskon ${o.discPct}%", "-" + rp(o.discount))
+            if (o.discount > 0) MoneyRow(discountLabel(o.discPct), "-" + rp(o.discount))
             MoneyRow("Pajak 10%", rp(o.tax))
             MoneyRow("Total", rp(o.total), big = true)
             if (o.paid > 0) MoneyRow("Terbayar", rp(o.paid))
@@ -197,7 +197,7 @@ private fun LineRow(l: OrderLine, store: PosStore) {
                 Text(l.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                 if (l.mods.isNotEmpty()) Text(l.modLabel, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (l.note.isNotBlank()) Text("“${l.note}”", fontSize = 13.sp, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (l.discPct > 0) Pill("Diskon ${l.discPct}%", MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer)
+                if (l.discPct > 0) Pill(discountLabel(l.discPct), MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer)
             }
             if (l.fired) Text("Terkirim ${l.firedAt}", fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(end = 10.dp))
             Text(num(l.net), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.padding(end = 6.dp))

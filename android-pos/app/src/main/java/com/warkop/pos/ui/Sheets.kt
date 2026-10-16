@@ -598,7 +598,7 @@ private fun ColumnScope.ReceiptDialog(store: PosStore, s: Sheet.Receipt) {
             Text("Kab. Bogor", Modifier.padding(top = 6.dp), fontFamily = mono, fontSize = 15.sp, color = ink)
             Dash()
             Text(o.receiptNo ?: "—", fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 1.dp))
-            Text("31/10/2026 ${o.closedAt ?: ""} · Kasir ${o.waiter}", fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
+            Text(listOfNotNull(o.receiptDateTime, "Kasir ${o.waiter}").joinToString(" · "), fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
             Text(o.label + (o.queue?.let { " · Antrean $it" } ?: ""), fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
             Dash()
             o.live.forEach { l -> Line("${l.qty}× ${l.name}", num(l.net)); if (l.mods.isNotEmpty()) Text("  " + l.modLabel, fontFamily = mono, fontSize = 13.sp, color = Color(0xFF605D5D)) }
