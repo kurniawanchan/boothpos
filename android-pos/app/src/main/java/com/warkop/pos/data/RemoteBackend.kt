@@ -25,6 +25,7 @@ import com.warkop.pos.model.MenuCatalog
 import com.warkop.pos.model.Approver
 import com.warkop.pos.model.ReasonCode
 import com.warkop.pos.model.BankChannel
+import com.warkop.pos.model.QrisChannel
 import com.warkop.pos.model.CashMovement
 import com.warkop.pos.model.CloseOutcome
 import com.warkop.pos.model.Shift
@@ -272,8 +273,9 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     override suspend fun reasonCodes(category: String): List<ReasonCode> =
         apiCall { api().reasonCodes(category) }.data.filter { it.isActive }.map { ReasonCode(it.id, it.label.ifBlank { it.code }) }
 
-    override suspend fun qrisChannelId(): Long? =
-        apiCall { api().paymentChannels() }.data.firstOrNull { it.type == "qr_ewallet" }?.id
+    override suspend fun qrisChannel(): QrisChannel? =
+        apiCall { api().paymentChannels() }.data.firstOrNull { it.type == "qr_ewallet" }
+            ?.let { QrisChannel(it.id, it.provider?.takeIf { p -> p.isNotBlank() } ?: "QRIS") }
 
     override suspend fun bankChannels(): List<BankChannel> =
         apiCall { api().paymentChannels() }.data

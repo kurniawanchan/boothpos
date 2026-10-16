@@ -3,6 +3,7 @@ package com.warkop.pos.data
 import com.warkop.pos.model.Approver
 import com.warkop.pos.model.ReasonCode
 import com.warkop.pos.model.BankChannel
+import com.warkop.pos.model.QrisChannel
 import com.warkop.pos.model.Availability
 import com.warkop.pos.model.CashMovement
 import com.warkop.pos.model.CloseOutcome
@@ -78,7 +79,8 @@ interface PosBackend {
     suspend fun cancelTab(tabId: String, reasonCode: String, reason: String?, overrideToken: String?): Order
     suspend fun soldOut(productId: String, reasonCodeId: Long, note: String?, overrideToken: String?)
     suspend fun reasonCodes(category: String): List<ReasonCode>
-    suspend fun qrisChannelId(): Long?
+    /** Kanal QRIS (qr_ewallet) dari server; null bila belum diatur. Nama = provider dari server. */
+    suspend fun qrisChannel(): QrisChannel?
     /** Kanal bank (bank_transfer) untuk EDC. Kosong = server belum punya bank; klien tidak boleh mengirim pembayaran EDC tanpa id. */
     suspend fun bankChannels(): List<BankChannel>
     suspend fun verifyPayment(tabId: String, paymentId: Long, reference: String, overrideToken: String?): Order

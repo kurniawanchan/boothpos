@@ -39,7 +39,7 @@ data class OrderLine(
     val modLabel: String get() = mods.joinToString(", ") { it.name }
 }
 
-enum class TenderMethod(val label: String) { CASH("Tunai"), EDC("EDC BCA"), QRIS("QRIS GoPay"), TRANSFER("Transfer bank") }
+enum class TenderMethod(val label: String) { CASH("Tunai"), EDC("EDC BCA"), QRIS("QRIS"), TRANSFER("Transfer bank") }
 enum class TenderStatus { OK, PENDING, FAIL }
 
 data class Tender(
@@ -115,6 +115,9 @@ data class ReasonCode(val id: Long, val label: String)
 
 /** 048 — kanal bank dari `GET /payment-channels` (type bank_transfer). EDC wajib membawa id-nya; nama dari server. */
 data class BankChannel(val id: Long, val name: String)
+
+/** Kanal QRIS dari `GET /payment-channels` (type qr_ewallet). [name] = provider dari server, atau "QRIS" dari tipe kanal. */
+data class QrisChannel(val id: Long, val name: String)
 
 /** 048 / S3 — penyetuju yang memenuhi syarat untuk satu aksi (tanpa peminta). */
 data class Approver(val id: Long, val name: String, val role: String)

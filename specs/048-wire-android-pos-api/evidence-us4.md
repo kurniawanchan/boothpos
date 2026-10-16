@@ -42,3 +42,13 @@ Status: **BELUM LULUS** — T057 tetap `[ ]`. Emulator `wjm_tablet` berjalan dan
 ## Koreksi induk (2026-10-16 10:5x WIB) — usang
 - Bagian ini mencatat pemeriksaan disk sebelum run. Status terbaru ada di bagian T057 di atas.
 - Docker: build cache 7,3 GB (0 aktif), volume 12,5 GB. Tidak dibersihkan; volume dan file DB tidak disentuh.
+
+## Verifikasi induk (2026-10-16, siang WIB)
+- **Langkah 3 (server):** penutupan shift 11 ditolak 409 `pending_payments` (count 1) saat QRIS 2029 (tab 2043) tertunda; shift tetap open. Permintaan EDC pada tab 2044 ditolak 409 `pending_qris` (tidak ada baris EDC). Di perangkat, tombol tutup dan tombol EDC dinonaktifkan oleh klien saat QRIS tertunda, jadi pesan server tidak tampil di layar.
+- **QRIS 2029** diverifikasi dengan REF9876 lewat persetujuan `qris_verify` (penyetuju Sari, id 11; override terbit 201, verifikasi 200). Shift 11 tetap open.
+- **Langkah 4** (EDC ganda): payment 2026 dan 2027, kode approval ABC123 pada dua tab; yang kedua dikonfirmasi setelah 409 `duplicate_edc`.
+- **Langkah 1** stok kembali: BELUM terverifikasi (varian dev tidak terlacak stok).
+- **Langkah 2**: tercakup OverrideGateTest (`same_person`).
+- Tab 2044 tanpa nomor struk: dibuka lewat API tanpa header X-Device-Id, jadi tidak mendapat nomor terminal. Ini artefak pengujian, bukan cacat aplikasi.
+- Residu: tab 2039–2044 selesai (tidak ada yang dibatalkan), shift 11 open, QRIS channel id 3 (dibuat untuk tes).
+

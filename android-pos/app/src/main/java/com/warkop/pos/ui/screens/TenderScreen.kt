@@ -26,6 +26,7 @@ import com.warkop.pos.ui.*
 /** S11 — layar bayar: sisa, riwayat tender, metode, uang cepat, keypad (desain 13/14/15/16, 32 phone). */
 @Composable
 fun TenderScreen(store: PosStore) {
+    LaunchedEffect(Unit) { store.loadQrisLabel() }
     val o = store.active ?: return
     var method by remember { mutableStateOf(TenderMethod.CASH) }
     var amount by remember { mutableStateOf("") }
@@ -72,7 +73,7 @@ fun TenderScreen(store: PosStore) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MethodTile(Icons.Filled.Payments, "Tunai", method == TenderMethod.CASH, true, Modifier.weight(1f)) { method = TenderMethod.CASH }
                 MethodTile(Icons.Filled.CreditCard, "EDC",method == TenderMethod.EDC, !pending, Modifier.weight(1f)) { method = TenderMethod.EDC; store.show(Sheet.Edc) }
-                MethodTile(Icons.Filled.QrCode2, "QRIS GoPay", method == TenderMethod.QRIS, !pending && store.conn == Conn.ONLINE, Modifier.weight(1f)) { method = TenderMethod.QRIS; store.show(Sheet.QrisRecord) }
+                MethodTile(Icons.Filled.QrCode2, store.qrisLabel,method == TenderMethod.QRIS, !pending && store.conn == Conn.ONLINE, Modifier.weight(1f)) { method = TenderMethod.QRIS; store.show(Sheet.QrisRecord) }
             }
             Spacer(Modifier.height(10.dp))
             if (method == TenderMethod.CASH) {

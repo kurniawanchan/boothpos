@@ -436,14 +436,14 @@ private fun ColumnScope.EdcDialog(store: PosStore) {
 private fun ColumnScope.QrisRecordDialog(store: PosStore) {
     val o = store.active ?: return
     Icon(Icons.Filled.QrCode2, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-    Text("QRIS GoPay (statis)", Modifier.padding(top = 10.dp, bottom = 16.dp), fontSize = 30.sp)
+    Text("${store.qrisLabel} (statis)", Modifier.padding(top = 10.dp, bottom = 16.dp), fontSize = 30.sp)
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Text("Jangan terima bukti dari layar ponsel pelanggan.", fontWeight = FontWeight.Medium, fontSize = 16.sp) }
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.Top) {
         Surface(Modifier.width(210.dp), shape = RoundedCornerShape(14.dp), color = Color.White, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
             Column {
-                Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(horizontal = 14.dp, vertical = 10.dp)) { Text("QRIS · GoPay", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
+                Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(store.qrisLabel, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
                 Icon(Icons.Filled.QrCode2, null, Modifier.padding(10.dp).fillMaxWidth().aspectRatio(1f), tint = Color(0xFF201E1D))
                 Text("WARKOP WJM 3 · NMID ID10••••", Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp), fontSize = 12.sp, color = Color(0xFF201E1D))
             }
@@ -451,7 +451,7 @@ private fun ColumnScope.QrisRecordDialog(store: PosStore) {
         Column(Modifier.weight(1f).padding(start = 20.dp, top = 30.dp)) {
             Text("Standee QRIS statis di meja kasir", fontSize = 14.sp)
             Text(rp(o.remaining), Modifier.padding(vertical = 6.dp), fontSize = 40.sp, fontWeight = FontWeight.Light)
-            Text("Catat sebagai menunggu verifikasi, lalu cek aplikasi GoPay Merchant.", fontSize = 16.sp)
+            Text("Catat sebagai menunggu verifikasi, lalu cek transaksi di aplikasi ${store.qrisLabel}.", fontSize = 16.sp)
         }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
@@ -469,7 +469,7 @@ private fun ColumnScope.QrisVerifyDialog(store: PosStore, s: Sheet.QrisVerify) {
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Text("Jangan terima bukti dari layar ponsel pelanggan.", fontWeight = FontWeight.Medium, fontSize = 16.sp) }
     }
-    Text(androidx.compose.ui.text.buildAnnotatedString { append("Cek transaksi "); pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)); append(rp(t.amount)); pop(); append(" di aplikasi GoPay Merchant, lalu masukkan referensinya.") }, Modifier.padding(vertical = 14.dp), fontSize = 17.sp)
+    Text(androidx.compose.ui.text.buildAnnotatedString { append("Cek transaksi "); pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)); append(rp(t.amount)); pop(); append(" di aplikasi ${store.qrisLabel}, lalu masukkan referensinya.") }, Modifier.padding(vertical = 14.dp), fontSize = 17.sp)
     SectionLabel("Referensi transaksi", Modifier.padding(start = 8.dp, bottom = 6.dp))
     OutlinedTextField(ref, { ref = it }, Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
     Spacer(Modifier.height(14.dp))

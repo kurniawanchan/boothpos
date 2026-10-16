@@ -29,6 +29,13 @@ import java.util.Date
 import java.util.Locale
 
 enum class Dest { SETUP, PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, SHIFT, XREPORT, CLOSE_SHIFT, CLOSE_RESULT, SYNC }
+
+/**
+ * Layar setelah shift dimuat ulang dari server (GET /sessions/current): kasir tanpa shift terbuka → layar buka shift,
+ * aturan yang sama dengan login. Di luar itu null = biarkan layar apa adanya.
+ */
+internal fun shiftRecoveryDest(current: Shift?, roleCode: String?): Dest? =
+    if (current == null && roleCode == "CSH") Dest.OPEN_SHIFT else null
 enum class Conn(val label: String) { ONLINE("Online"), OFFLINE("Offline"), OFFLINE_LIMITED("Offline terbatas") }
 
 /** Lembar/dialog di atas layar. Satu pada satu waktu — sama seperti prototipe (satu `sheet` aktif). */
@@ -313,6 +320,7 @@ class PosStore(
                 after(o)
             } catch (e: ApiError) {
                 if (e is ApiError.Network) conn = Conn.OFFLINE
+                onShiftRefused(e)
                 say(writeErrorText(e))
             }
         }
@@ -322,6 +330,20 @@ class PosStore(
     private fun writeErrorText(e: ApiError): String =
         if (e is ApiError.Conflict && e.code == "shift_required") "Pembayaran ditolak: shift sudah ditutup. Buka shift untuk menerima pembayaran."
         else e.message
+
+    /**
+     * Server menolak karena shift tidak terbuka: header "Shift dibuka …" tidak boleh basi. Muat ulang shift dari
+     * server; tanpa shift terbuka kasir diarahkan ke layar buka shift. Gangguan jaringan membiarkan keadaan apa adanya.
+     */
+    private fun onShiftRefused(e: ApiError) {
+        if (!(e is ApiError.Conflict && e.code == "shift_required")) return
+        val b = backend ?: return
+        viewModelScope.launch {
+            val current = try { b.currentShift() } catch (_: ApiError) { return@launch }
+            shift = current
+            shiftRecoveryDest(current, user?.code)?.let { dest = it }
+        }
+    }
 
     fun newCounter() {
         val b = backend ?: return
@@ -554,12 +576,23 @@ class PosStore(
             } catch (e: ApiError) {
                 if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
                 keys.settled(intent)
+                onShiftRefused(e)
                 if (e.code == "duplicate_edc") {
                     sheet = Sheet.Confirm("Kode approval sudah dipakai?", "Kode $code sudah dicatat dalam 2 menit terakhir. Lanjutkan jika ini transaksi berbeda.", "Lanjutkan") {
                         payEdc(channelId, code, confirmDuplicate = true)
                     }
                 } else say(e.message)
             }
+        }
+    }
+
+    /** Nama QRIS untuk tombol dan dialog: provider dari kanal qr_ewallet server; tanpa kanal → "QRIS" (tipe kanal), bukan merek. */
+    var qrisLabel by mutableStateOf("QRIS"); private set
+
+    fun loadQrisLabel() {
+        val b = backend ?: return
+        viewModelScope.launch {
+            qrisLabel = try { b.qrisChannel()?.name ?: "QRIS" } catch (e: ApiError) { "QRIS" }
         }
     }
 
@@ -573,8 +606,8 @@ class PosStore(
         val ref = keys.keyFor(intent)
         viewModelScope.launch {
             try {
-                val channel = b.qrisChannelId() ?: run { say("Kanal QRIS belum diatur di server."); return@launch }
-                val updated = retryNetwork { b.pay(o.id, "qr_ewallet", amount, ref, null, null, channel) }
+                val channel = b.qrisChannel() ?: run { say("Kanal QRIS belum diatur di server."); return@launch }
+                val updated = retryNetwork { b.pay(o.id, "qr_ewallet", amount, ref, null, null, channel.id) }
                 keys.settled(intent)
                 conn = Conn.ONLINE
                 upsert(updated)
@@ -583,6 +616,7 @@ class PosStore(
             } catch (e: ApiError) {
                 if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
                 keys.settled(intent)
+                onShiftRefused(e)
                 say(e.message)
             }
         }
