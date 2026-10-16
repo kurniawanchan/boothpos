@@ -55,24 +55,10 @@ class ProductController extends Controller
 
         $products = Product::query()
             ->with(array_merge(['artist', 'category'], $withVariants ? ['variants'] : []))
-            ->when($request->filled('search'), function ($q) use ($request) {
-                $term = $request->string('search');
-                $q->where(function ($q2) use ($term) {
-                    $q2->where('name', 'like', "%{$term}%")
-                       ->orWhereHas('variants', fn ($v) => $v->where('sku', 'like', "%{$term}%")
-                           ->orWhere('variant_name', 'like', "%{$term}%"));
-                });
-            })
-            // 005-ux-enhancements-dashboard (US1) — artist_id/category_id
-            // sekarang array (multi-select dropdown di Products/POS),
-            // bukan lagi skalar tunggal. $request->array() menormalkan
-            // baik `artist_id[]=1&artist_id[]=2` maupun `artist_id=1` lama
-            // menjadi array, jadi kompatibel mundur tanpa perubahan pada
-            // pemanggil lain. array_filter membuang string kosong supaya
-            // whereIn([]) (yang selalu false) tidak diam-diam mengosongkan
-            // hasil ketika parameter ada tapi bernilai kosong.
-            ->when(count(array_filter($request->array('artist_id'))) > 0, fn ($q) => $q->whereIn('artist_id', array_filter($request->array('artist_id'))))
-            ->when(count(array_filter($request->array('category_id'))) > 0, fn ($q) => $q->whereIn('category_id', array_filter($request->array('category_id'))))
+            // Filter search/artis/kategori ada di Product::scopeMatchingListFilters()
+            // — juga dipakai ekspor (spec 041), supaya file ekspor selalu
+            // berisi produk yang sama dengan yang tampil di layar ini.
+            ->matchingListFilters($request->only(['search', 'artist_id', 'category_id']))
             ->when($request->has('is_preorder'), fn ($q) => $q->where('is_preorder', $request->boolean('is_preorder')))
             ->orderBy('name')
             ->paginate($perPage);

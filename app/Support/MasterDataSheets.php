@@ -24,6 +24,21 @@ final class MasterDataSheets
 
     public const PRODUCTS = 'products';
 
+    /**
+     * Susunan kolom EKSPOR sheet 'products' — sengaja terpisah dari daftar
+     * impor PRODUCTS di headings(). Keputusan pemilik produk (spec 041,
+     * FR-011 opsi A): ekspor menampilkan nama artis/kategori, kode SKU
+     * pendek, label item, dan margin; sedangkan template + impor tetap
+     * memakai kolom lama (initial_stock, is_preorder, gambar, dll.) karena
+     * kolom-kolom itu masih dibutuhkan impor. Konsekuensinya: berkas ekspor
+     * sheet ini TIDAK dijamin bisa diimpor ulang apa adanya.
+     */
+    public const PRODUCTS_EXPORT = [
+        'sku', 'code', 'artist_code', 'artist_name', 'category_code', 'category_name',
+        'product_name', 'variant_name', 'item_label', 'description', 'total_stock_available',
+        'cost_price', 'sell_price', 'profit_margin', 'low_stock_alert',
+    ];
+
     public const STOCK = 'stock';
 
     /**
@@ -134,6 +149,18 @@ final class MasterDataSheets
             ],
             default => throw new \InvalidArgumentException("Sheet tidak dikenali: {$sheet}."),
         };
+    }
+
+    /**
+     * Judul kolom untuk EKSPOR satu sheet. Hanya 'products' yang berbeda
+     * dari impor (lihat PRODUCTS_EXPORT); sheet lain memakai daftar yang
+     * sama dengan impor supaya tetap bisa diunggah balik.
+     */
+    public static function exportHeadings(string $sheet): array
+    {
+        return $sheet === self::PRODUCTS
+            ? self::PRODUCTS_EXPORT
+            : self::headings($sheet);
     }
 
     /**

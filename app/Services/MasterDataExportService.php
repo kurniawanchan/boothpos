@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorMaterialPrice;
 use App\Support\MasterDataSheets;
+use App\Support\ReportSplit;
 
 /**
  * Menyusun baris ekspor .xlsx per entitas master data (F15.1).
@@ -28,14 +29,17 @@ class MasterDataExportService
     public const ENTITIES = MasterDataSheets::ORDER;
 
     /**
+     * @param  array{search?: mixed, artist_id?: mixed, category_id?: mixed}  $filters
+     *         Hanya dipakai sheet 'products' — filter layar Produk (spec 041,
+     *         FR-013). Kosong = semua varian, seperti sebelumnya.
      * @return array<int, array<string, mixed>>
      */
-    public function rows(string $entity): array
+    public function rows(string $entity, array $filters = []): array
     {
         return match ($entity) {
             MasterDataSheets::ARTISTS => $this->artistRows(),
             MasterDataSheets::CATEGORIES => $this->categoryRows(),
-            MasterDataSheets::PRODUCTS => $this->productRows(),
+            MasterDataSheets::PRODUCTS => $this->productRows($filters),
             MasterDataSheets::STOCK => $this->stockRows(),
             MasterDataSheets::VENDORS => $this->vendorRows(),
             MasterDataSheets::MATERIALS => $this->materialRows(),
@@ -200,37 +204,63 @@ class MasterDataExportService
      * endpoint yang menghapus varian — hanya menonaktifkan). Produk tanpa
      * varian karena itu tidak akan muncul di ekspor ini.
      */
-    private function productRows(): array
+    /**
+     * @param  array{search?: mixed, artist_id?: mixed, category_id?: mixed}  $filters
+     */
+    private function productRows(array $filters): array
     {
         return ProductVariant::query()
+            // Produk yang lolos filter layar, dengan SEMUA variannya (sama
+            // seperti layar yang menampilkan produk, bukan varian satu-satu).
+            ->whereHas('product', fn ($q) => $q->matchingListFilters($filters))
             ->with(['product.artist', 'product.category'])
             ->join('products', 'products.id', '=', 'product_variants.product_id')
             ->orderBy('products.name')
             ->orderBy('product_variants.sku')
             ->select('product_variants.*')
             ->get()
-            ->map(fn (ProductVariant $v) => [
-                'sku' => $v->sku,
-                'artist_code' => $v->product->artist->code,
-                'category_code' => $v->product->category->code,
-                'product_segment' => $v->product->product_segment,
-                'product_name' => $v->product->name,
-                'description' => $v->product->description,
-                'is_preorder' => $v->product->is_preorder ? 1 : 0,
-                'preorder_eta' => $v->product->preorder_eta?->toDateString(),
-                'product_is_active' => $v->product->is_active ? 1 : 0,
-                'variant_name' => $v->variant_name,
-                'cost_price' => number_format((float) $v->cost_price, 2, '.', ''),
-                'sell_price' => number_format((float) $v->sell_price, 2, '.', ''),
-                'low_stock_alert' => $v->low_stock_alert,
-                'variant_is_active' => $v->is_active ? 1 : 0,
-                // initial_stock sengaja dibiarkan kosong: kolom itu hanya
-                // berlaku untuk varian BARU saat impor. Stok varian yang
-                // sudah ada diubah lewat sheet 'stock'.
-                'initial_stock' => null,
-                'image_filename' => null, // lihat catatan di categoryRows().
-                'variant_image_filename' => null, // sama alasannya seperti image_filename di atas.
-            ])->all();
+            ->map(function (ProductVariant $v) {
+                // Urutan KUNCI di bawah = urutan kolom di ekspor (writer
+                // Excel memakai urutan array, bukan judul). Harus sama
+                // dengan MasterDataSheets::PRODUCTS_EXPORT.
+                $code = $this->skuTail($v->sku);
+                $categoryName = $v->product->category->name;
+
+                return [
+                    'sku' => $v->sku,
+                    'code' => $code,
+                    'artist_code' => $v->product->artist->code,
+                    'artist_name' => $v->product->artist->name,
+                    'category_code' => $v->product->category->code,
+                    'category_name' => $categoryName,
+                    'product_name' => $v->product->name,
+                    'variant_name' => $v->variant_name,
+                    'item_label' => "{$code} - {$categoryName} {$v->variant_name}",
+                    'description' => $v->product->description,
+                    // Stok fisik varian saat ini (spec 041, FR-012). Stok per
+                    // varian, bukan total produk: satu baris = satu varian.
+                    'total_stock_available' => (int) $v->current_stock,
+                    'cost_price' => number_format((float) $v->cost_price, 2, '.', ''),
+                    'sell_price' => number_format((float) $v->sell_price, 2, '.', ''),
+                    // Selisih dalam sen memakai ReportSplit — rumus uang yang
+                    // sama dengan laporan lain, bukan aritmetika float baru.
+                    'profit_margin' => ReportSplit::money(
+                        ReportSplit::cents($v->sell_price) - ReportSplit::cents($v->cost_price),
+                    ),
+                    'low_stock_alert' => $v->low_stock_alert,
+                ];
+            })->all();
+    }
+
+    /**
+     * 7 karakter terakhir SKU, atau SKU utuh bila lebih pendek. Dipakai
+     * sebagai `code` dan awalan `item_label` (spec 041, FR-005). substr()
+     * dengan start negatif melebihi panjang string mengembalikan seluruh
+     * string di PHP 8 — dikunci oleh test_products_export_short_sku_*.
+     */
+    private function skuTail(string $sku): string
+    {
+        return substr($sku, -7);
     }
 
     private function stockRows(): array

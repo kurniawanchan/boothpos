@@ -38,7 +38,7 @@ const toast = useToastStore();
 // tadinya tidak menampilkannya — permintaan pengguna membalik keputusan
 // itu untuk layar INI, `?with_variants=1` sudah ada dan dipakai POS,
 // bukan endpoint baru).
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listProducts, { with_variants: 1 });
+const { items, meta, loading, load, setPage, setFilter, params: listParams } = usePaginatedList(listProducts, { with_variants: 1 });
 const search = ref('');
 // 005-ux-enhancements-dashboard (US1) — filter artist/category sekarang
 // array (multi-select dropdown dengan pencarian), bukan lagi satu nilai
@@ -134,7 +134,13 @@ function openVariantImageLightbox(row) {
 async function doExport() {
   exporting.value = true;
   try {
-    await exportMasterData('products');
+    // Filter yang SUDAH diterapkan pada daftar (bukan isi kotak cari yang
+    // masih menunggu debounce) — file ekspor sama dengan yang tampil.
+    await exportMasterData('products', {
+      search: listParams.search,
+      artist_id: listParams.artist_id,
+      category_id: listParams.category_id,
+    });
   } catch {
     toast.error(t('master_data.export_product_failed'));
   } finally {

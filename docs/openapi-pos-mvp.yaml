@@ -5053,6 +5053,23 @@ paths:
         in: path
         required: true
         schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, roles, users] }
+      # Filter layar Produk (spec 041, FR-013) — HANYA untuk entity=products;
+      # entitas lain mengabaikannya. Tanpa filter = semua varian.
+      - name: search
+        in: query
+        required: false
+        description: Cocok dengan nama produk, atau sku/nama varian (semua varian produk yang cocok ikut).
+        schema: { type: string }
+      - name: artist_id
+        in: query
+        required: false
+        description: Satu atau lebih artis (OR di dalam jenis; AND dengan filter lain). Format `artist_id[]=1&artist_id[]=2`.
+        schema: { type: array, items: { type: integer } }
+      - name: category_id
+        in: query
+        required: false
+        description: Satu atau lebih kategori (OR di dalam jenis; AND dengan filter lain). Format `category_id[]=2`.
+        schema: { type: array, items: { type: integer } }
     get:
       tags: [Import & Export]
       summary: Ekspor satu entitas master data ke Excel
@@ -5064,6 +5081,27 @@ paths:
 
         Sheet `products` berisi **satu baris per varian** (bukan per
         produk), karena harga melekat pada varian.
+
+        **Ekspor sheet `products` memakai susunan kolom sendiri** (spec
+        041, keputusan pemilik produk opsi A). Urutan ekspor:
+        `sku, code, artist_code, artist_name, category_code, category_name,
+        product_name, variant_name, item_label, description,
+        total_stock_available, cost_price, sell_price, profit_margin,
+        low_stock_alert`. `total_stock_available` = stok di tangan varian
+        (`current_stock`), 0 bila habis.
+
+        Ekspor memakai filter yang sama dengan layar Produk (parameter
+        `search`, `artist_id[]`, `category_id[]`): berkas hanya berisi
+        SEMUA varian dari produk yang lolos filter, tanpa batas halaman. `code` = 7 karakter
+        terakhir `sku` (SKU utuh bila lebih pendek); `item_label` =
+        `{code} - {category_name} {variant_name}`; `profit_margin` =
+        `sell_price − cost_price` (boleh negatif). Kolom `product_segment`,
+        `is_preorder`, `preorder_eta`, `product_is_active`,
+        `variant_is_active`, `initial_stock`, `image_filename` dan
+        `variant_image_filename` TIDAK ada di ekspor.
+        **Berkas ekspor sheet ini tidak dijamin bisa diunggah ulang apa
+        adanya.** Template (`GET /imports/master-data/template`) dan impor
+        (`POST /imports/master-data`) tetap memakai 17 kolom lama.
 
         `vendors`, `materials`, `vendor_prices`, `bom` ditambahkan
         pasca-MVP (2026-09-01) — lihat catatan bertanggal di
