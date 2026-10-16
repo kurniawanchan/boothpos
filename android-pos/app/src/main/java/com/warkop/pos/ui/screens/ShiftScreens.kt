@@ -198,14 +198,12 @@ fun CloseShiftScreen(store: PosStore) {
     val counted = PosCatalog.denominations.sumOf { it * (counts[it] ?: 0) }
     val online = store.conn == Conn.ONLINE
     val noPending = !store.hasPendingPayment()
-    val queueEmpty = store.pendingEvents.isEmpty()
-    val ready = online && noPending && queueEmpty
+    val ready = online && noPending
     val compact = windowSize() == Size.COMPACT
     PosShell(store, title = "Tutup shift") {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             val gates = listOf(
                 Triple(online, "Online", if (online) "Server terjangkau" else "Tutup shift perlu koneksi ke server"),
-                Triple(queueEmpty, if (queueEmpty) "Antrean sinkron kosong" else "${store.pendingEvents.size} transaksi belum terkirim", if (queueEmpty) "Semua transaksi tersinkron" else "Sinkronkan dulu"),
                 Triple(noPending, "Tidak ada pembayaran tertunda", if (noPending) "Siap" else "Verifikasi dulu sebelum menutup shift"),
             )
             if (compact) gates.forEach { (ok, t, sub) -> Gate(ok, t, sub, Modifier.fillMaxWidth().padding(bottom = 8.dp)) }
@@ -291,56 +289,46 @@ fun CloseResultScreen(store: PosStore) {
     }
 }
 
-/** S23/S25 — perangkat & sinkron (desain 26). Antrean mencerminkan status perangkat; outbox sungguhan menunggu api-gap B16. */
+/**
+ * S23/S25 — perangkat & sinkron. Hanya nilai dari server (heartbeat). Tidak ada antrean atau cetak tiruan:
+ * yang belum ada di server ditampilkan apa adanya ("Belum ada rilis", "Belum tersedia"), bukan angka karangan.
+ */
 @Composable
 fun SyncScreen(store: PosStore) {
-    val online = store.conn == Conn.ONLINE
-    val pending = store.pendingEvents
+    val hb = store.heartbeat
     PosShell(store, title = "Perangkat & sinkron") {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.End) {
-                PrimaryPill("Sinkronkan sekarang", { store.say(if (store.syncNow()) "Tersinkron." else "Masih offline. Transaksi tetap aman tersimpan.") }, icon = Icons.Filled.Sync)
+                PrimaryPill("Periksa koneksi", { store.heartbeatNow() }, icon = Icons.Filled.Sync)
             }
-            // Hanya angka yang benar-benar diketahui. Yang belum ada di server (versi rilis, selisih jam, batas
-            // eksposur) ditandai "—", bukan diisi nilai contoh.
             val cells = listOf(
-                Triple("Koneksi", store.conn.label, "Denah diperbarui tiap 3 dtk"),
-                Triple("Antrean", "${pending.size} event", if (pending.isEmpty()) "Kosong" else "Tertua ${pending.first().at}"),
-                Triple("Terkirim sesi ini", "${store.outbox.count { it.synced }}", "Antrean offline belum tersedia (B16)"),
-                Triple("Rilis menu", "—", "Versi rilis belum tersedia dari server"),
-                Triple("Eksposur tunai offline", "—", "Batas eksposur menunggu API (B16)"),
-                Triple("Jam perangkat", "—", "Pemeriksaan jam menunggu API (B16)"),
-                Triple("Printer", "—", "Printer belum tersambung"),
+                Triple("Koneksi", syncConnectionLabel(hb), syncConnectionNote(hb)),
+                Triple("Jam perangkat", syncSkewLabel(hb.skewSeconds), syncSkewNote(hb.skewSeconds)),
+                Triple("Rilis menu", hb.menuRelease ?: "Belum ada rilis", if (hb.menuRelease == null) "Server belum mengirim rilis menu" else "Rilis dari server"),
+                Triple("Printer", "Belum tersedia", "Cetak belum tersambung ke perangkat ini"),
                 Triple("Siap EOD (perangkat ini)", if (store.shift == null) "Siap" else "Belum", "EOD dijalankan Outlet Manager di back office"),
             )
-            cells.chunked(if (windowSize() == Size.COMPACT) 2 else 4).forEach { row -> Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { row.forEach { (a, b, c) -> Cell(a, b, c, Modifier.weight(1f).heightIn(min = 110.dp)) } } }
-            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                QueueCard("Antrean sinkron", Modifier.weight(1f)) {
-                    if (store.outbox.isEmpty()) Text("Belum ada event.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    store.outbox.takeLast(4).reversed().forEach { e -> QueueRow(Icons.Filled.Schedule, e.title, e.type, e.at, if (e.synced) MaterialTheme.pos.okContainer else MaterialTheme.pos.warnContainer) }
-                }
-                QueueCard("Antrean cetak", Modifier.weight(1f)) {
-                    if (store.printJobs.isEmpty()) Text("Belum ada pekerjaan cetak.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    store.printJobs.takeLast(4).reversed().forEach { j -> QueueRow(Icons.Filled.Print, j.title, "${j.at} · ${if (j.ok) "Berhasil" else "Gagal"}", null, if (j.ok) MaterialTheme.pos.okContainer else MaterialTheme.colorScheme.errorContainer) }
-                }
-            }
+            cells.chunked(if (windowSize() == Size.COMPACT) 2 else 4).forEach { row -> Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { row.forEach { (a, b, c) -> Cell(a, b, c, Modifier.weight(1f).heightIn(min = 118.dp)) } } }
         }
     }
 }
 
-@Composable
-private fun QueueCard(title: String, modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(modifier, shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) { Text(title, fontWeight = FontWeight.SemiBold, fontSize = 18.sp); content() }
-    }
+private fun syncConnectionLabel(hb: com.warkop.pos.state.HeartbeatState): String = when {
+    hb.lastOkAtMs == null -> "Belum terhubung"
+    hb.reachable -> "Terhubung"
+    else -> "Terputus"
 }
 
-@Composable
-private fun QueueRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, sub: String, time: String?, tint: androidx.compose.ui.graphics.Color) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Surface(Modifier.size(48.dp), shape = CircleShape, color = tint) { Box(contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size(24.dp)) } }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) { Text(title, fontWeight = FontWeight.Medium, fontSize = 16.sp); Text(sub, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        if (time != null) Text(time, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+private fun syncConnectionNote(hb: com.warkop.pos.state.HeartbeatState): String {
+    val last = hb.lastOkAtMs ?: return "Belum ada heartbeat yang berhasil"
+    val time = java.time.Instant.ofEpochMilli(last).atZone(com.warkop.pos.data.OrderMapper.STORE_ZONE).format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"))
+    return if (hb.reachable) "Heartbeat terakhir OK $time" else "Heartbeat terakhir OK $time · server tidak terjangkau"
+}
+
+private fun syncSkewLabel(skew: Int?): String = if (skew == null) "—" else "$skew dtk"
+
+private fun syncSkewNote(skew: Int?): String = when {
+    skew == null -> "Belum ada data dari server"
+    com.warkop.pos.state.skewWarns(skew) -> "Selisih lebih dari ${com.warkop.pos.state.SKEW_WARN_SECONDS} dtk — koreksi jam perangkat"
+    else -> "Dalam batas ±${com.warkop.pos.state.SKEW_WARN_SECONDS} dtk"
 }

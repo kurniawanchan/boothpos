@@ -76,6 +76,8 @@ interface PosApi {
     @GET("reason-codes") suspend fun reasonCodes(@Query("category") category: String): ReasonCodesPage
     @GET("payment-channels") suspend fun paymentChannels(): PaymentChannelsPage
     @POST("tabs/{id}/prebill") suspend fun prebill(@Path("id") id: Long): TabDto
+    /** Heartbeat perangkat (US6). Tanpa Idempotency-Key: bukan tulisan bisnis, aman diulang. */
+    @POST("devices/heartbeat") suspend fun heartbeat(@Body body: HeartbeatRequestDto): HeartbeatResponseDto
     @GET("orders") suspend fun closedOrders(@Query("per_page") perPage: Int): ClosedOrdersPage
 
     // --- diskon, bagi rata, cetak ulang, refund (048 / S4 — US5). Setiap tulis membawa Idempotency-Key. ---

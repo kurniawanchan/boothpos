@@ -25,6 +25,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // 048 / US6 — heartbeat hanya saat aplikasi di latar depan.
+    override fun onStart() {
+        super.onStart()
+        store.startHeartbeat()
+    }
+
+    override fun onStop() {
+        store.stopHeartbeat()
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Ikon bilah status mengikuti tema aplikasi (terang/gelap otomatis malam hari), bukan tema sistem.

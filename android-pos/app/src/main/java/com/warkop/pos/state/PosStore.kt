@@ -110,19 +110,33 @@ class PosStore(
     var toast by mutableStateOf<String?>(null); private set
     var pinFails by mutableIntStateOf(0); private set
     var lockedUntil by mutableStateOf<Long?>(null); private set
-    // Antrean sinkron & cetak (status perangkat). Saat online, event langsung dianggap terkirim; saat offline menumpuk
-    // di antrean — sampai outbox sungguhan (api-gap B16) dibangun, ini hanya cermin tampilan, bukan penyimpan data.
-    data class OutboxEvent(val title: String, val type: String, val at: String, val synced: Boolean)
-    data class PrintJob(val title: String, val at: String, val ok: Boolean)
-    var outbox by mutableStateOf<List<OutboxEvent>>(emptyList()); private set
-    var printJobs by mutableStateOf<List<PrintJob>>(emptyList()); private set
-    private fun emit(title: String, type: String) { outbox = outbox + OutboxEvent(title, type, clock(), conn == Conn.ONLINE) }
-    private fun printed(title: String) { printJobs = printJobs + PrintJob(title, clock(), true) }
-    fun syncNow(): Boolean {
-        if (conn != Conn.ONLINE) return false
-        outbox = outbox.map { it.copy(synced = true) }; return true
+    // 048 / US6 — keadaan dari POST /devices/heartbeat. Tidak ada antrean atau cetak tiruan: yang tampil hanya angka server.
+    var heartbeat by mutableStateOf(HeartbeatState()); private set
+    private val heartbeatWorker = HeartbeatWorker(viewModelScope, tick = { heartbeatOnce() })
+
+    /** Dipanggil saat aplikasi masuk ke latar depan. */
+    fun startHeartbeat() = heartbeatWorker.start()
+
+    /** Dipanggil saat aplikasi ke latar belakang. */
+    fun stopHeartbeat() = heartbeatWorker.stop()
+
+    /** Heartbeat segera: sesudah masuk, atau saat kasir menekan "Periksa koneksi". */
+    fun heartbeatNow() = heartbeatWorker.now()
+
+    /** Satu heartbeat. Tanpa sesi (belum masuk) tidak dikirim. Kegagalan tidak pernah dilempar ke UI. */
+    private suspend fun heartbeatOnce() {
+        val b = backend ?: return
+        if (session == null) return
+        try {
+            // Antrean lokal tidak ada (online-first): queue_depth dilaporkan 0.
+            val result = b.heartbeat(System.currentTimeMillis(), queueDepth = 0)
+            heartbeat = heartbeat.onSuccess(result, System.currentTimeMillis())
+            conn = Conn.ONLINE
+        } catch (e: ApiError) {
+            heartbeat = heartbeat.onFailure()
+            if (e is ApiError.Network) conn = Conn.OFFLINE
+        }
     }
-    val pendingEvents: List<OutboxEvent> get() = outbox.filter { !it.synced }
 
     private var lineSeq = 100
     private var tenderSeq = 1
@@ -190,6 +204,7 @@ class PosStore(
         availabilityJob?.cancel()
         floorJob?.cancel(); floor = Load.Idle; closedCache = emptyList(); keys.clear()
         session = null; user = null; shift = null; activeId = null; catalog = Load.Idle; soldOut = emptySet(); dest = Dest.PIN; sheet = null
+        heartbeat = HeartbeatState()
         report = Load.Idle; cashMovements = Load.Idle; closeResult = null; limits = null
         // Daftar staf dimuat SETELAH logout selesai: sebelum itu token sesi lama masih terpasang dan server menolaknya (401).
         viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { }; loadRoster() }
@@ -203,6 +218,7 @@ class PosStore(
             try {
                 val s = b.pinLogin(staff, pin)
                 session = s
+                heartbeatNow()
                 user = s.user
                 shift = try { b.currentShift() } catch (_: ApiError) { null }
                 dest = when {
@@ -462,7 +478,6 @@ class PosStore(
         val intent = "send:${o.id}:${o.unsent.map { it.id }.sorted()}"
         val key = keys.keyFor(intent)
         send(intent, { b.sendToKitchen(o.id, key) }) { _ ->
-            emit("${o.label} · $n item", "order.fired")
             say("$n item dikirim ke dapur. Cetak KOT belum tersedia.")
         }
     }
@@ -617,7 +632,6 @@ class PosStore(
         val ref = keys.keyFor(intent)
         send(intent, { b.pay(o.id, "cash", received, ref) }) { o2 ->
             if (o2.closed) {
-                emit("${o2.receiptNo.orEmpty()} · ${rp(o2.total)}", "payment.recorded")
                 dest = Dest.DONE
             } else {
                 say("Sisa ${rp(o2.remaining)}.")
@@ -707,7 +721,6 @@ class PosStore(
                 upsert(updated)
                 sheet = null
                 if (updated.closed) {
-                    emit("${updated.receiptNo.orEmpty()} · ${rp(updated.total)}", "payment.recorded")
                     dest = Dest.DONE
                 } else say("Sisa ${rp(updated.remaining)}.")
             } catch (e: ApiError) {
