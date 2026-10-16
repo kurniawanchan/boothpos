@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.warkop.pos.model.*
+import com.warkop.pos.state.Load
 import com.warkop.pos.state.PosStore
 import com.warkop.pos.state.Sheet
 import com.warkop.pos.theme.pos
@@ -314,30 +315,51 @@ private fun ColumnScope.VoidDialog(store: PosStore, s: Sheet.Void) {
 @Composable
 private fun ColumnScope.OverrideDialog(store: PosStore, s: Sheet.Override) {
     val me = store.user
-    val approvers = PosCatalog.users.filter { it.isSupervisor && it.id != me?.id }
-    var who by remember { mutableStateOf(approvers.firstOrNull()) }
-    var pin by remember { mutableStateOf("") }
-    var err by remember { mutableStateOf<String?>(null) }
+    var who by remember(s) { mutableStateOf<Approver?>(null) }
+    var pin by remember(s) { mutableStateOf("") }
+    var err by remember(s) { mutableStateOf<String?>(null) }
+    var busy by remember(s) { mutableStateOf(false) }
+    LaunchedEffect(s.action) { store.loadApprovers(s.action) }
+    val loaded = (store.approvers as? Load.Ready)?.value.orEmpty()
+    // Penyetuju pertama dipilih otomatis; pilihan yang sudah tak ada di daftar dibuang.
+    LaunchedEffect(loaded) { if (loaded.none { it.id == who?.id }) who = loaded.firstOrNull() }
     Icon(Icons.Filled.VerifiedUser, null, Modifier.align(Alignment.CenterHorizontally).size(40.dp), tint = MaterialTheme.colorScheme.primary)
     Text("Perlu persetujuan", Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp, bottom = 10.dp), fontSize = 28.sp)
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest) { Text("${s.summary}. Diminta oleh ${me?.name}.", Modifier.padding(14.dp), fontSize = 15.sp) }
-    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
-        approvers.forEach { a ->
-            val on = who == a
-            Surface(onClick = { who = a; pin = ""; err = null }, shape = RoundedCornerShape(50), color = if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
-                Row(Modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(Modifier.size(38.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) { Box(contentAlignment = Alignment.Center) { Text(a.name, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onTertiaryContainer) } }
-                    Text(a.role, Modifier.padding(start = 10.dp, end = 12.dp), fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+    when (val a = store.approvers) {
+        is Load.Ready -> if (a.value.isEmpty()) {
+            Text("Tidak ada penyetuju yang memenuhi syarat untuk aksi ini.", Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.error)
+        } else {
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                a.value.forEach { ap ->
+                    val on = who?.id == ap.id
+                    Surface(onClick = { who = ap; pin = ""; err = null }, shape = RoundedCornerShape(50), color = if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+                        Row(Modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Surface(Modifier.size(38.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) { Box(contentAlignment = Alignment.Center) { Text(ap.name.take(2).uppercase(), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onTertiaryContainer) } }
+                            Column(Modifier.padding(start = 10.dp, end = 12.dp)) {
+                                Text(ap.name, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                                Text(ap.role, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
                 }
             }
         }
+        is Load.Failed -> ErrorState(a.error.message, { store.loadApprovers(s.action) }, Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        else -> Text("Memuat penyetuju…", Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    Row(Modifier.fillMaxWidth().height(22.dp), horizontalArrangement = Arrangement.Center) { err?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp) } }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)) { repeat(6) { i -> Box(Modifier.size(15.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (i < pin.length) MaterialTheme.colorScheme.onSurface else Color.Transparent).border(1.5.dp, if (i < pin.length) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, androidx.compose.foundation.shape.CircleShape)) } }
-    Box(Modifier.height(22.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { err?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp) } }
-    Keypad({ d -> if (pin.length < 6) { pin += d; if (pin.length == 6) { err = who?.let { store.approve(pin, it) }; pin = "" } } }, { pin = pin.dropLast(1) }, Modifier.fillMaxWidth(), keyHeight = 50.dp, light = true)
+    Keypad({ d -> if (pin.length < 6 && !busy) pin += d }, { pin = pin.dropLast(1) }, Modifier.fillMaxWidth(), keyHeight = 50.dp, light = true)
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(if (store.conn == com.warkop.pos.state.Conn.ONLINE) "Persetujuan berlaku untuk aksi ini saja dan dicatat." else "Offline: diverifikasi dengan data PIN tersimpan, batas offline berlaku.", Modifier.weight(1f), fontSize = 15.sp)
+        Text("Persetujuan berlaku untuk satu aksi ini saja dan dicatat.", Modifier.weight(1f), fontSize = 15.sp)
         TextButton({ store.show(null) }) { Text("Batal", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
+        Button(onClick = {
+            val approver = who ?: return@Button
+            val secret = pin
+            pin = ""; err = null; busy = true
+            store.requestOverride(s, approver.id, secret) { msg -> busy = false; err = msg }
+        }, enabled = who != null && pin.length == 6 && !busy) { Text("Setujui", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
     }
 }
 

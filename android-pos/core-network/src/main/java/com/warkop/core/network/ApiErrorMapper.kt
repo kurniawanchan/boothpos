@@ -24,13 +24,13 @@ object ApiErrorMapper {
         val code = obj?.get("code")?.jsonPrimitive?.contentOrNull
 
         val error: ApiError = when (status) {
-            401 -> ApiError.Unauthorized(message ?: "Sesi berakhir. Masuk kembali.", code)
+            401 -> ApiError.Unauthorized(localMessage(code) ?: message ?: "Sesi berakhir. Masuk kembali.", code)
             403 -> ApiError.Forbidden(localMessage(code) ?: message ?: "Anda tidak memiliki izin untuk aksi ini.", code)
             404 -> ApiError.NotFound(message ?: "Data tidak ditemukan.")
             409 -> ApiError.Conflict(localMessage(code) ?: message ?: "Aksi tidak dapat dilakukan saat ini.", code)
-            422 -> ApiError.Validation(message ?: "Data tidak valid.", fieldErrors(obj))
-            423 -> ApiError.Locked(message ?: "Perangkat belum diaktivasi.")
-            429 -> ApiError.TooMany(message ?: "Terlalu banyak percobaan. Coba lagi nanti.", code, obj?.get("locked_until")?.jsonPrimitive?.contentOrNull)
+            422 -> ApiError.Validation(localMessage(code) ?: message ?: "Data tidak valid.", fieldErrors(obj))
+            423 -> ApiError.Locked(localMessage(code) ?: message ?: "Perangkat belum diaktivasi.")
+            429 -> ApiError.TooMany(localMessage(code) ?: message ?: "Terlalu banyak percobaan. Coba lagi nanti.", code, obj?.get("locked_until")?.jsonPrimitive?.contentOrNull)
             503 -> if (code == "schema_outdated") ApiError.SchemaOutdated(message ?: "Server perlu diperbarui.") else ApiError.Server()
             else -> ApiError.Server()
         }
@@ -62,5 +62,12 @@ internal fun localMessage(code: String?): String? = when (code) {
     "session_not_owner" -> "Kas hanya bisa dicatat di shift Anda sendiri."
     "outlet_forbidden" -> "Outlet ini tidak termasuk outlet yang boleh Anda akses."
     "open_tabs" -> "Shift hanya bisa ditutup setelah semua tab terbuka dibayar, dibatalkan, atau diserahkan."
+    // 048 / S3 — persetujuan. Pesan PIN bisa ditambah jumlah sisa percobaan oleh pemanggil (ApiError.attemptsRemaining).
+    "invalid_pin" -> "PIN salah."
+    "pin_locked" -> "PIN penyetuju terkunci sementara karena salah berulang kali. Coba lagi nanti."
+    "approver_not_permitted" -> "Penyetuju ini tidak berwenang menyetujui aksi ini."
+    "same_person" -> "Penyetuju tidak boleh orang yang sama dengan peminta."
+    "override_expired" -> "Persetujuan sudah kedaluwarsa. Minta persetujuan ulang."
+    "override_mismatch" -> "Data aksi berubah sejak disetujui. Minta persetujuan ulang."
     else -> null
 }

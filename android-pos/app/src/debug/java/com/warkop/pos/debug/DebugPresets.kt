@@ -38,7 +38,7 @@ object DebugPresets {
             "09" -> sheet = Sheet.Split
             "10" -> sheet = Sheet.Discount
             "11" -> { active = "a1"; sheet = Sheet.Void(1) }
-            "12" -> { active = "a1"; sheet = Sheet.Override("Void 1× Nasi Goreng Kampung · Rp 22.000 · Alasan: Salah input · belum dibuat") {} }
+            "12" -> { active = "a1"; sheet = Sheet.Override("Void 1× Nasi Goreng Kampung · Rp 22.000 · Alasan: Salah input", "void_line", kotlinx.serialization.json.JsonObject(emptyMap())) {} }
             "13" -> dest = Dest.TENDER
             "14" -> { dest = Dest.TENDER; sheet = Sheet.Edc }
             "15" -> { dest = Dest.TENDER; sheet = Sheet.QrisRecord }

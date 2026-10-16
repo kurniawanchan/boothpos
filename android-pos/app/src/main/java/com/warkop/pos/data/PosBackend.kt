@@ -1,5 +1,6 @@
 package com.warkop.pos.data
 
+import com.warkop.pos.model.Approver
 import com.warkop.pos.model.Availability
 import com.warkop.pos.model.CashMovement
 import com.warkop.pos.model.CloseOutcome
@@ -10,6 +11,7 @@ import com.warkop.pos.model.Shift
 import com.warkop.pos.model.ShiftLimits
 import com.warkop.pos.model.ShiftReport
 import com.warkop.pos.model.StaffUser
+import kotlinx.serialization.json.JsonObject
 
 /** Hasil penyiapan terminal: outlet dan perangkat yang dipasangkan. */
 data class TerminalConfig(
@@ -59,9 +61,15 @@ interface PosBackend {
     suspend fun openShift(denominations: List<Pair<Int, Int>>): Shift
     suspend fun shiftReport(sessionId: Long): ShiftReport
     suspend fun cashMovements(sessionId: Long): List<CashMovement>
-    suspend fun recordCashMovement(sessionId: Long, inflow: Boolean, reasonCode: String, note: String?, amount: Int, key: String): CashMovement
+    /** [overrideToken]: token persetujuan (sekali pakai) bila kas keluar melampaui ambang; null bila tidak ada. */
+    suspend fun recordCashMovement(sessionId: Long, inflow: Boolean, reasonCode: String, note: String?, amount: Int, key: String, overrideToken: String? = null): CashMovement
     /** Hitungan buta: pasangan (pecahan, jumlah). Server menjumlahkan dan menentukan selisih. */
-    suspend fun closeShift(sessionId: Long, counted: List<Pair<Int, Int>>, edcBatch: Int?, key: String): CloseOutcome
+    suspend fun closeShift(sessionId: Long, counted: List<Pair<Int, Int>>, edcBatch: Int?, key: String, overrideToken: String? = null): CloseOutcome
+
+    // --- persetujuan (048 / S3: US4). Token tidak pernah disimpan; hanya dipakai satu aksi. ---
+    suspend fun approvers(action: String): List<Approver>
+    /** Mengirim `subject` (parameter aksi apa adanya); server yang menghitung hash-nya. */
+    suspend fun issueOverride(action: String, subject: JsonObject, approverId: Long, pin: String): String
     suspend fun shiftLimits(): ShiftLimits
 
     // --- denah & pesanan (S1/US2). Semua tulis membawa kunci niat (Idempotency-Key / client_ref / local_ref). ---

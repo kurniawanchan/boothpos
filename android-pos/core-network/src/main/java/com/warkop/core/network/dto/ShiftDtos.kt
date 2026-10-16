@@ -24,6 +24,8 @@ import kotlinx.serialization.json.JsonElement
 @Serializable data class CloseSessionRequest(
     @SerialName("counted_by_denomination") val countedByDenomination: List<DenominationQtyDto>,
     @SerialName("edc_batch_total") val edcBatchTotal: Long? = null,
+    /** 048 / S3 — token persetujuan selisih di atas toleransi; null bila selisih tidak melampaui batas. */
+    @SerialName("variance_override_token") val varianceOverrideToken: String? = null,
 )
 
 /** Keadaan shift setelah tutup: CashierSession dengan `z_report` tersimpan. */
@@ -88,6 +90,8 @@ import kotlinx.serialization.json.JsonElement
     @SerialName("reason_code") val reasonCode: String,
     @SerialName("reason_note") val reasonNote: String? = null,
     val amount: Long,
+    /** 048 / S3 — token persetujuan untuk kas keluar di atas ambang; null bila tidak ada. */
+    @SerialName("override_token") val overrideToken: String? = null,
 )
 
 /**

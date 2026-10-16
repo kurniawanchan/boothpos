@@ -110,6 +110,9 @@ data class CloseOutcome(
     val expected: Int, val counted: Int, val variance: Int, val tolerance: Int?, val edcBatch: Int?,
 )
 
+/** 048 / S3 — penyetuju yang memenuhi syarat untuk satu aksi (tanpa peminta). */
+data class Approver(val id: Long, val name: String, val role: String)
+
 /** Batas dari pengaturan server. null = belum terbaca; layar memakai teks umum, bukan angka tebakan. */
 data class ShiftLimits(val varianceTolerance: Int?, val cashOutThreshold: Int?)
 

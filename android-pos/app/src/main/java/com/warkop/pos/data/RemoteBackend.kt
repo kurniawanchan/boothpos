@@ -5,6 +5,8 @@ import com.warkop.core.network.ApiClient
 import com.warkop.core.network.ApiErrorMapper
 import com.warkop.core.network.dto.AddLineRequestDto
 import com.warkop.core.network.dto.CashMovementRequest
+import com.warkop.core.network.dto.OverrideRequest
+import kotlinx.serialization.json.JsonObject
 import com.warkop.core.network.dto.CloseSessionRequest
 import com.warkop.core.network.dto.DenominationQtyDto
 import com.warkop.core.network.dto.OpenTabRequestDto
@@ -20,6 +22,7 @@ import com.warkop.pos.model.Availability
 import com.warkop.pos.model.FloorSnapshot
 import com.warkop.pos.model.Order
 import com.warkop.pos.model.MenuCatalog
+import com.warkop.pos.model.Approver
 import com.warkop.pos.model.CashMovement
 import com.warkop.pos.model.CloseOutcome
 import com.warkop.pos.model.Shift
@@ -161,22 +164,30 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     override suspend fun cashMovements(sessionId: Long): List<CashMovement> =
         apiCall { api().cashMovements(sessionId) }.data.map(ShiftMapper::movement)
 
-    override suspend fun recordCashMovement(sessionId: Long, inflow: Boolean, reasonCode: String, note: String?, amount: Int, key: String): CashMovement =
+    override suspend fun recordCashMovement(sessionId: Long, inflow: Boolean, reasonCode: String, note: String?, amount: Int, key: String, overrideToken: String?): CashMovement =
         ShiftMapper.movement(apiCall {
             api().recordCashMovement(sessionId, key, CashMovementRequest(
                 direction = if (inflow) "in" else "out", reasonCode = reasonCode, reasonNote = note?.takeIf { it.isNotBlank() }, amount = amount.toLong(),
+                overrideToken = overrideToken,
             ))
         })
 
-    override suspend fun closeShift(sessionId: Long, counted: List<Pair<Int, Int>>, edcBatch: Int?, key: String): CloseOutcome =
+    override suspend fun closeShift(sessionId: Long, counted: List<Pair<Int, Int>>, edcBatch: Int?, key: String, overrideToken: String?): CloseOutcome =
         ShiftMapper.close(apiCall {
             api().closeSession(sessionId, key, CloseSessionRequest(
                 countedByDenomination = counted.filter { it.second > 0 }.map { DenominationQtyDto(it.first, it.second) },
                 edcBatchTotal = edcBatch?.toLong(),
+                varianceOverrideToken = overrideToken,
             ))
         })
 
     override suspend fun shiftLimits(): ShiftLimits = ShiftMapper.limits(apiCall { api().features() })
+
+    override suspend fun approvers(action: String): List<Approver> =
+        apiCall { api().approvers(action) }.map { Approver(it.id, it.name, it.role) }
+
+    override suspend fun issueOverride(action: String, subject: JsonObject, approverId: Long, pin: String): String =
+        apiCall { api().issueOverride(OverrideRequest(action, subject, approverId, pin)) }.overrideToken
 
     private fun shift(d: SessionDto): Shift {
         val opened = d.openedAt?.let { runCatching { java.time.OffsetDateTime.parse(it).toLocalTime().toString().take(5) }.getOrNull() } ?: "--:--"

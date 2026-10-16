@@ -15,9 +15,15 @@ import com.warkop.pos.model.*
 import com.warkop.core.network.IntentKeys
 import com.warkop.core.network.retryNetwork
 import com.warkop.pos.data.OrderMapper
+import com.warkop.pos.data.ShiftMapper
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,7 +40,11 @@ sealed interface Sheet {
     data object Split : Sheet
     data object Discount : Sheet
     data class Void(val lineId: Int?) : Sheet // null = batalkan seluruh order
-    data class Override(val summary: String, val minDiscount: Int? = null, val onApproved: () -> Unit) : Sheet
+    /**
+     * 048 / S3 — persetujuan satu aksi. [subject] = parameter aksi apa adanya (server yang menghitung hash-nya);
+     * [onApproved] menjalankan aksi lagi dengan token sekali pakai yang diterima.
+     */
+    data class Override(val summary: String, val action: String, val subject: JsonObject, val onApproved: (token: String) -> Unit) : Sheet
     data object Edc : Sheet
     data object QrisRecord : Sheet
     data class QrisVerify(val tenderId: Int) : Sheet
@@ -468,7 +478,6 @@ class PosStore(
 
     fun refund(orderId: String) = notWired("Refund")
 
-    fun approve(pin: String, approver: StaffUser): String? { notWired("Persetujuan"); return null }
 
     /** Daftar penjualan selesai dari server (layar Order → Selesai). */
     fun loadClosed() {
@@ -517,23 +526,86 @@ class PosStore(
      * yang sama sehingga tidak tercatat dua kali. Jawaban galat server (mis. override_required) melepas kunci dan
      * membiarkan lembar terbuka: kasir mengubah isian, bukan menekan ulang.
      */
-    fun cashMove(inflow: Boolean, reason: String, note: String?, amount: Int) {
+    fun cashMove(inflow: Boolean, reason: String, note: String?, amount: Int, overrideToken: String? = null) {
         val b = backend ?: return
         val sid = shift?.id ?: run { say("Buka shift dulu sebelum mencatat kas."); return }
         val intent = "cash:$sid:${if (inflow) "in" else "out"}:$reason:$amount:${note.orEmpty()}"
         val key = keys.keyFor(intent)
         viewModelScope.launch {
             try {
-                retryNetwork { b.recordCashMovement(sid, inflow, reason, note, amount, key) }
+                retryNetwork { b.recordCashMovement(sid, inflow, reason, note, amount, key, overrideToken) }
                 keys.settled(intent)
                 conn = Conn.ONLINE
                 sheet = null
                 say("${if (inflow) "Kas masuk" else "Kas keluar"} ${rp(amount)} dicatat.")
                 refreshCashMovements(); refreshShiftReport()
             } catch (e: ApiError) {
-                if (e is ApiError.Network) conn = Conn.OFFLINE else keys.settled(intent)
-                say(e.message)
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                if (e is ApiError.Conflict && e.code == "override_required") {
+                    // Di atas ambang: minta persetujuan untuk kas ini; aksi diulang dengan token sekali pakai.
+                    sheet = Sheet.Override(
+                        summary = "Kas ${if (inflow) "masuk" else "keluar"} ${rp(amount)} · ${ShiftMapper.reasonLabel(reason)}",
+                        action = "cash_out",
+                        subject = cashSubject(sid, inflow, reason, amount),
+                    ) { token -> cashMove(inflow, reason, note, amount, token) }
+                } else {
+                    say(e.message)
+                }
             }
+        }
+    }
+
+    // ---------- persetujuan (048 / S3: US4) ----------
+    /** Penyetuju untuk aksi yang sedang meminta persetujuan. Gagal = keadaan galat dengan Coba lagi. */
+    var approvers by mutableStateOf<Load<List<Approver>>>(Load.Idle); private set
+
+    fun loadApprovers(action: String) {
+        val b = backend ?: return
+        approvers = Load.Loading
+        viewModelScope.launch {
+            approvers = try { Load.Ready(retryNetwork { b.approvers(action) }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /**
+     * Minta token untuk satu aksi. Token hanya hidup di memori dan langsung diserahkan ke aksi yang disetujui; PIN
+     * tidak disimpan di state apa pun (dialog mengosongkannya sebelum memanggil ini).
+     */
+    fun requestOverride(s: Sheet.Override, approverId: Long, pin: String, onError: (String) -> Unit) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                val token = b.issueOverride(s.action, s.subject, approverId, pin)
+                sheet = null
+                s.onApproved(token)
+            } catch (e: ApiError) {
+                onError(overrideErrorText(e))
+            }
+        }
+    }
+
+    private fun overrideErrorText(e: ApiError): String {
+        val left = e.attemptsRemaining
+        return if (e.code == "invalid_pin" && left != null) "PIN salah. Sisa $left percobaan." else e.message
+    }
+
+    /**
+     * Subjek persetujuan kas keluar: identitas objek (shift) + parameter yang sama dengan permintaan aksi. Server
+     * mencocokkan token dengan subjek ini; token untuk shift/kas lain tidak berlaku (422 override_mismatch bila beda).
+     */
+    private fun cashSubject(sessionId: Long, inflow: Boolean, reason: String, amount: Int): JsonObject = buildJsonObject {
+        put("session_id", sessionId)
+        put("direction", if (inflow) "in" else "out")
+        put("amount", amount)
+        put("reason_code", reason)
+    }
+
+    /** Subjek persetujuan selisih tutup shift: identitas shift + hitungan pecahan yang dikirim ke POST close. */
+    private fun countSubject(sessionId: Long, rows: List<Pair<Int, Int>>): JsonObject = buildJsonObject {
+        put("session_id", sessionId)
+        putJsonArray("counted_by_denomination") {
+            rows.forEach { (d, q) -> addJsonObject { put("denomination", d); put("qty", q) } }
         }
     }
 
@@ -541,7 +613,7 @@ class PosStore(
      * Tutup shift dengan hitungan buta. Server yang menjumlahkan dan menilai selisih. Penutupan tidak idempoten di
      * server, jadi tidak ada coba-ulang otomatis: jika koneksi putus, status dianggap belum diketahui.
      */
-    fun submitCount(counts: Map<Int, Int>, edcBatch: Int?) {
+    fun submitCount(counts: Map<Int, Int>, edcBatch: Int?, overrideToken: String? = null) {
         val b = backend ?: return
         val sid = shift?.id ?: return
         val rows = counts.filter { it.value > 0 }.map { it.key to it.value }
@@ -550,7 +622,7 @@ class PosStore(
         val key = keys.keyFor(intent)
         viewModelScope.launch {
             try {
-                val outcome = retryNetwork { b.closeShift(sid, rows, edcBatch, key) }
+                val outcome = retryNetwork { b.closeShift(sid, rows, edcBatch, key, overrideToken) }
                 keys.settled(intent)
                 conn = Conn.ONLINE
                 closeResult = outcome
@@ -561,8 +633,15 @@ class PosStore(
                 if (e is ApiError.Network) {
                     conn = Conn.OFFLINE
                     say("Koneksi terputus. Kirim hitungan lagi; server tidak akan menutup dua kali.")
+                    return@launch
+                }
+                keys.settled(intent)
+                if (e is ApiError.Conflict && e.code == "override_required") {
+                    // Selisih di atas toleransi: minta persetujuan untuk tutup ini, lalu kirim hitungan yang sama dengan token.
+                    sheet = Sheet.Override(summary = "Selisih kas di atas toleransi", action = "variance", subject = countSubject(sid, rows)) { token ->
+                        submitCount(counts, edcBatch, token)
+                    }
                 } else if (e is ApiError.Conflict) {
-                    keys.settled(intent)
                     // Penutupan pertama mungkin sudah diterima server (jawaban hilang di jalan): cek status dulu.
                     val stillOpen = try { b.currentShift() != null } catch (_: ApiError) { true }
                     if (stillOpen) {

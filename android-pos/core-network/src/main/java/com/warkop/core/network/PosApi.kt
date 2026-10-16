@@ -47,6 +47,11 @@ interface PosApi {
     suspend fun closeSession(@Path("id") id: Long, @Header("Idempotency-Key") key: String, @Body body: CloseSessionRequest): ClosedSessionDto
     @GET("settings/features") suspend fun features(): FeaturesDto
 
+    // --- persetujuan (S3 / US4) ---
+    /** Penyetuju yang memenuhi syarat untuk satu aksi; server tidak menyertakan peminta. */
+    @GET("overrides/approvers") suspend fun approvers(@Query("action") action: String): List<ApproverDto>
+    @POST("overrides") suspend fun issueOverride(@Body body: OverrideRequest): OverrideResponse
+
     // --- denah & pesanan (S1/US2) ---
     /** `version` = penanda denah terakhir; jawaban `unchanged=true` bila tak berubah. */
     @GET("floor") suspend fun floor(@Query("version") version: String?): FloorDto
