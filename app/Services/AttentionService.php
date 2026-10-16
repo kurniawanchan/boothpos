@@ -136,7 +136,7 @@ class AttentionService
         $amount = $rows->whereNotNull('unit_price')->sum(fn ($r) => (int) $r->qty * (float) $r->unit_price);
         $unknown = $rows->whereNull('unit_price')->count();
 
-        $gross = (float) (SalesFigures::totals(SalesFigures::leanBase(['date_from' => BusinessDay::today(), 'date_to' => BusinessDay::today()]))->gross_sales ?? 0);
+        $gross = (float) (SalesFigures::netOfRefunds(SalesFigures::totals(SalesFigures::leanBase(['date_from' => BusinessDay::today(), 'date_to' => BusinessDay::today()])), BusinessDay::today(), BusinessDay::today())->gross_sales ?? 0);
 
         return $this->item(
             'void_after_fire',

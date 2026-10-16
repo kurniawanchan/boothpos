@@ -48,6 +48,9 @@ class Order extends Model
             'total_amount' => 'decimal:2', 'total_cost' => 'decimal:2',
             'paid_amount' => 'decimal:2', 'change_amount' => 'decimal:2',
             'completed_at' => 'datetime',
+            // 048 / S4 — jejak refund: waktu refund dan tanggal bisnis tempat refund diakui.
+            'refunded_at' => 'datetime',
+            'refund_business_date' => 'date',
             'tax_amount' => 'decimal:2', 'tax_rate_snapshot' => 'decimal:2',
             'prebill_at' => 'datetime',
         ];

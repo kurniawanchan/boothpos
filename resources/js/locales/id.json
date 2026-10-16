@@ -851,6 +851,7 @@
     "void_failed": "Gagal membatalkan transaksi.",
     "col_type": "Tipe",
     "status_voided": "Dibatalkan",
+    "status_refunded": "Dikembalikan",
     "filter_show_voided": "Tampilkan transaksi batal",
     "payment_state_pending": "Belum diverifikasi",
     "payment_state_rejected": "Ditolak",

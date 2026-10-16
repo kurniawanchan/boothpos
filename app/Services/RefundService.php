@@ -105,7 +105,14 @@ class RefundService
                 }
             }
 
-            $locked->forceFill(['refunded_at' => now(), 'refunded_by' => $user->id, 'refund_reason_code' => $reasonCode])->save();
+            // Tanggal bisnis refund (zona toko): refund mengurangi penjualan PADA HARI INI, bukan hari penjualan.
+            $refundedAt = now();
+            $locked->forceFill([
+                'refunded_at' => $refundedAt,
+                'refund_business_date' => \App\Support\BusinessDay::dateFor($refundedAt),
+                'refunded_by' => $user->id,
+                'refund_reason_code' => $reasonCode,
+            ])->save();
 
             $this->activity->log(
                 $user->id,

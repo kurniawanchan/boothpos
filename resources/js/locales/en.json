@@ -851,6 +851,7 @@
     "void_failed": "Failed to void the transaction.",
     "col_type": "Type",
     "status_voided": "Voided",
+    "status_refunded": "Refunded",
     "filter_show_voided": "Show voided transactions",
     "payment_state_pending": "Not verified",
     "payment_state_rejected": "Rejected",

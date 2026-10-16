@@ -118,6 +118,11 @@ class SalesTransactionsService
             'payment_methods' => $order->payments->pluck('method')->unique()->values(),
             'payment_state' => $this->paymentState($order->payments),
             'channel' => $order->channel,
+            // 048 / S4 — refund: baris tetap tampil dengan tanda `refunded`; total halaman mengecualikannya bila
+            // tanggal refund berada dalam rentang yang dipilih (lihat useSalesFilters).
+            'refunded' => $order->refunded_at !== null,
+            'refunded_at' => $order->refunded_at?->toIso8601String(),
+            'refund_business_date' => $order->refund_business_date ? \Illuminate\Support\Carbon::parse($order->refund_business_date)->toDateString() : null,
             'outlet_names' => $items->pluck('homeOutlet.name')->filter()->unique()->values(),
             'items_preview' => $top->take(2)->map(fn ($i) => ['name' => $i->name_snapshot, 'qty' => (float) $i->qty])->values(),
             'items_more' => max(0, $items->count() - 2),

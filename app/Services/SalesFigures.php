@@ -88,11 +88,127 @@ class SalesFigures
      */
     public static function netByDay(string $from, string $to): array
     {
-        return self::leanBase(['date_from' => $from, 'date_to' => $to])
+        $net = self::leanBase(['date_from' => $from, 'date_to' => $to])
             ->selectRaw('orders.business_date as day, SUM(order_items.line_total) as net')
             ->groupBy('orders.business_date')
             ->pluck('net', 'day')
-            ->map(fn ($v) => number_format((float) $v, 2, '.', ''))
+            ->map(fn ($v) => (float) $v)
+            ->all();
+
+        // 048 / S4 — refund mengurangi penjualan pada TANGGAL REFUND (hari yang sudah lewat tidak berubah).
+        foreach (self::refundNetByDay($from, $to) as $day => $refunded) {
+            $net[$day] = ($net[$day] ?? 0.0) - (float) $refunded;
+        }
+
+        return array_map(fn ($v) => number_format((float) $v, 2, '.', ''), $net);
+    }
+
+    /**
+     * 048 / S4 — basis refund (order_items ⨝ orders yang DIREFUND) dengan join dan filter yang sama dengan
+     * leanBase(). Tanggal = tanggal bisnis REFUND (`orders.refund_business_date`), bukan tanggal penjualan.
+     */
+    public static function refundLeanBase(array $filters = []): Builder
+    {
+        return DB::table('order_items')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.status', 'completed')
+            ->whereNotNull('orders.refunded_at')
+            ->where('order_items.data_mode', ModeGate::current())
+            ->when(true, fn ($q) => OutletFilter::apply($q, 'orders.outlet_id'))
+            ->when(! empty($filters['date_from']), fn ($q) => $q->where('orders.refund_business_date', '>=', $filters['date_from']))
+            ->when(! empty($filters['date_to']), fn ($q) => $q->where('orders.refund_business_date', '<=', $filters['date_to']));
+    }
+
+    /**
+     * 048 / S4 — basis refund untuk LAPORAN (join dan filter outlet pelaporan, sama dengan posBase()).
+     */
+    public static function refundBase(array $filters = []): Builder
+    {
+        return DB::table('order_items')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->join('product_variants', 'product_variants.id', '=', 'order_items.variant_id')
+            ->join('products', 'products.id', '=', 'product_variants.product_id')
+            ->join('categories', 'categories.id', '=', 'products.category_id')
+            ->tap(fn ($q) => OutletFilter::joinReportOutlet($q))
+            ->where('orders.status', 'completed')
+            ->whereNotNull('orders.refunded_at')
+            ->where('order_items.data_mode', ModeGate::current())
+            ->when(true, fn ($q) => OutletFilter::applyReport($q))
+            ->when(! empty($filters['date_from']), fn ($q) => $q->where('orders.refund_business_date', '>=', $filters['date_from']))
+            ->when(! empty($filters['date_to']), fn ($q) => $q->where('orders.refund_business_date', '<=', $filters['date_to']));
+    }
+
+    /**
+     * Refund netto (pendapatan) per tanggal bisnis REFUND di [from, to] → ['Y-m-d' => float].
+     *
+     * @return array<string, float>
+     */
+    public static function refundNetByDay(string $from, string $to): array
+    {
+        return self::refundLeanBase(['date_from' => $from, 'date_to' => $to])
+            ->selectRaw('orders.refund_business_date as day, SUM(order_items.line_total) as net')
+            ->groupBy('orders.refund_business_date')
+            ->pluck('net', 'day')
+            ->map(fn ($v) => (float) $v)
+            ->all();
+    }
+
+    /**
+     * Pengurangan refund untuk LAPORAN pada [from, to] (tanggal bisnis refund): gross dan net (pendapatan).
+     * Satu-satunya tempat angka refund dihitung untuk laporan; pemanggil memakai netOfRefunds().
+     */
+    public static function refundTotals(?string $from, ?string $to): object
+    {
+        $row = self::refundBase(['date_from' => $from, 'date_to' => $to])
+            ->selectRaw('SUM(order_items.line_total + order_items.discount_amount) as gross, SUM(order_items.line_total) as net')
+            ->first();
+
+        return (object) ['gross' => (float) ($row->gross ?? 0), 'net' => (float) ($row->net ?? 0)];
+    }
+
+    /**
+     * Kurangi refund dari totalan penjualan (gross & net) untuk [from, to]. Panggil SEBELUM angka diformat.
+     * Units dan jumlah order tetap menghitung transaksi (keputusan: refund hanya mengurangi uang).
+     */
+    public static function netOfRefunds(object $totals, ?string $from, ?string $to): object
+    {
+        $refund = self::refundTotals($from, $to);
+        $totals->gross_sales = (float) ($totals->gross_sales ?? 0) - $refund->gross;
+        $totals->net_sales = (float) ($totals->net_sales ?? 0) - $refund->net;
+
+        return $totals;
+    }
+
+    /**
+     * Refund per kelompok laporan (sama dengan `GROUP BY` laporan): ['<id atau tanggal>' => float].
+     * `$idExpr` adalah ekspresi kunci grup laporan; untuk pengelompokan per hari, kuncinya tanggal REFUND.
+     *
+     * @return array<string, float>
+     */
+    public static function refundAmountsByGroup(string $idExpr, ?string $from, ?string $to): array
+    {
+        $refundIdExpr = $idExpr === 'orders.business_date' ? 'orders.refund_business_date' : $idExpr;
+
+        return self::refundBase(['date_from' => $from, 'date_to' => $to])
+            ->selectRaw("{$refundIdExpr} as group_key, SUM(order_items.line_total) as net")
+            ->groupBy(DB::raw($refundIdExpr))
+            ->pluck('net', 'group_key')
+            ->map(fn ($v) => (float) $v)
+            ->all();
+    }
+
+    /**
+     * Refund per outlet PELAPORAN (recap) pada [from, to] → [outlet_id => ['sales' => float]].
+     *
+     * @return array<int, array{sales: float}>
+     */
+    public static function refundSalesByReportOutlet(?string $from, ?string $to): array
+    {
+        return self::refundBase(['date_from' => $from, 'date_to' => $to])
+            ->selectRaw(OutletFilter::reportOutletSql().' as report_outlet_id, SUM(order_items.line_total) as sales')
+            ->groupBy(DB::raw(OutletFilter::reportOutletSql()))
+            ->get()
+            ->mapWithKeys(fn ($row) => [(int) $row->report_outlet_id => ['sales' => (float) $row->sales]])
             ->all();
     }
 
@@ -124,7 +240,7 @@ class SalesFigures
      */
     public static function completedNetBetween(CarbonInterface $start, CarbonInterface $end): array
     {
-        return self::leanBase()
+        $sales = self::leanBase()
             ->where('orders.completed_at', '>=', $start->utc()->format('Y-m-d H:i:s'))
             ->where('orders.completed_at', '<', $end->utc()->format('Y-m-d H:i:s'))
             ->selectRaw('orders.id, orders.completed_at as at, SUM(order_items.line_total) as net')
@@ -132,6 +248,18 @@ class SalesFigures
             ->get()
             ->map(fn ($r) => ['at' => (string) $r->at, 'net' => (float) $r->net])
             ->all();
+
+        // 048 / S4 — refund dalam jendela ini muncul sebagai pengurangan pada instan refund itu sendiri.
+        $refunds = self::refundLeanBase()
+            ->where('orders.refunded_at', '>=', $start->utc()->format('Y-m-d H:i:s'))
+            ->where('orders.refunded_at', '<', $end->utc()->format('Y-m-d H:i:s'))
+            ->selectRaw('orders.id, orders.refunded_at as at, SUM(order_items.line_total) as net')
+            ->groupBy('orders.id', 'orders.refunded_at')
+            ->get()
+            ->map(fn ($r) => ['at' => (string) $r->at, 'net' => -(float) $r->net])
+            ->all();
+
+        return array_merge($sales, $refunds);
     }
 
     /**

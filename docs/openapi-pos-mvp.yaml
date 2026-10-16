@@ -7706,6 +7706,9 @@ components:
                 items: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
                 description: Metode pembayaran unik yang dipakai transaksi ini (bisa lebih dari satu untuk pembayaran terpisah).
               channel: { type: string, description: "Saluran transaksi (mis. 'offline')." }
+              refunded: { type: boolean, description: "048 / S4 — order sudah direfund. Status tetap completed; total halaman mengecualikannya bila tanggal refund berada dalam rentang." }
+              refunded_at: { type: string, format: date-time, nullable: true }
+              refund_business_date: { type: string, format: date, nullable: true, description: "Tanggal bisnis tempat refund diakui (penjualan dan laporan hari-hari sebelumnya tidak berubah)." }
               artist_names: { type: array, items: { type: string }, description: Nama penjual unik yang barangnya ada di transaksi ini. }
               total_amount: { $ref: '#/components/schemas/Money', description: Total transaksi. }
               key: { type: string, description: "Kunci baris `order:{id}` — dipakai untuk memilih baris dan mengekspornya." }

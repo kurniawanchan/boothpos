@@ -491,6 +491,7 @@ function viewFinishedTransaction(orderId) {
             <div class="flex flex-col items-start gap-1">
               <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" :class="{ 'line-through': isVoided(row) }" @click="openDetail(row)">{{ row.order_number }}</button>
               <StatusPill v-if="isVoided(row)" variant="danger">{{ t('reports.status_voided') }}</StatusPill>
+              <StatusPill v-else-if="row.refunded" variant="warning">{{ t('reports.status_refunded') }}</StatusPill>
             </div>
           </template>
           <template #cell-customer_name="{ row }">

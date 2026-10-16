@@ -165,9 +165,15 @@ export function useSalesFilters({ transactions, sessions }) {
   // Transaksi batal tampil (bila diminta) tapi TIDAK PERNAH ikut dihitung.
   const hasMargin = computed(() => all.value.some((tx) => tx.margin_amount !== undefined));
 
+  // 048 / S4 — refund dikurangkan dari total halaman bila TANGGAL REFUND berada dalam rentang yang dipilih
+  // (sama dengan angka laporan: refund mengurangi penjualan pada hari refund, bukan hari penjualan).
+  const refundedInRange = (tx) => !!tx.refunded
+    && (!filters.dateFrom || (tx.refund_business_date ?? '') >= filters.dateFrom)
+    && (!filters.dateTo || (tx.refund_business_date ?? '') <= filters.dateTo);
+
   const summary = computed(() => {
     const rows = filtered.value;
-    const counted = rows.filter(isCounted);
+    const counted = rows.filter((tx) => isCounted(tx) && !refundedInRange(tx));
     const sum = (fn) => counted.reduce((acc, tx) => acc + fn(tx), 0);
     return {
       shown: rows.length,
