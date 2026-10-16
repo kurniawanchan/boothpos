@@ -70,4 +70,47 @@ class DeviceService
 
         return 'T'.str_pad((string) ($max + 1), 2, '0', STR_PAD_LEFT);
     }
+
+    /**
+     * 048 / T064 — heartbeat terminal. Jam perangkat dibandingkan dengan jam server:
+     * `skew_seconds` = (clock_ms − server_time_ms) / 1000 dibulatkan; POSITIF berarti jam perangkat MAJU
+     * dari server. Disimpan di `clock_skew_seconds` dan dikembalikan apa adanya. Hanya baris perangkat
+     * yang berubah: tanpa catatan aktivitas per heartbeat (terlalu sering, tiap 60 dtk).
+     *
+     * @param  array{app_version: string, clock_ms: int, queue_depth: int}  $data  queue_depth divalidasi saja
+     * @return array{server_time_ms: int, skew_seconds: int, menu_release: ?int}
+     */
+    public function heartbeat(Device $device, array $data): array
+    {
+        $serverMs = now()->getTimestampMs();
+        $skew = (int) round(((int) $data['clock_ms'] - $serverMs) / 1000);
+
+        $device->forceFill([
+            'app_version' => $data['app_version'],
+            'last_seen_at' => now(),
+            'clock_skew_seconds' => $skew,
+        ])->save();
+
+        return [
+            'server_time_ms' => $serverMs,
+            'skew_seconds' => $skew,
+            'menu_release' => $this->appliedMenuRelease(),
+        ];
+    }
+
+    /**
+     * Versi rilis menu yang sedang berlaku: rilis TERBIT tertinggi. Null bila mesin rilis mati
+     * (`menu_release_enabled` = false, bawaan) atau belum ada rilis yang terbit.
+     */
+    private function appliedMenuRelease(): ?int
+    {
+        if (! \App\Support\MenuSettings::releaseEnabled()) {
+            return null;
+        }
+
+        $version = \App\Models\MenuRelease::query()->where('status', \App\Models\MenuRelease::PUBLISHED)->max('version');
+
+        return $version === null ? null : (int) $version;
+    }
 }
+

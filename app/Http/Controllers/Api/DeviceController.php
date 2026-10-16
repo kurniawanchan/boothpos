@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\DeviceHeartbeatRequest;
 use App\Http\Requests\PairDeviceRequest;
 use App\Models\Device;
 use App\Services\DeviceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 /**
  * 048 — pendaftaran terminal POS. Semua rute: owner/admin.
@@ -30,6 +32,22 @@ class DeviceController extends Controller
     public function pair(PairDeviceRequest $request): JsonResponse
     {
         return response()->json($this->present($this->devices->pair($request->validated(), $request->user())), 201);
+    }
+
+    /**
+     * 048 / T064 — heartbeat terminal (semua pengguna terautentikasi; sesi kasir yang sedang login juga boleh).
+     * Perangkat ditentukan dari X-Device-Id: harus terminal aktif milik outlet yang terlihat pengguna
+     * (OutletScope pada Device). Tanpa header, atau perangkat tak dikenal/dicabut/outlet lain → 422 `device_id`.
+     */
+    public function heartbeat(DeviceHeartbeatRequest $request, DeviceService $devices): JsonResponse
+    {
+        $header = $request->header('X-Device-Id');
+        $device = empty($header) ? null : Device::query()->whereNull('revoked_at')->find((int) $header);
+        if ($device === null) {
+            throw ValidationException::withMessages(['device_id' => __('devices.invalid_device')]);
+        }
+
+        return response()->json($devices->heartbeat($device, $request->validated()));
     }
 
     public function destroy(Request $request, Device $device): JsonResponse

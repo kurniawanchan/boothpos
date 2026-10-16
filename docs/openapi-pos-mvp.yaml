@@ -303,6 +303,61 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /devices/heartbeat:
+    post:
+      tags: [Devices]
+      summary: Heartbeat terminal POS — setiap 60 dtk (048 / T064)
+      description: |
+        Terminal mengirim versi aplikasi, jam perangkat, dan kedalaman antrean. Server menyimpan `app_version`
+        dan waktu terakhir terlihat, lalu menjawab waktu server dan selisih jam.
+
+        **Tanda selisih jam**: `skew_seconds` = (`clock_ms` − `server_time_ms`) / 1000, dibulatkan. POSITIF berarti
+        JAM PERANGKAT MAJU dari server; negatif berarti tertinggal. Nilai yang sama disimpan di perangkat.
+
+        `queue_depth` divalidasi (0–10000) tetapi TIDAK disimpan (antrean sinkron belum ada, B16).
+        `menu_release` = versi rilis menu TERBIT tertinggi bila mesin rilis aktif (`menu_release_enabled`);
+        `null` bila mesin rilis mati atau belum ada rilis terbit. Tidak menulis catatan aktivitas per heartbeat.
+
+        Perangkat ditentukan dari header `X-Device-Id`: harus terminal aktif milik outlet yang terlihat pengguna.
+        Tanpa header, atau perangkat tak dikenal/dicabut/outlet lain → 422 `errors.device_id`.
+      parameters:
+        - name: X-Device-Id
+          in: header
+          required: true
+          description: Id terminal (`devices.id`) yang dipasangkan.
+          schema: { type: string, example: "1" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [app_version, clock_ms, queue_depth]
+              properties:
+                app_version: { type: string, maxLength: 40, example: "1.4.2" }
+                clock_ms: { type: integer, minimum: 0, description: "Epoch milidetik jam perangkat." }
+                queue_depth: { type: integer, minimum: 0, maximum: 10000, description: "Divalidasi saja; tidak disimpan." }
+      responses:
+        '200':
+          description: Heartbeat diterima
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server_time_ms: { type: integer, description: "Epoch milidetik jam server." }
+                  skew_seconds: { type: integer, description: "Positif = jam perangkat maju dari server." }
+                  menu_release: { type: integer, nullable: true, description: "Versi rilis menu yang berlaku; null bila mesin rilis mati." }
+        '422':
+          description: Perangkat tidak dikenal, dicabut, bukan milik outlet ini, atau body tidak valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  errors: { type: object }
+
   /devices/{id}:
     delete:
       tags: [Devices]
