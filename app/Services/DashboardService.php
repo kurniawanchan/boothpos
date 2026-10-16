@@ -101,6 +101,25 @@ class DashboardService
                     $this->avgPoints($cmpLabels, $cmp['net'], $cmp['completed'])),
                 'low_stock' => $this->lowStock(LowStockHistory::current(), $lowCmpAtSame, $this->points($curLabels, $lowCur), $this->points($cmpLabels, $lowCmp)),
             ],
+            // 048 / S4 — pendapatan periode: net (pra-pajak), diskon tingkat-order, pajak, dan grand total
+            // (= net − diskon + pajak, sama dengan struk), angka yang sama dengan laporan penjualan. Hanya nilai
+            // periode ini; deret pembanding tetap berbasis net.
+            'revenue' => $this->revenue(
+                $curValue['net'],
+                array_sum(array_column($cur['rows']['sales'], 'discount')),
+                array_sum(array_column($cur['rows']['sales'], 'tax')),
+            ),
+        ];
+    }
+
+    /** @return array{net_sales: string, order_discount_total: string, tax_total: string, grand_total: string} */
+    private function revenue(float $net, float $orderDiscount, float $tax): array
+    {
+        return [
+            'net_sales' => number_format($net, 2, '.', ''),
+            'order_discount_total' => number_format($orderDiscount, 2, '.', ''),
+            'tax_total' => number_format($tax, 2, '.', ''),
+            'grand_total' => number_format(SalesFigures::grandTotal($net, $orderDiscount, $tax), 2, '.', ''),
         ];
     }
 
@@ -187,6 +206,7 @@ class DashboardService
         $lowCur = array_slice($lowAll, 0, count($curLabels));
         $lowCmp = array_slice($lowAll, count($curLabels));
         $lowCmpValue = $lowCmp === [] ? 0 : end($lowCmp);
+        $adjustments = SalesFigures::orderAdjustmentsBetween($from, $to);
 
         return [
             'range' => ['from' => $from, 'to' => $to],
@@ -199,6 +219,7 @@ class DashboardService
                     $this->avgPoints($cmpLabels, array_values($cmp['net']), array_values($cmp['completed']))),
                 'low_stock' => $this->lowStock(LowStockHistory::current(), $lowCmpValue, $this->points($curLabels, $lowCur), $this->points($cmpLabels, $lowCmp)),
             ],
+            'revenue' => $this->revenue($curTotal['net'], $adjustments->discount, $adjustments->tax),
         ];
     }
 

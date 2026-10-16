@@ -31,6 +31,8 @@ php artisan app:backup
 php artisan app:restore <path/database.sql> [--force]
 ```
 
+> **Dated note — 2026-10-16 (feature 048, T066).** Perintah tes di dalam kontainer WAJIB menyertakan `-e CACHE_STORE=array -e SESSION_DRIVER=array`. Tanpanya tes menulis setting bawaan (`system_mode = live`) ke cache file yang juga dibaca API dev, sehingga mode dan outlet dev berubah diam-diam. `tests/TestCase.php` menolak berjalan tanpa flag ini.
+
 ## Non-negotiable environment constraints
 
 - **Dated note — 2026-10-11 (constitution 2.0.0):** the premise "one machine per store" is extended to one organisation with one or more outlets, on one machine or one shared server (one server, one database per organisation). The bullets below still apply unchanged.
@@ -38,7 +40,7 @@ php artisan app:restore <path/database.sql> [--force]
 - **`.env.testing` must exist and point at a separate database** (`warkop_wjm_test`). It is gitignored. The suite runs `RefreshDatabase`, so pointing it at the app DB destroys real data.
 - **Running `php artisan test` INSIDE the `app` Docker container is destructive unless you pass explicit `-e` overrides — this has actually wiped the dev database twice (020-customer-data-import-export, and again 2026-09-27).** `docker-compose.yml`'s `app` service uses `env_file: .env`, which injects `DB_DATABASE=warkop_wjm` (the real dev DB) as a real OS-level environment variable inside the container. phpdotenv never overwrites an environment variable that's already set, so `.env.testing` — and even `-e APP_ENV=testing` alone — silently do **nothing**; `RefreshDatabase` then drops and rebuilds `warkop_wjm` itself. The ONLY safe way to run tests inside the container:
   ```bash
-  docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test app php artisan test
+  docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test app php artisan test -e CACHE_STORE=array -e SESSION_DRIVER=array
   ```
   `tests/TestCase.php::guardAgainstWrongDatabase()` is a hard technical backstop that refuses to run any test at all unless the resolved database name contains `test` — but treat that as a last-resort safety net, not permission to skip the `-e` flags above. If data does go missing, recover with `php artisan db:seed` + `php artisan db:seed --class=SakanaFridgeDemoSeeder` (docs/RUNBOOK.md §Mode C has the full recovery note).
 - On this dev machine MySQL runs in the `warkop_wjm-mysql-1` Docker container, exposed to the host at `127.0.0.1:3308` (container-internal port stays `3306` — that's what `mysql`/`DB_HOST=mysql` inside the `app` container resolves to). **Do not `brew install mysql-client`** — that was done once and deliberately reverted. If a CLI tool like `mysqldump` is needed, proxy through `docker exec`, and keep that shim out of committed code.
@@ -420,6 +422,18 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **Imports/exports:** the master-data `products` sheet lost `is_preorder`/`preorder_eta` (old files that still carry the columns import fine — unknown columns are ignored); there is no pre-order import/export. `jszip` left `package.json` (its only user was the bulk pre-order download).
 - **Time-dependence gotcha found here:** tests that need "today" must use `BusinessDay::today()` (store timezone), not `now()->toDateString()` (UTC) — between 00:00 and 07:00 WIB the two differ (`BulkPriceOutletsTest` failed after midnight for exactly this reason).
 
+## Aplikasi Android POS, perangkat, persetujuan, pajak, dan refund (feature 048, 2026-10-16)
+
+> **Dated note — 2026-10-16 (feature 048).** Kapabilitas baru di atas, tanpa menulis ulang riwayat di atas:
+> - **Aplikasi Android POS** (`android-pos/`, Kotlin + Compose) untuk tablet: online-first, memanggil API yang sama. `android/` (shell WebView 008) tidak diubah. Spesifikasi: `specs/048-wire-android-pos-api/`.
+> - **Perangkat/terminal**: `devices` per outlet; pemasangan `POST /devices/pairings`; pencabutan `DELETE /devices/{id}` (soft, mengisi `revoked_at`; perangkat harus dipasang ulang); heartbeat `POST /devices/heartbeat` (`skew_seconds` positif = jam perangkat di depan server). Header `X-Device-Id` dicek pada tulis tab dan sesi.
+> - **Persetujuan di titik aksi**: tabel `overrides`, token sekali pakai, 120 dtk, terikat ke **identitas objek** (id tab/baris/sesi/produk/pembayaran) + bidang body lewat `OverrideSubject::hash` (satu kanonikalisasi di PHP; klien tidak menghitung hash). Penyetuju ≠ peminta, memegang izin aksi, satu outlet; PIN penyetuju memakai kunci 5-salah yang sama dengan login.
+> - **QRIS**: disimpan `pending`, lalu verifikasi (referensi ≥ 4) atau gagal. QRIS tertunda memblokir non-tunai lain **pada tab yang sama** (`pending_qris`) dan **penutupan shift** untuk seluruh shift (`pending_payments`). **EDC**: kode approval 6–12, tanpa nomor kartu; bayar ganda dalam 2 menit → `duplicate_edc`.
+> - **Pajak PPN eksklusif** (setelah diskon, `TaxCalculator`) untuk tab dan ritel. Laporan: bersih (sebelum diskon tingkat order, keputusan O3), diskon, pajak, bruto = bersih − diskon + pajak = struk.
+> - **Refund** penuh order lunas (persetujuan `refund`): order tetap `completed` dengan `refunded_at`; nilai, pajak, dan HPP dinetralkan pada **tanggal bisnis refund**; stok dikembalikan lewat `StockService`.
+> - **Nomor struk per terminal** (`T01-000001`) dan **antrean per outlet per hari bisnis** (`A-001`).
+> - Diketahui belum selesai: server tidak menyimpan persen diskon (tampilan hanya nominal); bagi rata dan cetak ulang belum diuji di perangkat.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -427,7 +441,10 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - A remote `origin` (github.com/kurniawanchan/boothpos) exists (dated note 2026-10-11; the earlier "no remote" line was outdated), but **pushing and opening PRs need the developer's explicit per-instance authorization** (constitution; the harness may also deny them) — never push on your own initiative.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/047-android-pos-tablet/plan.md`
+Active feature plan: `specs/048-wire-android-pos-api/plan.md`
+(branch `048-wire-android-pos-api`, from 047) — menghubungkan aplikasi Android POS ke data server dan melengkapi API yang belum ada (B2–B14, B17–B19, B21), dalam empat irisan S1–S4; satu `PosBackend` (Remote/Sample), persetujuan di tempat lewat `OverrideGate` (token sekali pakai terikat hash aksi), pajak eksklusif + penomoran struk/antrean, perangkat/terminal. Lihat research.md D1–D14.
+
+Previous feature: `specs/047-android-pos-tablet/plan.md`
 (branch `047-android-pos-tablet`, from 046) — native Android (Kotlin + Compose, Material 3) POS for the Warkop WJM 3 tablet pilot, built **online-first on the EXISTING API** with **no backend change in this phase**; the source lives in the separate, self-contained folder `android-pos/` (to be moved to another repository later; `android/` = the old 008 WebView shell, untouched). Design source: `/Users/chan/www/warkopwjm/design/{spec,screens}`. API that does not exist yet (PIN login, supervisor approvals, cash in/out, X/Z reports, EDC, QRIS pending, tax, receipt/queue numbers, device registry, offline sync …) is listed in `specs/047-android-pos-tablet/api-gap.md` (B1–B21) and will be built after this phase; the app exposes those paths behind `ApiCapabilities` flags ("menunggu API"). No Android SDK/Gradle exists on this machine, so builds are not verified here. See research.md D1–D18.
 
 Previous feature: `specs/046-hide-events-preorders/plan.md`

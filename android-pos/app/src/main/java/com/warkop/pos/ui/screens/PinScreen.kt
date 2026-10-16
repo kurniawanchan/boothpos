@@ -20,10 +20,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.warkop.pos.model.PosCatalog
 import com.warkop.pos.model.StaffUser
 import com.warkop.pos.state.Conn
+import com.warkop.pos.state.Load
 import com.warkop.pos.state.PosStore
+import com.warkop.pos.ui.ErrorState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.warkop.pos.ui.Keypad
 import com.warkop.pos.ui.Size
 import com.warkop.pos.ui.windowSize
@@ -31,30 +34,37 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** S02 — pilih staf lalu PIN 6 digit; submit otomatis pada digit ke-6 (desain 01-login-pin, 29 phone). */
+/** S02 — pilih staf lalu PIN 6 digit; submit otomatis pada digit ke-6 (desain 01-login-pin, 29 phone). Staf dan PIN dari server. */
 @Composable
 fun PinScreen(store: PosStore) {
-    var selected by remember { mutableStateOf<StaffUser?>(PosCatalog.users.first()) }
+    val compact = windowSize() == Size.COMPACT
+    val staff = (store.roster as? Load.Ready)?.value.orEmpty().filter { it.hasPin }
+    var selected by remember { mutableStateOf<StaffUser?>(null) }
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    val compact = windowSize() == Size.COMPACT
+    var busy by remember { mutableStateOf(false) }
+
+    // Pilihan awal = staf pertama yang bisa masuk; dijaga bila daftar berubah (mis. setelah dimuat ulang).
+    LaunchedEffect(staff, store.roster) { if (store.roster is Load.Ready && (selected == null || staff.none { it.id == selected?.id })) selected = staff.firstOrNull() }
 
     fun submit() {
         val u = selected ?: run { error = "Pilih nama Anda terlebih dahulu."; return }
-        error = when (val r = store.submitPin(u, pin)) {
-            PosStore.PinResult.Ok -> null
-            is PosStore.PinResult.Wrong -> "PIN salah. Sisa ${r.left} percobaan."
-            PosStore.PinResult.Locked -> "Login dikunci 15 menit karena PIN salah 5 kali."
-        }
-        pin = ""
+        busy = true
+        store.loginPin(u, pin) { msg -> error = msg; pin = ""; busy = false }
     }
 
     val entry: @Composable (Modifier) -> Unit = { m ->
         Column(m, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(if (compact) "Siapa yang bertugas?" else "Siapa yang bertugas?", fontSize = if (compact) 22.sp else 30.sp, modifier = Modifier.align(Alignment.Start))
+            Text("Siapa yang bertugas?", fontSize = if (compact) 22.sp else 30.sp, modifier = Modifier.align(Alignment.Start))
             Spacer(Modifier.height(16.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                PosCatalog.users.forEach { u -> StaffChip(u, u == selected, compact, Modifier.weight(1f)) { selected = u; pin = ""; error = null } }
+            when (val r = store.roster) {
+                is Load.Loading, is Load.Idle -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                is Load.Failed -> ErrorState(r.error.message, onRetry = { store.loadRoster() }, modifier = Modifier.fillMaxWidth())
+                is Load.Ready -> if (staff.isEmpty()) {
+                    Text("Belum ada staf dengan PIN di outlet ini. Atur PIN dari akun masing-masing atau minta admin.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    staff.forEach { u -> StaffChip(u, u.id == selected?.id, compact, Modifier.weight(1f)) { selected = u; pin = ""; error = null } }
+                }
             }
             Spacer(Modifier.height(24.dp))
             Text(selected?.let { "PIN ${it.name}" } ?: "Pilih nama, lalu masukkan PIN", fontSize = 18.sp)
@@ -66,15 +76,15 @@ fun PinScreen(store: PosStore) {
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp, textAlign = TextAlign.Center) }
             }
             Keypad(
-                onDigit = { d -> if (pin.length < 6) { pin += d; error = null; if (pin.length == 6) submit() } },
-                onBackspace = { pin = pin.dropLast(1) },
+                onDigit = { d -> if (!busy && staff.isNotEmpty() && pin.length < 6) { pin += d; error = null; if (pin.length == 6) submit() } },
+                onBackspace = { if (!busy) pin = pin.dropLast(1) },
                 modifier = Modifier.widthIn(max = 340.dp), keyHeight = if (compact) 56.dp else 72.dp,
             )
         }
     }
 
     if (compact) {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp)) { entry(Modifier.fillMaxWidth()) }
+        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp).verticalScroll(rememberScrollState())) { entry(Modifier.fillMaxWidth()) }
     } else {
         Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
             BrandPanel(store, Modifier.weight(0.38f).fillMaxHeight())
@@ -116,15 +126,15 @@ private fun BrandPanel(store: PosStore, modifier: Modifier) {
                     Box(contentAlignment = Alignment.Center) { Text("W", color = MaterialTheme.colorScheme.onPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold) }
                 }
                 Spacer(Modifier.width(14.dp))
-                Column { Text("Warkop WJM 3", fontSize = 22.sp, fontWeight = FontWeight.SemiBold); Text("Terminal T01 · Kab. Bogor", fontSize = 14.sp) }
+                Column { Text(store.config?.outletName ?: "Warkop WJM", fontSize = 22.sp, fontWeight = FontWeight.SemiBold); Text("Terminal ${store.config?.deviceCode ?: ""}", fontSize = 14.sp) }
             }
             Spacer(Modifier.weight(1f))
             Text(time, fontSize = 112.sp, fontWeight = FontWeight.Light, lineHeight = 112.sp)
-            Text("Sabtu, 31 Oktober 2026", fontSize = 18.sp, fontWeight = FontWeight.Medium)
+            Text(java.text.SimpleDateFormat("EEEE, d MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date()), fontSize = 18.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 InfoChip(if (store.conn == Conn.ONLINE) Icons.Filled.Wifi else Icons.Filled.WifiOff, store.conn.label)
-                InfoChip(Icons.Filled.Schedule, "Shift 1 · 07:00–15:00")
+                InfoChip(Icons.Filled.Schedule, store.config?.let { "${it.outletName} · ${it.deviceCode}" } ?: "Terminal")
             }
         }
     }

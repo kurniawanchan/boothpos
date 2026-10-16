@@ -19,7 +19,7 @@ class Payment extends Model
     protected $fillable = [
         'order_id', 'purchase_order_id', 'channel_id', 'method', 'purpose', 'amount',
         'verification', 'verified_by', 'verified_at', 'reject_reason', 'paid_at', 'notes',
-        'reference', 'client_ref', 'session_id', 'recorded_by',
+        'reference', 'client_ref', 'session_id', 'recorded_by', 'approval_code',
     ];
 
     protected function casts(): array

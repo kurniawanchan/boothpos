@@ -7,7 +7,9 @@ import { listOutlets } from '../api/outlets';
 import { listProducts, lookupVariants } from '../api/products';
 import { createOrder } from '../api/orders';
 import { usePosCartStore } from '../stores/posCart';
+import { useSettingsStore } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
+import { cartTotals } from '../utils/posTotals';
 import { uuid } from '../utils/uuid';
 import { formatIDR, toMoneyString } from '../utils/money';
 import { buildProductCards, buildSearchCards, toCartItem } from '../utils/posProductCards';
@@ -45,6 +47,10 @@ const searchResults = ref(null);
 const loadingGrid = ref(false);
 
 const discount = ref(0);
+// 048 — pratinjau total (termasuk pajak) sebelum order dibuat; rumusnya sama dengan server. Setelah POST /orders,
+// struk dan laporan membaca total dari server.
+const settings = useSettingsStore();
+const totals = computed(() => cartTotals({ subtotal: cart.subtotal, discount: discount.value, taxRate: settings.taxRate }));
 const selectedCustomer = ref(null);
 const showCustomerPicker = ref(false);
 const showPayment = ref(false);
@@ -410,7 +416,10 @@ async function resumeDraft(draftId) {
       :lines="cart.items.map((i) => ({ key: i.variant_id, name: i.name, qty: i.qty, lineTotal: (parseFloat(i.sell_price) * i.qty).toFixed(2) }))"
       :subtotal="cart.subtotal"
       :discount-amount="discount.toFixed(2)"
-      :total="Math.max(parseFloat(cart.subtotal) - discount, 0).toFixed(2)"
+      :tax-amount="totals.tax.toFixed(2)"
+      :tax-rate="settings.taxRate"
+      :tax-label="settings.taxLabel"
+      :total="totals.total.toFixed(2)"
       :submitting="submittingOrder"
       :customer-name="selectedCustomer?.name ?? ''"
       @close="showPayment = false"

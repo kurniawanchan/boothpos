@@ -57,7 +57,7 @@ Route::prefix('v1')->group(function () {
     // SetLocaleFromUser HANYA di sini, bukan pada POST /auth/login di
     // atas — layar login selalu Bahasa Indonesia (FR-001), locale
     // per-akun baru berlaku setelah $request->user() resolve.
-    Route::middleware(['auth:sanctum', SetLocaleFromUser::class, \App\Http\Middleware\ResolveOutletContext::class])->group(function () {
+    Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserIsActive::class, SetLocaleFromUser::class, \App\Http\Middleware\ResolveOutletContext::class])->group(function () {
         // 045 Stage 2 — outlet yang boleh dilihat pengguna dan pilihan X-Outlet-Id (contracts/api-scope.md).
         Route::get('/me/scope', [\App\Http\Controllers\Api\MeScopeController::class, 'show']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -76,6 +76,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/pin-changes', [\App\Http\Controllers\Api\PinAuthController::class, 'change'])->middleware('throttle:10,1');
         Route::post('/auth/token-refresh', [\App\Http\Controllers\Api\PinAuthController::class, 'refresh']);
         Route::post('/users/{user}/pin-reset', [\App\Http\Controllers\Api\PinAuthController::class, 'reset']);
+
+        // 048 / B14 — terminal POS (owner/admin; outlet diturunkan server).
+        Route::get('/devices', [\App\Http\Controllers\Api\DeviceController::class, 'index']);
+        Route::post('/devices/pairings', [\App\Http\Controllers\Api\DeviceController::class, 'pair']);
+        Route::delete('/devices/{device}', [\App\Http\Controllers\Api\DeviceController::class, 'destroy']);
+        // 048 / T064 — heartbeat terminal, sengaja di luar pembatasan owner/admin (dikirim sesi kasir juga).
+        Route::post('/devices/heartbeat', [\App\Http\Controllers\Api\DeviceController::class, 'heartbeat']);
 
         Route::get('/settings/features', [SettingsController::class, 'features']);
         Route::get('/settings', [SettingsController::class, 'index']);
@@ -264,8 +271,12 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/sessions/current', [CashierSessionController::class, 'current']);
         Route::post('/sessions', [CashierSessionController::class, 'store']);
-        Route::post('/sessions/{session}/close', [CashierSessionController::class, 'close']);
+        // 048 — `idempotent`: pengiriman ulang setelah respons hilang mengembalikan hasil tutup yang tersimpan, bukan 409.
+        Route::post('/sessions/{session}/close', [CashierSessionController::class, 'close'])->middleware('idempotent');
         Route::get('/sessions/{session}/summary', [CashierSessionController::class, 'summary']);
+        Route::get('/sessions/{session}/x-report', [CashierSessionController::class, 'xReport']);
+        Route::get('/sessions/{session}/cash-movements', [\App\Http\Controllers\Api\CashMovementController::class, 'index']);
+        Route::post('/sessions/{session}/cash-movements', [\App\Http\Controllers\Api\CashMovementController::class, 'store'])->middleware('idempotent');
 
         Route::get('/payment-channels', [PaymentChannelController::class, 'index']);
         Route::post('/payment-channels', [PaymentChannelController::class, 'store']);
@@ -291,6 +302,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/orders/{order}/payments/{payment}/verify', [OrderController::class, 'verifyPayment']);
         Route::post('/orders/verify-payments', [OrderController::class, 'verifyPayments']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
+        // 048 / S4 — cetak ulang struk dan refund penuh (token persetujuan; lihat OverrideGate).
+        Route::post('/orders/{order}/reprints', [\App\Http\Controllers\Api\ReprintController::class, 'store']);
+        Route::post('/orders/{order}/refund', [\App\Http\Controllers\Api\RefundController::class, 'store']);
 
         // 028-restaurant-dine-in-ordering — meja dan lantai. Setiap rute
         // memeriksa menu-key-nya sendiri di sisi server (`dining_setup` /
@@ -316,10 +330,21 @@ Route::prefix('v1')->group(function () {
         Route::delete('/tabs/{order}', [TabController::class, 'destroy']);
         Route::post('/tabs/{order}/handover', [TabController::class, 'handover']);
         Route::post('/tabs/{order}/send', [TabController::class, 'send'])->middleware('idempotent');
+        Route::post('/tabs/{order}/prebill', [TabController::class, 'prebill']);
         Route::post('/tabs/{order}/void', [TabController::class, 'void']);
+        // 048 / S3 — batal seluruh tab (409 has_payments bila sudah dibayar), persetujuan di titik aksi, dan
+        // verifikasi/penandaan QRIS tab.
+        Route::post('/tabs/{order}/cancel', [TabController::class, 'cancel']);
+        Route::post('/tabs/{order}/payments/{payment}/verify', [TabPaymentController::class, 'verify']);
+        Route::post('/tabs/{order}/payments/{payment}/fail', [TabPaymentController::class, 'fail']);
+        Route::post('/overrides', [\App\Http\Controllers\Api\OverrideController::class, 'store']);
+        Route::get('/overrides/approvers', [\App\Http\Controllers\Api\OverrideController::class, 'approvers']);
         Route::post('/tabs/{order}/move', [TabController::class, 'move']);
         Route::post('/tabs/{order}/merge', [TabController::class, 'merge']);
         Route::post('/tabs/{order}/split', [TabPaymentController::class, 'split']);
+        // 048 / S4 — diskon order (DELETE = hapus diskon order) dan baris.
+        Route::post('/tabs/{order}/discounts', [\App\Http\Controllers\Api\TabDiscountController::class, 'store']);
+        Route::delete('/tabs/{order}/discounts', [\App\Http\Controllers\Api\TabDiscountController::class, 'destroy']);
         Route::post('/tabs/{order}/items', [TabLineController::class, 'store'])->middleware('idempotent');
         Route::patch('/tabs/{order}/items/{item}', [TabLineController::class, 'update'])->whereNumber('item')->middleware('idempotent');
         Route::delete('/tabs/{order}/items/{item}', [TabLineController::class, 'destroy'])->whereNumber('item');

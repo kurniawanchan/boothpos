@@ -52,21 +52,18 @@ object PosCatalog {
     val denominations = listOf(100_000, 50_000, 20_000, 10_000, 5_000, 2_000, 1_000, 500)
     val voidReasons = listOf("Salah input", "Pelanggan batal", "Item tidak tersedia", "Kualitas / keluhan")
     val cancelReasons = listOf("Pelanggan batal", "Order ganda", "Salah meja / tipe order")
-    val cashInReasons = listOf("Tambah modal", "Kembalian dari supplier", "Lainnya")
-    val cashOutReasons = listOf("Belanja bahan", "Setor ke brankas", "Bayar ojek / kurir", "Lainnya")
 
-    /** Batas diskon per peran — nilai CONTOH desain (PRD §8.4, menunggu OQ-023), bukan aturan final. */
-    val discountLimit = mapOf("CSH" to 10, "WTR" to 0, "SPV" to 50, "OMG" to 100)
-    val discountPresets = listOf(
-        DiscountPreset("Diskon karyawan", 20, "Diskon karyawan"),
-        DiscountPreset("Kompensasi keluhan", 50, "Kompensasi keluhan"),
-        DiscountPreset("Promo pelanggan tetap", 10, "Promo outlet"),
+    /** Alasan layar → kode server untuk void/batal tab (wrong_item | customer_request | kitchen_error | other). */
+    private val serverReasons = mapOf(
+        "Salah input" to "wrong_item", "Pelanggan batal" to "customer_request", "Item tidak tersedia" to "other",
+        "Kualitas / keluhan" to "kitchen_error", "Order ganda" to "other", "Salah meja / tipe order" to "wrong_item",
     )
-    const val CASH_OUT_THRESHOLD = 200_000
-    const val VARIANCE_TOLERANCE = 5_000
+    fun serverReasonCode(label: String): String = serverReasons[label] ?: "other"
+    /** Alasan kas: kode yang dikirim ke server (`CashMovement::REASONS`) dan label layar. */
+    val cashInReasons = listOf("float_topup" to "Tambah modal", "change_exchange" to "Kembalian dari supplier", "other" to "Lainnya")
+    val cashOutReasons = listOf("petty_cash" to "Belanja bahan", "bank_deposit" to "Setor ke brankas", "supplier" to "Bayar ojek / kurir", "other" to "Lainnya")
 
     fun product(id: String) = products.first { it.id == id }
     private fun opts(vararg n: String) = n.map { ModOption(it, 0) }
 }
 
-data class DiscountPreset(val label: String, val pct: Int, val reason: String)

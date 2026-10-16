@@ -19,7 +19,25 @@ class ProductAvailabilityController extends Controller
     public function store(SoldOutRequest $request, Product $product, AvailabilityService $service): JsonResponse
     {
         $outletIds = $this->targetOutlets($request);
-        $mark = $service->mark($product, $request->user(), (int) $request->input('reason_code_id'), $request->input('note'), $outletIds);
+        if ($outletIds === []) {
+            throw \Illuminate\Validation\ValidationException::withMessages(['outlet_ids' => __('overrides.outlet_ids_empty')]);
+        }
+        $context = app(\App\Support\OutletContext::class);
+        $outletId = (int) (($outletIds[0] ?? null) ?? $context->selectedId() ?? $context->singleId() ?? \App\Support\OutletDefaults::forNewRecord());
+
+        // 048 / S3 — penjagaan dan penandaan dalam SATU transaksi: token hanya ikut habis bila tanda tersimpan.
+        $mark = \Illuminate\Support\Facades\DB::transaction(function () use ($request, $product, $service, $outletIds, $outletId) {
+            app(\App\Services\OverrideGate::class)->requireFor(
+                'availability',
+                ['product_id' => $product->id, 'reason_code_id' => $request->input('reason_code_id'), 'note' => $request->input('note'), 'outlet_ids' => $outletIds],
+                $request->input('override_token'),
+                $request->user(),
+                $outletId,
+                "product:{$product->id}",
+            );
+
+            return $service->mark($product, $request->user(), (int) $request->input('reason_code_id'), $request->input('note'), $outletIds);
+        });
 
         return response()->json([
             'product_id' => $product->id,

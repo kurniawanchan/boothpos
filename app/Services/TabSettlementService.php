@@ -7,6 +7,7 @@ use App\Models\KitchenTicketItem;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Support\PosSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -19,6 +20,7 @@ use Illuminate\Validation\ValidationException;
 class TabSettlementService
 {
     public function __construct(
+        private ReceiptNumbering $numbering,
         private TabService $tabs,
         private PaymentRecorder $paymentRecorder,
         private OrderService $orders,
@@ -55,7 +57,7 @@ class TabSettlementService
                 if ($discount > (float) $order->subtotal) {
                     throw ValidationException::withMessages(['discount_amount' => __('orders_payments.discount_exceeds_subtotal')]);
                 }
-                $order->update(['discount_amount' => $discount, 'total_amount' => round((float) $order->subtotal - $discount, 2)]);
+                $this->tabs->recalculate($order, $discount);
             }
 
             $total = round((float) $order->total_amount, 2);
@@ -63,10 +65,44 @@ class TabSettlementService
             $paidTotal = round((float) $order->paid_amount + $newPaid, 2);
             $completes = $paidTotal >= $total;
 
+            // 048 / S3 — non-tunai: satu QRIS tertunda memblokir non-tunai lain; non-tunai tak boleh melebihi sisa.
+            $nonCash = collect($data['payments'])->where('method', '!=', 'cash');
+            if ($nonCash->isNotEmpty()) {
+                if (Payment::where('order_id', $order->id)->where('method', 'qr_ewallet')->where('verification', 'pending')->exists()) {
+                    throw new \App\Exceptions\ShiftRuleException(__('overrides.pending_qris'), 'pending_qris', [], 409);
+                }
+                $remaining = round($total - (float) $order->paid_amount, 2);
+                if (round((float) $nonCash->sum('amount'), 2) > $remaining + 0.005) {
+                    throw ValidationException::withMessages(['payments' => __('overrides.non_cash_exceeds_remaining')]);
+                }
+            }
+
+            // 048 / S3 — EDC: kode approval saja; kode ganda dalam jendela waktu → 409 kecuali dikonfirmasi.
+            foreach ($data['payments'] as $input) {
+                if (($input['method'] ?? null) !== 'edc') {
+                    continue;
+                }
+                $code = (string) ($input['approval_code'] ?? '');
+                if (preg_match('/^[A-Z0-9]{6,12}$/', $code) !== 1) {
+                    throw ValidationException::withMessages(['payments' => __('overrides.approval_code_invalid')]);
+                }
+                $duplicate = Payment::withoutGlobalScopes()
+                    ->where('method', 'edc')
+                    ->where('approval_code', $code)
+                    ->where('verification', '!=', 'rejected')
+                    ->where('paid_at', '>=', now()->subSeconds(PosSettings::edcDuplicateWindowSeconds()))
+                    ->exists();
+                if ($duplicate && empty($input['confirm_duplicate'])) {
+                    throw new \App\Exceptions\ShiftRuleException(__('overrides.duplicate_edc'), 'duplicate_edc', [], 409);
+                }
+            }
+
             foreach ($data['payments'] as $input) {
                 // 'full' hanya untuk pembayaran yang menuntaskan tab; sebelumnya uang muka.
                 $input['purpose'] = $completes ? 'full' : 'down_payment';
-                $payment = $this->paymentRecorder->record($input, $order->id);
+                // 048 — uang tab diterima di shift TEMPAT tab dibuka (satu-satunya shift yang boleh membuka tab):
+                // tanpa ini payments.session_id NULL dan tunai tab hilang dari kas shift, X-report, dan Z-report.
+                $payment = $this->paymentRecorder->record(array_merge($input, ['session_id' => $order->session_id]), $order->id);
                 // Kunci per-PENGIRIMAN: `client_ref` milik ledger UNIQUE per baris dan tak bisa dipakai bersama
                 // oleh beberapa baris dalam satu pengiriman (lihat migrasi 2026_10_31_000009).
                 $payment->forceFill(['submission_ref' => $ref])->save();
@@ -84,6 +120,7 @@ class TabSettlementService
                 }
 
                 $update += ['status' => Order::STATUS_COMPLETED, 'change_amount' => $change];
+                $order->forceFill(['receipt_no' => $this->receiptFor($order)]);
             }
 
             $order->update($update);
@@ -194,7 +231,7 @@ class TabSettlementService
                 if ($discount > (float) $paid->subtotal) {
                     throw ValidationException::withMessages(['discount_amount' => __('orders_payments.discount_exceeds_subtotal')]);
                 }
-                $paid->update(['discount_amount' => $discount, 'total_amount' => round((float) $paid->subtotal - $discount, 2)]);
+                $this->tabs->recalculate($paid, $discount);
             }
 
             $total = round((float) $paid->total_amount, 2);
@@ -205,7 +242,7 @@ class TabSettlementService
 
             foreach ($data['payments'] as $input) {
                 $input['purpose'] = 'full';
-                $payment = $this->paymentRecorder->record($input, $paid->id);
+                $payment = $this->paymentRecorder->record(array_merge($input, ['session_id' => $paid->session_id]), $paid->id);
                 $payment->forceFill(['submission_ref' => $ref])->save();
             }
 
@@ -214,6 +251,7 @@ class TabSettlementService
             if ($change > $cash + 0.01) {
                 throw ValidationException::withMessages(['payments' => __('orders_payments.change_exceeds_cash_received')]);
             }
+            $paid->forceFill(['device_id' => $order->device_id, 'receipt_no' => $this->receiptFor($order)]);
             $paid->update(['paid_amount' => $paidAmount, 'change_amount' => $change]);
 
             // Sisa tab: dihitung ulang; bila tak ada baris tersisa, tab (kini kosong) ditutup dan mejanya kosong.
@@ -224,5 +262,44 @@ class TabSettlementService
 
             return ['paid_order' => $this->tabs->loaded($paid), 'tab' => $this->tabs->loaded($order), 'replayed' => false];
         });
+    }
+
+    /**
+     * 048 / T059 — bagi rata tagihan (pratinjau, TANPA pembayaran dan TANPA mengubah tab). Setiap bagian = bagian
+     * rupiah utuh; sisa pembulatan (dan sen, bila ada) masuk ke bagian TERAKHIR, sehingga jumlah bagian sama
+     * persis dengan tagihan termasuk pajak. Kasir mencatat tiap bagian lewat pembayaran biasa.
+     *
+     * @return array{total: string, mode: string, parts: array<int, array{index: int, amount: string}>}
+     */
+    public function equalSplitPreview(Order $tab, int $parts): array
+    {
+        if ($tab->status !== Order::STATUS_OPEN) {
+            throw ValidationException::withMessages(['status' => __('restaurant.tab_not_open')]);
+        }
+        if (! $tab->items()->exists()) {
+            throw ValidationException::withMessages(['tab' => __('restaurant.tab_empty')]);
+        }
+
+        $totalCents = (int) round(((float) $tab->total_amount) * 100);
+        $baseCents = intdiv(intdiv($totalCents, 100), $parts) * 100; // bagian rupiah utuh (dibulatkan ke bawah)
+
+        $amounts = [];
+        for ($i = 1; $i <= $parts; $i++) {
+            $cents = $i < $parts ? $baseCents : $totalCents - $baseCents * ($parts - 1);
+            $amounts[] = ['index' => $i, 'amount' => number_format($cents / 100, 2, '.', '')];
+        }
+
+        return ['total' => number_format($totalCents / 100, 2, '.', ''), 'mode' => 'equal', 'parts' => $amounts];
+    }
+
+    /** 048 — nomor struk dari terminal pembuka order; order tanpa terminal (SPA web) tidak bernomor terminal (null). */
+    private function receiptFor(Order $order): ?string
+    {
+        if ($order->device_id === null || $order->receipt_no !== null) {
+            return $order->receipt_no;
+        }
+        $device = \App\Models\Device::withoutGlobalScopes()->find($order->device_id);
+
+        return $device === null ? null : $this->numbering->receiptFor($device);
     }
 }

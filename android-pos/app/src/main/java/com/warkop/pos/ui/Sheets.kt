@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.warkop.pos.model.*
+import com.warkop.pos.state.Load
 import com.warkop.pos.state.PosStore
 import com.warkop.pos.state.Sheet
 import com.warkop.pos.theme.pos
@@ -36,7 +37,7 @@ fun SheetHost(store: PosStore) {
     Box(Modifier.fillMaxSize().background(scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { store.show(null) }) {
         val consume = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
         when (sheet) {
-            is Sheet.Modifier, is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, Sheet.Discount, Sheet.CashOut ->
+            is Sheet.Modifier, is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, is Sheet.Discount, is Sheet.CashOut ->
                 if (compact) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 640.dp).then(consume), shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
                 else Surface(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(if (windowSize() == Size.MEDIUM) 400.dp else 440.dp).then(consume), shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
             else -> Surface(Modifier.align(Alignment.Center).widthIn(max = 480.dp).fillMaxWidth(0.92f).then(consume), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
@@ -47,26 +48,28 @@ fun SheetHost(store: PosStore) {
 @Composable
 private fun SheetBody(store: PosStore, s: Sheet) {
     if (s is Sheet.Modifier) { ModifierSheet(store, s); return }
-    if (s is Sheet.CashOut) { CashOutSheet(store); return }
+    if (s is Sheet.CashOut) { CashOutSheet(store, s.inflow); return }
     when (s) {
         is Sheet.LineActions -> { LineActionsSheet(store, s); return }
         Sheet.OrderActions -> { OrderActionsSheet(store); return }
         Sheet.Split -> { SplitSheet(store); return }
-        Sheet.Discount -> { DiscountSheet(store); return }
+        is Sheet.Discount -> { DiscountSheet(store, s); return }
         else -> Unit
     }
     Column(Modifier.statusBarsPadding().navigationBarsPadding().padding(24.dp).verticalScroll(rememberScrollState())) {
         when (s) {
             is Sheet.Pax -> PaxSheet(store, s)
             is Sheet.Modifier -> Unit
-            is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, Sheet.Discount -> Unit
+            is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, is Sheet.Discount -> Unit
+            is Sheet.Refund -> RefundDialog(store, s)
             is Sheet.Void -> VoidDialog(store, s)
             is Sheet.Override -> OverrideDialog(store, s)
+            is Sheet.SoldOut -> SoldOutDialog(store, s)
             Sheet.Edc -> EdcDialog(store)
             Sheet.QrisRecord -> QrisRecordDialog(store)
             is Sheet.QrisVerify -> QrisVerifyDialog(store, s)
             is Sheet.Receipt -> ReceiptDialog(store, s)
-            Sheet.CashOut -> Unit
+            is Sheet.CashOut -> Unit
             is Sheet.Confirm -> ConfirmDialog(store, s)
         }
     }
@@ -128,7 +131,8 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
     var note by remember { mutableStateOf("") }
     var qty by remember { mutableIntStateOf(1) }
     var firstMissing by remember { mutableStateOf<String?>(null) }
-    val groups = p.groups.mapNotNull { PosCatalog.groups[it] }
+    val catalogGroups = store.menu?.groups.orEmpty()
+    val groups = p.groups.mapNotNull { catalogGroups[it] }
     val chosen = groups.flatMap { picks[it.id].orEmpty() }
     val unit = p.price + chosen.sumOf { it.delta }
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
@@ -169,7 +173,7 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Column(Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
-            firstMissing?.let { id -> Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error); Spacer(Modifier.width(8.dp)); Text("Pilih ${PosCatalog.groups[id]?.name?.lowercase()} dulu.", color = MaterialTheme.colorScheme.error, fontSize = 14.sp) } }
+            firstMissing?.let { id -> Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error); Spacer(Modifier.width(8.dp)); Text("Pilih ${catalogGroups[id]?.name?.lowercase()} dulu.", color = MaterialTheme.colorScheme.error, fontSize = 14.sp) } }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 QtyStepper(qty, { if (qty > 1) qty-- }, { qty++ }, Modifier.height(56.dp))
                 Spacer(Modifier.width(14.dp))
@@ -187,7 +191,6 @@ private fun LineActionsSheet(store: PosStore, s: Sheet.LineActions) {
     val l = store.active?.lines?.firstOrNull { it.id == s.lineId } ?: run { store.show(null); return }
     var qty by remember { mutableIntStateOf(l.qty) }
     var note by remember { mutableStateOf(l.note) }
-    var disc by remember { mutableIntStateOf(l.discPct) }
     val sub = (if (l.mods.isNotEmpty()) l.modLabel + " · " else "") + rp(l.unit)
     if (l.fired) {
         SheetScaffold(l.name, "$sub · sudah dikirim ke dapur", { store.show(null) }, footer = {
@@ -198,22 +201,15 @@ private fun LineActionsSheet(store: PosStore, s: Sheet.LineActions) {
     SheetScaffold(l.name, sub, { store.show(null) }, footer = {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedPill("Hapus", { store.removeLine(l.id) }, Modifier.weight(1f).height(56.dp), icon = Icons.Filled.Delete, danger = true)
-            PrimaryPill("Simpan", { store.saveLine(l.id, qty, note, disc) }, Modifier.weight(1.5f))
+            PrimaryPill("Simpan", { store.saveLine(l.id, qty, note) }, Modifier.weight(1.5f))
         }
     }) {
         Row(verticalAlignment = Alignment.CenterVertically) { Text("Jumlah", Modifier.weight(1f), fontSize = 18.sp); QtyStepper(qty, { if (qty > 1) qty-- }, { qty++ }, Modifier.height(56.dp)) }
         SectionLabel("Catatan", Modifier.padding(top = 18.dp, bottom = 8.dp, start = 4.dp))
         OutlinedTextField(note, { if (it.length <= 100) note = it }, Modifier.fillMaxWidth(), shape = RoundedCornerShape(8.dp))
         Text("${note.length}/100", Modifier.fillMaxWidth().padding(top = 4.dp), fontSize = 13.sp, textAlign = TextAlign.End, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("Diskon item", Modifier.padding(top = 14.dp, bottom = 10.dp), fontSize = 18.sp, fontWeight = FontWeight.Medium)
-        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            (listOf(0 to "Tanpa") + PosCatalog.discountPresets.map { it.pct to "${it.label} ${it.pct}%" }).forEach { (v, t) ->
-                Surface(onClick = { disc = v }, shape = RoundedCornerShape(10.dp), color = if (disc == v) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, border = BorderStroke(1.dp, if (disc == v) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline)) {
-                    Text(t, Modifier.padding(horizontal = 16.dp, vertical = 12.dp), fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
+        Spacer(Modifier.height(14.dp))
+        OutlinedPill("Diskon item…", { store.show(Sheet.Discount(l.id)) }, Modifier.fillMaxWidth().height(52.dp), icon = Icons.Filled.Percent)
     }
 }
 
@@ -231,31 +227,40 @@ private fun OrderActionsSheet(store: PosStore) {
     val o = store.active ?: return
     SheetScaffold(o.label, "Aksi order", { store.show(null) }) {
         ActionRow(Icons.Filled.Receipt, "Cetak pre-bill", "Tagihan sementara dengan tanda BELUM LUNAS") { store.printPrebill() }
-        ActionRow(Icons.Filled.Percent, "Diskon order", "Pilih preset diskon beralasan") { store.show(Sheet.Discount) }
+        ActionRow(Icons.Filled.Percent, "Diskon order", "Alasan dan persentase dari server") { store.show(Sheet.Discount()) }
         ActionRow(Icons.Filled.CallSplit, "Bagi bill", "Per item atau rata per orang") { store.show(Sheet.Split) }
         ActionRow(Icons.Filled.Cancel, "Batalkan order", "Perlu alasan", danger = true) { store.show(Sheet.Void(null)) }
     }
 }
 
 @Composable
-private fun DiscountSheet(store: PosStore) {
+private fun DiscountSheet(store: PosStore, s: Sheet.Discount) {
     val o = store.active ?: return
-    val limit = PosCatalog.discountLimit[store.user?.code] ?: 0
-    SheetScaffold("Diskon order", "${o.label} · subtotal ${rp(o.gross)}", { store.show(null) }) {
-        PosCatalog.discountPresets.forEach { d ->
-            Surface(modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest, border = BorderStroke(if (o.discPct == d.pct) 2.dp else 1.dp, if (o.discPct == d.pct) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline), onClick = { store.applyOrderDiscount(d) }) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(Modifier.size(width = 96.dp, height = 78.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer) { Box(contentAlignment = Alignment.Center) { Text("${d.pct}%", fontSize = 26.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onPrimaryContainer) } }
-                    Column(Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                        Text(d.label, fontWeight = FontWeight.Medium, fontSize = 20.sp)
-                        Text("Alasan tercatat: ${d.reason}" + if (d.pct > limit) " · perlu persetujuan" else "", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (d.pct > limit) Icon(Icons.Filled.Lock, "Perlu persetujuan", Modifier.size(22.dp))
-                }
-            }
+    val line = s.lineId?.let { id -> o.lines.firstOrNull { it.id == id } }
+    var percent by remember(s) { mutableIntStateOf(10) }
+    var reason by remember(s) { mutableStateOf<ReasonCode?>(null) }
+    LaunchedEffect(s) { store.loadDiscountReasons() }
+    val title = if (line == null) "Diskon order" else "Diskon item"
+    val sub = if (line == null) "${o.label} · subtotal ${rp(o.gross)}" else "${line.qty}× ${line.name} · ${rp(line.net)}"
+    SheetScaffold(title, sub, { store.show(null) }, footer = {
+        PrimaryPill("Terapkan diskon", { reason?.let { r -> store.applyDiscount(percent.toDouble(), r, s.lineId) } }, Modifier.fillMaxWidth(), enabled = reason != null)
+    }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Potongan", Modifier.weight(1f), fontSize = 18.sp)
+            QtyStepper(percent, { if (percent > 1) percent-- }, { if (percent < 100) percent++ }, Modifier.height(56.dp))
         }
-        if (o.discPct > 0) TextButton({ store.applyOrderDiscount(null) }) { Text("Hapus diskon order") }
-        Text("Batas diskon per peran mengikuti PRD §8.4 (nilai contoh).", Modifier.padding(top = 4.dp, start = 4.dp), fontSize = 15.sp)
+        Text("$percent%", Modifier.padding(top = 4.dp, bottom = 8.dp), fontSize = 24.sp)
+        SectionLabel("Alasan", Modifier.padding(top = 10.dp, bottom = 8.dp, start = 4.dp))
+        when (val r = store.discountReasons) {
+            is Load.Ready -> if (r.value.isEmpty()) {
+                // Tanpa daftar dari server, diskon tidak diterapkan (alasan tidak dikarang di klien).
+                Text("Server belum punya alasan diskon aktif (kategori discount). Diskon belum bisa diterapkan dari sini.", color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
+            } else r.value.forEach { ra -> RadioRow(ra.label, reason?.id == ra.id, { reason = ra }, big = true) }
+            is Load.Failed -> ErrorState(r.error.message, { store.loadDiscountReasons() }, Modifier.fillMaxWidth())
+            else -> Text("Memuat alasan…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (line == null && (o.serverDiscount ?: 0) > 0) TextButton({ store.clearOrderDiscount() }) { Text("Hapus diskon order") }
+        Text("Batas diskon per peran ditentukan server; di atas batas diminta persetujuan. Total yang tampil dari server.", Modifier.padding(top = 10.dp), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -265,22 +270,70 @@ private fun SplitSheet(store: PosStore) {
     var equal by remember { mutableStateOf(false) }
     var parts by remember { mutableIntStateOf(2) }
     val picked = remember { mutableStateListOf<Int>() }
+    // Angka dari server (bagian dan sisa); tidak pernah dihitung ulang di klien.
+    val equalResult = (store.splitResult as? Load.Ready)?.value
+    val itemResult = (store.itemSplitResult as? Load.Ready)?.value
+    val busy = store.splitResult is Load.Loading || store.itemSplitResult is Load.Loading
     SheetScaffold("Bagi bill", "${o.label} · total ${rp(o.total)}", { store.show(null) }, footer = {
-        if (!equal) PrimaryPill("Pindahkan ${picked.size} item ke bill baru", { store.splitByItem(picked.toSet()) }, Modifier.fillMaxWidth(), enabled = picked.isNotEmpty())
-        else PrimaryPill("Lanjut ke pembayaran", { store.show(null); store.goPay() }, Modifier.fillMaxWidth())
+        if (!equal) {
+            if (itemResult == null) PrimaryPill("Bayar ${picked.size} item tunai", { store.splitByItem(picked.toSet()) }, Modifier.fillMaxWidth(), enabled = picked.isNotEmpty() && !busy)
+            else PrimaryPill("Selesai", { store.show(null) }, Modifier.fillMaxWidth())
+        } else if (equalResult == null) PrimaryPill("Bagi rata $parts orang", { store.splitEqual(parts) }, Modifier.fillMaxWidth(), enabled = !busy)
+        else PrimaryPill("Selesai", { store.show(null) }, Modifier.fillMaxWidth())
     }) {
         Segmented(listOf("Per item", "Rata"), if (equal) 1 else 0) { equal = it == 1 }
         if (!equal) {
-            Text("Pilih item yang dipindah ke bill baru.", Modifier.padding(top = 14.dp, bottom = 8.dp), fontSize = 16.sp)
-            o.live.forEach { l ->
-                Row(Modifier.fillMaxWidth().clickable { if (l.id in picked) picked.remove(l.id) else picked.add(l.id) }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(l.id in picked, null); Text("${l.qty}× ${l.name}", Modifier.weight(1f).padding(start = 14.dp), fontSize = 18.sp); Text(num(l.net), fontSize = 18.sp)
+            if (itemResult == null) {
+                Text("Pilih item yang dipindah ke bill baru, lalu bayar bagian itu.", Modifier.padding(top = 14.dp, bottom = 8.dp), fontSize = 16.sp)
+                o.live.forEach { l ->
+                    Row(Modifier.fillMaxWidth().clickable { if (l.id in picked) picked.remove(l.id) else picked.add(l.id) }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(l.id in picked, null); Text("${l.qty}× ${l.name}", Modifier.weight(1f).padding(start = 14.dp), fontSize = 18.sp); Text(num(l.net), fontSize = 18.sp)
+                    }
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Bagian dibayar", Modifier.weight(1f), fontSize = 18.sp); Text(rp(itemResult.paid.total), fontSize = 18.sp)
+                }
+                Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Sisa bill", Modifier.weight(1f), fontSize = 18.sp); Text(rp(itemResult.remaining.total), fontSize = 18.sp)
                 }
             }
-        } else {
+        } else if (equalResult == null) {
             Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.CenterVertically) { Text("Jumlah orang", Modifier.weight(1f), fontSize = 18.sp); QtyStepper(parts, { if (parts > 2) parts-- }, { if (parts < 5) parts++ }, Modifier.height(56.dp)) }
-            Text("${rp(kotlin.math.ceil(o.total / parts.toDouble()).toInt())} / orang", Modifier.padding(vertical = 12.dp), fontSize = 24.sp)
-            Text("Setiap orang membayar bagiannya di layar bayar.", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Jumlah tiap bagian ditentukan server. Tidak ada pembayaran di tahap ini.", Modifier.padding(top = 12.dp), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Text("${equalResult.size} bagian dari server", Modifier.padding(top = 14.dp, bottom = 8.dp), fontSize = 18.sp)
+            equalResult.forEach { p ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Bagian ${p.index}", Modifier.weight(1f), fontSize = 18.sp); Text(rp(p.amount), fontSize = 18.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.RefundDialog(store: PosStore, s: Sheet.Refund) {
+    var reason by remember(s) { mutableStateOf<ReasonCode?>(null) }
+    var note by remember(s) { mutableStateOf("") }
+    LaunchedEffect(s) { store.loadRefundReasons() }
+    Icon(Icons.Filled.WarningAmber, null, Modifier.align(Alignment.CenterHorizontally).size(36.dp), tint = MaterialTheme.colorScheme.primary)
+    Text("Refund order penuh?", Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp, bottom = 6.dp), fontSize = 26.sp)
+    Text("Stok dikembalikan dan kas tunai shift dibalik. Hanya untuk order yang sudah lunas.", Modifier.padding(bottom = 10.dp), fontSize = 16.sp)
+    when (val r = store.refundReasons) {
+        is Load.Ready -> if (r.value.isEmpty()) {
+            Text("Server belum punya alasan refund aktif (kategori refund). Refund belum bisa diproses dari sini.", color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
+        } else r.value.forEach { ra -> RadioRow(ra.label, reason?.id == ra.id, { reason = ra }, big = true) }
+        is Load.Failed -> ErrorState(r.error.message, { store.loadRefundReasons() }, Modifier.fillMaxWidth())
+        else -> Text("Memuat alasan…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    OutlinedTextField(note, { if (it.length <= 200) note = it }, Modifier.fillMaxWidth().padding(top = 10.dp), shape = RoundedCornerShape(8.dp), label = { Text("Catatan (opsional)") })
+    Spacer(Modifier.height(16.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+        TextButton({ store.show(null) }) { Text("Batal", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
+        Spacer(Modifier.width(12.dp))
+        Button({ reason?.let { r -> store.refundOrder(s.orderId, r, note) } }, Modifier.height(52.dp), enabled = reason != null) {
+            Text("Refund", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
         }
     }
 }
@@ -311,32 +364,79 @@ private fun ColumnScope.VoidDialog(store: PosStore, s: Sheet.Void) {
 }
 
 @Composable
+private fun ColumnScope.SoldOutDialog(store: PosStore, s: Sheet.SoldOut) {
+    var reason by remember(s) { mutableStateOf<ReasonCode?>(null) }
+    Icon(Icons.Filled.WarningAmber, null, Modifier.align(Alignment.CenterHorizontally).size(36.dp), tint = MaterialTheme.colorScheme.primary)
+    Text("Tandai ${s.product.name} habis?", Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp, bottom = 6.dp), fontSize = 26.sp)
+    Text("Pilih alasan. Item tidak bisa dipesan sampai dibuka lagi.", Modifier.padding(bottom = 10.dp), fontSize = 16.sp)
+    when (val r = store.soldOutReasons) {
+        is Load.Ready -> if (r.value.isEmpty()) {
+            // Tidak ada alasan di server: item TIDAK ditandai habis (tidak ada id yang dikarang).
+            Text("Server belum punya alasan 86 aktif (kategori sold_out). Item tidak bisa ditandai habis dari sini.", color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
+        } else {
+            r.value.forEach { ra -> RadioRow(ra.label, reason?.id == ra.id, { reason = ra }, big = true) }
+        }
+        is Load.Failed -> ErrorState(r.error.message, { store.loadSoldOutReasons() }, Modifier.fillMaxWidth())
+        else -> Text("Memuat alasan…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Spacer(Modifier.height(16.dp))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+        TextButton({ store.show(null) }) { Text("Batal", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
+        Spacer(Modifier.width(12.dp))
+        Button({ reason?.let { store.confirmSoldOut(s.product, it.id) } }, Modifier.height(52.dp), enabled = reason != null) {
+            Text("Tandai habis", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+        }
+    }
+}
+
+@Composable
 private fun ColumnScope.OverrideDialog(store: PosStore, s: Sheet.Override) {
     val me = store.user
-    val approvers = PosCatalog.users.filter { it.isSupervisor && it.id != me?.id }
-    var who by remember { mutableStateOf(approvers.firstOrNull()) }
-    var pin by remember { mutableStateOf("") }
-    var err by remember { mutableStateOf<String?>(null) }
+    var who by remember(s) { mutableStateOf<Approver?>(null) }
+    var pin by remember(s) { mutableStateOf("") }
+    var err by remember(s) { mutableStateOf<String?>(null) }
+    var busy by remember(s) { mutableStateOf(false) }
+    LaunchedEffect(s.action) { store.loadApprovers(s.action) }
+    val loaded = (store.approvers as? Load.Ready)?.value.orEmpty()
+    // Penyetuju pertama dipilih otomatis; pilihan yang sudah tak ada di daftar dibuang.
+    LaunchedEffect(loaded) { if (loaded.none { it.id == who?.id }) who = loaded.firstOrNull() }
     Icon(Icons.Filled.VerifiedUser, null, Modifier.align(Alignment.CenterHorizontally).size(40.dp), tint = MaterialTheme.colorScheme.primary)
     Text("Perlu persetujuan", Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp, bottom = 10.dp), fontSize = 28.sp)
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest) { Text("${s.summary}. Diminta oleh ${me?.name}.", Modifier.padding(14.dp), fontSize = 15.sp) }
-    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
-        approvers.forEach { a ->
-            val on = who == a
-            Surface(onClick = { who = a; pin = ""; err = null }, shape = RoundedCornerShape(50), color = if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
-                Row(Modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(Modifier.size(38.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) { Box(contentAlignment = Alignment.Center) { Text(a.name, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onTertiaryContainer) } }
-                    Text(a.role, Modifier.padding(start = 10.dp, end = 12.dp), fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+    when (val a = store.approvers) {
+        is Load.Ready -> if (a.value.isEmpty()) {
+            Text("Tidak ada penyetuju yang memenuhi syarat untuk aksi ini.", Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.error)
+        } else {
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
+                a.value.forEach { ap ->
+                    val on = who?.id == ap.id
+                    Surface(onClick = { who = ap; pin = ""; err = null }, shape = RoundedCornerShape(50), color = if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
+                        Row(Modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Surface(Modifier.size(38.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) { Box(contentAlignment = Alignment.Center) { Text(ap.name.take(2).uppercase(), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onTertiaryContainer) } }
+                            Column(Modifier.padding(start = 10.dp, end = 12.dp)) {
+                                Text(ap.name, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                                Text(ap.role, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
                 }
             }
         }
+        is Load.Failed -> ErrorState(a.error.message, { store.loadApprovers(s.action) }, Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        else -> Text("Memuat penyetuju…", Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+    Row(Modifier.fillMaxWidth().height(22.dp), horizontalArrangement = Arrangement.Center) { err?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp) } }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)) { repeat(6) { i -> Box(Modifier.size(15.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (i < pin.length) MaterialTheme.colorScheme.onSurface else Color.Transparent).border(1.5.dp, if (i < pin.length) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, androidx.compose.foundation.shape.CircleShape)) } }
-    Box(Modifier.height(22.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { err?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp) } }
-    Keypad({ d -> if (pin.length < 6) { pin += d; if (pin.length == 6) { err = who?.let { store.approve(pin, it) }; pin = "" } } }, { pin = pin.dropLast(1) }, Modifier.fillMaxWidth(), keyHeight = 50.dp, light = true)
+    Keypad({ d -> if (pin.length < 6 && !busy) pin += d }, { pin = pin.dropLast(1) }, Modifier.fillMaxWidth(), keyHeight = 50.dp, light = true)
     Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(if (store.conn == com.warkop.pos.state.Conn.ONLINE) "Persetujuan berlaku untuk aksi ini saja dan dicatat." else "Offline: diverifikasi dengan data PIN tersimpan, batas offline berlaku.", Modifier.weight(1f), fontSize = 15.sp)
+        Text("Persetujuan berlaku untuk satu aksi ini saja dan dicatat.", Modifier.weight(1f), fontSize = 15.sp)
         TextButton({ store.show(null) }) { Text("Batal", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
+        Button(onClick = {
+            val approver = who ?: return@Button
+            val secret = pin
+            pin = ""; err = null; busy = true
+            store.requestOverride(s, approver.id, secret) { msg -> busy = false; err = msg }
+        }, enabled = who != null && pin.length == 6 && !busy) { Text("Setujui", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
     }
 }
 
@@ -345,17 +445,40 @@ private fun ColumnScope.EdcDialog(store: PosStore) {
     val o = store.active ?: return
     var code by remember { mutableStateOf("") }
     var err by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf<BankChannel?>(null) }
+    LaunchedEffect(Unit) { store.loadEdcBanks() }
+    val banks = (store.edcBanks as? Load.Ready)?.value.orEmpty()
+    // Satu bank: dipilih otomatis. Lebih dari satu: kasir memilih dulu; kode approval baru bisa diisi setelah itu.
+    val bank = if (banks.size == 1) banks.single() else picked?.takeIf { p -> banks.any { it.id == p.id } }
     Icon(Icons.Filled.CreditCard, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-    Text("EDC BCA", Modifier.padding(top = 10.dp), fontSize = 30.sp)
+    Text("EDC", Modifier.padding(top = 10.dp), fontSize = 30.sp)
     Text("Masukkan nominal ini di mesin EDC", Modifier.padding(top = 18.dp), fontSize = 17.sp)
     Text(rp(o.remaining), Modifier.padding(vertical = 6.dp), fontSize = 56.sp, fontWeight = FontWeight.Light)
-    SectionLabel("Kode approval dari slip EDC", Modifier.padding(start = 8.dp, top = 10.dp, bottom = 6.dp))
-    OutlinedTextField(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(12); err = false }, Modifier.fillMaxWidth(), isError = err, singleLine = true, shape = RoundedCornerShape(8.dp),
-        supportingText = { Text(if (err) "Kode approval 6-12 huruf atau angka." else "Nomor kartu tidak pernah dicatat di aplikasi.") })
+    when (val loaded = store.edcBanks) {
+        is Load.Failed -> ErrorState(loaded.error.message, { store.loadEdcBanks() }, Modifier.fillMaxWidth())
+        is Load.Ready -> if (loaded.value.isEmpty()) {
+            // Tanpa kanal bank di server, pembayaran EDC tidak dikirim (tidak ada channel_id yang dikarang).
+            Text("Server belum punya kanal bank (bank_transfer). Pembayaran EDC tidak bisa dicatat dari sini.", color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
+        } else {
+            if (banks.size > 1) {
+                SectionLabel("Bank mesin EDC", Modifier.padding(start = 8.dp, top = 10.dp, bottom = 6.dp))
+                banks.forEach { b -> RadioRow(b.name, bank?.id == b.id, { picked = b }, big = true) }
+            }
+            if (bank != null) {
+                SectionLabel("Kode approval dari slip EDC", Modifier.padding(start = 8.dp, top = 10.dp, bottom = 6.dp))
+                OutlinedTextField(code, { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(12); err = false }, Modifier.fillMaxWidth(), isError = err, singleLine = true, shape = RoundedCornerShape(8.dp),
+                    supportingText = { Text(if (err) "Kode approval 6-12 huruf atau angka." else "Nomor kartu tidak pernah dicatat di aplikasi.") })
+            } else Text("Pilih bank mesin EDC dulu, lalu isi kode approval.", Modifier.padding(top = 10.dp), fontSize = 15.sp)
+        }
+        else -> Text("Memuat bank…", Modifier.padding(top = 10.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     Spacer(Modifier.height(14.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
         TextButton({ store.show(null) }) { Text("Batal", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }; Spacer(Modifier.width(12.dp))
-        Button({ if (code.length in 6..12) store.payEdc(code) else err = true }, Modifier.height(52.dp)) { Text("Simpan pembayaran", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
+        Button({
+            val b = bank ?: return@Button
+            if (code.length in 6..12) store.payEdc(b.id, code) else err = true
+        }, Modifier.height(52.dp), enabled = bank != null) { Text("Simpan pembayaran", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
     }
 }
 
@@ -363,14 +486,14 @@ private fun ColumnScope.EdcDialog(store: PosStore) {
 private fun ColumnScope.QrisRecordDialog(store: PosStore) {
     val o = store.active ?: return
     Icon(Icons.Filled.QrCode2, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-    Text("QRIS GoPay (statis)", Modifier.padding(top = 10.dp, bottom = 16.dp), fontSize = 30.sp)
+    Text("${store.qrisLabel} (statis)", Modifier.padding(top = 10.dp, bottom = 16.dp), fontSize = 30.sp)
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Text("Jangan terima bukti dari layar ponsel pelanggan.", fontWeight = FontWeight.Medium, fontSize = 16.sp) }
     }
     Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.Top) {
         Surface(Modifier.width(210.dp), shape = RoundedCornerShape(14.dp), color = Color.White, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
             Column {
-                Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(horizontal = 14.dp, vertical = 10.dp)) { Text("QRIS · GoPay", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
+                Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(store.qrisLabel, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
                 Icon(Icons.Filled.QrCode2, null, Modifier.padding(10.dp).fillMaxWidth().aspectRatio(1f), tint = Color(0xFF201E1D))
                 Text("WARKOP WJM 3 · NMID ID10••••", Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp), fontSize = 12.sp, color = Color(0xFF201E1D))
             }
@@ -378,7 +501,7 @@ private fun ColumnScope.QrisRecordDialog(store: PosStore) {
         Column(Modifier.weight(1f).padding(start = 20.dp, top = 30.dp)) {
             Text("Standee QRIS statis di meja kasir", fontSize = 14.sp)
             Text(rp(o.remaining), Modifier.padding(vertical = 6.dp), fontSize = 40.sp, fontWeight = FontWeight.Light)
-            Text("Catat sebagai menunggu verifikasi, lalu cek aplikasi GoPay Merchant.", fontSize = 16.sp)
+            Text("Catat sebagai menunggu verifikasi, lalu cek transaksi di aplikasi ${store.qrisLabel}.", fontSize = 16.sp)
         }
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
@@ -396,7 +519,7 @@ private fun ColumnScope.QrisVerifyDialog(store: PosStore, s: Sheet.QrisVerify) {
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Text("Jangan terima bukti dari layar ponsel pelanggan.", fontWeight = FontWeight.Medium, fontSize = 16.sp) }
     }
-    Text(androidx.compose.ui.text.buildAnnotatedString { append("Cek transaksi "); pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)); append(rp(t.amount)); pop(); append(" di aplikasi GoPay Merchant, lalu masukkan referensinya.") }, Modifier.padding(vertical = 14.dp), fontSize = 17.sp)
+    Text(androidx.compose.ui.text.buildAnnotatedString { append("Cek transaksi "); pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)); append(rp(t.amount)); pop(); append(" di aplikasi ${store.qrisLabel}, lalu masukkan referensinya.") }, Modifier.padding(vertical = 14.dp), fontSize = 17.sp)
     SectionLabel("Referensi transaksi", Modifier.padding(start = 8.dp, bottom = 6.dp))
     OutlinedTextField(ref, { ref = it }, Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))
     Spacer(Modifier.height(14.dp))
@@ -417,58 +540,86 @@ private fun ColumnScope.ConfirmDialog(store: PosStore, s: Sheet.Confirm) {
 }
 
 @Composable
-private fun CashOutSheet(store: PosStore) {
-    var inflow by remember { mutableStateOf(false) }
+private fun CashOutSheet(store: PosStore, startInflow: Boolean) {
+    // Kode alasan dikirim ke server apa adanya (CashMovement::REASONS); label hanya untuk layar.
+    var inflow by remember(startInflow) { mutableStateOf(startInflow) }
     var reason by remember { mutableStateOf<String?>(null) }
+    var note by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     val value = amount.toIntOrNull() ?: 0
     val reasons = if (inflow) PosCatalog.cashInReasons else PosCatalog.cashOutReasons
+    val threshold = store.limits?.cashOutThreshold
+    val needsNote = reason == "other"
+    val canSave = reason != null && value > 0 && (!needsNote || note.isNotBlank())
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 20.dp)) {
-            Title("Kas ${if (inflow) "masuk" else "keluar"}", "Dicatat ke Shift 1 · ${store.user?.name}", { store.show(null) })
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { FilterChip(inflow, { inflow = true; reason = null }, { Text("Kas masuk") }, shape = RoundedCornerShape(50)); FilterChip(!inflow, { inflow = false; reason = null }, { Text("Kas keluar") }, shape = RoundedCornerShape(50)) }
+            Title("Kas ${if (inflow) "masuk" else "keluar"}", "Dicatat ke shift · ${store.user?.name}", { store.show(null) })
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(inflow, { inflow = true; reason = null }, { Text("Kas masuk") }, shape = RoundedCornerShape(50))
+                FilterChip(!inflow, { inflow = false; reason = null }, { Text("Kas keluar") }, shape = RoundedCornerShape(50))
+            }
             SectionLabel("Alasan", Modifier.padding(top = 12.dp, bottom = 2.dp))
-            reasons.forEach { r -> RadioRow(r, reason == r, { reason = r }) }
+            reasons.forEach { (code, label) -> RadioRow(label, reason == code, { reason = code }) }
+            if (needsNote) {
+                OutlinedTextField(note, { note = it.take(200) }, Modifier.fillMaxWidth().padding(top = 8.dp), singleLine = true,
+                    label = { Text("Catatan (wajib)") }, shape = RoundedCornerShape(8.dp))
+            }
             Text(rp(value), Modifier.fillMaxWidth().padding(vertical = 6.dp), fontSize = 30.sp, textAlign = TextAlign.End, fontWeight = FontWeight.Light)
-            if (!inflow && value > PosCatalog.CASH_OUT_THRESHOLD) Text("Di atas Rp 200.000: perlu persetujuan Supervisor.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
+            // Batas dari server. Bila belum terbaca, tidak ada angka tebakan; server tetap menolak di atas ambang.
+            if (!inflow && threshold != null && value > threshold) {
+                Text("Di atas ${rp(threshold)}: perlu persetujuan. Persetujuan belum tersedia di aplikasi ini.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
+            } else if (!inflow && threshold == null) {
+                Text("Kas keluar di atas batas server perlu persetujuan.", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
+            }
             Keypad({ d -> if (amount.length < 9) amount = (amount + d).trimStart('0') }, { amount = amount.dropLast(1) }, Modifier.fillMaxWidth(), extraKey = "000", keyHeight = 40.dp, shape = RoundedCornerShape(12.dp))
             Spacer(Modifier.height(12.dp))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        PrimaryPill("Simpan", { reason?.let { store.cashMove(inflow, it, value) } }, Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), enabled = reason != null && value > 0)
+        PrimaryPill("Simpan", { reason?.let { store.cashMove(inflow, it, note.takeIf { _ -> needsNote }?.trim(), value) } }, Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), enabled = canSave)
     }
 }
 
 @Composable
 private fun ColumnScope.ReceiptDialog(store: PosStore, s: Sheet.Receipt) {
-    val o = store.orders.firstOrNull { it.id == s.orderId } ?: return
+    // T038: struk dari server (GET /orders/{id}/receipt). Tidak ada angka dari daftar order lokal.
+    LaunchedEffect(s.orderId) { store.loadReceipt(s.orderId) }
+    when (val r = store.receipts[s.orderId] ?: Load.Idle) {
+        is Load.Ready -> ReceiptPaper(r.value)
+        is Load.Failed -> ErrorState(friendlyLoadError(r.error), { store.loadReceipt(s.orderId) }, Modifier.fillMaxWidth(), offline = isOfflineError(r.error))
+        else -> Text("Memuat struk…", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ReceiptPaper(r: com.warkop.pos.model.ReceiptView) {
     val mono = androidx.compose.ui.text.font.FontFamily.Monospace
     val ink = Color(0xFF201E1D)
-    @Composable fun Line(l: String, r: String, bold: Boolean = false, size: Int = 15) {
+    @Composable fun Line(l: String, rightText: String, bold: Boolean = false, size: Int = 15) {
         Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
             Text(l, Modifier.weight(1f), fontFamily = mono, fontSize = size.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, color = ink)
-            Text(r, fontFamily = mono, fontSize = size.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, color = ink)
+            Text(rightText, fontFamily = mono, fontSize = size.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, color = ink)
         }
     }
     @Composable fun Dash() = Text("- ".repeat(26).trim(), fontFamily = mono, fontSize = 14.sp, color = ink, maxLines = 1, modifier = Modifier.padding(vertical = 6.dp))
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = Color.White) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-            if (o.reprints > 0) Box(Modifier.border(2.dp, ink).padding(horizontal = 12.dp, vertical = 6.dp)) { Text("SALINAN ${o.reprints}", fontFamily = mono, fontWeight = FontWeight.Bold, color = ink, fontSize = 16.sp) }
-            Text("WARKOP WJM 3", Modifier.padding(top = 10.dp), fontFamily = mono, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = ink)
-            Text("Kab. Bogor", Modifier.padding(top = 6.dp), fontFamily = mono, fontSize = 15.sp, color = ink)
+            if (r.copyNo > 1) Box(Modifier.border(2.dp, ink).padding(horizontal = 12.dp, vertical = 6.dp)) { Text("SALINAN ${r.copyNo}", fontFamily = mono, fontWeight = FontWeight.Bold, color = ink, fontSize = 16.sp) }
+            Text(r.storeName.uppercase(), Modifier.padding(top = 10.dp), fontFamily = mono, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = ink)
+            r.storeAddress?.let { Text(it, Modifier.padding(top = 6.dp), fontFamily = mono, fontSize = 15.sp, color = ink) }
             Dash()
-            Text(o.receiptNo ?: "—", fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 1.dp))
-            Text("31/10/2026 ${o.closedAt ?: ""} · Kasir ${o.waiter}", fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
-            Text(o.label + (o.queue?.let { " · Antrean $it" } ?: ""), fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
+            Text(r.receiptNo ?: r.orderNumber, fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 1.dp))
+            Text(listOfNotNull(r.paidAtText, r.cashier?.let { "Kasir $it" }).joinToString(" · "), fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
+            r.queueNo?.let { Text("Antrean $it", fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp)) }
             Dash()
-            o.live.forEach { l -> Line("${l.qty}× ${l.name}", num(l.net)); if (l.mods.isNotEmpty()) Text("  " + l.modLabel, fontFamily = mono, fontSize = 13.sp, color = Color(0xFF605D5D)) }
+            r.items.forEach { l -> Line("${l.qty}× ${l.name}", rp(l.lineTotal)) }
             Dash()
-            Line("Subtotal", num(o.gross)); if (o.discount > 0) Line("Diskon", "-" + num(o.discount)); Line("Pajak 10%", num(o.tax)); Line("TOTAL", num(o.total), bold = true, size = 17)
-            o.tenders.filter { it.status == com.warkop.pos.model.TenderStatus.OK }.forEach { Line(it.method.label + (it.ref?.let { r -> " · $r" } ?: ""), num(it.received ?: it.amount)) }
-            val change = o.tenders.sumOf { (it.received ?: it.amount) - it.amount }
-            if (change > 0) Line("Kembalian", num(change))
-            Text("Terima kasih", Modifier.padding(top = 10.dp), fontFamily = mono, fontSize = 14.sp, color = ink)
+            Line("Subtotal", rp(r.subtotal))
+            if (r.discount > 0) Line("Diskon", "-" + rp(r.discount))
+            Line("${r.taxLabel} ${r.taxRatePercent}%", rp(r.tax))
+            Line("TOTAL", rp(r.total), bold = true, size = 17)
+            r.payments.forEach { (method, amount) -> Line(method, rp(amount)) }
+            if (r.change > 0) Line("Kembali", rp(r.change))
+            Text("Terima kasih", Modifier.padding(top = 14.dp), fontFamily = mono, fontSize = 15.sp, color = ink)
         }
     }
-    TextButton({ store.show(null) }, Modifier.align(Alignment.End)) { Text("Tutup", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
 }

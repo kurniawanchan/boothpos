@@ -39,7 +39,7 @@ class TabLineController extends Controller
     public function destroy(CancelTabLineRequest $request, Order $order, int $item): JsonResponse
     {
         return $this->guarded(
-            fn () => new TabResource($this->tabs->removeLine($order, $item, $request->user(), $request->validated('reason'))),
+            fn () => new TabResource($this->tabs->removeLine($order, $item, $request->user(), $request->validated(), $request->validated('override_token'))),
         );
     }
 }

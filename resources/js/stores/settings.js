@@ -38,6 +38,10 @@ export const useSettingsStore = defineStore('settings', {
     // 043 — pembulatan bawaan ubah harga massal ('none' | '500'); hanya nilai awal saklar di drawer, server tetap
     // menghitung ulang dan memvalidasi.
     priceRoundingDefault: '500',
+    // 048 — tarif pajak eksklusif (persen) dan label di struk/keranjang. Hanya untuk MENAMPILKAN pratinjau keranjang;
+    // server tetap menghitung pajak sebenarnya saat order dibuat. Bawaan 0 = tanpa pajak.
+    taxRate: 0,
+    taxLabel: '',
     loaded: false,
   }),
   getters: {
@@ -62,6 +66,8 @@ export const useSettingsStore = defineStore('settings', {
         this.schemaUpdateRequired = data.schema_update_required === true;
         this.menuReleaseEnabled = data.menu_release_enabled === true;
         this.priceRoundingDefault = data.price_rounding_default === 'none' ? 'none' : '500';
+        this.taxRate = Number(data.tax_rate) || 0;
+        this.taxLabel = data.tax_label ?? '';
         applyThemeAccentColor(this.themeAccentColor);
       } finally {
         this.loaded = true;

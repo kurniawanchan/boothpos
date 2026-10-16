@@ -5,12 +5,52 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.warkop.core.domain.ApiError
+import com.warkop.pos.data.PosBackend
+import com.warkop.pos.data.PosSession
+import com.warkop.pos.data.RemoteBackend
+import com.warkop.pos.data.TerminalConfig
 import com.warkop.pos.model.*
+import com.warkop.core.network.IntentKeys
+import com.warkop.core.network.retryNetwork
+import com.warkop.pos.data.OrderMapper
+import com.warkop.pos.data.ShiftMapper
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class Dest { PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, SHIFT, XREPORT, CLOSE_SHIFT, CLOSE_RESULT, SYNC }
+enum class Dest { SETUP, PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, SHIFT, XREPORT, CLOSE_SHIFT, CLOSE_RESULT, SYNC }
+
+/**
+ * Layar setelah shift dimuat ulang dari server (GET /sessions/current): kasir tanpa shift terbuka → layar buka shift,
+ * aturan yang sama dengan login. Di luar itu null = biarkan layar apa adanya.
+ */
+internal fun shiftRecoveryDest(current: Shift?, roleCode: String?): Dest? =
+    if (current == null && roleCode == "CSH") Dest.OPEN_SHIFT else null
+
+/** Subjek persetujuan diskon (048 / S4): tab, lingkup, baris, persentase, dan alasan — apa adanya; server menghitung hash-nya. */
+internal fun discountSubject(tabId: Long, scope: String, lineId: Int?, percent: Double, reasonCode: String): JsonObject = buildJsonObject {
+    put("tab_id", tabId); put("scope", scope); lineId?.let { put("line_id", it) }; put("percent", percent); put("reason_code", reasonCode)
+}
+
+/** Subjek persetujuan cetak ulang salinan ke-[copyNo] (048 / S4). */
+internal fun reprintSubject(orderId: Long, copyNo: Int): JsonObject = buildJsonObject {
+    put("order_id", orderId); put("copy_no", copyNo)
+}
+
+/** Subjek persetujuan refund penuh (048 / S4): order, alasan, dan catatan bila ada. */
+internal fun refundSubject(orderId: Long, reasonCode: String, reason: String?): JsonObject = buildJsonObject {
+    put("order_id", orderId); put("reason_code", reasonCode); reason?.let { put("reason", it) }
+}
 enum class Conn(val label: String) { ONLINE("Online"), OFFLINE("Offline"), OFFLINE_LIMITED("Offline terbatas") }
 
 /** Lembar/dialog di atas layar. Satu pada satu waktu — sama seperti prototipe (satu `sheet` aktif). */
@@ -20,46 +60,83 @@ sealed interface Sheet {
     data class LineActions(val lineId: Int) : Sheet
     data object OrderActions : Sheet
     data object Split : Sheet
-    data object Discount : Sheet
+    /** 048 / S4 — diskon order ([lineId] null) atau satu baris (lineId = id baris server). */
+    data class Discount(val lineId: Int? = null) : Sheet
+    /** 048 / S4 — refund penuh order lunas: pilih alasan dari server dan catatan. */
+    data class Refund(val orderId: String) : Sheet
     data class Void(val lineId: Int?) : Sheet // null = batalkan seluruh order
-    data class Override(val summary: String, val minDiscount: Int? = null, val onApproved: () -> Unit) : Sheet
+    /**
+     * 048 / S3 — persetujuan satu aksi. [subject] = parameter aksi apa adanya (server yang menghitung hash-nya);
+     * [onApproved] menjalankan aksi lagi dengan token sekali pakai yang diterima.
+     */
+    data class Override(val summary: String, val action: String, val subject: JsonObject, val onApproved: (token: String) -> Unit) : Sheet
+    /** 86: pilih alasan dari server sebelum item ditandai habis. */
+    data class SoldOut(val product: Product) : Sheet
     data object Edc : Sheet
     data object QrisRecord : Sheet
     data class QrisVerify(val tenderId: Int) : Sheet
     data class Receipt(val orderId: String) : Sheet
-    data object CashOut : Sheet
+    /** Kas masuk ([inflow] = true) atau keluar; arah menentukan daftar alasan dan teks ambang. */
+    data class CashOut(val inflow: Boolean) : Sheet
     data class Confirm(val title: String, val body: String, val confirm: String, val onConfirm: () -> Unit) : Sheet
 }
 
-class PosStore : ViewModel() {
+/** Keadaan satu sumber data: belum dimuat / memuat / siap / GAGAL (bukan "kosong") — kontrak galat di android-client.md. */
+sealed interface Load<out T> {
+    data object Idle : Load<Nothing>
+    data object Loading : Load<Nothing>
+    data class Ready<T>(val value: T) : Load<T>
+    data class Failed(val error: ApiError) : Load<Nothing>
+}
+
+class PosStore(
+    private val backend: PosBackend? = null,
+    private val remote: RemoteBackend? = null,
+) : ViewModel() {
     var dest by mutableStateOf(Dest.PIN); private set
+    /** Terminal yang sudah disiapkan (URL + outlet + perangkat); null → layar penyiapan. */
+    var config by mutableStateOf<TerminalConfig?>(null); private set
+    var session by mutableStateOf<PosSession?>(null); private set
+    var roster by mutableStateOf<Load<List<StaffUser>>>(Load.Idle); private set
     var user by mutableStateOf<StaffUser?>(null); private set
     var shift by mutableStateOf<Shift?>(null); private set
     var conn by mutableStateOf(Conn.ONLINE)
     /** null = otomatis (malam hari gelap); dipakai preset debug untuk memaksa tema. */
     var darkOverride by mutableStateOf<Boolean?>(null)
     var ordersTab by mutableIntStateOf(0)
-    var orders by mutableStateOf<List<Order>>(seedOrders()); private set
+    var orders by mutableStateOf<List<Order>>(emptyList()); private set
     var activeId by mutableStateOf<String?>(null); private set
     var sheet by mutableStateOf<Sheet?>(null); private set
     var toast by mutableStateOf<String?>(null); private set
     var pinFails by mutableIntStateOf(0); private set
     var lockedUntil by mutableStateOf<Long?>(null); private set
-    var cashMovements by mutableStateOf<List<CashMovement>>(emptyList()); private set
-    var closeResult by mutableStateOf<CloseResult?>(null); private set
-    // Antrean sinkron & cetak (status perangkat). Saat online, event langsung dianggap terkirim; saat offline menumpuk
-    // di antrean — sampai outbox sungguhan (api-gap B16) dibangun, ini hanya cermin tampilan, bukan penyimpan data.
-    data class OutboxEvent(val title: String, val type: String, val at: String, val synced: Boolean)
-    data class PrintJob(val title: String, val at: String, val ok: Boolean)
-    var outbox by mutableStateOf<List<OutboxEvent>>(emptyList()); private set
-    var printJobs by mutableStateOf<List<PrintJob>>(emptyList()); private set
-    private fun emit(title: String, type: String) { outbox = outbox + OutboxEvent(title, type, clock(), conn == Conn.ONLINE) }
-    private fun printed(title: String) { printJobs = printJobs + PrintJob(title, clock(), true) }
-    fun syncNow(): Boolean {
-        if (conn != Conn.ONLINE) return false
-        outbox = outbox.map { it.copy(synced = true) }; return true
+    // 048 / US6 — keadaan dari POST /devices/heartbeat. Tidak ada antrean atau cetak tiruan: yang tampil hanya angka server.
+    var heartbeat by mutableStateOf(HeartbeatState()); private set
+    private val heartbeatWorker = HeartbeatWorker(viewModelScope, tick = { heartbeatOnce() })
+
+    /** Dipanggil saat aplikasi masuk ke latar depan. */
+    fun startHeartbeat() = heartbeatWorker.start()
+
+    /** Dipanggil saat aplikasi ke latar belakang. */
+    fun stopHeartbeat() = heartbeatWorker.stop()
+
+    /** Heartbeat segera: sesudah masuk, atau saat kasir menekan "Periksa koneksi". */
+    fun heartbeatNow() = heartbeatWorker.now()
+
+    /** Satu heartbeat. Tanpa sesi (belum masuk) tidak dikirim. Kegagalan tidak pernah dilempar ke UI. */
+    private suspend fun heartbeatOnce() {
+        val b = backend ?: return
+        if (session == null) return
+        try {
+            // Antrean lokal tidak ada (online-first): queue_depth dilaporkan 0.
+            val result = b.heartbeat(System.currentTimeMillis(), queueDepth = 0)
+            heartbeat = heartbeat.onSuccess(result, System.currentTimeMillis())
+            conn = Conn.ONLINE
+        } catch (e: ApiError) {
+            heartbeat = heartbeat.onFailure()
+            if (e is ApiError.Network) conn = Conn.OFFLINE
+        }
     }
-    val pendingEvents: List<OutboxEvent> get() = outbox.filter { !it.synced }
 
     private var lineSeq = 100
     private var tenderSeq = 1
@@ -68,155 +145,473 @@ class PosStore : ViewModel() {
     private var closedCount = 0
 
     val active: Order? get() = orders.firstOrNull { it.id == activeId }
-    val openOrders: List<Order> get() = orders.filter { !it.closed }
-    val closedOrders: List<Order> get() = orders.filter { it.closed }.sortedByDescending { it.closedAt }
+    /** Tab terbuka: yang sudah dibuka di terminal ini, ditambah tab lain dari denah (ringkasan sampai dimuat penuh). */
+    val openOrders: List<Order> get() {
+        val mine = orders.filter { !it.closed }
+        val known = mine.map { it.id }.toSet()
+        val fromFloor = (floor as? Load.Ready)?.value?.let { s -> s.takeaway + s.tables.mapNotNull { it.tab } }.orEmpty()
+        val others = fromFloor.filter { it.id.toString() !in known }.map { OrderMapper.stub(it) }
+        return (mine + others).sortedBy { it.id.toLongOrNull() ?: 0L }
+    }
+    val closedOrders: List<Order> get() =
+        (closedCache + orders.filter { it.closed }).distinctBy { it.id }.sortedByDescending { it.id.toLongOrNull() ?: 0L }
+
+    // ---------- awal & sesi ----------
+    /** Dipanggil sekali saat aplikasi mulai: terminal belum disiapkan → penyiapan; sudah → PIN dengan roster dimuat. */
+    fun bootstrap() {
+        val saved = remote?.savedConfig()
+        config = saved
+        if (saved == null) { dest = Dest.SETUP; return }
+        if (dest == Dest.SETUP) dest = Dest.PIN
+        loadRoster()
+    }
+
+    /** Roster staf dari server. Gagal = keadaan galat dengan Coba lagi, BUKAN daftar kosong. */
+    fun loadRoster(silent: Boolean = false) {
+        val b = backend ?: return
+        // `silent`: muat ulang tanpa mengganti daftar dengan 'memuat' (dipakai setelah PIN salah agar pilihan staf tak hilang).
+        if (!(silent && roster is Load.Ready)) roster = Load.Loading
+        viewModelScope.launch {
+            val fresh = try { Load.Ready(b.roster()) } catch (e: ApiError) { if (silent && roster is Load.Ready) roster else Load.Failed(e) }
+            roster = fresh
+        }
+    }
+
+    /** Hanya untuk layar penyiapan terminal. */
+    internal val backendForSetup: PosBackend? get() = backend
+
+    internal fun setConfig(c: TerminalConfig) { config = c; dest = Dest.PIN; loadRoster() }
+
+    /** Hanya untuk preset pembandingan visual (src/debug); tidak ada jalur produk yang memanggilnya. */
+    internal fun debugInstall(
+        user: StaffUser?, shift: Shift?, orders: List<Order>, activeId: String?, dest: Dest, sheet: Sheet?, conn: Conn,
+        dark: Boolean?, ordersTab: Int, closeResult: CloseOutcome?,
+    ) {
+        this.user = user; this.shift = shift; this.orders = orders; this.activeId = activeId; this.dest = dest; this.sheet = sheet
+        this.conn = conn; this.darkOverride = dark; this.ordersTab = ordersTab; this.closeResult = closeResult; this.toast = null
+    }
 
     // ---------- navigasi & umpan balik ----------
     fun go(d: Dest) { dest = d; sheet = null }
-    fun show(s: Sheet?) { sheet = s }
+    fun show(s: Sheet?) {
+        // Hasil bagi dari percobaan sebelumnya tidak ikut terbawa saat layar bagi dibuka lagi.
+        if (s == Sheet.Split) { splitResult = Load.Idle; itemSplitResult = Load.Idle }
+        sheet = s
+    }
     fun say(msg: String) { toast = msg }
     fun clearToast() { toast = null }
-    fun lock() { user = null; activeId = null; dest = Dest.PIN; sheet = null }
+    fun lock() {
+        availabilityJob?.cancel()
+        floorJob?.cancel(); floor = Load.Idle; closedCache = emptyList(); keys.clear()
+        session = null; user = null; shift = null; activeId = null; catalog = Load.Idle; soldOut = emptySet(); dest = Dest.PIN; sheet = null
+        heartbeat = HeartbeatState()
+        report = Load.Idle; cashMovements = Load.Idle; closeResult = null; limits = null
+        // Daftar staf dimuat SETELAH logout selesai: sebelum itu token sesi lama masih terpasang dan server menolaknya (401).
+        viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { }; loadRoster() }
+    }
 
-    // ---------- PIN ----------
-    /** Demo desain: 6 digit apa saja kecuali 000000. Login sungguhan memakai POST /auth/pin-sessions (lihat PinAuthController). */
-    sealed interface PinResult { data object Ok : PinResult; data class Wrong(val left: Int) : PinResult; data object Locked : PinResult }
+    // ---------- PIN (server) ----------
+    /** Pesan galat login PIN untuk layar PIN: salah (sisa percobaan), terkunci, jaringan. */
+    fun loginPin(staff: StaffUser, pin: String, onFailure: (String) -> Unit) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                val s = b.pinLogin(staff, pin)
+                session = s
+                heartbeatNow()
+                user = s.user
+                shift = try { b.currentShift() } catch (_: ApiError) { null }
+                dest = when {
+                    s.user.code == "CSH" && shift == null -> Dest.OPEN_SHIFT
+                    // Tidak membuka tab otomatis saat login: tab kosong yang terbuka akan menghalangi tutup shift (409 open_tabs).
+                    // Counter dibuka hanya saat kasir menekan tombol order baru.
+                    s.user.code == "CSH" -> Dest.TABLES
+                    s.user.code == "WTR" -> Dest.TABLES
+                    else -> Dest.ORDERS
+                }
+                loadMenu()
+                startAvailabilityPolling()
+                startFloorPolling()
+                loadLimits()
+            } catch (e: ApiError) {
+                onFailure(pinMessage(e))
+                if (e is ApiError.TooMany || e is ApiError.Unauthorized) loadRoster(silent = true)
+            }
+        }
+    }
 
-    fun submitPin(u: StaffUser, pin: String): PinResult {
-        val now = System.currentTimeMillis()
-        if ((lockedUntil ?: 0) > now) return PinResult.Locked
-        if (pin == "000000") {
-            pinFails++
-            if (pinFails >= 5) { lockedUntil = now + 15 * 60_000; pinFails = 0; return PinResult.Locked }
-            return PinResult.Wrong(5 - pinFails)
+    private fun pinMessage(e: ApiError): String = when {
+        e is ApiError.Unauthorized && e.code == "invalid_pin" -> e.attemptsRemaining?.let { "PIN salah. Sisa $it percobaan." } ?: "PIN salah."
+        e is ApiError.TooMany && e.code == "pin_locked" -> "Login dikunci 15 menit karena PIN salah 5 kali."
+        else -> e.message
+    }
+
+    // ---------- menu & ketersediaan ----------
+    var catalog by mutableStateOf<Load<MenuCatalog>>(Load.Idle); private set
+    var soldOut by mutableStateOf<Set<String>>(emptySet()); private set
+    private var availabilityEtag: String? = null
+    private var availabilityJob: kotlinx.coroutines.Job? = null
+
+    val menu: MenuCatalog? get() = (catalog as? Load.Ready)?.value
+
+    fun loadMenu() {
+        val b = backend ?: return
+        catalog = Load.Loading
+        viewModelScope.launch {
+            catalog = try { Load.Ready(b.loadMenu()) } catch (e: ApiError) { Load.Failed(e) }
         }
-        pinFails = 0
-        user = u
-        dest = when {
-            u.code == "CSH" && shift == null -> Dest.OPEN_SHIFT
-            u.code == "CSH" -> { newCounter(); Dest.EDITOR }
-            u.code == "WTR" -> Dest.TABLES
-            else -> Dest.ORDERS
+    }
+
+    /** Poll ±5 dtk selama ada sesi (SC-008); 304 = tak berubah. Gagal sesaat diabaikan: poll berikutnya mencoba lagi. */
+    private fun startAvailabilityPolling() {
+        val b = backend ?: return
+        availabilityJob?.cancel()
+        availabilityEtag = null
+        availabilityJob = viewModelScope.launch {
+            while (true) {
+                try {
+                    b.availability(availabilityEtag)?.let { a -> availabilityEtag = a.etag; soldOut = a.soldOutVariantIds }
+                } catch (_: ApiError) { /* poll berikutnya */ }
+                kotlinx.coroutines.delay(5_000)
+            }
         }
-        return PinResult.Ok
     }
 
     // ---------- shift ----------
-    fun openShift(float: Int) {
-        shift = Shift("Shift 1", clock(), "07:00-15:00", float, user?.id ?: "")
-        say("Shift 1 dibuka dengan modal ${rp(float)}.")
-        go(Dest.TABLES)
-    }
-
-    // ---------- order ----------
-    fun newCounter() {
-        counterSeq++
-        val o = Order("c$counterSeq", OrderKind.COUNTER, null, 0, "A-${counterSeq.toString().padStart(3, '0')}", user?.name ?: "", clock())
-        orders = orders + o; activeId = o.id; dest = Dest.EDITOR
-    }
-
-    fun openTable(table: String, pax: Int) {
-        val o = Order("t$table-${System.nanoTime()}", OrderKind.DINE_IN, table, pax, null, user?.name ?: "", clock())
-        orders = orders + o; activeId = o.id; sheet = null; dest = Dest.EDITOR
-    }
-
-    fun openOrder(id: String) {
-        val o = orders.first { it.id == id }
-        if (o.otherDevice != null && conn != Conn.ONLINE) { say("Meja ${o.table} dikelola perangkat ${o.otherDevice}. Tidak dapat dibuka saat offline."); return }
-        activeId = id
-        dest = if (o.hasPendingQris) Dest.TENDER else Dest.EDITOR
-    }
-
-    fun orderAtTable(table: String) = orders.firstOrNull { !it.closed && it.table == table }
-
-    private fun update(id: String, f: (Order) -> Order) { orders = orders.map { if (it.id == id) f(it) else it } }
-    private fun updateActive(f: (Order) -> Order) { activeId?.let { update(it, f) } }
-
-    fun tapProduct(p: Product) {
-        if (p.is86) { say("${p.name} sedang habis. Tahan untuk mengubah ketersediaan."); return }
-        if (p.groups.isEmpty()) addLine(p, emptyList(), "") else sheet = Sheet.Modifier(p)
-    }
-
-    /** Baris yang sama (item, modifier, belum terkirim, tanpa catatan/diskon) digabung — aturan prototipe. */
-    fun addLine(p: Product, mods: List<ModOption>, note: String, qty: Int = 1) {
-        updateActive { o ->
-            val twin = o.lines.firstOrNull { !it.voided && !it.fired && it.itemId == p.id && it.mods == mods && it.note.isBlank() && note.isBlank() && it.discPct == 0 }
-            if (twin != null) o.copy(lines = o.lines.map { if (it.id == twin.id) it.copy(qty = it.qty + qty) else it })
-            else o.copy(lines = o.lines + OrderLine(++lineSeq, p.id, p.name, p.price, qty, mods, note.trim()))
+    /** Buka shift dengan rincian pecahan kas awal (server menurunkan jumlahnya). Kosong = modal Rp 0. */
+    fun openShift(denominations: Map<Int, Int>) {
+        val b = backend ?: return
+        val rows = denominations.filter { it.value > 0 }.map { it.key to it.value }
+        val modal = rows.sumOf { it.first * it.second }
+        viewModelScope.launch {
+            try {
+                shift = b.openShift(rows)
+                report = Load.Idle; cashMovements = Load.Idle
+                say("Shift dibuka dengan modal ${rp(modal)}.")
+                go(Dest.TABLES)
+            } catch (e: ApiError) {
+                // Koneksi putus SETELAH server menerima: periksa dulu agar tidak membuka shift kedua.
+                if (e is ApiError.Network) {
+                    conn = Conn.OFFLINE
+                    val opened = try { b.currentShift() } catch (_: ApiError) { null }
+                    if (opened != null) {
+                        shift = opened; go(Dest.TABLES)
+                        say("Shift sudah terbuka di server.")
+                        return@launch
+                    }
+                }
+                say(e.message)
+            }
         }
+    }
+
+    // ---------- pesanan di server (048 / S1: US2) ----------
+    // Semua tulis pesanan lewat server (Konstitusi IV). Angka di layar diganti jawaban server; tidak ada hitung uang
+    // otoritatif di sini. Kunci per niat (IntentKeys) dipakai ulang saat coba-ulang sehingga tidak ada ganda.
+    var floor by mutableStateOf<Load<FloorSnapshot>>(Load.Idle); private set
+    var closedCache by mutableStateOf<List<Order>>(emptyList()); private set
+    private var floorVersion: String? = null
+    private var floorJob: Job? = null
+    private val keys = IntentKeys()
+
+    /** Meja (dengan tab bila ada) dari denah terakhir. */
+    val tables: List<FloorTable> get() = (floor as? Load.Ready)?.value?.tables.orEmpty()
+
+    /** Fitur yang belum tersambung ke server (cerita berikutnya). Tidak mengubah data lokal. */
+    private fun notWired(what: String) {
+        say("$what belum tersambung ke server — dikerjakan di cerita berikutnya.")
         sheet = null
     }
 
+    /** Denah diperbarui tiap 3 dtk (penanda `version`; tak berubah = tanpa beban). */
+    fun startFloorPolling() {
+        val b = backend ?: return
+        floorJob?.cancel()
+        if (floor !is Load.Ready) floor = Load.Loading
+        floorJob = viewModelScope.launch {
+            while (true) {
+                try {
+                    b.floor(floorVersion)?.let { snap -> floorVersion = snap.version; floor = Load.Ready(snap) }
+                    conn = Conn.ONLINE
+                } catch (e: ApiError) {
+                    if (e is ApiError.Network) conn = Conn.OFFLINE
+                    if (floor !is Load.Ready) floor = Load.Failed(e)
+                }
+                delay(3_000)
+            }
+        }
+    }
+
+    private fun upsert(o: Order) { orders = orders.filter { it.id != o.id } + o }
+
+    /**
+     * Satu niat tulis ke server. Gangguan jaringan dicoba ulang dengan kunci yang sama (server mengembalikan jawaban
+     * tersimpan); galat server ditampilkan apa adanya. Kunci dilepas hanya bila niat terkonfirmasi.
+     */
+    private fun send(intent: String, action: suspend () -> Order, retry: Boolean = true, after: (Order) -> Unit = {}) {
+        viewModelScope.launch {
+            try {
+                val o = if (retry) retryNetwork(block = action) else action()
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(o)
+                after(o)
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                onShiftRefused(e)
+                say(writeErrorText(e))
+            }
+        }
+    }
+
+    /** Server menolak tulis tab karena shift tidak terbuka: pesan khusus (pembayaran ditolak), bukan galat umum. */
+    private fun writeErrorText(e: ApiError): String =
+        if (e is ApiError.Conflict && e.code == "shift_required") "Pembayaran ditolak: shift sudah ditutup. Buka shift untuk menerima pembayaran."
+        else e.message
+
+    /**
+     * Server menolak karena shift tidak terbuka: header "Shift dibuka …" tidak boleh basi. Muat ulang shift dari
+     * server; tanpa shift terbuka kasir diarahkan ke layar buka shift. Gangguan jaringan membiarkan keadaan apa adanya.
+     */
+    private fun onShiftRefused(e: ApiError) {
+        if (!(e is ApiError.Conflict && e.code == "shift_required")) return
+        val b = backend ?: return
+        viewModelScope.launch {
+            val current = try { b.currentShift() } catch (_: ApiError) { return@launch }
+            shift = current
+            shiftRecoveryDest(current, user?.code)?.let { dest = it }
+        }
+    }
+
+    fun newCounter() {
+        val b = backend ?: return
+        val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka order."); return }
+        val intent = "open:counter"
+        val key = keys.keyFor(intent)
+        send(intent, { b.openTab(sid, null, null, key) }) { o -> activeId = o.id; dest = Dest.EDITOR; sheet = null }
+    }
+
+    /** Pilih jumlah tamu: tab terbuka di meja itu dibuka; meja kosong membuka tab baru. */
+    fun openTable(table: String, pax: Int) {
+        val b = backend ?: return
+        val ft = tables.firstOrNull { it.name == table } ?: run { say("Meja $table tidak ditemukan."); return }
+        ft.tab?.let { openOrder(it.id.toString()); sheet = null; return }
+        val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka order."); return }
+        val intent = "open:table:${ft.id}:$pax"
+        val key = keys.keyFor(intent)
+        send(intent, { b.openTab(sid, ft.id, pax, key) }) { o -> activeId = o.id; dest = Dest.EDITOR; sheet = null }
+    }
+
+    fun openOrder(id: String) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                val o = retryNetwork { b.tab(id) }
+                upsert(o)
+                activeId = o.id
+                dest = if (o.hasPendingQris) Dest.TENDER else Dest.EDITOR
+            } catch (e: ApiError) { say(e.message) }
+        }
+    }
+
+    fun tapProduct(p: Product) {
+        if (p.id in soldOut) { say("${p.name} sedang habis."); return }
+        if (p.groups.isEmpty()) addLine(p, emptyList(), "") else sheet = Sheet.Modifier(p)
+    }
+
+    /** Tambah baris ke tab aktif. Server menggabungkan baris identik (belum terkirim) sesuai aturannya sendiri. */
+    fun addLine(p: Product, mods: List<ModOption>, note: String, qty: Int = 1) {
+        val b = backend ?: return
+        val tab = activeId ?: return
+        val intent = "line:add:$tab:${p.id}:$qty:${mods.map { it.id }}:${note.trim()}"
+        val key = keys.keyFor(intent)
+        sheet = null
+        send(intent, { b.addLine(tab, p.id, qty, note.trim(), mods.map { it.id }, key) })
+    }
+
+    private fun updateLine(tabId: String, line: OrderLine, qty: Int, note: String) {
+        val b = backend ?: return
+        val intent = "line:patch:$tabId:${line.id}:$qty:$note"
+        val key = keys.keyFor(intent)
+        send(intent, { b.updateLine(tabId, line.id, qty, note, key) })
+    }
+
     fun qtyDelta(lineId: Int, d: Int) {
-        val line = active?.lines?.firstOrNull { it.id == lineId } ?: return
-        if (d < 0 && line.fired) { say("Mengurangi jumlah dilakukan lewat void."); return }
-        if (d < 0 && line.qty == 1) { removeLine(lineId); return }
-        updateActive { o -> o.copy(lines = o.lines.map { if (it.id == lineId) it.copy(qty = it.qty + d) else it }) }
-    }
-
-    fun removeLine(lineId: Int) { updateActive { o -> o.copy(lines = o.lines.filter { it.id != lineId }) }; sheet = null }
-
-    fun saveLine(lineId: Int, qty: Int, note: String, discPct: Int) {
-        val me = user ?: return
-        val limit = PosCatalog.discountLimit[me.code] ?: 0
-        val apply = {
-            updateActive { o -> o.copy(lines = o.lines.map { if (it.id == lineId) it.copy(qty = qty, note = note.trim(), discPct = discPct) else it }) }
-            sheet = null
-        }
-        if (discPct > limit) sheet = Sheet.Override("Diskon $discPct% pada item", discPct, apply) else apply()
-    }
-
-    fun voidLine(lineId: Int, reason: String, made: Boolean) {
-        val me = user ?: return
-        val go = {
-            updateActive { o -> o.copy(lines = o.lines.map { if (it.id == lineId) it.copy(voided = true) else it }) }
-            sheet = null; say("Item di-void · $reason${if (made) " · wastage" else ""}. Slip BATAL dicetak ke station.")
-        }
-        val ln = active?.lines?.firstOrNull { it.id == lineId }
-        val tail = if (made) "sudah dibuat" else "belum dibuat"
-        if (me.isSupervisor) go() else sheet = Sheet.Override("Void ${ln?.qty ?: 1}× ${ln?.name ?: "item"} · ${rp(ln?.net ?: 0)} · Alasan: $reason · $tail", null, go)
-    }
-
-    fun cancelOrder(reason: String) {
         val o = active ?: return
-        if (o.paid > 0) { say("Order dengan pembayaran tidak dapat dibatalkan. Gunakan refund setelah lunas."); sheet = null; return }
-        val go = {
-            update(o.id) { it.copy(closed = true, cancelledReason = reason, closedAt = clock()) }
-            sheet = null; activeId = null; dest = if (o.kind == OrderKind.DINE_IN) Dest.TABLES else Dest.ORDERS
-            say("Order dibatalkan · $reason.")
-        }
-        if (user?.isSupervisor == true) go() else sheet = Sheet.Override("Batalkan ${o.label}: $reason", null, go)
+        val line = o.lines.firstOrNull { it.id == lineId } ?: return
+        if (line.fired && d < 0) { say("Mengurangi jumlah dilakukan lewat void."); return }
+        val next = line.qty + d
+        if (next < 1) { removeLine(lineId); return }
+        if (next > 999) return
+        updateLine(o.id, line, next, line.note)
     }
 
+    fun removeLine(lineId: Int) {
+        val b = backend ?: return
+        val o = active ?: return
+        val line = o.lines.firstOrNull { it.id == lineId } ?: return
+        sheet = null
+        if (line.fired) { say("Item sudah dikirim ke dapur — batalkan lewat void."); return }
+        val intent = "line:del:${o.id}:$lineId"
+        val key = keys.keyFor(intent)
+        send(intent, { b.removeLine(o.id, lineId, key) })
+    }
+
+    /** Simpan jumlah dan catatan baris. Diskon baris dikirim lewat [applyDiscount] (server yang menghitung). */
+    fun saveLine(lineId: Int, qty: Int, note: String) {
+        val o = active ?: return
+        val line = o.lines.firstOrNull { it.id == lineId } ?: return
+        sheet = null
+        if (qty == line.qty && note.trim() == line.note.trim()) return
+        if (line.fired) { say("Item sudah dikirim — perubahan lewat void."); return }
+        updateLine(o.id, line, qty, note.trim())
+    }
+
+
+
+    /** Kirim semua baris belum terkirim ke dapur. Kunci mengikuti himpunan baris, jadi item baru = niat baru. */
     fun fire() {
+        val b = backend ?: return
         val o = active ?: return
         val n = o.unsent.size
         if (n == 0) return
-        val t = clock()
-        update(o.id) { it.copy(lines = it.lines.map { l -> if (!l.voided && !l.fired) l.copy(fired = true, firedAt = t) else l }) }
-        emit("${o.label} · $n item", "order.fired"); printed("KOT ${o.label} · Dapur"); say("$n item dikirim ke dapur. KOT tercetak.")
+        val intent = "send:${o.id}:${o.unsent.map { it.id }.sorted()}"
+        val key = keys.keyFor(intent)
+        send(intent, { b.sendToKitchen(o.id, key) }) { _ ->
+            say("$n item dikirim ke dapur. Cetak KOT belum tersedia.")
+        }
     }
 
-    fun printPrebill() { updateActive { it.copy(billPrinted = true) }; sheet = null; say("Pre-bill tercetak · BELUM LUNAS.") }
-
-    fun applyOrderDiscount(p: DiscountPreset?) {
-        val me = user ?: return
-        val pct = p?.pct ?: 0
-        val apply = { updateActive { it.copy(discPct = pct, discReason = p?.reason) }; sheet = null }
-        if (pct > (PosCatalog.discountLimit[me.code] ?: 0)) sheet = Sheet.Override("Diskon order $pct% · ${p?.label}", pct, apply) else apply()
+    /** Pra-bill: penanda di server (tanpa cetak fisik). Tidak diulang otomatis agar hitungan cetak tidak ganda. */
+    fun printPrebill() {
+        val b = backend ?: return
+        val o = active ?: return
+        sheet = null
+        send("prebill:${o.id}", { b.prebill(o.id) }, retry = false) { _ ->
+            say("Pra-bill ditandai · BELUM LUNAS. Cetak fisik belum tersedia.")
+        }
     }
+
+    /** 048 / S4 — alasan diskon dari daftar server (`GET /reason-codes?category=discount`). */
+    var discountReasons by mutableStateOf<Load<List<ReasonCode>>>(Load.Idle); private set
+
+    fun loadDiscountReasons() {
+        val b = backend ?: return
+        discountReasons = Load.Loading
+        viewModelScope.launch {
+            discountReasons = try { Load.Ready(retryNetwork { b.reasonCodes("discount") }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /**
+     * Diskon order ([lineId] null) atau baris. Persentase dan total dikirim apa adanya; yang tampil adalah total dari
+     * server. Di atas batas peran server menjawab 409 override_required → persetujuan `discount` dengan subjek lengkap.
+     * Kunci Idempotency-Key dilepas saat ditolak agar percobaan ulang setelah persetujuan memakai kunci baru.
+     */
+    fun applyDiscount(percent: Double, reason: ReasonCode, lineId: Int?, overrideToken: String? = null) {
+        val b = backend ?: return
+        val o = active ?: return
+        val scope = if (lineId == null) "order" else "line"
+        val intent = "discount:${o.id}:$scope:${lineId ?: 0}:$percent:${reason.code}"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val updated = retryNetwork { b.setDiscount(o.id, percent, reason.code, scope, lineId, overrideToken, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                say(if (lineId == null) "Diskon order diterapkan." else "Diskon item diterapkan.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(
+                        summary = "Diskon ${percent.toInt()}% · ${reason.label}", action = "discount",
+                        subject = discountSubject(o.id.toLong(), scope, lineId, percent, reason.code),
+                    ) { token -> applyDiscount(percent, reason, lineId, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    /** Hapus diskon order (DELETE /tabs/{id}/discounts). Total ulang dari server. */
+    fun clearOrderDiscount() {
+        val b = backend ?: return
+        val o = active ?: return
+        val intent = "discount-clear:${o.id}"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val updated = retryNetwork { b.clearDiscount(o.id, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                say("Diskon order dihapus.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                say(e.message)
+            }
+        }
+    }
+
+    /** 048 / S4 — bagi rata tanpa pembayaran. Jumlah tiap bagian dari server; tab asal disegarkan dari server. */
+    var splitResult by mutableStateOf<Load<List<SplitPart>>>(Load.Idle); private set
+
+    fun splitEqual(parts: Int) {
+        val b = backend ?: return
+        val o = active ?: return
+        val intent = "split-equal:${o.id}:$parts"
+        val key = keys.keyFor(intent)
+        splitResult = Load.Loading
+        viewModelScope.launch {
+            try {
+                val result = retryNetwork { b.splitEqual(o.id, parts, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                splitResult = Load.Ready(result)
+                runCatching { b.tab(o.id) }.getOrNull()?.let { upsert(it) }
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                keys.settled(intent)
+                splitResult = Load.Idle
+                say(e.message)
+            }
+        }
+    }
+
+    /** 048 — bagi per item (POST /tabs/{id}/split, kontrak yang ada). Baris yang dipilih dibayar tunai sebesar jumlahnya; bagian dan sisa dari server. */
+    var itemSplitResult by mutableStateOf<Load<SplitItemsResult>>(Load.Idle); private set
 
     fun splitByItem(lineIds: Set<Int>) {
+        val b = backend ?: return
         val o = active ?: return
-        if (o.paid > 0) { say("Bill dengan pembayaran tidak dapat dibagi per item."); return }
-        if (lineIds.isEmpty() || lineIds.size >= o.live.size) { say("Pilih minimal 1 item dan sisakan minimal 1 item."); return }
-        val moved = o.lines.filter { it.id in lineIds }
-        val child = Order("${o.id}-b", o.kind, o.table, o.pax, o.queue, o.waiter, o.openedAt, lines = moved)
-        orders = orders.map { if (it.id == o.id) it.copy(lines = it.lines.filter { l -> l.id !in lineIds }) else it } + child
-        sheet = null; say("${moved.size} item dipindahkan ke Bill B.")
+        val picked = o.live.filter { it.id in lineIds }
+        if (picked.isEmpty()) return
+        // Tunai sebesar jumlah baris yang dipilih; server tetap memverifikasi bagian dan menolak bila kurang.
+        val cash = picked.sumOf { it.net }
+        val lines = picked.map { it.id to it.qty }
+        val intent = "split-items:${o.id}:" + lines.joinToString(",") { "${it.first}x${it.second}" }
+        val key = keys.keyFor(intent)
+        itemSplitResult = Load.Loading
+        viewModelScope.launch {
+            try {
+                val result = retryNetwork { b.splitItems(o.id, lines, "$cash.00", key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                itemSplitResult = Load.Ready(result)
+                upsert(result.remaining)
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; itemSplitResult = Load.Idle; say(e.message); return@launch }
+                keys.settled(intent)
+                itemSplitResult = Load.Idle
+                say(e.message)
+            }
+        }
     }
 
-    // ---------- pembayaran ----------
     fun goPay() {
         val o = active ?: return
         if (user?.code == "WTR") { printPrebill(); return }
@@ -228,175 +623,522 @@ class PosStore : ViewModel() {
         dest = Dest.TENDER
     }
 
-    /** Tunai memberi kembalian; jumlah tercatat dibatasi sisa tagihan (aturan prototipe). */
+    /** Tunai: server menghitung kembalian sendiri. Pembayaran ber-`client_ref`, aman diulang. */
     fun payCash(received: Int) {
+        val b = backend ?: return
         val o = active ?: return
-        if (conn == Conn.OFFLINE_LIMITED) { say("Batas tunai offline tercapai. Gunakan EDC atau tunggu sinkron."); return }
-        val amount = minOf(received, o.remaining)
-        if (amount <= 0) return
-        record(Tender(tenderSeq++, TenderMethod.CASH, amount, TenderStatus.OK, received = received))
-    }
-
-    fun payEdc(code: String): Boolean {
-        val o = active ?: return false
-        val amount = o.remaining
-        val dup = o.tenders.any { it.method == TenderMethod.EDC && it.amount == amount && System.currentTimeMillis() - it.atMillis < 120_000 }
-        val save = { record(Tender(tenderSeq++, TenderMethod.EDC, amount, TenderStatus.OK, ref = code.uppercase())); sheet = null }
-        if (dup) { sheet = Sheet.Confirm("Pembayaran mungkin ganda", "Pembayaran EDC ${rp(amount)} sudah dicatat kurang dari 2 menit lalu. Catat lagi?", "Catat lagi", save); return false }
-        save(); return true
-    }
-
-    fun recordQris() {
-        val o = active ?: return
-        if (conn != Conn.ONLINE) { say("QRIS tidak tersedia saat offline. Tunai dan EDC tetap bisa dipakai."); return }
-        val t = Tender(tenderSeq++, TenderMethod.QRIS, o.remaining, TenderStatus.PENDING)
-        updateActive { it.copy(tenders = it.tenders + t) }
-        sheet = null; say("QRIS dicatat · menunggu verifikasi.")
-    }
-
-    fun verifyQris(tenderId: Int, ref: String) {
-        val go = {
-            updateActive { o -> o.copy(tenders = o.tenders.map { if (it.id == tenderId) it.copy(status = TenderStatus.OK, ref = ref) else it }) }
-            sheet = null; checkClosed(); say("QRIS terverifikasi.")
+        if (received <= 0) return
+        val intent = "pay:${o.id}:cash:$received"
+        val ref = keys.keyFor(intent)
+        send(intent, { b.pay(o.id, "cash", received, ref) }) { o2 ->
+            if (o2.closed) {
+                dest = Dest.DONE
+            } else {
+                say("Sisa ${rp(o2.remaining)}.")
+            }
         }
-        if (user?.isSupervisor == true) go() else sheet = Sheet.Override("Verifikasi QRIS · ref $ref", null, go)
     }
 
-    fun failQris(tenderId: Int) {
-        updateActive { o -> o.copy(tenders = o.tenders.map { if (it.id == tenderId) it.copy(status = TenderStatus.FAIL) else it }) }
-        sheet = null; say("QRIS ditandai gagal. Pilih metode lain.")
-    }
 
-    private fun record(t: Tender) { updateActive { it.copy(tenders = it.tenders + t) }; emit("${t.method.label} ${rp(t.amount)}", "payment.recorded"); checkClosed() }
 
-    private fun checkClosed() {
+
+
+    // ---------- aksi tab & pembayaran (048 / S3: T056) ----------
+    // Aksi yang perlu persetujuan: server menjawab 409 override_required → dialog Sheet.Override mengambil token, lalu
+    // aksi DIULANG dengan parameter yang sama + token. Subjek = identitas objek + parameter aksi (sesuai kontrak server).
+
+    fun voidLine(lineId: Int, reason: String, made: Boolean, overrideToken: String? = null) {
+        val b = backend ?: return
         val o = active ?: return
-        if (o.remaining > 0 || o.total == 0) return
-        val no = "T01-" + (receiptSeq++).toString().padStart(6, '0')
-        update(o.id) { cur ->
-            // Order counter menembak baris yang belum terkirim otomatis saat lunas (KOT) — aturan prototipe.
-            val t = clock()
-            cur.copy(closed = true, receiptNo = no, closedAt = t, lines = cur.lines.map { if (!it.voided && !it.fired) it.copy(fired = true, firedAt = t) else it })
+        val line = o.lines.firstOrNull { it.id == lineId } ?: return
+        val code = PosCatalog.serverReasonCode(reason)
+        val kitchen = if (made) "made" else "not_started"
+        val stock = if (made) "waste" else "return"
+        viewModelScope.launch {
+            try {
+                upsert(b.voidLine(o.id, lineId, code, kitchen, stock, null, overrideToken))
+                conn = Conn.ONLINE
+                sheet = null
+                say("${line.name} di-void.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "Void ${line.qty}× ${line.name} · $reason", action = "void_line",
+                        subject = voidSubject(o.id, lineId, code, kitchen, stock)) { token -> voidLine(lineId, reason, made, token) }
+                } else say(e.message)
+            }
         }
-        closedCount++
-        emit("$no · ${rp(o.total)}", "order.closed"); printed("Struk $no")
-        dest = Dest.DONE
     }
 
-    fun reprint(orderId: String) {
-        val o = orders.first { it.id == orderId }
-        val free = 1
-        val go = { update(orderId) { it.copy(reprints = it.reprints + 1) }; sheet = Sheet.Receipt(orderId) }
-        if (o.reprints >= free && user?.isSupervisor != true) sheet = Sheet.Override("Cetak ulang struk ${o.receiptNo} (salinan ke-${o.reprints + 1})", null, go) else go()
+    fun cancelOrder(reason: String, overrideToken: String? = null) {
+        val b = backend ?: return
+        val o = active ?: return
+        val code = PosCatalog.serverReasonCode(reason)
+        viewModelScope.launch {
+            try {
+                upsert(b.cancelTab(o.id, code, null, overrideToken))
+                conn = Conn.ONLINE
+                sheet = null
+                say("Order dibatalkan.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                // has_payments tidak pernah menawarkan persetujuan: pesannya langsung ditampilkan.
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "Batalkan order · $reason", action = "cancel_order",
+                        subject = cancelSubject(o.id, code)) { token -> cancelOrder(reason, token) }
+                } else say(e.message)
+            }
+        }
     }
 
-    fun refund(orderId: String) {
-        if (conn != Conn.ONLINE) { say("Refund tidak tersedia saat offline."); return }
-        val go = { update(orderId) { it.copy(refunded = true) }; sheet = null; say("Refund dicatat.") }
-        if (user?.isSupervisor == true) go() else sheet = Sheet.Override("Refund penuh order", null, go)
+    /** 048 — bank mesin EDC dari `GET /payment-channels` (bank_transfer). Dimuat setiap dialog EDC dibuka. */
+    var edcBanks by mutableStateOf<Load<List<BankChannel>>>(Load.Idle); private set
+
+    fun loadEdcBanks() {
+        val b = backend ?: return
+        edcBanks = Load.Loading
+        viewModelScope.launch {
+            edcBanks = try { Load.Ready(retryNetwork { b.bankChannels() }) } catch (e: ApiError) { Load.Failed(e) }
+        }
     }
-
-    fun approve(pin: String, approver: StaffUser): String? {
-        val s = sheet as? Sheet.Override ?: return null
-        if (pin == "000000") return "PIN salah. Sisa 4 percobaan."
-        val limit = PosCatalog.discountLimit[approver.code] ?: 0
-        if (s.minDiscount != null && limit < s.minDiscount) return "Batas diskon ${approver.name} hanya $limit%."
-        sheet = null; s.onApproved(); return null
-    }
-
-    // ---------- kas & shift ----------
-    data class CashMovement(val inflow: Boolean, val reason: String, val amount: Int, val at: String)
-    data class CloseResult(val expected: Int, val counted: Int, val edcSystem: Int, val edcBatch: Int) {
-        val variance get() = counted - expected
-        val withinTolerance get() = kotlin.math.abs(variance) <= PosCatalog.VARIANCE_TOLERANCE
-    }
-
-    fun cashMove(inflow: Boolean, reason: String, amount: Int) {
-        val go = { cashMovements = cashMovements + CashMovement(inflow, reason, amount, clock()); sheet = null; say("${if (inflow) "Kas masuk" else "Kas keluar"} ${rp(amount)} dicatat.") }
-        if (!inflow && amount > PosCatalog.CASH_OUT_THRESHOLD && user?.isSupervisor != true) sheet = Sheet.Override("Kas keluar ${rp(amount)} · $reason", null, go) else go()
-    }
-
-    val salesOrders: List<Order> get() = orders.filter { it.closed && it.cancelledReason == null }
-    fun cashSales() = salesOrders.sumOf { o -> o.tenders.filter { it.method == TenderMethod.CASH && it.status == TenderStatus.OK }.sumOf { it.amount } }
-    fun edcSales() = salesOrders.sumOf { o -> o.tenders.filter { it.method == TenderMethod.EDC && it.status == TenderStatus.OK }.sumOf { it.amount } }
-    fun qrisSales() = salesOrders.sumOf { o -> o.tenders.filter { it.method == TenderMethod.QRIS && it.status == TenderStatus.OK }.sumOf { it.amount } }
-    fun cashIn() = cashMovements.filter { it.inflow }.sumOf { it.amount }
-    fun cashOut() = cashMovements.filter { !it.inflow }.sumOf { it.amount }
-    fun expectedCash() = (shift?.float ?: 0) + cashSales() + cashIn() - cashOut()
-    fun hasPendingPayment() = orders.any { !it.closed && it.hasPendingQris }
-
-    fun submitCount(counted: Int, edcBatch: Int) {
-        closeResult = CloseResult(expectedCash(), counted, edcSales(), edcBatch)
-        dest = Dest.CLOSE_RESULT; sheet = null
-    }
-
-    fun finishShift() { shift = null; closeResult = null; cashMovements = emptyList(); lock() }
 
     /**
-     * HANYA untuk pembandingan visual dengan design/screens (dipanggil dari MainActivity bila build debuggable lewat
-     * `--es preset NN`). Menyusun kondisi awal tiap tangkapan desain; bukan jalur produk.
+     * EDC: nominal = sisa tab, kode approval dari slip, [channelId] = bank mesin EDC (wajib; tidak pernah null).
+     * Duplikat 2 menit → konfirmasi kasir, lalu kirim ulang dengan confirm_duplicate.
      */
-    fun debugPreset(id: String) {
-        val rina = PosCatalog.users[0]
-        user = if (id in setOf("08x")) PosCatalog.users[2] else rina
-        shift = Shift("Shift 1", "07:02", "07:00-15:00", 200_000, rina.id)
-        conn = Conn.ONLINE; darkOverride = null; sheet = null; ordersTab = 0; toast = null
-        fun l(i: Int, item: String, qty: Int, vararg m: ModOption, note: String = "", fired: Boolean = false): OrderLine {
-            val p = PosCatalog.product(item)
-            return OrderLine(i, p.id, p.name, p.price, qty, m.toList(), note, fired = fired, firedAt = if (fired) "10:40" else null)
-        }
-        fun m(n: String, d: Int = 0) = ModOption(n, d)
-        val lines = listOf(l(11, "k3", 2, m("Kurang manis"), m("Sedikit es")), l(12, "m1", 1, m("Pedas"), m("Telur", 4000), note = "Telur setengah matang"), l(13, "k1", 1))
-        val counter = Order("c24", OrderKind.COUNTER, null, 0, "A-024", "Rina", "10:38", lines)
-        val paid = counter.copy(id = "c24p", closed = true, receiptNo = "T01-000124", closedAt = "10:44", tenders = listOf(Tender(1, TenderMethod.CASH, 66_000, TenderStatus.OK, received = 100_000)))
-        val closed1 = Order("z1", OrderKind.DINE_IN, "5", 4, null, "Andi", "09:20", listOf(l(21, "m3", 2, m("Pedas"), fired = true)), closed = true, receiptNo = "T01-000122", closedAt = "09:55", tenders = listOf(Tender(2, TenderMethod.EDC, 48_400, TenderStatus.OK, ref = "448231")))
-        val closed2 = Order("z2", OrderKind.DINE_IN, "1", 2, null, "Andi", "08:30", listOf(l(22, "k3", 1, fired = true), l(23, "m4", 1, fired = true)), closed = true, receiptNo = "T01-000123", closedAt = "08:50", tenders = listOf(Tender(3, TenderMethod.CASH, 36_300, TenderStatus.OK, received = 40_000)))
-        val seeds = seedOrders().map { if (it.id == "a2") it.copy(otherDevice = "T02") else it }
-        orders = seeds + counter + paid + closed1 + closed2
-        activeId = "c24"; dest = Dest.EDITOR
-        when (id) {
-            "05" -> orders = orders.map { if (it.id == "c24") it.copy(lines = emptyList()) else it }
-            "06" -> sheet = Sheet.Modifier(PosCatalog.product("m1"))
-            "07" -> sheet = Sheet.LineActions(12)
-            "08" -> sheet = Sheet.OrderActions
-            "09" -> sheet = Sheet.Split
-            "10" -> sheet = Sheet.Discount
-            "11" -> { activeId = "a1"; sheet = Sheet.Void(1) }
-            "12" -> { activeId = "a1"; sheet = Sheet.Override("Void 1× Nasi Goreng Kampung · Rp 22.000 · Alasan: Salah input · belum dibuat") {} }
-            "13" -> dest = Dest.TENDER
-            "14" -> { dest = Dest.TENDER; sheet = Sheet.Edc }
-            "15" -> { dest = Dest.TENDER; sheet = Sheet.QrisRecord }
-            "16" -> { dest = Dest.TENDER; orders = orders.map { if (it.id == "c24") it.copy(tenders = listOf(Tender(9, TenderMethod.QRIS, 66_000, TenderStatus.PENDING))) else it }; sheet = Sheet.QrisVerify(9) }
-            "17" -> { activeId = "c24p"; dest = Dest.DONE }
-            "18" -> { activeId = "c24p"; dest = Dest.DONE; orders = orders.map { if (it.id == "c24p") it.copy(reprints = 1) else it }; sheet = Sheet.Receipt("c24p") }
-            "19" -> dest = Dest.ORDERS
-            "20" -> { dest = Dest.ORDERS; ordersTab = 1 }
-            "21" -> dest = Dest.SHIFT
-            "22" -> { dest = Dest.SHIFT; sheet = Sheet.CashOut }
-            "23" -> dest = Dest.XREPORT
-            "24" -> dest = Dest.CLOSE_SHIFT
-            "25" -> { closeResult = CloseResult(362_900, 359_900, 85_800, 85_800); dest = Dest.CLOSE_RESULT }
-            "26" -> { conn = Conn.OFFLINE; dest = Dest.SYNC }
-            "27" -> darkOverride = true
-            "28" -> conn = Conn.OFFLINE_LIMITED
-            "03" -> dest = Dest.TABLES
-            "35", "36" -> {}
+    fun payEdc(channelId: Long, code: String, confirmDuplicate: Boolean = false) {
+        val b = backend ?: return
+        val o = active ?: return
+        val amount = o.remaining
+        if (amount <= 0) return
+        val intent = "edc:${o.id}:$channelId:$code:$amount:$confirmDuplicate"
+        val ref = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val updated = retryNetwork { b.pay(o.id, "edc", amount, ref, code, confirmDuplicate.takeIf { it }, channelId) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                if (updated.closed) {
+                    dest = Dest.DONE
+                } else say("Sisa ${rp(updated.remaining)}.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                onShiftRefused(e)
+                if (e.code == "duplicate_edc") {
+                    sheet = Sheet.Confirm("Kode approval sudah dipakai?", "Kode $code sudah dicatat dalam 2 menit terakhir. Lanjutkan jika ini transaksi berbeda.", "Lanjutkan") {
+                        payEdc(channelId, code, confirmDuplicate = true)
+                    }
+                } else say(e.message)
+            }
         }
     }
+
+    /** Nama QRIS untuk tombol dan dialog: provider dari kanal qr_ewallet server; tanpa kanal → "QRIS" (tipe kanal), bukan merek. */
+    var qrisLabel by mutableStateOf("QRIS"); private set
+
+    fun loadQrisLabel() {
+        val b = backend ?: return
+        viewModelScope.launch {
+            qrisLabel = try { b.qrisChannel()?.name ?: "QRIS" } catch (e: ApiError) { "QRIS" }
+        }
+    }
+
+    /** QRIS statis: dicatat menunggu verifikasi (server menyimpan pending). Kanal QRIS dari daftar kanal server. */
+    fun recordQris() {
+        val b = backend ?: return
+        val o = active ?: return
+        val amount = o.remaining
+        if (amount <= 0) return
+        val intent = "qris:${o.id}:$amount"
+        val ref = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val channel = b.qrisChannel() ?: run { say("Kanal QRIS belum diatur di server."); return@launch }
+                val updated = retryNetwork { b.pay(o.id, "qr_ewallet", amount, ref, null, null, channel.id) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                say("QRIS dicatat · menunggu verifikasi.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                onShiftRefused(e)
+                say(e.message)
+            }
+        }
+    }
+
+    fun verifyQris(tenderId: Int, ref: String, overrideToken: String? = null) {
+        val b = backend ?: return
+        val o = active ?: return
+        val reference = ref.trim()
+        viewModelScope.launch {
+            try {
+                upsert(b.verifyPayment(o.id, tenderId.toLong(), reference, overrideToken))
+                conn = Conn.ONLINE
+                sheet = null
+                say("QRIS terverifikasi.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "Verifikasi QRIS · ref $reference", action = "qris_verify",
+                        subject = qrisSubject(o.id, tenderId, reference)) { token -> verifyQris(tenderId, reference, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    fun failQris(tenderId: Int, overrideToken: String? = null) {
+        val b = backend ?: return
+        val o = active ?: return
+        viewModelScope.launch {
+            try {
+                upsert(b.failPayment(o.id, tenderId.toLong(), overrideToken))
+                conn = Conn.ONLINE
+                sheet = null
+                say("Pembayaran QRIS ditandai tidak ditemukan.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "QRIS tidak ditemukan", action = "qris_fail",
+                        subject = qrisSubject(o.id, tenderId, null)) { token -> failQris(tenderId, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    /** 86: alasan dipilih kasir dari daftar server (`GET /reason-codes?category=sold_out`). Tidak ada id yang dikarang di klien. */
+    var soldOutReasons by mutableStateOf<Load<List<ReasonCode>>>(Load.Idle); private set
+
+    fun markSoldOut(p: Product) {
+        sheet = Sheet.SoldOut(p)
+        loadSoldOutReasons()
+    }
+
+    fun loadSoldOutReasons() {
+        val b = backend ?: return
+        soldOutReasons = Load.Loading
+        viewModelScope.launch {
+            soldOutReasons = try { Load.Ready(retryNetwork { b.reasonCodes("sold_out") }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /** Tandai habis dengan alasan yang dipilih. Server menjawab 409 override_required bila peminta tak punya izin. */
+    fun confirmSoldOut(p: Product, reasonCodeId: Long, overrideToken: String? = null) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                b.soldOut(p.id, reasonCodeId, null, overrideToken)
+                conn = Conn.ONLINE
+                sheet = null
+                say("${p.name} ditandai habis.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "Tandai ${p.name} habis", action = "availability",
+                        subject = availabilitySubject(p.id.toLong(), reasonCodeId)) { token -> confirmSoldOut(p, reasonCodeId, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    // Subjek persetujuan (identitas objek + parameter, sama dengan permintaan aksi; field yang tidak dikirim juga tidak ada di sini).
+    private fun voidSubject(tabId: String, lineId: Int, reasonCode: String, kitchen: String, stock: String): JsonObject = buildJsonObject {
+        put("tab_id", tabId.toLong()); put("line_id", lineId); put("reason_code", reasonCode); put("kitchen_status", kitchen); put("stock_decision", stock)
+    }
+
+    private fun cancelSubject(tabId: String, reasonCode: String): JsonObject = buildJsonObject {
+        put("tab_id", tabId.toLong()); put("reason_code", reasonCode)
+    }
+
+    private fun qrisSubject(tabId: String, paymentId: Int, reference: String?): JsonObject = buildJsonObject {
+        put("tab_id", tabId.toLong()); put("payment_id", paymentId.toLong()); reference?.let { put("reference", it) }
+    }
+
+    private fun availabilitySubject(productId: Long, reasonCodeId: Long): JsonObject = buildJsonObject {
+        put("product_id", productId); put("reason_code_id", reasonCodeId)
+    }
+
+    /** Jumlah salinan yang sudah dicetak ulang per order (ulang dari server pada tiap respons). */
+    private val reprintCopies = mutableMapOf<String, Int>()
+
+    /**
+     * 048 / S4 — cetak ulang. Salinan pertama gratis; berikutnya server menjawab 409 override_required → persetujuan
+     * `reprint` dengan subjek order_id + copy_no. Nomor salinan berikutnya = salinan terakhir yang tercatat + 1.
+     */
+    fun reprint(orderId: String, overrideToken: String? = null) {
+        val b = backend ?: return
+        val copyNo = (reprintCopies[orderId] ?: 0) + 1
+        val intent = "reprint:$orderId:$copyNo"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val printed = retryNetwork { b.reprintOrder(orderId, overrideToken, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                reprintCopies[orderId] = printed
+                say("Salinan ke-$printed dicetak. Cetak fisik belum tersedia.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(
+                        summary = "Cetak ulang struk · salinan $copyNo", action = "reprint",
+                        subject = reprintSubject(orderId.toLong(), copyNo),
+                    ) { token -> reprint(orderId, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    /** 048 / S4 — alasan refund dari daftar server (`GET /reason-codes?category=refund`). */
+    var refundReasons by mutableStateOf<Load<List<ReasonCode>>>(Load.Idle); private set
+
+    fun loadRefundReasons() {
+        val b = backend ?: return
+        refundReasons = Load.Loading
+        viewModelScope.launch {
+            refundReasons = try { Load.Ready(retryNetwork { b.reasonCodes("refund") }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /**
+     * 048 / S4 — refund penuh order lunas (online saja). Di luar izin server menjawab 409 override_required → persetujuan
+     * `refund` dengan subjek order_id, reason_code, reason. Total dan status dari server.
+     */
+    fun refundOrder(orderId: String, reason: ReasonCode, note: String?, overrideToken: String? = null) {
+        val b = backend ?: return
+        val intent = "refund:$orderId:${reason.code}"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val updated = retryNetwork { b.refundOrder(orderId, reason.code, note?.takeIf { it.isNotBlank() }, overrideToken, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                say("Order direfund penuh.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(
+                        summary = "Refund order · ${reason.label}", action = "refund",
+                        subject = refundSubject(orderId.toLong(), reason.code, note?.takeIf { it.isNotBlank() }),
+                    ) { token -> refundOrder(orderId, reason, note, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+
+    /** Keadaan memuat daftar penjualan selesai (GET /orders). Gagal → ErrorState di layar Order, bukan toast. */
+    var closedLoad by mutableStateOf<Load<Unit>>(Load.Idle); private set
+
+    /** Daftar penjualan selesai dari server (layar Order → Selesai). */
+    fun loadClosed() {
+        val b = backend ?: return
+        closedLoad = Load.Loading
+        viewModelScope.launch {
+            closedLoad = try {
+                closedCache = retryNetwork { b.closedOrders() }
+                Load.Ready(Unit)
+            } catch (e: ApiError) {
+                Load.Failed(e)
+            }
+        }
+    }
+
+    /** Struk per order dari GET /orders/{id}/receipt (T038). Dimuat saat lembar struk dibuka. */
+    var receipts by mutableStateOf<Map<String, Load<com.warkop.pos.model.ReceiptView>>>(emptyMap()); private set
+
+    fun loadReceipt(orderId: String) {
+        val b = backend ?: return
+        receipts = receipts + (orderId to Load.Loading)
+        viewModelScope.launch {
+            val next = try { Load.Ready(retryNetwork { b.receipt(orderId) }) } catch (e: ApiError) { Load.Failed(e) }
+            receipts = receipts + (orderId to next)
+        }
+    }
+
+    // ---------- kas & shift (048 / S2: US3) ----------
+    // Semua angka shift berasal dari server (X-report, daftar kas, jawaban tutup). Tidak ada hitungan kas di klien:
+    // layar yang belum berhasil memuat menampilkan keadaan memuat/galat, bukan angka lama.
+    var report by mutableStateOf<Load<ShiftReport>>(Load.Idle); private set
+    var cashMovements by mutableStateOf<Load<List<CashMovement>>>(Load.Idle); private set
+    var closeResult by mutableStateOf<CloseOutcome?>(null); private set
+    /** Batas dari pengaturan server; null sampai terbaca. Layar tidak memakai angka tetap sebagai gantinya. */
+    var limits by mutableStateOf<ShiftLimits?>(null); private set
+
+    /** Batas toleransi dan ambang kas keluar. Gagal dimuat = tetap null (teks umum di layar). */
+    fun loadLimits() {
+        val b = backend ?: return
+        viewModelScope.launch { limits = try { b.shiftLimits() } catch (_: ApiError) { null } }
+    }
+
+    /** X-report shift terbuka. Gagal = keadaan galat dengan Coba lagi. */
+    fun refreshShiftReport() {
+        val b = backend ?: return
+        val sid = shift?.id ?: return
+        report = Load.Loading
+        viewModelScope.launch {
+            report = try { Load.Ready(retryNetwork { b.shiftReport(sid) }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    fun refreshCashMovements() {
+        val b = backend ?: return
+        val sid = shift?.id ?: return
+        cashMovements = Load.Loading
+        viewModelScope.launch {
+            cashMovements = try { Load.Ready(retryNetwork { b.cashMovements(sid) }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /**
+     * Kas masuk/keluar lewat server. Kunci per niat (arah, alasan, jumlah, catatan): coba-ulang jaringan memakai kunci
+     * yang sama sehingga tidak tercatat dua kali. Jawaban galat server (mis. override_required) melepas kunci dan
+     * membiarkan lembar terbuka: kasir mengubah isian, bukan menekan ulang.
+     */
+    fun cashMove(inflow: Boolean, reason: String, note: String?, amount: Int, overrideToken: String? = null) {
+        val b = backend ?: return
+        val sid = shift?.id ?: run { say("Buka shift dulu sebelum mencatat kas."); return }
+        val intent = "cash:$sid:${if (inflow) "in" else "out"}:$reason:$amount:${note.orEmpty()}"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                retryNetwork { b.recordCashMovement(sid, inflow, reason, note, amount, key, overrideToken) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                sheet = null
+                say("${if (inflow) "Kas masuk" else "Kas keluar"} ${rp(amount)} dicatat.")
+                refreshCashMovements(); refreshShiftReport()
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                if (e is ApiError.Conflict && e.code == "override_required") {
+                    // Di atas ambang: minta persetujuan untuk kas ini; aksi diulang dengan token sekali pakai.
+                    sheet = Sheet.Override(
+                        summary = "Kas ${if (inflow) "masuk" else "keluar"} ${rp(amount)} · ${ShiftMapper.reasonLabel(reason)}",
+                        action = "cash_out",
+                        subject = cashSubject(sid, inflow, reason, amount),
+                    ) { token -> cashMove(inflow, reason, note, amount, token) }
+                } else {
+                    say(e.message)
+                }
+            }
+        }
+    }
+
+    // ---------- persetujuan (048 / S3: US4) ----------
+    /** Penyetuju untuk aksi yang sedang meminta persetujuan. Gagal = keadaan galat dengan Coba lagi. */
+    var approvers by mutableStateOf<Load<List<Approver>>>(Load.Idle); private set
+
+    fun loadApprovers(action: String) {
+        val b = backend ?: return
+        approvers = Load.Loading
+        viewModelScope.launch {
+            approvers = try { Load.Ready(retryNetwork { b.approvers(action) }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /**
+     * Minta token untuk satu aksi. Token hanya hidup di memori dan langsung diserahkan ke aksi yang disetujui; PIN
+     * tidak disimpan di state apa pun (dialog mengosongkannya sebelum memanggil ini).
+     */
+    fun requestOverride(s: Sheet.Override, approverId: Long, pin: String, onError: (String) -> Unit) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                val token = b.issueOverride(s.action, s.subject, approverId, pin)
+                sheet = null
+                s.onApproved(token)
+            } catch (e: ApiError) {
+                onError(overrideErrorText(e))
+            }
+        }
+    }
+
+    private fun overrideErrorText(e: ApiError): String {
+        val left = e.attemptsRemaining
+        return if (e.code == "invalid_pin" && left != null) "PIN salah. Sisa $left percobaan." else e.message
+    }
+
+    /**
+     * Subjek persetujuan kas keluar: identitas objek (shift) + parameter yang sama dengan permintaan aksi. Server
+     * mencocokkan token dengan subjek ini; token untuk shift/kas lain tidak berlaku (422 override_mismatch bila beda).
+     */
+    private fun cashSubject(sessionId: Long, inflow: Boolean, reason: String, amount: Int): JsonObject = buildJsonObject {
+        put("session_id", sessionId)
+        put("direction", if (inflow) "in" else "out")
+        put("amount", amount)
+        put("reason_code", reason)
+    }
+
+    /** Subjek persetujuan selisih tutup shift: identitas shift + hitungan pecahan yang dikirim ke POST close. */
+    private fun countSubject(sessionId: Long, rows: List<Pair<Int, Int>>): JsonObject = buildJsonObject {
+        put("session_id", sessionId)
+        putJsonArray("counted_by_denomination") {
+            rows.forEach { (d, q) -> addJsonObject { put("denomination", d); put("qty", q) } }
+        }
+    }
+
+    /**
+     * Tutup shift dengan hitungan buta. Server yang menjumlahkan dan menilai selisih. Penutupan tidak idempoten di
+     * server, jadi tidak ada coba-ulang otomatis: jika koneksi putus, status dianggap belum diketahui.
+     */
+    fun submitCount(counts: Map<Int, Int>, edcBatch: Int?, overrideToken: String? = null) {
+        val b = backend ?: return
+        val sid = shift?.id ?: return
+        val rows = counts.filter { it.value > 0 }.map { it.key to it.value }
+        // Satu kunci per niat tutup: coba-ulang jaringan memakai kunci yang sama, server menjawab dengan hasil tersimpan.
+        val intent = "close:$sid"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val outcome = retryNetwork { b.closeShift(sid, rows, edcBatch, key, overrideToken) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                closeResult = outcome
+                report = Load.Idle
+                sheet = null
+                dest = Dest.CLOSE_RESULT
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) {
+                    conn = Conn.OFFLINE
+                    say("Koneksi terputus. Kirim hitungan lagi; server tidak akan menutup dua kali.")
+                    return@launch
+                }
+                keys.settled(intent)
+                if (e is ApiError.Conflict && e.code == "override_required") {
+                    // Selisih di atas toleransi: minta persetujuan untuk tutup ini, lalu kirim hitungan yang sama dengan token.
+                    sheet = Sheet.Override(summary = "Selisih kas di atas toleransi", action = "variance", subject = countSubject(sid, rows)) { token ->
+                        submitCount(counts, edcBatch, token)
+                    }
+                } else if (e is ApiError.Conflict) {
+                    // Penutupan pertama mungkin sudah diterima server (jawaban hilang di jalan): cek status dulu.
+                    val stillOpen = try { b.currentShift() != null } catch (_: ApiError) { true }
+                    if (stillOpen) {
+                        say(e.message)
+                    } else {
+                        shift = null; report = Load.Idle; cashMovements = Load.Idle; sheet = null
+                        go(Dest.SHIFT)
+                        say("Shift sudah tertutup di server. Angka penutupan ada di back office.")
+                    }
+                } else {
+                    say(e.message)
+                }
+            }
+        }
+    }
+
+    fun hasPendingPayment() = orders.any { !it.closed && it.hasPendingQris }
+
+    fun finishShift() { shift = null; closeResult = null; report = Load.Idle; cashMovements = Load.Idle; lock() }
 
     private fun clock(): String = SimpleDateFormat("HH:mm", Locale.US).format(Date())
-
-    private fun seedOrders(): List<Order> {
-        fun l(id: Int, item: String, qty: Int, vararg mods: ModOption): OrderLine {
-            val p = PosCatalog.product(item)
-            return OrderLine(id, p.id, p.name, p.price, qty, mods.toList(), fired = true, firedAt = "10:12")
-        }
-        fun m(n: String, d: Int = 0) = ModOption(n, d)
-        // Angka mengikuti desain 03: Meja 3 = Rp 37.400 (2 tamu), Meja 5 = Rp 52.800 (4 tamu).
-        return listOf(
-            Order("a1", OrderKind.DINE_IN, "3", 2, null, "Andi", "18:42", listOf(l(1, "m3", 1, m("Sedang")), l(2, "n2", 1))),
-            Order("a2", OrderKind.DINE_IN, "5", 4, null, "Andi", "18:55", listOf(l(3, "m3", 2, m("Pedas")), l(4, "e1", 1))),
-            Order("a3", OrderKind.DINE_IN, "T2", 3, null, "Andi", "18:30", listOf(l(5, "m5", 3, m("Sedang")), l(6, "s2", 1)), billPrinted = true),
-        )
-    }
 }

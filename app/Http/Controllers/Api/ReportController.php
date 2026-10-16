@@ -129,7 +129,27 @@ class ReportController extends Controller
                 ]);
         }
 
-        $totals = SalesFigures::totals($base);
+        // 048 / S4 — refund mengurangi penjualan pada tanggal refund (lihat SalesFigures::refundTotals). Baris
+        // kelompok dikurangi dengan kunci yang sama; hari yang hanya berisi refund tetap muncul sebagai pengurangan.
+        if ($groupBy !== 'customer') {
+            $refundByKey = SalesFigures::refundAmountsByGroup($idExpr, $from, $to);
+            $rows = $rows->map(function ($row) use ($groupBy, $refundByKey) {
+                $key = $groupBy === 'day' ? (string) $row['label'] : (string) $row['entity_id'];
+                $row['amount'] = number_format((float) $row['amount'] - ($refundByKey[$key] ?? 0.0), 2, '.', '');
+
+                return $row;
+            });
+            if ($groupBy === 'day') {
+                $haveDays = $rows->pluck('label')->map(fn ($d) => (string) $d)->all();
+                foreach ($refundByKey as $day => $net) {
+                    if (! in_array((string) $day, $haveDays, true)) {
+                        $rows->push(['entity_id' => null, 'label' => $day, 'unit_count' => 0.0, 'amount' => number_format(-$net, 2, '.', '')]);
+                    }
+                }
+            }
+        }
+
+        $totals = SalesFigures::netOfRefunds(SalesFigures::totals($base), $from, $to);
 
         // 046: tidak ada lagi pendapatan pre-order, jadi angka bersama = angka POS. Kunci `pos_*` tetap
         // dikirim supaya klien/ekspor yang memakainya tidak berubah.
@@ -139,6 +159,12 @@ class ReportController extends Controller
         $totals->pos_unit_count = $totals->unit_count;
         $totals->pos_gross_sales = $totals->gross_sales;
         $totals->pos_net_sales = $totals->net_sales;
+
+        // 048 / S4 — pajak eksklusif: net (pra-pajak) + pajak = grand_total, sama dengan struk. order_discount_total
+        // ditampilkan supaya selisih diskon tingkat-order (yang tidak masuk net, keputusan O3) terlihat.
+        $totals->tax_total = number_format((float) ($totals->tax_total ?? 0), 2, '.', '');
+        $totals->grand_total = number_format((float) ($totals->grand_total ?? 0), 2, '.', '');
+        $totals->order_discount_total = number_format((float) ($totals->order_discount_total ?? 0), 2, '.', '');
 
         // Daftar TRANSAKSI dibangun oleh SalesTransactionsService — sumber yang SAMA dengan ekspor,
         // supaya berkas ekspor tidak pernah berbeda dari layar.
@@ -232,6 +258,13 @@ class ReportController extends Controller
                 SUM(order_items.line_total) as revenue,
                 SUM(order_items.cost_price * order_items.qty) as cost_of_goods
             ')->first();
+
+        // 048 / S4 — pendapatan dan biaya barang dikurangi refund pada tanggal refund (keputusan pemilik). Refund
+        // membalik penjualan DAN biaya barang yang dikembalikan, jadi laba kotor berkurang sebesar margin barang itu.
+        // Stok sudah kembali lewat RefundService; bagian ini hanya akuntansi.
+        $refund = SalesFigures::refundTotals($from, $to);
+        $totals->revenue = (float) ($totals->revenue ?? 0) - $refund->net;
+        $totals->cost_of_goods = (float) ($totals->cost_of_goods ?? 0) - $refund->cost;
 
         // 046 — penjualan selesai saja untuk periode ini: tanpa pre-order, tanpa biaya event / laba bersih.
         $revenue = (float) ($totals->revenue ?? 0);

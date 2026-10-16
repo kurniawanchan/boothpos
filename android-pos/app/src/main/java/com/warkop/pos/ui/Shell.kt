@@ -91,7 +91,7 @@ private fun Header(store: PosStore, title: String, subtitle: String?, compact: B
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = if (compact) 20.sp else 28.sp, fontWeight = FontWeight.Normal, maxLines = 1)
-            Text(subtitle ?: (if (compact) "${u?.name} · ${shift?.let { "Shift 1 · 31 Okt" } ?: "Belum ada shift"}" else "${u?.name} (${u?.role}) · Sab, 31 Okt 2026 · ${shift?.let { "Shift 1 sejak ${it.openedAt}" } ?: "Belum ada shift"}"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Text(subtitle ?: (if (compact) "${u?.name} · ${shift?.let { "Shift terbuka" } ?: "Belum ada shift"}" else "${u?.name} (${u?.role}) · ${shift?.let { "Shift dibuka ${it.openedAt}" } ?: "Belum ada shift"}"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
         ConnChip(store)
         Spacer(Modifier.width(10.dp))

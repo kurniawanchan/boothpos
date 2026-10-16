@@ -559,3 +559,37 @@ Peran dan akses outlet: setiap pengguna bisa dibatasi ke satu atau beberapa outl
 - **Pembatalan (rollback):** pulihkan dari `app:backup` yang diambil sebelum pemutakhiran. `down()` migrasi nullable sengaja
   berhenti bila sudah ada baris tanpa event (tidak mengarang event); kunci menu yang dicabut tidak dapat dipulihkan otomatis.
 - **Alamat tersimpan/saran:** pengguna yang menyimpan alamat `/events` atau `/preorders` akan mendarat di Dashboard.
+
+## 13. Aplikasi Android POS (fitur 048, 2026-10-16)
+
+Aplikasi tablet kasir ada di `android-pos/` (Kotlin, Compose). Ia online-first dan memanggil API yang sama dengan SPA. Spesifikasi: `specs/048-wire-android-pos-api/`.
+
+### 13.1 Menyiapkan terminal
+1. Buka aplikasi, masukkan alamat server (di emulator: `http://10.0.2.2:8010`; di perangkat sungguhan: alamat LAN host).
+2. Masuk dengan akun **owner atau admin** (kata sandi), lalu pilih outlet.
+3. Daftarkan terminal (mis. `T01`). Server membuat `devices` per outlet dan mengembalikan id perangkat; aplikasi menyimpannya di Keystore.
+4. Pilih staf dan masuk dengan PIN 6 digit. Staf dibaca dari server; PIN tidak pernah disimpan di perangkat.
+
+### 13.2 Emulator
+- Emulator mencapai host lewat `10.0.2.2` (bukan `localhost`). Backend dev berjalan di `http://localhost:8010` pada host, sehingga alamat di aplikasi adalah `http://10.0.2.2:8010`.
+- Cold boot (`-no-snapshot`) memakan beberapa GB ruang disk dan CPU; pastikan ruang bebas dan beban host cukup sebelum menguji.
+
+### 13.3 Membangun APK
+```bash
+cd android-pos
+./gradlew :app:assembleDebug        # APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew :core-network:testDebugUnitTest :app:testDebugUnitTest
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+### 13.4 Mencabut dan memasang ulang perangkat
+- Cabut: `DELETE /devices/{id}` (owner/admin). Server mengisi `revoked_at`; perangkat tidak dihapus dari basis data (jejak audit). Permintaan dari perangkat yang dicabut ditolak (422 pada `device_id`).
+- Pasang ulang: jalankan penyiapan lagi (13.1) untuk membuat pasangan baru. Heartbeat (`POST /devices/heartbeat`, tiap 60 dtk) menandai `last_seen_at` dan selisih jam; selisih di atas 5 dtk ditampilkan sebagai peringatan.
+
+### 13.5 Membaca log
+```bash
+adb logcat -s PosApi            # permintaan API (metode, path, status); tanpa token atau PIN
+adb logcat -s AndroidRuntime:E  # galat fatal; harus kosong pada pengujian
+```
+- Tag `PosApi` hanya tercatat pada build debug (`debuggable`).
+- Galat `ANR` ("tidak merespons") dicatat di `/data/anr/traces.txt`; ambil dengan `adb shell cat /data/anr/traces.txt`.

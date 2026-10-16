@@ -208,7 +208,10 @@ class TabPermissionsTest extends TestCase
             // Batal tab, serah-terima, dan batal item yang SUDAH dimasak: hanya owner/admin.
             $this->postJson("/api/v1/tabs/{$tab}/void", ['reason' => 'x'])->assertForbidden("void tab sebagai $name");
             $this->postJson("/api/v1/tabs/{$tab}/handover", ['session_id' => $session->id])->assertForbidden("handover sebagai $name");
-            $this->deleteJson("/api/v1/tabs/{$tab}/items/{$line}", ['reason' => 'x'])->assertForbidden("batal item dimasak sebagai $name");
+            // 048 / S3: tanpa order.void, batal item yang sudah dimasak butuh persetujuan (409 override_required);
+            // peran tanpa menu floor ditolak lebih dulu (403). Apa pun jawabannya, baris tidak boleh hilang.
+            $status = $this->deleteJson("/api/v1/tabs/{$tab}/items/{$line}", ['reason' => 'x', 'reason_code' => 'wrong_item', 'kitchen_status' => 'started', 'stock_decision' => 'waste'])->status();
+            $this->assertContains($status, [403, 409], "batal item dimasak sebagai $name");
         }
 
         $this->assertSame('open', Order::find($tab)->status);

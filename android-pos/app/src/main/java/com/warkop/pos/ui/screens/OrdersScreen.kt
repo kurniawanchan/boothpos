@@ -1,5 +1,9 @@
 package com.warkop.pos.ui.screens
 
+import com.warkop.pos.ui.ErrorState
+import com.warkop.pos.ui.friendlyLoadError
+import com.warkop.pos.ui.isOfflineError
+import com.warkop.pos.state.Load
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,6 +33,7 @@ fun OrdersScreen(store: PosStore) {
     val open = store.openOrders
     val closed = store.closedOrders
     val compact = windowSize() == Size.COMPACT
+    LaunchedEffect(tab) { if (tab == 1) store.loadClosed() }
     PosShell(store, title = "Order") {
         Column(Modifier.fillMaxSize()) {
             ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
@@ -37,6 +42,11 @@ fun OrdersScreen(store: PosStore) {
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.weight(1f)) {
+                // T039: kegagalan memuat tampil sebagai ErrorState (bukan toast, bukan daftar kosong).
+                val listFailure = if (tab == 1) (store.closedLoad as? Load.Failed)?.error else (store.floor as? Load.Failed)?.error
+                if (listFailure != null) {
+                    ErrorState(friendlyLoadError(listFailure), { if (tab == 1) store.loadClosed() else store.startFloorPolling() }, Modifier.weight(1f).fillMaxWidth(), offline = isOfflineError(listFailure))
+                } else {
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(if (tab == 0) open else closed, key = { it.id }) { o ->
                         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = if (tab == 1 && (selected ?: closed.firstOrNull()?.id) == o.id) MaterialTheme.colorScheme.surfaceContainerHigh else if (tab == 1) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow, onClick = { if (tab == 0) store.openOrder(o.id) else selected = o.id }) {
@@ -49,12 +59,13 @@ fun OrdersScreen(store: PosStore) {
                                 if (o.hasPendingQris) Pill("QRIS", MaterialTheme.pos.warnContainer, MaterialTheme.pos.onWarnContainer)
                                 if (o.billPrinted && !o.closed) Pill("Bill", MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
                                 o.otherDevice?.let { Pill(it, MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurface) }
-                                if (o.refunded) Pill("Refund", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
+                                if (o.refunded) Pill("Direfund", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
                                 Text(if (o.cancelledReason != null) "Batal" else rp(o.total), Modifier.padding(horizontal = 10.dp), fontWeight = FontWeight.SemiBold)
                                 if (tab == 0) androidx.compose.material3.Icon(Icons.Filled.ChevronRight, null)
                             }
                         }
                     }
+                }
                 }
                 val sel = closed.firstOrNull { it.id == selected } ?: closed.firstOrNull()
                 if (tab == 1 && sel != null && !compact) {
@@ -68,10 +79,11 @@ fun OrdersScreen(store: PosStore) {
                             MoneyRow("Total", rp(sel.total), big = true)
                             sel.tenders.filter { it.status == TenderStatus.OK }.forEach { MoneyRow(it.method.label, rp(it.amount)) }
                             if (sel.reprints > 0) Text("cetak ulang ${sel.reprints}×", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (sel.refunded) Text("Direfund · total ${rp(sel.refundTotal ?: 0)} · kembali tunai ${rp(sel.cashReturned ?: 0)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.weight(1f))
                             if (sel.cancelledReason == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedPill("Lihat struk", { store.show(Sheet.Receipt(sel.id)) }); OutlinedPill("Cetak ulang", { store.reprint(sel.id) })
-                                OutlinedPill(if (sel.refunded) "Sudah direfund" else "Refund", { store.refund(sel.id) }, enabled = !sel.refunded, danger = true)
+                                OutlinedPill(if (sel.refunded) "Sudah direfund" else "Refund", { store.show(Sheet.Refund(sel.id)) }, enabled = !sel.refunded, danger = true)
                             }
                         }
                     }

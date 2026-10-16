@@ -178,7 +178,7 @@ async function onExport() {
     </PageHeader>
 
     <!-- 045: dengan satu outlet terpilih, kartu stok (seluruh organisasi) memberi catatannya. -->
-    <DashboardKpis :summary="data" :state="state" :outlet-selected="outletStore.selected !== null" @retry="loadSummary()" />
+    <DashboardKpis :summary="data" :state="state" :outlet-selected="outletStore.selected !== null" :tax-label="settings.taxLabel" @retry="loadSummary()" />
 
     <!-- Cakupan satu outlet: "Seluruh toko" (Stage B menggantinya dengan nama outlet / "Semua outlet"). -->
     <AttentionPanel

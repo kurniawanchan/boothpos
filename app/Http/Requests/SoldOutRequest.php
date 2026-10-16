@@ -10,7 +10,8 @@ class SoldOutRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->hasPermission(PermissionCatalog::ITEM_86) ?? false;
+        // 048 / S3 — otorisasi sebenarnya di OverrideGate (izin menu.availability.set atau token persetujuan).
+        return $this->user() !== null;
     }
 
     public function rules(): array
@@ -19,6 +20,8 @@ class SoldOutRequest extends FormRequest
             ...\App\Support\OutletCarriedRule::rules(),
             'reason_code_id' => ['required', 'integer'],
             'note' => ['sometimes', 'nullable', 'string', 'max:255'],
+            // 048 / S3 — tanpa menu.availability.set, tanda habis butuh persetujuan (diperiksa OverrideGate).
+            'override_token' => ['nullable', 'string', 'max:64'],
         ];
     }
 }

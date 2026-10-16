@@ -26,6 +26,7 @@ import com.warkop.pos.ui.*
 /** S11 — layar bayar: sisa, riwayat tender, metode, uang cepat, keypad (desain 13/14/15/16, 32 phone). */
 @Composable
 fun TenderScreen(store: PosStore) {
+    LaunchedEffect(Unit) { store.loadQrisLabel() }
     val o = store.active ?: return
     var method by remember { mutableStateOf(TenderMethod.CASH) }
     var amount by remember { mutableStateOf("") }
@@ -69,10 +70,14 @@ fun TenderScreen(store: PosStore) {
 
     val right: @Composable (Modifier) -> Unit = { m ->
         Column(if (compact) m else m.verticalScroll(rememberScrollState())) {
+            // T039: saat offline, aksi non-tunai dinonaktifkan dan alasannya ditampilkan (bukan toast).
+            if (store.conn != Conn.ONLINE) {
+                ErrorState("Koneksi ke server terputus.", { store.heartbeatNow() }, Modifier.fillMaxWidth().padding(bottom = 10.dp), offline = true, writeDisabledReason = "EDC dan QRIS butuh server. Pembayaran tunai tetap bisa dicatat.")
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MethodTile(Icons.Filled.Payments, "Tunai", method == TenderMethod.CASH, true, Modifier.weight(1f)) { method = TenderMethod.CASH }
-                MethodTile(Icons.Filled.CreditCard, "EDC BCA", method == TenderMethod.EDC, !pending, Modifier.weight(1f)) { method = TenderMethod.EDC; store.show(Sheet.Edc) }
-                MethodTile(Icons.Filled.QrCode2, "QRIS GoPay", method == TenderMethod.QRIS, !pending && store.conn == Conn.ONLINE, Modifier.weight(1f)) { method = TenderMethod.QRIS; store.show(Sheet.QrisRecord) }
+                MethodTile(Icons.Filled.CreditCard, "EDC", method == TenderMethod.EDC, !pending && store.conn == Conn.ONLINE, Modifier.weight(1f)) { method = TenderMethod.EDC; store.show(Sheet.Edc) }
+                MethodTile(Icons.Filled.QrCode2, store.qrisLabel,method == TenderMethod.QRIS, !pending && store.conn == Conn.ONLINE, Modifier.weight(1f)) { method = TenderMethod.QRIS; store.show(Sheet.QrisRecord) }
             }
             Spacer(Modifier.height(10.dp))
             if (method == TenderMethod.CASH) {
@@ -94,7 +99,7 @@ fun TenderScreen(store: PosStore) {
                 PrimaryPill("Terima tunai", { store.payCash(value); amount = "" }, Modifier.fillMaxWidth(), enabled = value > 0, icon = Icons.Filled.Payments, trailing = rp(value))
             }
             if (pending) Surface(Modifier.fillMaxWidth().padding(top = 10.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.pos.warnContainer, contentColor = MaterialTheme.pos.onWarnContainer) {
-                Text("QRIS menunggu verifikasi memblokir pembayaran non-tunai lain dan penutupan shift.", Modifier.padding(16.dp), fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text("QRIS menunggu verifikasi memblokir pembayaran non-tunai lain pada tab ini, dan penutupan shift.", Modifier.padding(16.dp), fontSize = 16.sp, fontWeight = FontWeight.Medium)
             }
         }
     }
@@ -119,7 +124,7 @@ private fun MethodTile(icon: androidx.compose.ui.graphics.vector.ImageVector, la
 @Composable
 fun DoneScreen(store: PosStore) {
     val o = store.active ?: return
-    val change = o.tenders.sumOf { (it.received ?: it.amount) - it.amount }
+    val change = o.serverChange ?: 0
     val compact = windowSize() == Size.COMPACT
     PosShell(store, title = "Pembayaran selesai") {
         val main: @Composable (Modifier) -> Unit = { m ->
@@ -132,7 +137,7 @@ fun DoneScreen(store: PosStore) {
                     Text(rp(if (change > 0) change else o.total), fontSize = 56.sp, fontWeight = FontWeight.Light)
                     Text("Diterima ${rp(o.tenders.sumOf { it.received ?: it.amount })}${if (o.tenders.all { it.method == TenderMethod.CASH }) " tunai" else ""} · Total ${rp(o.total)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(14.dp))
-                    StatusLine(Icons.Filled.Print, "Struk tercetak di printer Kasir")
+                    StatusLine(Icons.Filled.Print, "Cetak struk belum tersedia · " + (o.receiptNo ?: "tanpa nomor terminal"))
                     StatusLine(Icons.Filled.CloudDone, if (store.conn == Conn.ONLINE) "Tersinkron ke server" else "Tersimpan di perangkat · dikirim saat online")
                     Spacer(Modifier.weight(1f, fill = !compact)); Spacer(Modifier.height(14.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

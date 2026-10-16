@@ -35,6 +35,7 @@ servers:
     description: Instalasi lokal pada laptop operasional
 
 tags:
+  - name: Devices
   - name: Dashboard
   - name: Menu
   - name: License
@@ -143,6 +144,230 @@ paths:
                   user: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /staff/roster:
+    get:
+      tags: [Auth]
+      summary: Daftar staf aktif satu outlet untuk layar pilih-nama terminal (048/B1)
+      description: |
+        Hanya data layar pilih-staf — tanpa username dan tanpa hash PIN. Butuh token (token penyiapan terminal dari
+        login owner/admin). Staf = pengguna aktif yang ditugaskan ke outlet itu, atau yang perannya melihat semua outlet.
+      parameters:
+        - { name: outlet_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Daftar staf
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        role: { type: string, nullable: true }
+                        has_pin: { type: boolean }
+                        locked: { type: boolean, description: Login PIN sedang terkunci }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Outlet tidak ada atau tidak aktif }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /auth/pin-sessions:
+    post:
+      tags: [Auth]
+      summary: Masuk dengan PIN 6 digit (048/B1)
+      description: |
+        Mengeluarkan token sesi PIN berumur 12 jam. Lima PIN salah berturut-turut mengunci login PIN staf itu 15
+        menit (429 `pin_locked`); kata sandi tetap dapat dipakai lewat `/auth/login`. Pengguna yang tidak ada, tidak
+        aktif, atau bukan staf outlet dijawab sama (401 `invalid_pin`) tanpa hitungan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outlet_id, user_id, pin]
+              properties:
+                outlet_id: { type: integer }
+                user_id: { type: integer }
+                pin: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_at: { type: string, format: date-time }
+                  user: { $ref: '#/components/schemas/AuthenticatedUser' }
+        '401': { description: "PIN salah (`code: invalid_pin`, `attempts_remaining` bila ada)" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { description: "Terkunci (`code: pin_locked`, `locked_until`)" }
+
+  /auth/pin-changes:
+    post:
+      tags: [Auth]
+      summary: Atur atau ganti PIN sendiri (048/B1)
+      description: Sudah punya PIN → wajib `current_pin` (salah dihitung ke kunci yang sama). Belum punya → wajib `current_password`. PIN lemah (angka sama / berurutan) ditolak.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_pin]
+              properties:
+                new_pin: { type: string, pattern: '^[0-9]{6}$' }
+                current_pin: { type: string, nullable: true }
+                current_password: { type: string, nullable: true, format: password }
+      responses:
+        '200': { description: PIN diubah }
+        '401': { description: Kata sandi atau PIN saat ini salah }
+        '422': { description: "PIN lemah (`pin_too_weak`) atau `current_pin_required`" }
+        '429': { description: Terkunci }
+
+  /auth/token-refresh:
+    post:
+      tags: [Auth]
+      summary: Perpanjang token sesi PIN (048/B1)
+      description: Hanya untuk token hasil PIN; token kata sandi tidak kedaluwarsa dan dijawab 403.
+      responses:
+        '200':
+          description: Token baru; token lama dicabut
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_at: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Bukan token PIN (`token_not_refreshable`) }
+
+  /users/{id}/pin-reset:
+    post:
+      tags: [Auth]
+      summary: Reset PIN seorang staf (owner/admin) (048/B1)
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '204': { description: PIN dan kunci dihapus; sesi PIN staf itu dicabut }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /devices:
+    get:
+      tags: [Devices]
+      summary: Daftar terminal POS pada outlet yang berlaku (owner/admin) (048/B14)
+      responses:
+        '200':
+          description: Daftar
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Device' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /devices/pairings:
+    post:
+      tags: [Devices]
+      summary: Daftarkan terminal POS (owner/admin) (048/B14)
+      description: |
+        Outlet diturunkan server dari konteks (satu-satunya outlet, atau `X-Outlet-Id`), TIDAK dari body. Admin yang
+        melihat banyak outlet wajib memilih satu lewat header. Kode `T01`, `T02`… otomatis bila kosong, unik per outlet.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 80 }
+                code: { type: string, maxLength: 12, nullable: true }
+      responses:
+        '201':
+          description: Terminal terdaftar
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /devices/heartbeat:
+    post:
+      tags: [Devices]
+      summary: Heartbeat terminal POS — setiap 60 dtk (048 / T064)
+      description: |
+        Terminal mengirim versi aplikasi, jam perangkat, dan kedalaman antrean. Server menyimpan `app_version`
+        dan waktu terakhir terlihat, lalu menjawab waktu server dan selisih jam.
+
+        **Tanda selisih jam**: `skew_seconds` = (`clock_ms` − `server_time_ms`) / 1000, dibulatkan. POSITIF berarti
+        JAM PERANGKAT MAJU dari server; negatif berarti tertinggal. Nilai yang sama disimpan di perangkat.
+
+        `queue_depth` divalidasi (0–10000) tetapi TIDAK disimpan (antrean sinkron belum ada, B16).
+        `menu_release` = versi rilis menu TERBIT tertinggi bila mesin rilis aktif (`menu_release_enabled`);
+        `null` bila mesin rilis mati atau belum ada rilis terbit. Tidak menulis catatan aktivitas per heartbeat.
+
+        Perangkat ditentukan dari header `X-Device-Id`: harus terminal aktif milik outlet yang terlihat pengguna.
+        Tanpa header, atau perangkat tak dikenal/dicabut/outlet lain → 422 `errors.device_id`.
+      parameters:
+        - name: X-Device-Id
+          in: header
+          required: true
+          description: Id terminal (`devices.id`) yang dipasangkan.
+          schema: { type: string, example: "1" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [app_version, clock_ms, queue_depth]
+              properties:
+                app_version: { type: string, maxLength: 40, example: "1.4.2" }
+                clock_ms: { type: integer, minimum: 0, description: "Epoch milidetik jam perangkat." }
+                queue_depth: { type: integer, minimum: 0, maximum: 10000, description: "Divalidasi saja; tidak disimpan." }
+      responses:
+        '200':
+          description: Heartbeat diterima
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server_time_ms: { type: integer, description: "Epoch milidetik jam server." }
+                  skew_seconds: { type: integer, description: "Positif = jam perangkat maju dari server." }
+                  menu_release: { type: integer, nullable: true, description: "Versi rilis menu yang berlaku; null bila mesin rilis mati." }
+        '422':
+          description: Perangkat tidak dikenal, dicabut, bukan milik outlet ini, atau body tidak valid.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  errors: { type: object }
+
+  /devices/{id}:
+    delete:
+      tags: [Devices]
+      summary: Cabut terminal POS (jejak audit tetap ada) (048/B14)
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '204': { description: Dicabut (idempoten) }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /auth/logout:
     post:
@@ -343,6 +568,12 @@ paths:
                   business_day_cutoff:
                     type: string
                     description: "042 — jam (HH:MM, waktu lokal toko) hari bisnis baru dimulai."
+                  tax_rate:
+                    type: number
+                    description: "048 — tarif pajak eksklusif (%), 0 bawaan. Angka tampilan; server selalu menghitung ulang."
+                  tax_label: { type: string, description: "048 — label pajak di layar/struk (bawaan `Pajak`)." }
+                  variance_tolerance: { type: integer, description: "048 — toleransi selisih kas saat tutup shift (Rp, bawaan 5000)." }
+                  cash_out_approval_threshold: { type: integer, description: "048 — kas keluar di atas ini butuh persetujuan atasan (Rp, bawaan 200000)." }
                   schema_update_required:
                     type: boolean
                     description: |
@@ -1349,13 +1580,25 @@ paths:
         `cashier_sessions`, bukan satu sesi per artist). Bila diisi, jumlah
         seluruh `amount` WAJIB persis sama dengan `opening_cash` (422 bila
         tidak).
+
+        048 / S2 — kas awal boleh diberikan sebagai `opening_denominations[]` (pecahan × qty); jumlahnya
+        DIHITUNG SERVER (`opening_cash` diturunkan darinya). `opening_cash` lama tetap diterima; bila keduanya
+        dikirim, harus sama (422). Pecahan di luar {100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100}
+        dan pecahan ganda ditolak 422. Header `X-Device-Id` (opsional) mencatat terminal pembuka; terminal yang
+        dicabut atau milik outlet lain → 422 `errors.device_id`.
+      parameters:
+        - name: X-Device-Id
+          in: header
+          required: false
+          description: 048 — id terminal (`devices.id`) yang membuka shift. Tanpa header (SPA web) tetap berjalan.
+          schema: { type: string, example: "1" }
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [opening_cash]
+              description: "Isi salah satu: `opening_cash` ATAU `opening_denominations`."
               properties:
                 outlet_id:
                   type: integer
@@ -1365,7 +1608,18 @@ paths:
                     (penugasan atau header X-Outlet-Id); lebih dari satu → 422 `errors.outlet_id`. Di luar outlet
                     yang boleh dilihat → 403 `outlet_forbidden`. Pengguna non-admin tanpa penugasan → 409
                     `outlet_unassigned`. Order, pembayaran dan tiket di shift ini mewarisi outletnya.
-                opening_cash: { type: string, example: "500000.00" }
+                opening_cash: { type: string, example: "500000.00", nullable: true }
+                opening_denominations:
+                  type: array
+                  nullable: true
+                  description: 048 — hitungan kas awal per pecahan. Baris ber-qty nol diabaikan.
+                  maxItems: 10
+                  items:
+                    type: object
+                    required: [denomination, qty]
+                    properties:
+                      denomination: { type: integer, enum: [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100] }
+                      qty: { type: integer, minimum: 0, maximum: 100000 }
                 opening_cash_entries:
                   type: array
                   nullable: true
@@ -1401,15 +1655,41 @@ paths:
         **028 — `409` bila shift masih memegang tab terbuka**; badan respons memuat
         `open_tabs` (id, nomor, meja/label) supaya UI bisa menautkannya. Tab harus
         dibayar, dibatalkan, atau diserahkan ke shift lain dulu.
+
+        **048 / S2 — hitungan buta.** Kirim `counted_by_denomination[]` (kasir menghitung per pecahan tanpa
+        melihat angka seharusnya). Server menjumlahkan hitungan itu sendiri, lalu:
+        - `409 pending_payments` bila masih ada pembayaran QRIS (`qr_ewallet`) berstatus `pending` di shift ini;
+        - `409 override_required` bila |selisih| > `variance_tolerance` (`GET /settings/features`, bawaan Rp 5.000);
+          shift TIDAK ditutup. Persetujuan selisih belum tersedia (S3/US4).
+        Hanya protokol hitungan buta yang memeriksa dua aturan itu. Bentuk lama (`closing_cash` saja) tetap
+        seperti sebelumnya. Salah satu dari `closing_cash` atau `counted_by_denomination` wajib (422).
+
+        Menerima header `Idempotency-Key` (satu UUID per niat tutup): pengiriman ulang dengan kunci yang sama
+        mengembalikan hasil tutup yang tersimpan, bukan 409. `expected_cash` hanya muncul di respons ini (dan
+        di Z-report), tidak di ringkasan atau X-report sebelum hitungan dikirim.
+
+        Respons memuat `z_report`: salinan angka shift saat tutup (sama dengan X-report plus hitungan, selisih,
+        toleransi, `edc_batch_total`, dan `closed_at`), disimpan supaya laporan lama tidak ikut berubah.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [closing_cash]
+              description: Isi `counted_by_denomination` (hitungan buta) ATAU `closing_cash` (bentuk lama).
               properties:
-                closing_cash: { type: string, example: "2350000.00" }
+                closing_cash: { type: string, nullable: true, example: "2350000.00" }
+                counted_by_denomination:
+                  type: array
+                  nullable: true
+                  maxItems: 10
+                  items:
+                    type: object
+                    required: [denomination, qty]
+                    properties:
+                      denomination: { type: integer, enum: [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100] }
+                      qty: { type: integer, minimum: 0, maximum: 100000 }
+                edc_batch_total: { type: string, nullable: true, description: "048 — total batch EDC untuk dicocokkan dengan mesin; tidak ikut menghitung selisih." }
                 notes: { type: string, nullable: true }
       responses:
         '200':
@@ -1418,13 +1698,16 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CashierSession' }
         '409':
-          description: Sesi sudah ditutup, ATAU masih ada tab terbuka (memuat `open_tabs`).
+          description: Sesi sudah ditutup, ATAU masih ada tab terbuka (memuat `open_tabs`), ATAU (048) `pending_payments`/`override_required`.
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   message: { type: string }
+                  code: { type: string, enum: [open_tabs, pending_payments, override_required], nullable: true }
+                  variance: { type: string, nullable: true }
+                  tolerance: { type: string, nullable: true }
                   open_tabs:
                     type: array
                     items:
@@ -1434,6 +1717,288 @@ paths:
                         order_number: { type: string }
                         table: { type: string, nullable: true, description: Nama meja; null untuk takeaway. }
                         tab_label: { type: string, nullable: true }
+
+  /overrides:
+    post:
+      tags: [Override]
+      summary: Terbitkan persetujuan di titik aksi (048 / S3)
+      description: |
+        Penyetuju memasukkan PIN-nya; server menghitung hash subjek SENDIRI dari `subject` (id objek + bidang body aksi), dan
+        mengembalikan `override_token` sekali pakai, berlaku **120 detik**, terikat ke aksi, bidang body itu, outlet
+        aktif peminta, dan peminta. Token hanya dikembalikan sekali; server hanya menyimpan hash-nya.
+
+        `subject` = identitas objek (id path: tab, sesi, baris, produk, pembayaran) SERTA bidang body aksi yang dijaga.
+        Token terikat ke objek itu: persetujuan untuk baris A tidak berlaku untuk baris B (422 `override_mismatch`).
+        Daftar per aksi: void_line → tab_id, line_id, reason_code, kitchen_status, stock_decision, reason;
+        cancel_order → tab_id, reason_code, reason; cash_out → session_id, direction, amount, reason_code;
+        variance → session_id, counted_by_denomination; availability → product_id, reason_code_id, note, outlet_ids;
+        qris_verify → tab_id, payment_id, reference; qris_fail → tab_id, payment_id.
+        Server tidak pernah menerima hash dari klien. Aksi yang dijaga memanggil `override_token` dari body-nya dan
+        menghitung ulang subjek dari body-nya sendiri; tidak cocok → `422 override_mismatch`.
+
+        **Batasan yang disadari**: karena parameter path tidak ikut dalam subjek, token tidak terikat ke tab/baris/
+        sesi/produk tertentu; terikat ke aksi, bidang body, outlet, peminta, 120 dtk, dan sekali pakai.
+
+        Aksi: `void_line` (reason_code, kitchen_status, stock_decision, reason), `cancel_order` (reason_code, reason),
+        `cash_out` (direction, amount, reason_code), `variance` (counted_by_denomination), `availability`
+        (reason_code_id, note, outlet_ids), `qris_verify` (reference), `qris_fail` (tanpa bidang).
+
+        Penyetuju harus aktif, berada di outlet yang sama, memegang izin aksi, dan bukan peminta. PIN penyetuju memakai
+        kunci 5-salah yang sama dengan login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, subject, approver_user_id, pin]
+              properties:
+                action: { type: string, enum: [void_line, cancel_order, cash_out, variance, availability, qris_verify, qris_fail, discount, reprint, refund] }
+                subject: { type: object, description: "Identitas objek (id path) + bidang body aksi yang dijaga (lihat deskripsi)." }
+                approver_user_id: { type: integer }
+                pin: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '201':
+          description: Token diterbitkan
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  override_token: { type: string }
+                  expires_at: { type: string, format: date-time }
+        '401': { description: "PIN penyetuju salah (`code` = invalid_pin; `attempts_remaining` menyertai)." }
+        '403': { description: "Penyetuju tidak berwenang (`approver_not_permitted`) atau outlet di luar jangkauan (`outlet_forbidden`)." }
+        '409': { description: "Penyetuju sama dengan peminta (`same_person`)." }
+        '422': { description: Validasi body. }
+        '429': { description: "PIN penyetuju terkunci setelah 5 kali salah (`pin_locked`, `locked_until`)." }
+
+  /overrides/approvers:
+    get:
+      tags: [Override]
+      summary: Daftar penyetuju yang memenuhi syarat untuk aksi (048 / S3)
+      description: |
+        Respons berupa **larik polos** `[{id, name, role}]` (bukan dibungkus `data`). Hanya penyetuju aktif yang punya
+        PIN, di outlet aktif (header `X-Outlet-Id`), memegang izin aksi, dan bukan peminta.
+      parameters:
+        - { name: action, in: query, required: true, schema: { type: string, enum: [void_line, cancel_order, cash_out, variance, availability, qris_verify, qris_fail, discount, reprint, refund] } }
+        - { name: X-Outlet-Id, in: header, required: false, schema: { type: integer } }
+      responses:
+        '200':
+          description: Larik penyetuju
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    name: { type: string }
+                    role: { type: string, nullable: true }
+
+  /tabs/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Restaurant]
+      summary: Batalkan seluruh tab terbuka (048 / S3)
+      description: |
+        Menjalankan pembatalan tab (stok kembali hanya untuk item yang belum dimasak). `409 has_payments` bila tab sudah
+        dibayar (tanpa alur refund). Peminta tanpa izin `order.cancel` wajib `override_token` dari `POST /overrides`
+        (aksi `cancel_order`, bidang body: reason_code, reason); tanpa itu `409 override_required`. Token dan pembatalan
+        dalam satu transaksi.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason_code]
+              properties:
+                reason_code: { type: string, enum: [wrong_item, customer_request, kitchen_error, other] }
+                reason: { type: string, maxLength: 255 }
+                override_token: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Tab dibatalkan (status voided)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '409': { description: "`has_payments`, `override_required`, `override_expired`, atau tab tidak terbuka." }
+        '422': { description: "`override_mismatch` atau validasi body." }
+
+  /tabs/{id}/payments/{payment}/verify:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: payment, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Restaurant]
+      summary: Verifikasi pembayaran tab; QRIS wajib referensi dan persetujuan (048 / S3)
+      description: |
+        Non-QRIS: perilaku lama. QRIS (`qr_ewallet`): `reference` minimal 4 karakter (422 bila kurang) dan persetujuan
+        `qris_verify` bila peminta tanpa `payment.qris.verify` (`409 override_required` bila tidak ada). Pencatat
+        pembayaran tidak boleh memverifikasi sendiri (403).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reference: { type: string, minLength: 4, maxLength: 40 }
+                override_token: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Pembayaran terverifikasi
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: "`override_required`, `override_expired`, atau pembayaran sudah terverifikasi." }
+        '422': { description: "`override_mismatch` atau referensi kurang dari 4 karakter." }
+
+  /tabs/{id}/payments/{payment}/fail:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: payment, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Restaurant]
+      summary: Tandai QRIS tidak ditemukan di mutasi (048 / S3)
+      description: |
+        Hanya QRIS, hanya selama tab masih terbuka. Pembayaran menjadi `rejected` dan keluar dari total terbayar.
+        Butuh persetujuan `qris_fail` bila peminta tanpa `payment.qris.verify`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                override_token: { type: string, maxLength: 64 }
+      responses:
+        '200':
+          description: Pembayaran ditandai rejected
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: "`override_required`, `override_expired`, tab tidak terbuka, atau pembayaran bukan pending." }
+        '422': { description: "`override_mismatch` atau pembayaran bukan QRIS." }
+
+  /sessions/{id}/x-report:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Session]
+      summary: X-report shift (048 — dihitung langsung, tidak disimpan)
+      description: |
+        Angka shift saat ini, dihitung dengan rumus yang SAMA dengan `summary` dan Z-report saat tutup
+        (ShiftReportService). Tidak menutup shift dan tidak menyimpan apa pun. Pemilik shift atau owner/admin.
+        **Tanpa `expected_cash`**: kas seharusnya baru tampil setelah hitungan buta dikirim (respons tutup dan Z-report).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at: { type: string, format: date-time }
+                  session_id: { type: integer }
+                  status: { type: string, enum: [open, closed] }
+                  opening_cash: { $ref: '#/components/schemas/Money' }
+                  order_count: { type: integer }
+                  total_sales: { $ref: '#/components/schemas/Money' }
+                  void_count: { type: integer }
+                  void_total: { $ref: '#/components/schemas/Money' }
+                  change_given: { $ref: '#/components/schemas/Money' }
+                  cash_received: { $ref: '#/components/schemas/Money' }
+                  cash_in: { $ref: '#/components/schemas/Money' }
+                  cash_out: { $ref: '#/components/schemas/Money' }
+                  by_method:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        method: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
+                        count: { type: integer }
+                        amount: { $ref: '#/components/schemas/Money' }
+                  hourly:
+                    type: array
+                    description: Penjualan per jam dinding toko (jam dengan penjualan saja).
+                    items:
+                      type: object
+                      properties:
+                        hour: { type: string, example: "09" }
+                        order_count: { type: integer }
+                        total: { $ref: '#/components/schemas/Money' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /sessions/{id}/cash-movements:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Session]
+      summary: Daftar kas masuk/keluar shift (048)
+      description: Pemilik shift atau owner/admin. Diurutkan menurut urutan pencatatan.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CashMovement' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Session]
+      summary: Catat kas masuk atau keluar (048 — api-gap B3)
+      description: |
+        Kas masuk/keluar di luar penjualan (uang kecil, setor bank, tambah modal). Hanya di shift TERBUKA milik
+        pengguna. Alasan wajib dan harus sah untuk arahnya; `other` wajib catatan.
+        Kas keluar di atas `cash_out_approval_threshold` (`GET /settings/features`) ditolak `409 override_required`
+        dan TIDAK dicatat; persetujuan belum tersedia (S3/US4). Menerima `Idempotency-Key`: permintaan yang
+        diulang dengan kunci sama hanya dicatat sekali.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: UUID per niat. Permintaan ulang dengan kunci sama tidak mencatat baris kedua.
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction, reason_code, amount]
+              properties:
+                direction: { type: string, enum: [in, out] }
+                reason_code:
+                  type: string
+                  description: "in → float_topup | change_exchange | other; out → petty_cash | supplier | bank_deposit | other"
+                reason_note: { type: string, nullable: true, maxLength: 200, description: "Wajib bila reason_code = other." }
+                amount: { type: string, example: "30000.00", description: "Harus > 0, paling banyak dua desimal." }
+      responses:
+        '201':
+          description: Kas dicatat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CashMovement' }
+        '403':
+          description: Shift milik pengguna lain (`code` = session_not_owner).
+        '409':
+          description: Shift sudah ditutup (`session_closed`), atau kas keluar di atas ambang (`override_required`, tidak dicatat).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  code: { type: string, enum: [session_closed, override_required] }
+                  threshold: { type: string, nullable: true }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /sessions/{id}/summary:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -1698,6 +2263,91 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Order' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /orders/{id}/reprints:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Sales]
+      summary: Cetak ulang struk — salinan pertama gratis, berikutnya dengan persetujuan (048 / S4)
+      description: |
+        `copy_no` = salinan yang akan dicetak; salinan asli adalah 1, jadi cetak ulang pertama = 2 (gratis menurut
+        `reprint_free_copies`, bawaan 1). Cetak ulang berikutnya butuh `override_token` dengan action `reprint` dan
+        subjek `order_id`, `copy_no`. `copy_no` yang tidak sama dengan salinan berikutnya di server → 409
+        `reprint_copy_changed` dengan `copy_no` yang benar (muat ulang struk). Hanya order `completed`; selain itu 409
+        `order_not_completed`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [copy_no]
+              properties:
+                copy_no: { type: integer, minimum: 2, example: 2 }
+                override_token: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Salinan dicatat.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order_id: { type: integer }
+                  copy_no: { type: integer, description: "Nomor salinan yang dicetak (2 = cetak ulang pertama)." }
+                  free: { type: boolean }
+                  receipt_no: { type: string, nullable: true }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/{id}/refund:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Sales]
+      summary: Refund penuh order yang sudah lunas — selalu butuh persetujuan (048 / S4)
+      description: |
+        Refund penuh untuk order `completed` yang sudah lunas penuh, belum pernah direfund, dan tanpa QRIS tertunda.
+        SELALU butuh `override_token` (action `refund`, subjek `order_id`, `reason_code`, `reason`); tidak ada bypass
+        izin peminta. Efek: stok dikembalikan lewat pergerakan `return` (referensi baris order); bagian tunai dikembalikan
+        sebagai kas keluar `refund` di SHIFT BERJALAN pengguna yang meminta; order asal TIDAK diubah (total, bayar,
+        kembalian, status tetap `completed`, `refunded_at` dicatat). Laporan lama tidak berubah.
+
+        ASUMSI (lihat laporan): tidak ada batasan kanal — `online` dan `offline` sama-sama dapat direfund, karena
+        refund booth adalah kasus utama. `reason_code` dari kategori `refund`.
+
+        Galat: `409 order_not_refundable` (belum selesai atau dibatalkan), `order_already_refunded`,
+        `order_not_fully_paid`, `pending_payments` (QRIS tertunda), `shift_required`, `override_required`;
+        `422 override_mismatch`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason_code]
+              properties:
+                reason_code: { type: string, example: wrong_item }
+                reason: { type: string, nullable: true, maxLength: 200 }
+                override_token: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Refund dicatat.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order_id: { type: integer }
+                  refunded_at: { type: string, format: date-time, description: "Status order tetap completed; kolom ini menandai refund." }
+                  refund_total: { type: string, example: "8000.00" }
+                  cash_returned: { type: string, example: "8000.00", description: "Bagian tunai yang keluar dari laci shift berjalan (0.00 bila tanpa tunai)." }
+                  session_id: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /orders/{id}/void:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -2532,7 +3182,9 @@ paths:
       tags: [Menu]
       summary: Menandai item habis (86)
       description: |
-        Izin `menu.item.86` (403 bila tidak). Alasan wajib dari kategori `sold_out`. Berlaku sampai akhir hari
+        048 / S3 — izin `menu.availability.set`. Tanpa izin itu, `override_token` dari `POST /overrides` (aksi
+        `availability`, bidang body: reason_code_id, note, outlet_ids) WAJIB; tanpa itu `409 override_required`.
+        Alasan wajib dari kategori `sold_out`. Berlaku sampai akhir hari
         bisnis (zona waktu toko + cut-off) atau sampai dibatalkan; item tidak bisa ditambahkan ke order/tab
         baru (409) tetapi baris yang sudah ada tidak berubah. 409 bila item didiskontinu atau sudah ditandai.
 
@@ -2548,7 +3200,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { type: object, required: [reason_code_id], properties: { reason_code_id: { type: integer }, note: { type: string, maxLength: 255 } } }
+            schema: { type: object, required: [reason_code_id], properties: { reason_code_id: { type: integer }, note: { type: string, maxLength: 255 }, override_token: { type: string, maxLength: 64 } } }
       responses:
         '201': { description: Ditandai }
         '403': { description: Tanpa izin }
@@ -5200,8 +5852,11 @@ paths:
       description: |
         - **Belum dikirim**: dihapus bebas, stok kembali penuh, `reason` tidak wajib.
         - **Sudah dikirim, item dapur masih `new`**: izin `floor`, `reason` WAJIB (`422` bila kosong), stok kembali.
-        - **Sudah dikirim, item dapur `preparing`/`ready`/`served`**: hanya owner/admin (`403` selain itu), `reason`
-          WAJIB, stok TIDAK kembali (bahan sudah terpakai).
+        - **Sudah dikirim (048 / S3)**: body WAJIB `reason_code` (wrong_item|customer_request|kitchen_error|other),
+          `kitchen_status` (not_started|started|made; harus sama dengan status dapur sebenarnya, 422 bila berbeda), dan
+          `stock_decision` (return|waste; `return` hanya bila belum dimasak). Pemegang izin `order.void` lewat; selain
+          itu wajib `override_token` dari `POST /overrides` (aksi `void_line`). Tanpa token → `409 override_required`.
+        - `override_token` dibaca dari BODY JSON (DELETE membawa body), bukan dari query.
 
         Baris dihapus dari order; item tiket dapurnya menjadi `cancelled` (siapa/kapan/alasan) dan tetap tampil di
         layar stasiun agar tak dimasak. Pembatalan item yang sudah dikirim dicatat di log aktivitas
@@ -5214,10 +5869,69 @@ paths:
             schema:
               type: object
               properties:
-                reason: { type: string, maxLength: 255, description: Wajib untuk baris yang sudah dikirim. }
+                reason: { type: string, maxLength: 255, description: Catatan bebas (opsional). }
+                reason_code: { type: string, enum: [wrong_item, customer_request, kitchen_error, other], description: Wajib untuk baris yang sudah dikirim. }
+                kitchen_status: { type: string, enum: [not_started, started, made], description: Wajib untuk baris yang sudah dikirim; harus sama dengan status dapur. }
+                stock_decision: { type: string, enum: [return, waste], description: Wajib untuk baris yang sudah dikirim. }
+                override_token: { type: string, maxLength: 64, description: "Dari POST /overrides (void_line) bila peminta tanpa order.void." }
       responses:
         '200':
           description: Tab terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /tabs/{id}/discounts:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Beri diskon tab — tingkat order atau baris (048 / S4, menu `floor`)
+      description: |
+        Persen dihitung server dari basis sebenarnya (subtotal untuk order; harga × qty untuk baris). Diskon
+        dikurangkan SEBELUM pajak. Di atas batas peran (`roles.discount_limit_pct`) butuh `override_token` dengan
+        action `discount` dan subjek `tab_id`, `scope`, `line_id`, `percent`, `reason_code`. Batas bawaan: pemilik/admin
+        tanpa batas (ASUMSI); peran lain 0 sampai diatur. `reason_code` dari kategori `discount`
+        (`GET /reason-codes?category=discount`).
+
+        `409 override_required` bila di atas batas tanpa token; `422 override_mismatch` bila token milik tab, baris,
+        persen, atau alasan lain; `409 shift_required` bila shift tidak terbuka; `404` bila baris milik tab lain;
+        `422` bila persen di luar (0, 100] atau alasan tidak dikenal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [percent, reason_code, scope]
+              properties:
+                percent: { type: number, example: 10, description: "0 < p ≤ 100, paling banyak dua desimal." }
+                reason_code: { type: string, example: member }
+                scope: { type: string, enum: [order, line] }
+                line_id: { type: integer, nullable: true, description: "Wajib bila scope = line." }
+                override_token: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Diskon diterapkan; totals dihitung ulang server.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Restaurant]
+      summary: Hapus diskon tingkat order (menu `floor`)
+      description: |
+        Menghapus diskon order. Tanpa token: ini menaikkan tagihan, bukan menguranginya. Diskon baris tidak dihapus
+        lewat endpoint ini. Order milik outlet lain → 404; pengguna tanpa menu `floor` → 403.
+      responses:
+        '200':
+          description: Diskon dihapus.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Tab' }
@@ -5236,7 +5950,13 @@ paths:
         Bila total yang dibayar ≥ total tab → status `completed`, `change_amount` dihitung, meja kosong.
         Bila kurang → tab tetap `open` dengan `balance`. `client_ref` WAJIB: pengiriman ulang dengan
         `client_ref` yang sama tidak mencatat pembayaran lagi (mengembalikan keadaan terkini).
-        Tab kosong / shift tidak terbuka / bukan `open` → `409`.
+        Tab kosong / bukan `open` → `409`. Shift tidak terbuka → `409` dengan `code` = `shift_required` (048; terminal
+        menampilkan tindakan yang tepat tanpa mengurai kalimat galat).
+
+        048 / S3 — metode `edc`: `approval_code` (6–12 huruf kapital atau angka; format salah → 422; nomor kartu TIDAK
+        pernah diterima maupun disimpan) dan `confirm_duplicate` (boolean). Kode yang sama dalam
+        `edc_duplicate_window_seconds` → `409 duplicate_edc` kecuali `confirm_duplicate: true`. Selama ada QRIS `pending`
+        di tab, non-tunai lain → `409 pending_qris` (tunai tetap boleh). Non-tunai tidak boleh melebihi sisa tagihan (409).
       requestBody:
         required: true
         content:
@@ -5549,6 +6269,25 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /tabs/{id}/prebill:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Tandai pra-bill tercetak (menu `floor`; 048/B13)
+      description: |
+        Hanya penanda: mengisi `prebill_at`, menaikkan `prebill_count`, dan menandai meja "Bill tercetak" di denah.
+        TIDAK mengubah status, stok, atau total; tidak butuh shift. Boleh diulang. Tab yang sudah lunas/dibatalkan → 409.
+      responses:
+        '200':
+          description: Tab terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   /tabs/{id}/move:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -5607,8 +6346,14 @@ paths:
       - $ref: '#/components/parameters/Id'
     post:
       tags: [Restaurant]
-      summary: Pisah tagihan — bayar sebagian item sebagai penjualan terpisah (menu `floor`)
+      summary: Pisah tagihan — penjualan terpisah per item, atau bagi rata pratinjau (menu `floor`)
       description: |
+        **048 / T059 — `mode: equal`.** Pratinjau bagi rata TANPA pembayaran dan TANPA mengubah tab: `parts` (2–5)
+        bagian; setiap bagian rupiah utuh dari tagihan termasuk pajak; sisa pembulatan (dan sen) masuk ke bagian
+        TERAKHIR sehingga jumlahnya tepat sama dengan tagihan. Kasir mencatat tiap bagian lewat `POST /tabs/{id}/payments`.
+        Tab tanpa baris → 409 `tab_empty`; tab tidak terbuka → 409. Respons: `{total, mode: "equal", parts: [{index, amount}]}` (200).
+
+        Mode bawaan (tanpa `mode`) tetap seperti di bawah.
         Membuat penjualan BARU berstatus `completed` (nomor sendiri, `split_from_order_id` = tab ini) dari item
         yang dipilih dan langsung membayarnya; sisanya tetap terbuka di meja yang sama. Baris yang dipilih UTUH
         dipindahkan (id baris yang sama); sebagian unit → baris asal dikecilkan dan snapshot-nya diklon.
@@ -5732,6 +6477,17 @@ components:
                   items: { type: string }
 
   schemas:
+    Device:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string, example: T01 }
+        name: { type: string }
+        outlet_id: { type: integer }
+        app_version: { type: string, nullable: true }
+        last_seen_at: { type: string, format: date-time, nullable: true }
+        revoked: { type: boolean }
+
     DashboardKpi:
       type: object
       properties:
@@ -5761,6 +6517,16 @@ components:
             from: { type: string, format: date }
             to: { type: string, format: date }
             up_to: { type: string, description: "HH:MM, hanya same_time_yesterday." }
+        # 048 — pendapatan periode dengan pajak: net (pra-pajak), order_discount_total, tax_total, dan
+        # grand_total = net_sales − order_discount_total + tax_total (= total struk). Sama definisinya dengan `totals`
+        # di GET /reports/sales (refund mengurangi pada tanggal refund).
+        revenue:
+          type: object
+          properties:
+            net_sales: { $ref: '#/components/schemas/Money' }
+            order_discount_total: { $ref: '#/components/schemas/Money' }
+            tax_total: { $ref: '#/components/schemas/Money' }
+            grand_total: { $ref: '#/components/schemas/Money' }
         kpis:
           type: object
           properties:
@@ -6510,6 +7276,30 @@ components:
         expected_cash: { $ref: '#/components/schemas/Money' }
         cash_difference: { $ref: '#/components/schemas/Money' }
         status: { type: string, enum: [open, closed] }
+        counted_total: { $ref: '#/components/schemas/Money', nullable: true, description: '048 — jumlah hitungan buta (null untuk penutupan bentuk lama).' }
+        edc_batch_total: { $ref: '#/components/schemas/Money', nullable: true }
+        variance: { $ref: '#/components/schemas/Money', nullable: true }
+        z_report: { type: object, nullable: true, description: '048 — salinan angka shift saat tutup.' }
+        device_id: { type: integer, nullable: true }
+        opening_denominations:
+          type: array
+          items:
+            type: object
+            properties:
+              denomination: { type: integer }
+              qty: { type: integer }
+
+    CashMovement:
+      type: object
+      properties:
+        id: { type: integer }
+        session_id: { type: integer }
+        direction: { type: string, enum: [in, out] }
+        reason_code: { type: string }
+        reason_note: { type: string, nullable: true }
+        amount: { $ref: '#/components/schemas/Money' }
+        created_by_name: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
 
     SessionSummary:
       type: object
@@ -6517,6 +7307,9 @@ components:
         session: { $ref: '#/components/schemas/CashierSession' }
         order_count: { type: integer }
         total_sales: { $ref: '#/components/schemas/Money' }
+        cash_in: { $ref: '#/components/schemas/Money' }
+        cash_out: { $ref: '#/components/schemas/Money' }
+        change_given: { $ref: '#/components/schemas/Money' }
         by_method:
           type: array
           items:
@@ -6785,6 +7578,9 @@ components:
         total_amount: { $ref: '#/components/schemas/Money' }
         paid_amount: { $ref: '#/components/schemas/Money' }
         change_amount: { $ref: '#/components/schemas/Money' }
+        # 048 — pajak eksklusif (sama dengan tab): total_amount = subtotal − discount_amount + tax_amount.
+        tax_amount: { $ref: '#/components/schemas/Money' }
+        tax_rate: { $ref: '#/components/schemas/Money', description: "Persentase tarif pajak saat order dibuat (snapshot)." }
         status: { type: string, enum: [completed, voided] }
         void_reason: { type: string, nullable: true }
         notes: { type: string, nullable: true }
@@ -6919,6 +7715,12 @@ components:
             pos_unit_count: { type: number, description: "Unit terjual dari order POS SAJA. Halaman Sales memakai `pos_*` karena hanya menampilkan transaksi POS." }
             pos_gross_sales: { $ref: '#/components/schemas/Money', description: Penjualan kotor order POS saja. }
             pos_net_sales: { $ref: '#/components/schemas/Money', description: Penjualan bersih order POS saja. }
+            # 048 (keputusan pemilik) — pajak eksklusif. net_sales = pra-pajak, TANPA diskon tingkat-order (keputusan O3).
+            # grand_total = net_sales − order_discount_total + tax_total = total struk. Refund mengurangi keempatnya
+            # pada tanggal refund dengan nilai yang sama.
+            tax_total: { $ref: '#/components/schemas/Money', description: Pajak order selesai (dikurangi refund pada tanggal refund). }
+            grand_total: { $ref: '#/components/schemas/Money', description: net_sales − order_discount_total + tax_total (= total struk). }
+            order_discount_total: { $ref: '#/components/schemas/Money', description: Diskon tingkat-order, tampil sebagai baris sendiri dan dikurangkan pada grand_total. }
         rows:
           type: array
           description: |
@@ -6978,6 +7780,9 @@ components:
                 items: { type: string, enum: [cash, bank_transfer, qr_ewallet] }
                 description: Metode pembayaran unik yang dipakai transaksi ini (bisa lebih dari satu untuk pembayaran terpisah).
               channel: { type: string, description: "Saluran transaksi (mis. 'offline')." }
+              refunded: { type: boolean, description: "048 / S4 — order sudah direfund. Status tetap completed; total halaman mengecualikannya bila tanggal refund berada dalam rentang." }
+              refunded_at: { type: string, format: date-time, nullable: true }
+              refund_business_date: { type: string, format: date, nullable: true, description: "Tanggal bisnis tempat refund diakui (penjualan dan laporan hari-hari sebelumnya tidak berubah)." }
               artist_names: { type: array, items: { type: string }, description: Nama penjual unik yang barangnya ada di transaksi ini. }
               total_amount: { $ref: '#/components/schemas/Money', description: Total transaksi. }
               key: { type: string, description: "Kunci baris `order:{id}` — dipakai untuk memilih baris dan mengekspornya." }
@@ -7256,10 +8061,17 @@ components:
         customer_id: { type: integer, nullable: true }
         subtotal: { type: string }
         discount_amount: { type: string }
-        total_amount: { type: string }
+        tax_amount: { type: string, description: "048 — pajak eksklusif (snapshot saat transaksi), dihitung SETELAH diskon, dibulatkan per order." }
+        tax_rate: { type: string, description: "048 — tarif (%) yang dipakai untuk snapshot pajak." }
+        total_amount: { type: string, description: "subtotal − diskon + pajak." }
         paid_amount: { type: string }
         change_amount: { type: string }
         balance: { type: string, description: "max(0, total − dibayar)." }
+        queue_no: { type: string, nullable: true, example: A-024, description: "048 — nomor antrean order counter dari terminal; per outlet per hari bisnis." }
+        receipt_no: { type: string, nullable: true, example: T01-000124, description: "048 — nomor struk per terminal; terisi saat lunas." }
+        guest_count: { type: integer, nullable: true, minimum: 1, maximum: 99 }
+        prebill_at: { type: string, format: date-time, nullable: true }
+        device: { type: object, nullable: true, properties: { id: { type: integer }, code: { type: string } } }
         created_at: { type: string, format: date-time }
         lines: { type: array, items: { $ref: '#/components/schemas/TabLine' } }
         payments:
@@ -7282,6 +8094,7 @@ components:
         tab_label: { type: string, nullable: true, maxLength: 100 }
         customer_id: { type: integer, nullable: true }
         local_ref: { type: string, format: uuid, nullable: true }
+        guest_count: { type: integer, nullable: true, minimum: 1, maximum: 99, description: "048 — jumlah tamu. Terminal dikenali dari header `X-Device-Id` (bukan body)." }
 
     AddTabLineInput:
       type: object
@@ -7427,9 +8240,11 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/TicketItem' } }
 
     SplitTabInput:
+      description: "048 — `mode: equal` memakai hanya `mode` dan `parts` (2–5); mode bawaan memakai `client_ref`, `items`, `payments`."
       type: object
-      required: [client_ref, items, payments]
       properties:
+        mode: { type: string, enum: [items, equal], description: "Bawaan items. equal = pratinjau bagi rata." }
+        parts: { type: integer, minimum: 2, maximum: 5, nullable: true, description: "Wajib bila mode = equal." }
         client_ref: { type: string, format: uuid }
         discount_amount: { type: number, nullable: true, minimum: 0, description: Diskon untuk penjualan terpisah saja (≤ subtotalnya). }
         items:

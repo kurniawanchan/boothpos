@@ -22,6 +22,8 @@ import DataTable from '../components/ui/DataTable.vue';
 import PageHeader from '../components/page/PageHeader.vue';
 import KpiStrip from '../components/page/KpiStrip.vue';
 import ViewToggle from '../components/page/ViewToggle.vue';
+import RevenueBreakdown from '../components/report/RevenueBreakdown.vue';
+import { useSettingsStore } from '../stores/settings';
 import FilterBar from '../components/page/FilterBar.vue';
 import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
 import { useOutletStore } from '../stores/outlet';
@@ -48,6 +50,7 @@ const route = useRoute();
 const router = useRouter(); // undefined bila tak ada router (mis. test lama) — sinkron URL dilewati
 const auth = useAuthStore();
 const outletStore = useOutletStore();
+const settings = useSettingsStore(); // 048 — label pajak untuk baris Net · Diskon · Pajak · Bruto
 
 // --- saklar Daftar order | Meja (044-sales-table-view) -----------------------------------------
 // Pilihan tersimpan di URL (?view=tables; kosong = daftar). Saklar HANYA ada bagi pengguna dengan akses lantai
@@ -401,6 +404,8 @@ function viewFinishedTransaction(orderId) {
     <!-- Daftar order. v-if (bukan v-show): templatnya dilepas saat Meja aktif, tetapi seluruh KEADAAN (filter, urutan,
          pilihan, data termuat) hidup di setup() di atas, jadi kembali ke daftar tidak kehilangan apa pun dan tak memuat ulang. -->
     <KpiStrip v-if="view === 'list'" data-testid="kpi-cards" :items="kpiItems" />
+    <!-- 048 — Net, Diskon tingkat order, Pajak, dan Bruto dari totals server (sama dengan struk untuk order tanpa diskon tingkat-order). -->
+    <RevenueBreakdown v-if="view === 'list' && sales?.totals" class="mx-[26px] mb-4" :revenue="sales.totals" :tax-label="settings.taxLabel" />
 
     <section v-if="view === 'list'" class="mx-[26px] border-2 border-line bg-white">
       <!-- Filter lengkap: pencarian teks + tanggal (dengan pintasan) + kasir + shift + outlet + pembayaran +
@@ -491,6 +496,7 @@ function viewFinishedTransaction(orderId) {
             <div class="flex flex-col items-start gap-1">
               <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" :class="{ 'line-through': isVoided(row) }" @click="openDetail(row)">{{ row.order_number }}</button>
               <StatusPill v-if="isVoided(row)" variant="danger">{{ t('reports.status_voided') }}</StatusPill>
+              <StatusPill v-else-if="row.refunded" variant="warning">{{ t('reports.status_refunded') }}</StatusPill>
             </div>
           </template>
           <template #cell-customer_name="{ row }">

@@ -150,7 +150,10 @@ class OrderService
                 ]);
             }
 
-            $totalAmount = $subtotal - $orderDiscount;
+            // 048 / S4 (keputusan pemilik) — pajak EKSKLUSIF yang sama dengan tab: dihitung setelah diskon order
+            // dengan TaxCalculator (tarif dari settings, setengah ke atas per pesanan). Tarif 0 = tanpa pajak.
+            $tax = \App\Support\TaxCalculator::compute($subtotal - $orderDiscount);
+            $totalAmount = round($subtotal - $orderDiscount + $tax['tax'], 2);
 
             $paidAmount = collect($data['payments'])->sum('amount');
             // 028-partial-split-payment (research Decision 8) — penjualan boleh
@@ -186,6 +189,8 @@ class OrderService
                 'subtotal' => $subtotal,
                 'discount_amount' => $orderDiscount,
                 'total_amount' => $totalAmount,
+                'tax_amount' => $tax['tax'],
+                'tax_rate_snapshot' => $tax['rate'],
                 'total_cost' => $totalCost,
                 'paid_amount' => $paidAmount,
                 'change_amount' => $changeAmount,

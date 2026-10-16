@@ -83,10 +83,12 @@ class ProductSoldOutTest extends TestCase
         $role = Role::factory()->create(['menu_keys' => ['products', 'pos']]);   // peran tanpa izin 86
         $this->actingAs(User::factory()->create(['role_id' => $role->id]), 'sanctum');
 
-        $this->postJson("/api/v1/products/{$p->id}/sold-out", ['reason_code_id' => $this->reasonId()])->assertForbidden();
+        // 048 / S3: tanpa menu.availability.set, tanda habis butuh persetujuan (token), bukan sekadar 403.
+        $this->postJson("/api/v1/products/{$p->id}/sold-out", ['reason_code_id' => $this->reasonId()])
+            ->assertStatus(409)->assertJsonPath('code', 'override_required');
         $this->assertDatabaseCount('item_availability_marks', 0);
 
-        $granted = Role::factory()->create(['menu_keys' => ['pos'], 'permissions' => ['menu.item.86']]);
+        $granted = Role::factory()->create(['menu_keys' => ['pos'], 'permissions' => ['menu.availability.set']]);
         $this->actingAs(User::factory()->create(['role_id' => $granted->id]), 'sanctum');
         $this->postJson("/api/v1/products/{$p->id}/sold-out", ['reason_code_id' => $this->reasonId()])->assertCreated();
     }

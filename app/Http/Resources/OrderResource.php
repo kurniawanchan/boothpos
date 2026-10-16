@@ -16,6 +16,9 @@ class OrderResource extends JsonResource
             'customer_id' => $this->customer_id,
             'subtotal' => number_format((float) $this->subtotal, 2, '.', ''),
             'discount_amount' => number_format((float) $this->discount_amount, 2, '.', ''),
+            // 048 / S4 — pajak eksklusif (sama dengan tab): total_amount = subtotal − diskon + tax_amount.
+            'tax_amount' => number_format((float) $this->tax_amount, 2, '.', ''),
+            'tax_rate' => number_format((float) $this->tax_rate_snapshot, 2, '.', ''),
             'total_amount' => number_format((float) $this->total_amount, 2, '.', ''),
             'paid_amount' => number_format((float) $this->paid_amount, 2, '.', ''),
             'change_amount' => number_format((float) $this->change_amount, 2, '.', ''),

@@ -22,7 +22,10 @@ class TabPaymentRequest extends FormRequest
             'client_ref' => ['required', 'uuid'],
             'discount_amount' => ['nullable', 'numeric', 'min:0'],
             'payments' => ['required', 'array', 'min:1'],
-            'payments.*.method' => ['required', 'in:cash,bank_transfer,qr_ewallet'],
+            'payments.*.method' => ['required', 'in:cash,bank_transfer,qr_ewallet,edc'],
+            // 048 / S3 — EDC: kode approval (6–12 huruf kapital/angka; diperiksa di TabSettlementService).
+            'payments.*.approval_code' => ['nullable', 'string', 'regex:/^[A-Z0-9]{6,12}$/'],
+            'payments.*.confirm_duplicate' => ['nullable', 'boolean'],
             'payments.*.channel_id' => ['nullable', 'integer', 'exists:payment_channels,id'],
             'payments.*.amount' => ['required', 'numeric', 'min:0.01'],
             'payments.*.proof_token' => ['nullable', 'uuid'],

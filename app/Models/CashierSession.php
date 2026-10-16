@@ -20,6 +20,7 @@ class CashierSession extends Model
     protected $fillable = [
         'user_id', 'opened_at', 'closed_at', 'opening_cash',
         'closing_cash', 'expected_cash', 'cash_difference', 'status', 'notes',
+        'counted_by_denomination', 'counted_total', 'edc_batch_total', 'variance', 'variance_override_id', 'z_report',
     ];
 
     protected function casts(): array
@@ -31,6 +32,11 @@ class CashierSession extends Model
             'closing_cash' => 'decimal:2',
             'expected_cash' => 'decimal:2',
             'cash_difference' => 'decimal:2',
+            'counted_by_denomination' => 'array',
+            'counted_total' => 'decimal:2',
+            'edc_batch_total' => 'decimal:2',
+            'variance' => 'decimal:2',
+            'z_report' => 'array',
         ];
     }
 
@@ -54,5 +60,20 @@ class CashierSession extends Model
     public function openingCashEntries(): HasMany
     {
         return $this->hasMany(SessionOpeningCashEntry::class, 'session_id');
+    }
+
+    public function openingDenominations(): HasMany
+    {
+        return $this->hasMany(SessionOpeningDenomination::class, 'session_id');
+    }
+
+    public function cashMovements(): HasMany
+    {
+        return $this->hasMany(CashMovement::class, 'session_id');
+    }
+
+    public function device(): BelongsTo
+    {
+        return $this->belongsTo(Device::class);
     }
 }

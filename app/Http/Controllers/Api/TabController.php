@@ -57,7 +57,7 @@ class TabController extends Controller
     public function store(OpenTabRequest $request): JsonResponse
     {
         return $this->guarded(
-            fn () => new TabResource($this->tabs->open($request->validated(), $request->user())),
+            fn () => new TabResource($this->tabs->open($request->validated() + ['device_header' => $request->header('X-Device-Id')], $request->user())),
             201,
         );
     }
@@ -95,6 +95,14 @@ class TabController extends Controller
         });
     }
 
+    /** 048 / B13 — pra-bill tercetak (tidak butuh shift; kasir dan waiter boleh). */
+    public function prebill(Request $request, Order $order): JsonResponse
+    {
+        $this->ensureFloorAccess($request);
+
+        return $this->guarded(fn () => new TabResource($this->tabs->prebill($order, $request->user())));
+    }
+
     public function move(MoveTabRequest $request, Order $order): JsonResponse
     {
         return $this->guarded(fn () => new TabResource($this->tabs->move($order, (int) $request->validated('table_id'), $request->user())));
@@ -107,6 +115,14 @@ class TabController extends Controller
     }
 
     /** Batalkan seluruh tab terbuka (owner/admin, alasan wajib; 409 bila sudah ada pembayaran). */
+    /** 048 / S3 — batal seluruh tab: 409 has_payments bila sudah dibayar; persetujuan cancel_order bila perlu. */
+    public function cancel(\App\Http\Requests\CancelTabRequest $request, Order $order): JsonResponse
+    {
+        return $this->guarded(fn () => new TabResource($this->tabs->cancelTab(
+            $order, $request->user(), $request->validated('reason_code'), $request->validated('reason'), $request->validated('override_token'),
+        )));
+    }
+
     public function void(VoidTabRequest $request, Order $order): JsonResponse
     {
         return $this->guarded(fn () => new TabResource($this->tabs->voidTab($order, $request->validated('reason'), $request->user())));

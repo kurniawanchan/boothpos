@@ -29,7 +29,9 @@ class Order extends Model
 
     protected $fillable = [
         'order_number', 'session_id', 'customer_id', 'user_id', 'channel',
-        'subtotal', 'discount_amount', 'total_amount', 'total_cost', 'paid_amount',
+        // 048 — pajak diisi server (TaxCalculator), tidak pernah dari request. Tanpa ini Order::create() membuang
+        // tax_amount diam-diam sementara total_amount (yang sudah memuat pajak) tersimpan.
+        'subtotal', 'discount_amount', 'tax_amount', 'tax_rate_snapshot', 'total_amount', 'total_cost', 'paid_amount',
         'change_amount', 'status', 'void_reason', 'local_ref', 'notes',
         'service_type', 'table_id', 'tab_label', 'split_from_order_id',
     ];
@@ -48,6 +50,11 @@ class Order extends Model
             'total_amount' => 'decimal:2', 'total_cost' => 'decimal:2',
             'paid_amount' => 'decimal:2', 'change_amount' => 'decimal:2',
             'completed_at' => 'datetime',
+            // 048 / S4 — jejak refund: waktu refund dan tanggal bisnis tempat refund diakui.
+            'refunded_at' => 'datetime',
+            'refund_business_date' => 'date',
+            'tax_amount' => 'decimal:2', 'tax_rate_snapshot' => 'decimal:2',
+            'prebill_at' => 'datetime',
         ];
     }
 
@@ -105,5 +112,11 @@ class Order extends Model
         }
 
         return CashierSession::withoutGlobalScopes()->whereKey($this->session_id)->value('outlet_id');
+    }
+
+    /** 048 — terminal POS yang membuka order (kunci meja lintas perangkat). */
+    public function device(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Device::class);
     }
 }

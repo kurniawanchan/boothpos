@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Models\KitchenTicket;
 use App\Models\KitchenTicketItem;
 use App\Models\DiningTable;
+use App\Models\Device;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\ProductVariant;
@@ -35,6 +36,7 @@ use Illuminate\Validation\ValidationException;
 class TabService
 {
     public function __construct(
+        private \App\Services\ReceiptNumbering $numbering,
         private StockService $stockService,
         private OrderService $orderService,
         private ActivityLogger $activityLogger,
@@ -64,6 +66,16 @@ class TabService
         $session = CashierSession::findOrFail($data['session_id']);
         $this->assertSessionOpen($session);
 
+        // 048 — perangkat dari header X-Device-Id: harus terminal AKTIF milik outlet yang terlihat pengguna
+        // (Device ber-OutletScope → perangkat outlet lain tidak ditemukan). Tanpa header (SPA web) tetap berjalan.
+        $device = null;
+        if (! empty($data['device_header'])) {
+            $device = Device::query()->whereNull('revoked_at')->find((int) $data['device_header']);
+            if ($device === null) {
+                throw InputRejectedException::withMessages(['device_id' => __('devices.invalid_device')]);
+            }
+        }
+
         $table = null;
         if (! empty($data['table_id'])) {
             $table = DiningTable::findOrFail($data['table_id']);
@@ -82,20 +94,30 @@ class TabService
         }
 
         try {
-            $order = DB::transaction(fn () => Order::create([
-                'order_number' => $this->orderService->generateOrderNumber(),
-                'session_id' => $session->id,
-                'customer_id' => $data['customer_id'] ?? null,
-                'user_id' => $user->id,
-                'channel' => 'offline',
-                'service_type' => $table ? Order::SERVICE_DINE_IN : Order::SERVICE_TAKEAWAY,
-                'table_id' => $table?->id,
-                'tab_label' => isset($data['tab_label']) && trim($data['tab_label']) !== '' ? trim($data['tab_label']) : null,
-                'subtotal' => 0, 'discount_amount' => 0, 'total_amount' => 0, 'total_cost' => 0,
-                'paid_amount' => 0, 'change_amount' => 0,
-                'status' => Order::STATUS_OPEN,
-                'local_ref' => $data['local_ref'] ?? null,
-            ]));
+            $order = DB::transaction(function () use ($data, $session, $user, $table, $device) {
+                $order = new Order([
+                    'order_number' => $this->orderService->generateOrderNumber(),
+                    'session_id' => $session->id,
+                    'customer_id' => $data['customer_id'] ?? null,
+                    'user_id' => $user->id,
+                    'channel' => 'offline',
+                    'service_type' => $table ? Order::SERVICE_DINE_IN : Order::SERVICE_TAKEAWAY,
+                    'table_id' => $table?->id,
+                    'tab_label' => isset($data['tab_label']) && trim($data['tab_label']) !== '' ? trim($data['tab_label']) : null,
+                    'subtotal' => 0, 'discount_amount' => 0, 'total_amount' => 0, 'total_cost' => 0,
+                    'paid_amount' => 0, 'change_amount' => 0,
+                    'status' => Order::STATUS_OPEN,
+                    'local_ref' => $data['local_ref'] ?? null,
+                ]);
+                // 048 — kolom yang TIDAK fillable (diturunkan server): tamu, perangkat, nomor antrean (counter saja).
+                $order->forceFill([
+                    'guest_count' => $data['guest_count'] ?? null,
+                    'device_id' => $device?->id,
+                    'queue_no' => $table === null && $device !== null ? $this->numbering->queueFor((int) $session->outlet_id) : null,
+                ])->save();
+
+                return $order;
+            });
         } catch (UniqueConstraintViolationException $e) {
             // Dua pelayan membuka meja yang sama di detik yang sama: pemeriksaan
             // di atas sudah lolos untuk keduanya, indeks UNIQUE database yang
@@ -246,24 +268,20 @@ class TabService
     }
 
     /**
-     * Menghapus/membatalkan sebuah baris tab.
+     * Menghapus/membatalkan satu baris tab.
      *
-     *  - BELUM dikirim: dihapus bebas, stok kembali penuh, tanpa alasan.
-     *  - SUDAH dikirim dan item dapurnya masih `new` (belum dimasak): boleh siapa pun dengan izin `floor`,
-     *    alasan WAJIB, stok kembali.
-     *  - SUDAH dikirim dan item dapurnya `preparing`/`ready`/`served`: hanya owner/admin, alasan WAJIB,
-     *    stok TIDAK kembali (bahan sudah terpakai) — mirip void penjualan.
-     * Baris dihapus dari order_items (supaya tak ada laporan yang perlu menyaring "baris batal");
-     * item tiket dapurnya menjadi `cancelled` dengan siapa/kapan/alasan, dan layar stasiun tetap
-     * menampilkannya agar tak ada yang memasaknya. Semua perubahan + baris log berada dalam SATU
-     * transaksi: penolakan di akhir (total < sudah dibayar) membatalkan semuanya, termasuk log.
+     * - Baris BELUM dikirim: dihapus bebas, stok kembali (tanpa persetujuan).
+     * - Baris SUDAH dikirim (048 / S3): wajib `reason_code`; `kitchen_status` harus sama dengan status dapur
+     *   sebenarnya (dihitung server, 422 bila berbeda); `stock_decision` wajib (`return` hanya bila belum mulai
+     *   dimasak). Persetujuan `void_line` diperiksa di titik aksi; pemegang izin order.void lewat tanpa token.
      *
-     * @throws AuthorizationException membatalkan item yang sudah dimasak tanpa hak owner/admin
-     * @throws InputRejectedException alasan kosong untuk item yang sudah dikirim
+     * Perubahan, konsumsi token, dan baris log berada dalam SATU transaksi.
+     *
+     * @param  array<string, mixed>  $input  reason_code, reason, kitchen_status, stock_decision (bidang body)
      */
-    public function removeLine(Order $tab, int $itemId, User $user, ?string $reason = null): Order
+    public function removeLine(Order $tab, int $itemId, User $user, array $input = [], ?string $overrideToken = null): Order
     {
-        return DB::transaction(function () use ($tab, $itemId, $user, $reason) {
+        return DB::transaction(function () use ($tab, $itemId, $user, $input, $overrideToken) {
             $order = $this->lockOpen($tab);
             $line = $order->items()->with('ticketItem')->findOrFail($itemId);
 
@@ -276,31 +294,45 @@ class TabService
                 return $this->loaded($order);
             }
 
+            $kitchenStatus = self::kitchenStatusFor($line->ticketItem);
+            $reasonCode = $input['reason_code'] ?? null;
+            $stockDecision = $input['stock_decision'] ?? null;
+
+            if ($reasonCode === null) {
+                throw InputRejectedException::withMessages(['reason_code' => [__('restaurant.cancel_reason_required')]]);
+            }
+            if (($input['kitchen_status'] ?? null) !== $kitchenStatus) {
+                throw ValidationException::withMessages(['kitchen_status' => [__('overrides.kitchen_status_changed')]]);
+            }
+            if ($stockDecision === null) {
+                throw ValidationException::withMessages(['stock_decision' => [__('overrides.stock_decision_required')]]);
+            }
+            if ($stockDecision === 'return' && $kitchenStatus !== 'not_started') {
+                throw ValidationException::withMessages(['stock_decision' => [__('overrides.stock_return_after_prep')]]);
+            }
+
+            // Subjek = id objek (tab, baris) + bidang body mentah, sama dengan saat persetujuan diterbitkan.
+            app(OverrideGate::class)->requireFor(
+                'void_line',
+                ['tab_id' => $order->id, 'line_id' => $line->id, 'reason_code' => $reasonCode, 'kitchen_status' => $kitchenStatus, 'stock_decision' => $stockDecision, 'reason' => $input['reason'] ?? null],
+                $overrideToken,
+                $user,
+                (int) $order->outlet_id,
+                "order:{$order->id}:line:{$line->id}",
+            );
+
             $ticketItem = $line->ticketItem;
-            $kitchenStatus = $ticketItem?->status ?? KitchenTicketItem::NEW;
-            $started = $kitchenStatus !== KitchenTicketItem::NEW;
-
-            if ($started && ! $user->isOwnerOrAdmin()) {
-                throw new AuthorizationException(__('restaurant.cancel_after_prep_forbidden'));
-            }
-
-            $reason = $this->cleanNote($reason);
-            if ($reason === null) {
-                throw InputRejectedException::withMessages(['reason' => [__('restaurant.cancel_reason_required')]]);
-            }
-
-            if (! $started) {
+            if ($stockDecision === 'return') {
                 $this->returnStock($line, $line->qty, $user);
             }
-
             $ticketItem?->update([
                 'status' => KitchenTicketItem::CANCELLED,
                 'cancelled_at' => now(),
                 'cancelled_by' => $user->id,
-                'cancel_reason' => $reason,
+                'cancel_reason' => $reasonCode,
             ]);
 
-            $snapshot = ['line_id' => $line->id, 'name' => $line->name_snapshot, 'qty' => $line->qty, 'kitchen_status' => $kitchenStatus, 'stock_restored' => ! $started];
+            $snapshot = ['line_id' => $line->id, 'name' => $line->name_snapshot, 'qty' => $line->qty, 'kitchen_status' => $kitchenStatus, 'stock_decision' => $stockDecision];
             $line->delete();
             $this->recalculate($order);
             $this->assertNotBelowPaid($order);
@@ -311,13 +343,48 @@ class TabService
                 action: 'item_cancelled',
                 entityType: 'Order',
                 entityId: $order->id,
-                description: "Membatalkan {$snapshot['qty']}× {$snapshot['name']} dari tab {$order->order_number} (status dapur: {$kitchenStatus}). "
-                    .'Stok '.($started ? 'tidak dikembalikan (sudah dimasak)' : 'dikembalikan').". Alasan: {$reason}.",
+                description: "Membatalkan {$snapshot['qty']}× {$snapshot['name']} dari tab {$order->order_number} (status dapur: {$kitchenStatus}). Stok: {$stockDecision}. Alasan: {$reasonCode}.",
                 oldValues: $snapshot,
-                newValues: ['reason' => $reason],
+                newValues: ['reason_code' => $reasonCode, 'reason' => $this->cleanNote($input['reason'] ?? null)],
             );
 
             return $this->loaded($order);
+        });
+    }
+
+    /** Status dapur item dalam kosa kata kontrak: not_started | started | made. */
+    public static function kitchenStatusFor(?KitchenTicketItem $item): string
+    {
+        return match ($item?->status) {
+            null, KitchenTicketItem::NEW => 'not_started',
+            KitchenTicketItem::PREPARING => 'started',
+            default => 'made',
+        };
+    }
+
+    /**
+     * 048 / S3 — membatalkan SELURUH tab terbuka (`POST /tabs/{id}/cancel`). 409 `has_payments` bila sudah
+     * dibayar (tanpa alur refund). Selain itu persetujuan `cancel_order` bila peminta tanpa order.cancel.
+     * Konsumsi token dan pembatalan dalam satu transaksi.
+     */
+    public function cancelTab(Order $tab, User $user, string $reasonCode, ?string $note, ?string $overrideToken): Order
+    {
+        return DB::transaction(function () use ($tab, $user, $reasonCode, $note, $overrideToken) {
+            $order = $this->lockOpen($tab);
+            if ($order->payments()->exists()) {
+                throw new \App\Exceptions\ShiftRuleException(__('overrides.has_payments'), 'has_payments', [], 409);
+            }
+
+            app(OverrideGate::class)->requireFor(
+                'cancel_order',
+                ['tab_id' => $order->id, 'reason_code' => $reasonCode, 'reason' => $note],
+                $overrideToken,
+                $user,
+                (int) $order->outlet_id,
+                "order:{$order->id}",
+            );
+
+            return $this->voidTab($order, $note !== null && $note !== '' ? $reasonCode.' — '.$note : $reasonCode, $user);
         });
     }
 
@@ -395,6 +462,21 @@ class TabService
     // --- tutup kosong / serah-terima ---------------------------------------
 
     /** Tab tanpa baris ditutup tanpa efek stok/penjualan; mejanya kosong lagi. */
+    /**
+     * 048 / B13 — tandai pra-bill tercetak. Tidak mengubah status, stok, atau total; hanya penanda untuk denah ("Bill
+     * tercetak") dan hitungan cetak. Boleh diulang (hitungan naik). Tab harus terbuka.
+     */
+    public function prebill(Order $tab, User $user): Order
+    {
+        return DB::transaction(function () use ($tab, $user) {
+            $tab = $this->lockOpen($tab);
+            $tab->forceFill(['prebill_at' => now(), 'prebill_count' => min(255, (int) $tab->prebill_count + 1)])->save();
+            $this->activityLogger->log($user->id, 'tab_prebill', 'Order', $tab->id, "Pra-bill {$tab->order_number} dicetak");
+
+            return $this->loaded($tab);
+        });
+    }
+
     public function closeEmpty(Order $tab, User $user): void
     {
         DB::transaction(function () use ($tab) {
@@ -556,32 +638,41 @@ class TabService
 
     public function assertSessionOpen(CashierSession $session): void
     {
+        // 048 — kode mesin `shift_required` (409) agar terminal menampilkan tindakan yang tepat; respons
+        // dirender oleh bootstrap/app.php untuk ShiftRuleException di rute API.
         if ($session->status !== 'open') {
-            throw ValidationException::withMessages(['session_id' => __('orders_payments.session_not_open')]);
+            throw new \App\Exceptions\ShiftRuleException(__('orders_payments.session_not_open'), 'shift_required');
         }
     }
 
-    /** Menghitung ulang subtotal/total/biaya dari baris-barisnya (satu-satunya tempat). */
-    public function recalculate(Order $order): void
+    /**
+     * Menghitung ulang subtotal/diskon/pajak/total dari baris-barisnya (satu-satunya tempat — 048: termasuk pajak).
+     * `$discount` (opsional) menggantikan diskon tingkat-order yang tersimpan; selalu dibatasi subtotal.
+     * Total = subtotal − diskon + pajak eksklusif (TaxCalculator); pajak dan tarifnya disimpan sebagai snapshot.
+     */
+    public function recalculate(Order $order, ?float $discount = null): void
     {
         $items = $order->items()->get(['qty', 'cost_price', 'line_total']);
 
         $subtotal = round((float) $items->sum('line_total'), 2);
         $cost = round((float) $items->sum(fn ($i) => (float) $i->cost_price * $i->qty), 2);
-        // Diskon tingkat-order yang sudah tersimpan tidak boleh melebihi subtotal baru.
-        $discount = min((float) $order->discount_amount, $subtotal);
+        // Diskon tingkat-order tidak boleh melebihi subtotal baru.
+        $discount = min($discount ?? (float) $order->discount_amount, $subtotal);
+        $tax = \App\Support\TaxCalculator::compute($subtotal - $discount);
 
-        $order->update([
+        $order->forceFill([
             'subtotal' => $subtotal,
             'total_cost' => $cost,
             'discount_amount' => $discount,
-            'total_amount' => round($subtotal - $discount, 2),
-        ]);
+            'tax_amount' => $tax['tax'],
+            'tax_rate_snapshot' => $tax['rate'],
+            'total_amount' => round($subtotal - $discount + $tax['tax'], 2),
+        ])->save();
     }
 
     public function loaded(Order $order): Order
     {
-        return $order->fresh(['items.ticketItem.ticket.station', 'payments', 'table', 'cashier:id,name']);
+        return $order->fresh(['items.ticketItem.ticket.station', 'payments', 'table', 'cashier:id,name', 'device:id,code']);
     }
 
     private function assertTableFree(DiningTable $table): void

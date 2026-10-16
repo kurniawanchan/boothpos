@@ -25,7 +25,7 @@ class SettlementService
      */
     public function posSalesForPeriod(?string $from, ?string $to): \Illuminate\Support\Collection
     {
-        return DB::table('order_items')
+        $sales = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->where('orders.status', 'completed')
             ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat ReportController::sales()
@@ -39,5 +39,14 @@ class SettlementService
                 'sales' => (float) $row->total_sales,
                 'units' => (float) $row->total_units,
             ]]);
+
+        // 048 / S4 — refund mengurangi penjualan recap pada tanggal refund, per outlet pelaporan (units tetap).
+        foreach (\App\Services\SalesFigures::refundSalesByReportOutlet($from, $to) as $outletId => $refund) {
+            $entry = $sales->get($outletId, ['sales' => 0.0, 'units' => 0.0]);
+            $entry['sales'] -= $refund['sales'];
+            $sales->put($outletId, $entry);
+        }
+
+        return $sales;
     }
 }

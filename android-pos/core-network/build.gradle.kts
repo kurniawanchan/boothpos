@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.androidLibrary)
     alias(libs.plugins.kotlinAndroid)
+    alias(libs.plugins.kotlinSerialization)
 }
 
 android {
@@ -22,9 +23,14 @@ android {
 }
 
 dependencies {
-    implementation(project(":core-domain"))
+    api(project(":core-domain"))
     implementation(libs.androidx.core.ktx)
-    implementation(libs.retrofit)
-    implementation(libs.retrofit.gson)
+    api(libs.retrofit)
+    api(libs.retrofit.kotlinx.serialization)
+    api(libs.okhttp)
+    api(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 }

@@ -64,6 +64,11 @@ class SettingsController extends Controller
             'menu_release_enabled' => \App\Support\MenuSettings::releaseEnabled(),
             'price_approval_threshold_pct' => \App\Support\MenuSettings::approvalThresholdPct(),
             'price_rounding_default' => \App\Support\MenuSettings::roundingDefault(),
+            // 048 — angka tampilan terminal POS (pajak, ambang, toleransi); bukan rahasia, terbuka untuk semua peran.
+            'tax_rate' => \App\Support\PosSettings::taxRate(),
+            'tax_label' => \App\Support\PosSettings::taxLabel(),
+            'variance_tolerance' => \App\Support\PosSettings::varianceTolerance(),
+            'cash_out_approval_threshold' => \App\Support\PosSettings::cashOutApprovalThreshold(),
             'store_timezone' => BusinessDay::timezone(),
             'business_day_cutoff' => BusinessDay::cutoff(),
             // 035-po-row-actions — database tertinggal dari versi aplikasi? Hanya

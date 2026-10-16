@@ -62,6 +62,6 @@ class PermissionCatalogTest extends TestCase
 
         $this->getJson("/api/v1/roles/{$inventoryId}")->assertOk()
             // 045 Stage 6: inventory juga mengirim dan menerima transfer stok (bukan membatalkan).
-            ->assertJsonPath('permissions', [PermissionCatalog::ITEM_MANAGE, PermissionCatalog::ITEM_86, PermissionCatalog::RECIPE_EDIT, PermissionCatalog::TRANSFER_DISPATCH, PermissionCatalog::TRANSFER_RECEIVE]);
+            ->assertJsonPath('permissions', [PermissionCatalog::ITEM_MANAGE, PermissionCatalog::ITEM_86, PermissionCatalog::RECIPE_EDIT, PermissionCatalog::TRANSFER_DISPATCH, PermissionCatalog::TRANSFER_RECEIVE, PermissionCatalog::MENU_AVAILABILITY_SET]);
     }
 }

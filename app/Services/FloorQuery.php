@@ -30,7 +30,8 @@ class FloorQuery
     public function build(): array
     {
         $tabs = Order::query()
-            ->select(['id', 'outlet_id', 'order_number', 'table_id', 'tab_label', 'service_type', 'total_amount', 'session_id', 'created_at'])
+            ->select(['id', 'outlet_id', 'order_number', 'table_id', 'tab_label', 'service_type', 'total_amount', 'session_id', 'created_at', 'guest_count', 'prebill_at', 'device_id', 'queue_no'])
+            ->with('device:id,code')
             ->selectRaw('GREATEST(0, '.PaymentSummary::orderPaidSql('orders').') as paid_total')
             ->where('status', Order::STATUS_OPEN)
             ->withCount([
@@ -105,6 +106,11 @@ class FloorQuery
             'session_id' => $order->session_id,
             'ready_count' => (int) $order->ready_count,
             'unsent_count' => (int) $order->unsent_count,
+            // 048 — pax, status "Bill tercetak", dan terminal pemilik (kunci meja lintas perangkat). Nilai TIDAK bergantung jam.
+            'guest_count' => $order->guest_count,
+            'bill_printed' => $order->prebill_at !== null,
+            'device_code' => $order->device?->code,
+            'queue_no' => $order->queue_no,
         ];
     }
 }

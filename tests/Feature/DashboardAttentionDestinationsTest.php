@@ -69,7 +69,9 @@ class DashboardAttentionDestinationsTest extends TestCase
             $this->apiAddLine($tab, $this->makeVariant(stock: 20, price: 9000)->id, 3)->assertCreated();
             $this->postJson("/api/v1/tabs/{$tab}/send")->assertOk();
             $line = Order::findOrFail($tab)->items()->value('id');
-            $this->deleteJson("/api/v1/tabs/{$tab}/items/{$line}", ['reason' => 'batal'])->assertOk();
+            $kitchen = match (\App\Models\KitchenTicketItem::where('order_item_id', $line)->value('status')) { 'preparing' => 'started', 'ready', 'served' => 'made', default => 'not_started' };
+            $stock = $kitchen === 'not_started' ? 'return' : 'waste';
+            $this->deleteJson("/api/v1/tabs/{$tab}/items/{$line}", ['reason_code' => 'wrong_item', 'kitchen_status' => $kitchen, 'stock_decision' => $stock, 'reason' => 'batal'])->assertOk();
         }
 
         $item = collect($this->getJson('/api/v1/dashboard/attention')->json('items'))->firstWhere('kind', 'void_after_fire');

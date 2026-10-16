@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Server POS berjalan di jaringan outlet dan umumnya tanpa TLS (instalasi lokal per toko), jadi HTTP polos DIIZINKAN.
+  Konsekuensinya diketahui: token terlihat oleh perangkat lain di jaringan yang sama — gunakan jaringan outlet yang
+  tepercaya atau pasang HTTPS di server (RUNBOOK "Android POS"). Tidak ada pin sertifikat.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.kotlinSerialization)
 }
 
 android {
@@ -33,7 +34,6 @@ android {
 dependencies {
     implementation(project(":core-domain"))
     implementation(project(":core-network"))
-    implementation(project(":core-printing"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -47,8 +47,12 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons)
 
+    implementation(libs.kotlinx.serialization.json)
     implementation(libs.timber)
     implementation(libs.kotlinx.coroutines.android)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     debugImplementation(libs.compose.ui.tooling)
 }
