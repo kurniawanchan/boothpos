@@ -420,6 +420,18 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **Imports/exports:** the master-data `products` sheet lost `is_preorder`/`preorder_eta` (old files that still carry the columns import fine — unknown columns are ignored); there is no pre-order import/export. `jszip` left `package.json` (its only user was the bulk pre-order download).
 - **Time-dependence gotcha found here:** tests that need "today" must use `BusinessDay::today()` (store timezone), not `now()->toDateString()` (UTC) — between 00:00 and 07:00 WIB the two differ (`BulkPriceOutletsTest` failed after midnight for exactly this reason).
 
+## Aplikasi Android POS, perangkat, persetujuan, pajak, dan refund (feature 048, 2026-10-16)
+
+> **Dated note — 2026-10-16 (feature 048).** Kapabilitas baru di atas, tanpa menulis ulang riwayat di atas:
+> - **Aplikasi Android POS** (`android-pos/`, Kotlin + Compose) untuk tablet: online-first, memanggil API yang sama. `android/` (shell WebView 008) tidak diubah. Spesifikasi: `specs/048-wire-android-pos-api/`.
+> - **Perangkat/terminal**: `devices` per outlet; pemasangan `POST /devices/pairings`; pencabutan `DELETE /devices/{id}` (soft, mengisi `revoked_at`; perangkat harus dipasang ulang); heartbeat `POST /devices/heartbeat` (`skew_seconds` positif = jam perangkat di depan server). Header `X-Device-Id` dicek pada tulis tab dan sesi.
+> - **Persetujuan di titik aksi**: tabel `overrides`, token sekali pakai, 120 dtk, terikat ke **identitas objek** (id tab/baris/sesi/produk/pembayaran) + bidang body lewat `OverrideSubject::hash` (satu kanonikalisasi di PHP; klien tidak menghitung hash). Penyetuju ≠ peminta, memegang izin aksi, satu outlet; PIN penyetuju memakai kunci 5-salah yang sama dengan login.
+> - **QRIS**: disimpan `pending`, lalu verifikasi (referensi ≥ 4) atau gagal. QRIS tertunda memblokir non-tunai lain **pada tab yang sama** (`pending_qris`) dan **penutupan shift** untuk seluruh shift (`pending_payments`). **EDC**: kode approval 6–12, tanpa nomor kartu; bayar ganda dalam 2 menit → `duplicate_edc`.
+> - **Pajak PPN eksklusif** (setelah diskon, `TaxCalculator`) untuk tab dan ritel. Laporan: bersih (sebelum diskon tingkat order, keputusan O3), diskon, pajak, bruto = bersih − diskon + pajak = struk.
+> - **Refund** penuh order lunas (persetujuan `refund`): order tetap `completed` dengan `refunded_at`; nilai, pajak, dan HPP dinetralkan pada **tanggal bisnis refund**; stok dikembalikan lewat `StockService`.
+> - **Nomor struk per terminal** (`T01-000001`) dan **antrean per outlet per hari bisnis** (`A-001`).
+> - Diketahui belum selesai: server tidak menyimpan persen diskon (tampilan hanya nominal); bagi rata dan cetak ulang belum diuji di perangkat.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.

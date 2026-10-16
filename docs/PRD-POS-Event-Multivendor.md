@@ -815,6 +815,8 @@ Yang meringankan: skalanya kecil. Lima artist dan puluhan SKU berarti beberapa f
 
 **Catatan — 2026-10-11 (fitur 045, konstitusi 2.0.0).** Dua butir di bawah ini *tidak* dihidupkan kembali sebagai fitur baru: *penjualan/konsinyasi ke penjual* tetap dicoret dari MVP. Yang berubah adalah makna *penjual* — kini *outlet*, lokasi yang menjual menu milik organisasi yang sama — dan cakupan outlet (shift, pesanan, meja, stok, transfer antar-outlet, laporan per outlet) ditambahkan sebagai kapabilitas baru yang tercatat di `specs/045-outlets-per-outlet-menu/`, bukan sebagai pembatalan pemotongan di bawah.
 
+**Catatan — 2026-10-16 (fitur 048, aplikasi Android POS).** Kapabilitas berikut ditambahkan sebagai cakupan baru, bukan sebagai pembatalan pemotongan di atas: aplikasi kasir Android untuk tablet yang berjalan *online* dan memanggil API yang sama dengan SPA (`specs/048-wire-android-pos-api/`); terminal/perangkat yang dipasang, dicabut, dan mengirim *heartbeat*; persetujuan atasan di titik aksi (void, batal, tanda habis, kas keluar besar, selisih tutup, diskon di atas batas, cetak ulang, refund) yang terikat ke satu objek; pajak PPN eksklusif untuk tab dan ritel dengan rincian bersih–diskon–pajak–bruto; dan nomor struk per terminal serta nomor antrean per outlet per hari. Mode offline penuh, cetak fisik, dan sinkronisasi offline tetap di luar cakupan.
+
 ### 10.2 Yang dipotong dari MVP dan alasannya
 
 | Modul | Alasan penundaan |
