@@ -145,8 +145,8 @@ description: "Daftar tugas fitur 048 — menghubungkan aplikasi Android POS ke d
 **Tujuan**: Heartbeat, layar Perangkat nyata, ketahanan jaringan dan sesi.
 
 
-- [ ] T064 [US6] [Server] Buat `POST /devices/heartbeat` (`DeviceController::heartbeat`, `DeviceService`: simpan `app_version`, `last_seen_at`, `clock_skew_seconds`, kembalikan `server_time_ms`, `skew_seconds`, rilis menu); uji `tests/Feature/DeviceHeartbeatTest.php`
-- [ ] T065 [US6] Implementasikan heartbeat 60 dtk di aplikasi (`android-pos/app/src/main/java/com/warkop/pos/data/HeartbeatWorker.kt`) dan ganti angka tetap di `SyncScreen` (`ui/screens/ShiftScreens.kt`: koneksi, selisih jam, versi rilis menu, printer = 'belum tersedia') dengan nilai nyata; hapus antrean cetak/sinkron buatan di `PosStore`
+- [X] T064 [US6] [Server] Buat `POST /devices/heartbeat` (`DeviceController::heartbeat`, `DeviceService`: simpan `app_version`, `last_seen_at`, `clock_skew_seconds`, kembalikan `server_time_ms`, `skew_seconds`, rilis menu); uji `tests/Feature/DeviceHeartbeatTest.php` — SELESAI (server, 70529c4; DeviceHeartbeatTest 11/11).
+- [X] T065 [US6] Implementasikan heartbeat 60 dtk di aplikasi (`android-pos/app/src/main/java/com/warkop/pos/data/HeartbeatWorker.kt`) dan ganti angka tetap di `SyncScreen` (`ui/screens/ShiftScreens.kt`: koneksi, selisih jam, versi rilis menu, printer = 'belum tersedia') dengan nilai nyata; hapus antrean cetak/sinkron buatan di `PosStore` — KODE SELESAI (3fbcbab; core-network 67/67, app 20/20). Verifikasi perangkat di T066.
 - [ ] T066 [US6] Uji ketahanan di emulator: putus jaringan di tengah tiap langkah tulis (buka order, tambah baris, kirim, bayar, tutup shift), token kedaluwarsa di tengah order, staf dinonaktifkan saat sesi berjalan; buktikan tidak ada duplikat, order tidak hilang, dan kembali ke layar PIN dengan benar; simpan bukti di `specs/048-wire-android-pos-api/evidence-us6.md`
 
 ---
@@ -156,8 +156,8 @@ description: "Daftar tugas fitur 048 — menghubungkan aplikasi Android POS ke d
 **Tujuan**: Dokumentasi, keamanan, performa, dan verifikasi akhir 'semua layar bekerja'.
 
 
-- [ ] T067 [P] Tambahkan catatan bertanggal ke `docs/PRD-POS-Event-Multivendor.md` dan `CLAUDE.md` (kapabilitas baru: aplikasi Android POS, perangkat/terminal, persetujuan di tempat, pajak eksklusif, penomoran struk/antrean) tanpa menulis ulang riwayat
-- [ ] T068 [P] Tambahkan bagian 'Android POS' ke `docs/RUNBOOK.md` (menyiapkan terminal, 10.0.2.2 untuk emulator, membangun APK, rotasi/pencabutan perangkat, cara membaca log) dan perbarui `specs/047-android-pos-tablet/api-gap.md` (tandai B2–B14, B17–B19, B21 selesai)
+- [X] T067 [P] Tambahkan catatan bertanggal ke `docs/PRD-POS-Event-Multivendor.md` dan `CLAUDE.md` (kapabilitas baru: aplikasi Android POS, perangkat/terminal, persetujuan di tempat, pajak eksklusif, penomoran struk/antrean) tanpa menulis ulang riwayat — SELESAI (869dfc2; catatan bertanggal, tanpa menulis ulang riwayat).
+- [X] T068 [P] Tambahkan bagian 'Android POS' ke `docs/RUNBOOK.md` (menyiapkan terminal, 10.0.2.2 untuk emulator, membangun APK, rotasi/pencabutan perangkat, cara membaca log) dan perbarui `specs/047-android-pos-tablet/api-gap.md` (tandai B2–B14, B17–B19, B21 selesai) — SELESAI (869dfc2; RUNBOOK bagian 13; api-gap ditandai).
 - [ ] T069 Audit keamanan sisi klien: pastikan tidak ada URL/kredensial di `BuildConfig`/repo, token hanya di `TokenVault`, log tidak memuat `Authorization`/PIN/nomor kartu (`grep` + uji `android-pos/core-network/src/test/java/LogRedactionTest.kt`), dan `SampleBackend`/preset tidak dapat aktif di build rilis (`./gradlew :app:assembleRelease` + periksa manifes)
 - [ ] T070 [P] Audit performa: tidak ada N+1 pada resource/endpoint baru (hitung kueri di `tests/Feature/*Performance*Test.php` mengikuti pola `TabPerformanceTest`), cache denah/menu dikunci mode data + outlet + pengguna, polling berhenti di latar
 - [ ] T071 Jalankan seluruh suite backend melawan MySQL (`php artisan test`, bukan di dalam container tanpa `-e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test`) dan perbaiki regresi; catat hasil di `specs/048-wire-android-pos-api/evidence-final.md`
