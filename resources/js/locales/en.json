@@ -1026,7 +1026,7 @@
     "add_channel": "Add payment channel",
     "type": "Type",
     "bank_transfer": "Bank transfer",
-    "qr_ewallet": "QR e-wallet",
+    "qr_ewallet": "QRIS",
     "provider_name": "Provider name",
     "account_holder_name": "Account holder name",
     "account_number": "Account number",

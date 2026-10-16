@@ -1026,7 +1026,7 @@
     "add_channel": "Tambah kanal pembayaran",
     "type": "Tipe",
     "bank_transfer": "Transfer bank",
-    "qr_ewallet": "QR e-wallet",
+    "qr_ewallet": "QRIS",
     "provider_name": "Nama penyedia",
     "account_holder_name": "Nama pemilik rekening",
     "account_number": "Nomor rekening",
