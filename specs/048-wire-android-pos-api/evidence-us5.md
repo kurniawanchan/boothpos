@@ -29,5 +29,14 @@ Sebagian lewat perangkat dan sebagian lewat API (diberi label). Dev DB (warkop_w
 - Struk tanggal benar (cacat 1).
 - Refund (tidak diuji dalam T063).
 
-## Status
-T063 BELUM SELESAI. Langkah API lulus; langkah perangkat terhalang dua cacat aplikasi.
+## Verifikasi perangkat setelah perbaikan (2026-10-16, 17:4x WIB)
+- Muat host ~18–36 (beban dari kontainer proyek lain; kontainer warkop_wjm idle). Emulator dinyalakan ulang.
+- **Diskon di atas batas di perangkat LULUS**: order 2050 (A-025), 5× Kopi Susu, diskon 10% → 409 → Sari menyetujui → diskon 6.000, PPN 5.400, total 59.400. DB cocok (subtotal 60.000, diskon 6.000, pajak 5.400, bayar tunai 59.400, payment 2036, T01-000014, selesai 17:42 WIB).
+- **Struk LULUS**: tanggal 16/10/2026 17:42 (tanggal contoh 31/10/2026 sudah dihapus).
+- Pembekuan saat "Setujui" TIDAK terjadi pada pengujian ini (dengan beban host lebih rendah). Penyebab pembekuan sebelumnya belum dibuktikan: kemungkinan beban host, dan ada perbaikan pembacaan Keystore di jalur utama.
+- Cacat kecil yang tersisa: server tidak menyimpan persen diskon sehingga label keranjang hanya menampilkan "Diskon" dengan jumlahnya. Perlu penyimpanan persen di server (tindak lanjut).
+- Dibatalkan: order 2049 (residu perangkat, 4× Kopi Susu 52.800) dibatalkan lewat `cancel_order` dengan persetujuan Sari (status voided). Shift 12 tetap terbuka, tanpa tab terbuka.
+
+## Status akhir T063
+- **LULUS**: langkah 1 (perangkat), langkah 2 (perangkat dan API), langkah 5 (API, laporan = DB), struk (perangkat).
+- **Lulus lewat API saja, belum di perangkat**: langkah bagi rata (3) dan cetak ulang (4) — akan diuji di perangkat pada sesi berikutnya.
