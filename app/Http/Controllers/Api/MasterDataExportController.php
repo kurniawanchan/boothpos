@@ -46,8 +46,14 @@ class MasterDataExportController extends Controller
 
         $sheet = new SheetArrayExport(
             $entity,
-            MasterDataSheets::headings($entity),
-            $this->exportService->rows($entity),
+            MasterDataSheets::exportHeadings($entity),
+            // Filter layar Produk hanya berlaku untuk sheet 'products' (spec
+            // 041, FR-013). Entitas lain tidak punya filter ekspor dan tidak
+            // boleh terpengaruh query string yang kebetulan sama.
+            $this->exportService->rows(
+                $entity,
+                $entity === MasterDataSheets::PRODUCTS ? $request->only(['search', 'artist_id', 'category_id']) : [],
+            ),
         );
 
         // Dibungkus MultiSheetArrayExport meski hanya satu sheet, supaya

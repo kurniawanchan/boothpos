@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -62,5 +63,32 @@ class Product extends Model
     public function variants(): HasMany
     {
         return $this->hasMany(ProductVariant::class);
+    }
+
+    /**
+     * Filter daftar produk — SATU definisi untuk layar Produk dan ekspor
+     * (spec 041 FR-013). Dulu aturannya hanya ada di ProductController::index();
+     * menyalinnya ke ekspor berarti dua definisi yang bisa menyimpang.
+     *
+     * Pencarian mencocokkan nama produk ATAU sku/nama varian, sehingga semua
+     * varian produk yang cocok ikut — sama dengan yang tampil di layar.
+     * Filter artis/kategori memakai array; nilai kosong dibuang supaya
+     * whereIn([]) (selalu false) tidak diam-diam mengosongkan hasil.
+     *
+     * @param  array{search?: mixed, artist_id?: mixed, category_id?: mixed}  $filters
+     */
+    public function scopeMatchingListFilters(Builder $query, array $filters): Builder
+    {
+        return $query
+            ->when(isset($filters['search']) && $filters['search'] !== '', function (Builder $q) use ($filters) {
+                $term = (string) $filters['search'];
+                $q->where(function (Builder $q2) use ($term) {
+                    $q2->where('name', 'like', "%{$term}%")
+                        ->orWhereHas('variants', fn (Builder $v) => $v->where('sku', 'like', "%{$term}%")
+                            ->orWhere('variant_name', 'like', "%{$term}%"));
+                });
+            })
+            ->when(count(array_filter((array) ($filters['artist_id'] ?? []))) > 0, fn (Builder $q) => $q->whereIn('artist_id', array_filter((array) $filters['artist_id'])))
+            ->when(count(array_filter((array) ($filters['category_id'] ?? []))) > 0, fn (Builder $q) => $q->whereIn('category_id', array_filter((array) $filters['category_id'])));
     }
 }

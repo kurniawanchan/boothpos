@@ -30,8 +30,10 @@ function downloadBlob(blob, filename) {
  * same column headers the import accepts, so export → edit → re-upload
  * round-trips through the same file.
  */
-export async function exportMasterData(entity) {
-  const response = await client.get(`/exports/${entity}`, { responseType: 'blob' });
+export async function exportMasterData(entity, params = {}) {
+  // params = filter layar (search, artist_id[], category_id[]) untuk sheet
+  // 'products' (spec 041, FR-013/FR-016). axios membuang nilai undefined.
+  const response = await client.get(`/exports/${entity}`, { params, responseType: 'blob' });
   downloadBlob(response.data, EXPORT_FILENAMES[entity] ?? `data-${entity}.xlsx`);
 }
 

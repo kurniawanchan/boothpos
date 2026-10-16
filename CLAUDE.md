@@ -368,7 +368,13 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/040-recap-pos-transactions-only/plan.md`
+Active feature plan: `specs/041-product-export-columns/plan.md`
+(branch `049-product-export-columns`, from `develop`) — the products master-data EXPORT (`GET /exports/products`)
+gets a new column layout (artist/category names, `code` and `item_label` from the SKU tail, `profit_margin`;
+eight columns removed). Export-only (product-owner decision A): `MasterDataSheets::PRODUCTS` and the import/template
+stay unchanged; the export uses its own `PRODUCTS_EXPORT` header list. No migration.
+
+Previous feature: `specs/040-recap-pos-transactions-only/plan.md`
 (branch `040-recap-pos-transactions-only`, from `develop` after PR #33) — the Seller Recap becomes POS-ONLY
 (product-owner decision: whole recap, not just the detail list). `SettlementService` aggregates completed POS
 order items only (the 033 pre-order aggregation/breakdown is deleted, `salesBreakdownForEvent` → `posSalesForEvent`),
