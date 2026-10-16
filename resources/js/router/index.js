@@ -36,7 +36,10 @@ const routes = [
         path: 'pos',
         name: 'pos',
         component: () => import('../views/PosView.vue'),
-        meta: { menuKey: 'pos' },
+        // fullHeight: layar kasir berjalan pada tinggi viewport (AppShell), jadi
+        // ringkasan keranjang + tombol Bayar tidak terdorong keluar layar saat
+        // daftar produk panjang (spec 043). Hanya rute POS yang memakai ini.
+        meta: { menuKey: 'pos', fullHeight: true },
       },
       {
         path: 'session',

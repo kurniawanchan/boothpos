@@ -51,6 +51,12 @@ function setSidebarVisible(visible) {
 // Stok) punya judul halaman lebih panjang daripada label sidebarnya
 // sendiri — meta.titleKey/subtitleKey di router/index.js mengganti
 // default itu untuk kasus tersebut.
+// Rute yang butuh tinggi viewport tetap (meta.fullHeight, spec 043): kontainer
+// luar dan kolom konten dibatasi ke layar, sehingga <main> menjadi satu-satunya
+// area gulir dan ringkasan keranjang POS tetap terlihat. Rute lain tetap seperti
+// sebelumnya (halaman tumbuh mengikuti isi).
+const fullHeight = computed(() => route.meta.fullHeight === true);
+
 const pageTitle = computed(() => t(route.meta.titleKey ?? `nav.${route.name}`));
 const pageSubtitle = computed(() => t(route.meta.subtitleKey ?? `nav.${String(route.name)}_subtitle`));
 
@@ -82,7 +88,7 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="flex min-h-screen">
+  <div :class="['flex', fullHeight ? 'h-dvh' : 'min-h-screen']">
     <!-- AppSidebar tetap ter-mount (bukan v-if) SELAMA transisi berjalan
          supaya lebar wrapper bisa dianimasikan mulus (228px <-> 0);
          v-if lama menghapus/memasang ulang secara instan tanpa animasi
@@ -102,7 +108,7 @@ async function handleLogout() {
         @hide-sidebar="setSidebarVisible(false)"
       />
     </div>
-    <div class="flex min-w-0 flex-1 flex-col">
+    <div :class="['flex min-w-0 flex-1 flex-col', fullHeight ? 'min-h-0' : '']">
       <AppTopbar
         :title="pageTitle"
         :subtitle="pageSubtitle"

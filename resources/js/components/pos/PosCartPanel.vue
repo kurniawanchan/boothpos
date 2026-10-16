@@ -86,7 +86,7 @@ function openImageLightbox(item) {
       </div>
     </div>
 
-    <div class="flex flex-col gap-3 border-t border-line-3 bg-surface-subtle px-[18px] pb-[18px] pt-3.5">
+    <div class="flex flex-none flex-col gap-3 border-t border-line-3 bg-surface-subtle px-[18px] pb-[18px] pt-3.5">
       <button
         type="button"
         class="flex items-center gap-2 self-start rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-muted-4 transition-colors hover:bg-line-7"
