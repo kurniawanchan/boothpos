@@ -34,6 +34,8 @@ object OrderMapper {
     fun tab(t: TabDto, myDeviceCode: String?): Order {
         val voided = t.status == "voided"
         val completed = t.status == "completed"
+        // 048 / S4 — refund penuh: order tetap "completed"; penanda refund = refunded_at dari server.
+        val refunded = t.refundedAt != null
         return Order(
             id = t.id.toString(),
             kind = if (t.table != null) OrderKind.DINE_IN else OrderKind.COUNTER,
@@ -45,7 +47,10 @@ object OrderMapper {
             lines = t.lines.map { line(it) },
             tenders = t.payments.map { tender(it) },
             billPrinted = t.prebillAt != null,
-            closed = completed || voided,
+            closed = completed || voided || refunded,
+            refunded = refunded,
+            refundTotal = t.refundTotal?.let { rp(it) },
+            cashReturned = t.cashReturned?.let { rp(it) },
             cancelledReason = if (voided) "Dibatalkan" else null,
             receiptNo = t.receiptNo,
             otherDevice = t.device?.code?.takeIf { it != myDeviceCode },

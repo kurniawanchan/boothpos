@@ -77,4 +77,19 @@ interface PosApi {
     @GET("payment-channels") suspend fun paymentChannels(): PaymentChannelsPage
     @POST("tabs/{id}/prebill") suspend fun prebill(@Path("id") id: Long): TabDto
     @GET("orders") suspend fun closedOrders(@Query("per_page") perPage: Int): ClosedOrdersPage
+
+    // --- diskon, bagi rata, cetak ulang, refund (048 / S4 — US5). Setiap tulis membawa Idempotency-Key. ---
+    @POST("tabs/{id}/discounts")
+    suspend fun setDiscount(@Path("id") id: Long, @Header("Idempotency-Key") key: String, @Body body: DiscountRequestDto): TabDto
+    @DELETE("tabs/{id}/discounts")
+    suspend fun clearDiscount(@Path("id") id: Long, @Header("Idempotency-Key") key: String): TabDto
+    @POST("tabs/{id}/split")
+    suspend fun splitEqual(@Path("id") id: Long, @Header("Idempotency-Key") key: String, @Body body: SplitEqualRequestDto): SplitEqualResponseDto
+    /** Bagi per item: rute yang sama dengan bagi rata (kontrak yang sudah ada), tubuh berbeda. */
+    @POST("tabs/{id}/split")
+    suspend fun splitItems(@Path("id") id: Long, @Header("Idempotency-Key") key: String, @Body body: SplitItemsRequestDto): SplitItemsResponseDto
+    @POST("orders/{id}/reprints")
+    suspend fun reprint(@Path("id") id: Long, @Header("Idempotency-Key") key: String, @Body body: ReprintRequestDto): ReprintResponseDto
+    @POST("orders/{id}/refund")
+    suspend fun refund(@Path("id") id: Long, @Header("Idempotency-Key") key: String, @Body body: RefundRequestDto): TabDto
 }

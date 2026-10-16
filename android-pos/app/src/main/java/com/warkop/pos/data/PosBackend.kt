@@ -4,6 +4,8 @@ import com.warkop.pos.model.Approver
 import com.warkop.pos.model.ReasonCode
 import com.warkop.pos.model.BankChannel
 import com.warkop.pos.model.QrisChannel
+import com.warkop.pos.model.SplitItemsResult
+import com.warkop.pos.model.SplitPart
 import com.warkop.pos.model.Availability
 import com.warkop.pos.model.CashMovement
 import com.warkop.pos.model.CloseOutcome
@@ -99,5 +101,17 @@ interface PosBackend {
     /** EDC: [approvalCode] + [confirmDuplicate] (setelah kasir mengonfirmasi duplikat). QRIS: [channelId] kanal QRIS. */
     suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String, approvalCode: String? = null, confirmDuplicate: Boolean? = null, channelId: Long? = null): Order
     suspend fun prebill(tabId: String): Order
+
+    // --- diskon, bagi rata, cetak ulang, refund (048 / S4 — US5). [key] = Idempotency-Key per niat pengguna. ---
+    /** Diskon order ([scope] "order") atau satu baris ([scope] "line", [lineId]). Di atas batas → 409 override_required. */
+    suspend fun setDiscount(tabId: String, percent: Double, reasonCode: String, scope: String, lineId: Int?, overrideToken: String?, key: String): Order
+    suspend fun clearDiscount(tabId: String, key: String): Order
+    /** Bagi rata tanpa pembayaran; jumlah tiap bagian dari server (bukan dihitung di klien). */
+    suspend fun splitEqual(tabId: String, parts: Int, key: String): List<SplitPart>
+    /** Bagi per item ke POST /tabs/{id}/split: [lines] = (id baris, qty) yang dipindah; [cashAmount] = tunai bagian itu. */
+    suspend fun splitItems(tabId: String, lines: List<Pair<Int, Int>>, cashAmount: String, key: String): SplitItemsResult
+    /** Cetak ulang: salinan pertama gratis, berikutnya wajib [overrideToken]. Mengembalikan copy_no. */
+    suspend fun reprintOrder(orderId: String, overrideToken: String?, key: String): Int
+    suspend fun refundOrder(orderId: String, reasonCode: String, reason: String?, overrideToken: String?, key: String): Order
     suspend fun closedOrders(): List<Order>
 }

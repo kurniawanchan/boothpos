@@ -26,6 +26,8 @@ import com.warkop.pos.model.Approver
 import com.warkop.pos.model.ReasonCode
 import com.warkop.pos.model.BankChannel
 import com.warkop.pos.model.QrisChannel
+import com.warkop.pos.model.SplitItemsResult
+import com.warkop.pos.model.SplitPart
 import com.warkop.pos.model.CashMovement
 import com.warkop.pos.model.CloseOutcome
 import com.warkop.pos.model.Shift
@@ -271,7 +273,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     }
 
     override suspend fun reasonCodes(category: String): List<ReasonCode> =
-        apiCall { api().reasonCodes(category) }.data.filter { it.isActive }.map { ReasonCode(it.id, it.label.ifBlank { it.code }) }
+        apiCall { api().reasonCodes(category) }.data.filter { it.isActive }.map { ReasonCode(it.id, it.label.ifBlank { it.code }, it.code) }
 
     override suspend fun qrisChannel(): QrisChannel? =
         apiCall { api().paymentChannels() }.data.firstOrNull { it.type == "qr_ewallet" }
@@ -289,6 +291,33 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         OrderMapper.tab(apiCall { api().failPayment(tabId.toLong(), paymentId, FailPaymentRequestDto(overrideToken = overrideToken)) }, myDeviceCode)
 
     override suspend fun prebill(tabId: String): Order = OrderMapper.tab(apiCall { api().prebill(tabId.toLong()) }, myDeviceCode)
+
+    override suspend fun setDiscount(tabId: String, percent: Double, reasonCode: String, scope: String, lineId: Int?, overrideToken: String?, key: String): Order =
+        OrderMapper.tab(apiCall { api().setDiscount(tabId.toLong(), key, DiscountRequestDto(percent, reasonCode, scope, lineId, overrideToken)) }, myDeviceCode)
+
+    override suspend fun clearDiscount(tabId: String, key: String): Order =
+        OrderMapper.tab(apiCall { api().clearDiscount(tabId.toLong(), key) }, myDeviceCode)
+
+    override suspend fun splitEqual(tabId: String, parts: Int, key: String): List<SplitPart> =
+        apiCall { api().splitEqual(tabId.toLong(), key, SplitEqualRequestDto(clientRef = key, mode = "equal", parts = parts)) }
+            .parts.map { SplitPart(it.index, Money.parse(it.amount).toInt()) }
+
+    override suspend fun splitItems(tabId: String, lines: List<Pair<Int, Int>>, cashAmount: String, key: String): SplitItemsResult {
+        val res = apiCall {
+            api().splitItems(tabId.toLong(), key, SplitItemsRequestDto(
+                clientRef = key,
+                items = lines.map { SplitItemDto(it.first, it.second) },
+                payments = listOf(PaymentInputDto("cash", cashAmount)),
+            ))
+        }
+        return SplitItemsResult(OrderMapper.tab(res.paidOrder, myDeviceCode), OrderMapper.tab(res.tab, myDeviceCode))
+    }
+
+    override suspend fun reprintOrder(orderId: String, overrideToken: String?, key: String): Int =
+        apiCall { api().reprint(orderId.toLong(), key, ReprintRequestDto(overrideToken)) }.copyNo
+
+    override suspend fun refundOrder(orderId: String, reasonCode: String, reason: String?, overrideToken: String?, key: String): Order =
+        OrderMapper.tab(apiCall { api().refund(orderId.toLong(), key, RefundRequestDto(reasonCode, reason, overrideToken)) }, myDeviceCode)
 
     override suspend fun closedOrders(): List<Order> =
         apiCall { api().closedOrders(25) }.data.map { OrderMapper.closed(it) }

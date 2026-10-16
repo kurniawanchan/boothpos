@@ -50,7 +50,7 @@ fun OrdersScreen(store: PosStore) {
                                 if (o.hasPendingQris) Pill("QRIS", MaterialTheme.pos.warnContainer, MaterialTheme.pos.onWarnContainer)
                                 if (o.billPrinted && !o.closed) Pill("Bill", MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
                                 o.otherDevice?.let { Pill(it, MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurface) }
-                                if (o.refunded) Pill("Refund", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
+                                if (o.refunded) Pill("Direfund", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer)
                                 Text(if (o.cancelledReason != null) "Batal" else rp(o.total), Modifier.padding(horizontal = 10.dp), fontWeight = FontWeight.SemiBold)
                                 if (tab == 0) androidx.compose.material3.Icon(Icons.Filled.ChevronRight, null)
                             }
@@ -69,10 +69,11 @@ fun OrdersScreen(store: PosStore) {
                             MoneyRow("Total", rp(sel.total), big = true)
                             sel.tenders.filter { it.status == TenderStatus.OK }.forEach { MoneyRow(it.method.label, rp(it.amount)) }
                             if (sel.reprints > 0) Text("cetak ulang ${sel.reprints}×", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (sel.refunded) Text("Direfund · total ${rp(sel.refundTotal ?: 0)} · kembali tunai ${rp(sel.cashReturned ?: 0)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.weight(1f))
                             if (sel.cancelledReason == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedPill("Lihat struk", { store.show(Sheet.Receipt(sel.id)) }); OutlinedPill("Cetak ulang", { store.reprint(sel.id) })
-                                OutlinedPill(if (sel.refunded) "Sudah direfund" else "Refund", { store.refund(sel.id) }, enabled = !sel.refunded, danger = true)
+                                OutlinedPill(if (sel.refunded) "Sudah direfund" else "Refund", { store.show(Sheet.Refund(sel.id)) }, enabled = !sel.refunded, danger = true)
                             }
                         }
                     }

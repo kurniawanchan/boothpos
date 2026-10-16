@@ -63,16 +63,7 @@ object PosCatalog {
     val cashInReasons = listOf("float_topup" to "Tambah modal", "change_exchange" to "Kembalian dari supplier", "other" to "Lainnya")
     val cashOutReasons = listOf("petty_cash" to "Belanja bahan", "bank_deposit" to "Setor ke brankas", "supplier" to "Bayar ojek / kurir", "other" to "Lainnya")
 
-    /** Batas diskon per peran — nilai CONTOH desain (PRD §8.4, menunggu OQ-023), bukan aturan final. */
-    val discountLimit = mapOf("CSH" to 10, "WTR" to 0, "SPV" to 50, "OMG" to 100)
-    val discountPresets = listOf(
-        DiscountPreset("Diskon karyawan", 20, "Diskon karyawan"),
-        DiscountPreset("Kompensasi keluhan", 50, "Kompensasi keluhan"),
-        DiscountPreset("Promo pelanggan tetap", 10, "Promo outlet"),
-    )
-
     fun product(id: String) = products.first { it.id == id }
     private fun opts(vararg n: String) = n.map { ModOption(it, 0) }
 }
 
-data class DiscountPreset(val label: String, val pct: Int, val reason: String)

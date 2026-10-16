@@ -57,6 +57,10 @@ import kotlinx.serialization.Serializable
     @SerialName("receipt_no") val receiptNo: String? = null,
     @SerialName("guest_count") val guestCount: Int? = null,
     @SerialName("prebill_at") val prebillAt: String? = null,
+    // 048 / S4 — refund: order tetap "completed"; penanda refund = refunded_at (ISO), angka dari server.
+    @SerialName("refunded_at") val refundedAt: String? = null,
+    @SerialName("refund_total") val refundTotal: String? = null,
+    @SerialName("cash_returned") val cashReturned: String? = null,
     val device: DeviceRefDto? = null,
 )
 

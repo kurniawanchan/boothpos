@@ -36,6 +36,21 @@ enum class Dest { SETUP, PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, 
  */
 internal fun shiftRecoveryDest(current: Shift?, roleCode: String?): Dest? =
     if (current == null && roleCode == "CSH") Dest.OPEN_SHIFT else null
+
+/** Subjek persetujuan diskon (048 / S4): tab, lingkup, baris, persentase, dan alasan — apa adanya; server menghitung hash-nya. */
+internal fun discountSubject(tabId: Long, scope: String, lineId: Int?, percent: Double, reasonCode: String): JsonObject = buildJsonObject {
+    put("tab_id", tabId); put("scope", scope); lineId?.let { put("line_id", it) }; put("percent", percent); put("reason_code", reasonCode)
+}
+
+/** Subjek persetujuan cetak ulang salinan ke-[copyNo] (048 / S4). */
+internal fun reprintSubject(orderId: Long, copyNo: Int): JsonObject = buildJsonObject {
+    put("order_id", orderId); put("copy_no", copyNo)
+}
+
+/** Subjek persetujuan refund penuh (048 / S4): order, alasan, dan catatan bila ada. */
+internal fun refundSubject(orderId: Long, reasonCode: String, reason: String?): JsonObject = buildJsonObject {
+    put("order_id", orderId); put("reason_code", reasonCode); reason?.let { put("reason", it) }
+}
 enum class Conn(val label: String) { ONLINE("Online"), OFFLINE("Offline"), OFFLINE_LIMITED("Offline terbatas") }
 
 /** Lembar/dialog di atas layar. Satu pada satu waktu — sama seperti prototipe (satu `sheet` aktif). */
@@ -45,7 +60,10 @@ sealed interface Sheet {
     data class LineActions(val lineId: Int) : Sheet
     data object OrderActions : Sheet
     data object Split : Sheet
-    data object Discount : Sheet
+    /** 048 / S4 — diskon order ([lineId] null) atau satu baris (lineId = id baris server). */
+    data class Discount(val lineId: Int? = null) : Sheet
+    /** 048 / S4 — refund penuh order lunas: pilih alasan dari server dan catatan. */
+    data class Refund(val orderId: String) : Sheet
     data class Void(val lineId: Int?) : Sheet // null = batalkan seluruh order
     /**
      * 048 / S3 — persetujuan satu aksi. [subject] = parameter aksi apa adanya (server yang menghitung hash-nya);
@@ -161,7 +179,11 @@ class PosStore(
 
     // ---------- navigasi & umpan balik ----------
     fun go(d: Dest) { dest = d; sheet = null }
-    fun show(s: Sheet?) { sheet = s }
+    fun show(s: Sheet?) {
+        // Hasil bagi dari percobaan sebelumnya tidak ikut terbawa saat layar bagi dibuka lagi.
+        if (s == Sheet.Split) { splitResult = Load.Idle; itemSplitResult = Load.Idle }
+        sheet = s
+    }
     fun say(msg: String) { toast = msg }
     fun clearToast() { toast = null }
     fun lock() {
@@ -419,12 +441,11 @@ class PosStore(
         send(intent, { b.removeLine(o.id, lineId, key) })
     }
 
-    /** Simpan jumlah dan catatan baris. Diskon item menunggu cerita diskon (5). */
-    fun saveLine(lineId: Int, qty: Int, note: String, discPct: Int) {
+    /** Simpan jumlah dan catatan baris. Diskon baris dikirim lewat [applyDiscount] (server yang menghitung). */
+    fun saveLine(lineId: Int, qty: Int, note: String) {
         val o = active ?: return
         val line = o.lines.firstOrNull { it.id == lineId } ?: return
         sheet = null
-        if (discPct != line.discPct) say("Diskon item belum tersambung ke server.")
         if (qty == line.qty && note.trim() == line.note.trim()) return
         if (line.fired) { say("Item sudah dikirim — perubahan lewat void."); return }
         updateLine(o.id, line, qty, note.trim())
@@ -456,9 +477,125 @@ class PosStore(
         }
     }
 
-    fun applyOrderDiscount(p: DiscountPreset?) = notWired("Diskon order")
+    /** 048 / S4 — alasan diskon dari daftar server (`GET /reason-codes?category=discount`). */
+    var discountReasons by mutableStateOf<Load<List<ReasonCode>>>(Load.Idle); private set
 
-    fun splitByItem(lineIds: Set<Int>) = notWired("Bagi bill")
+    fun loadDiscountReasons() {
+        val b = backend ?: return
+        discountReasons = Load.Loading
+        viewModelScope.launch {
+            discountReasons = try { Load.Ready(retryNetwork { b.reasonCodes("discount") }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /**
+     * Diskon order ([lineId] null) atau baris. Persentase dan total dikirim apa adanya; yang tampil adalah total dari
+     * server. Di atas batas peran server menjawab 409 override_required → persetujuan `discount` dengan subjek lengkap.
+     * Kunci Idempotency-Key dilepas saat ditolak agar percobaan ulang setelah persetujuan memakai kunci baru.
+     */
+    fun applyDiscount(percent: Double, reason: ReasonCode, lineId: Int?, overrideToken: String? = null) {
+        val b = backend ?: return
+        val o = active ?: return
+        val scope = if (lineId == null) "order" else "line"
+        val intent = "discount:${o.id}:$scope:${lineId ?: 0}:$percent:${reason.code}"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val updated = retryNetwork { b.setDiscount(o.id, percent, reason.code, scope, lineId, overrideToken, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                say(if (lineId == null) "Diskon order diterapkan." else "Diskon item diterapkan.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(
+                        summary = "Diskon ${percent.toInt()}% · ${reason.label}", action = "discount",
+                        subject = discountSubject(o.id.toLong(), scope, lineId, percent, reason.code),
+                    ) { token -> applyDiscount(percent, reason, lineId, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    /** Hapus diskon order (DELETE /tabs/{id}/discounts). Total ulang dari server. */
+    fun clearOrderDiscount() {
+        val b = backend ?: return
+        val o = active ?: return
+        val intent = "discount-clear:${o.id}"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val updated = retryNetwork { b.clearDiscount(o.id, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                say("Diskon order dihapus.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                say(e.message)
+            }
+        }
+    }
+
+    /** 048 / S4 — bagi rata tanpa pembayaran. Jumlah tiap bagian dari server; tab asal disegarkan dari server. */
+    var splitResult by mutableStateOf<Load<List<SplitPart>>>(Load.Idle); private set
+
+    fun splitEqual(parts: Int) {
+        val b = backend ?: return
+        val o = active ?: return
+        val intent = "split-equal:${o.id}:$parts"
+        val key = keys.keyFor(intent)
+        splitResult = Load.Loading
+        viewModelScope.launch {
+            try {
+                val result = retryNetwork { b.splitEqual(o.id, parts, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                splitResult = Load.Ready(result)
+                runCatching { b.tab(o.id) }.getOrNull()?.let { upsert(it) }
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                keys.settled(intent)
+                splitResult = Load.Idle
+                say(e.message)
+            }
+        }
+    }
+
+    /** 048 — bagi per item (POST /tabs/{id}/split, kontrak yang ada). Baris yang dipilih dibayar tunai sebesar jumlahnya; bagian dan sisa dari server. */
+    var itemSplitResult by mutableStateOf<Load<SplitItemsResult>>(Load.Idle); private set
+
+    fun splitByItem(lineIds: Set<Int>) {
+        val b = backend ?: return
+        val o = active ?: return
+        val picked = o.live.filter { it.id in lineIds }
+        if (picked.isEmpty()) return
+        // Tunai sebesar jumlah baris yang dipilih; server tetap memverifikasi bagian dan menolak bila kurang.
+        val cash = picked.sumOf { it.net }
+        val lines = picked.map { it.id to it.qty }
+        val intent = "split-items:${o.id}:" + lines.joinToString(",") { "${it.first}x${it.second}" }
+        val key = keys.keyFor(intent)
+        itemSplitResult = Load.Loading
+        viewModelScope.launch {
+            try {
+                val result = retryNetwork { b.splitItems(o.id, lines, "$cash.00", key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                itemSplitResult = Load.Ready(result)
+                upsert(result.remaining)
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; itemSplitResult = Load.Idle; say(e.message); return@launch }
+                keys.settled(intent)
+                itemSplitResult = Load.Idle
+                say(e.message)
+            }
+        }
+    }
 
     fun goPay() {
         val o = active ?: return
@@ -713,9 +850,77 @@ class PosStore(
         put("product_id", productId); put("reason_code_id", reasonCodeId)
     }
 
-    fun reprint(orderId: String) = notWired("Cetak ulang struk")
+    /** Jumlah salinan yang sudah dicetak ulang per order (ulang dari server pada tiap respons). */
+    private val reprintCopies = mutableMapOf<String, Int>()
 
-    fun refund(orderId: String) = notWired("Refund")
+    /**
+     * 048 / S4 — cetak ulang. Salinan pertama gratis; berikutnya server menjawab 409 override_required → persetujuan
+     * `reprint` dengan subjek order_id + copy_no. Nomor salinan berikutnya = salinan terakhir yang tercatat + 1.
+     */
+    fun reprint(orderId: String, overrideToken: String? = null) {
+        val b = backend ?: return
+        val copyNo = (reprintCopies[orderId] ?: 0) + 1
+        val intent = "reprint:$orderId:$copyNo"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val printed = retryNetwork { b.reprintOrder(orderId, overrideToken, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                reprintCopies[orderId] = printed
+                say("Salinan ke-$printed dicetak. Cetak fisik belum tersedia.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(
+                        summary = "Cetak ulang struk · salinan $copyNo", action = "reprint",
+                        subject = reprintSubject(orderId.toLong(), copyNo),
+                    ) { token -> reprint(orderId, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    /** 048 / S4 — alasan refund dari daftar server (`GET /reason-codes?category=refund`). */
+    var refundReasons by mutableStateOf<Load<List<ReasonCode>>>(Load.Idle); private set
+
+    fun loadRefundReasons() {
+        val b = backend ?: return
+        refundReasons = Load.Loading
+        viewModelScope.launch {
+            refundReasons = try { Load.Ready(retryNetwork { b.reasonCodes("refund") }) } catch (e: ApiError) { Load.Failed(e) }
+        }
+    }
+
+    /**
+     * 048 / S4 — refund penuh order lunas (online saja). Di luar izin server menjawab 409 override_required → persetujuan
+     * `refund` dengan subjek order_id, reason_code, reason. Total dan status dari server.
+     */
+    fun refundOrder(orderId: String, reason: ReasonCode, note: String?, overrideToken: String? = null) {
+        val b = backend ?: return
+        val intent = "refund:$orderId:${reason.code}"
+        val key = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val updated = retryNetwork { b.refundOrder(orderId, reason.code, note?.takeIf { it.isNotBlank() }, overrideToken, key) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                say("Order direfund penuh.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(
+                        summary = "Refund order · ${reason.label}", action = "refund",
+                        subject = refundSubject(orderId.toLong(), reason.code, note?.takeIf { it.isNotBlank() }),
+                    ) { token -> refundOrder(orderId, reason, note, token) }
+                } else say(e.message)
+            }
+        }
+    }
 
 
     /** Daftar penjualan selesai dari server (layar Order → Selesai). */

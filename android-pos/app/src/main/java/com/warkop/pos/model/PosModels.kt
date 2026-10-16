@@ -56,6 +56,7 @@ data class Order(
     val billPrinted: Boolean = false, val closed: Boolean = false, val cancelledReason: String? = null,
     val receiptNo: String? = null, val otherDevice: String? = null, val reprints: Int = 0,
     val closedAt: String? = null, val refunded: Boolean = false,
+    val refundTotal: Int? = null, val cashReturned: Int? = null,
     // Angka dari server (null = belum ada; dihitung lokal hanya sebagai cadangan tampilan).
     val serverSubtotal: Int? = null, val serverDiscount: Int? = null, val serverTax: Int? = null,
     val serverTotal: Int? = null, val serverPaid: Int? = null, val serverChange: Int? = null,
@@ -111,13 +112,19 @@ data class CloseOutcome(
 )
 
 /** 048 / S3 — alasan dari server (id untuk 86). */
-data class ReasonCode(val id: Long, val label: String)
+data class ReasonCode(val id: Long, val label: String, val code: String = "")
 
 /** 048 — kanal bank dari `GET /payment-channels` (type bank_transfer). EDC wajib membawa id-nya; nama dari server. */
 data class BankChannel(val id: Long, val name: String)
 
 /** Kanal QRIS dari `GET /payment-channels` (type qr_ewallet). [name] = provider dari server, atau "QRIS" dari tipe kanal. */
 data class QrisChannel(val id: Long, val name: String)
+
+/** 048 — hasil bagi per item: [paid] = bagian yang dibayar, [remaining] = sisa bill; total dari server. */
+data class SplitItemsResult(val paid: Order, val remaining: Order)
+
+/** 048 / S4 — satu bagian bagi rata dari server: nomor urut dan jumlah rupiah (bagian terakhir membawa sisa pembulatan). */
+data class SplitPart(val index: Int, val amount: Int)
 
 /** 048 / S3 — penyetuju yang memenuhi syarat untuk satu aksi (tanpa peminta). */
 data class Approver(val id: Long, val name: String, val role: String)
