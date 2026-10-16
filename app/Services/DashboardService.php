@@ -101,6 +101,19 @@ class DashboardService
                     $this->avgPoints($cmpLabels, $cmp['net'], $cmp['completed'])),
                 'low_stock' => $this->lowStock(LowStockHistory::current(), $lowCmpAtSame, $this->points($curLabels, $lowCur), $this->points($cmpLabels, $lowCmp)),
             ],
+            // 048 / S4 — pendapatan periode: net (pra-pajak), pajak, dan grand total (net + pajak), angka yang sama
+            // dengan laporan penjualan. Hanya nilai periode ini; deret pembanding tetap berbasis net.
+            'revenue' => $this->revenue($curValue['net'], array_sum(array_column($cur['rows']['sales'], 'tax'))),
+        ];
+    }
+
+    /** @return array{net_sales: string, tax_total: string, grand_total: string} */
+    private function revenue(float $net, float $tax): array
+    {
+        return [
+            'net_sales' => number_format($net, 2, '.', ''),
+            'tax_total' => number_format($tax, 2, '.', ''),
+            'grand_total' => number_format($net + $tax, 2, '.', ''),
         ];
     }
 
@@ -199,6 +212,7 @@ class DashboardService
                     $this->avgPoints($cmpLabels, array_values($cmp['net']), array_values($cmp['completed']))),
                 'low_stock' => $this->lowStock(LowStockHistory::current(), $lowCmpValue, $this->points($curLabels, $lowCur), $this->points($cmpLabels, $lowCmp)),
             ],
+            'revenue' => $this->revenue($curTotal['net'], SalesFigures::taxTotalBetween($from, $to)),
         ];
     }
 

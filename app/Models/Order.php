@@ -29,7 +29,9 @@ class Order extends Model
 
     protected $fillable = [
         'order_number', 'session_id', 'customer_id', 'user_id', 'channel',
-        'subtotal', 'discount_amount', 'total_amount', 'total_cost', 'paid_amount',
+        // 048 — pajak diisi server (TaxCalculator), tidak pernah dari request. Tanpa ini Order::create() membuang
+        // tax_amount diam-diam sementara total_amount (yang sudah memuat pajak) tersimpan.
+        'subtotal', 'discount_amount', 'tax_amount', 'tax_rate_snapshot', 'total_amount', 'total_cost', 'paid_amount',
         'change_amount', 'status', 'void_reason', 'local_ref', 'notes',
         'service_type', 'table_id', 'tab_label', 'split_from_order_id',
     ];

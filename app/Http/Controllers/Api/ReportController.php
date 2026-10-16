@@ -160,6 +160,12 @@ class ReportController extends Controller
         $totals->pos_gross_sales = $totals->gross_sales;
         $totals->pos_net_sales = $totals->net_sales;
 
+        // 048 / S4 — pajak eksklusif: net (pra-pajak) + pajak = grand_total, sama dengan struk. order_discount_total
+        // ditampilkan supaya selisih diskon tingkat-order (yang tidak masuk net, keputusan O3) terlihat.
+        $totals->tax_total = number_format((float) ($totals->tax_total ?? 0), 2, '.', '');
+        $totals->grand_total = number_format((float) ($totals->grand_total ?? 0), 2, '.', '');
+        $totals->order_discount_total = number_format((float) ($totals->order_discount_total ?? 0), 2, '.', '');
+
         // Daftar TRANSAKSI dibangun oleh SalesTransactionsService — sumber yang SAMA dengan ekspor,
         // supaya berkas ekspor tidak pernah berbeda dari layar.
         $built = app(\App\Services\SalesTransactionsService::class)->build([
@@ -253,8 +259,12 @@ class ReportController extends Controller
                 SUM(order_items.cost_price * order_items.qty) as cost_of_goods
             ')->first();
 
-        // 048 / S4 — pendapatan dikurangi refund pada tanggal refund (biaya barang belum dikurangi: lihat laporan).
-        $totals->revenue = (float) ($totals->revenue ?? 0) - SalesFigures::refundTotals($from, $to)->net;
+        // 048 / S4 — pendapatan dan biaya barang dikurangi refund pada tanggal refund (keputusan pemilik). Refund
+        // membalik penjualan DAN biaya barang yang dikembalikan, jadi laba kotor berkurang sebesar margin barang itu.
+        // Stok sudah kembali lewat RefundService; bagian ini hanya akuntansi.
+        $refund = SalesFigures::refundTotals($from, $to);
+        $totals->revenue = (float) ($totals->revenue ?? 0) - $refund->net;
+        $totals->cost_of_goods = (float) ($totals->cost_of_goods ?? 0) - $refund->cost;
 
         // 046 — penjualan selesai saja untuk periode ini: tanpa pre-order, tanpa biaya event / laba bersih.
         $revenue = (float) ($totals->revenue ?? 0);
