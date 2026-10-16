@@ -64,7 +64,7 @@ fun EditorScreen(store: PosStore) {
                     is Load.Ready -> if (items.isEmpty()) Text(if (query.isBlank()) "Belum ada menu di kategori ini." else "Tidak ada menu \"$query\"", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 LazyVerticalGrid(GridCells.Fixed(size.menuColumns()), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = if (size == Size.COMPACT) 88.dp else 8.dp)) {
-                    items(items, key = { it.id }) { p -> MenuCard(p, catalog?.categories.orEmpty(), items, qtyById[p.id] ?: 0, p.id in store.soldOut, onTap = { store.tapProduct(p) }, onHold = { store.say(if (store.user?.isSupervisor == true) "Ketersediaan ${p.name} diubah." else "Mengubah ketersediaan perlu persetujuan Supervisor.") }) }
+                    items(items, key = { it.id }) { p -> MenuCard(p, catalog?.categories.orEmpty(), items, qtyById[p.id] ?: 0, p.id in store.soldOut, onTap = { store.tapProduct(p) }, onHold = { store.markSoldOut(p) }) }
                 }
             }
         }

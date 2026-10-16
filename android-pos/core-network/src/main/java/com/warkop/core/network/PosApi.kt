@@ -3,6 +3,7 @@ package com.warkop.core.network
 import com.warkop.core.network.dto.*
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.HTTP
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.Header
@@ -65,6 +66,15 @@ interface PosApi {
     suspend fun removeLine(@Path("id") id: Long, @Path("item") item: Long, @Header("Idempotency-Key") key: String): TabDto
     @POST("tabs/{id}/send") suspend fun send(@Path("id") id: Long, @Header("Idempotency-Key") key: String): SendResponseDto
     @POST("tabs/{id}/payments") suspend fun pay(@Path("id") id: Long, @Body body: PayRequestDto): TabDto
+    @POST("tabs/{id}/payments/{pay}/verify") suspend fun verifyPayment(@Path("id") id: Long, @Path("pay") pay: Long, @Body body: VerifyPaymentRequestDto): TabDto
+    @POST("tabs/{id}/payments/{pay}/fail") suspend fun failPayment(@Path("id") id: Long, @Path("pay") pay: Long, @Body body: FailPaymentRequestDto): TabDto
+    /** Void baris terkirim: DELETE dengan badan JSON (alasan, status dapur, keputusan stok, token persetujuan). */
+    @HTTP(method = "DELETE", path = "tabs/{id}/items/{item}", hasBody = true)
+    suspend fun voidLine(@Path("id") id: Long, @Path("item") item: Long, @Body body: VoidLineRequestDto): TabDto
+    @POST("tabs/{id}/cancel") suspend fun cancelTab(@Path("id") id: Long, @Body body: CancelTabRequestDto): TabDto
+    @POST("products/{id}/sold-out") suspend fun soldOut(@Path("id") id: Long, @Body body: SoldOutRequestDto): Response<Unit>
+    @GET("reason-codes") suspend fun reasonCodes(@Query("category") category: String): ReasonCodesPage
+    @GET("payment-channels") suspend fun paymentChannels(): PaymentChannelsPage
     @POST("tabs/{id}/prebill") suspend fun prebill(@Path("id") id: Long): TabDto
     @GET("orders") suspend fun closedOrders(@Query("per_page") perPage: Int): ClosedOrdersPage
 }

@@ -69,5 +69,9 @@ internal fun localMessage(code: String?): String? = when (code) {
     "same_person" -> "Penyetuju tidak boleh orang yang sama dengan peminta."
     "override_expired" -> "Persetujuan sudah kedaluwarsa. Minta persetujuan ulang."
     "override_mismatch" -> "Data aksi berubah sejak disetujui. Minta persetujuan ulang."
+    // 048 / S3 — pembayaran EDC/QRIS dan batal tab.
+    "duplicate_edc" -> "Kode approval EDC ini sudah dicatat dalam 2 menit terakhir. Konfirmasi jika ini transaksi berbeda."
+    "pending_qris" -> "Ada pembayaran QRIS yang belum diverifikasi. Verifikasi atau tandai tidak ditemukan dulu."
+    "has_payments" -> "Order sudah ada pembayaran, jadi tidak bisa dibatalkan. Gunakan void per item."
     else -> null
 }

@@ -23,6 +23,7 @@ import com.warkop.pos.model.FloorSnapshot
 import com.warkop.pos.model.Order
 import com.warkop.pos.model.MenuCatalog
 import com.warkop.pos.model.Approver
+import com.warkop.pos.model.ReasonCode
 import com.warkop.pos.model.CashMovement
 import com.warkop.pos.model.CloseOutcome
 import com.warkop.pos.model.Shift
@@ -244,13 +245,40 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     override suspend fun sendToKitchen(tabId: String, key: String): Order =
         OrderMapper.tab(apiCall { api().send(tabId.toLong(), key).tab }, myDeviceCode)
 
-    override suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String): Order =
+    override suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String, approvalCode: String?, confirmDuplicate: Boolean?, channelId: Long?): Order =
         OrderMapper.tab(
             apiCall {
-                api().pay(tabId.toLong(), PayRequestDto(clientRef = clientRef, payments = listOf(PaymentInputDto(method, Money.toServer(amount.toLong())))))
+                api().pay(tabId.toLong(), PayRequestDto(clientRef = clientRef, payments = listOf(
+                    PaymentInputDto(method, Money.toServer(amount.toLong()), approvalCode = approvalCode, confirmDuplicate = confirmDuplicate, channelId = channelId),
+                )))
             },
             myDeviceCode,
         )
+
+    override suspend fun voidLine(tabId: String, lineId: Int, reasonCode: String, kitchenStatus: String, stockDecision: String, reason: String?, overrideToken: String?): Order =
+        OrderMapper.tab(apiCall {
+            api().voidLine(tabId.toLong(), lineId.toLong(), VoidLineRequestDto(reasonCode = reasonCode, kitchenStatus = kitchenStatus, stockDecision = stockDecision, reason = reason, overrideToken = overrideToken))
+        }, myDeviceCode)
+
+    override suspend fun cancelTab(tabId: String, reasonCode: String, reason: String?, overrideToken: String?): Order =
+        OrderMapper.tab(apiCall { api().cancelTab(tabId.toLong(), CancelTabRequestDto(reasonCode = reasonCode, reason = reason, overrideToken = overrideToken)) }, myDeviceCode)
+
+    override suspend fun soldOut(productId: String, reasonCodeId: Long, note: String?, overrideToken: String?) {
+        val res = apiCall { api().soldOut(productId.toLong(), SoldOutRequestDto(reasonCodeId = reasonCodeId, note = note?.takeIf { it.isNotBlank() }, overrideToken = overrideToken)) }
+        if (!res.isSuccessful) throw ApiErrorMapper.fromHttp(res.code(), runCatching { res.errorBody()?.string() }.getOrNull())
+    }
+
+    override suspend fun reasonCodes(category: String): List<ReasonCode> =
+        apiCall { api().reasonCodes(category) }.data.filter { it.isActive }.map { ReasonCode(it.id, it.label.ifBlank { it.code }) }
+
+    override suspend fun qrisChannelId(): Long? =
+        apiCall { api().paymentChannels() }.data.firstOrNull { it.type == "qr_ewallet" }?.id
+
+    override suspend fun verifyPayment(tabId: String, paymentId: Long, reference: String, overrideToken: String?): Order =
+        OrderMapper.tab(apiCall { api().verifyPayment(tabId.toLong(), paymentId, VerifyPaymentRequestDto(reference = reference, overrideToken = overrideToken)) }, myDeviceCode)
+
+    override suspend fun failPayment(tabId: String, paymentId: Long, overrideToken: String?): Order =
+        OrderMapper.tab(apiCall { api().failPayment(tabId.toLong(), paymentId, FailPaymentRequestDto(overrideToken = overrideToken)) }, myDeviceCode)
 
     override suspend fun prebill(tabId: String): Order = OrderMapper.tab(apiCall { api().prebill(tabId.toLong()) }, myDeviceCode)
 

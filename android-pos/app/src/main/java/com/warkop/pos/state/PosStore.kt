@@ -406,9 +406,7 @@ class PosStore(
         updateLine(o.id, line, qty, note.trim())
     }
 
-    fun voidLine(lineId: Int, reason: String, made: Boolean) = notWired("Void item")
 
-    fun cancelOrder(reason: String) = notWired("Batalkan order")
 
     /** Kirim semua baris belum terkirim ke dapur. Kunci mengikuti himpunan baris, jadi item baru = niat baru. */
     fun fire() {
@@ -466,13 +464,203 @@ class PosStore(
         }
     }
 
-    fun payEdc(code: String): Boolean { notWired("Pembayaran EDC"); return false }
 
-    fun recordQris() = notWired("QRIS")
 
-    fun verifyQris(tenderId: Int, ref: String) = notWired("Verifikasi QRIS")
 
-    fun failQris(tenderId: Int) = notWired("Verifikasi QRIS")
+
+    // ---------- aksi tab & pembayaran (048 / S3: T056) ----------
+    // Aksi yang perlu persetujuan: server menjawab 409 override_required → dialog Sheet.Override mengambil token, lalu
+    // aksi DIULANG dengan parameter yang sama + token. Subjek = identitas objek + parameter aksi (sesuai kontrak server).
+
+    fun voidLine(lineId: Int, reason: String, made: Boolean, overrideToken: String? = null) {
+        val b = backend ?: return
+        val o = active ?: return
+        val line = o.lines.firstOrNull { it.id == lineId } ?: return
+        val code = PosCatalog.serverReasonCode(reason)
+        val kitchen = if (made) "made" else "not_started"
+        val stock = if (made) "waste" else "return"
+        viewModelScope.launch {
+            try {
+                upsert(b.voidLine(o.id, lineId, code, kitchen, stock, null, overrideToken))
+                conn = Conn.ONLINE
+                sheet = null
+                say("${line.name} di-void.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "Void ${line.qty}× ${line.name} · $reason", action = "void_line",
+                        subject = voidSubject(o.id, lineId, code, kitchen, stock)) { token -> voidLine(lineId, reason, made, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    fun cancelOrder(reason: String, overrideToken: String? = null) {
+        val b = backend ?: return
+        val o = active ?: return
+        val code = PosCatalog.serverReasonCode(reason)
+        viewModelScope.launch {
+            try {
+                upsert(b.cancelTab(o.id, code, null, overrideToken))
+                conn = Conn.ONLINE
+                sheet = null
+                say("Order dibatalkan.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                // has_payments tidak pernah menawarkan persetujuan: pesannya langsung ditampilkan.
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "Batalkan order · $reason", action = "cancel_order",
+                        subject = cancelSubject(o.id, code)) { token -> cancelOrder(reason, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    /** EDC: nominal = sisa tab, kode approval dari slip. Duplikat 2 menit → konfirmasi kasir, lalu kirim ulang dengan confirm_duplicate. */
+    fun payEdc(code: String, confirmDuplicate: Boolean = false) {
+        val b = backend ?: return
+        val o = active ?: return
+        val amount = o.remaining
+        if (amount <= 0) return
+        val intent = "edc:${o.id}:$code:$amount:$confirmDuplicate"
+        val ref = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val updated = retryNetwork { b.pay(o.id, "edc", amount, ref, code, confirmDuplicate.takeIf { it }, null) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                if (updated.closed) {
+                    emit("${updated.receiptNo.orEmpty()} · ${rp(updated.total)}", "payment.recorded")
+                    dest = Dest.DONE
+                } else say("Sisa ${rp(updated.remaining)}.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                if (e.code == "duplicate_edc") {
+                    sheet = Sheet.Confirm("Kode approval sudah dipakai?", "Kode $code sudah dicatat dalam 2 menit terakhir. Lanjutkan jika ini transaksi berbeda.", "Lanjutkan") {
+                        payEdc(code, confirmDuplicate = true)
+                    }
+                } else say(e.message)
+            }
+        }
+    }
+
+    /** QRIS statis: dicatat menunggu verifikasi (server menyimpan pending). Kanal QRIS dari daftar kanal server. */
+    fun recordQris() {
+        val b = backend ?: return
+        val o = active ?: return
+        val amount = o.remaining
+        if (amount <= 0) return
+        val intent = "qris:${o.id}:$amount"
+        val ref = keys.keyFor(intent)
+        viewModelScope.launch {
+            try {
+                val channel = b.qrisChannelId() ?: run { say("Kanal QRIS belum diatur di server."); return@launch }
+                val updated = retryNetwork { b.pay(o.id, "qr_ewallet", amount, ref, null, null, channel) }
+                keys.settled(intent)
+                conn = Conn.ONLINE
+                upsert(updated)
+                sheet = null
+                say("QRIS dicatat · menunggu verifikasi.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
+                keys.settled(intent)
+                say(e.message)
+            }
+        }
+    }
+
+    fun verifyQris(tenderId: Int, ref: String, overrideToken: String? = null) {
+        val b = backend ?: return
+        val o = active ?: return
+        val reference = ref.trim()
+        viewModelScope.launch {
+            try {
+                upsert(b.verifyPayment(o.id, tenderId.toLong(), reference, overrideToken))
+                conn = Conn.ONLINE
+                sheet = null
+                say("QRIS terverifikasi.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "Verifikasi QRIS · ref $reference", action = "qris_verify",
+                        subject = qrisSubject(o.id, tenderId, reference)) { token -> verifyQris(tenderId, reference, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    fun failQris(tenderId: Int, overrideToken: String? = null) {
+        val b = backend ?: return
+        val o = active ?: return
+        viewModelScope.launch {
+            try {
+                upsert(b.failPayment(o.id, tenderId.toLong(), overrideToken))
+                conn = Conn.ONLINE
+                sheet = null
+                say("Pembayaran QRIS ditandai tidak ditemukan.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "QRIS tidak ditemukan", action = "qris_fail",
+                        subject = qrisSubject(o.id, tenderId, null)) { token -> failQris(tenderId, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    /** 86 dari layar menu: alasan aktif pertama dari server (`sold_out`). Server menentukan apakah perlu persetujuan. */
+    fun markSoldOut(p: Product) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                val reason = b.reasonCodes("sold_out").firstOrNull() ?: run { say("Alasan 86 belum diatur di server."); return@launch }
+                sheet = Sheet.Confirm("Tandai ${p.name} habis?", "Alasan: ${reason.label}. Item tidak bisa dipesan sampai dibuka lagi.", "Tandai habis") {
+                    soldOutNow(p, reason.id)
+                }
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                say(e.message)
+            }
+        }
+    }
+
+    private fun soldOutNow(p: Product, reasonCodeId: Long, overrideToken: String? = null) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            try {
+                b.soldOut(p.id, reasonCodeId, null, overrideToken)
+                conn = Conn.ONLINE
+                sheet = null
+                say("${p.name} ditandai habis.")
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                if (e.code == "override_required") {
+                    sheet = Sheet.Override(summary = "Tandai ${p.name} habis", action = "availability",
+                        subject = availabilitySubject(p.id.toLong(), reasonCodeId)) { token -> soldOutNow(p, reasonCodeId, token) }
+                } else say(e.message)
+            }
+        }
+    }
+
+    // Subjek persetujuan (identitas objek + parameter, sama dengan permintaan aksi; field yang tidak dikirim juga tidak ada di sini).
+    private fun voidSubject(tabId: String, lineId: Int, reasonCode: String, kitchen: String, stock: String): JsonObject = buildJsonObject {
+        put("tab_id", tabId.toLong()); put("line_id", lineId); put("reason_code", reasonCode); put("kitchen_status", kitchen); put("stock_decision", stock)
+    }
+
+    private fun cancelSubject(tabId: String, reasonCode: String): JsonObject = buildJsonObject {
+        put("tab_id", tabId.toLong()); put("reason_code", reasonCode)
+    }
+
+    private fun qrisSubject(tabId: String, paymentId: Int, reference: String?): JsonObject = buildJsonObject {
+        put("tab_id", tabId.toLong()); put("payment_id", paymentId.toLong()); reference?.let { put("reference", it) }
+    }
+
+    private fun availabilitySubject(productId: Long, reasonCodeId: Long): JsonObject = buildJsonObject {
+        put("product_id", productId); put("reason_code_id", reasonCodeId)
+    }
 
     fun reprint(orderId: String) = notWired("Cetak ulang struk")
 

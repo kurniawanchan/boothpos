@@ -110,6 +110,9 @@ data class CloseOutcome(
     val expected: Int, val counted: Int, val variance: Int, val tolerance: Int?, val edcBatch: Int?,
 )
 
+/** 048 / S3 — alasan dari server (id untuk 86). */
+data class ReasonCode(val id: Long, val label: String)
+
 /** 048 / S3 — penyetuju yang memenuhi syarat untuk satu aksi (tanpa peminta). */
 data class Approver(val id: Long, val name: String, val role: String)
 

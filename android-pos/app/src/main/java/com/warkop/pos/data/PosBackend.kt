@@ -1,6 +1,7 @@
 package com.warkop.pos.data
 
 import com.warkop.pos.model.Approver
+import com.warkop.pos.model.ReasonCode
 import com.warkop.pos.model.Availability
 import com.warkop.pos.model.CashMovement
 import com.warkop.pos.model.CloseOutcome
@@ -70,6 +71,15 @@ interface PosBackend {
     suspend fun approvers(action: String): List<Approver>
     /** Mengirim `subject` (parameter aksi apa adanya); server yang menghitung hash-nya. */
     suspend fun issueOverride(action: String, subject: JsonObject, approverId: Long, pin: String): String
+
+    // --- aksi tab & pembayaran (048 / S3: T056). Setiap tulis menerima token persetujuan (null bila tidak perlu). ---
+    suspend fun voidLine(tabId: String, lineId: Int, reasonCode: String, kitchenStatus: String, stockDecision: String, reason: String?, overrideToken: String?): Order
+    suspend fun cancelTab(tabId: String, reasonCode: String, reason: String?, overrideToken: String?): Order
+    suspend fun soldOut(productId: String, reasonCodeId: Long, note: String?, overrideToken: String?)
+    suspend fun reasonCodes(category: String): List<ReasonCode>
+    suspend fun qrisChannelId(): Long?
+    suspend fun verifyPayment(tabId: String, paymentId: Long, reference: String, overrideToken: String?): Order
+    suspend fun failPayment(tabId: String, paymentId: Long, overrideToken: String?): Order
     suspend fun shiftLimits(): ShiftLimits
 
     // --- denah & pesanan (S1/US2). Semua tulis membawa kunci niat (Idempotency-Key / client_ref / local_ref). ---
@@ -81,7 +91,8 @@ interface PosBackend {
     suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order
     suspend fun removeLine(tabId: String, lineId: Int, key: String): Order
     suspend fun sendToKitchen(tabId: String, key: String): Order
-    suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String): Order
+    /** EDC: [approvalCode] + [confirmDuplicate] (setelah kasir mengonfirmasi duplikat). QRIS: [channelId] kanal QRIS. */
+    suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String, approvalCode: String? = null, confirmDuplicate: Boolean? = null, channelId: Long? = null): Order
     suspend fun prebill(tabId: String): Order
     suspend fun closedOrders(): List<Order>
 }

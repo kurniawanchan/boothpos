@@ -111,7 +111,14 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class UpdateLineRequestDto(val qty: Int? = null, val note: String? = null)
 
-@Serializable data class PaymentInputDto(val method: String, val amount: String)
+/** Satu baris pembayaran. EDC: `approval_code` (6–12 huruf kapital/angka) + `confirm_duplicate` setelah konfirmasi kasir. */
+@Serializable data class PaymentInputDto(
+    val method: String,
+    val amount: String,
+    @SerialName("approval_code") val approvalCode: String? = null,
+    @SerialName("confirm_duplicate") val confirmDuplicate: Boolean? = null,
+    @SerialName("channel_id") val channelId: Long? = null,
+)
 
 @Serializable data class PayRequestDto(
     @SerialName("client_ref") val clientRef: String,

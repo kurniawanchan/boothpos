@@ -52,6 +52,13 @@ object PosCatalog {
     val denominations = listOf(100_000, 50_000, 20_000, 10_000, 5_000, 2_000, 1_000, 500)
     val voidReasons = listOf("Salah input", "Pelanggan batal", "Item tidak tersedia", "Kualitas / keluhan")
     val cancelReasons = listOf("Pelanggan batal", "Order ganda", "Salah meja / tipe order")
+
+    /** Alasan layar → kode server untuk void/batal tab (wrong_item | customer_request | kitchen_error | other). */
+    private val serverReasons = mapOf(
+        "Salah input" to "wrong_item", "Pelanggan batal" to "customer_request", "Item tidak tersedia" to "other",
+        "Kualitas / keluhan" to "kitchen_error", "Order ganda" to "other", "Salah meja / tipe order" to "wrong_item",
+    )
+    fun serverReasonCode(label: String): String = serverReasons[label] ?: "other"
     /** Alasan kas: kode yang dikirim ke server (`CashMovement::REASONS`) dan label layar. */
     val cashInReasons = listOf("float_topup" to "Tambah modal", "change_exchange" to "Kembalian dari supplier", "other" to "Lainnya")
     val cashOutReasons = listOf("petty_cash" to "Belanja bahan", "bank_deposit" to "Setor ke brankas", "supplier" to "Bayar ojek / kurir", "other" to "Lainnya")
