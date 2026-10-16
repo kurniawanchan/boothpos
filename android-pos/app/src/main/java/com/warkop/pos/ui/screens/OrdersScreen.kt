@@ -1,5 +1,9 @@
 package com.warkop.pos.ui.screens
 
+import com.warkop.pos.ui.ErrorState
+import com.warkop.pos.ui.friendlyLoadError
+import com.warkop.pos.ui.isOfflineError
+import com.warkop.pos.state.Load
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,6 +42,11 @@ fun OrdersScreen(store: PosStore) {
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.weight(1f)) {
+                // T039: kegagalan memuat tampil sebagai ErrorState (bukan toast, bukan daftar kosong).
+                val listFailure = if (tab == 1) (store.closedLoad as? Load.Failed)?.error else (store.floor as? Load.Failed)?.error
+                if (listFailure != null) {
+                    ErrorState(friendlyLoadError(listFailure), { if (tab == 1) store.loadClosed() else store.startFloorPolling() }, Modifier.weight(1f).fillMaxWidth(), offline = isOfflineError(listFailure))
+                } else {
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(if (tab == 0) open else closed, key = { it.id }) { o ->
                         Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = if (tab == 1 && (selected ?: closed.firstOrNull()?.id) == o.id) MaterialTheme.colorScheme.surfaceContainerHigh else if (tab == 1) androidx.compose.ui.graphics.Color.Transparent else MaterialTheme.colorScheme.surfaceContainerLow, onClick = { if (tab == 0) store.openOrder(o.id) else selected = o.id }) {
@@ -56,6 +65,7 @@ fun OrdersScreen(store: PosStore) {
                             }
                         }
                     }
+                }
                 }
                 val sel = closed.firstOrNull { it.id == selected } ?: closed.firstOrNull()
                 if (tab == 1 && sel != null && !compact) {

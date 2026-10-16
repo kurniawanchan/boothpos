@@ -936,11 +936,32 @@ class PosStore(
     }
 
 
+    /** Keadaan memuat daftar penjualan selesai (GET /orders). Gagal → ErrorState di layar Order, bukan toast. */
+    var closedLoad by mutableStateOf<Load<Unit>>(Load.Idle); private set
+
     /** Daftar penjualan selesai dari server (layar Order → Selesai). */
     fun loadClosed() {
         val b = backend ?: return
+        closedLoad = Load.Loading
         viewModelScope.launch {
-            try { closedCache = retryNetwork { b.closedOrders() } } catch (e: ApiError) { say(e.message) }
+            closedLoad = try {
+                closedCache = retryNetwork { b.closedOrders() }
+                Load.Ready(Unit)
+            } catch (e: ApiError) {
+                Load.Failed(e)
+            }
+        }
+    }
+
+    /** Struk per order dari GET /orders/{id}/receipt (T038). Dimuat saat lembar struk dibuka. */
+    var receipts by mutableStateOf<Map<String, Load<com.warkop.pos.model.ReceiptView>>>(emptyMap()); private set
+
+    fun loadReceipt(orderId: String) {
+        val b = backend ?: return
+        receipts = receipts + (orderId to Load.Loading)
+        viewModelScope.launch {
+            val next = try { Load.Ready(retryNetwork { b.receipt(orderId) }) } catch (e: ApiError) { Load.Failed(e) }
+            receipts = receipts + (orderId to next)
         }
     }
 

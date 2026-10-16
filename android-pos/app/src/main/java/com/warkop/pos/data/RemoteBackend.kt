@@ -295,6 +295,9 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
 
     override suspend fun prebill(tabId: String): Order = OrderMapper.tab(apiCall { api().prebill(tabId.toLong()) }, myDeviceCode)
 
+    override suspend fun receipt(orderId: String): com.warkop.pos.model.ReceiptView =
+        ReceiptMapper.map(apiCall { api().receipt(orderId.toLong()) })
+
     override suspend fun heartbeat(clockMs: Long, queueDepth: Int): com.warkop.pos.state.HeartbeatResult =
         HeartbeatMapper.result(apiCall { api().heartbeat(com.warkop.core.network.dto.HeartbeatRequestDto(com.warkop.pos.state.APP_VERSION, clockMs, queueDepth)) })
 

@@ -102,6 +102,9 @@ interface PosBackend {
     suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String, approvalCode: String? = null, confirmDuplicate: Boolean? = null, channelId: Long? = null): Order
     suspend fun prebill(tabId: String): Order
 
+    /** Struk dari server (T038). */
+    suspend fun receipt(orderId: String): com.warkop.pos.model.ReceiptView
+
     /** Heartbeat perangkat (US6): jam perangkat, jumlah antrean lokal (0 bila tidak ada), dan versi aplikasi. */
     suspend fun heartbeat(clockMs: Long, queueDepth: Int): com.warkop.pos.state.HeartbeatResult
 

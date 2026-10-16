@@ -70,9 +70,13 @@ fun TenderScreen(store: PosStore) {
 
     val right: @Composable (Modifier) -> Unit = { m ->
         Column(if (compact) m else m.verticalScroll(rememberScrollState())) {
+            // T039: saat offline, aksi non-tunai dinonaktifkan dan alasannya ditampilkan (bukan toast).
+            if (store.conn != Conn.ONLINE) {
+                ErrorState("Koneksi ke server terputus.", { store.heartbeatNow() }, Modifier.fillMaxWidth().padding(bottom = 10.dp), offline = true, writeDisabledReason = "EDC dan QRIS butuh server. Pembayaran tunai tetap bisa dicatat.")
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 MethodTile(Icons.Filled.Payments, "Tunai", method == TenderMethod.CASH, true, Modifier.weight(1f)) { method = TenderMethod.CASH }
-                MethodTile(Icons.Filled.CreditCard, "EDC",method == TenderMethod.EDC, !pending, Modifier.weight(1f)) { method = TenderMethod.EDC; store.show(Sheet.Edc) }
+                MethodTile(Icons.Filled.CreditCard, "EDC", method == TenderMethod.EDC, !pending && store.conn == Conn.ONLINE, Modifier.weight(1f)) { method = TenderMethod.EDC; store.show(Sheet.Edc) }
                 MethodTile(Icons.Filled.QrCode2, store.qrisLabel,method == TenderMethod.QRIS, !pending && store.conn == Conn.ONLINE, Modifier.weight(1f)) { method = TenderMethod.QRIS; store.show(Sheet.QrisRecord) }
             }
             Spacer(Modifier.height(10.dp))

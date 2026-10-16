@@ -78,6 +78,8 @@ interface PosApi {
     @POST("tabs/{id}/prebill") suspend fun prebill(@Path("id") id: Long): TabDto
     /** Heartbeat perangkat (US6). Tanpa Idempotency-Key: bukan tulisan bisnis, aman diulang. */
     @POST("devices/heartbeat") suspend fun heartbeat(@Body body: HeartbeatRequestDto): HeartbeatResponseDto
+    /** Struk server (T038). Order yang masih terbuka menjawab 409; layar struk hanya dibuka untuk order selesai. */
+    @GET("orders/{id}/receipt") suspend fun receipt(@Path("id") id: Long): ReceiptDto
     @GET("orders") suspend fun closedOrders(@Query("per_page") perPage: Int): ClosedOrdersPage
 
     // --- diskon, bagi rata, cetak ulang, refund (048 / S4 — US5). Setiap tulis membawa Idempotency-Key. ---

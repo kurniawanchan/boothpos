@@ -122,6 +122,34 @@ data class BankChannel(val id: Long, val name: String)
 /** Kanal QRIS dari `GET /payment-channels` (type qr_ewallet). [name] = provider dari server, atau "QRIS" dari tipe kanal. */
 data class QrisChannel(val id: Long, val name: String)
 
+/** 048 / T038 — satu baris struk. */
+data class ReceiptLine(val name: String, val qty: Int, val lineTotal: Int, val note: String?)
+
+/**
+ * 048 / T038 — struk dari server. Semua angka rupiah berasal dari server; [taxRatePercent] hanya untuk label.
+ * [queueNo] dan [receiptNo] null bila server belum mengisinya (tidak diganti nilai tetap).
+ */
+data class ReceiptView(
+    val storeName: String,
+    val storeAddress: String?,
+    val orderNumber: String,
+    val receiptNo: String?,
+    val queueNo: String?,
+    val copyNo: Int,
+    val cashier: String?,
+    val paidAtText: String?,
+    val taxLabel: String,
+    val taxRatePercent: String,
+    val subtotal: Int,
+    val discount: Int,
+    val tax: Int,
+    val total: Int,
+    val paid: Int,
+    val change: Int,
+    val items: List<ReceiptLine>,
+    val payments: List<Pair<String, Int>>,
+)
+
 /** 048 — hasil bagi per item: [paid] = bagian yang dibayar, [remaining] = sisa bill; total dari server. */
 data class SplitItemsResult(val paid: Order, val remaining: Order)
 

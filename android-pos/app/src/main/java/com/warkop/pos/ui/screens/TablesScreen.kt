@@ -24,6 +24,8 @@ import com.warkop.pos.state.PosStore
 import com.warkop.pos.state.Sheet
 import com.warkop.pos.theme.pos
 import com.warkop.pos.ui.ErrorState
+import com.warkop.pos.ui.friendlyLoadError
+import com.warkop.pos.ui.isOfflineError
 import com.warkop.pos.ui.Size
 import com.warkop.pos.ui.hatched
 import com.warkop.pos.ui.tableColumns
@@ -35,7 +37,7 @@ fun TablesScreen(store: PosStore) {
     val size = windowSize()
     when (val f = store.floor) {
         is Load.Idle, is Load.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        is Load.Failed -> ErrorState(f.error.message, onRetry = { store.startFloorPolling() }, modifier = Modifier.fillMaxWidth().padding(top = 24.dp))
+        is Load.Failed -> ErrorState(friendlyLoadError(f.error), onRetry = { store.startFloorPolling() }, offline = isOfflineError(f.error), modifier = Modifier.fillMaxWidth().padding(top = 24.dp))
         is Load.Ready -> FloorBoard(store, f.value.tables, size)
     }
 }

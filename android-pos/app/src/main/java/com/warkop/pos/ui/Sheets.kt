@@ -581,34 +581,45 @@ private fun CashOutSheet(store: PosStore, startInflow: Boolean) {
 
 @Composable
 private fun ColumnScope.ReceiptDialog(store: PosStore, s: Sheet.Receipt) {
-    val o = store.orders.firstOrNull { it.id == s.orderId } ?: return
+    // T038: struk dari server (GET /orders/{id}/receipt). Tidak ada angka dari daftar order lokal.
+    LaunchedEffect(s.orderId) { store.loadReceipt(s.orderId) }
+    when (val r = store.receipts[s.orderId] ?: Load.Idle) {
+        is Load.Ready -> ReceiptPaper(r.value)
+        is Load.Failed -> ErrorState(friendlyLoadError(r.error), { store.loadReceipt(s.orderId) }, Modifier.fillMaxWidth(), offline = isOfflineError(r.error))
+        else -> Text("Memuat struk…", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ReceiptPaper(r: com.warkop.pos.model.ReceiptView) {
     val mono = androidx.compose.ui.text.font.FontFamily.Monospace
     val ink = Color(0xFF201E1D)
-    @Composable fun Line(l: String, r: String, bold: Boolean = false, size: Int = 15) {
+    @Composable fun Line(l: String, rightText: String, bold: Boolean = false, size: Int = 15) {
         Row(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
             Text(l, Modifier.weight(1f), fontFamily = mono, fontSize = size.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, color = ink)
-            Text(r, fontFamily = mono, fontSize = size.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, color = ink)
+            Text(rightText, fontFamily = mono, fontSize = size.sp, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal, color = ink)
         }
     }
     @Composable fun Dash() = Text("- ".repeat(26).trim(), fontFamily = mono, fontSize = 14.sp, color = ink, maxLines = 1, modifier = Modifier.padding(vertical = 6.dp))
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = Color.White) {
         Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
-            if (o.reprints > 0) Box(Modifier.border(2.dp, ink).padding(horizontal = 12.dp, vertical = 6.dp)) { Text("SALINAN ${o.reprints}", fontFamily = mono, fontWeight = FontWeight.Bold, color = ink, fontSize = 16.sp) }
-            Text("WARKOP WJM 3", Modifier.padding(top = 10.dp), fontFamily = mono, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = ink)
-            Text("Kab. Bogor", Modifier.padding(top = 6.dp), fontFamily = mono, fontSize = 15.sp, color = ink)
+            if (r.copyNo > 1) Box(Modifier.border(2.dp, ink).padding(horizontal = 12.dp, vertical = 6.dp)) { Text("SALINAN ${r.copyNo}", fontFamily = mono, fontWeight = FontWeight.Bold, color = ink, fontSize = 16.sp) }
+            Text(r.storeName.uppercase(), Modifier.padding(top = 10.dp), fontFamily = mono, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = ink)
+            r.storeAddress?.let { Text(it, Modifier.padding(top = 6.dp), fontFamily = mono, fontSize = 15.sp, color = ink) }
             Dash()
-            Text(o.receiptNo ?: "—", fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 1.dp))
-            Text(listOfNotNull(o.receiptDateTime, "Kasir ${o.waiter}").joinToString(" · "), fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
-            Text(o.label + (o.queue?.let { " · Antrean $it" } ?: ""), fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
+            Text(r.receiptNo ?: r.orderNumber, fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 1.dp))
+            Text(listOfNotNull(r.paidAtText, r.cashier?.let { "Kasir $it" }).joinToString(" · "), fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
+            r.queueNo?.let { Text("Antrean $it", fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp)) }
             Dash()
-            o.live.forEach { l -> Line("${l.qty}× ${l.name}", num(l.net)); if (l.mods.isNotEmpty()) Text("  " + l.modLabel, fontFamily = mono, fontSize = 13.sp, color = Color(0xFF605D5D)) }
+            r.items.forEach { l -> Line("${l.qty}× ${l.name}", rp(l.lineTotal)) }
             Dash()
-            Line("Subtotal", num(o.gross)); if (o.discount > 0) Line("Diskon", "-" + num(o.discount)); Line("Pajak 10%", num(o.tax)); Line("TOTAL", num(o.total), bold = true, size = 17)
-            o.tenders.filter { it.status == com.warkop.pos.model.TenderStatus.OK }.forEach { Line(it.method.label + (it.ref?.let { r -> " · $r" } ?: ""), num(it.received ?: it.amount)) }
-            val change = o.serverChange ?: 0
-            if (change > 0) Line("Kembalian", num(change))
-            Text("Terima kasih", Modifier.padding(top = 10.dp), fontFamily = mono, fontSize = 14.sp, color = ink)
+            Line("Subtotal", rp(r.subtotal))
+            if (r.discount > 0) Line("Diskon", "-" + rp(r.discount))
+            Line("${r.taxLabel} ${r.taxRatePercent}%", rp(r.tax))
+            Line("TOTAL", rp(r.total), bold = true, size = 17)
+            r.payments.forEach { (method, amount) -> Line(method, rp(amount)) }
+            if (r.change > 0) Line("Kembali", rp(r.change))
+            Text("Terima kasih", Modifier.padding(top = 14.dp), fontFamily = mono, fontSize = 15.sp, color = ink)
         }
     }
-    TextButton({ store.show(null) }, Modifier.align(Alignment.End)) { Text("Tutup", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
 }

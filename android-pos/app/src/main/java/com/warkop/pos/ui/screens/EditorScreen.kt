@@ -59,7 +59,7 @@ fun EditorScreen(store: PosStore) {
                 SearchField(query) { query = it }
                 Spacer(Modifier.height(10.dp))
                 when (val c = store.catalog) {
-                    is Load.Failed -> ErrorState(c.error.message, onRetry = { store.loadMenu() }, modifier = Modifier.fillMaxWidth())
+                    is Load.Failed -> ErrorState(friendlyLoadError(c.error), onRetry = { store.loadMenu() }, offline = isOfflineError(c.error), modifier = Modifier.fillMaxWidth())
                     is Load.Loading, is Load.Idle -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     is Load.Ready -> if (items.isEmpty()) Text(if (query.isBlank()) "Belum ada menu di kategori ini." else "Tidak ada menu \"$query\"", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

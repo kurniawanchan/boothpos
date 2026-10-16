@@ -1,0 +1,43 @@
+package com.warkop.core.network.dto
+
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+/**
+ * 048 / T038 — struk dari server (`GET /orders/{id}/receipt`). Semua uang berupa string "0.00"; tidak ada angka
+ * yang dihitung ulang di klien. Field yang belum ada di server bernilai null/default.
+ */
+@Serializable data class ReceiptDto(
+    @SerialName("store_name") val storeName: String? = null,
+    @SerialName("store_address") val storeAddress: String? = null,
+    @SerialName("order_number") val orderNumber: String = "",
+    @SerialName("receipt_no") val receiptNo: String? = null,
+    @SerialName("queue_no") val queueNo: String? = null,
+    @SerialName("copy_no") val copyNo: Int? = null,
+    @SerialName("cashier_name") val cashierName: String? = null,
+    @SerialName("tax_amount") val taxAmount: String = "0.00",
+    @SerialName("tax_rate") val taxRate: String = "0.00",
+    @SerialName("tax_label") val taxLabel: String? = null,
+    val subtotal: String = "0.00",
+    @SerialName("discount_amount") val discountAmount: String = "0.00",
+    @SerialName("total_amount") val totalAmount: String = "0.00",
+    @SerialName("paid_amount") val paidAmount: String = "0.00",
+    @SerialName("change_amount") val changeAmount: String = "0.00",
+    @SerialName("payment_status") val paymentStatus: String? = null,
+    val items: List<ReceiptItemDto> = emptyList(),
+    @SerialName("payment_summary") val paymentSummary: List<ReceiptPaymentDto> = emptyList(),
+)
+
+@Serializable data class ReceiptItemDto(
+    val name: String = "",
+    val qty: Int = 0,
+    val price: String = "0.00",
+    @SerialName("line_total") val lineTotal: String = "0.00",
+    val note: String? = null,
+)
+
+@Serializable data class ReceiptPaymentDto(
+    val method: String = "",
+    val amount: String = "0.00",
+    @SerialName("paid_at") val paidAt: String? = null,
+)
