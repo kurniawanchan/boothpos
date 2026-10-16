@@ -20,4 +20,10 @@ return [
     'fail_only_open_tab' => 'A payment can only be marked as not found while its tab is still open.',
     'subject_outlet_required' => 'The approval subject must include outlet_id.',
     'outlet_ids_empty' => 'outlet_ids must not be empty; name at least one outlet.',
+    'reprint_not_completed' => 'Only receipts of a completed (paid) order can be reprinted.',
+    'reprint_copy_changed' => 'The copy number has changed (another print happened). Reload the receipt and try again.',
+    'refund_not_refundable' => 'This order cannot be refunded (not completed or already cancelled).',
+    'refund_already' => 'This order has already been refunded.',
+    'refund_not_fully_paid' => 'Refunds are only for orders that are fully paid.',
+    'refund_pending_qris' => 'A QRIS payment on this order is not yet checked. Check it before refunding.',
 ];

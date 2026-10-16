@@ -34,6 +34,9 @@ final class OverrideGate
         'availability' => PermissionCatalog::MENU_AVAILABILITY_SET,
         'qris_verify' => PermissionCatalog::PAYMENT_QRIS_VERIFY,
         'qris_fail' => PermissionCatalog::PAYMENT_QRIS_VERIFY,
+        'discount' => PermissionCatalog::ORDER_DISCOUNT_APPROVE,
+        'reprint' => PermissionCatalog::ORDER_REPRINT_APPROVE,
+        'refund' => PermissionCatalog::ORDER_REFUND,
     ];
 
     public function __construct(
@@ -115,13 +118,15 @@ final class OverrideGate
      * @param  array<string, mixed>  $body  bidang body aksi versi server (sama dengan saat penerbitan)
      * @return int|null id persetujuan yang dikonsumsi; null bila peminta memegang izin aksi
      */
-    public function requireFor(string $action, array $body, ?string $token, User $requester, int $outletId, ?string $ref = null): ?int
+    public function requireFor(string $action, array $body, ?string $token, User $requester, int $outletId, ?string $ref = null, bool $bypassByPermission = true): ?int
     {
         if (DB::transactionLevel() === 0) {
             throw new \LogicException('OverrideGate::requireFor harus dipanggil di dalam transaksi aksi, agar konsumsi token ikut dibatalkan bila aksi gagal.');
         }
 
-        if ($requester->hasPermission($this->permissionFor($action))) {
+        // 048 / S4: diskon di atas batas, cetak ulang, dan refund TIDAK pernah lolos karena izin peminta sendiri
+        // (`$bypassByPermission = false`): batas milik peminta tidak boleh menyetujui dirinya sendiri.
+        if ($bypassByPermission && $requester->hasPermission($this->permissionFor($action))) {
             return null;
         }
 

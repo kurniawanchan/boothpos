@@ -264,6 +264,34 @@ class TabSettlementService
         });
     }
 
+    /**
+     * 048 / T059 — bagi rata tagihan (pratinjau, TANPA pembayaran dan TANPA mengubah tab). Setiap bagian = bagian
+     * rupiah utuh; sisa pembulatan (dan sen, bila ada) masuk ke bagian TERAKHIR, sehingga jumlah bagian sama
+     * persis dengan tagihan termasuk pajak. Kasir mencatat tiap bagian lewat pembayaran biasa.
+     *
+     * @return array{total: string, mode: string, parts: array<int, array{index: int, amount: string}>}
+     */
+    public function equalSplitPreview(Order $tab, int $parts): array
+    {
+        if ($tab->status !== Order::STATUS_OPEN) {
+            throw ValidationException::withMessages(['status' => __('restaurant.tab_not_open')]);
+        }
+        if (! $tab->items()->exists()) {
+            throw ValidationException::withMessages(['tab' => __('restaurant.tab_empty')]);
+        }
+
+        $totalCents = (int) round(((float) $tab->total_amount) * 100);
+        $baseCents = intdiv(intdiv($totalCents, 100), $parts) * 100; // bagian rupiah utuh (dibulatkan ke bawah)
+
+        $amounts = [];
+        for ($i = 1; $i <= $parts; $i++) {
+            $cents = $i < $parts ? $baseCents : $totalCents - $baseCents * ($parts - 1);
+            $amounts[] = ['index' => $i, 'amount' => number_format($cents / 100, 2, '.', '')];
+        }
+
+        return ['total' => number_format($totalCents / 100, 2, '.', ''), 'mode' => 'equal', 'parts' => $amounts];
+    }
+
     /** 048 — nomor struk dari terminal pembuka order; order tanpa terminal (SPA web) tidak bernomor terminal (null). */
     private function receiptFor(Order $order): ?string
     {

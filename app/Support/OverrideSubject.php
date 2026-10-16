@@ -25,6 +25,12 @@ final class OverrideSubject
         'availability' => ['product_id', 'reason_code_id', 'note', 'outlet_ids'],
         'qris_verify' => ['tab_id', 'payment_id', 'reference'],
         'qris_fail' => ['tab_id', 'payment_id'],
+        // 048 / S4 — diskon: id tab + cakupan + id baris (bila baris) + persen + alasan.
+        'discount' => ['tab_id', 'scope', 'line_id', 'percent', 'reason_code'],
+        // Cetak ulang: id order + nomor salinan yang akan dicetak (mengikat token ke salinan itu, bukan salinan lain).
+        'reprint' => ['order_id', 'copy_no'],
+        // Refund: id order + alasan. Token tidak bisa dipakai untuk order lain.
+        'refund' => ['order_id', 'reason_code', 'reason'],
     ];
 
     /** @return list<string> */
@@ -54,7 +60,7 @@ final class OverrideSubject
         if ($value === null) {
             return null;
         }
-        if ($field === 'amount') {
+        if ($field === 'amount' || $field === 'percent') {
             return number_format((float) $value, 2, '.', '');
         }
         if ($field === 'counted_by_denomination') {

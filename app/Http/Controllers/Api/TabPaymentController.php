@@ -41,6 +41,10 @@ class TabPaymentController extends Controller
     /** Pisah tagihan: 201 membuat penjualan terpisah; 200 bila ini pengiriman ulang (client_ref sama). */
     public function split(SplitTabRequest $request, Order $order): JsonResponse
     {
+        if ($request->input('mode') === 'equal') {
+            return $this->guardedWithStatus(fn () => [$this->settlement->equalSplitPreview($order, (int) $request->validated('parts')), 200]);
+        }
+
         return $this->guardedWithStatus(function () use ($request, $order) {
             $result = $this->settlement->split($order, $request->validated(), $request->user());
 

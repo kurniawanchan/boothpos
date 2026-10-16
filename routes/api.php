@@ -300,6 +300,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/orders/{order}/payments/{payment}/verify', [OrderController::class, 'verifyPayment']);
         Route::post('/orders/verify-payments', [OrderController::class, 'verifyPayments']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
+        // 048 / S4 — cetak ulang struk dan refund penuh (token persetujuan; lihat OverrideGate).
+        Route::post('/orders/{order}/reprints', [\App\Http\Controllers\Api\ReprintController::class, 'store']);
+        Route::post('/orders/{order}/refund', [\App\Http\Controllers\Api\RefundController::class, 'store']);
 
         // 028-restaurant-dine-in-ordering — meja dan lantai. Setiap rute
         // memeriksa menu-key-nya sendiri di sisi server (`dining_setup` /
@@ -337,6 +340,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/tabs/{order}/move', [TabController::class, 'move']);
         Route::post('/tabs/{order}/merge', [TabController::class, 'merge']);
         Route::post('/tabs/{order}/split', [TabPaymentController::class, 'split']);
+        // 048 / S4 — diskon order (DELETE = hapus diskon order) dan baris.
+        Route::post('/tabs/{order}/discounts', [\App\Http\Controllers\Api\TabDiscountController::class, 'store']);
+        Route::delete('/tabs/{order}/discounts', [\App\Http\Controllers\Api\TabDiscountController::class, 'destroy']);
         Route::post('/tabs/{order}/items', [TabLineController::class, 'store'])->middleware('idempotent');
         Route::patch('/tabs/{order}/items/{item}', [TabLineController::class, 'update'])->whereNumber('item')->middleware('idempotent');
         Route::delete('/tabs/{order}/items/{item}', [TabLineController::class, 'destroy'])->whereNumber('item');

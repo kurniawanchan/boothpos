@@ -49,8 +49,8 @@ class PermissionCatalog
 
     public const SHIFT_VARIANCE_APPROVE = 'shift.variance.approve';
 
-    /** Batas diskon per peran (nilai persen, diatur per peran; US5). */
-    public const DISCOUNT_LIMIT_PCT = 'discount_limit_pct';
+    /** 048 / T050 — menyetujui diskon di atas batas peran (batas persennya ada di kolom roles.discount_limit_pct). */
+    public const ORDER_DISCOUNT_APPROVE = 'order.discount.approve';
 
     /** key => label manusiawi (Indonesia). */
     public const ALL = [
@@ -71,7 +71,7 @@ class PermissionCatalog
         self::ORDER_REFUND => 'Refund penuh order lunas',
         self::MENU_AVAILABILITY_SET => 'Menandai item habis (sold out) tanpa persetujuan',
         self::SHIFT_VARIANCE_APPROVE => 'Menyetujui selisih kas tutup shift di atas toleransi',
-        self::DISCOUNT_LIMIT_PCT => 'Batas diskon persen per transaksi',
+        self::ORDER_DISCOUNT_APPROVE => 'Menyetujui diskon di atas batas peran',
     ];
 
     /** @return list<string> */

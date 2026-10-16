@@ -29,13 +29,17 @@ class WarkopPosStaffSeeder extends Seeder
             PermissionCatalog::ORDER_VOID, PermissionCatalog::ORDER_CANCEL, PermissionCatalog::CASH_OUT_APPROVE,
             PermissionCatalog::ORDER_REPRINT_APPROVE, PermissionCatalog::PAYMENT_QRIS_VERIFY,
             PermissionCatalog::MENU_AVAILABILITY_SET, PermissionCatalog::SHIFT_VARIANCE_APPROVE,
+            PermissionCatalog::ORDER_DISCOUNT_APPROVE,
         ]],
         'Outlet Manager' => [['dashboard', 'pos', 'session', 'customers', 'sales', 'floor', 'reports', 'products', 'stock'], [
             PermissionCatalog::ORDER_VOID, PermissionCatalog::ORDER_CANCEL, PermissionCatalog::CASH_OUT_APPROVE,
             PermissionCatalog::ORDER_REPRINT_APPROVE, PermissionCatalog::PAYMENT_QRIS_VERIFY, PermissionCatalog::ORDER_REFUND,
-            PermissionCatalog::MENU_AVAILABILITY_SET, PermissionCatalog::SHIFT_VARIANCE_APPROVE, PermissionCatalog::DISCOUNT_LIMIT_PCT,
+            PermissionCatalog::MENU_AVAILABILITY_SET, PermissionCatalog::SHIFT_VARIANCE_APPROVE, PermissionCatalog::ORDER_DISCOUNT_APPROVE,
         ]],
     ];
+
+    /** Batas diskon (persen) yang boleh diberikan tanpa persetujuan; peran lain tidak tercantum → 0. */
+    private const DISCOUNT_LIMITS = ['Supervisor' => 10, 'Outlet Manager' => 20];
 
     /** username => [nama, peran, PIN contoh] */
     private const STAFF = [
@@ -63,6 +67,11 @@ class WarkopPosStaffSeeder extends Seeder
                 if ($permissions !== []) {
                     $roles[$name]->forceFill(['permissions' => $permissions])->save();
                 }
+            }
+
+            // 048 / T058 — batas diskon persen per peran (ASUMSI dev; pemilik/admin tetap tanpa batas).
+            foreach (self::DISCOUNT_LIMITS as $name => $limit) {
+                $roles[$name]->forceFill(['discount_limit_pct' => $limit])->save();
             }
 
             foreach (self::STAFF as $username => [$name, $role, $pin]) {

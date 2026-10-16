@@ -20,4 +20,10 @@ return [
     'fail_only_open_tab' => 'Pembayaran hanya bisa ditandai tidak ditemukan selama tab masih terbuka.',
     'subject_outlet_required' => 'Subjek persetujuan harus memuat outlet_id.',
     'outlet_ids_empty' => 'outlet_ids tidak boleh kosong; sebutkan minimal satu outlet.',
+    'reprint_not_completed' => 'Hanya struk order yang sudah selesai (lunas) yang bisa dicetak ulang.',
+    'reprint_copy_changed' => 'Nomor salinan sudah berubah (ada cetak lain). Muat ulang struk, lalu coba lagi.',
+    'refund_not_refundable' => 'Order ini tidak bisa direfund (belum selesai atau sudah dibatalkan).',
+    'refund_already' => 'Order ini sudah pernah direfund.',
+    'refund_not_fully_paid' => 'Refund hanya untuk order yang sudah lunas penuh.',
+    'refund_pending_qris' => 'Ada pembayaran QRIS yang belum dicek pada order ini. Cek dulu sebelum refund.',
 ];

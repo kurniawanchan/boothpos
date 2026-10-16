@@ -1698,7 +1698,7 @@ paths:
               type: object
               required: [action, subject, approver_user_id, pin]
               properties:
-                action: { type: string, enum: [void_line, cancel_order, cash_out, variance, availability, qris_verify, qris_fail] }
+                action: { type: string, enum: [void_line, cancel_order, cash_out, variance, availability, qris_verify, qris_fail, discount, reprint, refund] }
                 subject: { type: object, description: "Identitas objek (id path) + bidang body aksi yang dijaga (lihat deskripsi)." }
                 approver_user_id: { type: integer }
                 pin: { type: string, pattern: '^[0-9]{6}$' }
@@ -1726,7 +1726,7 @@ paths:
         Respons berupa **larik polos** `[{id, name, role}]` (bukan dibungkus `data`). Hanya penyetuju aktif yang punya
         PIN, di outlet aktif (header `X-Outlet-Id`), memegang izin aksi, dan bukan peminta.
       parameters:
-        - { name: action, in: query, required: true, schema: { type: string, enum: [void_line, cancel_order, cash_out, variance, availability, qris_verify, qris_fail] } }
+        - { name: action, in: query, required: true, schema: { type: string, enum: [void_line, cancel_order, cash_out, variance, availability, qris_verify, qris_fail, discount, reprint, refund] } }
         - { name: X-Outlet-Id, in: header, required: false, schema: { type: integer } }
       responses:
         '200':
@@ -2208,6 +2208,91 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Order' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /orders/{id}/reprints:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Sales]
+      summary: Cetak ulang struk — salinan pertama gratis, berikutnya dengan persetujuan (048 / S4)
+      description: |
+        `copy_no` = salinan yang akan dicetak; salinan asli adalah 1, jadi cetak ulang pertama = 2 (gratis menurut
+        `reprint_free_copies`, bawaan 1). Cetak ulang berikutnya butuh `override_token` dengan action `reprint` dan
+        subjek `order_id`, `copy_no`. `copy_no` yang tidak sama dengan salinan berikutnya di server → 409
+        `reprint_copy_changed` dengan `copy_no` yang benar (muat ulang struk). Hanya order `completed`; selain itu 409
+        `order_not_completed`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [copy_no]
+              properties:
+                copy_no: { type: integer, minimum: 2, example: 2 }
+                override_token: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Salinan dicatat.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order_id: { type: integer }
+                  copy_no: { type: integer, description: "Nomor salinan yang dicetak (2 = cetak ulang pertama)." }
+                  free: { type: boolean }
+                  receipt_no: { type: string, nullable: true }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/{id}/refund:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Sales]
+      summary: Refund penuh order yang sudah lunas — selalu butuh persetujuan (048 / S4)
+      description: |
+        Refund penuh untuk order `completed` yang sudah lunas penuh, belum pernah direfund, dan tanpa QRIS tertunda.
+        SELALU butuh `override_token` (action `refund`, subjek `order_id`, `reason_code`, `reason`); tidak ada bypass
+        izin peminta. Efek: stok dikembalikan lewat pergerakan `return` (referensi baris order); bagian tunai dikembalikan
+        sebagai kas keluar `refund` di SHIFT BERJALAN pengguna yang meminta; order asal TIDAK diubah (total, bayar,
+        kembalian, status tetap `completed`, `refunded_at` dicatat). Laporan lama tidak berubah.
+
+        ASUMSI (lihat laporan): tidak ada batasan kanal — `online` dan `offline` sama-sama dapat direfund, karena
+        refund booth adalah kasus utama. `reason_code` dari kategori `refund`.
+
+        Galat: `409 order_not_refundable` (belum selesai atau dibatalkan), `order_already_refunded`,
+        `order_not_fully_paid`, `pending_payments` (QRIS tertunda), `shift_required`, `override_required`;
+        `422 override_mismatch`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason_code]
+              properties:
+                reason_code: { type: string, example: wrong_item }
+                reason: { type: string, nullable: true, maxLength: 200 }
+                override_token: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Refund dicatat.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order_id: { type: integer }
+                  refunded_at: { type: string, format: date-time, description: "Status order tetap completed; kolom ini menandai refund." }
+                  refund_total: { type: string, example: "8000.00" }
+                  cash_returned: { type: string, example: "8000.00", description: "Bagian tunai yang keluar dari laci shift berjalan (0.00 bila tanpa tunai)." }
+                  session_id: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /orders/{id}/void:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -5744,6 +5829,61 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /tabs/{id}/discounts:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Beri diskon tab — tingkat order atau baris (048 / S4, menu `floor`)
+      description: |
+        Persen dihitung server dari basis sebenarnya (subtotal untuk order; harga × qty untuk baris). Diskon
+        dikurangkan SEBELUM pajak. Di atas batas peran (`roles.discount_limit_pct`) butuh `override_token` dengan
+        action `discount` dan subjek `tab_id`, `scope`, `line_id`, `percent`, `reason_code`. Batas bawaan: pemilik/admin
+        tanpa batas (ASUMSI); peran lain 0 sampai diatur. `reason_code` dari kategori `discount`
+        (`GET /reason-codes?category=discount`).
+
+        `409 override_required` bila di atas batas tanpa token; `422 override_mismatch` bila token milik tab, baris,
+        persen, atau alasan lain; `409 shift_required` bila shift tidak terbuka; `404` bila baris milik tab lain;
+        `422` bila persen di luar (0, 100] atau alasan tidak dikenal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [percent, reason_code, scope]
+              properties:
+                percent: { type: number, example: 10, description: "0 < p ≤ 100, paling banyak dua desimal." }
+                reason_code: { type: string, example: member }
+                scope: { type: string, enum: [order, line] }
+                line_id: { type: integer, nullable: true, description: "Wajib bila scope = line." }
+                override_token: { type: string, nullable: true }
+      responses:
+        '200':
+          description: Diskon diterapkan; totals dihitung ulang server.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Restaurant]
+      summary: Hapus diskon tingkat order (menu `floor`)
+      description: |
+        Menghapus diskon order. Tanpa token: ini menaikkan tagihan, bukan menguranginya. Diskon baris tidak dihapus
+        lewat endpoint ini. Order milik outlet lain → 404; pengguna tanpa menu `floor` → 403.
+      responses:
+        '200':
+          description: Diskon dihapus.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tab' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   /tabs/{id}/payments:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -6151,8 +6291,14 @@ paths:
       - $ref: '#/components/parameters/Id'
     post:
       tags: [Restaurant]
-      summary: Pisah tagihan — bayar sebagian item sebagai penjualan terpisah (menu `floor`)
+      summary: Pisah tagihan — penjualan terpisah per item, atau bagi rata pratinjau (menu `floor`)
       description: |
+        **048 / T059 — `mode: equal`.** Pratinjau bagi rata TANPA pembayaran dan TANPA mengubah tab: `parts` (2–5)
+        bagian; setiap bagian rupiah utuh dari tagihan termasuk pajak; sisa pembulatan (dan sen) masuk ke bagian
+        TERAKHIR sehingga jumlahnya tepat sama dengan tagihan. Kasir mencatat tiap bagian lewat `POST /tabs/{id}/payments`.
+        Tab tanpa baris → 409 `tab_empty`; tab tidak terbuka → 409. Respons: `{total, mode: "equal", parts: [{index, amount}]}` (200).
+
+        Mode bawaan (tanpa `mode`) tetap seperti di bawah.
         Membuat penjualan BARU berstatus `completed` (nomor sendiri, `split_from_order_id` = tab ini) dari item
         yang dipilih dan langsung membayarnya; sisanya tetap terbuka di meja yang sama. Baris yang dipilih UTUH
         dipindahkan (id baris yang sama); sebagian unit → baris asal dikecilkan dan snapshot-nya diklon.
@@ -8017,9 +8163,11 @@ components:
         items: { type: array, items: { $ref: '#/components/schemas/TicketItem' } }
 
     SplitTabInput:
+      description: "048 — `mode: equal` memakai hanya `mode` dan `parts` (2–5); mode bawaan memakai `client_ref`, `items`, `payments`."
       type: object
-      required: [client_ref, items, payments]
       properties:
+        mode: { type: string, enum: [items, equal], description: "Bawaan items. equal = pratinjau bagi rata." }
+        parts: { type: integer, minimum: 2, maximum: 5, nullable: true, description: "Wajib bila mode = equal." }
         client_ref: { type: string, format: uuid }
         discount_amount: { type: number, nullable: true, minimum: 0, description: Diskon untuk penjualan terpisah saja (≤ subtotalnya). }
         items:

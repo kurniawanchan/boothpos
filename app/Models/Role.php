@@ -21,6 +21,7 @@ class Role extends Model
         'name',
         'menu_keys',
         'permissions',
+        'discount_limit_pct',
         'is_system_default',
         'all_outlets',
     ];
@@ -30,6 +31,7 @@ class Role extends Model
         return [
             'menu_keys' => 'array',
             'permissions' => 'array',
+            'discount_limit_pct' => 'decimal:2',
             'is_system_default' => 'boolean',
             // 045 Stage 2 — Owner/Admin melihat semua outlet aktif tanpa baris penugasan (D6).
             'all_outlets' => 'boolean',
@@ -45,6 +47,19 @@ class Role extends Model
         $granted = $this->permissions ?? \App\Support\PermissionCatalog::defaultsFor((string) $this->name);
 
         return in_array($permission, $granted, true);
+    }
+
+    /**
+     * 048 / T058 — batas diskon (persen) yang boleh diberikan peran ini tanpa persetujuan. Kolom NULL = bawaan:
+     * pemilik/admin tanpa batas (ASUMSI, 100 %); peran lain 0 (setiap diskon butuh persetujuan).
+     */
+    public function discountLimit(): float
+    {
+        if ($this->discount_limit_pct !== null) {
+            return (float) $this->discount_limit_pct;
+        }
+
+        return in_array(mb_strtolower(trim((string) $this->name)), ['owner', 'admin'], true) ? 100.0 : 0.0;
     }
 
     public function users(): HasMany
