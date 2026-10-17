@@ -7,6 +7,7 @@ use App\Models\ProductVariant;
 use App\Models\User;
 use App\Support\ProductSegment;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Ganti segmen produk (spec 044, FR-006/FR-007).
@@ -48,12 +49,30 @@ class ProductSegmentChangeService
                 $normalised,
             );
 
-            $variants = ProductVariant::withTrashed()
+            // Varian yang sudah dihapus tidak diregenerasi (spec 045, FR-016).
+            // Varian nonaktif tidak diregenerasi, sama seperti yang dihapus (spec 045).
+            $variants = ProductVariant::query()
                 ->where('product_id', $locked->id)
+                ->where('is_active', true)
                 ->orderBy('id')
                 ->get();
 
-            $newSkus = $this->assignSkus($variants, $oldPrefix, $newPrefix);
+            // SEMUA SKU aktif ikut kode baru, termasuk yang diketik pemilik: yang diketik
+            // hanya nomornya, kodenya selalu milik produk (spec 045, FR-010 — diubah
+            // 2026-10-17). Nomor tiap varian dipertahankan; bentrok diselesaikan assignSkus().
+            // Nomor yang DIKETIK pemilik didahulukan saat bentrok: yang dibuat server
+            // yang bergeser ke nomor kosong berikutnya (spec 045).
+            $ordered = $variants->sortBy(fn (ProductVariant $v) => $v->sku_is_typed ? 0 : 1)->values();
+            $newSkus = $this->assignSkus($ordered, $oldPrefix, $newPrefix);
+
+            // Spec 046, FR-004: segmen yang membuat SKU melebihi lebar kolom ditolak di
+            // sini (pada segmen, dengan pesan), sebelum ada yang ditulis. Lewat exception
+            // transaksi ikut dibatalkan.
+            if (collect($newSkus)->contains(fn (string $sku) => strlen($sku) > ProductSegment::MAX_SKU_LENGTH)) {
+                throw ValidationException::withMessages([
+                    'product_segment' => ['Segmen ini membuat SKU lebih dari '.ProductSegment::MAX_SKU_LENGTH.' karakter. Gunakan segmen yang lebih pendek.'],
+                ]);
+            }
 
             $locked->update([
                 'code_prefix' => $newPrefix,
@@ -88,7 +107,10 @@ class ProductSegmentChangeService
         $taken = [];
 
         foreach ($variants as $variant) {
-            $n = $this->codeGenerator->sequenceOf($oldPrefix, $variant->sku);
+            // SKU diketik bisa memakai kode lama lain (mis. `…-MCY-1` setelah ganti segmen
+            // sebelumnya): nomornya diambil dari ujung SKU (trailingNumber), spec 045.
+            $n = $this->codeGenerator->sequenceOf($oldPrefix, $variant->sku)
+                ?? $this->codeGenerator->trailingNumber($variant->sku);
             if ($n !== null && ! isset($taken[$n])) {
                 $numbers[$variant->id] = $n;
                 $taken[$n] = true;

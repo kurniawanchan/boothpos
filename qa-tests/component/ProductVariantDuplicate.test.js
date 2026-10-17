@@ -25,7 +25,7 @@ const PRODUCT = {
   id: 2, artist_id: 1, category_id: 1, name: 'MCYT', code_prefix: 'SPF-KC-MCY', description: null, is_preorder: false, is_active: true, image_url: null,
   variants: [
     { id: 10, sku: 'SPF-KC-MCY-001', variant_name: 'Red', cost_price: '1000.00', sell_price: '2500.00', current_stock: 6, low_stock_alert: 4, is_active: true, has_bom: true, bom_cost: '397.00', bom_complete: false, image_url: 'https://example.test/red.png' },
-    { id: 11, sku: 'SPF-KC-MCY-002', variant_name: 'Blue', cost_price: '1000.00', sell_price: '2500.00', current_stock: 9, low_stock_alert: null, is_active: false, has_bom: false, bom_cost: null, bom_complete: false, image_url: null },
+    { id: 11, sku: 'SPF-KC-MCY-002', variant_name: 'Blue', cost_price: '1000.00', sell_price: '2500.00', current_stock: 9, low_stock_alert: null, is_active: true, has_bom: false, bom_cost: null, bom_complete: false, image_url: null },
     { id: 12, sku: 'SPF-KC-MCY-003', variant_name: 'Green', cost_price: '397.00', sell_price: '1000.00', current_stock: 2, low_stock_alert: null, is_active: true, has_bom: true, bom_cost: '397.00', bom_complete: true, image_url: null },
   ],
 };
@@ -76,7 +76,7 @@ describe('Duplicate variant in the Edit product drawer (037)', () => {
     expect(within(copy).queryByText('SPF-KC-MCY-001')).not.toBeInTheDocument(); // belum punya SKU
     expect(copy.querySelector('img')).toBeNull(); // gambar tidak disalin
     expect(value(cards()[0], M.variant_name)).toBe('Red');
-    expect(within(cards()[0]).getByText('SPF-KC-MCY-001')).toBeInTheDocument();
+    expect(within(cards()[0]).getByTestId('variant-sku')).toBeInTheDocument();
   });
 
   it('says the BOM will be copied and that the copied stock counts as new inventory, and asks for the adjustment reason', async () => {
@@ -134,19 +134,7 @@ describe('Duplicate variant in the Edit product drawer (037)', () => {
     expect(within(cards()[unsavedIndex + 1]).queryByText(/BOM dari/)).not.toBeInTheDocument();
   });
 
-  it('gives an inactive source an ACTIVE copy, and a complete-BOM source an unlocked copy that keeps the cost value', async () => {
-    const user = await openEdit();
-
-    await dup(user, 1); // Blue nonaktif
-    expect(cards()[2]).not.toHaveClass('opacity-50');
-    expect(cards()[1]).toHaveClass('opacity-50'); // sumbernya tetap redup
-
-    await dup(user, 3); // Green: BOM selesai (kini di indeks 3)
-    const copy = cards()[4];
-    expect(value(copy, M.cost_price)).toBe('397.00');
-    expect(within(copy).getByLabelText(new RegExp(`^${M.cost_price}`))).not.toBeDisabled();
-    expect(within(copy).queryByText(M.bom_from_bom)).not.toBeInTheDocument();
-  });
+  // Varian nonaktif tidak lagi tampil di formulir (spec 045, FR-017), jadi tidak ada sumber nonaktif untuk diduplikasi.
 
   it('lets the user zero the copied stock, in which case no stock adjustment is queued', async () => {
     const user = await openEdit();

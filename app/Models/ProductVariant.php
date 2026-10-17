@@ -30,6 +30,7 @@ class ProductVariant extends Model
      */
     protected $fillable = [
         'sku',
+        'sku_is_typed',
         'image_path',
         'variant_name',
         'cost_price',
@@ -49,6 +50,7 @@ class ProductVariant extends Model
             'sell_price' => 'decimal:2',
             'current_stock' => 'integer',
             'is_active' => 'boolean',
+            'sku_is_typed' => 'boolean',
             'bom_complete' => 'boolean',
             'bom_completed_at' => 'datetime',
         ];

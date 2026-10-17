@@ -27,7 +27,7 @@ class UpdateProductRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'product_segment.regex' => 'Segmen produk harus 1 sampai 3 huruf (A–Z).',
+            'product_segment.regex' => 'Segmen produk harus 1 sampai 6 karakter (huruf A–Z, boleh tanda hubung tunggal di antara huruf).',
         ];
     }
 

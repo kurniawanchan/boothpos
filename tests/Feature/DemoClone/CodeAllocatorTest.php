@@ -72,12 +72,18 @@ class CodeAllocatorTest extends TestCase
         $this->assertSame('ZVL-ZK-LO', $allocator->productPrefix('VLC-KC-LO', 7));
     }
 
-    public function test_a_segment_longer_than_three_letters_still_aborts(): void
+    /** Spec 046 (T009): segmen dengan tanda hubung tetap utuh (pemisah dibatasi tiga bagian). */
+    public function test_a_hyphenated_segment_is_kept_whole(): void
+    {
+        $this->assertSame('ZVL-ZK-SH-K', (new CodeAllocator)->productPrefix('VLC-KC-SH-K', 7));
+    }
+
+    public function test_a_segment_longer_than_six_characters_still_aborts(): void
     {
         $this->expectException(CloneException::class);
         $this->expectExceptionMessage('products id 9');
 
-        (new CodeAllocator)->productPrefix('VLC-KC-ABCD', 9);
+        (new CodeAllocator)->productPrefix('VLC-KC-ABCDEFG', 9);
     }
 
     public function test_a_prefix_with_the_wrong_shape_aborts_with_the_product_id(): void

@@ -83,7 +83,8 @@ class ProductSegmentChangeTest extends TestCase
         $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-S-1']);
     }
 
-    public function test_a_deleted_variant_is_regenerated_too(): void
+    /** Spec 045 FR-016: varian yang sudah dihapus tidak diregenerasi (SKU-nya dibiarkan). */
+    public function test_a_removed_variant_is_left_alone_and_a_live_one_is_regenerated(): void
     {
         $this->actAs('owner');
         $product = $this->productWithSkus('SH', ['RYU-KY-SH-1', 'RYU-KY-SH-3']);
@@ -91,7 +92,8 @@ class ProductSegmentChangeTest extends TestCase
 
         $this->changeSegment($product, 'S')->assertOk();
 
-        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-S-3']);
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-S-1']);
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-SH-3']);
     }
 
     public function test_the_same_or_a_blank_segment_changes_nothing(): void
@@ -128,11 +130,36 @@ class ProductSegmentChangeTest extends TestCase
         $this->actAs('owner');
         $product = $this->productWithSkus('SH', ['RYU-KY-SH-1']);
 
-        foreach (['ABCD', 'S1'] as $segment) {
+        foreach (['ABCDEFG', 'S1', '-S', 'SH-', 'S--K'] as $segment) {
             $this->changeSegment($product, $segment)->assertStatus(422)->assertJsonValidationErrors('product_segment');
         }
 
         $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-SH-1']);
+    }
+
+    /** Spec 046 (T007): segmen dengan tanda hubung masuk utuh; nomor tiap varian tetap. */
+    public function test_a_hyphenated_segment_keeps_every_number(): void
+    {
+        $this->actAs('owner');
+        $product = $this->productWithSkus('SH', ['RYU-KY-SH-1', 'RYU-KY-SH-2']);
+
+        $this->changeSegment($product, 'sh-k')->assertOk();
+
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'code_prefix' => 'RYU-KY-SH-K', 'product_segment' => 'SH-K']);
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-SH-K-1']);
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-SH-K-2']);
+    }
+
+    /** Spec 046 FR-004 (T023): segmen yang membuat SKU lebih dari 20 karakter ditolak; tidak ada yang berubah. */
+    public function test_a_segment_that_pushes_a_sku_past_twenty_characters_is_refused_and_nothing_changes(): void
+    {
+        $this->actAs('owner');
+        $product = $this->productWithSkus('SH', ['RYU-KY-SH-1234567']);
+
+        $this->changeSegment($product, 'ABCDEF')->assertStatus(422)->assertJsonValidationErrors('product_segment');
+
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'code_prefix' => 'RYU-KY-SH', 'product_segment' => 'SH']);
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-SH-1234567']);
     }
 
     public function test_the_change_is_written_to_the_activity_log(): void
@@ -173,5 +200,45 @@ class ProductSegmentChangeTest extends TestCase
 
         $this->assertDatabaseHas('product_variants', ['id' => $variant->id, 'sku' => 'RYU-KY-S-1']);
         $this->assertSame('RYU-KY-SH-1', DB::table('order_items')->where('variant_id', $variant->id)->value('sku_snapshot'));
+    }
+
+    /** Spec 045 US3 (FR-010, diubah 2026-10-17): nomor yang diketik tetap; kodenya ikut segmen baru. */
+    public function test_a_typed_number_is_kept_and_its_code_follows_the_new_segment(): void
+    {
+        $this->actAs('owner');
+        $product = $this->productWithSkus('SH', ['RYU-KY-SH-7', 'RYU-KY-SH-2']);
+        $product->variants()->where('sku', 'RYU-KY-SH-7')->update(['sku_is_typed' => true]);
+
+        $this->changeSegment($product, 'S')->assertOk();
+
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-S-7', 'sku_is_typed' => true]);
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-S-2', 'sku_is_typed' => false]);
+        $this->assertDatabaseMissing('product_variants', ['sku' => 'RYU-KY-SH-7']);
+    }
+
+    /** Typed SKU dengan kode lama yang lain (mis. hasil ganti segmen sebelumnya) tetap ikut kode produk sekarang. */
+    public function test_a_typed_sku_under_an_older_code_is_moved_to_the_current_code(): void
+    {
+        $this->actAs('owner');
+        $product = $this->productWithSkus('SH', ['RYU-KY-T-2']);
+        $product->variants()->update(['sku_is_typed' => true]);
+
+        $this->changeSegment($product, 'S')->assertOk();
+
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-S-2', 'sku_is_typed' => true]);
+    }
+
+    /** Nomor diketik didahulukan saat bentrok: yang dibuat server bergeser ke nomor kosong berikutnya. */
+    public function test_a_generated_sku_yields_a_collision_to_a_typed_number(): void
+    {
+        $this->actAs('owner');
+        // Yang dibuat server bernomor 2 (sama dengan SKU diketik di kode baru) → harus bergeser ke 3.
+        $product = $this->productWithSkus('SH', ['RYU-KY-SH-2', 'RYU-KY-T-2']);
+        $product->variants()->where('sku', 'RYU-KY-T-2')->update(['sku_is_typed' => true]);
+
+        $this->changeSegment($product, 'T')->assertOk();
+
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-T-2', 'sku_is_typed' => true]);
+        $this->assertDatabaseHas('product_variants', ['product_id' => $product->id, 'sku' => 'RYU-KY-T-3', 'sku_is_typed' => false]);
     }
 }

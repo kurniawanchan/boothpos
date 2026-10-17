@@ -26,4 +26,25 @@ class ProductCodeGeneratorTest extends TestCase
         // SKU asing (bukan kode ini) tidak boleh dibaca sebagai nomor urut.
         $this->assertNull($generator->sequenceOf('SPF-SH-S', 'VB12345678'));
     }
+
+    public function test_normalise_sequence_accepts_digits_and_drops_leading_zeros(): void
+    {
+        $generator = new ProductCodeGenerator;
+
+        $this->assertSame(7, $generator->normaliseSequence('007'));
+        $this->assertSame(12, $generator->normaliseSequence(' 12 '));
+        $this->assertNull($generator->normaliseSequence('0'));
+        $this->assertNull($generator->normaliseSequence('A7'));
+        $this->assertNull($generator->normaliseSequence('7-1'));
+        $this->assertNull($generator->normaliseSequence(''));
+    }
+
+    public function test_trailing_number_reads_the_digits_after_the_last_hyphen(): void
+    {
+        $generator = new ProductCodeGenerator;
+
+        $this->assertSame(7, $generator->trailingNumber('SPF-PI-S-7'));
+        $this->assertNull($generator->trailingNumber('RYUKYSAK0001'));
+        $this->assertNull($generator->trailingNumber('SPF-PI-S-MUG'));
+    }
 }

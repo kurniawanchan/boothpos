@@ -2,7 +2,7 @@
 import { reactive, ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { listProducts, getProduct, createProduct, updateProduct, deleteProduct, addVariant, updateVariant, uploadProductImage, uploadVariantImage } from '../api/products';
+import { listProducts, getProduct, createProduct, updateProduct, deleteProduct, addVariant, updateVariant, updateVariantSequences, deleteVariant, uploadProductImage, uploadVariantImage } from '../api/products';
 import { createAdjustment } from '../api/stock';
 import { listArtists } from '../api/artists';
 import { listCategories } from '../api/categories';
@@ -27,7 +27,7 @@ import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 import VariantBomModal from '../components/product/VariantBomModal.vue';
 import VariantDetailModal from '../components/product/VariantDetailModal.vue';
 import ImageLightbox from '../components/ui/ImageLightbox.vue';
-import { previewSegment, previewSku } from '../utils/productSegment';
+import { previewSegment, previewSku, splitSku, maxSequenceLength, compareVariantSku } from '../utils/productSegment';
 
 const auth = useAuthStore();
 const { t } = useI18n();
@@ -174,7 +174,7 @@ const columns = computed(() => [
   { key: 'actions', label: '' },
 ]);
 
-const emptyVariant = () => ({ id: null, copy_bom_from: '', variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, image_file: null, image_error: '' });
+const emptyVariant = () => ({ id: null, copy_bom_from: '', variant_name: 'Standard', cost_price: '0', sell_price: '0', current_stock: '0', original_stock: 0, low_stock_alert: '', is_active: true, image_file: null, image_error: '', sequence: '', sequence_error: '' });
 
 const showDrawer = ref(false);
 const editingProduct = ref(null);
@@ -206,6 +206,8 @@ const effectiveSegment = computed(() => previewSegment(productForm.product_segme
 const artistCode = computed(() => artists.value.find((a) => a.id === Number(productForm.artist_id))?.code ?? '···');
 const categoryCode = computed(() => categories.value.find((c) => c.id === Number(productForm.category_id))?.code ?? '··');
 const codePreview = computed(() => previewSku(artistCode.value, categoryCode.value, effectiveSegment.value));
+// Kode produk tanpa nomor urut (spec 045): bagian tetap untuk varian baru di drawer.
+const productCodeText = computed(() => codePreview.value.replace(/-1$/, ''));
 
 // SKU cell — hanya 3 SKU pertama ditampilkan per baris, sisanya di balik
 // tautan "+N lainnya" yang bisa dibuka/tutup per baris (bukan sekaligus
@@ -285,8 +287,11 @@ async function openEdit(product) {
     preorder_eta: full.preorder_eta ?? '',
     is_active: full.is_active,
   });
-  variantRows.value = full.variants.length
-    ? full.variants.map((v) => ({ ...v, low_stock_alert: v.low_stock_alert ?? '', original_stock: v.current_stock, image_file: null, image_error: '' }))
+  // Varian tersimpan diurutkan menurut SKU (spec 045, FR-012). Baris baru belum ada di sini.
+  // Varian nonaktif (spec 045, FR-015/FR-017) tidak ditampilkan di formulir; nomornya bebas dipakai.
+  const activeVariants = full.variants.filter((v) => v.is_active);
+  variantRows.value = activeVariants.length
+    ? [...activeVariants].sort((x, y) => compareVariantSku(x.sku, y.sku)).map((v) => ({ ...v, low_stock_alert: v.low_stock_alert ?? '', original_stock: v.current_stock, image_file: null, image_error: '', sequence: splitSku(v.sku).number, sequence_error: '' }))
     : [emptyVariant()];
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showDrawer.value = true;
@@ -357,15 +362,27 @@ function duplicateVariantRow(index) {
   });
 }
 
-function removeVariantRow(index) {
+async function removeVariantRow(index) {
   const row = variantRows.value[index];
-  if (row.id) {
-    // No DELETE /variants/{id} exists — an already-persisted variant can
-    // only be soft-disabled, never removed from the array server-side.
-    row.is_active = false;
+  if (!row.id) {
+    variantRows.value.splice(index, 1);
     return;
   }
-  variantRows.value.splice(index, 1);
+  // Varian tersimpan: dihapus bila tanpa riwayat (spec 045, FR-015); bila sudah punya
+  // penjualan/stok/BOM, server hanya menonaktifkannya dan drawer memberi tahu.
+  if (!window.confirm(t('master_data.confirm_remove_variant', { name: row.variant_name }))) return;
+  try {
+    const result = await deleteVariant(row.id);
+    if (result.removed) {
+      variantRows.value.splice(index, 1);
+      toast.success(t('master_data.variant_removed'));
+    } else {
+      row.is_active = false;
+      toast.info(t('master_data.variant_kept_history'));
+    }
+  } catch {
+    toast.error(t('master_data.variant_remove_failed'));
+  }
 }
 
 function applyMarkup(row) {
@@ -404,6 +421,7 @@ async function saveProduct() {
 
   saving.value = true;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
+  variantRows.value.forEach((row) => { row.sequence_error = ''; });
   let productId = editingProduct.value?.id ?? null;
   // { variantId, file } pairs collected as variants are created/updated,
   // uploaded only after every variant has a real id (a brand-new row has
@@ -418,6 +436,26 @@ async function saveProduct() {
   }
   try {
     if (editingProduct.value) {
+      // Nomor urut SKU lebih dulu (spec 045): galat SKU menghentikan simpan sebelum
+      // perubahan produk atau harga apa pun tersimpan.
+      // Semua perubahan nomor dikirim SEKALIGUS (geser nomor, mis. 10→11 lalu 11→12).
+      const sequenceItems = variantRows.value
+        .filter((row) => row.id && (row.sequence ?? '').trim() && row.sequence.trim() !== splitSku(row.sku).number)
+        .map((row) => ({ variant_id: row.id, sequence: row.sequence.trim() }));
+      if (sequenceItems.length) {
+        try {
+          await updateVariantSequences(editingProduct.value.id, sequenceItems);
+        } catch (err) {
+          // Galat ditampilkan di kolom nomor baris yang bermasalah.
+          if (err.isValidation && err.errors) {
+            variantRows.value.forEach((row) => {
+              const message = err.errors[`sequences.${row.id}`];
+              if (message) row.sequence_error = message[0];
+            });
+          }
+          throw err;
+        }
+      }
       await updateProduct(editingProduct.value.id, {
         artist_id: Number(productForm.artist_id),
         category_id: Number(productForm.category_id),
@@ -438,8 +476,18 @@ async function saveProduct() {
           low_stock_alert: row.low_stock_alert === '' ? null : Number(row.low_stock_alert),
           is_active: row.is_active,
         };
+        // Nomor urut varian baru yang diketik (spec 045); varian lama sudah diproses di atas.
+        const sequence = (row.sequence ?? '').trim();
+        if (!row.id && sequence) payload.sequence = sequence;
         const newVariantPayload = row.copy_bom_from ? { ...payload, copy_bom_from_variant_id: Number(row.copy_bom_from) } : payload;
-        const variantId = row.id ? (await updateVariant(row.id, payload)).id : (await addVariant(editingProduct.value.id, newVariantPayload)).id;
+        let variantId;
+        try {
+          variantId = row.id ? (await updateVariant(row.id, payload)).id : (await addVariant(editingProduct.value.id, newVariantPayload)).id;
+        } catch (err) {
+          // Galat SKU ditampilkan di kolom nomor varian ini, bukan di pesan umum.
+          if (err.isValidation && err.errors?.sku) row.sequence_error = err.errors.sku[0];
+          throw err;
+        }
         if (row.image_file) pendingVariantImages.push({ variantId, file: row.image_file });
         queueStockAdjustment(row, variantId);
       }
@@ -673,7 +721,7 @@ async function performDelete() {
           </div>
           <div class="grid grid-cols-[2fr_1fr] gap-3.5">
             <BaseInput v-model="productForm.name" :label="t('master_data.product_name')" required maxlength="150" :error="formErrors.name" />
-            <BaseInput v-model="productForm.product_segment" :label="t('master_data.segment_3')" maxlength="3" :placeholder="t('master_data.auto')" :error="formErrors.product_segment" />
+            <BaseInput v-model="productForm.product_segment" :label="t('master_data.segment_3')" maxlength="6" :placeholder="t('master_data.auto')" :error="formErrors.product_segment" />
           </div>
           <BaseTextarea v-model="productForm.description" :label="t('master_data.description')" :rows="2" />
           <div class="flex items-center gap-5">
@@ -745,7 +793,22 @@ async function performDelete() {
             :class="{ 'opacity-50': row.id && !row.is_active }"
           >
             <div data-testid="variant-header" class="flex flex-wrap items-center gap-2.5">
-              <span v-if="row.sku" class="rounded-md bg-sky-bg px-2.5 py-1 font-mono text-[12px] font-semibold text-sky-text">{{ row.sku }}</span>
+              <!-- Spec 045: kode produk tetap (tidak bisa diubah); hanya nomor urut yang diketik. Varian baru di formulir produk baru tetap dibuat server. -->
+              <div v-if="editingProduct" data-testid="variant-sku" class="flex flex-wrap items-center gap-1 rounded-md bg-sky-bg px-2 py-1 font-mono text-[12px] font-semibold text-sky-text">
+                <span>{{ row.sku ? splitSku(row.sku).code : productCodeText }}-</span>
+                <input
+                  v-model="row.sequence"
+                  data-testid="variant-sequence"
+                  type="text"
+                  inputmode="numeric"
+                  :maxlength="maxSequenceLength(row.sku ? splitSku(row.sku).code : productCodeText)"
+                  :placeholder="t('master_data.auto')"
+                  :aria-label="t('master_data.col_sku')"
+                  class="w-16 rounded border border-line bg-white px-1.5 py-0.5 font-mono text-[12px] font-semibold text-sky-text outline-none focus:border-brand"
+                />
+                <p v-if="row.sequence_error" class="w-full text-[12px] font-semibold text-danger-text">{{ row.sequence_error }}</p>
+              </div>
+              <span v-else-if="row.sku" class="rounded-md bg-sky-bg px-2.5 py-1 font-mono text-[12px] font-semibold text-sky-text">{{ row.sku }}</span>
               <span v-if="row.bom_complete" class="rounded-md bg-mint-100 px-2 py-1 text-[11px] font-bold text-brand-active">{{ t('master_data.bom_from_bom') }}</span>
               <span v-if="markupFor(row) !== null" class="rounded-md px-2 py-1 text-[11px] font-bold" :class="markupFor(row) >= 0 ? 'bg-mint-100 text-brand-active' : 'bg-danger-bg text-danger-text'">
                 {{ t('master_data.markup_value', { value: markupFor(row) }) }}

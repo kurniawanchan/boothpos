@@ -71,7 +71,8 @@ describe('Variant card in the Edit product drawer (037)', () => {
     await openEdit();
     const h = header(cards()[0]);
 
-    const sku = within(h).getByText('SPF-KC-MCY-001');
+    // Spec 045: kode tetap + nomor urut diketik; wrapper chip ber-testid 'variant-sku'.
+    const sku = within(h).getByTestId('variant-sku');
     const markup = within(h).getByText(M.markup_value.replace('{value}', '150'));
     const margin = within(h).getByText(M.margin.replace('{value}', '60'));
     const bom = within(h).getByText(M.bom_cost_label.replace('{cost}', 'Rp 397'));
@@ -102,7 +103,7 @@ describe('Variant card in the Edit product drawer (037)', () => {
 
     expect(before(open, apply) && before(apply, del)).toBe(true);
     // chips come first (left), actions after
-    expect(before(within(h).getByText('SPF-KC-MCY-001'), open)).toBe(true);
+    expect(before(within(h).getByTestId('variant-sku'), open)).toBe(true);
   });
 
   it('explains what a BOM is in a tooltip on the Open BOM button (hover and keyboard focus)', async () => {

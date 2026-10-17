@@ -137,13 +137,56 @@ class ProductTest extends TestCase
         $this->assertDatabaseHas('products', ['code_prefix' => 'RYU-KY-SH', 'product_segment' => 'SH']);
     }
 
-    public function test_segment_longer_than_three_letters_is_refused_and_nothing_is_saved(): void
+    /** Spec 046 (T006): segmen 6 karakter diterima; kode dan SKU memakainya utuh. */
+    public function test_a_six_character_segment_is_accepted_and_builds_the_code(): void
     {
         $this->actingAsRole('owner');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
 
         $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
-            'product_segment' => 'ABCD',
+            'product_segment' => 'ABCDEF',
+        ]))->assertCreated()
+            ->assertJsonPath('code_prefix', 'RYU-KY-ABCDEF')
+            ->assertJsonPath('variants.0.sku', 'RYU-KY-ABCDEF-1');
+    }
+
+    /** Spec 046 FR-001: satu tanda hubung di antara huruf diterima dan disimpan utuh. */
+    public function test_a_hyphenated_segment_is_saved_whole(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'product_segment' => 'sh-k',
+        ]))->assertCreated()
+            ->assertJsonPath('code_prefix', 'RYU-KY-SH-K')
+            ->assertJsonPath('variants.0.sku', 'RYU-KY-SH-K-1');
+
+        $this->assertDatabaseHas('products', ['code_prefix' => 'RYU-KY-SH-K', 'product_segment' => 'SH-K']);
+    }
+
+    /** Spec 046 (T024): tanda hubung di awal, di akhir, atau dua berturut-turut ditolak. */
+    public function test_a_segment_with_misplaced_hyphens_is_refused(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        foreach (['-SH', 'SH-', 'S--K'] as $segment) {
+            $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+                'product_segment' => $segment,
+            ]))->assertStatus(422)->assertJsonValidationErrors('product_segment');
+        }
+
+        $this->assertSame(0, Product::count());
+    }
+
+    public function test_segment_longer_than_six_characters_is_refused_and_nothing_is_saved(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, [
+            'product_segment' => 'ABCDEFG',
         ]))->assertStatus(422)->assertJsonValidationErrors('product_segment');
 
         $this->assertSame(0, Product::count());
@@ -250,7 +293,8 @@ class ProductTest extends TestCase
     }
 
     /** Spec 044 US1 (FR-002): nomor tidak pernah dipakai ulang, termasuk setelah hapus. */
-    public function test_a_deleted_variant_number_is_never_reused(): void
+    /** Spec 045 FR-016: nomor varian yang dihapus boleh dipakai lagi (hanya varian aktif yang dihitung). */
+    public function test_a_deleted_variant_number_is_free_again(): void
     {
         $this->actingAsRole('owner');
         ['artist' => $artist, 'category' => $category] = $this->baseline();
@@ -267,15 +311,16 @@ class ProductTest extends TestCase
         $product = Product::findOrFail($response->json('id'));
         $product->variants()->where('sku', 'RYU-KY-S-2')->firstOrFail()->delete();
 
+        // Nomor 2 kosong; yang tertinggi aktif adalah 3, jadi nomor berikutnya 4.
         $this->postJson("/api/v1/products/{$product->id}/variants", [
             'variant_name' => 'D', 'sell_price' => 15000,
         ])->assertCreated()->assertJsonPath('sku', 'RYU-KY-S-4');
 
-        // Menghapus varian nomor tertinggi juga tidak membebaskan nomornya.
+        // Nomor tertinggi yang dihapus juga bebas: setelah 4 dihapus, berikutnya 4 lagi.
         $product->variants()->where('sku', 'RYU-KY-S-4')->firstOrFail()->delete();
         $this->postJson("/api/v1/products/{$product->id}/variants", [
             'variant_name' => 'E', 'sell_price' => 15000,
-        ])->assertCreated()->assertJsonPath('sku', 'RYU-KY-S-5');
+        ])->assertCreated()->assertJsonPath('sku', 'RYU-KY-S-4');
     }
 
     /** Spec 044 US2 (FR-003): variant lama dengan format `-001` tetap; nomor baru lanjut. */
@@ -358,6 +403,25 @@ class ProductTest extends TestCase
         $this->getJson("/api/v1/products/{$created->json('id')}")
             ->assertOk()
             ->assertJsonPath('product_segment', 'S');
+    }
+
+    /** Spec 045 US3: setelah segmen berganti, nomor baru tetap melanjutkan nomor SKU diketik. */
+    public function test_the_next_number_continues_past_a_typed_sku_kept_under_an_old_code(): void
+    {
+        $this->actingAsRole('owner');
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+        $product = Product::factory()->create([
+            'artist_id' => $artist->id, 'category_id' => $category->id,
+            'code_prefix' => 'RYU-KY-S', 'product_segment' => 'S',
+        ]);
+        $product->variants()->create(['sku' => 'RYU-KY-S-7', 'variant_name' => 'Diketik', 'sell_price' => 15000, 'current_stock' => 0, 'sku_is_typed' => true]);
+        $product->variants()->create(['sku' => 'RYU-KY-S-2', 'variant_name' => 'Dibuat', 'sell_price' => 15000, 'current_stock' => 0]);
+
+        $this->putJson("/api/v1/products/{$product->id}", ['name' => $product->name, 'product_segment' => 'T'])->assertOk();
+
+        $this->postJson("/api/v1/products/{$product->id}/variants", [
+            'variant_name' => 'Baru', 'sell_price' => 15000,
+        ])->assertCreated()->assertJsonPath('sku', 'RYU-KY-T-8');
     }
 
     public function test_product_requires_at_least_one_variant(): void

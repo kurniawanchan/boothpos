@@ -28,6 +28,16 @@ export function updateVariant(variantId, payload) {
   return client.put(`/variants/${variantId}`, payload).then((r) => r.data);
 }
 
+/** Hapus varian (spec 045 FR-015): { removed: true } atau false bila dinonaktifkan karena riwayat. */
+export function deleteVariant(variantId) {
+  return client.delete(`/variants/${variantId}`).then((r) => r.data);
+}
+
+/** Semua nomor urut SKU satu produk dalam satu permintaan (spec 045, geser nomor). */
+export function updateVariantSequences(productId, items) {
+  return client.put(`/products/${productId}/variant-sequences`, { items }).then((r) => r.data);
+}
+
 /** POST /products/{id}/image — multipart `image` field, gated same as product update. */
 export function uploadProductImage(id, file) {
   const form = new FormData();
