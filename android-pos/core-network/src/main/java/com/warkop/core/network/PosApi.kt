@@ -81,6 +81,8 @@ interface PosApi {
     /** Struk server (T038). Order yang masih terbuka menjawab 409; layar struk hanya dibuka untuk order selesai. */
     @GET("orders/{id}/receipt") suspend fun receipt(@Path("id") id: Long): ReceiptDto
     @GET("orders") suspend fun closedOrders(@Query("per_page") perPage: Int): ClosedOrdersPage
+    /** 050 / T008 — satu tiket dapur untuk cetak ulang KOT. Server menjawab 403 bila pengguna tanpa akses dapur/denah. */
+    @GET("tickets/{id}") suspend fun ticket(@Path("id") id: Long): TicketDto
 
     // --- diskon, bagi rata, cetak ulang, refund (048 / S4 — US5). Setiap tulis membawa Idempotency-Key. ---
     @POST("tabs/{id}/discounts")

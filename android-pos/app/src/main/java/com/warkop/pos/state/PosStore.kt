@@ -10,6 +10,13 @@ import com.warkop.core.domain.ApiError
 import com.warkop.pos.data.PosBackend
 import com.warkop.pos.data.PosSession
 import com.warkop.pos.data.RemoteBackend
+import com.warkop.pos.model.PrintableItem
+import com.warkop.pos.print.Documents
+import com.warkop.pos.print.PrintKind
+import com.warkop.pos.print.PrintStatus
+import com.warkop.pos.print.PrinterService
+import com.warkop.pos.print.PrinterStatus
+import com.warkop.pos.print.jobKey
 import com.warkop.pos.data.TerminalConfig
 import com.warkop.pos.model.*
 import com.warkop.core.network.IntentKeys
@@ -92,6 +99,8 @@ sealed interface Load<out T> {
 class PosStore(
     private val backend: PosBackend? = null,
     private val remote: RemoteBackend? = null,
+    /** 050 — printer untuk KOT/struk/pra-bill. null pada build uji tanpa printer; penjualan tidak bergantung padanya. */
+    val printer: PrinterService? = null,
 ) : ViewModel() {
     var dest by mutableStateOf(Dest.PIN); private set
     /** Terminal yang sudah disiapkan (URL + outlet + perangkat); null → layar penyiapan. */
@@ -477,19 +486,57 @@ class PosStore(
         if (n == 0) return
         val intent = "send:${o.id}:${o.unsent.map { it.id }.sorted()}"
         val key = keys.keyFor(intent)
-        send(intent, { b.sendToKitchen(o.id, key) }) { _ ->
-            say("$n item dikirim ke dapur. Cetak KOT belum tersedia.")
+        send(intent, {
+            // 050 / T031 — KOT masuk antrean dari respons yang sama. Antrean dedupe per id tiket, jadi percobaan ulang
+            // jaringan tidak mencetak dua kali, dan kegagalan cetak tidak menggagalkan kirim (FR-017).
+            val sent = b.sendToKitchen(o.id, key)
+            printer?.enqueueKot(sent.tickets, user?.name, o.id)
+            sent.tab
+        }) { _ ->
+            say(kotMessage(n))
         }
     }
 
-    /** Pra-bill: penanda di server (tanpa cetak fisik). Tidak diulang otomatis agar hitungan cetak tidak ganda. */
+    /** Pesan jujur: KOT "dikirim ke printer" berarti masuk antrean, bukan sudah tercetak (lihat antrean cetak). */
+    private fun kotMessage(n: Int): String =
+        if (printer?.status?.value == PrinterStatus.Connected) "$n item dikirim ke dapur · KOT dikirim ke printer"
+        else "$n item dikirim ke dapur · KOT belum tercetak, printer belum tersambung"
+
+    /** Pra-bill: penanda di server, lalu cetak lewat antrean. Penanda tidak diulang otomatis agar hitungan cetak tidak ganda. */
     fun printPrebill() {
         val b = backend ?: return
         val o = active ?: return
         sheet = null
-        send("prebill:${o.id}", { b.prebill(o.id) }, retry = false) { _ ->
-            say("Pra-bill ditandai · BELUM LUNAS. Cetak fisik belum tersedia.")
+        send("prebill:${o.id}", { b.prebill(o.id) }, retry = false) { tab ->
+            // 050 / T052 — penanda di server sudah tersimpan; sekarang kertasnya. Salinan dihitung per tab (cetak ulang
+            // pra-bill memang disengaja), dan hanya job cetak yang diulang, bukan panggilan server.
+            val copy = (prebillCopies[tab.id] ?: 0) + 1
+            prebillCopies[tab.id] = copy
+            printer?.enqueueRendered(PrintKind.PREBILL, tab.id, copy, Documents.prebill(tab), tab.id)
+            say("Pra-bill masuk antrean cetak · BELUM LUNAS.")
         }
+    }
+
+    private val prebillCopies = mutableMapOf<String, Int>()
+
+    /**
+     * 050 / T051 — "Cetak struk" pada penjualan selesai. Salinan 1 sudah dicetak otomatis saat bayar; bila salinan itu
+     * masih menunggu di antrean, tombol ini MENGULANG job tersebut (bukan membuat salinan 2 yang membingungkan).
+     * Selain itu, ini cetak ulang biasa lewat server (salinan 2+, persetujuan sesuai aturan 048).
+     */
+    fun printReceipt(orderId: String) {
+        val p = printer ?: return
+        val firstCopy = jobKey(PrintKind.STRUK, orderId, 1)
+        val job = p.jobs.value.firstOrNull { it.key == firstCopy }
+        if (job != null && job.status != PrintStatus.PRINTED) p.retry(firstCopy) else reprint(orderId)
+    }
+
+    /** 050 / T054 — "Cetak ulang KOT" untuk tab terbuka. KOT dicetak lagi dari data yang tersimpan (tanpa server). */
+    fun reprintKot() {
+        val p = printer ?: return
+        val o = active ?: return
+        val queued = p.reprintKot(o.id)
+        say(if (queued == 0) "Belum ada KOT untuk tab ini." else "$queued KOT masuk antrean cetak ulang.")
     }
 
     /** 048 / S4 — alasan diskon dari daftar server (`GET /reason-codes?category=discount`). */
@@ -632,11 +679,20 @@ class PosStore(
         val ref = keys.keyFor(intent)
         send(intent, { b.pay(o.id, "cash", received, ref) }) { o2 ->
             if (o2.closed) {
+                onSaleClosed(o2)
                 dest = Dest.DONE
             } else {
                 say("Sisa ${rp(o2.remaining)}.")
             }
         }
+    }
+
+    /**
+     * 050 / T039 — penjualan selesai: struk masuk antrean cetak (salinan 1). Tidak menunda, tidak mengubah pembayaran,
+     * dan tidak menunggu printer (FR-005, FR-017). Kunci antrean mencegah struk ganda bila layar dibuka ulang.
+     */
+    private fun onSaleClosed(order: Order) {
+        printer?.enqueueStruk(order.id, 1)
     }
 
 
@@ -657,6 +713,14 @@ class PosStore(
         viewModelScope.launch {
             try {
                 upsert(b.voidLine(o.id, lineId, code, kitchen, stock, null, overrideToken))
+                // 050 / T032 — item yang sudah dikirim ke dapur menghasilkan slip BATAL (FR-008). Hanya setelah void sukses.
+                if (line.fired) {
+                    printer?.enqueueBatal(
+                        tabId = o.id, lineId = lineId, station = null, table = o.table, orderNumber = null,
+                        item = PrintableItem(qty = line.qty, name = line.name, modifiers = line.mods.map { it.name }, note = line.note.ifBlank { null }),
+                        reason = reason,
+                    )
+                }
                 conn = Conn.ONLINE
                 sheet = null
                 say("${line.name} di-void.")
@@ -721,6 +785,7 @@ class PosStore(
                 upsert(updated)
                 sheet = null
                 if (updated.closed) {
+                    onSaleClosed(updated)
                     dest = Dest.DONE
                 } else say("Sisa ${rp(updated.remaining)}.")
             } catch (e: ApiError) {
@@ -881,7 +946,9 @@ class PosStore(
                 keys.settled(intent)
                 conn = Conn.ONLINE
                 reprintCopies[orderId] = printed
-                say("Salinan ke-$printed dicetak. Cetak fisik belum tersedia.")
+                // 050 / T050 — salinan yang sudah diterima server masuk antrean; nomornya dari server (copy_no).
+                printer?.enqueueStruk(orderId, printed)
+                say("Salinan ke-$printed masuk antrean cetak.")
             } catch (e: ApiError) {
                 if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
                 keys.settled(intent)

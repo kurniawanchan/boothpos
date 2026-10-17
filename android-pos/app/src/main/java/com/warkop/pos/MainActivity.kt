@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val container = (application as PosApplication).container
-                return PosStore(container.backend, container.backend) as T
+                return PosStore(container.backend, container.backend, container.printer) as T
             }
         }
     }
