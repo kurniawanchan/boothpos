@@ -21,6 +21,7 @@ import com.warkop.core.domain.Money
 import com.warkop.pos.model.Availability
 import com.warkop.pos.model.FloorSnapshot
 import com.warkop.pos.model.Order
+import com.warkop.pos.model.PrintableKot
 import com.warkop.pos.model.MenuCatalog
 import com.warkop.pos.model.Approver
 import com.warkop.pos.model.ReasonCode
@@ -249,8 +250,14 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     override suspend fun removeLine(tabId: String, lineId: Int, key: String): Order =
         OrderMapper.tab(apiCall { api().removeLine(tabId.toLong(), lineId.toLong(), key) }, myDeviceCode)
 
-    override suspend fun sendToKitchen(tabId: String, key: String): Order =
-        OrderMapper.tab(apiCall { api().send(tabId.toLong(), key).tab }, myDeviceCode)
+    override suspend fun sendToKitchen(tabId: String, key: String): KitchenSend {
+        // 050 / T006 — tiket dari respons yang sama dipakai untuk KOT; sebelumnya dibuang di sini.
+        val res = apiCall { api().send(tabId.toLong(), key) }
+        return KitchenSend(OrderMapper.tab(res.tab, myDeviceCode), res.tickets.map(TicketMapper::kot))
+    }
+
+    override suspend fun ticket(ticketId: Long): PrintableKot =
+        TicketMapper.kot(apiCall { api().ticket(ticketId) })
 
     override suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String, approvalCode: String?, confirmDuplicate: Boolean?, channelId: Long?): Order =
         OrderMapper.tab(

@@ -305,10 +305,11 @@ fun SyncScreen(store: PosStore) {
                 Triple("Koneksi", syncConnectionLabel(hb), syncConnectionNote(hb)),
                 Triple("Jam perangkat", syncSkewLabel(hb.skewSeconds), syncSkewNote(hb.skewSeconds)),
                 Triple("Rilis menu", hb.menuRelease ?: "Belum ada rilis", if (hb.menuRelease == null) "Server belum mengirim rilis menu" else "Rilis dari server"),
-                Triple("Printer", "Belum tersedia", "Cetak belum tersambung ke perangkat ini"),
                 Triple("Siap EOD (perangkat ini)", if (store.shift == null) "Siap" else "Belum", "EOD dijalankan Outlet Manager di back office"),
             )
             cells.chunked(if (windowSize() == Size.COMPACT) 2 else 4).forEach { row -> Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { row.forEach { (a, b, c) -> Cell(a, b, c, Modifier.weight(1f).heightIn(min = 118.dp)) } } }
+            // 050 / T024 — printer sungguhan menggantikan baris "Belum tersedia".
+            store.printer?.let { printer -> Spacer(Modifier.height(18.dp)); PrinterPanel(printer) }
         }
     }
 }

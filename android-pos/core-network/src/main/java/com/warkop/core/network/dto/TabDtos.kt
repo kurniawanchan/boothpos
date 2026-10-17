@@ -65,7 +65,8 @@ import kotlinx.serialization.Serializable
     val device: DeviceRefDto? = null,
 )
 
-@Serializable data class SendResponseDto(val tab: TabDto)
+/** 050 / T003 — `tickets` = tiket dapur yang baru dibuat (satu per stasiun). Bawaan kosong agar respons lama tetap terbaca. */
+@Serializable data class SendResponseDto(val tab: TabDto, val tickets: List<TicketDto> = emptyList())
 
 @Serializable data class FloorTabDto(
     val id: Long,

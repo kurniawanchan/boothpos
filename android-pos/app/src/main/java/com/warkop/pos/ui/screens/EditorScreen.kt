@@ -159,6 +159,16 @@ fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null)
                 }
                 IconButton({ store.show(Sheet.OrderActions) }) { Icon(Icons.Filled.MoreVert, "Aksi order") }
             }
+            // 050 / T046 — KOT tab ini yang belum tercetak tetap diperingatkan sampai tercetak atau ditutup dengan alasan (FR-020).
+            val kotWaiting = store.printer?.jobs?.collectAsState()?.value.orEmpty().count {
+                it.kind == com.warkop.pos.print.PrintKind.KOT && it.tabId == o.id &&
+                    (it.status == com.warkop.pos.print.PrintStatus.PENDING || it.status == com.warkop.pos.print.PrintStatus.FAILED)
+            }
+            if (kotWaiting > 0) {
+                Surface(Modifier.fillMaxWidth().padding(top = 8.dp), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer) {
+                    Text("KOT belum tercetak — kirim ulang ke dapur secara manual", Modifier.padding(12.dp), color = MaterialTheme.colorScheme.onErrorContainer, fontSize = 14.sp)
+                }
+            }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (o.live.isEmpty()) item {
                     Column(Modifier.fillMaxWidth().padding(top = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {

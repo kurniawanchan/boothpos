@@ -227,6 +227,8 @@ private fun OrderActionsSheet(store: PosStore) {
     val o = store.active ?: return
     SheetScaffold(o.label, "Aksi order", { store.show(null) }) {
         ActionRow(Icons.Filled.Receipt, "Cetak pre-bill", "Tagihan sementara dengan tanda BELUM LUNAS") { store.printPrebill() }
+        // 050 / T054 — KOT tidak dicetak ulang dari server; hanya tiket yang sudah pernah dicetak untuk tab ini.
+        if (o.lines.any { it.fired }) ActionRow(Icons.Filled.Receipt, "Cetak ulang KOT", "Tiket dapur yang sudah dikirim, untuk dapur") { store.reprintKot() }
         ActionRow(Icons.Filled.Percent, "Diskon order", "Alasan dan persentase dari server") { store.show(Sheet.Discount()) }
         ActionRow(Icons.Filled.CallSplit, "Bagi bill", "Per item atau rata per orang") { store.show(Sheet.Split) }
         ActionRow(Icons.Filled.Cancel, "Batalkan order", "Perlu alasan", danger = true) { store.show(Sheet.Void(null)) }
@@ -346,7 +348,7 @@ private fun ColumnScope.VoidDialog(store: PosStore, s: Sheet.Void) {
     var made by remember { mutableStateOf(false) }
     val line = s.lineId?.let { id -> store.active?.lines?.firstOrNull { it.id == id } }
     Text(if (cancel) "Batalkan order?" else "Void ${line?.qty ?: 1}× ${line?.name ?: "item"}", fontSize = 26.sp, lineHeight = 32.sp)
-    Text(if (cancel) "Item terkirim diproses sebagai void." else "Item sudah dikirim ke dapur. Slip BATAL dicetak ke station.", Modifier.padding(top = 14.dp, bottom = 10.dp), fontSize = 17.sp)
+    Text(if (cancel) "Item terkirim diproses sebagai void." else "Item sudah dikirim ke dapur. Slip BATAL masuk antrean cetak dapur.", Modifier.padding(top = 14.dp, bottom = 10.dp), fontSize = 17.sp)
     reasons.forEach { r -> RadioRow(r, reason == r, { reason = r }, big = true) }
     if (!cancel) {
         Text("Status di dapur", Modifier.padding(top = 16.dp, bottom = 10.dp), fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
@@ -584,7 +586,11 @@ private fun ColumnScope.ReceiptDialog(store: PosStore, s: Sheet.Receipt) {
     // T038: struk dari server (GET /orders/{id}/receipt). Tidak ada angka dari daftar order lokal.
     LaunchedEffect(s.orderId) { store.loadReceipt(s.orderId) }
     when (val r = store.receipts[s.orderId] ?: Load.Idle) {
-        is Load.Ready -> ReceiptPaper(r.value)
+        is Load.Ready -> {
+            ReceiptPaper(r.value)
+            // 050 / T051 — cetak struk ke printer; salinan 1 sudah otomatis saat bayar, jadi ini cetak ulang atau retry.
+            if (store.printer != null) PrimaryPill("Cetak struk", { store.printReceipt(s.orderId) }, Modifier.fillMaxWidth().padding(top = 12.dp), icon = Icons.Filled.Print)
+        }
         is Load.Failed -> ErrorState(friendlyLoadError(r.error), { store.loadReceipt(s.orderId) }, Modifier.fillMaxWidth(), offline = isOfflineError(r.error))
         else -> Text("Memuat struk…", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

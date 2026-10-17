@@ -441,7 +441,10 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - A remote `origin` (github.com/kurniawanchan/boothpos) exists (dated note 2026-10-11; the earlier "no remote" line was outdated), but **pushing and opening PRs need the developer's explicit per-instance authorization** (constitution; the harness may also deny them) — never push on your own initiative.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/048-wire-android-pos-api/plan.md`
+Active feature plan: `specs/050-android-thermal-printing/plan.md`
+(branch `050-android-thermal-printing`, from `048`) — printer Bluetooth VSC TM-58V (58 mm) pada aplikasi Android POS: struk, KOT (tiket dapur), pra-bill, dan slip BATAL tercetak otomatis; cetak ulang lewat persetujuan server; antrean cetak lokal yang tahan gagal. Android saja, tanpa perubahan server. Lihat research.md D1–D9.
+
+Previous feature: `specs/048-wire-android-pos-api/plan.md`
 (branch `048-wire-android-pos-api`, from 047) — menghubungkan aplikasi Android POS ke data server dan melengkapi API yang belum ada (B2–B14, B17–B19, B21), dalam empat irisan S1–S4; satu `PosBackend` (Remote/Sample), persetujuan di tempat lewat `OverrideGate` (token sekali pakai terikat hash aksi), pajak eksklusif + penomoran struk/antrean, perangkat/terminal. Lihat research.md D1–D14.
 
 Previous feature: `specs/047-android-pos-tablet/plan.md`

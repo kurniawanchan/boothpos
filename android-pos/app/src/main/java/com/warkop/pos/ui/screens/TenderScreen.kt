@@ -126,6 +126,8 @@ fun DoneScreen(store: PosStore) {
     val o = store.active ?: return
     val change = o.serverChange ?: 0
     val compact = windowSize() == Size.COMPACT
+    // 050 / T040 — keadaan struk dari antrean cetak (bukan teks tetap). Tanpa printer, antrean kosong.
+    val printJobs = store.printer?.jobs?.collectAsState()?.value.orEmpty()
     PosShell(store, title = "Pembayaran selesai") {
         val main: @Composable (Modifier) -> Unit = { m ->
             Surface(m, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
@@ -137,7 +139,7 @@ fun DoneScreen(store: PosStore) {
                     Text(rp(if (change > 0) change else o.total), fontSize = 56.sp, fontWeight = FontWeight.Light)
                     Text("Diterima ${rp(o.tenders.sumOf { it.received ?: it.amount })}${if (o.tenders.all { it.method == TenderMethod.CASH }) " tunai" else ""} · Total ${rp(o.total)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(14.dp))
-                    StatusLine(Icons.Filled.Print, "Cetak struk belum tersedia · " + (o.receiptNo ?: "tanpa nomor terminal"))
+                    StatusLine(Icons.Filled.Print, strukPrintLabel(printJobs, o.id) + " · " + (o.receiptNo ?: "tanpa nomor terminal"))
                     StatusLine(Icons.Filled.CloudDone, if (store.conn == Conn.ONLINE) "Tersinkron ke server" else "Tersimpan di perangkat · dikirim saat online")
                     Spacer(Modifier.weight(1f, fill = !compact)); Spacer(Modifier.height(14.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -168,4 +170,15 @@ fun DoneScreen(store: PosStore) {
 @Composable
 private fun StatusLine(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
     Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(10.dp)); Text(text) }
+}
+
+/** 050 / T040 — keadaan struk penjualan ini di antrean cetak. Kunci job = STRUK + id order + salinan 1 (lihat PrinterService). */
+private fun strukPrintLabel(jobs: List<com.warkop.pos.print.PrintJob>, orderId: String): String {
+    val job = jobs.firstOrNull { it.key == com.warkop.pos.print.jobKey(com.warkop.pos.print.PrintKind.STRUK, orderId, 1) }
+    return when (job?.status) {
+        com.warkop.pos.print.PrintStatus.PRINTED -> "Struk tercetak"
+        com.warkop.pos.print.PrintStatus.PENDING -> "Struk belum tercetak"
+        com.warkop.pos.print.PrintStatus.FAILED -> "Struk gagal dicetak · " + (job.lastError?.let { com.warkop.pos.print.printErrorMessage(it) } ?: "coba lagi")
+        else -> "Struk belum dicetak"
+    }
 }

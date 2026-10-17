@@ -12,6 +12,7 @@ import com.warkop.pos.model.CloseOutcome
 import com.warkop.pos.model.FloorSnapshot
 import com.warkop.pos.model.MenuCatalog
 import com.warkop.pos.model.Order
+import com.warkop.pos.model.PrintableKot
 import com.warkop.pos.model.Shift
 import com.warkop.pos.model.ShiftLimits
 import com.warkop.pos.model.ShiftReport
@@ -28,6 +29,9 @@ data class TerminalConfig(
 )
 
 data class OutletChoice(val id: Long, val name: String)
+
+/** 050 / T006 — hasil kirim ke dapur: tab terbaru dan tiket yang baru dibuat. */
+data class KitchenSend(val tab: Order, val tickets: List<PrintableKot>)
 
 /** Sesi PIN yang sedang berjalan. `permissions`/`menuKeys` hanya untuk menyembunyikan kontrol; server tetap penegak. */
 data class PosSession(
@@ -97,7 +101,10 @@ interface PosBackend {
     suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order
     suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order
     suspend fun removeLine(tabId: String, lineId: Int, key: String): Order
-    suspend fun sendToKitchen(tabId: String, key: String): Order
+    /** 050 / T006 — tab setelah kirim + tiket dapur yang baru dibuat (satu per stasiun) untuk dicetak sebagai KOT. */
+    suspend fun sendToKitchen(tabId: String, key: String): KitchenSend
+    /** 050 / T008 — satu tiket dapur (untuk cetak ulang KOT). */
+    suspend fun ticket(ticketId: Long): PrintableKot
     /** EDC: [approvalCode] + [confirmDuplicate] (setelah kasir mengonfirmasi duplikat). QRIS: [channelId] kanal QRIS. */
     suspend fun pay(tabId: String, method: String, amount: Int, clientRef: String, approvalCode: String? = null, confirmDuplicate: Boolean? = null, channelId: Long? = null): Order
     suspend fun prebill(tabId: String): Order
