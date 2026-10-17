@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Vendor;
 use App\Models\VendorMaterialPrice;
 use App\Support\MasterDataSheets;
+use App\Support\ProductSegment;
 use App\Support\ReportSplit;
 
 /**
@@ -223,7 +224,7 @@ class MasterDataExportService
                 // Urutan KUNCI di bawah = urutan kolom di ekspor (writer
                 // Excel memakai urutan array, bukan judul). Harus sama
                 // dengan MasterDataSheets::PRODUCTS_EXPORT.
-                $code = $this->skuTail($v->sku);
+                $code = $this->skuCode($v);
                 $categoryName = $v->product->category->name;
 
                 return [
@@ -253,14 +254,28 @@ class MasterDataExportService
     }
 
     /**
-     * 7 karakter terakhir SKU, atau SKU utuh bila lebih pendek. Dipakai
-     * sebagai `code` dan awalan `item_label` (spec 041, FR-005). substr()
-     * dengan start negatif melebihi panjang string mengembalikan seluruh
-     * string di PHP 8 — dikunci oleh test_products_export_short_sku_*.
+     * `code` ekspor = bagian SKU setelah "ART-CA-" (segmen + nomor), mis.
+     * `SH-K-1` dari `RYU-KY-SH-K-1` (spec 046, research Decision 10, pilihan (a)).
+     * Bagian "ART-CA-" selalu 7 karakter karena artist dan kategori memakai
+     * panjang tetap; panjang segmen dan tanda hubung di dalamnya tidak lagi
+     * menentukan potongan. Dipakai juga sebagai awalan `item_label` (spec 041).
+     *
+     * Produk lama (kode tanpa tanda hubung, `RYUKYSAK` → SKU `RYUKYSAK0001`) tetap
+     * memakai 7 karakter terakhir SKU (spec 041, FR-005): format lama itu lebar
+     * tetap, sehingga 7 karakter terakhir selalu segmen + nomor. Test 041 mengunci ini.
      */
-    private function skuTail(string $sku): string
+    private function skuCode(ProductVariant $variant): string
     {
-        return substr($sku, -7);
+        $prefix = (string) $variant->product->code_prefix;
+        $sku = $variant->sku;
+
+        if (preg_match(ProductSegment::CODE_PATTERN, $prefix) !== 1) {
+            return substr($sku, -7);
+        }
+
+        $head = substr($prefix, 0, 7);
+
+        return str_starts_with($sku, $head) ? substr($sku, 7) : $sku;
     }
 
     private function stockRows(): array

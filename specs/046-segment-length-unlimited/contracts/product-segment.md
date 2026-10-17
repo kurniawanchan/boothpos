@@ -27,4 +27,4 @@ Applies to `docs/openapi-pos-mvp.yaml` (must move in the same commit as the code
 ## Unchanged
 
 - Artist code (3 letters), category code (2 letters), SKU number rules, DEMO/LIVE behaviour, sales and stock snapshots (text kept as recorded).
-- Products export `code` / `item_label` change only if the product owner picks option (a) in research Decision 10; the default is `SH-K-1`-style text after the category code.
+- Products export `code` / `item_label`: `code` is the SKU after `ART-CA-` (e.g. `SH-K-12`); legacy products keep the 7-character tail (research Decision 10).

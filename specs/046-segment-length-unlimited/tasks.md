@@ -50,7 +50,7 @@
 - [X] T007 [P] [US1] Add a feature test to `tests/Feature/ProductSegmentChangeTest.php`: change to `SH-K` regenerates every active SKU with its number kept (last hyphen group is the number)
 - [X] T008 [P] [US1] Add a feature test to `tests/Feature/MasterDataImportTest.php`: a products row with a hyphenated 4–6 character segment is accepted; a 7-character one is refused with the new message
 - [X] T009 [P] [US1] Add a test to `tests/Feature/DemoClone/CodeAllocatorTest.php`: `productPrefix('ART-CA-SH-K', …)` returns the segment `SH-K` whole (guards the `explode` limit fix)
-- [ ] T010 [P] [US1] Add or update tests in `tests/Feature/MasterDataExportTest.php` for the `code` / `item_label` value per the product owner's choice on research Decision 10 (default: text after the category code, e.g. `SH-K-1`); replace the `substr(-7)` expectation
+- [X] T010 [P] [US1] Add or update tests in `tests/Feature/MasterDataExportTest.php` for the `code` / `item_label` value per the product owner's choice on research Decision 10 (default: text after the category code, e.g. `SH-K-1`); replace the `substr(-7)` expectation
 
 ### Implementation for User Story 1
 
@@ -59,7 +59,7 @@
 - [X] T013 [US1] `app/Services/ProductCodeGenerator.php`: docblock (lines ~27–54) and the `InvalidArgumentException` message (line ~54) → 6 characters with hyphens; `deriveSegmentFromName` unchanged (still 3 letters)
 - [X] T014 [US1] `app/Services/MasterDataImportService.php` lines ~725–729: segment check uses `ProductSegment::PATTERN`; message → "harus 1 sampai 6 karakter …"; comment at ~725 updated
 - [X] T015 [US1] `app/Services/DemoClone/CodeAllocator.php`: line ~56 `explode('-', $livePrefix)` → `explode('-', $livePrefix, 3)` so the segment keeps its hyphen; line ~50 comment and line ~54 message `(segmen 1-3 huruf)` → 6 characters
-- [ ] T016 [US1] `app/Services/MasterDataExportService.php`: replace `skuTail()` (lines ~261–263, `substr($sku, -7)`) with the chosen rule (default: text after the category code, research Decision 10); update the docblock at ~255–260 and the callers at lines ~226 and ~237 (`item_label`). Depends on the owner's choice; do not start until confirmed.
+- [X] T016 [US1] `app/Services/MasterDataExportService.php`: replace `skuTail()` (lines ~261–263, `substr($sku, -7)`) with the chosen rule (default: text after the category code, research Decision 10); update the docblock at ~255–260 and the callers at lines ~226 and ~237 (`item_label`). Depends on the owner's choice; do not start until confirmed.
 - [X] T017 [US1] `resources/js/utils/productSegment.js` `previewSegment`: keep letters and single hyphens, uppercase, cut to 6 characters (line ~18–19); `deriveSegment` unchanged; update the header comment (lines ~7–9)
 - [X] T018 [P] [US1] `qa-tests/unit/productSegment.test.js`: previewSegment expectations (6 characters, hyphen kept, other symbols dropped)
 - [X] T019 [US1] `resources/js/views/ProductsView.vue` line ~724: segment `BaseInput` `maxlength="3"` → `maxlength="6"`

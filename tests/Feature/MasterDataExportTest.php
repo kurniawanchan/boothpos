@@ -149,8 +149,33 @@ class MasterDataExportTest extends TestCase
     }
 
     /**
-     * Spec 041 (FR-005 edge case): SKU lebih pendek dari 7 karakter dipakai
-     * utuh sebagai `code`. Pemeriksaan ini mengunci perilaku substr(-7) PHP.
+     * Spec 046 (research Decision 10, pilihan (a)): `code` ekspor = bagian SKU setelah
+     * "ART-CA-", jadi segmen dengan tanda hubung dan nomor tanpa nol di depan utuh.
+     */
+    public function test_products_export_code_is_the_sku_after_the_artist_and_category(): void
+    {
+        $this->actingAsRole('owner');
+        $this->seedCatalog();
+        $product = Product::firstOrFail();
+        $product->update(['code_prefix' => 'RYU-KY-SH-K', 'product_segment' => 'SH-K']);
+        $product->variants()->create([
+            'sku' => 'RYU-KY-SH-K-12',
+            'variant_name' => 'Panjang',
+            'cost_price' => 1000,
+            'sell_price' => 2000,
+            'current_stock' => 0,
+        ]);
+
+        $rows = $this->readDownload('/api/v1/exports/products')[MasterDataSheets::PRODUCTS];
+        $row = $this->rowBySku($rows, 'RYU-KY-SH-K-12');
+
+        $this->assertSame('SH-K-12', $row['code']);
+        $this->assertSame('SH-K-12 - Keychain Panjang', $row['item_label']);
+    }
+
+    /**
+     * Spec 041 (FR-005 edge case) + spec 046: SKU lama tanpa tanda hubung (yang
+     * tidak diawali "ART-CA-") dipakai utuh sebagai `code`.
      */
     public function test_products_export_short_sku_uses_the_whole_sku_as_code(): void
     {
