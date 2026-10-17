@@ -6,6 +6,7 @@ use App\Models\Artist;
 use App\Models\Category;
 use App\Models\Material;
 use App\Models\ProductVariant;
+use App\Models\ProductVariantBomLine;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\Vendor;
@@ -147,7 +148,7 @@ class MasterDataExportService
      */
     private function bomRows(): array
     {
-        return \App\Models\ProductVariantBomLine::query()
+        return ProductVariantBomLine::query()
             ->with(['variant', 'material'])
             ->join('product_variants', 'product_variants.id', '=', 'product_variant_bom_lines.product_variant_id')
             ->join('materials', 'materials.id', '=', 'product_variant_bom_lines.material_id')
