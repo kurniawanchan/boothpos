@@ -16,6 +16,7 @@ use App\Models\ProductVariant;
 use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
 use App\Services\ProductCodeGenerator;
+use App\Services\ProductSegmentChangeService;
 use App\Services\VariantBomService;
 use App\Support\ReportSplit;
 use Illuminate\Http\JsonResponse;
@@ -31,6 +32,7 @@ class ProductController extends Controller
         private ActivityLogger $activityLogger,
         private ImageUploadService $imageUploadService,
         private VariantBomService $bomService,
+        private ProductSegmentChangeService $segmentChanges,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -144,7 +146,14 @@ class ProductController extends Controller
         DB::transaction(function () use ($request, $product) {
             $before = $product->only($product->getFillable());
 
-            $product->update($request->validated());
+            // Segmen (spec 044): mengubah kode produk dan SKU variannya. Hanya bila
+            // diisi; kosong berarti tidak berubah. Ditangani service, bukan di sini.
+            if ($request->filled('product_segment')) {
+                $this->segmentChanges->changeSegment($product, $request->validated('product_segment'), $request->user());
+                $product->refresh();
+            }
+
+            $product->update($request->safe()->except('product_segment'));
 
             $this->activityLogger->log(
                 userId: $request->user()?->id,

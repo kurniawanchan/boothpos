@@ -167,7 +167,7 @@ class MasterDataImportTest extends TestCase
 
         $this->assertDatabaseHas('artists', ['code' => 'RYU']);
         $this->assertDatabaseHas('categories', ['code' => 'KY']);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'RYU-KY-SAK-001', 'current_stock' => 20]);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'RYU-KY-SAK-1', 'current_stock' => 20]);
 
         // T054 (User Story 4) — sheet 'roles'/'users' ikut diperluas ke
         // template ini; baris contohnya harus saling konsisten seperti
@@ -267,7 +267,7 @@ class MasterDataImportTest extends TestCase
         // Kode produk & SKU dihasilkan SERVER lewat ProductCodeGenerator.
         $this->assertDatabaseHas('products', ['code_prefix' => 'RYU-KY-SAK', 'name' => 'Keychain Sakura']);
         $this->assertDatabaseHas('product_variants', [
-            'sku' => 'RYU-KY-SAK-001',
+            'sku' => 'RYU-KY-SAK-1',
             'variant_name' => 'Standard',
             'current_stock' => 20,
         ]);
@@ -325,7 +325,7 @@ class MasterDataImportTest extends TestCase
         $this->postImport($file)->assertOk()->assertJsonPath('applied', true);
 
         $this->assertDatabaseHas('products', ['code_prefix' => 'SPF-SH-S', 'product_segment' => 'S']);
-        $this->assertDatabaseHas('product_variants', ['sku' => 'SPF-SH-S-001']);
+        $this->assertDatabaseHas('product_variants', ['sku' => 'SPF-SH-S-1']);
     }
 
     /** Spec 042 US4 (FR-008): segmen 4 huruf = galat baris, seluruh impor dibatalkan. */
@@ -423,7 +423,7 @@ class MasterDataImportTest extends TestCase
 
         $this->assertSame(1, Product::count());
         $this->assertSame(
-            ['RYU-KY-SAK-001', 'RYU-KY-SAK-002'],
+            ['RYU-KY-SAK-1', 'RYU-KY-SAK-2'],
             ProductVariant::orderBy('sku')->pluck('sku')->all(),
         );
     }
@@ -528,7 +528,7 @@ class MasterDataImportTest extends TestCase
 
         $this->postImport($this->fullCatalogWorkbook())->assertOk();
 
-        $variant = ProductVariant::where('sku', 'RYU-KY-SAK-001')->firstOrFail();
+        $variant = ProductVariant::where('sku', 'RYU-KY-SAK-1')->firstOrFail();
 
         $movement = StockMovement::where('variant_id', $variant->id)->firstOrFail();
         $this->assertSame('adjustment', $movement->type);
@@ -585,11 +585,11 @@ class MasterDataImportTest extends TestCase
                 ['artist_code' => 'RYU', 'category_code' => 'KY', 'product_segment' => 'SAK', 'product_name' => 'Keychain Sakura', 'variant_name' => 'Standard', 'sell_price' => 25000],
             ]],
             'stock' => ['rows' => [
-                ['sku' => 'RYU-KY-SAK-001', 'current_stock' => 7],
+                ['sku' => 'RYU-KY-SAK-1', 'current_stock' => 7],
             ]],
         ]))->assertOk()->assertJsonPath('applied', true);
 
-        $this->assertSame(7, ProductVariant::where('sku', 'RYU-KY-SAK-001')->value('current_stock'));
+        $this->assertSame(7, ProductVariant::where('sku', 'RYU-KY-SAK-1')->value('current_stock'));
         $this->assertEquals(7, StockMovement::sum('qty_change'));
     }
 

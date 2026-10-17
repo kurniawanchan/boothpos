@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\ProductSegment;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateProductRequest extends FormRequest
@@ -9,6 +10,25 @@ class UpdateProductRequest extends FormRequest
     public function authorize(): bool
     {
         return $this->user()?->can('update', $this->route('product')) ?? false;
+    }
+
+    /**
+     * Segmen dinormalisasi sebelum diperiksa (spec 044). Kosong = tidak diubah;
+     * segmen tidak diturunkan dari nama saat edit, karena itu akan diam-diam
+     * mengubah kode produk setiap kali nama berubah.
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('product_segment')) {
+            $this->merge(['product_segment' => ProductSegment::normalise($this->input('product_segment'))]);
+        }
+    }
+
+    public function messages(): array
+    {
+        return [
+            'product_segment.regex' => 'Segmen produk harus 1 sampai 3 huruf (A–Z).',
+        ];
     }
 
     public function rules(): array
@@ -23,6 +43,8 @@ class UpdateProductRequest extends FormRequest
             // mengubah code_prefix maupun SKU yang sudah ada."
             'artist_id' => ['sometimes', 'integer', 'exists:artists,id'],
             'category_id' => ['sometimes', 'integer', 'exists:categories,id'],
+            // Spec 044: segmen boleh diubah; server meregenerasi SKU (ProductSegmentChangeService).
+            'product_segment' => ['sometimes', 'nullable', 'string', 'regex:'.ProductSegment::PATTERN_RULE],
             'name' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string'],
             'is_preorder' => ['sometimes', 'boolean'],

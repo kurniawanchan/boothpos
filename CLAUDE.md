@@ -368,7 +368,12 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/043-pos-cart-pinned-summary/plan.md`
+Active feature plan: `specs/044-sku-sequence-no-padding/plan.md`
+(branch `052-sku-sequence-no-padding`, stacked on `051-pos-cart-pinned-summary`) — new variant SKUs use an unpadded
+number (`VLC-SK-S-1`); changing a product's segment regenerates all its variant SKUs (`ProductSegmentChangeService`),
+keeping each variant's number. Past sales keep their recorded SKUs.
+
+Previous feature: `specs/043-pos-cart-pinned-summary/plan.md`
 (branch `051-pos-cart-pinned-summary`, stacked on `050-product-segment-1-3`) — on the POS screen the cart's total
 and Pay button stay visible without scrolling the page. The POS route carries `meta.fullHeight`; `AppShell` then
 runs at viewport height and `<main>` is the only scroll area. Other routes are unchanged.

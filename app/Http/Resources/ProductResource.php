@@ -17,6 +17,8 @@ class ProductResource extends JsonResource
             'category_id' => $this->category_id,
             'category_name' => $this->whenLoaded('category', fn () => $this->category->name),
             'code_prefix' => $this->code_prefix,
+            // Segmen tersimpan (spec 044 US4). Kolom product_segment NOT NULL, jadi selalu ada.
+            'product_segment' => $this->product_segment,
             'name' => $this->name,
             'description' => $this->description,
             'image_path' => $this->image_path,

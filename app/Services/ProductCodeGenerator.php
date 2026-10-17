@@ -68,21 +68,53 @@ class ProductCodeGenerator
     }
 
     /**
-     * SKU varian berikutnya untuk satu produk (format "ART-CA-SEG-001",
+     * Susunan SKU varian: kode produk, tanda hubung, lalu nomor TANPA nol di depan
+     * (VLC-SK-S-1, VLC-SK-S-11). Satu-satunya tempat format ini didefinisikan:
+     * pembuatan varian, impor, dan ganti segmen memanggil method ini (spec 044).
+     */
+    public function variantSku(string $prefix, int $number): string
+    {
+        return $prefix.'-'.$number;
+    }
+
+    /**
+     * Nomor urut sebuah SKU MILIK kode produk $prefix: `SPF-SH-S-001` → 1,
+     * `SPF-SH-S-11` → 11, `RYUKYSAK0001` → 1 (SKU lama tanpa tanda hubung, prefix
+     * `RYUKYSAK`). Null bila SKU tidak berawalan kode itu — SKU yang bukan milik
+     * kode ini tidak boleh ikut menentukan nomor berikutnya.
+     */
+    public function sequenceOf(string $prefix, string $sku): ?int
+    {
+        return preg_match('/^'.preg_quote($prefix, '/').'-?(\d+)$/', $sku, $m) ? (int) $m[1] : null;
+    }
+
+    /**
+     * SKU varian berikutnya untuk satu produk (format "ART-CA-SEG-1",
      * urutan 3 digit). Urutan dihitung dari jumlah varian (termasuk yang
      * sudah dihapus/soft-deleted) agar nomor urut tidak pernah dipakai
      * ulang meski ada varian yang dihapus.
      */
     public function nextVariantSku(Product $product): string
     {
-        $existingCount = ProductVariant::withTrashed()
+        // Nomor berikutnya = nomor tertinggi yang pernah dipakai + 1, dihitung dari
+        // SEMUA varian (termasuk yang dihapus). Hitung baris saja tidak cukup:
+        // SKU lama (mis. RYUKYSAK0001) tidak selalu sesuai jumlah baris (spec 044).
+        $highest = ProductVariant::withTrashed()
             ->where('product_id', $product->id)
-            ->count();
+            ->pluck('sku')
+            ->map(fn (string $sku) => $this->sequenceOf($product->code_prefix, $sku) ?? 0)
+            ->max() ?? 0;
 
-        $sequence = $existingCount + 1;
+        $sequence = $highest + 1;
 
         for ($attempt = 0; $attempt < 20; $attempt++) {
-            $candidate = $product->code_prefix.'-'.str_pad((string) ($sequence + $attempt), 3, '0', STR_PAD_LEFT);
+            $candidate = $this->variantSku($product->code_prefix, $sequence + $attempt);
+
+            // Kolom sku CHAR(14): SKU yang lebih panjang ditolak di sini dengan pesan
+            // jelas, bukan galat basis data (500) di tengah transaksi.
+            if (strlen($candidate) > 14) {
+                throw new \RuntimeException('Nomor SKU sudah melebihi lebar kolom sku (14 karakter) untuk kode produk ini.');
+            }
 
             if (! ProductVariant::withTrashed()->where('sku', $candidate)->exists()) {
                 return $candidate;

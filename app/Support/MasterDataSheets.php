@@ -223,7 +223,7 @@ final class MasterDataSheets
                 'variant_image_filename' => '',
             ],
             self::STOCK => [
-                'sku' => 'RYU-KY-SAK-001',
+                'sku' => 'RYU-KY-SAK-1',
                 'current_stock' => 20,
                 'reason' => 'Isi jumlah AKHIR yang diinginkan, bukan selisih. Contoh alasan: stok opname 1 Oktober.',
             ],
@@ -252,7 +252,7 @@ final class MasterDataSheets
             self::BOM => [
                 // SKU sama seperti pada sheet 'stock' — varian ini memang
                 // dibuat oleh baris contoh sheet 'products' di atas.
-                'sku' => 'RYU-KY-SAK-001',
+                'sku' => 'RYU-KY-SAK-1',
                 'material_code' => 'AC3',
                 'qty_needed' => '1.0000',
                 'notes' => '',

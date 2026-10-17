@@ -24,3 +24,12 @@ export function previewSegment(typed, name) {
   }
   return deriveSegment(name);
 }
+
+/**
+ * Pratinjau SKU variant pertama (spec 044): kode produk + tanda hubung + nomor 1
+ * tanpa nol di depan. Salinan tampilan dari format server
+ * (ProductCodeGenerator::variantSku).
+ */
+export function previewSku(artistCode, categoryCode, segment) {
+  return `${artistCode}-${categoryCode}-${segment}-1`;
+}
