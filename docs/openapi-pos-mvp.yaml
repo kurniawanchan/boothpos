@@ -903,8 +903,9 @@ paths:
         `code_prefix` dan `sku` dihasilkan server, tidak dikirim klien.
         `code_prefix` = artist.code + "-" + category.code + "-" + product_segment
         (format "ART-CA-SEG", 8–10 karakter; segmen 1–3 huruf, disimpan apa
-        adanya, tidak dipad — spec 042). `sku` = code_prefix + "-" + urutan
-        varian 3 digit (format "ART-CA-SEG-001", 12–14 karakter). Segmen
+        adanya, tidak dipad — spec 042). `sku` = code_prefix + "-" + nomor
+        urut varian tanpa nol di depan (format "ART-CA-SEG-1", "ART-CA-SEG-11";
+        10–14 karakter; spec 044). Nomor tidak pernah dipakai ulang. Segmen
         kosong diturunkan dari nama produk (3 huruf, dipad 'X').
       requestBody:
         required: true
@@ -934,7 +935,14 @@ paths:
     put:
       tags: [Master Data]
       summary: Perbarui produk
-      description: Perubahan nama tidak mengubah `code_prefix` maupun SKU yang sudah ada.
+      description: |
+        Perubahan nama tidak mengubah `code_prefix` maupun SKU yang sudah ada.
+        Mengganti `product_segment` (spec 044) mengubah `code_prefix` dan
+        meregenerasi SKU SEMUA varian produk (termasuk yang dihapus) dengan
+        segmen baru; nomor urut tiap varian dipertahankan (`SPF-SH-SH-1` menjadi
+        `SPF-SH-S-1`). Kode yang sudah dipakai produk lain ditolak 422 pada
+        `product_segment`, dan tidak ada SKU yang berubah. Penjualan dan stok
+        lama tetap memakai SKU yang tercatat. Kosong = segmen tidak berubah.
       requestBody:
         required: true
         content:
@@ -5207,8 +5215,8 @@ paths:
         stok awal varian BARU adalah kolom `initial_stock` di sheet
         `products`, karena SKU dibuat server. Sheet `stock` tetap boleh
         menunjuk SKU yang baru akan dibuat oleh berkas yang sama — SKU-nya
-        deterministik (`code_prefix` + `-` + urutan 3 digit, mis.
-        `RYU-KY-SAK-001`) — dan penyelesaiannya ditunda sampai sheet
+        deterministik (`code_prefix` + `-` + nomor urut tanpa nol di depan, mis.
+        `RYU-KY-SAK-1`) — dan penyelesaiannya ditunda sampai sheet
         `products` diterapkan. SKU yang tetap tidak ditemukan setelah itu
         membatalkan seluruh impor dengan galat per-baris biasa.
 
@@ -5995,6 +6003,13 @@ components:
         category_id: { type: integer }
         category_name: { type: string, readOnly: true }
         code_prefix: { type: string, minLength: 8, maxLength: 10, readOnly: true, example: RYU-KY-SAK }
+        product_segment:
+          type: string
+          minLength: 1
+          maxLength: 3
+          pattern: '^[A-Za-z]{1,3}$'
+          readOnly: true
+          description: Segmen tersimpan produk (spec 044 US4). Diubah hanya lewat PUT /products/{id} dan meregenerasi SKU varian.
         name: { type: string }
         description: { type: string, nullable: true }
         image_path: { type: string, nullable: true, description: "Diisi via POST /products/{id}/image atau impor massal (Task 6)." }

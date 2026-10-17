@@ -6,7 +6,7 @@ namespace App\Support;
  * Aturan tunggal untuk segmen produk (spec 042).
  *
  * Segmen adalah 1–3 huruf (A–Z), disimpan apa adanya (huruf besar) dan TIDAK
- * dipad ke 3 karakter — "S" menghasilkan kode "SPF-SH-S" dan SKU "SPF-SH-S-001".
+ * dipad ke 3 karakter — "S" menghasilkan kode "SPF-SH-S" dan SKU "SPF-SH-S-1".
  * Segmen kosong diturunkan dari nama produk oleh ProductCodeGenerator
  * (selalu 3 huruf, dipad 'X'); itu jalur terpisah dari aturan ini.
  *

@@ -454,3 +454,103 @@ describe('ProductsView — SKU tooltip shows the variant name (038)', () => {
   });
 });
 
+
+// Spec 044 (US3, FR-006/FR-007): segmen yang diubah dikirim ke server; penolakan
+// (422 pada product_segment) tampil di bawah kolom segmen, bukan diam-diam hilang.
+describe('ProductsView — changing the segment (044)', () => {
+  const PRODUCT_SH = {
+    id: 1, artist_id: 1, category_id: 1, name: 'Keychain A', code_prefix: 'ART-KA-SH', product_segment: 'SH',
+    description: '', is_preorder: false, preorder_eta: null, is_active: true, image_url: null,
+    variants: [{ id: 10, sku: 'ART-KA-SH-1', variant_name: 'Standard', cost_price: '10000.00', sell_price: '20000.00', current_stock: 5, low_stock_alert: null, is_active: true, image_url: null }],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProducts.mockResolvedValue({ data: [PRODUCT_SH], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
+    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+  });
+
+  it('sends the new segment when the product is saved', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getProduct.mockResolvedValue(PRODUCT_SH);
+    updateProduct.mockResolvedValue({});
+    updateVariant.mockResolvedValue({ id: 10 });
+
+    renderProducts();
+    await screen.findByText('Keychain A');
+    await user.click(screen.getAllByText('Edit')[0]);
+    const segment = await screen.findByDisplayValue('SH');
+    await user.clear(segment);
+    await user.type(segment, 'S');
+    await user.click(screen.getByText('Simpan produk'));
+
+    await waitFor(() => expect(updateProduct).toHaveBeenCalledWith(1, expect.objectContaining({ product_segment: 'S' })));
+  });
+
+  it('shows the server refusal of a segment under the segment field', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getProduct.mockResolvedValue(PRODUCT_SH);
+    updateProduct.mockRejectedValue(Object.assign(new Error('validation'), {
+      isValidation: true,
+      errors: { product_segment: ['Kombinasi kode ini (ART-KA-S) sudah dipakai produk lain.'] },
+    }));
+
+    renderProducts();
+    await screen.findByText('Keychain A');
+    await user.click(screen.getAllByText('Edit')[0]);
+    const segment = await screen.findByDisplayValue('SH');
+    await user.clear(segment);
+    await user.type(segment, 'S');
+    await user.click(screen.getByText('Simpan produk'));
+
+    expect(await screen.findByText('Kombinasi kode ini (ART-KA-S) sudah dipakai produk lain.')).toBeInTheDocument();
+  });
+});
+
+// Spec 044 US4 (FR-008/FR-009/FR-010): form edit menampilkan segmen tersimpan dan
+// pratinjau memakai kode tersimpan; menyimpan tanpa perubahan mengirim nilai yang sama.
+describe('ProductsView — saved segment in the edit form (044 US4)', () => {
+  const PRODUCT_S = {
+    id: 1, artist_id: 1, category_id: 1, name: 'Keychain S', code_prefix: 'ART-KA-S', product_segment: 'S',
+    description: '', is_preorder: false, preorder_eta: null, is_active: true, image_url: null,
+    variants: [{ id: 10, sku: 'ART-KA-S-1', variant_name: 'Standard', cost_price: '10000.00', sell_price: '20000.00', current_stock: 5, low_stock_alert: null, is_active: true, image_url: null }],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProducts.mockResolvedValue({ data: [PRODUCT_S], meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 } });
+    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+    getProduct.mockResolvedValue(PRODUCT_S);
+    updateProduct.mockResolvedValue({});
+    updateVariant.mockResolvedValue({ id: 10 });
+  });
+
+  it('shows the saved segment and previews the saved code when the product is edited', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+
+    renderProducts();
+    await screen.findByText('Keychain S');
+    await user.click(screen.getAllByText('Edit')[0]);
+
+    expect(await screen.findByDisplayValue('S')).toBeInTheDocument();
+    expect(document.body.textContent).toContain('ART-KA-S-1');
+  });
+
+  it('sends the unchanged saved segment when the product is saved', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+
+    renderProducts();
+    await screen.findByText('Keychain S');
+    await user.click(screen.getAllByText('Edit')[0]);
+    await screen.findByDisplayValue('S');
+    await user.click(screen.getByText('Simpan produk'));
+
+    await waitFor(() => expect(updateProduct).toHaveBeenCalledWith(1, expect.objectContaining({ product_segment: 'S' })));
+  });
+});

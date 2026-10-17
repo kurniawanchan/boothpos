@@ -152,7 +152,7 @@ class PreorderExportImportService
         // event pada preorder opsional, dan sebuah instalasi baru belum
         // tentu punya event bernama apa pun. SKU contoh memakai kode
         // produk sungguhan dari SakanaFridgeDemoSeeder (variant pertama
-        // tiap produk, `code_prefix` + '-001' — lihat catatan SKU
+        // tiap produk, `code_prefix` + '-1' — lihat catatan SKU
         // deterministik CLAUDE.md); pada instalasi tanpa seeder demo ini
         // tetap perlu diganti dengan SKU toko sendiri, karena impor
         // pre-order (beda dari impor master-data) tidak pernah membuat
@@ -163,7 +163,7 @@ class PreorderExportImportService
                 'event_name' => '',
                 'fulfillment' => 'mail order',
                 'pickup_day' => null,
-                'products' => 'NEK-KY-MIK-001, HOS-KY-RGR-001',
+                'products' => 'NEK-KY-MIK-1, HOS-KY-RGR-1',
                 'quantities' => '3, 1',
                 'unit_prices' => '15000.00, 85000.00',
                 'shipping_cost' => '15000.00',

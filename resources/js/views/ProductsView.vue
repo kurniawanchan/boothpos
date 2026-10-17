@@ -27,7 +27,7 @@ import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 import VariantBomModal from '../components/product/VariantBomModal.vue';
 import VariantDetailModal from '../components/product/VariantDetailModal.vue';
 import ImageLightbox from '../components/ui/ImageLightbox.vue';
-import { previewSegment } from '../utils/productSegment';
+import { previewSegment, previewSku } from '../utils/productSegment';
 
 const auth = useAuthStore();
 const { t } = useI18n();
@@ -205,7 +205,7 @@ const hasStockChanges = computed(() =>
 const effectiveSegment = computed(() => previewSegment(productForm.product_segment, productForm.name));
 const artistCode = computed(() => artists.value.find((a) => a.id === Number(productForm.artist_id))?.code ?? '···');
 const categoryCode = computed(() => categories.value.find((c) => c.id === Number(productForm.category_id))?.code ?? '··');
-const codePreview = computed(() => `${artistCode.value}-${categoryCode.value}-${effectiveSegment.value}-001`);
+const codePreview = computed(() => previewSku(artistCode.value, categoryCode.value, effectiveSegment.value));
 
 // SKU cell — hanya 3 SKU pertama ditampilkan per baris, sisanya di balik
 // tautan "+N lainnya" yang bisa dibuka/tutup per baris (bukan sekaligus
@@ -422,6 +422,9 @@ async function saveProduct() {
         artist_id: Number(productForm.artist_id),
         category_id: Number(productForm.category_id),
         name: productForm.name,
+        // Spec 044: segmen yang diubah meregenerasi SKU semua varian di server.
+        // Kosong = tidak berubah (server tidak menurunkan segmen saat edit).
+        product_segment: productForm.product_segment || null,
         description: productForm.description || null,
         is_preorder: productForm.is_preorder,
         preorder_eta: productForm.is_preorder ? productForm.preorder_eta || null : null,
