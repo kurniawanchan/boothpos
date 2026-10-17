@@ -111,7 +111,9 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('products', ProductController::class);
         Route::post('/products/{product}/image', [ProductController::class, 'uploadImage']);
         Route::post('/products/{product}/variants', [ProductController::class, 'storeVariant']);
+        Route::put('/products/{product}/variant-sequences', [ProductController::class, 'updateSequences']);
         Route::put('/variants/{variant}', [ProductController::class, 'updateVariant']);
+        Route::delete('/variants/{variant}', [ProductController::class, 'destroyVariant']);
         Route::post('/variants/{variant}/image', [ProductController::class, 'uploadVariantImage']);
         Route::get('/variants/lookup', [ProductController::class, 'lookupVariants']);
 

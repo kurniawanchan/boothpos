@@ -368,7 +368,17 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/044-sku-sequence-no-padding/plan.md`
+Active feature plan: `specs/046-segment-length-unlimited/plan.md`
+(branch `053-variant-sku-manual-edit`, the feature directory is `046-segment-length-unlimited`) — the product segment
+grows from 1–3 to 1–6 letters; product code ≤ 13 characters, variant SKU ≤ 20 (widened by a new migration). One rule in
+`App\Support\ProductSegment` holds the constants.
+
+Previous feature: `specs/045-variant-sku-manual-edit/plan.md`
+(branch `053-variant-sku-manual-edit`, from `develop` after PR #45) — in the product edit drawer the owner types only
+the sequence number of a variant SKU; the product code stays fixed. Typed numbers are kept when the segment changes
+(`sku_is_typed`). `VariantSkuService` owns the rule.
+
+Previous feature: `specs/044-sku-sequence-no-padding/plan.md`
 (branch `052-sku-sequence-no-padding`, stacked on `051-pos-cart-pinned-summary`) — new variant SKUs use an unpadded
 number (`VLC-SK-S-1`); changing a product's segment regenerates all its variant SKUs (`ProductSegmentChangeService`),
 keeping each variant's number. Past sales keep their recorded SKUs.

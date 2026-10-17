@@ -7,6 +7,7 @@ use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\StoreVariantRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Http\Requests\UpdateVariantRequest;
+use App\Http\Requests\UpdateVariantSequencesRequest;
 use App\Http\Resources\ProductResource;
 use App\Http\Resources\ProductVariantResource;
 use App\Models\Artist;
@@ -17,6 +18,8 @@ use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
 use App\Services\ProductCodeGenerator;
 use App\Services\ProductSegmentChangeService;
+use App\Services\VariantRemovalService;
+use App\Services\VariantSkuService;
 use App\Services\VariantBomService;
 use App\Support\ReportSplit;
 use Illuminate\Http\JsonResponse;
@@ -33,6 +36,8 @@ class ProductController extends Controller
         private ImageUploadService $imageUploadService,
         private VariantBomService $bomService,
         private ProductSegmentChangeService $segmentChanges,
+        private VariantSkuService $skuService,
+        private VariantRemovalService $variantRemoval,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -210,14 +215,17 @@ class ProductController extends Controller
             return response()->json(['message' => __('bom.not_authorized')], 403);
         }
 
-        $sku = $this->codeGenerator->nextVariantSku($product);
+        // Nomor yang diketik pemilik (spec 045) dipakai bila diisi; kosong = dibuat server.
+        $typedSku = $this->skuService->skuForNewVariant($product, $request->validated('sequence'));
+        $sku = $typedSku ?? $this->codeGenerator->nextVariantSku($product);
 
         // Varian + salinan BOM dalam satu transaksi: salinan yang ditolak
         // (produk lain, sumber kosong) tidak boleh meninggalkan varian setengah jadi.
         try {
-            $variant = DB::transaction(function () use ($request, $product, $sku, $copyFromId) {
+            $variant = DB::transaction(function () use ($request, $product, $sku, $typedSku, $copyFromId) {
                 $variant = $product->variants()->create([
                     'sku' => $sku,
+                    'sku_is_typed' => $typedSku !== null,
                     'variant_name' => $request->validated('variant_name'),
                     'cost_price' => $request->validated('cost_price') ?? 0,
                     'sell_price' => $request->validated('sell_price'),
@@ -235,6 +243,24 @@ class ProductController extends Controller
         }
 
         return response()->json(new ProductVariantResource($variant), 201);
+    }
+
+    /** Hapus varian (spec 045, FR-015): dihapus bila tanpa riwayat, selain itu dinonaktifkan. */
+    public function destroyVariant(Request $request, ProductVariant $variant): JsonResponse
+    {
+        $this->authorize('update', $variant->product);
+
+        $removed = $this->variantRemoval->remove($variant, $request->user());
+
+        return response()->json(['removed' => $removed]);
+    }
+
+    /** Semua nomor urut SKU satu produk sekaligus (spec 045, geser nomor). */
+    public function updateSequences(UpdateVariantSequencesRequest $request, Product $product): JsonResponse
+    {
+        $this->skuService->setSequences($product, $request->validated('items'), $request->user());
+
+        return response()->json(new ProductResource($product->fresh(['artist', 'category', ...$this->variantRelations($request)])));
     }
 
     public function updateVariant(UpdateVariantRequest $request, ProductVariant $variant): JsonResponse
@@ -255,10 +281,24 @@ class ProductController extends Controller
         // menyentuh cost_price/sell_price. Snapshot ditulis apa adanya
         // (bukan hanya diff kolom harga) supaya operator bisa melihat
         // konteks lengkap perubahan, bukan cuma angka harga saja.
+        // Nomor urut SKU (spec 045): diperiksa dan dicatat oleh VariantSkuService,
+        // lalu sisa kolom diperbarui seperti biasa (kolom sequence tidak ikut).
+        // Mengaktifkan lagi varian nonaktif: nomornya tidak boleh sudah dipakai varian aktif (spec 045).
+        if ($request->boolean('is_active') && ! $variant->is_active
+            && ProductVariant::query()->where('sku', $variant->sku)->where('is_active', true)->where('id', '!=', $variant->id)->exists()) {
+            return response()->json([
+                'message' => 'Nomor SKU sudah dipakai varian aktif lain.',
+                'errors' => ['sku' => ["Nomor SKU {$variant->sku} sudah dipakai varian aktif lain."]],
+            ], 422);
+        }
+
+        $this->skuService->setSequence($variant, $request->validated('sequence'), $request->user());
+        $variant->refresh();
+
         DB::transaction(function () use ($request, $variant) {
             $before = $variant->only($variant->getFillable());
 
-            $variant->update($request->validated());
+            $variant->update($request->safe()->except('sequence'));
 
             $this->activityLogger->log(
                 userId: $request->user()?->id,

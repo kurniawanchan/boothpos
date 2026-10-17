@@ -9,7 +9,8 @@ use App\Support\ProductSegment;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Menghasilkan code_prefix (10 karakter) dan SKU varian (14 karakter),
+ * Menghasilkan code_prefix (paling panjang 13 karakter) dan SKU varian (paling panjang 20),
+ * batasnya di ProductSegment::MAX_* (spec 046),
  * format dipisah tanda hubung atas permintaan pengguna (sebelumnya
  * digabung tanpa pemisah — lihat migration
  * 2026_10_25_000001_widen_product_code_and_sku_columns_for_dashed_format
@@ -26,6 +27,7 @@ class ProductCodeGenerator
 {
     /**
      * Menurunkan segmen 3 huruf dari nama produk bila tidak diberikan
+     * (segmen yang DIKETIK kini sampai 6 karakter, lihat ProductSegment — spec 046)
      * secara manual (F19.8). Non-huruf dibuang, hasil selalu tepat 3
      * karakter (dipad dengan 'X' bila nama terlalu pendek).
      */
@@ -48,10 +50,10 @@ class ProductCodeGenerator
     {
         $prefix = strtoupper($artistCode).'-'.strtoupper($categoryCode).'-'.strtoupper($productSegment);
 
-        // Bentuk diperiksa lewat ProductSegment::CODE_PATTERN (segmen 1–3 huruf,
-        // spec 042) — bukan panjang tetap, karena segmen kini bervariasi.
+        // Bentuk diperiksa lewat ProductSegment::CODE_PATTERN (segmen 1–6 karakter,
+        // boleh satu tanda hubung, spec 046) — bukan panjang tetap, karena segmen bervariasi.
         if (! preg_match(ProductSegment::CODE_PATTERN, $prefix)) {
-            throw new \InvalidArgumentException('Kombinasi kode artist, kategori, dan segmen produk harus berbentuk ART-CA-SEG (segmen 1–3 huruf).');
+            throw new \InvalidArgumentException('Kombinasi kode artist, kategori, dan segmen produk harus berbentuk ART-CA-SEG (segmen 1–6 karakter).');
         }
 
         // 003-seed-demo-live — withoutGlobalScope: code_prefix UNIQUE lintas
@@ -65,6 +67,38 @@ class ProductCodeGenerator
         }
 
         return $prefix;
+    }
+
+    /**
+     * Nomor urut yang diketik pemilik (spec 045): hanya digit, minimal 1. Nol di
+     * depan hilang karena hasilnya int (`007` → 7). Null bila tidak valid.
+     */
+    public function normaliseSequence(string $raw): ?int
+    {
+        $trimmed = trim($raw);
+        if ($trimmed === '' || ! ctype_digit($trimmed)) {
+            return null;
+        }
+
+        $number = (int) $trimmed;
+
+        return $number >= 1 ? $number : null;
+    }
+
+    /**
+     * Nomor di ujung SKU setelah tanda hubung terakhir, apa pun kode awalnya:
+     * `SPF-PI-S-7` → 7. Dipakai untuk SKU yang tetap memakai kode lama setelah
+     * ganti segmen (spec 045). Null bila tidak ada tanda hubung atau tidak ada digit.
+     */
+    public function trailingNumber(string $sku): ?int
+    {
+        if (! str_contains($sku, '-')) {
+            return null;
+        }
+
+        $tail = substr($sku, strrpos($sku, '-') + 1);
+
+        return ctype_digit($tail) && $tail !== '' ? (int) $tail : null;
     }
 
     /**
@@ -99,10 +133,15 @@ class ProductCodeGenerator
         // Nomor berikutnya = nomor tertinggi yang pernah dipakai + 1, dihitung dari
         // SEMUA varian (termasuk yang dihapus). Hitung baris saja tidak cukup:
         // SKU lama (mis. RYUKYSAK0001) tidak selalu sesuai jumlah baris (spec 044).
-        $highest = ProductVariant::withTrashed()
+        // Varian yang sudah dihapus tidak ikut: nomornya bebas dipakai lagi (spec 045, FR-016).
+        // Varian nonaktif (dibatasi riwayat) tidak ikut: nomornya bebas dipakai (spec 045).
+        $highest = ProductVariant::query()
             ->where('product_id', $product->id)
+            ->where('is_active', true)
             ->pluck('sku')
-            ->map(fn (string $sku) => $this->sequenceOf($product->code_prefix, $sku) ?? 0)
+            // Nomor dari SKU yang berawalan kode sekarang, atau dari ujung SKU untuk
+            // SKU yang diketik dan tetap memakai kode lama (spec 045, research D5).
+            ->map(fn (string $sku) => $this->sequenceOf($product->code_prefix, $sku) ?? $this->trailingNumber($sku) ?? 0)
             ->max() ?? 0;
 
         $sequence = $highest + 1;
@@ -110,13 +149,13 @@ class ProductCodeGenerator
         for ($attempt = 0; $attempt < 20; $attempt++) {
             $candidate = $this->variantSku($product->code_prefix, $sequence + $attempt);
 
-            // Kolom sku CHAR(14): SKU yang lebih panjang ditolak di sini dengan pesan
-            // jelas, bukan galat basis data (500) di tengah transaksi.
-            if (strlen($candidate) > 14) {
-                throw new \RuntimeException('Nomor SKU sudah melebihi lebar kolom sku (14 karakter) untuk kode produk ini.');
+            // Kolom sku CHAR(20) (spec 046): SKU yang lebih panjang ditolak di sini dengan
+            // pesan jelas, bukan galat basis data (500) di tengah transaksi.
+            if (strlen($candidate) > ProductSegment::MAX_SKU_LENGTH) {
+                throw new \RuntimeException('Nomor SKU sudah melebihi lebar kolom sku ('.ProductSegment::MAX_SKU_LENGTH.' karakter) untuk kode produk ini.');
             }
 
-            if (! ProductVariant::withTrashed()->where('sku', $candidate)->exists()) {
+            if (! ProductVariant::query()->where('sku', $candidate)->where('is_active', true)->exists()) {
                 return $candidate;
             }
         }

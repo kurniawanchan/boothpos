@@ -722,11 +722,11 @@ class MasterDataImportService
 
             $segment = null;
             if ($this->filled($values, 'product_segment')) {
-                // Aturan yang sama dengan POST /products (spec 042): 1–3 huruf,
-                // disimpan apa adanya — bukan lagi tepat 3 huruf.
+                // Aturan yang sama dengan POST /products (spec 042, diperluas spec 046):
+                // huruf dengan tanda hubung tunggal, sampai 6 karakter — disimpan apa adanya.
                 $segment = ProductSegment::normalise($this->stringValue($values, 'product_segment'));
                 if ($segment === null || ! preg_match(ProductSegment::PATTERN, $segment)) {
-                    $this->addError($sheet, $row, 'product_segment', "Segmen produk '{$segment}' harus 1 sampai 3 huruf (A–Z).");
+                    $this->addError($sheet, $row, 'product_segment', "Segmen produk '{$segment}' harus 1 sampai 6 karakter (huruf A–Z, boleh tanda hubung tunggal di antara huruf).");
                     $rowIsBroken = true;
                 }
             } elseif ($productName !== null) {

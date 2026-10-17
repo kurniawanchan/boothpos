@@ -335,6 +335,17 @@ class LiveToDemoCloner
     }
 
     /** @return list<string> */
+    /** Kolom GENERATED ALWAYS suatu tabel (tidak boleh ditulis lewat INSERT). */
+    private function generatedColumns(string $table): array
+    {
+        return DB::table('information_schema.COLUMNS')
+            ->where('TABLE_SCHEMA', DB::getDatabaseName())
+            ->where('TABLE_NAME', $table)
+            ->whereRaw("EXTRA LIKE '%GENERATED%'")
+            ->pluck('COLUMN_NAME')
+            ->all();
+    }
+
     private function decimalColumns(string $table): array
     {
         return collect(Schema::getColumns($table))->where('type_name', 'decimal')->pluck('name')->all();
@@ -376,10 +387,16 @@ class LiveToDemoCloner
 
             $rows = DB::table($table)->whereRaw(CloneRegistry::scope($table, 'live'))->orderBy('id')->get();
 
+            // Kolom turunan (GENERATED) tidak boleh ditulis; basis data menghitungnya sendiri.
+            $generated = $this->generatedColumns($table);
+
             foreach ($rows as $row) {
                 $oldId = (int) $row->id;
                 $data = (array) $row;
                 unset($data['id']);
+                foreach ($generated as $column) {
+                    unset($data[$column]);
+                }
 
                 foreach ($spec['fks'] as $column => $parent) {
                     $data[$column] = $this->mapForeignKey($table, $column, $parent, $row->{$column}, $oldId);

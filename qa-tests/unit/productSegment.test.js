@@ -12,9 +12,14 @@ describe('product segment preview (042)', () => {
     expect(previewSegment('SPF', 'Conan')).toBe('SPF');
   });
 
-  it('uppercases and trims a typed segment and caps it at three letters', () => {
+  it('uppercases and trims a typed segment and caps it at six characters (spec 046)', () => {
     expect(previewSegment(' spf ', 'x')).toBe('SPF');
-    expect(previewSegment('abcd', 'x')).toBe('ABC');
+    expect(previewSegment('abcdefgh', 'x')).toBe('ABCDEF');
+  });
+
+  it('keeps a single hyphen in a typed segment and drops other symbols', () => {
+    expect(previewSegment('sh-k', 'x')).toBe('SH-K');
+    expect(previewSegment('sh_k', 'x')).toBe('SHK');
   });
 
   it('derives three letters from the name when the segment is blank', () => {

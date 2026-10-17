@@ -11,9 +11,18 @@ class UpdateVariantRequest extends FormRequest
         return $this->user()?->can('update', $this->route('variant')->product) ?? false;
     }
 
+    /** Nomor urut SKU (spec 045): dipotong spasi; pemeriksaan aturan ada di VariantSkuService. */
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('sequence'))) {
+            $this->merge(['sequence' => trim($this->input('sequence'))]);
+        }
+    }
+
     public function rules(): array
     {
         return [
+            'sequence' => ['sometimes', 'nullable', 'string', 'max:20'],
             'variant_name' => ['sometimes', 'string', 'max:100'],
             'cost_price' => ['sometimes', 'numeric', 'min:0'],
             'sell_price' => ['sometimes', 'numeric', 'min:0'],

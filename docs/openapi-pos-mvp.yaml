@@ -902,10 +902,11 @@ paths:
       description: |
         `code_prefix` dan `sku` dihasilkan server, tidak dikirim klien.
         `code_prefix` = artist.code + "-" + category.code + "-" + product_segment
-        (format "ART-CA-SEG", 8–10 karakter; segmen 1–3 huruf, disimpan apa
-        adanya, tidak dipad — spec 042). `sku` = code_prefix + "-" + nomor
+        (format "ART-CA-SEG", 8–13 karakter; segmen 1–6 karakter — huruf A–Z,
+        boleh satu tanda hubung tunggal di antara huruf, disimpan apa adanya,
+        tidak dipad — spec 042, diperluas spec 046). `sku` = code_prefix + "-" + nomor
         urut varian tanpa nol di depan (format "ART-CA-SEG-1", "ART-CA-SEG-11";
-        10–14 karakter; spec 044). Nomor tidak pernah dipakai ulang. Segmen
+        10–20 karakter; spec 044, 046). Nomor tidak pernah dipakai ulang. Segmen
         kosong diturunkan dari nama produk (3 huruf, dipad 'X').
       requestBody:
         required: true
@@ -1011,6 +1012,42 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Variant' }
+
+  /products/{id}/variant-sequences:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [Master Data]
+      summary: Ubah nomor urut SKU banyak varian sekaligus (spec 045)
+      description: |
+        Semua perubahan nomor urut satu produk dalam SATU permintaan (mis. `…-10` → `…-11`
+        dan `…-11` → `…-12`). Keadaan akhir diperiksa bersama: tidak boleh ada dua varian
+        dengan SKU sama, dan tidak boleh bentrok dengan SKU lain di toko (termasuk yang
+        dihapus dan kedua mode). Galat apa pun: 422 pada `sequences.<variant_id>`, tidak ada
+        yang tersimpan. Satu entri activity log `sku_changed` per varian yang berubah.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  maxItems: 500
+                  items:
+                    type: object
+                    required: [variant_id]
+                    properties:
+                      variant_id: { type: integer }
+                      sequence: { type: string, nullable: true, maxLength: 20 }
+      responses:
+        '200':
+          description: Dicatat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /variants/{id}:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -5958,7 +5995,7 @@ components:
       properties:
         id: { type: integer }
         product_id: { type: integer }
-        sku: { type: string, minLength: 14, maxLength: 14, example: RYU-KY-SAK-001 }
+        sku: { type: string, minLength: 10, maxLength: 20, example: RYU-KY-SAK-1 }
         variant_name: { type: string }
         cost_price: { $ref: '#/components/schemas/Money' }
         sell_price: { $ref: '#/components/schemas/Money' }
@@ -5973,6 +6010,17 @@ components:
       type: object
       required: [variant_name, sell_price]
       properties:
+        sequence:
+          type: string
+          nullable: true
+          maxLength: 20
+          description: |
+            Nomor urut SKU yang diketik pemilik (spec 045). Hanya digit, minimal 1; nol di depan
+            dibuang. Kode produk di depannya tetap dari server. Kosong = tidak diubah (PUT) atau
+            dibuat server (POST). Gagal: 422 pada `sku` bila bukan angka/0, SKU lebih dari 14
+            karakter, atau sudah dipakai varian lain (termasuk yang dihapus dan mode lain).
+            Nomor yang diketik tetap dipakai saat segmen produk berganti; yang dibuat server
+            mengikuti kode baru.
         variant_name: { type: string, maxLength: 100, default: Standard }
         cost_price: { $ref: '#/components/schemas/Money' }
         sell_price: { $ref: '#/components/schemas/Money' }
@@ -6002,12 +6050,12 @@ components:
         artist_name: { type: string, readOnly: true }
         category_id: { type: integer }
         category_name: { type: string, readOnly: true }
-        code_prefix: { type: string, minLength: 8, maxLength: 10, readOnly: true, example: RYU-KY-SAK }
+        code_prefix: { type: string, minLength: 8, maxLength: 13, readOnly: true, example: RYU-KY-SAK }
         product_segment:
           type: string
           minLength: 1
-          maxLength: 3
-          pattern: '^[A-Za-z]{1,3}$'
+          maxLength: 6
+          pattern: '^(?=[A-Za-z-]{1,6}$)[A-Za-z]+(?:-[A-Za-z]+)*$'
           readOnly: true
           description: Segmen tersimpan produk (spec 044 US4). Diubah hanya lewat PUT /products/{id} dan meregenerasi SKU varian.
         name: { type: string }
@@ -6033,7 +6081,7 @@ components:
           minLength: 1
           maxLength: 3
           pattern: '^[A-Za-z]{1,3}$'
-          description: 1–3 huruf; disimpan huruf besar tanpa pad. Kosong = diturunkan dari name.
+          description: 1–6 karakter (huruf, boleh satu tanda hubung tunggal di antara huruf); disimpan huruf besar tanpa pad. Kosong = diturunkan dari name.
         name: { type: string, maxLength: 150 }
         description: { type: string, nullable: true }
         is_preorder: { type: boolean, default: false }

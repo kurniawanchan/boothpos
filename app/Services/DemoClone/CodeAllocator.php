@@ -47,13 +47,15 @@ final class CodeAllocator
 
     public function productPrefix(string $livePrefix, int $productId): string
     {
-        // Segmen 1–3 huruf (spec 042) — aturan tunggal ProductSegment. Diperiksa
-        // dalam huruf besar; pemisah '-' tidak berubah oleh strtoupper, jadi
-        // bagian asli dipakai untuk pencarian peta kode LIVE.
+        // Segmen 1–6 karakter, boleh satu tanda hubung (spec 042, 046) — aturan tunggal
+        // ProductSegment. Diperiksa dalam huruf besar; pemisah '-' tidak berubah oleh
+        // strtoupper, jadi bagian asli dipakai untuk pencarian peta kode LIVE.
         if (! preg_match(ProductSegment::CODE_PATTERN, strtoupper($livePrefix))) {
-            throw new CloneException("products id {$productId}: code_prefix tidak berbentuk AAA-BB-SEG (segmen 1-3 huruf).");
+            throw new CloneException("products id {$productId}: code_prefix tidak berbentuk AAA-BB-SEG (segmen 1–6 karakter).");
         }
-        [$artistPart, $categoryPart, $segmentPart] = explode('-', $livePrefix);
+        // Batas 3: segmen boleh berisi tanda hubung (SH-K), jadi hanya dua pemisah pertama
+        // yang dipotong. Tanpa batas, `SH-K` terpotong dan segmen hilang sebagian.
+        [$artistPart, $categoryPart, $segmentPart] = explode('-', $livePrefix, 3);
 
         // Tiap bagian prefix dicari lewat peta kode LIVE-nya sendiri (bukan lewat
         // artist/kategori produk sekarang): kode bersifat permanen (F19.4), jadi
