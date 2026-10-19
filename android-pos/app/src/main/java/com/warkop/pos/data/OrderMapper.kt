@@ -57,6 +57,13 @@ object OrderMapper {
             queue = t.queueNo,
             waiter = t.openedBy.orEmpty(),
             openedAt = hhmm(t.createdAt),
+            // 057 / US5 — waktu tutup dari server; null (bukan teks "null") bila belum ada.
+            closedAt = t.closedAt?.let { hhmm(it) },
+            // 057 / US3 — jumlah cetak ulang dari server; dipakai untuk nomor salinan berikutnya.
+            reprints = t.reprintCount,
+            // 057 / US8 — persen dan alasan diskon order; null untuk diskon lama (tampil nominal saja).
+            discPct = (t.discountPercent ?: 0.0).toInt(),
+            discReason = t.discountReasonLabel,
             lines = t.lines.map { line(it) },
             tenders = t.payments.map { tender(it) },
             billPrinted = t.prebillAt != null,
@@ -78,6 +85,8 @@ object OrderMapper {
     }
 
     fun line(l: TabLineDto): OrderLine = OrderLine(
+        // 057 / US8 — persen diskon baris dari server (0 bila tidak ada).
+        discPct = (l.discountPercent ?: 0.0).toInt(),
         // Id baris server (BIGINT) dipersempit ke Int di layar; auto-increment instalasi ini jauh di bawah 2^31.
         id = l.id.toInt(),
         itemId = l.variantId.toString(),
@@ -157,7 +166,8 @@ object OrderMapper {
         openedAt = hhmm(c.createdAt),
         closed = true,
         receiptNo = c.orderNumber,
-        closedAt = hhmm(c.createdAt),
+        closedAt = c.closedAt?.let { hhmm(it) },
+        reprints = c.reprintCount,
         cancelledReason = if (c.status == "voided") (c.voidReason ?: "Dibatalkan") else null,
         serverTotal = rp(c.totalAmount),
         serverPaid = rp(c.paidAmount),

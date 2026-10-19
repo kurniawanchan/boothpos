@@ -103,11 +103,12 @@ private fun Header(store: PosStore, title: String, subtitle: String?, compact: B
 
 @Composable
 fun ConnChip(store: PosStore) {
-    val warn = store.conn != Conn.ONLINE
+    // 054 — UNKNOWN belum tahu apa-apa, jadi tidak diberi nada peringatan (hanya OFFLINE yang diperingatkan).
+    val warn = store.conn == Conn.OFFLINE || store.conn == Conn.OFFLINE_LIMITED
     Surface(
         shape = RoundedCornerShape(50), color = if (warn) MaterialTheme.pos.warnContainer else Color0,
         border = if (warn) null else androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        onClick = { store.conn = when (store.conn) { Conn.ONLINE -> Conn.OFFLINE; Conn.OFFLINE -> Conn.OFFLINE_LIMITED; Conn.OFFLINE_LIMITED -> Conn.ONLINE } },
+        onClick = { store.conn = when (store.conn) { Conn.UNKNOWN, Conn.ONLINE -> Conn.OFFLINE; Conn.OFFLINE -> Conn.OFFLINE_LIMITED; Conn.OFFLINE_LIMITED -> Conn.ONLINE } },
     ) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(if (warn) Icons.Filled.WifiOff else Icons.Filled.Wifi, null, Modifier.size(18.dp))

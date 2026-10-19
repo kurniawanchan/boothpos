@@ -10,9 +10,14 @@ import com.warkop.pos.model.ReceiptView
  * (dibulatkan ke rupiah utuh untuk tampilan). Tanggal bayar diambil dari waktu pembayaran server, bukan tanggal tetap.
  */
 object ReceiptMapper {
-    fun map(dto: ReceiptDto): ReceiptView = ReceiptView(
+    /** [serverBase] = alamat server yang dipakai tablet; dipakai untuk memasang ulang URL logo (059). */
+    fun map(dto: ReceiptDto, serverBase: String? = null): ReceiptView = ReceiptView(
         storeName = dto.storeName?.takeIf { it.isNotBlank() } ?: "Toko",
         storeAddress = dto.storeAddress?.takeIf { it.isNotBlank() },
+        storeContactPerson = dto.storeContactPerson?.trim()?.takeIf { it.isNotBlank() },
+        storeContactPhone = dto.storeContactPhone?.trim()?.takeIf { it.isNotBlank() },
+        storeContactEmail = dto.storeContactEmail?.trim()?.takeIf { it.isNotBlank() },
+        storeLogoUrl = ServerUrl.resolve(serverBase, dto.storeLogoUrl),
         orderNumber = dto.orderNumber,
         receiptNo = dto.receiptNo?.takeIf { it.isNotBlank() },
         queueNo = dto.queueNo?.takeIf { it.isNotBlank() },

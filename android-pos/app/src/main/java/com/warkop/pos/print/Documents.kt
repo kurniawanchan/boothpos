@@ -58,11 +58,18 @@ object Documents {
 
     /**
      * Struk pelanggan dari data server ([ReceiptView]). Semua angka diformat dari server; tidak ada aritmetika di sini.
-     * Telepon dan e-mail tidak pernah masuk ke [ReceiptView] (ReceiptMapper), sehingga tidak bisa tercetak.
+     * Telepon dan e-mail PELANGGAN tidak pernah masuk ke [ReceiptView] (ReceiptMapper). Kontak yang tercetak adalah
+     * kontak TOKO (059), dari pengaturan admin.
      */
-    fun struk(r: ReceiptView): List<PrintLine> = buildList {
+    fun struk(r: ReceiptView, logo: PrintLine? = null): List<PrintLine> = buildList {
+        // 059 — logo di atas nama toko; tanpa logo (dimatikan, gagal dimuat) susunannya tetap seperti semula.
+        logo?.let { add(it) }
         add(PrintLine(text = r.storeName, align = PrintLine.Align.CENTER, bold = true))
         r.storeAddress?.let { add(PrintLine(text = it, align = PrintLine.Align.CENTER)) }
+        // 059 — kontak toko (bukan pelanggan); setiap baris hanya bila terisi.
+        r.storeContactPerson?.let { add(PrintLine(text = it, align = PrintLine.Align.CENTER)) }
+        r.storeContactPhone?.let { add(PrintLine(text = it, align = PrintLine.Align.CENTER)) }
+        r.storeContactEmail?.let { add(PrintLine(text = it, align = PrintLine.Align.CENTER)) }
         add(separator())
         add(PrintLine(text = "No. struk", right = r.receiptNo ?: r.orderNumber))
         r.paidAtText?.let { add(PrintLine(text = "Tanggal", right = it)) }

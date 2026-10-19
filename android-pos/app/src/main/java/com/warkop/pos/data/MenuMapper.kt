@@ -2,6 +2,7 @@ package com.warkop.pos.data
 
 import com.warkop.core.domain.Money
 import com.warkop.core.network.dto.ModifierGroupDto
+import com.warkop.core.network.dto.PosCategoryDto
 import com.warkop.core.network.dto.ProductDto
 import com.warkop.pos.model.MenuCatalog
 import com.warkop.pos.model.MenuCategory
@@ -18,15 +19,27 @@ import com.warkop.pos.model.Tone
 object MenuMapper {
     private val TONES = listOf(Tone.INK, Tone.TINT, Tone.ACCENT, Tone.NEUTRAL, Tone.OUTLINE)
 
-    fun toCatalog(products: List<ProductDto>): MenuCatalog {
+    /** Kelompok untuk produk yang kategorinya tidak ada di daftar server; produk tidak pernah dibuang diam-diam. */
+    const val LAINNYA = "lainnya"
+
+    /**
+     * 055 / T010 — kategori datang dari server (sudah menurut mode aktif), termasuk kategori yang belum punya produk.
+     * Tidak lagi diturunkan dari produk (research R1): itu penyebab kategori hilang dari tablet.
+     */
+    fun toCatalog(products: List<ProductDto>, serverCategories: List<PosCategoryDto>): MenuCatalog {
         val categories = LinkedHashMap<String, MenuCategory>()
+        serverCategories.forEachIndexed { i, c ->
+            val id = c.id.toString()
+            categories[id] = MenuCategory(id, c.name, c.name.take(1).uppercase(), TONES[i % TONES.size])
+        }
         val groups = LinkedHashMap<String, ModGroup>()
         val items = ArrayList<Product>()
 
         for (p in products.filter { it.isActive }) {
-            val catId = (p.categoryId ?: 0L).toString()
-            val catName = p.categoryName ?: "Lainnya"
-            categories.getOrPut(catId) { MenuCategory(catId, catName, catName.take(1).uppercase(), TONES[categories.size % TONES.size]) }
+            val known = p.categoryId?.toString()?.takeIf { it in categories }
+            val catId = known ?: LAINNYA
+            if (known == null && LAINNYA !in categories) categories[LAINNYA] = MenuCategory(LAINNYA, "Lainnya", "L", Tone.OUTLINE)
+            val catName = categories.getValue(catId).name
 
             val groupIds = p.modifierGroups.map { g -> toGroup(g).also { groups.putIfAbsent(it.id, it) }.id }
             val active = p.variants.filter { it.isActive }

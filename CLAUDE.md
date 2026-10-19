@@ -441,7 +441,34 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - A remote `origin` (github.com/kurniawanchan/boothpos) exists (dated note 2026-10-11; the earlier "no remote" line was outdated), but **pushing and opening PRs need the developer's explicit per-instance authorization** (constitution; the harness may also deny them) — never push on your own initiative.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/050-android-thermal-printing/plan.md`
+Active feature plan: `specs/061-android-queue-screen-fixes/plan.md`
+(dibuat dari `060`) — layar "Pembayaran selesai" Android POS: nomor antrean dipas agar tidak terpotong, centang dan lencana "Lunas" dalam satu baris, dan tombol "Panggil pelanggan" mengucapkan nomor antrean (Text-to-Speech, id-ID). Hanya Android; tanpa perubahan server. Lihat research.md R1–R8.
+
+Previous feature: `specs/060-android-app-icon-name/plan.md`
+(dibuat dari `059`) — ikon peluncur Android POS dari paket ikon (`design/AppIcons/android`, adaptif, latar putih) dan nama aplikasi "Warkop WJM POS". Hanya resource; tanpa perubahan paket, tanda tangan, atau server. Lihat research.md R1–R7.
+
+Previous feature: `specs/059-struk-store-identity/plan.md`
+(branch `059-struk-store-identity`, dibuat dari `058`) — struk Android mencetak identitas toko: logo (raster 1-bit di atas nama), nama, alamat, dan kontak (orang, telepon, e-mail). Tanpa perubahan server. Lihat research.md R1–R5.
+
+Previous feature: `specs/058-qris-bayar-auto-struk/plan.md`
+(branch `058-qris-bayar-auto-struk`, dibuat dari `057`) — tombol QRIS menjadi "Bayar" dan struk tercetak otomatis setelah pembayaran tercatat (rute tutup penjualan seperti tunai/EDC). Tanpa perubahan server. Lihat research.md R1–R3.
+
+Previous feature: `specs/057-android-pos-phase-4-fixes/plan.md`
+(branch `057-android-pos-phase-4-fixes`, dibuat dari `056`) — perbaikan Android POS fase 4: diskon menyimpan persen dan alasan di order (migrasi kolom baru), cetak ulang memakai nomor salinan dari server, waktu tutup order, tombol Refund/Verifikasi, layout kolom kiri pembayaran, dan pemulihan sesi setelah offline. Lihat research.md R1–R7.
+
+Previous feature: `specs/056-android-qris-sheet-layout/plan.md`
+(branch `056-android-qris-sheet-layout`, dibuat dari `055`) — lembar QRIS statis di Android POS: judul "{penyedia} {nama pemilik rekening}", peringatan lebih kecil, gambar QR di tengah (diunduh dari server), total satu baris, teks instruksi utuh, tombol Catat terbaca. Tanpa perubahan server; tanpa dependensi baru. Lihat research.md R1–R6.
+
+Previous feature: `specs/055-android-pos-phase-2-ui/plan.md`
+(branch `055-android-pos-phase-2-ui`, dibuat dari `054`) — counter Android POS fase 2 (dua kolom, kategori dari server, tarik-untuk-segarkan).
+
+Previous feature: `specs/054-android-pin-layout-fixes/plan.md`
+(branch `055-android-pos-phase-2-ui`, dibuat dari `054`) — counter Android POS fase 2: dua kolom (produk | order), strip kategori horizontal dari server (`GET /pos/categories`, menurut mode sistem), tombol Kirim/Bayar terbaca, total bisa disembunyikan, pajak dari server, tarik-untuk-segarkan di setiap layar. Satu endpoint baru; tanpa migrasi. Lihat research.md R1–R8.
+
+Previous feature: `specs/054-android-pin-layout-fixes/plan.md`
+(branch `054-android-pin-layout-fixes`, from `050`) — layar masuk Android POS: nama outlet penuh satu baris (font mengecil atau chip pindah), status koneksi jujur (chip tidak lagi default "Online"), PIN bisa digulir; plus alamat server yang diatur admin lewat API (lokal atau online, tablet mengadopsi pilihan setelah kontak berhasil). Ada satu tambahan backend (`/settings/server-address`, `/devices/server-address`). Lihat research.md R1–R8.
+
+Previous feature: `specs/050-android-thermal-printing/plan.md`
 (branch `050-android-thermal-printing`, from `048`) — printer Bluetooth VSC TM-58V (58 mm) pada aplikasi Android POS: struk, KOT (tiket dapur), pra-bill, dan slip BATAL tercetak otomatis; cetak ulang lewat persetujuan server; antrean cetak lokal yang tahan gagal. Android saja, tanpa perubahan server. Lihat research.md D1–D9.
 
 Previous feature: `specs/048-wire-android-pos-api/plan.md`

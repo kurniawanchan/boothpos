@@ -16,6 +16,14 @@ class OrderResource extends JsonResource
             'customer_id' => $this->customer_id,
             'subtotal' => number_format((float) $this->subtotal, 2, '.', ''),
             'discount_amount' => number_format((float) $this->discount_amount, 2, '.', ''),
+            // 057 / US8 — persen dan alasan diskon order (null untuk diskon lama / tanpa diskon).
+            'discount_percent' => $this->discount_percent !== null ? (float) $this->discount_percent : null,
+            'discount_reason_code' => $this->discount_reason_code,
+            'discount_reason_label' => \App\Models\ReasonCode::discountLabel($this->discount_reason_code),
+            // 057 / T009 — jumlah cetak ulang yang sudah diterima server; klien menghitung nomor salinan berikutnya dari sini.
+            'reprint_count' => (int) $this->receipt_copies,
+            // 057 / T010 — waktu tutup order (completed_at, distempel saat order selesai); null bila belum selesai.
+            'closed_at' => $this->completed_at?->toIso8601String(),
             // 048 / S4 — pajak eksklusif (sama dengan tab): total_amount = subtotal − diskon + tax_amount.
             'tax_amount' => number_format((float) $this->tax_amount, 2, '.', ''),
             'tax_rate' => number_format((float) $this->tax_rate_snapshot, 2, '.', ''),
@@ -44,6 +52,8 @@ class OrderResource extends JsonResource
                 'qty' => $i->qty, 'sell_price' => number_format((float) $i->sell_price, 2, '.', ''),
                 'line_total' => number_format((float) $i->line_total, 2, '.', ''),
                 'discount_amount' => number_format((float) $i->discount_amount, 2, '.', ''),
+                'discount_percent' => $i->discount_percent !== null ? (float) $i->discount_percent : null,
+                'discount_reason_code' => $i->discount_reason_code,
                 // 028 — pilihan modifier & catatan (snapshot; kosong untuk penjualan ritel biasa).
                 'modifiers' => \App\Support\ModifierSnapshot::forDisplay($i->modifiers),
                 'note' => $i->note,

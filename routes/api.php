@@ -83,6 +83,8 @@ Route::prefix('v1')->group(function () {
         Route::delete('/devices/{device}', [\App\Http\Controllers\Api\DeviceController::class, 'destroy']);
         // 048 / T064 — heartbeat terminal, sengaja di luar pembatasan owner/admin (dikirim sesi kasir juga).
         Route::post('/devices/heartbeat', [\App\Http\Controllers\Api\DeviceController::class, 'heartbeat']);
+        // 054 / US3 — alamat server yang dipilih; di dalam auth:sanctum seperti roster (tablet memakai token dari penyiapan).
+        Route::get('/devices/server-address', [\App\Http\Controllers\Api\DeviceController::class, 'serverAddress']);
 
         Route::get('/settings/features', [SettingsController::class, 'features']);
         Route::get('/settings', [SettingsController::class, 'index']);
@@ -90,6 +92,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/settings/store-logo', [SettingsController::class, 'uploadStoreLogo']);
         Route::get('/settings/payment', [InvoicePaymentSettingController::class, 'show']);
         Route::put('/settings/payment', [InvoicePaymentSettingController::class, 'update']);
+        // 054 / US3 — alamat server lokal/online (owner/admin; SettingPolicy di controller dan request).
+        Route::get('/settings/server-address', [\App\Http\Controllers\Api\ServerAddressController::class, 'show']);
+        Route::put('/settings/server-address', [\App\Http\Controllers\Api\ServerAddressController::class, 'update']);
 
         // Cadangan & pemulihan database (Pengaturan) — owner/admin, dicek di
         // BackupController. 'restore-upload' didaftarkan sebelum rute ber-{id}
@@ -167,6 +172,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/approvals/{approval}/reject', [\App\Http\Controllers\Api\ApprovalController::class, 'reject']);
         Route::get('/menu/availability', [\App\Http\Controllers\Api\MenuAvailabilityController::class, 'show']);
         Route::apiResource('products', ProductController::class);
+        // 055 / T004 — kategori kasir menurut mode sistem; gerbang sama dengan GET /products?pos=1.
+        Route::get('/pos/categories', [\App\Http\Controllers\Api\PosCategoryController::class, 'index']);
         Route::post('/products/{product}/image', [ProductController::class, 'uploadImage']);
         Route::post('/products/{product}/variants', [ProductController::class, 'storeVariant']);
         Route::put('/variants/{variant}', [ProductController::class, 'updateVariant']);

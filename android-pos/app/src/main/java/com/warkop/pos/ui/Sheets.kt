@@ -17,11 +17,24 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.Image
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.warkop.pos.data.QrImageLoader
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import com.warkop.pos.data.QrisMapper
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.compose.rememberLauncherForActivityResult
 import com.warkop.pos.model.*
 import com.warkop.pos.state.Load
 import com.warkop.pos.state.PosStore
@@ -40,7 +53,8 @@ fun SheetHost(store: PosStore) {
             is Sheet.Modifier, is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, is Sheet.Discount, is Sheet.CashOut ->
                 if (compact) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 640.dp).then(consume), shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
                 else Surface(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(if (windowSize() == Size.MEDIUM) 400.dp else 440.dp).then(consume), shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
-            else -> Surface(Modifier.align(Alignment.Center).widthIn(max = 480.dp).fillMaxWidth(0.92f).then(consume), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
+            // 056 amandemen — modal QRIS 50 % lebih lebar (480 dp → 720 dp).
+            else -> Surface(Modifier.align(Alignment.Center).widthIn(max = if (sheet is Sheet.QrisRecord) 720.dp else 480.dp).fillMaxWidth(0.92f).then(consume), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
         }
     }
 }
@@ -487,29 +501,91 @@ private fun ColumnScope.EdcDialog(store: PosStore) {
 @Composable
 private fun ColumnScope.QrisRecordDialog(store: PosStore) {
     val o = store.active ?: return
+    val channel = store.qrisChannel
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
     Icon(Icons.Filled.QrCode2, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-    Text("${store.qrisLabel} (statis)", Modifier.padding(top = 10.dp, bottom = 16.dp), fontSize = 30.sp)
-    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Text("Jangan terima bukti dari layar ponsel pelanggan.", fontWeight = FontWeight.Medium, fontSize = 16.sp) }
+    // 056 amandemen — judul dan peringatan memanjang di atas dua kolom (lebar penuh).
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp)) {
+        val availablePx = with(density) { maxWidth.roundToPx() }
+        val titleSp = titleSizeFor({ sp -> measurer.measure(store.qrisTitle, TextStyle(fontSize = sp.sp, fontWeight = FontWeight.SemiBold)).size.width }, availablePx) ?: 22f
+        Text(store.qrisTitle, fontSize = titleSp.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
     }
-    Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.Top) {
-        Surface(Modifier.width(210.dp), shape = RoundedCornerShape(14.dp), color = Color.White, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-            Column {
-                Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(store.qrisLabel, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
-                Icon(Icons.Filled.QrCode2, null, Modifier.padding(10.dp).fillMaxWidth().aspectRatio(1f), tint = Color(0xFF201E1D))
-                Text("WARKOP WJM 3 · NMID ID10••••", Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp), fontSize = 12.sp, color = Color(0xFF201E1D))
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Text("Jangan terima bukti dari layar ponsel pelanggan.", fontWeight = FontWeight.Medium, fontSize = 14.sp) }
+    }
+    // Dua kolom: kiri = gambar QR penuh (+ ganti gambar bila berhak); kanan = total, instruksi, dan tombol.
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(0.45f), horizontalAlignment = Alignment.CenterHorizontally) {
+            QrCard(channel, store.qrisLabel)
+            if (channel?.canManageQr == true) QrUploadButton(store)
+        }
+        Spacer(Modifier.width(24.dp))
+        Column(Modifier.weight(0.55f)) {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val availablePx = with(density) { maxWidth.roundToPx() }
+                val totalSp = totalSizeFor({ sp -> measurer.measure(rp(o.remaining), TextStyle(fontSize = sp.sp, fontWeight = FontWeight.Light)).size.width }, availablePx)
+                Text(rp(o.remaining), Modifier.fillMaxWidth(), fontSize = totalSp.sp, fontWeight = FontWeight.Light, maxLines = 1, softWrap = false, textAlign = TextAlign.Center)
+            }
+            Text("Catat sebagai menunggu verifikasi, lalu cek transaksi di aplikasi ${store.qrisLabel}.", Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp), fontSize = 16.sp, textAlign = TextAlign.Center)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                TextButton({ store.show(null) }) { Text("Tutup", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }; Spacer(Modifier.width(12.dp))
+                // 056 / US5 — label tombol dipas-kan di lebarnya (FitPillText dari 055), tanpa dipotong.
+                Button({ store.recordQris() }, Modifier.height(52.dp)) { FitPillText(bayarLabel(waiter = false)); Spacer(Modifier.width(10.dp)); Icon(Icons.Filled.ArrowForward, null, Modifier.size(18.dp)) }
             }
         }
-        Column(Modifier.weight(1f).padding(start = 20.dp, top = 30.dp)) {
-            Text("Standee QRIS statis di meja kasir", fontSize = 14.sp)
-            Text(rp(o.remaining), Modifier.padding(vertical = 6.dp), fontSize = 40.sp, fontWeight = FontWeight.Light)
-            Text("Catat sebagai menunggu verifikasi, lalu cek transaksi di aplikasi ${store.qrisLabel}.", fontSize = 16.sp)
+    }
+}
+
+/** 056 — kartu QR: nama penyedia, gambar QR penuh (tanpa dipotong), dan nama pemilik rekening. */
+@Composable
+private fun QrCard(channel: com.warkop.pos.model.QrisChannel?, fallbackLabel: String) {
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = Color.White, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Column {
+            Box(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(horizontal = 14.dp, vertical = 10.dp)) { Text(channel?.provider ?: fallbackLabel, color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
+            QrCodeBox(channel?.qrImageUrl)
+            channel?.accountName?.let { Text(it, Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp), fontSize = 12.sp, color = Color(0xFF201E1D)) }
         }
     }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-        TextButton({ store.show(null) }) { Text("Tutup", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }; Spacer(Modifier.width(12.dp))
-        Button({ store.recordQris() }, Modifier.height(52.dp)) { Text("Catat · menunggu verifikasi", fontWeight = FontWeight.SemiBold, fontSize = 17.sp); Spacer(Modifier.width(10.dp)); Icon(Icons.Filled.ArrowForward, null, Modifier.size(18.dp)) }
+}
+
+/** 056 / T017–T018 — gambar QR penuh (ContentScale.Fit, tidak dipotong); "QR belum diatur" bila tanpa URL atau unduhan gagal. */
+@Composable
+private fun QrCodeBox(url: String?) {
+    val state by produceState<QrImageState>(QrImageState.Loading, url) {
+        value = if (url == null) QrImageState.Missing else QrImageLoader.load(url)?.let { QrImageState.Shown(it) } ?: QrImageState.Missing
     }
+    Box(Modifier.fillMaxWidth().padding(10.dp), contentAlignment = Alignment.Center) {
+        when (val s = state) {
+            is QrImageState.Shown -> Image(s.bitmap, "QRIS", Modifier.fillMaxWidth(), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+            QrImageState.Loading -> Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            QrImageState.Missing -> Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { Text("QR belum diatur", textAlign = TextAlign.Center, color = Color(0xFF201E1D), fontSize = 14.sp) }
+        }
+    }
+}
+
+/** 056 amandemen — ganti gambar QR dari galeri (Photo Picker). Hanya tampil bila server menyatakan pengguna berhak. */
+@Composable
+private fun QrUploadButton(store: PosStore) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val mime = context.contentResolver.getType(uri)
+            if (!QrisMapper.isAllowedQrMime(mime)) { store.say("Gambar QR harus berformat JPG atau PNG."); return@launch }
+            val bytes = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }
+            if (bytes == null) { store.say("Gambar tidak dapat dibaca."); return@launch }
+            store.saveQrImage(bytes, mime ?: return@launch)
+        }
+    }
+    OutlinedButton({ picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Ganti gambar QR") }
+}
+
+private sealed interface QrImageState {
+    data object Loading : QrImageState
+    data object Missing : QrImageState
+    data class Shown(val bitmap: androidx.compose.ui.graphics.ImageBitmap) : QrImageState
 }
 
 @Composable
@@ -528,9 +604,9 @@ private fun ColumnScope.QrisVerifyDialog(store: PosStore, s: Sheet.QrisVerify) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
         TextButton({ store.show(null) }) { Text("Tutup", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
         TextButton({ store.failQris(t.id) }) { Text("Tidak ditemukan", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }
-        Spacer(Modifier.width(8.dp))
-        Button({ store.verifyQris(t.id, ref) }, Modifier.height(52.dp), enabled = ref.length >= 4) { Text("Verifikasi", fontWeight = FontWeight.SemiBold, fontSize = 17.sp); if (store.user?.isSupervisor != true) { Spacer(Modifier.width(8.dp)); Icon(Icons.Filled.Lock, null, Modifier.size(18.dp)) } }
     }
+    // 057 / US2 — Verifikasi di barisnya sendiri, lebar penuh, label utuh.
+    Button({ store.verifyQris(t.id, ref) }, Modifier.fillMaxWidth().height(52.dp), enabled = ref.length >= 4) { FitPillText("Verifikasi"); if (store.user?.isSupervisor != true) { Spacer(Modifier.width(8.dp)); Icon(Icons.Filled.Lock, null, Modifier.size(18.dp)) } }
 }
 
 @Composable

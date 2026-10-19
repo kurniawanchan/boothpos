@@ -24,6 +24,9 @@ import kotlinx.serialization.Serializable
     val note: String? = null,
     val sent: Boolean = false,
     @SerialName("prep_status") val prepStatus: String? = null,
+    // 057 / US8 — persen dan alasan diskon baris.
+    @SerialName("discount_percent") val discountPercent: Double? = null,
+    @SerialName("discount_reason_code") val discountReasonCode: String? = null,
 )
 
 @Serializable data class TabPaymentDto(
@@ -47,6 +50,13 @@ import kotlinx.serialization.Serializable
     @SerialName("session_id") val sessionId: Long? = null,
     val subtotal: String = "0.00",
     @SerialName("discount_amount") val discountAmount: String = "0.00",
+    // 057 / US8 — persen dan alasan diskon order (null untuk diskon lama / tanpa diskon).
+    @SerialName("discount_percent") val discountPercent: Double? = null,
+    @SerialName("discount_reason_code") val discountReasonCode: String? = null,
+    @SerialName("discount_reason_label") val discountReasonLabel: String? = null,
+    // 057 / US3 & US5 — jumlah cetak ulang dari server; waktu tutup order (null bila belum selesai).
+    @SerialName("reprint_count") val reprintCount: Int = 0,
+    @SerialName("closed_at") val closedAt: String? = null,
     @SerialName("tax_amount") val taxAmount: String = "0.00",
     @SerialName("total_amount") val totalAmount: String = "0.00",
     @SerialName("paid_amount") val paidAmount: String = "0.00",
@@ -140,6 +150,9 @@ import kotlinx.serialization.Serializable
     val status: String = "completed",
     @SerialName("void_reason") val voidReason: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
+    // 057 / US3 & US5 — cetak ulang dan waktu tutup dari server (daftar order memakai OrderResource).
+    @SerialName("reprint_count") val reprintCount: Int = 0,
+    @SerialName("closed_at") val closedAt: String? = null,
 )
 
 @Serializable data class ClosedOrdersPage(val data: List<ClosedOrderDto> = emptyList())

@@ -14,6 +14,7 @@ import com.warkop.pos.model.PrintableKot
 import com.warkop.pos.model.ReceiptView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +23,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
+import java.io.OutputStream
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
@@ -51,6 +53,8 @@ class PrinterService(
     private val settings: PrinterSettings,
     /** Mengambil struk dari server saat job STRUK dicetak (research D2). */
     private val fetchReceipt: suspend (orderId: String) -> ReceiptView,
+    /** 059 — memuat logo struk dari URL; null = cetak tanpa logo. Dipisah agar paket print tidak bergantung pada data layer. */
+    private val loadLogo: suspend (logoUrl: String) -> PrintLine? = { null },
     scope: CoroutineScope,
 ) {
     private val wake = Channel<Unit>(Channel.CONFLATED)
@@ -212,7 +216,10 @@ class PrinterService(
 
         val lines: List<PrintLine> = job.lines ?: try {
             // Label "SALINAN n" mengikuti nomor salinan yang dicatat server saat job dibuat, bukan nilai receipt saat ini.
-            Documents.struk(fetchReceipt(job.refId).copy(copyNo = job.copyNo))
+            val receipt = fetchReceipt(job.refId).copy(copyNo = job.copyNo)
+            // 059 — logo diambil di sini, bersama struk (struk dibangun saat cetak, research R4). Gagal = tanpa logo, cetak jalan.
+            val logo = receipt.storeLogoUrl?.let { url -> runCatching { loadLogo(url) }.getOrNull() }
+            Documents.struk(receipt, logo)
         } catch (e: Exception) {
             // Gagal mengambil struk dari server: dicoba ulang nanti. Pesan generik; detail hanya ke log.
             return PrintError.WRITE_ERROR
@@ -222,8 +229,7 @@ class PrinterService(
         val socket = openSocket(config.address) ?: return PrintError.OUT_OF_RANGE
         return try {
             if (paperOut(socket)) return PrintError.PAPER_OUT
-            socket.outputStream.write(bytes)
-            socket.outputStream.flush()
+            writeChunked(socket.outputStream, bytes)
             null
         } catch (e: IOException) {
             PrintError.WRITE_ERROR
@@ -290,6 +296,22 @@ class PrinterService(
         /** Serial Port Profile — UUID standar untuk printer Bluetooth klasik (UNVERIFIED pada TM-58V, research D4). */
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
         const val CONNECT_TIMEOUT_MS = 5_000L
+    }
+}
+
+/**
+ * Kirim job dalam potongan kecil dengan jeda singkat. Logo struk menambah ±8 KB raster; satu `write` besar bisa
+ * membuat buffer printer penuh di tengah gambar, sehingga printer berhenti setelah setengah logo. Potongan dan
+ * jeda sengaja diberi nilai awal (UNVERIFIED pada TM-58V); tuning dilakukan di perangkat.
+ */
+internal suspend fun writeChunked(out: OutputStream, bytes: ByteArray, chunkBytes: Int = 512, pauseMs: Long = 20L) {
+    var offset = 0
+    while (offset < bytes.size) {
+        val end = minOf(offset + chunkBytes, bytes.size)
+        out.write(bytes, offset, end - offset)
+        out.flush()
+        offset = end
+        if (offset < bytes.size) delay(pauseMs)
     }
 }
 

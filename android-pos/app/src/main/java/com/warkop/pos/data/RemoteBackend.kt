@@ -1,5 +1,11 @@
 package com.warkop.pos.data
 
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
+
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonPrimitive
+
 import com.warkop.core.domain.ApiError
 import com.warkop.core.network.ApiClient
 import com.warkop.core.network.ApiErrorMapper
@@ -107,7 +113,23 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     // --- sesi PIN ---
     override suspend fun roster(): List<StaffUser> {
         val outlet = outletId ?: throw ApiError.Network("Terminal belum disiapkan.")
-        return apiCall { api().roster(outlet) }.data.map { StaffUser(it.id.toString(), it.name, it.role.orEmpty(), roleCode(it.role), hasPin = it.hasPin, locked = it.locked) }
+        return try {
+            rosterFor(outlet)
+        } catch (e: ApiError) {
+            if (!SessionRecovery.dropsSession(e, hasSession = sessionToken != null)) throw e
+            // 057 / US7 — buang sesi PIN yang sudah tidak berlaku, lalu satu percobaan ulang dengan token admin (tidak berulang).
+            dropSession()
+            rosterFor(outlet)
+        }
+    }
+
+    private suspend fun rosterFor(outlet: Long): List<StaffUser> =
+        apiCall { api().roster(outlet) }.data.map { StaffUser(it.id.toString(), it.name, it.role.orEmpty(), roleCode(it.role), hasPin = it.hasPin, locked = it.locked) }
+
+    /** Membuang token sesi PIN dari memori dan penyimpanan; token admin dari penyiapan tetap ada. */
+    fun dropSession() {
+        sessionToken = null
+        vault.clear(TokenVault.SESSION_TOKEN, TokenVault.SESSION_EXPIRES)
     }
 
     override suspend fun pinLogin(user: StaffUser, pin: String): PosSession {
@@ -142,11 +164,14 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         val all = ArrayList<ProductDto>()
         var page = 1
         do {
-            val res = apiCall { api().products(page) }
+            // 055 — pos=1: menu outlet shift (item yang tidak dibawa outlet tidak tampil; harga outlet ikut).
+            val res = apiCall { api().products(page, pos = 1) }
             all += res.data
             page++
         } while (res.meta.currentPage < res.meta.lastPage)
-        return MenuMapper.toCatalog(all)
+        // 055 / T011 — kategori dari server untuk mode aktif; tidak diturunkan dari produk.
+        val categories = apiCall { api().posCategories() }.data
+        return MenuMapper.toCatalog(all, categories)
     }
 
     override suspend fun availability(since: String?): Availability? {
@@ -192,6 +217,22 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         })
 
     override suspend fun shiftLimits(): ShiftLimits = ShiftMapper.limits(apiCall { api().features() })
+
+    override suspend fun uploadQrImage(channelId: Long, bytes: ByteArray, mime: String) {
+        val part = okhttp3.MultipartBody.Part.createFormData(
+            "qr_image", if (mime == "image/png") "qr.png" else "qr.jpg",
+            bytes.toRequestBody(mime.toMediaType()),
+        )
+        val res = api().uploadQrImage(channelId, part)
+        if (!res.isSuccessful) throw ApiErrorMapper.fromHttp(res.code(), runCatching { res.errorBody()?.string() }.getOrNull())
+    }
+
+    override suspend fun taxDisplay(): TaxDisplay? {
+        val f = apiCall { api().features() }
+        val label = f.taxLabel?.takeIf { it.isNotBlank() } ?: return null
+        // Tarif bisa berupa angka atau string desimal di JSON; keduanya dibaca sebagai Double.
+        return TaxDisplay(label, f.taxRate?.jsonPrimitive?.doubleOrNull)
+    }
 
     override suspend fun approvers(action: String): List<Approver> =
         apiCall { api().approvers(action) }.map { Approver(it.id, it.name, it.role) }
@@ -287,7 +328,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
 
     override suspend fun qrisChannel(): QrisChannel? =
         apiCall { api().paymentChannels() }.data.firstOrNull { it.type == "qr_ewallet" }
-            ?.let { QrisChannel(it.id, it.provider?.takeIf { p -> p.isNotBlank() } ?: "QRIS") }
+            ?.let { QrisMapper.toChannel(it, serverBase = serverUrl) }
 
     override suspend fun bankChannels(): List<BankChannel> =
         apiCall { api().paymentChannels() }.data
@@ -303,10 +344,27 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     override suspend fun prebill(tabId: String): Order = OrderMapper.tab(apiCall { api().prebill(tabId.toLong()) }, myDeviceCode)
 
     override suspend fun receipt(orderId: String): com.warkop.pos.model.ReceiptView =
-        ReceiptMapper.map(apiCall { api().receipt(orderId.toLong()) })
+        ReceiptMapper.map(apiCall { api().receipt(orderId.toLong()) }, serverBase = serverUrl)
 
     override suspend fun heartbeat(clockMs: Long, queueDepth: Int): com.warkop.pos.state.HeartbeatResult =
         HeartbeatMapper.result(apiCall { api().heartbeat(com.warkop.core.network.dto.HeartbeatRequestDto(com.warkop.pos.state.APP_VERSION, clockMs, queueDepth)) })
+
+    /**
+     * 054 / US3 — pindah ke alamat yang dipilih admin. Hanya URL yang berubah: sesi, outlet, dan perangkat tetap,
+     * sehingga shift yang sedang berjalan tidak terpengaruh (FR-013). Klien HTTP dibangun ulang otomatis, karena [api]
+     * menyimpan klien per URL.
+     */
+    fun adoptServerUrl(url: String) {
+        serverUrl = url
+        vault.put(TokenVault.SERVER_URL, url)
+    }
+
+    // 054 — galat apa pun di sini tidak boleh mengubah status koneksi atau membuang alamat yang sudah dipakai.
+    override suspend fun serverEndpoint(): ServerEndpoint? = try {
+        apiCall { api().serverAddress() }.let { ServerEndpoint(it.selected, it.url) }
+    } catch (e: ApiError) {
+        null
+    }
 
     override suspend fun setDiscount(tabId: String, percent: Double, reasonCode: String, scope: String, lineId: Int?, overrideToken: String?, key: String): Order =
         OrderMapper.tab(apiCall { api().setDiscount(tabId.toLong(), key, DiscountRequestDto(percent, reasonCode, scope, lineId, overrideToken)) }, myDeviceCode)
@@ -329,8 +387,8 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         return SplitItemsResult(OrderMapper.tab(res.paidOrder, myDeviceCode), OrderMapper.tab(res.tab, myDeviceCode))
     }
 
-    override suspend fun reprintOrder(orderId: String, overrideToken: String?, key: String): Int =
-        apiCall { api().reprint(orderId.toLong(), key, ReprintRequestDto(overrideToken)) }.copyNo
+    override suspend fun reprintOrder(orderId: String, copyNo: Int, overrideToken: String?, key: String): Int =
+        apiCall { api().reprint(orderId.toLong(), key, ReprintRequestDto(copyNo = copyNo, overrideToken = overrideToken)) }.copyNo
 
     override suspend fun refundOrder(orderId: String, reasonCode: String, reason: String?, overrideToken: String?, key: String): Order =
         OrderMapper.tab(apiCall { api().refund(orderId.toLong(), key, RefundRequestDto(reasonCode, reason, overrideToken)) }, myDeviceCode)

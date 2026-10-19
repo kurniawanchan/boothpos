@@ -11,7 +11,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,7 +54,7 @@ fun TenderScreen(store: PosStore) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(t.method.label, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false); t.ref?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                                if (t.status == TenderStatus.PENDING && store.conn == Conn.ONLINE) FilledTonalButton({ store.show(Sheet.QrisVerify(t.id)) }, Modifier.padding(top = 6.dp), colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) { Text("Verifikasi", fontWeight = FontWeight.SemiBold) }
+                                if (t.status == TenderStatus.PENDING && store.conn == Conn.ONLINE) FilledTonalButton({ store.show(Sheet.QrisVerify(t.id)) }, Modifier.padding(top = 6.dp).widthIn(min = 150.dp), colors = ButtonDefaults.filledTonalButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) { FitPillText("Verifikasi") }
                             }
                             when (t.status) {
                                 TenderStatus.OK -> Pill("Lunas", MaterialTheme.pos.okContainer, MaterialTheme.pos.onOkContainer)
@@ -132,9 +138,12 @@ fun DoneScreen(store: PosStore) {
         val main: @Composable (Modifier) -> Unit = { m ->
             Surface(m, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                 Column(Modifier.padding(24.dp)) {
-                    Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) { Surface(shape = RoundedCornerShape(50), color = MaterialTheme.pos.okContainer, modifier = Modifier.fillMaxSize()) { Icon(Icons.Filled.Check, null, Modifier.padding(14.dp), tint = MaterialTheme.pos.onOkContainer) } }
-                    Spacer(Modifier.height(10.dp))
-                    Pill("Lunas · ${o.receiptNo}", MaterialTheme.pos.okContainer, MaterialTheme.pos.onOkContainer)
+                    // 061 / T019 — centang dan lencana "Lunas" dalam satu baris; lencana mengecil bila perlu.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) { Surface(shape = RoundedCornerShape(50), color = MaterialTheme.pos.okContainer, modifier = Modifier.fillMaxSize()) { Icon(Icons.Filled.Check, null, Modifier.padding(14.dp), tint = MaterialTheme.pos.onOkContainer) } }
+                        Spacer(Modifier.width(10.dp))
+                        FitPill("Lunas · ${o.receiptNo}", MaterialTheme.pos.okContainer, MaterialTheme.pos.onOkContainer, Modifier.weight(1f))
+                    }
                     Text(if (change > 0) "Kembalian" else "Total dibayar", Modifier.padding(top = 14.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(rp(if (change > 0) change else o.total), fontSize = 56.sp, fontWeight = FontWeight.Light)
                     Text("Diterima ${rp(o.tenders.sumOf { it.received ?: it.amount })}${if (o.tenders.all { it.method == TenderMethod.CASH }) " tunai" else ""} · Total ${rp(o.total)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -153,9 +162,26 @@ fun DoneScreen(store: PosStore) {
             val queue: @Composable (Modifier) -> Unit = { m ->
                 Surface(m, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
                     Column(Modifier.padding(28.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Campaign, null); Spacer(Modifier.width(10.dp)); Text("Panggil pelanggan", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
+                        // 061 / T015 — "Panggil pelanggan" adalah tombol: ketuk untuk mengucapkan nomor antrean.
+                        Surface(
+                            onClick = { store.callQueue(o) },
+                            modifier = Modifier.semantics { role = Role.Button },
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f),
+                        ) {
+                            Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.Campaign, null); Spacer(Modifier.width(10.dp)); Text("Panggil pelanggan", fontWeight = FontWeight.SemiBold, fontSize = 18.sp) }
+                        }
                         Spacer(Modifier.weight(1f))
-                        Text(o.queue, fontSize = if (compact) 88.sp else 168.sp, fontWeight = FontWeight.Light, maxLines = 1, softWrap = false)
+                        // 061 / T006 — ukuran diukur dari lebar kartu: nomor tidak pernah terpotong di tepi (dulu 168/88 sp tetap).
+                        BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val measurer = rememberTextMeasurer()
+                            val density = LocalDensity.current
+                            val size = queueSizeFor(
+                                { sp -> measurer.measure(o.queue, TextStyle(fontSize = sp.sp, fontWeight = FontWeight.Light)).size.width },
+                                with(density) { maxWidth.roundToPx() },
+                            )
+                            Text(o.queue, fontSize = size.sp, fontWeight = FontWeight.Light, maxLines = 1, softWrap = false)
+                        }
                         Spacer(Modifier.weight(1f))
                         Text("Nomor antrean juga tercetak di struk dan KOT.", fontSize = 15.sp)
                     }
