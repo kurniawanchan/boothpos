@@ -120,7 +120,8 @@ data class ReasonCode(val id: Long, val label: String, val code: String = "")
 data class BankChannel(val id: Long, val name: String)
 
 /** Kanal QRIS dari `GET /payment-channels` (type qr_ewallet). [name] = provider dari server, atau "QRIS" dari tipe kanal. */
-data class QrisChannel(val id: Long, val name: String)
+/** 056 / T004 — kanal QRIS statis: penyedia, nama pemilik rekening, dan URL gambar QR (dari server). */
+data class QrisChannel(val id: Long, val provider: String, val accountName: String?, val qrImageUrl: String?, val canManageQr: Boolean = false)
 
 /** 048 / T038 — satu baris struk. */
 data class ReceiptLine(val name: String, val qty: Int, val lineTotal: Int, val note: String?)
@@ -148,6 +149,11 @@ data class ReceiptView(
     val change: Int,
     val items: List<ReceiptLine>,
     val payments: List<Pair<String, Int>>,
+    /** 059 — identitas toko di struk. Ditambahkan di akhir dengan default agar konstruktor lama tetap sah. */
+    val storeContactPerson: String? = null,
+    val storeContactPhone: String? = null,
+    val storeContactEmail: String? = null,
+    val storeLogoUrl: String? = null,
 )
 
 /** 048 — hasil bagi per item: [paid] = bagian yang dibayar, [remaining] = sisa bill; total dari server. */
@@ -185,6 +191,12 @@ private val rpFormat = NumberFormat.getIntegerInstance(Locale("id", "ID"))
  * hanya membawa jumlah diskon (`discount_amount`), jadi label tanpa persen — tidak pernah "0%" atau persen karangan.
  */
 fun discountLabel(percent: Int): String = if (percent > 0) "Diskon $percent%" else "Diskon"
+
+/** 057 / US8 — "Potongan 11 % · Promosi" bila persen dan alasan tersimpan; nominal saja untuk diskon lama. */
+fun discountHeading(percent: Int, reason: String?): String {
+    val base = if (percent > 0) "Potongan $percent %" else "Potongan"
+    return reason?.takeIf { it.isNotBlank() }?.let { "$base · $it" } ?: base
+}
 
 fun rp(n: Int): String = (if (n < 0) "-Rp " else "Rp ") + rpFormat.format(kotlin.math.abs(n))
 fun num(n: Int): String = rpFormat.format(n)

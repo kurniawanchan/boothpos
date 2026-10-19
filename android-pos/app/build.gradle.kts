@@ -45,6 +45,8 @@ dependencies {
     implementation(libs.compose.ui.graphics)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
+    // 055 / T025 — pull-to-refresh (material3 1.3.0 belum punya PullToRefreshBox); versi dari BOM.
+    implementation(libs.compose.material)
     implementation(libs.compose.material.icons)
 
     implementation(libs.kotlinx.serialization.json)

@@ -358,6 +358,36 @@ paths:
                   message: { type: string }
                   errors: { type: object }
 
+  /devices/server-address:
+    get:
+      tags: [Devices]
+      summary: Alamat server yang dipilih admin untuk terminal ini (054)
+      description: |
+        Dipanggil tablet setelah roster berhasil (research.md R3, opsi A). Terautentikasi
+        seperti roster (token dari penyiapan terminal); perangkat ditentukan dari header
+        X-Device-Id dengan pengecekan yang sama dengan heartbeat. Hanya pilihan aktif yang
+        dikirim: alamat satunya dan kredensial tidak pernah sampai ke tablet (FR-011).
+      parameters:
+        - in: header
+          name: X-Device-Id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [selected, url]
+                properties:
+                  selected: { type: string, enum: [local, online] }
+                  url: { type: string, nullable: true, description: 'Alamat pilihan; null = tetap alamat pairing tablet' }
+        '422':
+          description: Header X-Device-Id kosong, tidak dikenal, atau perangkat dicabut (kode device_id)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /devices/{id}:
     delete:
       tags: [Devices]
@@ -630,6 +660,54 @@ paths:
               schema: { $ref: '#/components/schemas/InvoicePaymentSetting' }
         '403':
           description: Peran tanpa akses menu settings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /settings/server-address:
+    get:
+      tags: [Settings]
+      summary: Ambil alamat server lokal dan online (054)
+      description: |
+        Owner/admin (menu `settings`). Mengembalikan kedua alamat dan pilihan aktif.
+        Alamat yang belum diisi bernilai null; pilihan awal `local`.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerAddress' }
+        '403':
+          description: Peran tanpa akses menu settings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    put:
+      tags: [Settings]
+      summary: Ubah alamat server lokal/online dan pilihan aktif (054)
+      description: |
+        Satu transaksi: menulis ketiga pengaturan dan satu baris activity_logs
+        (`server_address_updated`) berisi nilai sebelum dan sesudah. Ditolak 422 bila URL
+        tidak lengkap (http/https, dengan host), atau bila `selected` = online tanpa alamat
+        online. Perubahan berlaku pada tablet saat pengecekan koneksi berikutnya (FR-013).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServerAddress' }
+      responses:
+        '200':
+          description: Tersimpan; respons sama dengan GET
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ServerAddress' }
+        '403':
+          description: Peran tanpa akses menu settings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          description: 'URL tidak valid, atau pilihan online tanpa alamat online (kunci: local, online, atau selected)'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1119,6 +1197,32 @@ paths:
   # ------------------------------------------------------------------
   # MASTER DATA — PRODUK
   # ------------------------------------------------------------------
+  /pos/categories:
+    get:
+      tags: [Products]
+      summary: Kategori kasir menurut mode sistem aktif (055)
+      description: |
+        Sumber kategori untuk layar kasir Android. Hanya kategori aktif dari mode sistem
+        yang sedang aktif (DEMO/LIVE, lewat HasDataMode). Kategori tanpa produk yang bisa
+        dijual tetap dikembalikan dengan product_count 0. Gerbang sama dengan GET /products?pos=1.
+      responses:
+        '200':
+          description: Berhasil; urut display_order lalu nama
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/PosCategory' }
+        '401':
+          description: Tanpa sesi
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
   /products:
     get:
       tags: [Master Data]
@@ -6643,6 +6747,22 @@ components:
         account_holder: { type: string, nullable: true }
         instructions: { type: string, nullable: true }
 
+    PosCategory:
+      type: object
+      required: [id, code, name, display_order, product_count]
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        display_order: { type: integer }
+        product_count: { type: integer, description: 'Produk aktif dalam mode yang sama; 0 valid' }
+    ServerAddress:
+      type: object
+      required: [selected]
+      properties:
+        local: { type: string, nullable: true, example: 'http://192.168.1.10:8010' }
+        online: { type: string, nullable: true, example: 'https://pos.example.com' }
+        selected: { type: string, enum: [local, online] }
     Error:
       type: object
       properties:
@@ -7354,6 +7474,7 @@ components:
           description: Tersamar untuk peran kasir pada daftar. Kosong untuk qr_ewallet.
         qr_image_url: { type: string, nullable: true }
         is_active: { type: boolean }
+        can_manage_qr: { type: boolean, description: '056 — true bila pengguna berhak mengganti QR (menu settings); tablet memakai ini untuk menampilkan kontrol ganti QR' }
 
     PosDraftSummary:
       type: object
@@ -7554,6 +7675,8 @@ components:
         cost_price: { $ref: '#/components/schemas/Money', description: "TIDAK dikembalikan oleh GET /orders/{id} (terbuka untuk kasir); hanya laporan owner/admin." }
         sell_price: { $ref: '#/components/schemas/Money' }
         discount_amount: { $ref: '#/components/schemas/Money' }
+        discount_percent: { type: number, nullable: true, description: '057 — persen diskon baris' }
+        discount_reason_code: { type: string, nullable: true }
         line_total: { $ref: '#/components/schemas/Money' }
 
     OrderSummary:
@@ -7575,6 +7698,11 @@ components:
         customer_id: { type: integer, nullable: true }
         subtotal: { $ref: '#/components/schemas/Money' }
         discount_amount: { $ref: '#/components/schemas/Money' }
+        discount_percent: { type: number, nullable: true, description: '057 — persen diskon order; null untuk diskon lama / tanpa diskon' }
+        discount_reason_code: { type: string, nullable: true }
+        discount_reason_label: { type: string, nullable: true }
+        reprint_count: { type: integer, description: '057 — jumlah cetak ulang yang sudah diterima server; nomor salinan berikutnya = reprint_count + 2' }
+        closed_at: { type: string, format: date-time, nullable: true, description: '057 — waktu order selesai (tutup); null bila belum selesai' }
         total_amount: { $ref: '#/components/schemas/Money' }
         paid_amount: { $ref: '#/components/schemas/Money' }
         change_amount: { $ref: '#/components/schemas/Money' }

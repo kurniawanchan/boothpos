@@ -29,7 +29,9 @@ interface PosApi {
 
     // --- katalog (S1) ---
     @GET("products?pos=1&with_variants=1&with_modifiers=1")
-    suspend fun products(@Query("page") page: Int, @Query("per_page") perPage: Int = 100): ProductPage
+    suspend fun products(@Query("page") page: Int, @Query("per_page") perPage: Int = 100, @Query("pos") pos: Int? = null): ProductPage
+    /** 055 — kategori kasir menurut mode sistem (sumber kategori tablet). */
+    @GET("pos/categories") suspend fun posCategories(): PosCategoriesPage
 
     /** `since` = etag terakhir; server menjawab 304 tanpa badan bila tak berubah. */
     @GET("menu/availability?pos=1")
@@ -75,9 +77,15 @@ interface PosApi {
     @POST("products/{id}/sold-out") suspend fun soldOut(@Path("id") id: Long, @Body body: SoldOutRequestDto): Response<Unit>
     @GET("reason-codes") suspend fun reasonCodes(@Query("category") category: String): ReasonCodesPage
     @GET("payment-channels") suspend fun paymentChannels(): PaymentChannelsPage
+    /** 056 amandemen — unggah gambar QR kanal (multipart, field `qr_image`). Respons tidak dipakai; kanal dimuat ulang. */
+    @retrofit2.http.Multipart
+    @POST("payment-channels/{id}")
+    suspend fun uploadQrImage(@Path("id") id: Long, @retrofit2.http.Part image: okhttp3.MultipartBody.Part): retrofit2.Response<okhttp3.ResponseBody>
     @POST("tabs/{id}/prebill") suspend fun prebill(@Path("id") id: Long): TabDto
     /** Heartbeat perangkat (US6). Tanpa Idempotency-Key: bukan tulisan bisnis, aman diulang. */
     @POST("devices/heartbeat") suspend fun heartbeat(@Body body: HeartbeatRequestDto): HeartbeatResponseDto
+    /** 054 / US3 — alamat server yang dipilih admin; header X-Device-Id dipasang klien. Dipanggil sebelum login. */
+    @GET("devices/server-address") suspend fun serverAddress(): ServerAddressDto
     /** Struk server (T038). Order yang masih terbuka menjawab 409; layar struk hanya dibuka untuk order selesai. */
     @GET("orders/{id}/receipt") suspend fun receipt(@Path("id") id: Long): ReceiptDto
     @GET("orders") suspend fun closedOrders(@Query("per_page") perPage: Int): ClosedOrdersPage

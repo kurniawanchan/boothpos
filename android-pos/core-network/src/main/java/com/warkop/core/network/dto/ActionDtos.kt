@@ -54,6 +54,10 @@ import kotlinx.serialization.Serializable
     val type: String = "",
     val provider: String? = null,
     @SerialName("account_name") val accountName: String? = null,
+    // 056 / T003 — URL gambar QR statis dari server; null bila belum diunggah.
+    @SerialName("qr_image_url") val qrImageUrl: String? = null,
+    // 056 amandemen — pengguna berhak mengganti QR (menu settings); tablet menampilkan kontrol hanya bila true.
+    @SerialName("can_manage_qr") val canManageQr: Boolean = false,
 )
 
 @Serializable data class PaymentChannelsPage(val data: List<PaymentChannelDto> = emptyList())

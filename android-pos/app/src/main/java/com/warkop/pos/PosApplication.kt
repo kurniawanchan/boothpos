@@ -1,5 +1,8 @@
 package com.warkop.pos
 
+import androidx.compose.ui.graphics.asAndroidBitmap
+import com.warkop.pos.data.QrImageLoader
+import com.warkop.pos.print.Logo
 import android.app.Application
 import android.util.Log
 import com.warkop.pos.data.RemoteBackend
@@ -25,11 +28,16 @@ class AppContainer(app: Application) {
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** 050 / T016 — satu-satunya printer service. Antrean dan pilihan printer disimpan di filesDir (tidak di-backup). */
+    /** 061 / T013 — satu mesin ucap per proses (dibuat sekali, seperti printer). */
+    val queueAnnouncer = com.warkop.pos.audio.QueueAnnouncer(com.warkop.pos.audio.TtsSpeechEngine(app))
+
     val printer = PrinterService(
         context = app,
         queue = PrintQueue(File(app.filesDir, "print-queue.json")),
         settings = PrinterSettings(File(app.filesDir, "printer.json")),
         fetchReceipt = backend::receipt,
+        // 059 — logo struk: gambar yang sama dengan cache QR (satu unduhan per proses), lalu dikonversi ke raster 1-bit.
+        loadLogo = { url -> QrImageLoader.load(url)?.let { Logo.toRaster(it.asAndroidBitmap()) } },
         scope = appScope,
     )
 }

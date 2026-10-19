@@ -220,4 +220,16 @@ class PaymentChannelTest extends TestCase
         $response->assertConflict();
         $this->assertNull($channel->fresh()->deleted_at);
     }
+
+    /** 056 amandemen — tablet hanya menampilkan ganti QR bila pengguna berhak (menu settings). */
+    public function test_channel_list_tells_the_tablet_whether_the_user_can_manage_the_qr(): void
+    {
+        PaymentChannel::factory()->create(['type' => 'qr_ewallet', 'is_active' => true]);
+
+        $this->actingAsRole('owner');
+        $this->getJson('/api/v1/payment-channels')->assertOk()->assertJsonPath('data.0.can_manage_qr', true);
+
+        $this->actingAsRole('cashier');
+        $this->getJson('/api/v1/payment-channels')->assertOk()->assertJsonPath('data.0.can_manage_qr', false);
+    }
 }

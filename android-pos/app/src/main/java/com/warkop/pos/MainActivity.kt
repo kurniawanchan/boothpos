@@ -13,6 +13,9 @@ import com.warkop.pos.state.PosStore
 import com.warkop.pos.ui.PosApp
 import com.warkop.pos.ui.autoDark
 
+/** 055 / T034 — kunci shared preferences untuk tampil/sembunyi total di counter. */
+private const val TOTALS_KEY = "counter_totals_visible"
+
 /** Satu activity; seluruh navigasi dipegang PosStore (lihat state/PosStore.kt) mengikuti prototipe desain. */
 class MainActivity : ComponentActivity() {
     private val store: PosStore by viewModels {
@@ -20,7 +23,13 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val container = (application as PosApplication).container
-                return PosStore(container.backend, container.backend, container.printer) as T
+                // 055 / T034 — pilihan tampil/sembunyi total disimpan di perangkat (shared preferences, bukan TokenVault).
+                val prefs = (application as PosApplication).getSharedPreferences("pos_ui", android.content.Context.MODE_PRIVATE)
+                val totals = com.warkop.pos.state.TotalsPreference(
+                    read = { if (prefs.contains(TOTALS_KEY)) prefs.getBoolean(TOTALS_KEY, true) else null },
+                    write = { prefs.edit().putBoolean(TOTALS_KEY, it).apply() },
+                )
+                return PosStore(container.backend, container.backend, container.printer, totalsPref = totals, announcer = container.queueAnnouncer) as T
             }
         }
     }

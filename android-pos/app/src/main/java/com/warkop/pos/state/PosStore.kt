@@ -7,6 +7,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.warkop.core.domain.ApiError
+import com.warkop.pos.audio.QueueAnnouncer
+import com.warkop.pos.audio.QueuePhrase
+import com.warkop.pos.audio.SilentSpeech
 import com.warkop.pos.data.PosBackend
 import com.warkop.pos.data.PosSession
 import com.warkop.pos.data.RemoteBackend
@@ -17,6 +20,8 @@ import com.warkop.pos.print.PrintStatus
 import com.warkop.pos.print.PrinterService
 import com.warkop.pos.print.PrinterStatus
 import com.warkop.pos.print.jobKey
+import com.warkop.pos.data.QrisMapper
+import com.warkop.pos.data.TaxDisplay
 import com.warkop.pos.data.TerminalConfig
 import com.warkop.pos.model.*
 import com.warkop.core.network.IntentKeys
@@ -41,6 +46,15 @@ enum class Dest { SETUP, PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, 
  * Layar setelah shift dimuat ulang dari server (GET /sessions/current): kasir tanpa shift terbuka → layar buka shift,
  * aturan yang sama dengan login. Di luar itu null = biarkan layar apa adanya.
  */
+/** 058 / T006 — langkah setelah pembayaran QRIS tercatat: penjualan tutup → struk dan selesai; masih sisa → tampilkan sisa. */
+internal sealed interface QrisNext {
+    data object Finish : QrisNext
+    data class ShowRemaining(val remaining: Int) : QrisNext
+}
+
+internal fun qrisAfterPayment(closed: Boolean, remaining: Int): QrisNext =
+    if (closed) QrisNext.Finish else QrisNext.ShowRemaining(remaining)
+
 internal fun shiftRecoveryDest(current: Shift?, roleCode: String?): Dest? =
     if (current == null && roleCode == "CSH") Dest.OPEN_SHIFT else null
 
@@ -58,7 +72,10 @@ internal fun reprintSubject(orderId: Long, copyNo: Int): JsonObject = buildJsonO
 internal fun refundSubject(orderId: Long, reasonCode: String, reason: String?): JsonObject = buildJsonObject {
     put("order_id", orderId); put("reason_code", reasonCode); reason?.let { put("reason", it) }
 }
-enum class Conn(val label: String) { ONLINE("Online"), OFFLINE("Offline"), OFFLINE_LIMITED("Offline terbatas") }
+/** 054 — UNKNOWN = belum ada pemeriksaan yang berhasil atau gagal; tidak boleh tampil sebagai "Online". */
+enum class Conn(val label: String) { UNKNOWN("Memeriksa koneksi…"), ONLINE("Online"), OFFLINE("Offline"), OFFLINE_LIMITED("Offline terbatas") }
+
+private const val PIN_PROBE_INTERVAL_MS = 10_000L
 
 /** Lembar/dialog di atas layar. Satu pada satu waktu — sama seperti prototipe (satu `sheet` aktif). */
 sealed interface Sheet {
@@ -101,7 +118,54 @@ class PosStore(
     private val remote: RemoteBackend? = null,
     /** 050 — printer untuk KOT/struk/pra-bill. null pada build uji tanpa printer; penjualan tidak bergantung padanya. */
     val printer: PrinterService? = null,
+    /** 054 — menulis URL server yang dipilih admin ke penyimpanan terminal. Bisa diganti pada uji (TokenVault butuh Context). */
+    private val onServerUrl: (String) -> Unit = { url -> remote?.adoptServerUrl(url) },
+    /** 055 / T037 — pilihan tampil/sembunyi total; penyimpanan perangkat di Android, in-memory di uji. */
+    private val totalsPref: TotalsPreference = TotalsPreference({ null }, {}),
+    /** 061 / T011 — suara panggilan antrean; default diam supaya uji tidak butuh mesin ucap. */
+    private val announcer: QueueAnnouncer = QueueAnnouncer(SilentSpeech),
 ) : ViewModel() {
+    /** 055 / T037 — area total (Subtotal, pajak, Total, Kirim, Bayar) tampil atau tersembunyi. */
+    var totalsVisible by mutableStateOf(totalsPref.visible); private set
+    fun changeTotalsVisibility(v: Boolean) { totalsVisible = v; totalsPref.visible = v }
+
+    /** 055 / T036 — label dan tarif pajak dari server; null sampai dimuat. */
+    var tax by mutableStateOf<TaxDisplay?>(null); private set
+
+    /** 055 / T026 — true selama tarik-untuk-segarkan berjalan. */
+    var refreshing by mutableStateOf(false); private set
+    fun refreshCounter() {
+        refreshing = true
+        viewModelScope.launch { try { loadMenu(silent = true).join() } finally { refreshing = false } }
+    }
+
+    /**
+     * 055 / T028–T031 — tarik-untuk-segarkan untuk layar yang tampil sekarang. Setiap layar memuat ulang datanya sendiri;
+     * polling denah tetap berjalan. Perangkat (SYNC) memeriksa ulang printer. Indikator selesai saat muatan selesai.
+     */
+    fun refreshCurrent() {
+        val job: Job = when (dest) {
+            Dest.TABLES -> fetchFloorNow()
+            Dest.ORDERS -> loadClosed()
+            Dest.SHIFT, Dest.XREPORT, Dest.CLOSE_SHIFT -> refreshShiftReport()
+            Dest.SYNC -> viewModelScope.launch { printer?.checkConnection() }
+            else -> Job().apply { complete() }
+        }
+        refreshing = true
+        viewModelScope.launch { try { job.join() } finally { refreshing = false } }
+    }
+
+    /** Satu tarikan denah sekarang; polling 3 dtk tetap jalan dan galat sesaat tidak menghapus denah terakhir. */
+    private fun fetchFloorNow(): Job = viewModelScope.launch {
+        val b = backend ?: return@launch
+        try {
+            b.floor(null)?.let { snap -> floorVersion = snap.version; floor = Load.Ready(snap) }
+            conn = Conn.ONLINE
+        } catch (e: ApiError) {
+            if (e is ApiError.Network) conn = Conn.OFFLINE
+            if (floor !is Load.Ready) floor = Load.Failed(e)
+        }
+    }
     var dest by mutableStateOf(Dest.PIN); private set
     /** Terminal yang sudah disiapkan (URL + outlet + perangkat); null → layar penyiapan. */
     var config by mutableStateOf<TerminalConfig?>(null); private set
@@ -109,7 +173,8 @@ class PosStore(
     var roster by mutableStateOf<Load<List<StaffUser>>>(Load.Idle); private set
     var user by mutableStateOf<StaffUser?>(null); private set
     var shift by mutableStateOf<Shift?>(null); private set
-    var conn by mutableStateOf(Conn.ONLINE)
+    /** 054 — awalnya UNKNOWN: dulu ONLINE, sehingga layar masuk selalu menampilkan "Online" walau Wi-Fi mati. */
+    var conn by mutableStateOf(Conn.UNKNOWN)
     /** null = otomatis (malam hari gelap); dipakai preset debug untuk memaksa tema. */
     var darkOverride by mutableStateOf<Boolean?>(null)
     var ordersTab by mutableIntStateOf(0)
@@ -175,16 +240,55 @@ class PosStore(
         loadRoster()
     }
 
-    /** Roster staf dari server. Gagal = keadaan galat dengan Coba lagi, BUKAN daftar kosong. */
-    fun loadRoster(silent: Boolean = false) {
-        val b = backend ?: return
-        // `silent`: muat ulang tanpa mengganti daftar dengan 'memuat' (dipakai setelah PIN salah agar pilihan staf tak hilang).
-        if (!(silent && roster is Load.Ready)) roster = Load.Loading
-        viewModelScope.launch {
-            val fresh = try { Load.Ready(b.roster()) } catch (e: ApiError) { if (silent && roster is Load.Ready) roster else Load.Failed(e) }
+    /**
+     * Roster staf dari server. Gagal = keadaan galat dengan Coba lagi, BUKAN daftar kosong.
+     * 054 / US2: roster juga satu-satunya sumber status koneksi di layar PIN (belum ada sesi, jadi heartbeat tidak
+     * berjalan). Hanya galat jaringan yang berarti OFFLINE; 401/5xx membuktikan server terjangkau (FR-006).
+     */
+    fun loadRoster(silent: Boolean = false): Job {
+        val b = backend ?: return Job().apply { complete() }
+        // `silent`: muat ulang tanpa mengganti daftar dengan 'memuat' (dipakai setelah PIN salah dan oleh probe PIN agar tidak berkedip).
+        if (!silent) roster = Load.Loading
+        return viewModelScope.launch {
+            val fresh = try {
+                Load.Ready(b.roster()).also { conn = Conn.ONLINE }
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                if (silent && roster is Load.Ready) roster else Load.Failed(e)
+            }
             roster = fresh
         }
     }
+
+    private var pinProbe: Job? = null
+
+    /** 054 / US2 — selama layar PIN tampil, muat roster diam-diam tiap [PIN_PROBE_INTERVAL_MS] agar chip mengikuti jaringan. */
+    fun startPinProbe() {
+        if (pinProbe?.isActive == true) return
+        pinProbe = viewModelScope.launch {
+            while (true) {
+                // Tunggu hasil roster dulu: status koneksi dan roster baru terisi setelah panggilan selesai.
+                loadRoster(silent = true).join()
+                adoptSelectedServer()
+                delay(PIN_PROBE_INTERVAL_MS)
+            }
+        }
+    }
+
+    /**
+     * 054 / US3 — hanya setelah roster berhasil (opsi A, research.md R3): tanya server alamat yang dipilih admin
+     * dan pindah bila berbeda. Galat jaringan atau tanpa koneksi berarti tidak ada yang dipindah.
+     */
+    private suspend fun adoptSelectedServer() {
+        if (roster !is Load.Ready || conn != Conn.ONLINE) return
+        val current = config ?: return
+        val url = backend?.serverEndpoint()?.url ?: return
+        if (url == current.serverUrl) return
+        onServerUrl(url)
+        config = current.copy(serverUrl = url)
+    }
+
+    fun stopPinProbe() { pinProbe?.cancel(); pinProbe = null }
 
     /** Hanya untuk layar penyiapan terminal. */
     internal val backendForSetup: PosBackend? get() = backend
@@ -208,6 +312,13 @@ class PosStore(
         sheet = s
     }
     fun say(msg: String) { toast = msg }
+
+    /** 061 / T011 — "Panggil pelanggan": nomor diucapkan sekali. Pesan layar tetap muncul walau suara gagal (FR-007). */
+    fun callQueue(o: Order) {
+        val queue = o.queue?.takeIf { it.isNotBlank() } ?: return
+        announcer.announce(QueuePhrase.spoken(queue))
+        say("Dipanggil $queue")
+    }
     fun clearToast() { toast = null }
     fun lock() {
         availabilityJob?.cancel()
@@ -263,11 +374,17 @@ class PosStore(
 
     val menu: MenuCatalog? get() = (catalog as? Load.Ready)?.value
 
-    fun loadMenu() {
-        val b = backend ?: return
-        catalog = Load.Loading
-        viewModelScope.launch {
-            catalog = try { Load.Ready(b.loadMenu()) } catch (e: ApiError) { Load.Failed(e) }
+    /**
+     * 055 / T026 — `silent`: segarkan tanpa mengosongkan katalog yang sudah tampil. Galat saat menyegarkan
+     * mempertahankan data terakhir (FR-018); pilihan order dan jumlah bayar tidak disentuh (FR-019).
+     */
+    fun loadMenu(silent: Boolean = false): Job {
+        val b = backend ?: return Job().apply { complete() }
+        if (!silent || catalog !is Load.Ready) catalog = Load.Loading
+        return viewModelScope.launch {
+            catalog = try { Load.Ready(b.loadMenu()) } catch (e: ApiError) { if (silent && catalog is Load.Ready) catalog else Load.Failed(e) }
+            // 055 / T036 — pajak ikut dimuat bersama katalog; galat pajak tidak menggagalkan katalog.
+            tax = try { b.taxDisplay() } catch (_: ApiError) { tax }
         }
     }
 
@@ -803,11 +920,34 @@ class PosStore(
 
     /** Nama QRIS untuk tombol dan dialog: provider dari kanal qr_ewallet server; tanpa kanal → "QRIS" (tipe kanal), bukan merek. */
     var qrisLabel by mutableStateOf("QRIS"); private set
+    /** 056 / T008 — kanal QRIS statis yang dimuat; null sampai dimuat atau bila server belum mengatur kanal. */
+    var qrisChannel by mutableStateOf<QrisChannel?>(null); private set
+
+    /** Judul lembar QRIS: "penyedia pemilik" (056 US1). */
+    val qrisTitle: String get() = QrisMapper.sheetTitle(qrisChannel?.provider ?: qrisLabel, qrisChannel?.accountName)
+
+    /** 056 amandemen — simpan gambar QR dari layar ini ke server, lalu muat ulang kanal. Galat ditampilkan sebagai pesan. */
+    fun saveQrImage(bytes: ByteArray, mime: String) {
+        val b = backend ?: return
+        val channel = qrisChannel ?: return
+        viewModelScope.launch {
+            try {
+                b.uploadQrImage(channel.id, bytes, mime)
+                channel.qrImageUrl?.let { com.warkop.pos.data.QrImageLoader.evict(it) }
+                loadQrisLabel()
+                say("Gambar QR disimpan.")
+            } catch (e: ApiError) {
+                say(e.message)
+            }
+        }
+    }
 
     fun loadQrisLabel() {
         val b = backend ?: return
         viewModelScope.launch {
-            qrisLabel = try { b.qrisChannel()?.name ?: "QRIS" } catch (e: ApiError) { "QRIS" }
+            // 056 / T008 — kanal disimpan utuh (judul, nama pemilik, QR); qrisLabel tetap penyedia untuk layar lain.
+            qrisChannel = try { b.qrisChannel() } catch (e: ApiError) { null }
+            qrisLabel = qrisChannel?.provider ?: "QRIS"
         }
     }
 
@@ -827,7 +967,11 @@ class PosStore(
                 conn = Conn.ONLINE
                 upsert(updated)
                 sheet = null
-                say("QRIS dicatat · menunggu verifikasi.")
+                when (val next = qrisAfterPayment(updated.closed, updated.remaining)) {
+                    // 058 / US2 — penjualan tutup: struk masuk antrean cetak sekali (kunci antrean), lalu selesai.
+                    QrisNext.Finish -> { onSaleClosed(updated); dest = Dest.DONE; say("QRIS dicatat · menunggu verifikasi.") }
+                    is QrisNext.ShowRemaining -> say("Sisa ${rp(next.remaining)}.")
+                }
             } catch (e: ApiError) {
                 if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
                 keys.settled(intent)
@@ -888,7 +1032,7 @@ class PosStore(
         val b = backend ?: return
         soldOutReasons = Load.Loading
         viewModelScope.launch {
-            soldOutReasons = try { Load.Ready(retryNetwork { b.reasonCodes("sold_out") }) } catch (e: ApiError) { Load.Failed(e) }
+            soldOutReasons = try { Load.Ready(b.reasonCodes("sold_out")) } catch (e: ApiError) { Load.Failed(e) }
         }
     }
 
@@ -929,29 +1073,36 @@ class PosStore(
     }
 
     /** Jumlah salinan yang sudah dicetak ulang per order (ulang dari server pada tiap respons). */
-    private val reprintCopies = mutableMapOf<String, Int>()
 
     /**
      * 048 / S4 — cetak ulang. Salinan pertama gratis; berikutnya server menjawab 409 override_required → persetujuan
      * `reprint` dengan subjek order_id + copy_no. Nomor salinan berikutnya = salinan terakhir yang tercatat + 1.
      */
-    fun reprint(orderId: String, overrideToken: String? = null) {
+    /**
+     * 057 / US3 — nomor salinan = jumlah cetak ulang yang diterima server + 2 (salinan asli = 1). Dihitung dari order
+     * yang dimuat, bukan dari penghitung lokal. 409 `reprint_copy_changed` (ada cetak lain) memuat ulang order sekali.
+     */
+    fun reprint(orderId: String, overrideToken: String? = null, retried: Boolean = false) {
         val b = backend ?: return
-        val copyNo = (reprintCopies[orderId] ?: 0) + 1
+        val copyNo = ReprintRules.nextCopyNo(serverReprintCount(orderId))
         val intent = "reprint:$orderId:$copyNo"
         val key = keys.keyFor(intent)
         viewModelScope.launch {
             try {
-                val printed = retryNetwork { b.reprintOrder(orderId, overrideToken, key) }
+                val printed = retryNetwork { b.reprintOrder(orderId, copyNo, overrideToken, key) }
                 keys.settled(intent)
                 conn = Conn.ONLINE
-                reprintCopies[orderId] = printed
                 // 050 / T050 — salinan yang sudah diterima server masuk antrean; nomornya dari server (copy_no).
                 printer?.enqueueStruk(orderId, printed)
                 say("Salinan ke-$printed masuk antrean cetak.")
             } catch (e: ApiError) {
                 if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
                 keys.settled(intent)
+                if (e.code == "reprint_copy_changed" && !retried) {
+                    loadClosed().join()
+                    reprint(orderId, overrideToken, retried = true)
+                    return@launch
+                }
                 if (e.code == "override_required") {
                     sheet = Sheet.Override(
                         summary = "Cetak ulang struk · salinan $copyNo", action = "reprint",
@@ -961,6 +1112,10 @@ class PosStore(
             }
         }
     }
+
+    /** 057 — jumlah cetak ulang order dari data server yang sudah dimuat (daftar selesai atau order aktif). */
+    private fun serverReprintCount(orderId: String): Int =
+        (closedCache + orders).firstOrNull { it.id == orderId }?.reprints ?: 0
 
     /** 048 / S4 — alasan refund dari daftar server (`GET /reason-codes?category=refund`). */
     var refundReasons by mutableStateOf<Load<List<ReasonCode>>>(Load.Idle); private set
@@ -1007,15 +1162,16 @@ class PosStore(
     var closedLoad by mutableStateOf<Load<Unit>>(Load.Idle); private set
 
     /** Daftar penjualan selesai dari server (layar Order → Selesai). */
-    fun loadClosed() {
-        val b = backend ?: return
-        closedLoad = Load.Loading
-        viewModelScope.launch {
+    /** 055 / T029 — data yang sudah tampil tetap saat menyegarkan; galat hanya mengganti keadaan bila belum ada data. */
+    fun loadClosed(): Job {
+        val b = backend ?: return Job().apply { complete() }
+        if (closedLoad !is Load.Ready) closedLoad = Load.Loading
+        return viewModelScope.launch {
             closedLoad = try {
                 closedCache = retryNetwork { b.closedOrders() }
                 Load.Ready(Unit)
             } catch (e: ApiError) {
-                Load.Failed(e)
+                if (closedLoad is Load.Ready) closedLoad else Load.Failed(e)
             }
         }
     }
@@ -1048,12 +1204,13 @@ class PosStore(
     }
 
     /** X-report shift terbuka. Gagal = keadaan galat dengan Coba lagi. */
-    fun refreshShiftReport() {
-        val b = backend ?: return
-        val sid = shift?.id ?: return
-        report = Load.Loading
-        viewModelScope.launch {
-            report = try { Load.Ready(retryNetwork { b.shiftReport(sid) }) } catch (e: ApiError) { Load.Failed(e) }
+    /** 055 / T030 — laporan shift disegarkan tanpa menghapus angka yang sudah tampil. */
+    fun refreshShiftReport(): Job {
+        val b = backend ?: return Job().apply { complete() }
+        val sid = shift?.id ?: return Job().apply { complete() }
+        if (report !is Load.Ready) report = Load.Loading
+        return viewModelScope.launch {
+            report = try { Load.Ready(retryNetwork { b.shiftReport(sid) }) } catch (e: ApiError) { if (report is Load.Ready) report else Load.Failed(e) }
         }
     }
 

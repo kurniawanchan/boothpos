@@ -51,6 +51,8 @@ class PaymentChannelController extends Controller
             // endpoint otorisasi seperti bukti pembayaran.
             'qr_image_url' => $this->imageUploadService->url($c->qr_image_path),
             'is_active' => $c->is_active,
+            // 056 amandemen — tablet menampilkan ganti QR hanya bila pengguna berhak (menu settings); server tetap menegakkan.
+            'can_manage_qr' => (bool) $request->user()?->canAccessMenu('settings'),
         ]);
 
         return response()->json(['data' => $data]);

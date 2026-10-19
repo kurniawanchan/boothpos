@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 060 / T006 — latar ikon adaptif; #FFFFFF adalah default dari panduan paket ikon (asumsi di spec). -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+</resources>

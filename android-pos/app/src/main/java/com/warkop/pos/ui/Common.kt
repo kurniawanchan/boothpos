@@ -20,6 +20,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -83,6 +88,24 @@ fun Pill(text: String, container: Color, content: Color, modifier: Modifier = Mo
     }
 }
 
+/** 061 / T018 — pil berwarna seperti [Pill], tetapi teksnya mengecil agar muat di lebarnya (tidak dipotong, tidak turun baris). */
+private val FIT_PILL_SIZES = listOf(12f, 11f, 10f)
+
+@Composable
+fun FitPill(text: String, container: Color, content: Color, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(50), color = container, contentColor = content) {
+        BoxWithConstraints(Modifier.padding(horizontal = 10.dp, vertical = 3.dp)) {
+            val measurer = rememberTextMeasurer()
+            val density = LocalDensity.current
+            val size = chooseFontSize(
+                { sp -> measurer.measure(text, TextStyle(fontSize = sp.sp, fontWeight = FontWeight.Medium)).size.width },
+                with(density) { maxWidth.roundToPx() }, FIT_PILL_SIZES,
+            ) ?: FIT_PILL_SIZES.last()
+            Text(text, fontSize = size.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
+        }
+    }
+}
+
 @Composable
 fun QtyStepper(qty: Int, onMinus: () -> Unit, onPlus: () -> Unit, modifier: Modifier = Modifier) {
     Surface(modifier, shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
@@ -140,7 +163,7 @@ fun MoneyRow(label: String, value: String, modifier: Modifier = Modifier, big: B
 fun PrimaryPill(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, icon: ImageVector? = null, trailing: String? = null) {
     Button(onClick, modifier.height(56.dp), enabled = enabled, shape = RoundedCornerShape(50)) {
         if (icon != null) { Icon(icon, null); Spacer(Modifier.width(8.dp)) }
-        Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+        FitPillText(text)
         if (trailing != null) { Spacer(Modifier.weight(1f).widthIn(min = 14.dp)); Text(trailing, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false) }
     }
 }
@@ -150,7 +173,7 @@ fun TonalPill(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, 
     FilledTonalButton(onClick, modifier.height(56.dp), enabled = enabled, shape = RoundedCornerShape(50),
         colors = ButtonDefaults.filledTonalButtonColors(containerColor = if (secondary) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer, contentColor = if (secondary) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimaryContainer)) {
         if (icon != null) { Icon(icon, null); Spacer(Modifier.width(8.dp)) }
-        Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+        FitPillText(text)
     }
 }
 
@@ -185,5 +208,41 @@ fun CircleStepper(qty: Int, onMinus: () -> Unit, onPlus: () -> Unit, modifier: M
         Surface(onClick = onMinus, modifier = Modifier.size(44.dp), shape = CircleShape, color = Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.Remove, "Kurangi", Modifier.size(20.dp)) } }
         Text(qty.toString(), Modifier.widthIn(min = 48.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Surface(onClick = onPlus, modifier = Modifier.size(44.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Filled.Add, "Tambah", Modifier.size(20.dp)) } }
+    }
+}
+
+/** Ukuran label tombol pil, terbesar dulu. Di bawah 12 sp terlalu kecil dibaca di kasir. */
+private val PILL_FONT_SIZES = listOf(16f, 15f, 14f, 13f, 12f)
+
+/**
+ * 055 / T043 — teks tombol pil (Kirim, Bayar, …) dibuat muat di lebarnya: mengecil sampai 12 sp, tidak pernah dipotong.
+ * Memakai [chooseFontSize] (054) — satu aturan untuk chip dan tombol.
+ */
+@Composable
+fun RowScope.FitPillText(text: String) {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.weight(1f, fill = false)) {
+        val availablePx = with(density) { maxWidth.roundToPx() }
+        val size = chooseFontSize(
+            { sp -> measurer.measure(text, TextStyle(fontSize = sp.sp, fontWeight = FontWeight.SemiBold)).size.width },
+            availablePx, PILL_FONT_SIZES,
+        ) ?: PILL_FONT_SIZES.last()
+        Text(text, fontSize = size.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
+    }
+}
+
+/**
+ * 055 / T025 — tarik-untuk-segarkan untuk layar yang memuat data server (FR-016, FR-017). Isi tetap tampil selama
+ * menyegarkan; galat ditangani pemanggil (data terakhir tidak dihapus). Memakai API pull-refresh dari `material`
+ * karena material3 1.3.0 (versi proyek) belum menyediakan PullToRefreshBox.
+ */
+@OptIn(androidx.compose.material.ExperimentalMaterialApi::class)
+@Composable
+fun RefreshableScreen(refreshing: Boolean, onRefresh: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val state = androidx.compose.material.pullrefresh.rememberPullRefreshState(refreshing, onRefresh)
+    Box(modifier.then(Modifier.pullRefresh(state))) {
+        content()
+        androidx.compose.material.pullrefresh.PullRefreshIndicator(refreshing, state, Modifier.align(Alignment.TopCenter))
     }
 }

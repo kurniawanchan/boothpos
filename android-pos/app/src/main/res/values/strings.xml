@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 060 / T003 — nama di peluncur dan Pengaturan > Aplikasi. Satu-satunya sumber nama aplikasi Android. -->
+    <string name="app_name">Warkop WJM POS</string>
+</resources>

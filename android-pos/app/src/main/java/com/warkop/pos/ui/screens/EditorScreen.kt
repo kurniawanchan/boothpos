@@ -4,8 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -26,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.warkop.pos.data.TaxDisplay
 import com.warkop.pos.model.*
 import com.warkop.pos.state.Load
 import com.warkop.pos.state.PosStore
@@ -38,7 +37,9 @@ fun EditorScreen(store: PosStore) {
     val order = store.active ?: return
     val size = windowSize()
     val catalog = store.menu
-    var cat by remember(catalog) { mutableStateOf(catalog?.categories?.firstOrNull()?.id ?: "") }
+    // 055 / T018 — pilihan kategori bertahan setelah daftar dimuat ulang; kategori pertama bila pilihan sudah hilang.
+    var pickedCat by remember { mutableStateOf("") }
+    val cat = keepOrPickCategory(catalog?.categories.orEmpty(), pickedCat)
     var query by remember { mutableStateOf("") }
     var paneOpen by remember { mutableStateOf(false) }
     val items = remember(cat, query, catalog) {
@@ -49,13 +50,9 @@ fun EditorScreen(store: PosStore) {
 
     val menu: @Composable (Modifier) -> Unit = { m ->
         Row(m) {
-            if (size == Size.EXPANDED || size == Size.LARGE) CategoryRail(catalog?.categories.orEmpty(), cat, if (size == Size.LARGE) 160.dp else 150.dp) { cat = it; query = "" }
             Column(Modifier.weight(1f)) {
-                if (size == Size.COMPACT || size == Size.MEDIUM) {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        catalog?.categories.orEmpty().forEach { c -> FilterChip(c.id == cat && query.isBlank(), { cat = c.id; query = "" }, { Text(c.name) }, shape = RoundedCornerShape(50)) }
-                    }
-                }
+                // 055 / T017 — satu strip horizontal untuk semua ukuran; menggantikan rel vertikal yang terpotong.
+                CategoryStrip(catalog?.categories.orEmpty(), cat) { pickedCat = it; query = "" }
                 SearchField(query) { query = it }
                 Spacer(Modifier.height(10.dp))
                 when (val c = store.catalog) {
@@ -73,6 +70,7 @@ fun EditorScreen(store: PosStore) {
     val pane: @Composable (Modifier) -> Unit = { m -> OrderPane(store, m, onBack = if (size == Size.COMPACT) ({ paneOpen = false }) else null) }
 
     PosShell(store, title = order.label, subtitle = null) {
+        RefreshableScreen(store.refreshing, store::refreshCounter, Modifier.fillMaxSize()) {
         when (size) {
             Size.COMPACT -> if (paneOpen) pane(Modifier.fillMaxSize()) else {
                 menu(Modifier.fillMaxSize())
@@ -83,23 +81,16 @@ fun EditorScreen(store: PosStore) {
                     }
                 }
             }
+            // 055 / T014–T015 — lanskap: produk kiri, order kanan (40 %); lebar sedang: produk di atas, order di bawah.
+            Size.MEDIUM -> Column(Modifier.fillMaxSize()) {
+                menu(Modifier.weight(1f).fillMaxWidth().padding(bottom = 8.dp))
+                pane(Modifier.fillMaxWidth().height(340.dp))
+            }
             else -> Row(Modifier.fillMaxSize()) {
-                menu(Modifier.weight(1f).fillMaxHeight().padding(end = 12.dp))
-                pane(Modifier.width(when (size) { Size.MEDIUM -> 320.dp; Size.EXPANDED -> 400.dp; else -> 420.dp }).fillMaxHeight())
+                menu(Modifier.weight(0.6f).fillMaxHeight().padding(end = 12.dp))
+                pane(Modifier.weight(0.4f).fillMaxHeight())
             }
         }
-    }
-}
-
-@Composable
-private fun CategoryRail(categories: List<MenuCategory>, selected: String, width: androidx.compose.ui.unit.Dp, onSelect: (String) -> Unit) {
-    Column(Modifier.width(width).padding(end = 12.dp)) {
-        Text("Kategori", Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp), fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        categories.forEach { c ->
-            val sel = c.id == selected
-            Surface(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp).height(52.dp), shape = RoundedCornerShape(50), color = if (sel) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent, onClick = { onSelect(c.id) }) {
-                Box(Modifier.padding(horizontal = 20.dp), contentAlignment = Alignment.CenterStart) { Text(c.name, fontWeight = FontWeight.Medium, fontSize = 17.sp) }
-            }
         }
     }
 }
@@ -182,19 +173,35 @@ fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null)
                 if (o.sent.isNotEmpty()) item { SectionLabel("Sudah dikirim ke dapur", Modifier.padding(top = 10.dp, bottom = 2.dp), MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(o.sent, key = { it.id }) { l -> LineRow(l, store) }
             }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            MoneyRow("Subtotal", rp(o.gross))
-            if (o.discount > 0) MoneyRow(discountLabel(o.discPct), "-" + rp(o.discount))
-            MoneyRow("Pajak 10%", rp(o.tax))
-            MoneyRow("Total", rp(o.total), big = true)
-            if (o.paid > 0) MoneyRow("Terbayar", rp(o.paid))
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                TonalPill("Kirim ${o.unsent.size}", { store.fire() }, Modifier.weight(1f), enabled = o.unsent.isNotEmpty(), icon = Icons.Filled.SoupKitchen, secondary = true)
-                PrimaryPill(if (waiter) "Cetak pre-bill" else "Bayar", { store.goPay() }, Modifier.weight(1.4f), enabled = o.live.isNotEmpty(), icon = if (waiter) Icons.Filled.Receipt else Icons.Filled.Payments, trailing = if (waiter) null else rp(o.remaining))
+            // 055 / T038 — area total bisa disembunyikan; satu kontrol membukanya lagi (FR-006, FR-007).
+            if (store.totalsVisible) {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                MoneyRow("Subtotal", rp(o.gross))
+                if (o.discount > 0) MoneyRow(discountHeading(o.discPct, o.discReason), "-" + rp(o.discount))
+                MoneyRow(taxLine(store.tax), rp(o.tax))
+                MoneyRow("Total", rp(o.total), big = true)
+                if (o.paid > 0) MoneyRow("Terbayar", rp(o.paid))
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TonalPill(kirimLabel(o.unsent.size), { store.fire() }, Modifier.weight(1f), enabled = o.unsent.isNotEmpty(), icon = Icons.Filled.SoupKitchen, secondary = true)
+                    PrimaryPill(bayarLabel(waiter), { store.goPay() }, Modifier.weight(1.4f), enabled = o.live.isNotEmpty(), icon = if (waiter) Icons.Filled.Receipt else Icons.Filled.Payments)
+                }
+                TextButton({ store.changeTotalsVisibility(false) }, Modifier.align(Alignment.End)) { Text("Sembunyikan total") }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Total ${rp(o.total)}", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                    TextButton({ store.changeTotalsVisibility(true) }) { Text("Tampilkan total") }
+                }
             }
         }
     }
+}
+
+/** 055 / T039 — baris pajak dari server; tarif ditampilkan hanya bila server memberinya (tanpa angka tertulis di kode). */
+private fun taxLine(t: TaxDisplay?): String {
+    if (t == null) return "Pajak"
+    val rate = t.ratePercent ?: return t.label
+    return "${t.label} ${if (rate % 1.0 == 0.0) rate.toLong().toString() else rate.toString()}%"
 }
 
 @Composable
@@ -204,13 +211,13 @@ private fun LineRow(l: OrderLine, store: PosStore) {
             if (!l.fired) QtyStepper(l.qty, { store.qtyDelta(l.id, -1) }, { store.qtyDelta(l.id, 1) })
             else Pill("${l.qty}×", MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurface)
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-                Text(l.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                if (l.mods.isNotEmpty()) Text(l.modLabel, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (l.note.isNotBlank()) Text("“${l.note}”", fontSize = 13.sp, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(l.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                if (l.mods.isNotEmpty()) Text(l.modLabel, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (l.note.isNotBlank()) Text("“${l.note}”", fontSize = 11.sp, fontStyle = FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (l.discPct > 0) Pill(discountLabel(l.discPct), MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.onPrimaryContainer)
             }
-            if (l.fired) Text("Terkirim ${l.firedAt}", fontSize = 12.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(end = 10.dp))
-            Text(num(l.net), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.padding(end = 6.dp))
+            if (l.fired) Text("Terkirim ${l.firedAt}", fontSize = 10.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(end = 10.dp))
+            Text(num(l.net), fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
         }
     }
 }

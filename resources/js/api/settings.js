@@ -31,3 +31,13 @@ export function getPaymentSettings() {
 export function updatePaymentSettings(payload) {
   return client.put('/settings/payment', payload).then((r) => r.data);
 }
+
+// 054 / US3 — alamat server lokal/online untuk halaman admin (owner/admin; menu `settings`).
+export function getServerAddress() {
+  return client.get('/settings/server-address').then((r) => r.data);
+}
+
+/** payload: { local, online, selected: 'local' | 'online' } — kosong = null. */
+export function saveServerAddress(payload) {
+  return client.put('/settings/server-address', payload).then((r) => r.data);
+}
