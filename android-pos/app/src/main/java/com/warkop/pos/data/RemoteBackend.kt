@@ -104,6 +104,13 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         return TerminalConfig(serverUrl.orEmpty(), outlet.id, outlet.name, device.id, device.code)
     }
 
+    override fun serverUrl(): String? = serverUrl
+
+    override fun setServerUrl(url: String) {
+        serverUrl = url.trim()
+        vault.put(TokenVault.SERVER_URL, url.trim())
+    }
+
     // --- sesi PIN ---
     override suspend fun roster(): List<StaffUser> {
         val outlet = outletId ?: throw ApiError.Network("Terminal belum disiapkan.")

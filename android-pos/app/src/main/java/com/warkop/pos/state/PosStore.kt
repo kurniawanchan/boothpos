@@ -166,12 +166,13 @@ class PosStore(
         (closedCache + orders.filter { it.closed }).distinctBy { it.id }.sortedByDescending { it.id.toLongOrNull() ?: 0L }
 
     // ---------- awal & sesi ----------
-    /** Dipanggil sekali saat aplikasi mulai: terminal belum disiapkan → penyiapan; sudah → PIN dengan roster dimuat. */
+    /** Dipanggil sekali saat aplikasi mulai: selalu langsung ke layar PIN, membaca alamat server dari vault. */
     fun bootstrap() {
         val saved = remote?.savedConfig()
         config = saved
-        if (saved == null) { dest = Dest.SETUP; return }
-        if (dest == Dest.SETUP) dest = Dest.PIN
+        // 050 / T066 — selalu langsung ke PIN; jika belum ada konfigurasi, serverUrl
+        // diambil dari vault (atau nilai default bila ada), roster tetap dimuat.
+        dest = Dest.PIN
         loadRoster()
     }
 
@@ -188,6 +189,15 @@ class PosStore(
 
     /** Hanya untuk layar penyiapan terminal. */
     internal val backendForSetup: PosBackend? get() = backend
+
+    /** Baca alamat server dari vault (untuk tampilan di layar PIN). */
+    fun serverUrl(): String? = backend?.serverUrl()
+
+    /** Simpan alamat server ke vault (untuk penyiapan yang disederhanakan). */
+    fun setServerUrl(url: String) { backend?.setServerUrl(url) }
+
+    /** Navigasi ke layar penyiapan terminal dari PIN (untuk mengganti server/alamat). */
+    fun goToSetup() { dest = Dest.SETUP }
 
     internal fun setConfig(c: TerminalConfig) { config = c; dest = Dest.PIN; loadRoster() }
 

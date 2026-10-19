@@ -52,6 +52,12 @@ interface PosBackend {
     suspend fun listOutlets(): List<OutletChoice>
     suspend fun pairTerminal(outlet: OutletChoice, terminalName: String): TerminalConfig
 
+    /** Baca alamat server yang tersimpan di vault (untuk tampilan/penyiapan). Null bila belum pernah disiapkan. */
+    fun serverUrl(): String?
+
+    /** Simpan alamat server ke vault (untuk penyiapan yang disederhanakan). */
+    fun setServerUrl(url: String)
+
     // --- sesi PIN ---
     suspend fun roster(): List<StaffUser>
     suspend fun pinLogin(user: StaffUser, pin: String): PosSession

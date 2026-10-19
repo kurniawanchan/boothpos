@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
@@ -123,10 +124,12 @@ private fun BrandPanel(store: PosStore, modifier: Modifier) {
         Column(Modifier.padding(28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(Modifier.size(52.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primary) {
-                    Box(contentAlignment = Alignment.Center) { Text("W", color = MaterialTheme.colorScheme.onPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold) }
-                }
+                    Box(contentAlignment = Alignment.Center) { Text("W", color = MaterialTheme.colorScheme.onPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold) } }
                 Spacer(Modifier.width(14.dp))
-                Column { Text(store.config?.outletName ?: "Warkop WJM", fontSize = 22.sp, fontWeight = FontWeight.SemiBold); Text("Terminal ${store.config?.deviceCode ?: ""}", fontSize = 14.sp) }
+                Column(Modifier.weight(1f)) { Text(store.config?.outletName ?: store.serverUrl()?.let { "Outlet" } ?: "Warkop WJM", fontSize = 22.sp, fontWeight = FontWeight.SemiBold); Text("Terminal ${store.config?.deviceCode ?: ""}", fontSize = 14.sp) }
+                IconButton(onClick = { store.goToSetup() }) {
+                    Icon(imageVector = Icons.Filled.Settings, contentDescription = "Atur terminal", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
             }
             Spacer(Modifier.weight(1f))
             Text(time, fontSize = 112.sp, fontWeight = FontWeight.Light, lineHeight = 112.sp)
