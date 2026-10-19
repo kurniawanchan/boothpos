@@ -16,6 +16,13 @@ data class PrintLine(
     val big: Boolean = false,
     /** Bila diisi, [text] di kiri dan [right] di kanan pada satu baris (mis. "Subtotal ... 25.000"). */
     val right: String? = null,
+    /**
+     * 059 — baris gambar (logo struk), berupa baris 1-bit dalam heksadesimal, MSB dulu. Null untuk baris teks.
+     * Field baru punya default, sehingga job antrean lama (tanpa field ini) tetap terbaca.
+     */
+    val raster: String? = null,
+    val rasterWidthDots: Int = 0,
+    val rasterHeightDots: Int = 0,
 ) {
     @Serializable enum class Align { LEFT, CENTER }
 }
@@ -79,6 +86,11 @@ object EscPos {
         val boldFlag: Byte = if (line.bold) 1 else 0
         out.write(byteArrayOf(ESC.toByte(), 'a'.code.toByte(), justify))
         out.write(byteArrayOf(ESC.toByte(), 'E'.code.toByte(), boldFlag))
+        if (line.raster != null) {
+            writeRaster(line.raster, line.rasterWidthDots, line.rasterHeightDots, out)
+            if (line.bold) out.write(byteArrayOf(ESC.toByte(), 'E'.code.toByte(), 0))
+            return
+        }
         if (line.big) out.write(byteArrayOf(GS.toByte(), '!'.code.toByte(), 0x11))
 
         val rows: List<String> = if (line.right != null) {
@@ -94,5 +106,25 @@ object EscPos {
 
         if (line.big) out.write(byteArrayOf(GS.toByte(), '!'.code.toByte(), 0))
         if (line.bold) out.write(byteArrayOf(ESC.toByte(), 'E'.code.toByte(), 0))
+    }
+
+    /**
+     * GS v 0 (mode 0): lebar dalam byte (dibulatkan ke atas) dan tinggi dalam titik, little endian, lalu data.
+     * Jika jumlah byte data tidak sesuai ukuran, baris dilewati (lebih baik tanpa logo daripada mencetak sampah).
+     */
+    fun writeRaster(hex: String, widthDots: Int, heightDots: Int, out: ByteArrayOutputStream) {
+        if (widthDots <= 0 || heightDots <= 0) return
+        val bytesPerRow = (widthDots + 7) / 8
+        val data = hexToBytes(hex) ?: return
+        if (data.size != bytesPerRow * heightDots) return
+        out.write(byteArrayOf(GS.toByte(), 'v'.code.toByte(), '0'.code.toByte(), 0))
+        out.write(byteArrayOf((bytesPerRow and 0xFF).toByte(), (bytesPerRow shr 8).toByte()))
+        out.write(byteArrayOf((heightDots and 0xFF).toByte(), (heightDots shr 8).toByte()))
+        out.write(data)
+    }
+
+    private fun hexToBytes(hex: String): ByteArray? {
+        if (hex.length % 2 != 0) return null
+        return runCatching { ByteArray(hex.length / 2) { i -> hex.substring(i * 2, i * 2 + 2).toInt(16).toByte() } }.getOrNull()
     }
 }

@@ -59,6 +59,8 @@ import kotlinx.serialization.Serializable
 
 /** 048 / S4 — cetak ulang; salinan pertama gratis, berikutnya wajib [overrideToken] (persetujuan `reprint`). */
 @Serializable data class ReprintRequestDto(
+    // 057 / US3 — nomor salinan dari server (receipt_copies + 2); wajib, sama dengan aturan ReprintRequest di server.
+    @SerialName("copy_no") val copyNo: Int,
     @SerialName("override_token") val overrideToken: String? = null,
 )
 

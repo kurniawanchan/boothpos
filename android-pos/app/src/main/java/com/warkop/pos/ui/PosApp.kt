@@ -26,16 +26,17 @@ fun PosApp(store: PosStore, preset: String? = null) {
                     Dest.SETUP -> store.backendForSetup?.let { TerminalSetupScreen(it) { cfg -> store.setConfig(cfg) } }
                     Dest.PIN -> PinScreen(store)
                     Dest.OPEN_SHIFT -> OpenShiftScreen(store)
-                    Dest.TABLES -> PosShell(store, "Meja") { TablesScreen(store) }
+                    // 055 / T028–T031 — tarik-untuk-segarkan di layar yang memuat data server (counter punya pembungkus sendiri).
+                    Dest.TABLES -> PosShell(store, "Meja") { RefreshableScreen(store.refreshing, store::refreshCurrent, Modifier.fillMaxSize()) { TablesScreen(store) } }
                     Dest.EDITOR -> EditorScreen(store)
                     Dest.TENDER -> TenderScreen(store)
                     Dest.DONE -> DoneScreen(store)
-                    Dest.ORDERS -> OrdersScreen(store)
-                    Dest.SHIFT -> ShiftHubScreen(store)
-                    Dest.XREPORT -> XReportScreen(store)
-                    Dest.CLOSE_SHIFT -> CloseShiftScreen(store)
+                    Dest.ORDERS -> RefreshableScreen(store.refreshing, store::refreshCurrent, Modifier.fillMaxSize()) { OrdersScreen(store) }
+                    Dest.SHIFT -> RefreshableScreen(store.refreshing, store::refreshCurrent, Modifier.fillMaxSize()) { ShiftHubScreen(store) }
+                    Dest.XREPORT -> RefreshableScreen(store.refreshing, store::refreshCurrent, Modifier.fillMaxSize()) { XReportScreen(store) }
+                    Dest.CLOSE_SHIFT -> RefreshableScreen(store.refreshing, store::refreshCurrent, Modifier.fillMaxSize()) { CloseShiftScreen(store) }
                     Dest.CLOSE_RESULT -> CloseResultScreen(store)
-                    Dest.SYNC -> SyncScreen(store)
+                    Dest.SYNC -> RefreshableScreen(store.refreshing, store::refreshCurrent, Modifier.fillMaxSize()) { SyncScreen(store) }
                 }
                 }
                 SheetHost(store)

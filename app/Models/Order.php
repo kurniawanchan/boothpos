@@ -46,7 +46,7 @@ class Order extends Model
     protected function casts(): array
     {
         return [
-            'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2',
+            'subtotal' => 'decimal:2', 'discount_amount' => 'decimal:2', 'discount_percent' => 'decimal:2',
             'total_amount' => 'decimal:2', 'total_cost' => 'decimal:2',
             'paid_amount' => 'decimal:2', 'change_amount' => 'decimal:2',
             'completed_at' => 'datetime',

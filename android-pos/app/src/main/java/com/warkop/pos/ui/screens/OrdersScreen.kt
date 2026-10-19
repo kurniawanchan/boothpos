@@ -72,7 +72,7 @@ fun OrdersScreen(store: PosStore) {
                     Surface(modifier = Modifier.width(430.dp).fillMaxHeight().padding(start = 12.dp), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                         Column(Modifier.padding(20.dp)) {
                             Text(sel.receiptNo ?: "Dibatalkan", fontSize = 30.sp)
-                            Text("${sel.label} · ditutup ${sel.closedAt} · cetak ulang ${sel.reprints}×", Modifier.padding(top = 4.dp, bottom = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(listOfNotNull(sel.label, sel.closedAt?.let { "ditutup $it" }, "cetak ulang ${sel.reprints}×").joinToString(" · "), Modifier.padding(top = 4.dp, bottom = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.height(10.dp))
                             sel.live.forEach { l -> Row(Modifier.fillMaxWidth()) { Text("${l.qty}× ${l.name}", Modifier.weight(1f)); Text(num(l.net)) } }
                             HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -81,9 +81,13 @@ fun OrdersScreen(store: PosStore) {
                             if (sel.reprints > 0) Text("cetak ulang ${sel.reprints}×", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (sel.refunded) Text("Direfund · total ${rp(sel.refundTotal ?: 0)} · kembali tunai ${rp(sel.cashReturned ?: 0)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.weight(1f))
-                            if (sel.cancelledReason == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedPill("Lihat struk", { store.show(Sheet.Receipt(sel.id)) }); OutlinedPill("Cetak ulang", { store.reprint(sel.id) })
-                                OutlinedPill(if (sel.refunded) "Sudah direfund" else "Refund", { store.show(Sheet.Refund(sel.id)) }, enabled = !sel.refunded, danger = true)
+                            // 057 / US4 — dua tombol berdampingan, Refund di barisnya sendiri: labelnya utuh, tidak terpotong.
+                            if (sel.cancelledReason == null) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedPill("Lihat struk", { store.show(Sheet.Receipt(sel.id)) }, Modifier.weight(1f))
+                                    OutlinedPill("Cetak ulang", { store.reprint(sel.id) }, Modifier.weight(1f))
+                                }
+                                OutlinedPill(if (sel.refunded) "Sudah direfund" else "Refund", { store.show(Sheet.Refund(sel.id)) }, Modifier.fillMaxWidth(), enabled = !sel.refunded, danger = true)
                             }
                         }
                     }

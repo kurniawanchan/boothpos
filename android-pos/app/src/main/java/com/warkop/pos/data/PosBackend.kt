@@ -30,6 +30,12 @@ data class TerminalConfig(
 
 data class OutletChoice(val id: Long, val name: String)
 
+/** 054 — pilihan admin ("local" | "online") dan URL yang dipakai untuk pilihan itu; url null = tetap alamat pairing. */
+data class ServerEndpoint(val selected: String, val url: String?)
+
+/** 055 — label dan tarif pajak dari server untuk baris "Pajak" di layar kasir; ratePercent null = tarif tidak diketahui. */
+data class TaxDisplay(val label: String, val ratePercent: Double?)
+
 /** 050 / T006 — hasil kirim ke dapur: tab terbaru dan tiket yang baru dibuat. */
 data class KitchenSend(val tab: Order, val tickets: List<PrintableKot>)
 
@@ -121,6 +127,15 @@ interface PosBackend {
     /** Heartbeat perangkat (US6): jam perangkat, jumlah antrean lokal (0 bila tidak ada), dan versi aplikasi. */
     suspend fun heartbeat(clockMs: Long, queueDepth: Int): com.warkop.pos.state.HeartbeatResult
 
+    /** 054 / US3 — alamat server yang dipilih admin; null = galat (tablet tetap memakai alamat pairing). */
+    suspend fun serverEndpoint(): ServerEndpoint?
+
+    /** 055 / T036 — pajak untuk tampilan counter; null bila server belum memberi label. */
+    suspend fun taxDisplay(): TaxDisplay?
+
+    /** 056 amandemen — simpan gambar QR kanal ke server; galat server dilempar sebagai ApiError. */
+    suspend fun uploadQrImage(channelId: Long, bytes: ByteArray, mime: String)
+
     // --- diskon, bagi rata, cetak ulang, refund (048 / S4 — US5). [key] = Idempotency-Key per niat pengguna. ---
     /** Diskon order ([scope] "order") atau satu baris ([scope] "line", [lineId]). Di atas batas → 409 override_required. */
     suspend fun setDiscount(tabId: String, percent: Double, reasonCode: String, scope: String, lineId: Int?, overrideToken: String?, key: String): Order
@@ -130,7 +145,7 @@ interface PosBackend {
     /** Bagi per item ke POST /tabs/{id}/split: [lines] = (id baris, qty) yang dipindah; [cashAmount] = tunai bagian itu. */
     suspend fun splitItems(tabId: String, lines: List<Pair<Int, Int>>, cashAmount: String, key: String): SplitItemsResult
     /** Cetak ulang: salinan pertama gratis, berikutnya wajib [overrideToken]. Mengembalikan copy_no. */
-    suspend fun reprintOrder(orderId: String, overrideToken: String?, key: String): Int
+    suspend fun reprintOrder(orderId: String, copyNo: Int, overrideToken: String?, key: String): Int
     suspend fun refundOrder(orderId: String, reasonCode: String, reason: String?, overrideToken: String?, key: String): Order
     suspend fun closedOrders(): List<Order>
 }

@@ -10,6 +10,12 @@ import kotlinx.serialization.Serializable
 @Serializable data class ReceiptDto(
     @SerialName("store_name") val storeName: String? = null,
     @SerialName("store_address") val storeAddress: String? = null,
+    /** 059 — kontak toko dari pengaturan admin (bukan pelanggan). Null/kosong = tidak dicetak. */
+    @SerialName("store_contact_person") val storeContactPerson: String? = null,
+    @SerialName("store_contact_phone") val storeContactPhone: String? = null,
+    @SerialName("store_contact_email") val storeContactEmail: String? = null,
+    /** 059 — URL logo; null bila admin mematikan logo di struk. Dapat berupa localhost (lihat ServerUrl). */
+    @SerialName("store_logo_url") val storeLogoUrl: String? = null,
     @SerialName("order_number") val orderNumber: String = "",
     @SerialName("receipt_no") val receiptNo: String? = null,
     @SerialName("queue_no") val queueNo: String? = null,

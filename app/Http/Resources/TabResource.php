@@ -40,6 +40,12 @@ class TabResource extends JsonResource
             'customer_id' => $this->customer_id,
             'subtotal' => self::money($this->subtotal),
             'discount_amount' => self::money($this->discount_amount),
+            // 057 / US8 — persen dan alasan diskon order.
+            'discount_percent' => $this->discount_percent !== null ? (float) $this->discount_percent : null,
+            'discount_reason_code' => $this->discount_reason_code,
+            'discount_reason_label' => \App\Models\ReasonCode::discountLabel($this->discount_reason_code),
+            'reprint_count' => (int) $this->receipt_copies,
+            'closed_at' => $this->completed_at?->toIso8601String(),
             // 048 — pajak eksklusif (snapshot saat transaksi) + penomoran + pra-bill. Field SELALU ada (null/"0.00" bila belum).
             'tax_amount' => self::money($this->tax_amount),
             'tax_rate' => self::money($this->tax_rate_snapshot),

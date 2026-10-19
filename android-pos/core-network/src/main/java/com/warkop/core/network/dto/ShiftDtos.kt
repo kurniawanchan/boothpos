@@ -101,4 +101,7 @@ import kotlinx.serialization.json.JsonElement
 @Serializable data class FeaturesDto(
     @SerialName("variance_tolerance") val varianceTolerance: JsonElement? = null,
     @SerialName("cash_out_approval_threshold") val cashOutApprovalThreshold: JsonElement? = null,
+    // 055 / T036 — label dan tarif pajak dari server (FR-015); tidak lagi "Pajak 10%" tertulis di layar.
+    @SerialName("tax_label") val taxLabel: String? = null,
+    @SerialName("tax_rate") val taxRate: JsonElement? = null,
 )

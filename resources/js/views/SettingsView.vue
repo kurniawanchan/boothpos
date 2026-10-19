@@ -16,6 +16,7 @@ import LicenseTierSection from './settings/LicenseTierSection.vue';
 import BusinessDaySection from './settings/BusinessDaySection.vue';
 import ReasonCodesSection from './settings/ReasonCodesSection.vue';
 import MenuReleaseSection from './settings/MenuReleaseSection.vue';
+import ServerAddressSection from './settings/ServerAddressSection.vue';
 
 /**
  * 041-back-office-ui-redesign (US2) — Pengaturan dipecah dari satu halaman 8 kartu menjadi daftar bagian di kiri
@@ -42,6 +43,7 @@ const SECTIONS = {
   business_day: BusinessDaySection,
   reasons: ReasonCodesSection,
   menu_release: MenuReleaseSection,
+  server: ServerAddressSection,
   backup: BackupRestoreSection,
 };
 
@@ -68,6 +70,7 @@ const groups = computed(() => [
     label: t('settings.group_system'),
     items: [
       { key: 'mode', label: t('settings.system_mode_section_title') },
+      { key: 'server', label: t('settings.server_address_section_title') },
       { key: 'tier', label: t('settings.license_tier') },
       { key: 'business_day', label: t('settings.business_day_section_title') },
       // 043 — kode alasan (86, diskontinu, tolak persetujuan) diatur admin; dibaca dialog alasan di halaman Produk.

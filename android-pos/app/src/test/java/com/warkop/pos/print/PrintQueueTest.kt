@@ -106,4 +106,13 @@ class PrintQueueTest {
         assertEquals("sudah disampaikan ke dapur", q.get(jobKey(PrintKind.KOT, "2201", 1))?.dismissReason)
         assertNull(q.get("tidak-ada"))
     }
+
+    /** 059 / T023 — baris raster (logo, atau baris lain yang memakainya) tetap utuh setelah antrean dibaca ulang. */
+    @Test fun `baris raster bertahan lewat simpan dan baca ulang`() {
+        val file = File(tmp.root, "q.json")
+        val logo = PrintLine(align = PrintLine.Align.CENTER, raster = "ff00", rasterWidthDots = 8, rasterHeightDots = 2)
+        queueAt(file).enqueue(PrintKind.KOT, "2201", 1, lines = listOf(logo, PrintLine(text = "x")))
+        val saved = queueAt(file).get(jobKey(PrintKind.KOT, "2201", 1))?.lines
+        assertEquals(logo, saved?.first())
+    }
 }

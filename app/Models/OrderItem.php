@@ -20,7 +20,7 @@ class OrderItem extends Model
     {
         return [
             'cost_price' => 'decimal:2', 'sell_price' => 'decimal:2',
-            'discount_amount' => 'decimal:2', 'line_total' => 'decimal:2',
+            'discount_amount' => 'decimal:2', 'discount_percent' => 'decimal:2', 'line_total' => 'decimal:2',
             'modifiers' => 'array', 'sent_at' => 'datetime',
         ];
     }

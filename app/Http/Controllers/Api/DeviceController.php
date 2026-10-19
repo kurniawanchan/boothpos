@@ -7,6 +7,7 @@ use App\Http\Requests\DeviceHeartbeatRequest;
 use App\Http\Requests\PairDeviceRequest;
 use App\Models\Device;
 use App\Services\DeviceService;
+use App\Support\ServerAddress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -41,13 +42,34 @@ class DeviceController extends Controller
      */
     public function heartbeat(DeviceHeartbeatRequest $request, DeviceService $devices): JsonResponse
     {
+        return response()->json($devices->heartbeat($this->activeDevice($request), $request->validated()));
+    }
+
+    /**
+     * 054 / US3 — alamat server yang dipilih admin untuk terminal ini. Tablet memanggilnya setelah roster berhasil
+     * (research.md R3). Hanya `selected` dan `url` yang dikirim: alamat satunya tidak pernah sampai ke tablet (FR-011).
+     * Memakai pengecekan perangkat yang sama dengan heartbeat (activeDevice), bukan salinannya.
+     */
+    public function serverAddress(Request $request): JsonResponse
+    {
+        $this->activeDevice($request);
+
+        return response()->json([
+            'selected' => ServerAddress::current()['selected'],
+            'url' => ServerAddress::selectedUrl(),
+        ]);
+    }
+
+    /** Perangkat dari X-Device-Id harus aktif (tidak dicabut) dan terlihat untuk outlet pengguna; selain itu 422. */
+    private function activeDevice(Request $request): Device
+    {
         $header = $request->header('X-Device-Id');
         $device = empty($header) ? null : Device::query()->whereNull('revoked_at')->find((int) $header);
         if ($device === null) {
             throw ValidationException::withMessages(['device_id' => __('devices.invalid_device')]);
         }
 
-        return response()->json($devices->heartbeat($device, $request->validated()));
+        return $device;
     }
 
     public function destroy(Request $request, Device $device): JsonResponse

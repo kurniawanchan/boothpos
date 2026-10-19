@@ -64,10 +64,16 @@ class DiscountService
 
             if ($line !== null) {
                 // Diskon baris menggantikan diskon baris sebelumnya; subtotal dihitung ulang dari baris.
-                $line->forceFill(['discount_amount' => $amount, 'line_total' => round($base - $amount, 2)])->save();
+                $line->forceFill([
+                    'discount_amount' => $amount, 'line_total' => round($base - $amount, 2),
+                    // 057 / US8 — persen dan alasan disimpan di baris (bukan hanya di activity log).
+                    'discount_percent' => $percent, 'discount_reason_code' => $reasonCode,
+                ])->save();
                 $this->tabs->recalculate($order);
             } else {
                 // Diskon order disimpan sebagai jumlah rupiah pada saat diterapkan (tidak ikut berubah bila baris berubah).
+                // 057 / US8 — persen dan alasan diskon order disimpan di order, dalam transaksi yang sama.
+                $order->forceFill(['discount_percent' => $percent, 'discount_reason_code' => $reasonCode])->save();
                 $this->tabs->recalculate($order, $amount);
             }
 
@@ -93,6 +99,8 @@ class DiscountService
             $this->tabs->assertSessionOpen(CashierSession::findOrFail($order->session_id));
 
             $before = number_format((float) $order->discount_amount, 2, '.', '');
+            // 057 / US8 — diskon dihapus: persen dan alasan ikut dikosongkan.
+            $order->forceFill(['discount_percent' => null, 'discount_reason_code' => null])->save();
             $this->tabs->recalculate($order, 0.0);
 
             $this->activity->log($user->id, 'discount_removed', 'order', $order->id, 'Diskon tingkat order dihapus', ['discount_amount' => $before], ['discount_amount' => '0.00']);

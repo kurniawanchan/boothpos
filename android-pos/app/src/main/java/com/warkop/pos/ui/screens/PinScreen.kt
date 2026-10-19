@@ -17,8 +17,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.warkop.pos.model.StaffUser
@@ -26,6 +30,7 @@ import com.warkop.pos.state.Conn
 import com.warkop.pos.state.Load
 import com.warkop.pos.state.PosStore
 import com.warkop.pos.ui.ErrorState
+import com.warkop.pos.ui.chooseFontSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.warkop.pos.ui.Keypad
@@ -47,6 +52,12 @@ fun PinScreen(store: PosStore) {
 
     // Pilihan awal = staf pertama yang bisa masuk; dijaga bila daftar berubah (mis. setelah dimuat ulang).
     LaunchedEffect(staff, store.roster) { if (store.roster is Load.Ready && (selected == null || staff.none { it.id == selected?.id })) selected = staff.firstOrNull() }
+
+    // 054 / US2 — status koneksi di layar ini diperbarui hanya selama layar PIN tampil; timer berhenti saat keluar.
+    DisposableEffect(Unit) {
+        store.startPinProbe()
+        onDispose { store.stopPinProbe() }
+    }
 
     fun submit() {
         val u = selected ?: run { error = "Pilih nama Anda terlebih dahulu."; return }
@@ -89,7 +100,8 @@ fun PinScreen(store: PosStore) {
     } else {
         Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
             BrandPanel(store, Modifier.weight(0.38f).fillMaxHeight())
-            entry(Modifier.weight(0.62f).fillMaxHeight().padding(start = 40.dp, end = 24.dp, top = 24.dp))
+            // 054 / US4 — layar lebar (tablet landscape) dulu tidak bisa digulir: keypad terdorong keluar saat banner tampil.
+            entry(Modifier.weight(0.62f).fillMaxHeight().padding(start = 40.dp, end = 24.dp, top = 24.dp).verticalScroll(rememberScrollState()))
         }
     }
 }
@@ -135,19 +147,57 @@ private fun BrandPanel(store: PosStore, modifier: Modifier) {
             Text(time, fontSize = 112.sp, fontWeight = FontWeight.Light, lineHeight = 112.sp)
             Text(java.text.SimpleDateFormat("EEEE, d MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date()), fontSize = 18.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                InfoChip(if (store.conn == Conn.ONLINE) Icons.Filled.Wifi else Icons.Filled.WifiOff, store.conn.label)
-                InfoChip(Icons.Filled.Schedule, store.config?.let { "${it.outletName} · ${it.deviceCode}" } ?: "Terminal")
-            }
+            OutletStatusChips(store.conn, store.config?.let { "${it.outletName} · ${it.deviceCode}" } ?: "Terminal")
         }
     }
 }
 
 @Composable
-private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, fontSize: TextUnit = 14.sp) {
     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest, contentColor = MaterialTheme.colorScheme.onSurface) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(text, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            // 054 / FR-001 — satu baris, tanpa elipsis: nama outlet dipastikan muat oleh OutletStatusChips.
+            Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(text, fontWeight = FontWeight.Medium, fontSize = fontSize, maxLines = 1, softWrap = false)
+        }
+    }
+}
+
+/** Lebar dalam chip di luar teks: padding 14+14, ikon 18, jarak 6 (sama dengan [InfoChip]). */
+private val CHIP_INSET = 52.dp
+private val CHIP_GAP = 10.dp
+/** Ukuran huruf nama outlet, terbesar dulu. Di bawah 12sp terlalu kecil dibaca di kasir. */
+private val OUTLET_FONT_SIZES = listOf(14f, 13f, 12f)
+
+/**
+ * 054 / US1 — chip status koneksi dan chip outlet · terminal. Nama outlet dibuat muat: pertama mengecil sampai
+ * [OUTLET_FONT_SIZES]; bila tetap tidak muat di samping chip koneksi, chip outlet pindah ke baris penuh di atasnya.
+ * Keputusan tata letak hanya dari lebar panel (tidak dari ukuran chip), jadi tidak ada loop umpan balik.
+ */
+@Composable
+private fun OutletStatusChips(conn: Conn, outletText: String) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        val panelPx = with(density) { maxWidth.roundToPx() }
+        val gapPx = with(density) { CHIP_GAP.roundToPx() }
+        val insetPx = with(density) { CHIP_INSET.roundToPx() }
+        fun textWidth(text: String, size: Float): Int =
+            measurer.measure(text, TextStyle(fontSize = size.sp, fontWeight = FontWeight.Medium)).size.width
+        fun outletSize(available: Int): Float? = chooseFontSize({ textWidth(outletText, it) }, available - insetPx, OUTLET_FONT_SIZES)
+
+        val connWidth = textWidth(conn.label, 14f) + insetPx
+        val connIcon = if (conn == Conn.OFFLINE || conn == Conn.OFFLINE_LIMITED) Icons.Filled.WifiOff else Icons.Filled.Wifi
+        val sideBySide = outletSize(panelPx - connWidth - gapPx)
+        if (sideBySide != null) {
+            Row(horizontalArrangement = Arrangement.spacedBy(CHIP_GAP)) {
+                InfoChip(connIcon, conn.label)
+                InfoChip(Icons.Filled.Schedule, outletText, fontSize = sideBySide.sp)
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(CHIP_GAP)) {
+                InfoChip(Icons.Filled.Schedule, outletText, fontSize = (outletSize(panelPx) ?: OUTLET_FONT_SIZES.last()).sp)
+                InfoChip(connIcon, conn.label)
+            }
         }
     }
 }
