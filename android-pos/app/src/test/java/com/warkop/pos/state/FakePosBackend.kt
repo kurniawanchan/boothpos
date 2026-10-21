@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonObject
  */
 class FakePosBackend : PosBackend {
     var rosterResult: () -> List<StaffUser> = { emptyList() }
+    private var serverUrlValue: String? = null
     var endpoint: ServerEndpoint? = null
     var tax: TaxDisplay? = null
     /** 055 / T022 — hasil loadMenu; null = panggilan tidak diharapkan. */
@@ -24,6 +25,8 @@ class FakePosBackend : PosBackend {
 
     override suspend fun roster(): List<StaffUser> = rosterResult()
     override suspend fun serverEndpoint(): ServerEndpoint? = endpoint
+    override fun serverUrl(): String? = serverUrlValue
+    override fun setServerUrl(url: String) { serverUrlValue = url }
     override suspend fun taxDisplay(): TaxDisplay? = tax
     var qris: com.warkop.pos.model.QrisChannel? = null
     /** 056 amandemen — unggahan yang diterima fake: (channelId, mime, ukuran). */
