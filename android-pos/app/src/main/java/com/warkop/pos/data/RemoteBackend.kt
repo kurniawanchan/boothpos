@@ -60,7 +60,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
 
     /** Terminal yang sudah disiapkan (URL + outlet + perangkat), atau null → layar penyiapan. */
     fun savedConfig(): TerminalConfig? {
-        val url = serverUrl ?: return null
+        val url = serverUrl?.takeIf { it.isNotBlank() } ?: return null
         val outlet = outletId ?: return null
         val device = deviceId ?: return null
         return TerminalConfig(url, outlet, vault.get(TokenVault.OUTLET_NAME).orEmpty(), device, vault.get(TokenVault.DEVICE_CODE).orEmpty())
@@ -113,8 +113,14 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     override fun serverUrl(): String? = serverUrl
 
     override fun setServerUrl(url: String) {
-        serverUrl = url.trim()
-        vault.put(TokenVault.SERVER_URL, url.trim())
+        // Alamat kosong berarti "kosongkan" (null), bukan string "" yang menyesatkan loader.
+        val trimmed = url.trim().takeIf { it.isNotBlank() }
+        serverUrl = trimmed
+        if (trimmed == null) {
+            vault.clear(TokenVault.SERVER_URL)
+        } else {
+            vault.put(TokenVault.SERVER_URL, trimmed)
+        }
     }
 
     // --- sesi PIN ---

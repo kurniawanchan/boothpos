@@ -293,13 +293,22 @@ class PosStore(
         // menjangkau server". Uji (roster) pada alamat kandidat dulu; kalau gagal, tetap di
         // alamat lama yang memang terjangkau.
         val savedUrl = backend?.serverUrl()
+        var adopted = false
         try {
             backend?.setServerUrl(url)
             backend?.roster()
             onServerUrl(url)
             config = current.copy(serverUrl = url)
-        } catch (e: ApiError) {
-            if (savedUrl != null) backend?.setServerUrl(savedUrl)
+            adopted = true
+        } catch (t: Throwable) {
+            // Pembatalan coroutine harus diteruskan agar struktur pembatalan tetap benar.
+            if (t is kotlinx.coroutines.CancellationException) throw t
+        } finally {
+            // Kembalikan (atau hapus) alamat tersimpan bila adopsi tidak benar-benar sukses,
+            // termasuk bila await dibatalkan atau gagal di luar ApiError.
+            if (!adopted) {
+                backend?.setServerUrl(savedUrl ?: "")
+            }
         }
     }
 
