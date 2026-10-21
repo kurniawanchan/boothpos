@@ -56,16 +56,12 @@ class PosStoreConnectionTest {
         assertTrue(store.roster is Load.Failed)
     }
 
-    @Test fun `galat non-jaringan tidak mengklaim server tidak terjangkau (FR-006)`() = runTest(dispatcher) {
+    @Test fun `galat non-jaringan pada pemuatan pertama tetap menandai Online (regresi status koneksi jujur di layar PIN)`() = runTest(dispatcher) {
+        backend.rosterResult = { throw ApiError.Unauthorized("Sesi berakhir") }
         val store = PosStore(backend = backend)
         store.loadRoster()
         advanceUntilIdle()
-        assertEquals(Conn.ONLINE, store.conn)
-
-        backend.rosterResult = { throw ApiError.Unauthorized("Sesi berakhir") }
-        store.loadRoster()
-        advanceUntilIdle()
-        assertEquals("server menjawab, jadi tidak boleh Offline", Conn.ONLINE, store.conn)
+        assertEquals("server menjawab, jadi harus Online sejak pemuatan pertama", Conn.ONLINE, store.conn)
         assertTrue(store.roster is Load.Failed)
     }
 
@@ -150,5 +146,20 @@ class PosStoreConnectionTest {
         runCurrent()
         assertTrue("tidak boleh pindah saat server tidak terjangkau", adopted.isEmpty())
         store.stopPinProbe()
+    }
+
+    @Test fun `galat non-jaringan setelah sebelumnya Offline menandai Online (regresi FR-006)`() = runTest(dispatcher) {
+        var jaringanGagal = true
+        backend.rosterResult = { if (jaringanGagal) throw ApiError.Network() else throw ApiError.Unauthorized("Sesi berakhir") }
+        val store = PosStore(backend = backend)
+        store.loadRoster()
+        advanceUntilIdle()
+        assertEquals(Conn.OFFLINE, store.conn)
+
+        jaringanGagal = false
+        store.loadRoster()
+        advanceUntilIdle()
+        assertEquals("server kini menjawab (401), jadi harus Online bukan OFFLINE", Conn.ONLINE, store.conn)
+        assertTrue(store.roster is Load.Failed)
     }
 }

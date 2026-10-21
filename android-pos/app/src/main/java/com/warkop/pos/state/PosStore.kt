@@ -254,7 +254,9 @@ class PosStore(
             val fresh = try {
                 Load.Ready(b.roster()).also { conn = Conn.ONLINE }
             } catch (e: ApiError) {
-                if (e is ApiError.Network) conn = Conn.OFFLINE
+                // 054 / FR-006 — hanya galat jaringan yang berarti tidak terjangkau (OFFLINE).
+                // Galat lain (401/403/404/5xx) membuktikan server menjawab, jadi terjangkau (ONLINE).
+                if (e is ApiError.Network) conn = Conn.OFFLINE else conn = Conn.ONLINE
                 if (silent && roster is Load.Ready) roster else Load.Failed(e)
             }
             roster = fresh
@@ -285,8 +287,20 @@ class PosStore(
         val current = config ?: return
         val url = backend?.serverEndpoint()?.url ?: return
         if (url == current.serverUrl) return
-        onServerUrl(url)
-        config = current.copy(serverUrl = url)
+        // 054 / opsi A yang diperketat: jangan memindahkan tablet ke alamat yang belum terbukti
+        // terjangkau. Admin boleh salah mengetik alamat lokal/online (atau jaringan ke alamat itu
+        // sedang mati); kalau kita pindah buta, layar setelah login gagal dengan "Tidak dapat
+        // menjangkau server". Uji (roster) pada alamat kandidat dulu; kalau gagal, tetap di
+        // alamat lama yang memang terjangkau.
+        val savedUrl = backend?.serverUrl()
+        try {
+            backend?.setServerUrl(url)
+            backend?.roster()
+            onServerUrl(url)
+            config = current.copy(serverUrl = url)
+        } catch (e: ApiError) {
+            if (savedUrl != null) backend?.setServerUrl(savedUrl)
+        }
     }
 
     fun stopPinProbe() { pinProbe?.cancel(); pinProbe = null }
