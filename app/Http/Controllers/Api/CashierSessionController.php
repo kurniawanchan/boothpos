@@ -7,6 +7,7 @@ use App\Models\CashierSession;
 use App\Models\Device;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Models\User;
 use App\Services\ActivityLogger;
 use App\Services\ShiftListService;
 use App\Services\ShiftReportService;
@@ -79,10 +80,10 @@ class CashierSessionController extends Controller
         ]);
 
         // 065 — "sudah punya shift terbuka" dihitung per SUMBER: shift aplikasi dan shift web berdiri sendiri.
-        // Dikunci agar dua pembukaan serentak dari sumber yang sama tidak lolos bersamaan.
-        $hasOpenSession = DB::transaction(fn () => ShiftSource::hasOpen($request->user(), ShiftSource::isApp($request), lock: true));
-
-        if ($hasOpenSession) {
+        // Pemeriksaan awal ini hanya mempercepat penolakan; yang MENJAMIN satu shift per sumber adalah pemeriksaan ulang
+        // di bawah kunci baris pengguna, di transaksi yang sama dengan penyisipan (kunci pada query tanpa baris tidak
+        // mengunci apa pun, dan kunci yang dilepas sebelum insert tidak mencegah dua pembukaan serentak).
+        if (ShiftSource::hasOpen($request->user(), ShiftSource::isApp($request))) {
             return response()->json([
                 'message' => __('events_sessions.already_has_open_session'),
             ], 409);
@@ -132,6 +133,12 @@ class CashierSessionController extends Controller
         }
 
         $session = DB::transaction(function () use ($validated, $entries, $request, $outletId, $openingCash, $denominations, $device) {
+            // Baris pengguna selalu ada, jadi mengunci baris itu menserialkan dua pembukaan serentak milik pengguna yang sama.
+            User::query()->whereKey($request->user()->id)->lockForUpdate()->first();
+            if (ShiftSource::hasOpen($request->user(), ShiftSource::isApp($request))) {
+                return null;
+            }
+
             $session = new CashierSession([
                 'user_id' => $request->user()->id,
                 'opened_at' => now(),
@@ -160,6 +167,10 @@ class CashierSessionController extends Controller
 
             return $session;
         });
+
+        if ($session === null) {
+            return response()->json(['message' => __('events_sessions.already_has_open_session')], 409);
+        }
 
         return response()->json($session->load(['openingCashEntries', 'openingDenominations', 'outlet:id,code,name']), 201);
     }
