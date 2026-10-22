@@ -703,6 +703,8 @@ paths:
       description: |
         Owner/admin (menu `settings`). Mengembalikan kedua alamat dan pilihan aktif.
         Alamat yang belum diisi bernilai null; pilihan awal `local`.
+        066: ikut `default_online` (read-only) — alamat online bawaan aplikasi Android dari
+        `config/pos.php`, dipakai tablet bila admin memilih Online tetapi kolom online kosong.
       responses:
         '200':
           description: Berhasil
@@ -721,7 +723,8 @@ paths:
         Satu transaksi: menulis ketiga pengaturan dan satu baris activity_logs
         (`server_address_updated`) berisi nilai sebelum dan sesudah. Ditolak 422 bila URL
         tidak lengkap (http/https, dengan host), atau bila `selected` = online tanpa alamat
-        online. Perubahan berlaku pada tablet saat pengecekan koneksi berikutnya (FR-013).
+        online DAN tanpa alamat online bawaan aplikasi (066: dengan bawaan, kolom boleh kosong).
+        `default_online` pada body diabaikan. Perubahan berlaku pada tablet saat pengecekan koneksi berikutnya (FR-013).
       requestBody:
         required: true
         content:
@@ -6947,6 +6950,12 @@ components:
         local: { type: string, nullable: true, example: 'http://192.168.1.10:8010' }
         online: { type: string, nullable: true, example: 'https://pos.example.com' }
         selected: { type: string, enum: [local, online] }
+        default_online:
+          type: string
+          nullable: true
+          readOnly: true
+          description: 066 — alamat online bawaan aplikasi (config/pos.php); hanya pada respons admin, tidak pada GET /server-address publik.
+          example: 'https://smasher-nullify-subgroup.ngrok-free.dev'
     Error:
       type: object
       properties:

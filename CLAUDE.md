@@ -457,6 +457,14 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 > - **Server dan APK dirilis bersama.**
 > - **Jebakan yang ditemukan:** perintah tes di kontainer harus memakai `-e` SEBELUM nama layanan sebagai argumen literal (variabel shell tanpa kutip tidak di-split oleh zsh dan dulu memigrasi DB dev); `PosStore` punya loop polling tak berujung, jadi uji store memakai `runCurrent()`, bukan `advanceUntilIdle()`; `rm` di shell ini bertanya konfirmasi (pakai `rm -f`).
 
+## Alamat online bawaan aplikasi Android (feature 066, 2026-10-22)
+
+> **Dated note — 2026-10-22 (feature 066).** Spesifikasi: `specs/066-android-default-online-server-address/`. Melengkapi 065 (Q1 = A), tidak menulis ulang riwayatnya.
+> - **Bawaan online** = `https://smasher-nullify-subgroup.ngrok-free.dev`, ditanam di APK lewat `pos.defaultOnlineUrl` (`android-pos/app/build.gradle.kts`; `gradle.properties`/`local.properties` tetap menimpa) dan dibaca server dari `config/pos.php` (`server_address.default_online`, env `SERVER_ADDRESS_DEFAULT_ONLINE`). **Dua nilai itu HARUS sama** (server hanya memakainya untuk petunjuk web). Alamat ngrok gratis bisa berubah: ganti di kedua tempat.
+> - **Jatuhan hanya satu kasus:** jawaban `GET /server-address` = `selected: online` dengan `url: null` → `ServerDiscovery` memakai bawaan online, dan hanya menyimpannya bila terbukti terjangkau. Isian admin selalu menang; pilihan Lokal tidak pernah memakai bawaan online. Server TIDAK mengirim bawaan ke tablet dan TIDAK menulisnya ke `settings` (kolom online tetap `NULL`).
+> - **Aturan simpan 054 dilonggarkan:** `PUT /settings/server-address` dengan `selected=online` dan kolom online kosong kini diterima selama ada bawaan (`ServerAddress::defaultOnline()`); tanpa bawaan (config dikosongkan) tetap 422. Respons admin menambah `default_online` (read-only, body `PUT` yang memuatnya diabaikan); halaman web menampilkannya sebagai petunjuk di bawah kolom online.
+> - Tidak ada migrasi dan tidak ada endpoint baru; kontrak publik tidak berubah. APK dan server tidak harus dirilis bersama.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -464,7 +472,10 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - A remote `origin` (github.com/kurniawanchan/boothpos) exists (dated note 2026-10-11; the earlier "no remote" line was outdated), but **pushing and opening PRs need the developer's explicit per-instance authorization** (constitution; the harness may also deny them) — never push on your own initiative.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/065-android-shift-payment-updates/plan.md`
+Active feature plan: `specs/066-android-default-online-server-address/plan.md`
+(branch `066-android-default-online-server-address`, dibuat dari `065`) — alamat online bawaan (`https://smasher-nullify-subgroup.ngrok-free.dev`) tertanam di aplikasi Android sebagai jatuhan: dipakai hanya bila admin memilih Online tetapi kolom "Online server address" kosong; isian admin selalu menang, Local tidak berubah. `ServerDiscovery` menanganinya; halaman web menampilkan petunjuk dari `default_online` (read-only, konfigurasi server). Tanpa migrasi/endpoint baru. Lihat research.md D1–D5.
+
+Previous feature: `specs/065-android-shift-payment-updates/plan.md`
 (branch `065-android-shift-payment-updates`, dibuat dari `develop-warkop-wjm` setelah 064) — pembaruan Android + visibilitas web: web Sesi Kasir menampilkan SEMUA shift (buka/tutup) untuk owner/admin + rincian kas masuk/keluar + panel dashboard "shift terbuka" (daftar baru `GET /sessions`, `GET /cash-movements`, `GET /dashboard/shifts`, tanpa tabel baru); shift aplikasi dan shift web DIPISAH (sumber = `cashier_sessions.device_id` terisi/tidak, satu shift terbuka per pengguna per sumber); tutup shift menerima total ketikan (`counted_total`, tetap lewat protokol terkontrol: QRIS tertunda + persetujuan selisih), tanpa EDC, dan menampilkan penjualan LENGKAP termasuk kas seharusnya sebelum menghitung (keputusan Q2 = B, mengakhiri hitungan buta 048); `GET /server-address` publik; Android tanpa input alamat server (alamat bawaan saat build lalu alamat pilihan admin disimpan di perangkat sampai data dihapus, Q1 = A), layar buka shift dirapikan + ketik total + tanpa "Lewati", lembar QRIS (judul di samping ikon, tanpa peringatan, teks baru, QR dari kanal pembayaran + gagal-muat yang jelas). Lihat research.md D1–D12.
 
 Previous feature: `specs/064-terminal-name-only/plan.md`

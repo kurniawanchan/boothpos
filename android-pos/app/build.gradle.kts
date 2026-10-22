@@ -11,7 +11,9 @@ plugins {
 // dipilih admin. Diisi per pembangunan lewat gradle.properties atau local.properties (tidak di-commit):
 //   pos.defaultLocalUrl=http://192.168.1.219:8010
 //   pos.defaultOnlineUrl=https://pos.example.com
-// Tanpa isian, alamat lokal memakai alamat emulator dan alamat online kosong (tidak dicoba).
+// Tanpa isian, alamat lokal memakai alamat emulator dan alamat online memakai bawaan di bawah (066). Bawaan online
+// dipakai juga sebagai jatuhan bila admin memilih Online tetapi kolom alamat online di web kosong; nilainya HARUS sama
+// dengan `server_address.default_online` di config/pos.php (petunjuk di halaman web membacanya dari sana).
 val localProps = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
@@ -31,7 +33,7 @@ android {
         // Sengaja resValue, bukan BuildConfig: BuildConfig memaksa kompilasi Java, yang gagal pada JDK 24 di mesin
         // pembangun ini (transformasi JDK image AGP). String resource tidak butuh javac.
         resValue("string", "default_local_url", posProp("pos.defaultLocalUrl", "http://10.0.2.2:8010"))
-        resValue("string", "default_online_url", posProp("pos.defaultOnlineUrl", ""))
+        resValue("string", "default_online_url", posProp("pos.defaultOnlineUrl", "https://smasher-nullify-subgroup.ngrok-free.dev"))
     }
 
     buildFeatures {

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { getServerAddress, saveServerAddress } from '../../api/settings';
 import { normalizeAxiosError } from '../../utils/errors';
@@ -19,11 +19,15 @@ const errors = reactive({});
 const loading = ref(true);
 const saving = ref(false);
 const loadError = ref('');
+// 066 — alamat online bawaan aplikasi (read-only dari server); hanya petunjuk, tidak ikut dikirim saat simpan.
+const defaultOnline = ref('');
+const onlineHint = computed(() => (defaultOnline.value ? t('settings.server_address_online_default_hint', { url: defaultOnline.value }) : ''));
 
 function apply(data) {
   form.local = data.local ?? '';
   form.online = data.online ?? '';
   form.selected = data.selected ?? 'local';
+  defaultOnline.value = data.default_online ?? '';
 }
 
 async function load() {
@@ -66,7 +70,7 @@ onMounted(load);
     <p class="text-[12px] leading-relaxed text-muted-3">{{ t('settings.server_address_intro') }}</p>
     <p v-if="loadError" class="text-[13px] text-danger">{{ loadError }}</p>
     <BaseInput v-model="form.local" :label="t('settings.server_address_local_label')" :error="errors.local" :hint="t('settings.server_address_hint')" />
-    <BaseInput v-model="form.online" :label="t('settings.server_address_online_label')" :error="errors.online" />
+    <BaseInput v-model="form.online" :label="t('settings.server_address_online_label')" :error="errors.online" :hint="onlineHint" />
     <fieldset class="flex flex-col gap-2">
       <legend class="text-[13px] font-medium">{{ t('settings.server_address_selected_label') }}</legend>
       <label class="flex items-center gap-2 text-[14px]">

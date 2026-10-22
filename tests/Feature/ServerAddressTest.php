@@ -31,7 +31,40 @@ class ServerAddressTest extends TestCase
     {
         $this->getJson('/api/v1/settings/server-address')
             ->assertOk()
-            ->assertExactJson(['local' => null, 'online' => null, 'selected' => 'local']);
+            ->assertExactJson(['local' => null, 'online' => null, 'selected' => 'local', 'default_online' => config('pos.server_address.default_online')]);
+    }
+
+    // 066 — alamat online bawaan aplikasi ikut respons admin, read-only.
+    public function test_the_admin_response_carries_the_built_in_online_address_read_only(): void
+    {
+        config(['pos.server_address.default_online' => 'https://built-in.example.com/']);
+
+        $this->getJson('/api/v1/settings/server-address')->assertOk()->assertJsonPath('default_online', 'https://built-in.example.com');
+
+        $this->putJson('/api/v1/settings/server-address', ['local' => 'http://192.168.1.10:8010', 'selected' => 'local', 'default_online' => 'https://evil.example.com'])
+            ->assertOk()->assertJsonPath('default_online', 'https://built-in.example.com')->assertJsonPath('online', null);
+
+        $this->assertNull(\App\Models\Setting::query()->where('key', 'server_address_online')->value('value'));
+        $this->assertDatabaseMissing('settings', ['value' => 'https://evil.example.com']);
+    }
+
+    public function test_the_built_in_address_is_null_when_the_config_is_emptied(): void
+    {
+        config(['pos.server_address.default_online' => '']);
+
+        $this->getJson('/api/v1/settings/server-address')->assertOk()->assertJsonPath('default_online', null);
+    }
+
+    public function test_online_can_be_selected_with_an_empty_field_when_the_app_has_a_built_in_address(): void
+    {
+        config(['pos.server_address.default_online' => 'https://built-in.example.com']);
+
+        $this->putJson('/api/v1/settings/server-address', ['local' => 'http://192.168.1.10:8010', 'selected' => 'online'])
+            ->assertOk()->assertJsonPath('selected', 'online')->assertJsonPath('online', null);
+
+        // Tablet tidak pernah menerima alamat bawaan dari server: jawabannya tetap url null.
+        $this->getJson('/api/v1/devices/server-address', ['X-Device-Id' => (string) $this->deviceId])
+            ->assertOk()->assertExactJson(['selected' => 'online', 'url' => null]);
     }
 
     public function test_owner_saves_both_addresses_and_the_choice(): void
@@ -44,6 +77,7 @@ class ServerAddressTest extends TestCase
             'local' => 'http://192.168.1.10:8010',
             'online' => 'https://pos.example.com',
             'selected' => 'online',
+            'default_online' => config('pos.server_address.default_online'),
         ]);
 
         $this->getJson('/api/v1/settings/server-address')->assertJsonPath('selected', 'online');
@@ -67,8 +101,10 @@ class ServerAddressTest extends TestCase
         $this->getJson('/api/v1/settings/server-address')->assertJsonPath('online', null);
     }
 
-    public function test_selecting_online_without_an_online_address_is_refused(): void
+    public function test_selecting_online_without_an_online_address_is_refused_when_there_is_no_built_in_address(): void
     {
+        config(['pos.server_address.default_online' => null]);
+
         $this->putJson('/api/v1/settings/server-address', ['local' => 'http://192.168.1.10:8010', 'selected' => 'online'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['selected']);

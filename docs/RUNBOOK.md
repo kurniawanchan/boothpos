@@ -593,3 +593,8 @@ adb logcat -s AndroidRuntime:E  # galat fatal; harus kosong pada pengujian
 ```
 - Tag `PosApi` hanya tercatat pada build debug (`debuggable`).
 - Galat `ANR` ("tidak merespons") dicatat di `/data/anr/traces.txt`; ambil dengan `adb shell cat /data/anr/traces.txt`.
+
+### 13.4 Alamat online bawaan (fitur 066, 2026-10-22)
+- APK membawa alamat online bawaan (`https://smasher-nullify-subgroup.ngrok-free.dev`). Dipakai tablet baru **hanya** bila admin memilih "Online" di Pengaturan → Umum → Server address tetapi kolom "Online server address" kosong; isian admin selalu didahulukan.
+- Ganti alamat bawaan bila ngrok berubah: (1) build APK dengan `pos.defaultOnlineUrl=<alamat baru>` di `android-pos/local.properties` atau `gradle.properties`; (2) set `SERVER_ADDRESS_DEFAULT_ONLINE=<alamat baru>` di `.env` server agar petunjuk di halaman web sama (lalu `php artisan config:clear` bila konfigurasi di-cache). Kedua nilai harus sama.
+- Tablet yang sudah menyimpan alamat tidak berubah sampai datanya dihapus (aturan 065).
