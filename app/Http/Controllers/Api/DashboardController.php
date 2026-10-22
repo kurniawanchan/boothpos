@@ -32,6 +32,18 @@ class DashboardController extends Controller
         return response()->json($service->items($request->user()));
     }
 
+    /**
+     * 065 / US1 — panel "Shift terbuka": satu baris per shift terbuka (aplikasi dan web), maks. 50, terbaru dulu.
+     * Owner/admin melihat semua pengguna; peran lain yang punya menu dashboard hanya miliknya (aturan di
+     * ShiftListService). Live dan kecil, jadi tanpa cache.
+     */
+    public function shifts(\Illuminate\Http\Request $request, \App\Services\ShiftListService $list): JsonResponse
+    {
+        abort_unless($request->user()->canAccessMenu('dashboard'), 403, __('reports.not_authorized_generic'));
+
+        return response()->json($list->openShifts($request->user(), 50));
+    }
+
     /** Tabel "Order terbaru": baris + jumlah tab (semua filter kecuali tab) + tab yang disembunyikan. */
     public function orders(DashboardQueryRequest $request, DashboardOrdersQuery $query): JsonResponse
     {

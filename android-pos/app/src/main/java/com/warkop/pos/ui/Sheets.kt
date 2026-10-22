@@ -502,17 +502,20 @@ private fun ColumnScope.EdcDialog(store: PosStore) {
 private fun ColumnScope.QrisRecordDialog(store: PosStore) {
     val o = store.active ?: return
     val channel = store.qrisChannel
+    // 065 — kanal QRIS dimuat ulang SETIAP lembar dibuka: QR yang diunggah di web setelah tablet memuat kanal (sesi yang
+    // sudah berjalan) kini langsung tampil, tidak tertahan sebagai "QR belum diatur" dari muatan lama.
+    LaunchedEffect(Unit) { store.loadQrisLabel() }
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
-    Icon(Icons.Filled.QrCode2, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-    // 056 amandemen — judul dan peringatan memanjang di atas dua kolom (lebar penuh).
-    BoxWithConstraints(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp)) {
-        val availablePx = with(density) { maxWidth.roundToPx() }
-        val titleSp = titleSizeFor({ sp -> measurer.measure(store.qrisTitle, TextStyle(fontSize = sp.sp, fontWeight = FontWeight.SemiBold)).size.width }, availablePx) ?: 22f
-        Text(store.qrisTitle, fontSize = titleSp.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
-    }
-    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Text("Jangan terima bukti dari layar ponsel pelanggan.", fontWeight = FontWeight.Medium, fontSize = 14.sp) }
+    // 065 / US5 — judul di SAMPING ikon QR (satu baris), bukan di bawahnya; peringatan layar ponsel pelanggan dihapus.
+    Row(Modifier.fillMaxWidth().padding(bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.QrCode2, null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(12.dp))
+        BoxWithConstraints(Modifier.weight(1f)) {
+            val availablePx = with(density) { maxWidth.roundToPx() }
+            val titleSp = titleSizeFor({ sp -> measurer.measure(store.qrisTitle, TextStyle(fontSize = sp.sp, fontWeight = FontWeight.SemiBold)).size.width }, availablePx) ?: 22f
+            Text(store.qrisTitle, fontSize = titleSp.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
+        }
     }
     // Dua kolom: kiri = gambar QR penuh (+ ganti gambar bila berhak); kanan = total, instruksi, dan tombol.
     Row(Modifier.fillMaxWidth().padding(top = 16.dp), verticalAlignment = Alignment.Top) {
@@ -527,7 +530,7 @@ private fun ColumnScope.QrisRecordDialog(store: PosStore) {
                 val totalSp = totalSizeFor({ sp -> measurer.measure(rp(o.remaining), TextStyle(fontSize = sp.sp, fontWeight = FontWeight.Light)).size.width }, availablePx)
                 Text(rp(o.remaining), Modifier.fillMaxWidth(), fontSize = totalSp.sp, fontWeight = FontWeight.Light, maxLines = 1, softWrap = false, textAlign = TextAlign.Center)
             }
-            Text("Catat sebagai menunggu verifikasi, lalu cek transaksi di aplikasi ${store.qrisLabel}.", Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp), fontSize = 16.sp, textAlign = TextAlign.Center)
+            Text(QrisTexts.INSTRUCTION, Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp), fontSize = 16.sp, textAlign = TextAlign.Center)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 TextButton({ store.show(null) }) { Text("Tutup", fontWeight = FontWeight.SemiBold, fontSize = 17.sp) }; Spacer(Modifier.width(12.dp))
                 // 056 / US5 — label tombol dipas-kan di lebarnya (FitPillText dari 055), tanpa dipotong.
@@ -549,17 +552,31 @@ private fun QrCard(channel: com.warkop.pos.model.QrisChannel?, fallbackLabel: St
     }
 }
 
-/** 056 / T017–T018 — gambar QR penuh (ContentScale.Fit, tidak dipotong); "QR belum diatur" bila tanpa URL atau unduhan gagal. */
+/**
+ * 056 / T017–T018 — gambar QR penuh (ContentScale.Fit, tidak dipotong).
+ * 065 — membedakan "belum diatur" (kanal tanpa gambar) dari "tidak dapat dimuat" (ada gambar, unduhan gagal) dengan
+ * tombol "Muat ulang"; dulu keduanya "QR belum diatur", jadi QR yang sudah diunggah di web terlihat belum diatur.
+ */
 @Composable
 private fun QrCodeBox(url: String?) {
-    val state by produceState<QrImageState>(QrImageState.Loading, url) {
-        value = if (url == null) QrImageState.Missing else QrImageLoader.load(url)?.let { QrImageState.Shown(it) } ?: QrImageState.Missing
+    var attempt by remember { mutableIntStateOf(0) }
+    var bitmap by remember(url, attempt) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    var loaded by remember(url, attempt) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(url, attempt) {
+        if (url == null) return@LaunchedEffect
+        bitmap = QrImageLoader.load(url)
+        loaded = bitmap != null
     }
     Box(Modifier.fillMaxWidth().padding(10.dp), contentAlignment = Alignment.Center) {
-        when (val s = state) {
-            is QrImageState.Shown -> Image(s.bitmap, "QRIS", Modifier.fillMaxWidth(), contentScale = androidx.compose.ui.layout.ContentScale.Fit)
-            QrImageState.Loading -> Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            QrImageState.Missing -> Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { Text("QR belum diatur", textAlign = TextAlign.Center, color = Color(0xFF201E1D), fontSize = 14.sp) }
+        when (QrBox.stateFor(url, loaded)) {
+            QrBoxState.SHOWN -> bitmap?.let { Image(it, "QRIS", Modifier.fillMaxWidth(), contentScale = androidx.compose.ui.layout.ContentScale.Fit) }
+            QrBoxState.LOADING -> Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            QrBoxState.NOT_SET -> Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) { Text(QrisTexts.QR_NOT_SET, textAlign = TextAlign.Center, color = Color(0xFF201E1D), fontSize = 14.sp) }
+            QrBoxState.LOAD_FAILED -> Column(Modifier.fillMaxWidth().height(200.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text(QrisTexts.QR_LOAD_FAILED, textAlign = TextAlign.Center, color = Color(0xFF201E1D), fontSize = 14.sp)
+                // Gagal tidak boleh tertahan di cache: buang dulu, baru unduh ulang.
+                TextButton({ url?.let { QrImageLoader.evict(it) }; attempt++ }) { Text(QrisTexts.RETRY, fontWeight = FontWeight.SemiBold) }
+            }
         }
     }
 }
@@ -582,11 +599,6 @@ private fun QrUploadButton(store: PosStore) {
     OutlinedButton({ picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Ganti gambar QR") }
 }
 
-private sealed interface QrImageState {
-    data object Loading : QrImageState
-    data object Missing : QrImageState
-    data class Shown(val bitmap: androidx.compose.ui.graphics.ImageBitmap) : QrImageState
-}
 
 @Composable
 private fun ColumnScope.QrisVerifyDialog(store: PosStore, s: Sheet.QrisVerify) {
@@ -594,9 +606,6 @@ private fun ColumnScope.QrisVerifyDialog(store: PosStore, s: Sheet.QrisVerify) {
     var ref by remember { mutableStateOf("") }
     Icon(Icons.Filled.QrCode2, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
     Text("Verifikasi QRIS", Modifier.padding(top = 10.dp, bottom = 16.dp), fontSize = 30.sp)
-    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WarningAmber, null, Modifier.size(22.dp)); Spacer(Modifier.width(12.dp)); Text("Jangan terima bukti dari layar ponsel pelanggan.", fontWeight = FontWeight.Medium, fontSize = 16.sp) }
-    }
     Text(androidx.compose.ui.text.buildAnnotatedString { append("Cek transaksi "); pushStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)); append(rp(t.amount)); pop(); append(" di aplikasi ${store.qrisLabel}, lalu masukkan referensinya.") }, Modifier.padding(vertical = 14.dp), fontSize = 17.sp)
     SectionLabel("Referensi transaksi", Modifier.padding(start = 8.dp, bottom = 6.dp))
     OutlinedTextField(ref, { ref = it }, Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(8.dp))

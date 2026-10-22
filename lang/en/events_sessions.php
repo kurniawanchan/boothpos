@@ -17,4 +17,16 @@ return [
     'pending_qris_payments' => 'There are :count QRIS payments not yet checked. Check them before closing the shift.',
     'variance_needs_approval' => 'The cash difference is above tolerance and needs approval. Approval is not available in this app yet.',
     'count_or_closing_required' => 'Enter the closing cash amount or the count by denomination.',
+    // 065 — label alasan kas masuk/keluar untuk daftar kas di web (kode tetap sumber kebenaran).
+    'cash_reason' => [
+        'float_topup' => 'Top up float',
+        'change_exchange' => 'Change exchange',
+        'petty_cash' => 'Petty cash / purchases',
+        'supplier' => 'Supplier payment',
+        'bank_deposit' => 'Bank / safe deposit',
+        'refund' => 'Refund',
+        'other' => 'Other',
+    ],
+    'count_one_method_only' => 'Use one counting method only: by denomination or a typed total, not both.',
+    'counted_total_whole' => 'The amount must be whole rupiah (no cents).',
 ];

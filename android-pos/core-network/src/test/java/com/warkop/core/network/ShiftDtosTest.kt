@@ -36,11 +36,10 @@ class ShiftDtosTest {
         assertEquals("{\"counted_by_denomination\":[{\"denomination\":50000,\"qty\":3},{\"denomination\":2000,\"qty\":4}]}", body)
     }
 
-    @Test fun `total batch edc ikut dikirim bila diisi`() {
-        val body = json.encodeToString(CloseSessionRequest.serializer(), CloseSessionRequest(
-            countedByDenomination = emptyList(), edcBatchTotal = 120000,
-        ))
-        assertTrue(body, body.contains("\"edc_batch_total\":120000"))
+    @Test fun `total ketikan dikirim sebagai counted_total tanpa pecahan dan tanpa EDC`() {
+        val body = json.encodeToString(CloseSessionRequest.serializer(), CloseSessionRequest(countedTotal = 250000))
+        assertEquals("{\"counted_total\":250000}", body)
+        assertTrue(body, !body.contains("edc"))
     }
 
     @Test fun `x-report membaca jam dan metode dengan uang sebagai string`() {
@@ -74,7 +73,6 @@ class ShiftDtosTest {
         val c = json.decodeFromString(ClosedSessionDto.serializer(), raw)
         assertEquals("-5000.00", c.variance)
         assertEquals("5000.00", c.zReport?.varianceTolerance)
-        assertNull(c.edcBatchTotal)
     }
 
     @Test fun `pengaturan berupa angka tetap terbaca`() {

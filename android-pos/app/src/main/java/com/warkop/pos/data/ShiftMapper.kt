@@ -35,6 +35,7 @@ object ShiftMapper {
         cashOut = money(d.cashOut),
         byMethod = d.byMethod.map { MethodTotal(it.method, it.count, money(it.amount)) },
         hourly = d.hourly.map { HourlyTotal(hourOf(it.hour), it.orderCount, money(it.total)) },
+        expectedCash = d.expectedCash?.let(::money),
     )
 
     fun movement(d: CashMovementDto): CashMovement = CashMovement(
@@ -52,7 +53,6 @@ object ShiftMapper {
         counted = money(d.countedTotal),
         variance = money(d.variance),
         tolerance = d.zReport?.varianceTolerance?.let(::money),
-        edcBatch = d.edcBatchTotal?.let(::money),
     )
 
     fun limits(d: FeaturesDto): ShiftLimits = ShiftLimits(

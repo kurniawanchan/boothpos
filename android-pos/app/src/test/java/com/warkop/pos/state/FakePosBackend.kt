@@ -5,7 +5,6 @@ import com.warkop.pos.data.KitchenSend
 import com.warkop.pos.data.OutletChoice
 import com.warkop.pos.data.PosBackend
 import com.warkop.pos.data.PosSession
-import com.warkop.pos.data.ServerEndpoint
 import com.warkop.pos.data.TaxDisplay
 import com.warkop.pos.data.TerminalConfig
 import com.warkop.pos.model.*
@@ -18,13 +17,11 @@ import kotlinx.serialization.json.JsonObject
 class FakePosBackend : PosBackend {
     var rosterResult: () -> List<StaffUser> = { emptyList() }
     private var serverUrlValue: String? = null
-    var endpoint: ServerEndpoint? = null
     var tax: TaxDisplay? = null
     /** 055 / T022 — hasil loadMenu; null = panggilan tidak diharapkan. */
     var menuResult: (() -> MenuCatalog)? = null
 
     override suspend fun roster(): List<StaffUser> = rosterResult()
-    override suspend fun serverEndpoint(): ServerEndpoint? = endpoint
     override fun serverUrl(): String? = serverUrlValue
     override fun setServerUrl(url: String) { serverUrlValue = url.trim().takeIf { it.isNotBlank() } }
     override suspend fun taxDisplay(): TaxDisplay? = tax
@@ -44,11 +41,15 @@ class FakePosBackend : PosBackend {
     override suspend fun loadMenu(): MenuCatalog = menuResult?.invoke() ?: unused()
     override suspend fun availability(since: String?): Availability? = unused()
     override suspend fun currentShift(): Shift? = unused()
-    override suspend fun openShift(denominations: List<Pair<Int, Int>>): Shift = unused()
+    /** 065 — hitungan yang diterima fake saat buka/tutup shift (untuk memastikan hanya SATU total yang dikirim). */
+    val openedWith = mutableListOf<ShiftCount>()
+    val closedWith = mutableListOf<ShiftCount>()
+    var closeResult: () -> CloseOutcome = { CloseOutcome(250_000, 250_000, 0, 5_000) }
+    override suspend fun openShift(count: ShiftCount): Shift { openedWith += count; return Shift("Shift", "06:39", "", count.total, "1", id = 7) }
     override suspend fun shiftReport(sessionId: Long): ShiftReport = unused()
     override suspend fun cashMovements(sessionId: Long): List<CashMovement> = unused()
     override suspend fun recordCashMovement(sessionId: Long, inflow: Boolean, reasonCode: String, note: String?, amount: Int, key: String, overrideToken: String?): CashMovement = unused()
-    override suspend fun closeShift(sessionId: Long, counted: List<Pair<Int, Int>>, edcBatch: Int?, key: String, overrideToken: String?): CloseOutcome = unused()
+    override suspend fun closeShift(sessionId: Long, count: ShiftCount, key: String, overrideToken: String?): CloseOutcome { closedWith += count; return closeResult() }
     override suspend fun approvers(action: String): List<Approver> = unused()
     override suspend fun issueOverride(action: String, subject: JsonObject, approverId: Long, pin: String): String = unused()
     override suspend fun voidLine(tabId: String, lineId: Int, reasonCode: String, kitchenStatus: String, stockDecision: String, reason: String?, overrideToken: String?): Order = unused()

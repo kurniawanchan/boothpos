@@ -13,9 +13,16 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
+import AllShiftsSection from '../components/session/AllShiftsSection.vue';
+import { useAuthStore } from '../stores/auth';
 
 const toast = useToastStore();
 const { t } = useI18n();
+// 065 — "Semua shift" (daftar lintas pengguna, aplikasi dan web) hanya untuk owner/admin: disembunyikan, bukan
+// dinonaktifkan, untuk peran lain. Cermin kosmetik dari aturan server (`User::isOwnerOrAdmin()` = menu `settings`, bukan
+// nama peran yang tampil kapital dan bisa kustom); server membatasi pengguna lain ke shift miliknya.
+const auth = useAuthStore();
+const isManager = computed(() => auth.canAccessMenu('settings'));
 
 const loading = ref(true);
 const session = ref(null);
@@ -373,5 +380,7 @@ async function handleClose() {
         </p>
       </div>
     </div>
+
+    <AllShiftsSection v-if="isManager" />
   </div>
 </template>

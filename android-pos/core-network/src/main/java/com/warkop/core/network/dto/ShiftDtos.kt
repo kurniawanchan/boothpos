@@ -20,10 +20,13 @@ import kotlinx.serialization.json.JsonElement
     @SerialName("opening_denominations") val openingDenominations: List<DenominationQtyDto>? = null,
 )
 
-/** POST /sessions/{id}/close — hitungan buta (server menjumlahkan) + total batch EDC bila ada. */
+/**
+ * POST /sessions/{id}/close — hitungan per pecahan (server menjumlahkan) ATAU total ketikan `counted_total` (065);
+ * isi salah satu, tidak keduanya. Total batch EDC tidak ada lagi (065): server mengabaikannya.
+ */
 @Serializable data class CloseSessionRequest(
-    @SerialName("counted_by_denomination") val countedByDenomination: List<DenominationQtyDto>,
-    @SerialName("edc_batch_total") val edcBatchTotal: Long? = null,
+    @SerialName("counted_by_denomination") val countedByDenomination: List<DenominationQtyDto>? = null,
+    @SerialName("counted_total") val countedTotal: Long? = null,
     /** 048 / S3 — token persetujuan selisih di atas toleransi; null bila selisih tidak melampaui batas. */
     @SerialName("variance_override_token") val varianceOverrideToken: String? = null,
 )
@@ -35,7 +38,6 @@ import kotlinx.serialization.json.JsonElement
     @SerialName("expected_cash") val expectedCash: String? = null,
     @SerialName("counted_total") val countedTotal: String? = null,
     val variance: String? = null,
-    @SerialName("edc_batch_total") val edcBatchTotal: String? = null,
     @SerialName("z_report") val zReport: ZReportDto? = null,
 )
 
@@ -58,7 +60,8 @@ import kotlinx.serialization.json.JsonElement
     @SerialName("cash_received") val cashReceived: String = "0.00",
     @SerialName("cash_in") val cashIn: String = "0.00",
     @SerialName("cash_out") val cashOut: String = "0.00",
-    // 048 — TIDAK ada `expected_cash` di x-report/summary (hitungan buta). Kas seharusnya hanya di jawaban tutup shift.
+    // 065 — `expected_cash` kini ada di x-report/summary (keputusan pemilik: hitungan buta dihentikan).
+    @SerialName("expected_cash") val expectedCash: String? = null,
     @SerialName("by_method") val byMethod: List<MethodTotalDto> = emptyList(),
     val hourly: List<HourlyTotalDto> = emptyList(),
 )

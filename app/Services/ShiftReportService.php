@@ -108,6 +108,72 @@ class ShiftReportService
         ];
     }
 
+    /**
+     * 065 — angka beberapa shift SEKALIGUS untuk daftar shift dan panel dashboard: satu kueri terkelompok per sumber
+     * data (order, pembayaran, kas masuk/keluar), jadi jumlah kueri tidak naik bersama jumlah baris. Rumusnya SAMA
+     * dengan {@see figures()} / {@see expectedCash()} (tunai terverifikasi dikurangi kembalian, ditambah kas masuk,
+     * dikurangi kas keluar; order batal dikeluarkan). Shift tertutup memakai `expected_cash` yang tersimpan.
+     *
+     * @param  \Illuminate\Support\Collection<int, CashierSession>  $sessions
+     * @return array<int, array<string, float|int>> dikunci id shift
+     */
+    public function figuresForMany($sessions): array
+    {
+        $ids = $sessions->pluck('id')->all();
+        if ($ids === []) {
+            return [];
+        }
+
+        $orders = Order::withoutGlobalScopes()->whereIn('session_id', $ids)
+            ->selectRaw("session_id,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS completed_count,
+                SUM(CASE WHEN status = ? THEN total_amount ELSE 0 END) AS completed_total,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS void_count,
+                SUM(CASE WHEN status = ? THEN total_amount ELSE 0 END) AS void_total,
+                SUM(CASE WHEN status != ? THEN change_amount ELSE 0 END) AS change_given", [Order::STATUS_COMPLETED, Order::STATUS_COMPLETED, Order::STATUS_VOIDED, Order::STATUS_VOIDED, Order::STATUS_VOIDED])
+            ->groupBy('session_id')->get()->keyBy('session_id');
+
+        // Tunai/non-tunai TERVERIFIKASI per shift tempat uang diterima (payments.session_id), order batal dikeluarkan.
+        $payments = Payment::withoutGlobalScopes()->whereIn('session_id', $ids)
+            ->where('verification', 'verified')
+            ->whereHas('order', fn ($q) => $q->withoutGlobalScopes()->where('status', '!=', Order::STATUS_VOIDED))
+            ->selectRaw("session_id, SUM(CASE WHEN method = 'cash' THEN amount ELSE 0 END) AS cash, SUM(CASE WHEN method != 'cash' THEN amount ELSE 0 END) AS noncash")
+            ->groupBy('session_id')->get()->keyBy('session_id');
+
+        $moves = CashMovement::withoutGlobalScopes()->whereIn('session_id', $ids)
+            ->selectRaw("session_id, SUM(CASE WHEN direction = ? THEN amount ELSE 0 END) AS cash_in, SUM(CASE WHEN direction = ? THEN amount ELSE 0 END) AS cash_out", [CashMovement::IN, CashMovement::OUT])
+            ->groupBy('session_id')->get()->keyBy('session_id');
+
+        $out = [];
+        foreach ($sessions as $s) {
+            $o = $orders->get($s->id);
+            $p = $payments->get($s->id);
+            $m = $moves->get($s->id);
+            $cashReceived = (float) ($p->cash ?? 0);
+            $change = (float) ($o->change_given ?? 0);
+            $in = (float) ($m->cash_in ?? 0);
+            $outAmount = (float) ($m->cash_out ?? 0);
+
+            $out[$s->id] = [
+                'order_count' => (int) ($o->completed_count ?? 0),
+                'sales_total' => (float) ($o->completed_total ?? 0),
+                'void_count' => (int) ($o->void_count ?? 0),
+                'void_total' => (float) ($o->void_total ?? 0),
+                'cash_received' => $cashReceived,
+                'change_given' => $change,
+                'cash_net' => $cashReceived - $change,
+                'noncash_total' => (float) ($p->noncash ?? 0),
+                'cash_in' => $in,
+                'cash_out' => $outAmount,
+                'expected_cash' => $s->status === 'closed' && $s->expected_cash !== null
+                    ? (float) $s->expected_cash
+                    : (float) $s->opening_cash + $cashReceived - $change + $in - $outAmount,
+            ];
+        }
+
+        return $out;
+    }
+
     public function money(mixed $value): string
     {
         return number_format((float) $value, 2, '.', '');

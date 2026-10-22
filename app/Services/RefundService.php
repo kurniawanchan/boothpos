@@ -51,7 +51,8 @@ class RefundService
                 throw new ShiftRuleException(__('overrides.refund_pending_qris'), 'pending_payments', [], 409);
             }
 
-            $session = CashierSession::query()->where('user_id', $user->id)->where('status', 'open')->lockForUpdate()->first();
+            // 065 — refund tercatat di shift SUMBER permintaan ini (tablet atau web), bukan shift sumber lain.
+            $session = \App\Support\ShiftSource::openFor($user, lock: true);
             if ($session === null) {
                 throw new ShiftRuleException(__('events_sessions.no_open_session'), 'shift_required', [], 409);
             }

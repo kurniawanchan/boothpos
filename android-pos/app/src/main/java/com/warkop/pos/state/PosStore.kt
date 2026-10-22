@@ -118,8 +118,6 @@ class PosStore(
     private val remote: RemoteBackend? = null,
     /** 050 — printer untuk KOT/struk/pra-bill. null pada build uji tanpa printer; penjualan tidak bergantung padanya. */
     val printer: PrinterService? = null,
-    /** 054 — menulis URL server yang dipilih admin ke penyimpanan terminal. Bisa diganti pada uji (TokenVault butuh Context). */
-    private val onServerUrl: (String) -> Unit = { url -> remote?.adoptServerUrl(url) },
     /** 055 / T037 — pilihan tampil/sembunyi total; penyimpanan perangkat di Android, in-memory di uji. */
     private val totalsPref: TotalsPreference = TotalsPreference({ null }, {}),
     /** 061 / T011 — suara panggilan antrean; default diam supaya uji tidak butuh mesin ucap. */
@@ -275,45 +273,14 @@ class PosStore(
             while (true) {
                 // Tunggu hasil roster dulu: status koneksi dan roster baru terisi setelah panggilan selesai.
                 loadRoster(silent = true).join()
-                adoptSelectedServer()
                 delay(PIN_PROBE_INTERVAL_MS)
             }
         }
     }
 
-    /**
-     * 054 / US3 — hanya setelah roster berhasil (opsi A, research.md R3): tanya server alamat yang dipilih admin
-     * dan pindah bila berbeda. Galat jaringan atau tanpa koneksi berarti tidak ada yang dipindah.
-     */
-    private suspend fun adoptSelectedServer() {
-        if (roster !is Load.Ready || conn != Conn.ONLINE) return
-        val current = config ?: return
-        val url = backend?.serverEndpoint()?.url ?: return
-        if (url == current.serverUrl) return
-        // 054 / opsi A yang diperketat: jangan memindahkan tablet ke alamat yang belum terbukti
-        // terjangkau. Admin boleh salah mengetik alamat lokal/online (atau jaringan ke alamat itu
-        // sedang mati); kalau kita pindah buta, layar setelah login gagal dengan "Tidak dapat
-        // menjangkau server". Uji (roster) pada alamat kandidat dulu; kalau gagal, tetap di
-        // alamat lama yang memang terjangkau.
-        val savedUrl = backend?.serverUrl()
-        var adopted = false
-        try {
-            backend?.setServerUrl(url)
-            backend?.roster()
-            onServerUrl(url)
-            config = current.copy(serverUrl = url)
-            adopted = true
-        } catch (t: Throwable) {
-            // Pembatalan coroutine harus diteruskan agar struktur pembatalan tetap benar.
-            if (t is kotlinx.coroutines.CancellationException) throw t
-        } finally {
-            // Kembalikan (atau hapus) alamat tersimpan bila adopsi tidak benar-benar sukses,
-            // termasuk bila await dibatalkan atau gagal di luar ApiError.
-            if (!adopted) {
-                backend?.setServerUrl(savedUrl ?: "")
-            }
-        }
-    }
+    // 065 / research D8 — TIDAK ada lagi perpindahan alamat otomatis (adoptSelectedServer, 054): alamat server dibaca SEKALI
+    // saat "Siapkan terminal" (ServerDiscovery), disimpan di perangkat, dan dipakai semua permintaan sampai data dihapus.
+    // Konsekuensi yang diterima pemilik: memindahkan tablet antara lokal dan online berarti menghapus data tablet.
 
     fun stopPinProbe() { pinProbe?.cancel(); pinProbe = null }
 
@@ -440,14 +407,15 @@ class PosStore(
     }
 
     // ---------- shift ----------
-    /** Buka shift dengan rincian pecahan kas awal (server menurunkan jumlahnya). Kosong = modal Rp 0. */
-    fun openShift(denominations: Map<Int, Int>) {
+    /**
+     * Buka shift dengan kas awal per pecahan (server menurunkan jumlahnya) ATAU total ketikan (065). Rp 0 = modal nol.
+     */
+    fun openShift(count: com.warkop.pos.model.ShiftCount) {
         val b = backend ?: return
-        val rows = denominations.filter { it.value > 0 }.map { it.key to it.value }
-        val modal = rows.sumOf { it.first * it.second }
+        val modal = count.total
         viewModelScope.launch {
             try {
-                shift = b.openShift(rows)
+                shift = b.openShift(count)
                 report = Load.Idle; cashMovements = Load.Idle
                 say("Shift dibuka dengan modal ${rp(modal)}.")
                 go(Dest.TABLES)
@@ -982,7 +950,8 @@ class PosStore(
         val b = backend ?: return
         viewModelScope.launch {
             // 056 / T008 — kanal disimpan utuh (judul, nama pemilik, QR); qrisLabel tetap penyedia untuk layar lain.
-            qrisChannel = try { b.qrisChannel() } catch (e: ApiError) { null }
+            // 065 — gagal memuat ulang tidak menghapus kanal yang sudah termuat (sebelumnya null → "QR belum diatur").
+            qrisChannel = try { b.qrisChannel() } catch (e: ApiError) { qrisChannel }
             qrisLabel = qrisChannel?.provider ?: "QRIS"
         }
     }
@@ -1339,11 +1308,17 @@ class PosStore(
         put("reason_code", reason)
     }
 
-    /** Subjek persetujuan selisih tutup shift: identitas shift + hitungan pecahan yang dikirim ke POST close. */
-    private fun countSubject(sessionId: Long, rows: List<Pair<Int, Int>>): JsonObject = buildJsonObject {
+    /**
+     * Subjek persetujuan selisih tutup shift: identitas shift + hitungan yang dikirim ke POST close — pecahan ATAU
+     * total ketikan (065); token terikat ke angka yang SEBENARNYA dikirim.
+     */
+    private fun countSubject(sessionId: Long, count: com.warkop.pos.model.ShiftCount): JsonObject = buildJsonObject {
         put("session_id", sessionId)
-        putJsonArray("counted_by_denomination") {
-            rows.forEach { (d, q) -> addJsonObject { put("denomination", d); put("qty", q) } }
+        when (count) {
+            is com.warkop.pos.model.ShiftCount.Typed -> put("counted_total", count.total)
+            is com.warkop.pos.model.ShiftCount.ByDenomination -> putJsonArray("counted_by_denomination") {
+                count.rows.forEach { (d, q) -> addJsonObject { put("denomination", d); put("qty", q) } }
+            }
         }
     }
 
@@ -1351,16 +1326,15 @@ class PosStore(
      * Tutup shift dengan hitungan buta. Server yang menjumlahkan dan menilai selisih. Penutupan tidak idempoten di
      * server, jadi tidak ada coba-ulang otomatis: jika koneksi putus, status dianggap belum diketahui.
      */
-    fun submitCount(counts: Map<Int, Int>, edcBatch: Int?, overrideToken: String? = null) {
+    fun submitCount(count: com.warkop.pos.model.ShiftCount, overrideToken: String? = null) {
         val b = backend ?: return
         val sid = shift?.id ?: return
-        val rows = counts.filter { it.value > 0 }.map { it.key to it.value }
         // Satu kunci per niat tutup: coba-ulang jaringan memakai kunci yang sama, server menjawab dengan hasil tersimpan.
         val intent = "close:$sid"
         val key = keys.keyFor(intent)
         viewModelScope.launch {
             try {
-                val outcome = retryNetwork { b.closeShift(sid, rows, edcBatch, key, overrideToken) }
+                val outcome = retryNetwork { b.closeShift(sid, count, key, overrideToken) }
                 keys.settled(intent)
                 conn = Conn.ONLINE
                 closeResult = outcome
@@ -1376,8 +1350,8 @@ class PosStore(
                 keys.settled(intent)
                 if (e is ApiError.Conflict && e.code == "override_required") {
                     // Selisih di atas toleransi: minta persetujuan untuk tutup ini, lalu kirim hitungan yang sama dengan token.
-                    sheet = Sheet.Override(summary = "Selisih kas di atas toleransi", action = "variance", subject = countSubject(sid, rows)) { token ->
-                        submitCount(counts, edcBatch, token)
+                    sheet = Sheet.Override(summary = "Selisih kas di atas toleransi", action = "variance", subject = countSubject(sid, count)) { token ->
+                        submitCount(count, token)
                     }
                 } else if (e is ApiError.Conflict) {
                     // Penutupan pertama mungkin sudah diterima server (jawaban hilang di jalan): cek status dulu.

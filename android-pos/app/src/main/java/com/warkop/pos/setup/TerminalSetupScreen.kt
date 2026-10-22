@@ -23,6 +23,8 @@ import androidx.compose.ui.unit.sp
 import com.warkop.core.domain.ApiError
 import com.warkop.pos.data.OutletChoice
 import com.warkop.pos.data.PosBackend
+import com.warkop.pos.data.DiscoveryResult
+import com.warkop.pos.data.ServerDiscovery
 import com.warkop.pos.data.TerminalConfig
 import com.warkop.pos.ui.PrimaryPill
 import kotlinx.coroutines.launch
@@ -30,14 +32,28 @@ import kotlinx.coroutines.launch
 private enum class Step { SERVER, OUTLET }
 
 /**
- * Penyiapan terminal sekali pakai (research D5): alamat server → login owner/admin → pilih outlet → daftarkan
- * terminal. Token admin hanya dipakai untuk mengambil roster dan memulai sesi PIN; PIN tidak pernah diketik di sini.
+ * Penyiapan terminal sekali pakai (research D5): cari alamat server (otomatis, dari pilihan admin di web — 065, tanpa kolom
+ * ketik) → login owner/admin → pilih outlet → daftarkan terminal. Token admin hanya dipakai untuk mengambil roster dan memulai sesi PIN; PIN tidak pernah diketik di sini.
  */
 @Composable
-fun TerminalSetupScreen(backend: PosBackend, onDone: (TerminalConfig) -> Unit) {
+fun TerminalSetupScreen(
+    backend: PosBackend,
+    discoveryOverride: ServerDiscovery? = null,
+    onDone: (TerminalConfig) -> Unit,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val discovery = remember { discoveryOverride ?: ServerDiscovery.fromContext(context) }
     val scope = rememberCoroutineScope()
     var step by remember { mutableStateOf(Step.SERVER) }
-    var url by remember { mutableStateOf("") }
+    // 065 / US6 — tidak ada kolom "Alamat server": alamat dari pilihan admin di web, dicari lewat alamat bawaan aplikasi.
+    // Bila tablet SUDAH menyimpan alamat (penyiapan ulang tanpa hapus data) alamat itu dipakai; server baru ditanya lagi
+    // hanya setelah data dihapus (keputusan pemilik).
+    var found by remember { mutableStateOf<DiscoveryResult?>(backend.serverUrl()?.takeIf { it.isNotBlank() }?.let { DiscoveryResult.Found(it) }) }
+    var attempt by remember { mutableStateOf(0) }
+    LaunchedEffect(attempt) {
+        if (found == null) found = discovery.discover()
+    }
+    val url = (found as? DiscoveryResult.Found)?.url.orEmpty()
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -66,10 +82,17 @@ fun TerminalSetupScreen(backend: PosBackend, onDone: (TerminalConfig) -> Unit) {
                     Modifier.padding(top = 6.dp, bottom = 18.dp), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (step == Step.SERVER) {
-                    OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth(), label = { Text("Alamat server") }, singleLine = true, enabled = !busy,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri), placeholder = { Text("192.168.1.10:8010") }, supportingText = { Text("Alamat server outlet (emulator: 10.0.2.2:8010)") })
-                    OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("Username") }, singleLine = true, enabled = !busy)
-                    OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("Kata sandi") }, singleLine = true, enabled = !busy,
+                    when (val f = found) {
+                        null -> Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp); Spacer(Modifier.width(12.dp)); Text("Mencari server…")
+                        }
+                        is DiscoveryResult.NotConfigured -> DiscoveryProblem("Alamat server belum diatur. Minta admin mengisinya di web (Pengaturan › Server address), lalu coba lagi.") { found = null; attempt++ }
+                        DiscoveryResult.Unreachable -> DiscoveryProblem("Server tidak terjangkau. Pastikan tablet satu jaringan dengan server outlet atau punya internet, lalu coba lagi.") { found = null; attempt++ }
+                        DiscoveryResult.NoDefaults -> DiscoveryProblem("Aplikasi ini dibuat tanpa alamat server bawaan. Hubungi admin untuk versi aplikasi yang benar.", retry = null)
+                        is DiscoveryResult.Found -> Unit
+                    }
+                    OutlinedTextField(username, { username = it }, Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("Username") }, singleLine = true, enabled = !busy && found is DiscoveryResult.Found)
+                    OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth().padding(top = 8.dp), label = { Text("Kata sandi") }, singleLine = true, enabled = !busy && found is DiscoveryResult.Found,
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                         trailingIcon = { IconButton({ showPassword = !showPassword }) { Icon(if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, "Tampilkan kata sandi") } })
                 } else {
@@ -91,12 +114,21 @@ fun TerminalSetupScreen(backend: PosBackend, onDone: (TerminalConfig) -> Unit) {
                         chosen = outlets.firstOrNull()
                         step = Step.OUTLET
                     }
-                }, Modifier.fillMaxWidth(), enabled = url.length > 3 && username.isNotBlank() && password.isNotEmpty())
+                }, Modifier.fillMaxWidth(), enabled = url.isNotBlank() && username.isNotBlank() && password.isNotEmpty())
                 else PrimaryPill("Daftarkan terminal", {
                     val o = chosen ?: return@PrimaryPill
                     run { onDone(backend.pairTerminal(o, terminalName.trim())) }
                 }, Modifier.fillMaxWidth(), enabled = chosen != null && terminalName.isNotBlank(), icon = Icons.Filled.Check)
             }
         }
+    }
+}
+
+/** 065 — pesan jelas saat alamat server tidak bisa ditemukan; tanpa kolom ketik sebagai jalan keluar (keputusan pemilik). */
+@Composable
+private fun DiscoveryProblem(message: String, retry: (() -> Unit)?) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(message, color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
+        retry?.let { TextButton(it, Modifier.padding(top = 4.dp)) { Text("Coba lagi", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) } }
     }
 }

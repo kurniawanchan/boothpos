@@ -8,9 +8,11 @@ use App\Models\Device;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\ActivityLogger;
+use App\Services\ShiftListService;
 use App\Services\ShiftReportService;
 use App\Support\CashDenominations;
 use App\Support\PosSettings;
+use App\Support\ShiftSource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
@@ -20,11 +22,33 @@ use Illuminate\Validation\ValidationException;
 
 class CashierSessionController extends Controller
 {
+    /**
+     * 065 / US1 — daftar shift untuk halaman Sesi Kasir web: owner/admin melihat semua shift (aplikasi dan web),
+     * pengguna lain hanya miliknya (aturan di ShiftListService, satu tempat). Angka dari kueri terkelompok.
+     */
+    public function index(Request $request, ShiftListService $list): JsonResponse
+    {
+        $filters = $request->validate([
+            'status' => ['nullable', 'in:open,closed,all'],
+            'source' => ['nullable', 'in:app,web'],
+            'user_id' => ['nullable', 'integer'],
+            'date_from' => ['nullable', 'date_format:Y-m-d'],
+            'date_to' => ['nullable', 'date_format:Y-m-d'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $page = $list->paginate($request->user(), $filters, (int) ($filters['per_page'] ?? 25));
+
+        return response()->json([
+            'data' => $page->items(),
+            'meta' => ['current_page' => $page->currentPage(), 'per_page' => $page->perPage(), 'total' => $page->total(), 'last_page' => $page->lastPage()],
+        ]);
+    }
+
     public function current(Request $request): JsonResponse
     {
-        $session = CashierSession::where('user_id', $request->user()->id)
-            ->where('status', 'open')
-            ->first();
+        // 065 — shift terbuka SUMBER permintaan ini (aplikasi atau web); shift sumber lain tidak ikut terlihat.
+        $session = ShiftSource::openFor($request->user(), $request);
 
         if (! $session) {
             return response()->json(['message' => __('events_sessions.no_open_session')], 404);
@@ -54,9 +78,9 @@ class CashierSessionController extends Controller
             'opening_cash_entries.*.amount' => ['required_with:opening_cash_entries', 'numeric', 'min:0'],
         ]);
 
-        $hasOpenSession = CashierSession::where('user_id', $request->user()->id)
-            ->where('status', 'open')
-            ->exists();
+        // 065 — "sudah punya shift terbuka" dihitung per SUMBER: shift aplikasi dan shift web berdiri sendiri.
+        // Dikunci agar dua pembukaan serentak dari sumber yang sama tidak lolos bersamaan.
+        $hasOpenSession = DB::transaction(fn () => ShiftSource::hasOpen($request->user(), ShiftSource::isApp($request), lock: true));
 
         if ($hasOpenSession) {
             return response()->json([
@@ -160,7 +184,13 @@ class CashierSessionController extends Controller
             'counted_by_denomination' => ['nullable', 'array', 'max:10'],
             'counted_by_denomination.*.denomination' => ['required', 'integer', Rule::in(CashDenominations::VALUES)],
             'counted_by_denomination.*.qty' => ['required', 'integer', 'min:0', 'max:'.CashDenominations::MAX_QTY],
-            'edc_batch_total' => ['nullable', 'numeric', 'min:0', 'max:999999999999.99'],
+            // 065 — total ketikan (rupiah utuh) sebagai alternatif pecahan; tetap di protokol terkontrol (cek QRIS tertunda
+            // + persetujuan selisih). `edc_batch_total` tidak diterima lagi: klien lama yang masih mengirimnya diabaikan.
+            'counted_total' => ['nullable', 'numeric', 'min:0', 'max:999999999999', function ($attribute, $value, $fail) {
+                if (floor((float) $value) !== (float) $value) {
+                    $fail(__('events_sessions.counted_total_whole'));
+                }
+            }],
             // 048 / S3 — persetujuan selisih di atas toleransi (token dari POST /overrides, action variance).
             'variance_override_token' => ['nullable', 'string', 'max:64'],
             'notes' => ['nullable', 'string'],
@@ -169,15 +199,24 @@ class CashierSessionController extends Controller
         // 048 — hitungan buta: jumlah dihitung SERVER dari pecahan. Hanya protokol ini yang memeriksa
         // QRIS tertunda dan toleransi selisih; penutupan lama (`closing_cash`) tetap berperilaku seperti
         // sebelumnya, karena SPA web belum punya jalur persetujuan untuk 409 itu (dibangun di S3/US4).
-        $blind = is_array($validated['counted_by_denomination'] ?? null);
+        $byDenomination = is_array($validated['counted_by_denomination'] ?? null);
+        $typedTotal = $validated['counted_total'] ?? null;
+        // 065 — dua cara menghitung tidak boleh dikirim bersamaan: total mana yang berlaku akan ambigu.
+        if ($byDenomination && $typedTotal !== null) {
+            throw ValidationException::withMessages(['counted_total' => __('events_sessions.count_one_method_only')]);
+        }
+        // Protokol terkontrol = hitungan per pecahan ATAU total ketikan (sama-sama memeriksa QRIS tertunda dan
+        // toleransi selisih). Hanya `closing_cash` lama (SPA web) yang melewati keduanya, seperti sebelumnya.
+        $blind = $byDenomination || $typedTotal !== null;
         if (! $blind && ($validated['closing_cash'] ?? null) === null) {
             throw ValidationException::withMessages(['closing_cash' => __('events_sessions.count_or_closing_required')]);
         }
-        $counted = $blind ? CashDenominations::normalise($validated['counted_by_denomination']) : null;
-        $closingCash = $blind ? $counted['total'] : round((float) $validated['closing_cash'], 2);
-        $edcBatch = isset($validated['edc_batch_total']) ? round((float) $validated['edc_batch_total'], 2) : null;
+        $counted = $byDenomination ? CashDenominations::normalise($validated['counted_by_denomination']) : null;
+        $closingCash = $byDenomination
+            ? $counted['total']
+            : round((float) ($typedTotal ?? $validated['closing_cash']), 2);
 
-        return DB::transaction(function () use ($request, $session, $validated, $report, $blind, $counted, $closingCash, $edcBatch) {
+        return DB::transaction(function () use ($request, $session, $validated, $report, $blind, $counted, $closingCash, $typedTotal) {
             // Kunci baris sesi: penutupan dan kas keluar yang berjalan bersamaan harus berurutan.
             $locked = CashierSession::query()->whereKey($session->id)->lockForUpdate()->firstOrFail();
             if ($locked->status !== 'open') {
@@ -243,7 +282,8 @@ class CashierSessionController extends Controller
             if ($blind && abs($variance) > $tolerance) {
                 $varianceApprovalId = app(\App\Services\OverrideGate::class)->requireFor(
                     'variance',
-                    ['session_id' => $locked->id, 'counted_by_denomination' => $validated['counted_by_denomination']],
+                    // 065 — token terikat ke hitungan yang SEBENARNYA dikirim: pecahan, atau total ketikan.
+                    ['session_id' => $locked->id, 'counted_by_denomination' => $validated['counted_by_denomination'] ?? null, 'counted_total' => $typedTotal],
                     $validated['variance_override_token'] ?? null,
                     $request->user(),
                     (int) $locked->outlet_id,
@@ -257,7 +297,6 @@ class CashierSessionController extends Controller
                 'counted_total' => $blind ? $report->money($closingCash) : null,
                 'variance' => $report->money($variance),
                 'variance_tolerance' => $report->money($tolerance),
-                'edc_batch_total' => $edcBatch !== null ? $report->money($edcBatch) : null,
                 'counted_by_denomination' => $counted['rows'] ?? null,
             ];
 
@@ -270,7 +309,6 @@ class CashierSessionController extends Controller
                 'notes' => $validated['notes'] ?? $locked->notes,
                 'counted_by_denomination' => $counted['rows'] ?? null,
                 'counted_total' => $blind ? $closingCash : null,
-                'edc_batch_total' => $edcBatch,
                 'variance' => $blind ? $variance : null,
                 'variance_override_id' => $varianceApprovalId,
                 'z_report' => $zReport,
@@ -297,8 +335,8 @@ class CashierSessionController extends Controller
             return response()->json(['message' => __('events_sessions.not_authorized_view_summary')], 403);
         }
 
-        // 048 — tanpa `expected_cash` (blind count): lihat catatan di summary().
-        return response()->json(['generated_at' => now()->toIso8601String()] + Arr::except($report->figures($session), ['expected_cash']));
+        // 065 — `expected_cash` ikut dikirim (keputusan pemilik Q2 = B): hitungan buta fitur 048 dihentikan.
+        return response()->json(['generated_at' => now()->toIso8601String()] + $report->figures($session));
     }
 
     public function summary(Request $request, CashierSession $session, ShiftReportService $report): JsonResponse
@@ -324,13 +362,18 @@ class CashierSessionController extends Controller
         $figures = $report->figures($session);
 
         return response()->json([
-            'session' => $session->load('outlet:id,code,name'),
+            // 065 — pemilik shift ikut dimuat: rincian shift di web menyebut siapa yang membuka.
+            'session' => $session->load('outlet:id,code,name', 'user:id,name'),
             'terminal_name' => $figures['terminal_name'],
             'order_count' => $orders->count(),
             'total_sales' => $orders->sum('total_amount'),
             'by_method' => $byMethod,
-            // 048 — `expected_cash` SENGAJA tidak dikirim di sini: kasir melihat ringkasan sebelum menghitung,
-            // dan angka seharusnya baru boleh tampil setelah hitungan buta dikirim (respons tutup, Z-report).
+            // 065 — `expected_cash` kini dikirim sebelum kasir menghitung (keputusan pemilik Q2 = B), mengakhiri
+            // hitungan buta fitur 048 (dulu SENGAJA disembunyikan sampai hitungan dikirim). Selisih di atas
+            // toleransi tetap butuh persetujuan.
+            'expected_cash' => $figures['expected_cash'],
+            'void_count' => $figures['void_count'],
+            'void_total' => $figures['void_total'],
             'cash_in' => $figures['cash_in'],
             'cash_out' => $figures['cash_out'],
             'change_given' => $figures['change_given'],

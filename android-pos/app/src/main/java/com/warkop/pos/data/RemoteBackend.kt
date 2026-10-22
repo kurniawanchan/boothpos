@@ -204,8 +204,12 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         return res.body()?.let(::shift)
     }
 
-    override suspend fun openShift(denominations: List<Pair<Int, Int>>): Shift = shift(apiCall {
-        api().openSession(OpenSessionRequest(openingDenominations = denominations.filter { it.second > 0 }.map { DenominationQtyDto(it.first, it.second) }))
+    override suspend fun openShift(count: com.warkop.pos.model.ShiftCount): Shift = shift(apiCall {
+        // 065 — satu dari dua: total ketikan (`opening_cash`) ATAU pecahan; server menolak/menyamakan bila keduanya.
+        api().openSession(when (count) {
+            is com.warkop.pos.model.ShiftCount.Typed -> OpenSessionRequest(openingCash = count.total.toLong())
+            is com.warkop.pos.model.ShiftCount.ByDenomination -> OpenSessionRequest(openingDenominations = count.rows.map { DenominationQtyDto(it.first, it.second) })
+        })
     })
 
     override suspend fun shiftReport(sessionId: Long): ShiftReport = ShiftMapper.report(apiCall { api().xReport(sessionId) })
@@ -221,13 +225,15 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
             ))
         })
 
-    override suspend fun closeShift(sessionId: Long, counted: List<Pair<Int, Int>>, edcBatch: Int?, key: String, overrideToken: String?): CloseOutcome =
+    override suspend fun closeShift(sessionId: Long, count: com.warkop.pos.model.ShiftCount, key: String, overrideToken: String?): CloseOutcome =
         ShiftMapper.close(apiCall {
-            api().closeSession(sessionId, key, CloseSessionRequest(
-                countedByDenomination = counted.filter { it.second > 0 }.map { DenominationQtyDto(it.first, it.second) },
-                edcBatchTotal = edcBatch?.toLong(),
-                varianceOverrideToken = overrideToken,
-            ))
+            // 065 — pecahan ATAU total ketikan (`counted_total`), tanpa EDC.
+            api().closeSession(sessionId, key, when (count) {
+                is com.warkop.pos.model.ShiftCount.Typed -> CloseSessionRequest(countedTotal = count.total.toLong(), varianceOverrideToken = overrideToken)
+                is com.warkop.pos.model.ShiftCount.ByDenomination -> CloseSessionRequest(
+                    countedByDenomination = count.rows.map { DenominationQtyDto(it.first, it.second) }, varianceOverrideToken = overrideToken,
+                )
+            })
         })
 
     override suspend fun shiftLimits(): ShiftLimits = ShiftMapper.limits(apiCall { api().features() })
@@ -341,7 +347,10 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         apiCall { api().reasonCodes(category) }.data.filter { it.isActive }.map { ReasonCode(it.id, it.label.ifBlank { it.code }, it.code) }
 
     override suspend fun qrisChannel(): QrisChannel? =
-        apiCall { api().paymentChannels() }.data.firstOrNull { it.type == "qr_ewallet" }
+        // 065 — bila ada beberapa kanal QRIS, utamakan yang SUDAH punya gambar QR: kanal pertama tanpa gambar tidak boleh
+        // menutupi kanal ber-QR di bawahnya ("QR belum diatur" padahal QR sudah diunggah di web).
+        apiCall { api().paymentChannels() }.data.filter { it.type == "qr_ewallet" }
+            .let { qr -> qr.firstOrNull { !it.qrImageUrl.isNullOrBlank() } ?: qr.firstOrNull() }
             ?.let { QrisMapper.toChannel(it, serverBase = serverUrl) }
 
     override suspend fun bankChannels(): List<BankChannel> =
@@ -370,22 +379,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         return result
     }
 
-    /**
-     * 054 / US3 — pindah ke alamat yang dipilih admin. Hanya URL yang berubah: sesi, outlet, dan perangkat tetap,
-     * sehingga shift yang sedang berjalan tidak terpengaruh (FR-013). Klien HTTP dibangun ulang otomatis, karena [api]
-     * menyimpan klien per URL.
-     */
-    fun adoptServerUrl(url: String) {
-        serverUrl = url
-        vault.put(TokenVault.SERVER_URL, url)
-    }
-
-    // 054 — galat apa pun di sini tidak boleh mengubah status koneksi atau membuang alamat yang sudah dipakai.
-    override suspend fun serverEndpoint(): ServerEndpoint? = try {
-        apiCall { api().serverAddress() }.let { ServerEndpoint(it.selected, it.url) }
-    } catch (e: ApiError) {
-        null
-    }
+    // 065 — adoptServerUrl dan serverEndpoint (054) dihapus: alamat server dibaca sekali saat penyiapan (ServerDiscovery).
 
     override suspend fun setDiscount(tabId: String, percent: Double, reasonCode: String, scope: String, lineId: Int?, overrideToken: String?, key: String): Order =
         OrderMapper.tab(apiCall { api().setDiscount(tabId.toLong(), key, DiscountRequestDto(percent, reasonCode, scope, lineId, overrideToken)) }, deviceId)

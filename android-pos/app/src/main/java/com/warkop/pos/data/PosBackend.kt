@@ -31,9 +31,6 @@ data class TerminalConfig(
 
 data class OutletChoice(val id: Long, val name: String)
 
-/** 054 — pilihan admin ("local" | "online") dan URL yang dipakai untuk pilihan itu; url null = tetap alamat pairing. */
-data class ServerEndpoint(val selected: String, val url: String?)
-
 /** 055 — label dan tarif pajak dari server untuk baris "Pajak" di layar kasir; ratePercent null = tarif tidak diketahui. */
 data class TaxDisplay(val label: String, val ratePercent: Double?)
 
@@ -80,13 +77,13 @@ interface PosBackend {
     // --- shift & kas (048 / S2: US3). Angka selalu dari server; kunci niat dibawa tiap tulis. ---
     suspend fun currentShift(): Shift?
     /** [denominations]: pasangan (pecahan, jumlah); server menurunkan kas awal dari situ. */
-    suspend fun openShift(denominations: List<Pair<Int, Int>>): Shift
+    suspend fun openShift(count: com.warkop.pos.model.ShiftCount): Shift
     suspend fun shiftReport(sessionId: Long): ShiftReport
     suspend fun cashMovements(sessionId: Long): List<CashMovement>
     /** [overrideToken]: token persetujuan (sekali pakai) bila kas keluar melampaui ambang; null bila tidak ada. */
     suspend fun recordCashMovement(sessionId: Long, inflow: Boolean, reasonCode: String, note: String?, amount: Int, key: String, overrideToken: String? = null): CashMovement
     /** Hitungan buta: pasangan (pecahan, jumlah). Server menjumlahkan dan menentukan selisih. */
-    suspend fun closeShift(sessionId: Long, counted: List<Pair<Int, Int>>, edcBatch: Int?, key: String, overrideToken: String? = null): CloseOutcome
+    suspend fun closeShift(sessionId: Long, count: com.warkop.pos.model.ShiftCount, key: String, overrideToken: String? = null): CloseOutcome
 
     // --- persetujuan (048 / S3: US4). Token tidak pernah disimpan; hanya dipakai satu aksi. ---
     suspend fun approvers(action: String): List<Approver>
@@ -127,9 +124,6 @@ interface PosBackend {
 
     /** Heartbeat perangkat (US6): jam perangkat, jumlah antrean lokal (0 bila tidak ada), dan versi aplikasi. */
     suspend fun heartbeat(clockMs: Long, queueDepth: Int): com.warkop.pos.state.HeartbeatResult
-
-    /** 054 / US3 — alamat server yang dipilih admin; null = galat (tablet tetap memakai alamat pairing). */
-    suspend fun serverEndpoint(): ServerEndpoint?
 
     /** 055 / T036 — pajak untuk tampilan counter; null bila server belum memberi label. */
     suspend fun taxDisplay(): TaxDisplay?
