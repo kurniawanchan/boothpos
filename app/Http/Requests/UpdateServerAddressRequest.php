@@ -39,8 +39,9 @@ class UpdateServerAddressRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         // Memilih online tanpa alamat online akan membuat tablet kehilangan server; ditolak di sini, bukan di tablet.
+        // 066: kecuali aplikasi membawa alamat online bawaan — tablet memakainya, jadi kolom boleh kosong.
         $validator->after(function (Validator $validator): void {
-            if ($this->input('selected') === ServerAddress::ONLINE && blank($this->input('online'))) {
+            if ($this->input('selected') === ServerAddress::ONLINE && blank($this->input('online')) && ServerAddress::defaultOnline() === null) {
                 $validator->errors()->add('selected', 'Pilih online hanya jika alamat online sudah diisi.');
             }
         });

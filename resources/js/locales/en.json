@@ -1055,6 +1055,7 @@
     "server_address_intro": "Choose which server the cashier tablets use. The change applies on each tablet's next connection check.",
     "server_address_local_label": "Local server address",
     "server_address_online_label": "Online server address",
+    "server_address_online_default_hint": "If left empty, tablets use the app's built-in address: {url}. A value entered here always takes priority.",
     "server_address_selected_label": "Choice used by tablets",
     "server_address_choose_local": "Local (outlet network)",
     "server_address_choose_online": "Online (live server)",

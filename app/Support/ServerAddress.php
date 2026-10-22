@@ -44,6 +44,15 @@ final class ServerAddress
     }
 
     /**
+     * 066 — alamat online bawaan aplikasi (config/pos.php), hanya untuk ditampilkan sebagai petunjuk di halaman admin.
+     * Bukan bagian dari tiga baris settings: tidak pernah disimpan dan tidak keluar lewat endpoint publik tablet.
+     */
+    public static function defaultOnline(): ?string
+    {
+        return self::clean(config('pos.server_address.default_online'));
+    }
+
+    /**
      * @param  array{local?: ?string, online?: ?string, selected: string}  $values
      */
     public static function save(array $values): void

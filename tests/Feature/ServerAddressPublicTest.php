@@ -70,4 +70,15 @@ class ServerAddressPublicTest extends TestCase
 
         $this->getJson('/api/v1/devices/server-address', ['X-Device-Id' => (string) $device])->assertOk()->assertJsonPath('url', 'http://192.168.1.10:8010');
     }
+
+    // 066 — alamat bawaan aplikasi tidak pernah keluar lewat endpoint publik.
+    public function test_the_public_answer_never_carries_the_built_in_address(): void
+    {
+        config(['pos.server_address.default_online' => 'https://built-in.example.com']);
+        ServerAddress::save(['local' => 'http://192.168.1.219:8010', 'online' => null, 'selected' => 'online']);
+
+        $res = $this->getJson('/api/v1/server-address')->assertOk()->assertExactJson(['selected' => 'online', 'url' => null]);
+        $this->assertStringNotContainsString('built-in.example.com', $res->getContent());
+        $this->assertArrayNotHasKey('default_online', $res->json());
+    }
 }

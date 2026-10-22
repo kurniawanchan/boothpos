@@ -35,7 +35,7 @@ class ServerAddressController extends Controller
     {
         $this->authorize('viewAny', Setting::class);
 
-        return response()->json(ServerAddress::current());
+        return response()->json($this->present(ServerAddress::current()));
     }
 
     public function update(UpdateServerAddressRequest $request): JsonResponse
@@ -59,6 +59,12 @@ class ServerAddressController extends Controller
             return $after;
         });
 
-        return response()->json($result);
+        return response()->json($this->present($result));
+    }
+
+    /** 066 — `default_online` ikut respons admin (read-only); respons publik tablet tidak memuatnya. */
+    private function present(array $address): array
+    {
+        return $address + ['default_online' => ServerAddress::defaultOnline()];
     }
 }

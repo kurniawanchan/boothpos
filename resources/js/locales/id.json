@@ -1055,6 +1055,7 @@
     "server_address_intro": "Pilih server yang dipakai tablet kasir. Perubahan berlaku di tiap tablet pada pengecekan koneksi berikutnya.",
     "server_address_local_label": "Alamat server lokal",
     "server_address_online_label": "Alamat server online",
+    "server_address_online_default_hint": "Bila dikosongkan, tablet memakai alamat bawaan aplikasi: {url}. Isian di sini selalu didahulukan.",
     "server_address_selected_label": "Pilihan yang dipakai tablet",
     "server_address_choose_local": "Lokal (jaringan outlet)",
     "server_address_choose_online": "Online (server live)",

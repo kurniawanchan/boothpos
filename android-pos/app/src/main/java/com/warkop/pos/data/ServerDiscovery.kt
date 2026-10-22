@@ -30,11 +30,16 @@ sealed interface DiscoveryResult {
  * address". Server MENJAWAB satu alamat (yang terpilih); alamat itulah yang disimpan tablet dan dipakai semua
  * permintaan. Tidak ada alamat karangan: bila tak satu pun bawaan menjawab → [DiscoveryResult.Unreachable].
  *
+ * 066 — admin boleh memilih Online dengan kolom alamat online KOSONG; jawaban server lalu `url = null`. Hanya untuk
+ * kasus itu, alamat online bawaan build ([defaultOnline]) dipakai sebagai alamat, dan tetap hanya disimpan bila
+ * terbukti terjangkau. Isian admin selalu menang; pilihan Lokal tidak pernah memakai bawaan online.
+ *
  * [probe] mengembalikan jawaban server untuk satu alamat bawaan, atau null bila tidak terjangkau; dipisah supaya
  * aturan urutan dan hasil bisa diuji tanpa jaringan.
  */
 class ServerDiscovery(
     private val defaults: List<String>,
+    private val defaultOnline: String? = null,
     private val probe: suspend (baseUrl: String) -> ServerAddressDto?,
 ) {
     suspend fun discover(): DiscoveryResult {
@@ -45,6 +50,7 @@ class ServerDiscovery(
             // Server menjawab: pilihan admin menentukan alamat. Kosong berarti admin belum mengisinya — berhenti di sini,
             // karena bertanya ke alamat bawaan lain tidak akan mengubah jawaban (satu server, satu database).
             val url = answer.url?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() }
+                ?: onlineFallback(answer.selected)
                 ?: return DiscoveryResult.NotConfigured(answer.selected)
             // Alamat pilihan admin yang BEDA dari yang baru saja menjawab (mis. admin memilih online, tablet bertanya lewat
             // lokal) hanya disimpan bila ia sendiri terbukti terjangkau — jangan memindahkan tablet ke alamat mati.
@@ -54,11 +60,16 @@ class ServerDiscovery(
         return DiscoveryResult.Unreachable
     }
 
+    /** 066 — bawaan online hanya untuk pilihan online yang kosong; null berarti tidak ada jatuhan. */
+    private fun onlineFallback(selected: String): String? =
+        if (selected == "online") defaultOnline?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() } else null
+
     companion object {
         /** Alamat bawaan dari string resource yang diisi saat build (pos.defaultLocalUrl / pos.defaultOnlineUrl): lokal dulu, lalu online. */
         fun fromContext(context: android.content.Context): ServerDiscovery =
             ServerDiscovery(
                 listOf(context.getString(com.warkop.pos.R.string.default_local_url), context.getString(com.warkop.pos.R.string.default_online_url)),
+                context.getString(com.warkop.pos.R.string.default_online_url),
                 ServerProbe::ask,
             )
     }
