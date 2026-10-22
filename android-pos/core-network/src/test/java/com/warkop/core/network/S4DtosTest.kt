@@ -48,7 +48,8 @@ class S4DtosTest {
     }
 
     @Test fun `salinan pertama cetak ulang dikirim tanpa token, respons membaca copy_no`() {
-        assertEquals("{}", json.encodeToString(ReprintRequestDto.serializer(), ReprintRequestDto()))
+        // 057 — `copy_no` wajib (nomor salinan dari server); tanpa token persetujuan untuk salinan pertama.
+        assertEquals("{\"copy_no\":2}", json.encodeToString(ReprintRequestDto.serializer(), ReprintRequestDto(copyNo = 2)))
         val r = json.decodeFromString(ReprintResponseDto.serializer(), """{"copy_no":2}""")
         assertEquals(2, r.copyNo)
     }

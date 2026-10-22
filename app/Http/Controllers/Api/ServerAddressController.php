@@ -18,6 +18,19 @@ class ServerAddressController extends Controller
 {
     public function __construct(private ActivityLogger $activityLogger) {}
 
+    /**
+     * 065 / US6 (research D8) — PUBLIK: dibaca tablet baru saat "Siapkan terminal", sebelum ada token atau terminal,
+     * lewat alamat bawaan yang tertanam di aplikasi. HANYA alamat yang dipilih admin yang keluar; alamat satunya tidak
+     * pernah sampai ke tablet (054 FR-011). Tetap di balik gerbang lisensi dan dibatasi laju.
+     */
+    public function forTablets(): JsonResponse
+    {
+        return response()->json([
+            'selected' => ServerAddress::current()['selected'],
+            'url' => ServerAddress::selectedUrl(),
+        ]);
+    }
+
     public function show(): JsonResponse
     {
         $this->authorize('viewAny', Setting::class);

@@ -48,11 +48,12 @@ class CashMovementTest extends TestCase
         $this->getJson("/api/v1/sessions/{$this->shift->id}/cash-movements")
             ->assertOk()->assertJsonCount(2, 'data');
 
-        // Ringkasan kasir memperlihatkan arus kas, tetapi TIDAK kas seharusnya (blind count).
+        // 065 (Q2 = B) — ringkasan kini memperlihatkan arus kas DAN kas seharusnya (hitungan buta 048 dihentikan).
+        // Kas seharusnya = modal 150.000 + masuk 100.000 − keluar 30.000 = 220.000.
         $this->getJson("/api/v1/sessions/{$this->shift->id}/summary")
-            ->assertOk()->assertJsonPath('cash_in', '100000.00')->assertJsonPath('cash_out', '30000.00')->assertJsonMissingPath('expected_cash');
+            ->assertOk()->assertJsonPath('cash_in', '100000.00')->assertJsonPath('cash_out', '30000.00')->assertJsonPath('expected_cash', '220000.00');
 
-        // Kas seharusnya = modal 150.000 + masuk 100.000 − keluar 30.000 = 220.000; baru tampil di respons tutup.
+        // Respons tutup tetap menyebut kas seharusnya dan selisih.
         $this->postJson("/api/v1/sessions/{$this->shift->id}/close", ['counted_by_denomination' => [['denomination' => 100000, 'qty' => 2], ['denomination' => 10000, 'qty' => 2]]])
             ->assertOk()->assertJsonPath('expected_cash', '220000.00')->assertJsonPath('cash_difference', '0.00');
     }

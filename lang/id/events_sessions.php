@@ -17,4 +17,16 @@ return [
     'pending_qris_payments' => 'Ada :count pembayaran QRIS yang belum dicek. Cek dulu sebelum menutup shift.',
     'variance_needs_approval' => 'Selisih kas di atas toleransi harus disetujui. Persetujuan belum tersedia di aplikasi ini.',
     'count_or_closing_required' => 'Isi jumlah kas akhir (closing_cash) atau hitungan per pecahan.',
+    // 065 — label alasan kas masuk/keluar untuk daftar kas di web (kode tetap sumber kebenaran).
+    'cash_reason' => [
+        'float_topup' => 'Tambah modal',
+        'change_exchange' => 'Tukar uang kecil',
+        'petty_cash' => 'Uang kecil / belanja',
+        'supplier' => 'Bayar supplier',
+        'bank_deposit' => 'Setor ke bank / brankas',
+        'refund' => 'Refund',
+        'other' => 'Lainnya',
+    ],
+    'count_one_method_only' => 'Hitungan hanya boleh satu cara: per pecahan atau total ketikan, tidak keduanya.',
+    'counted_total_whole' => 'Jumlah uang harus rupiah utuh (tanpa sen).',
 ];

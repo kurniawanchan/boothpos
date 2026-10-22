@@ -1689,8 +1689,13 @@ paths:
   /sessions/current:
     get:
       tags: [Session]
-      summary: Sesi kasir aktif milik pengguna
-      description: 045 — membawa `outlet_id` dan `outlet {id, code, name}` (outlet shift); sama untuk POST /sessions dan `session` pada ringkasan shift.
+      summary: Sesi kasir aktif milik pengguna (per SUMBER permintaan)
+      description: |
+        045 — membawa `outlet_id` dan `outlet {id, code, name}` (outlet shift); sama untuk POST /sessions dan `session` pada ringkasan shift.
+
+        **065 — shift aplikasi dan shift web dipisah.** Yang dikembalikan adalah shift terbuka milik pengguna dari SUMBER
+        permintaan ini: tablet (membawa `X-Device-Id`) atau web (tanpa header). 404 bila sumber itu tidak punya shift terbuka,
+        walaupun sumber lain punya.
       responses:
         '200':
           description: Berhasil
@@ -1701,11 +1706,40 @@ paths:
           description: Tidak ada sesi terbuka
 
   /sessions:
+    get:
+      tags: [Session]
+      summary: Daftar shift (065)
+      description: |
+        Owner/admin melihat SEMUA shift (aplikasi dan web) pada outlet dan mode data yang diizinkan; pengguna lain hanya
+        shift miliknya (`user_id` orang lain diabaikan). Angka per baris dari kueri terkelompok (jumlah kueri tidak naik
+        bersama jumlah baris); shift tertutup membaca nilai yang tersimpan. Terbuka dulu, lalu terbaru.
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, closed, all], default: open } }
+        - { name: source, in: query, schema: { type: string, enum: [app, web] } }
+        - { name: user_id, in: query, description: "Hanya berlaku untuk owner/admin.", schema: { type: integer } }
+        - { name: date_from, in: query, description: "Tanggal bisnis shift (Y-m-d).", schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        '200':
+          description: Daftar shift
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ShiftRow' } }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '422': { $ref: '#/components/responses/ValidationError' }
     post:
       tags: [Session]
       summary: Buka sesi kasir
       description: |
-        Ditolak bila pengguna masih memiliki sesi lain berstatus `open`.
+        Ditolak (409) bila pengguna masih memiliki sesi lain berstatus `open` DARI SUMBER YANG SAMA. **065:** shift
+        aplikasi (tablet, `X-Device-Id`) dan shift web berdiri sendiri — satu pengguna boleh memegang satu dari masing-masing
+        sumber; pembayaran, refund, dan kas masuk/keluar masuk ke shift sumbernya. Kas awal: `opening_cash` (total ketikan)
+        ATAU `opening_denominations` (pecahan), jangan keduanya berbeda.
 
         046-hide-events-preorders — shift TIDAK lagi terikat event: `event_id` DIHAPUS dari body (nilai yang masih
         dikirim klien lama diabaikan) dan tidak ada lagi aturan "hanya pada event aktif"; shift hanya butuh kas awal
@@ -1792,12 +1826,18 @@ paths:
         `open_tabs` (id, nomor, meja/label) supaya UI bisa menautkannya. Tab harus
         dibayar, dibatalkan, atau diserahkan ke shift lain dulu.
 
-        **048 / S2 — hitungan buta.** Kirim `counted_by_denomination[]` (kasir menghitung per pecahan tanpa
-        melihat angka seharusnya). Server menjumlahkan hitungan itu sendiri, lalu:
+        **065 — total ketikan.** Selain per pecahan, kasir boleh mengetik total uang di laci: `counted_total` (rupiah
+        utuh ≥ 0; tidak bersama `counted_by_denomination`, 422). Kedua cara itu memakai protokol terkontrol yang sama
+        (di bawah); persetujuan selisih terikat ke angka yang DIKIRIM (pecahan atau `counted_total`). **EDC dihapus dari
+        alur tutup:** `edc_batch_total` tidak diterima lagi (diabaikan), tidak disimpan, dan tidak ada di `z_report`.
+        `expected_cash` kini juga ada di ringkasan dan X-report sebelum menghitung (keputusan pemilik; hitungan buta 048 dihentikan).
+
+        **048 / S2 — protokol terkontrol.** Kirim `counted_by_denomination[]` (kasir menghitung per pecahan).
+        Server menjumlahkan hitungan itu sendiri, lalu:
         - `409 pending_payments` bila masih ada pembayaran QRIS (`qr_ewallet`) berstatus `pending` di shift ini;
         - `409 override_required` bila |selisih| > `variance_tolerance` (`GET /settings/features`, bawaan Rp 5.000);
           shift TIDAK ditutup. Persetujuan selisih belum tersedia (S3/US4).
-        Hanya protokol hitungan buta yang memeriksa dua aturan itu. Bentuk lama (`closing_cash` saja) tetap
+        Hanya protokol terkontrol (pecahan atau `counted_total`) yang memeriksa dua aturan itu. Bentuk lama (`closing_cash` saja) tetap
         seperti sebelumnya. Salah satu dari `closing_cash` atau `counted_by_denomination` wajib (422).
 
         Menerima header `Idempotency-Key` (satu UUID per niat tutup): pengiriman ulang dengan kunci yang sama
@@ -1812,9 +1852,10 @@ paths:
           application/json:
             schema:
               type: object
-              description: Isi `counted_by_denomination` (hitungan buta) ATAU `closing_cash` (bentuk lama).
+              description: Isi `counted_by_denomination` (pecahan) ATAU `counted_total` (total ketikan, 065) ATAU `closing_cash` (bentuk lama).
               properties:
                 closing_cash: { type: string, nullable: true, example: "2350000.00" }
+                counted_total: { type: number, nullable: true, minimum: 0, description: "065 — total uang di laci, rupiah utuh; tidak bersama `counted_by_denomination`." }
                 counted_by_denomination:
                   type: array
                   nullable: true
@@ -1825,7 +1866,6 @@ paths:
                     properties:
                       denomination: { type: integer, enum: [100000, 50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100] }
                       qty: { type: integer, minimum: 0, maximum: 100000 }
-                edc_batch_total: { type: string, nullable: true, description: "048 — total batch EDC untuk dicocokkan dengan mesin; tidak ikut menghitung selisih." }
                 notes: { type: string, nullable: true }
       responses:
         '200':
@@ -2051,6 +2091,7 @@ paths:
                   cash_received: { $ref: '#/components/schemas/Money' }
                   cash_in: { $ref: '#/components/schemas/Money' }
                   cash_out: { $ref: '#/components/schemas/Money' }
+                  expected_cash: { $ref: '#/components/schemas/Money', description: "065 — kas seharusnya di laci; kini dikirim sebelum menghitung (keputusan pemilik)." }
                   by_method:
                     type: array
                     items:
@@ -3178,6 +3219,91 @@ paths:
               schema: { $ref: '#/components/schemas/DashboardSummary' }
         '403': { description: Tanpa menu dashboard }
         '422': { description: period tidak valid }
+
+  /dashboard/shifts:
+    get:
+      tags: [Dashboard]
+      summary: Shift terbuka semua pengguna untuk panel dashboard (065)
+      description: "Satu baris per shift terbuka (aplikasi dan web), maks. 50, terbaru dulu; `total_open` = jumlah sebenarnya. Owner/admin melihat semua pengguna; peran lain dengan menu dashboard hanya miliknya. 403 tanpa menu `dashboard`."
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/ShiftRow' } }
+                  total_open: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /cash-movements:
+    get:
+      tags: [Session]
+      summary: Daftar kas masuk/keluar lintas shift (065)
+      description: Aturan lihat sama dengan `GET /sessions`. `totals` menjumlah SELURUH hasil yang disaring, bukan hanya halaman ini.
+      parameters:
+        - { name: direction, in: query, schema: { type: string, enum: [in, out] } }
+        - { name: user_id, in: query, schema: { type: integer } }
+        - { name: session_id, in: query, schema: { type: integer } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        session_id: { type: integer }
+                        direction: { type: string, enum: [in, out] }
+                        reason_code: { type: string }
+                        reason_label: { type: string, nullable: true }
+                        reason_note: { type: string, nullable: true }
+                        amount: { $ref: '#/components/schemas/Money' }
+                        created_by_name: { type: string, nullable: true }
+                        created_at: { type: string, format: date-time }
+                        terminal_name: { type: string, nullable: true }
+                        source: { type: string, enum: [app, web] }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+                  totals:
+                    type: object
+                    properties:
+                      in: { $ref: '#/components/schemas/Money' }
+                      out: { $ref: '#/components/schemas/Money' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /server-address:
+    get:
+      tags: [Settings]
+      summary: Alamat server pilihan admin untuk tablet baru — PUBLIK (065)
+      description: |
+        Tanpa token dan tanpa terminal: dibaca tablet saat "Siapkan terminal" lewat alamat bawaan yang tertanam di
+        aplikasi. HANYA alamat yang dipilih admin keluar; alamat satunya tidak pernah. Dibatasi laju (30/menit) dan tetap
+        di balik gerbang lisensi (423 bila belum aktivasi). `url` null bila pilihan itu belum punya alamat.
+        `GET /devices/server-address` (butuh terminal) tetap ada untuk APK lama.
+      security: []
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  selected: { type: string, enum: [local, online] }
+                  url: { type: string, nullable: true }
+        '423': { description: Instalasi belum aktivasi }
+        '429': { description: Terlalu banyak permintaan }
 
   /dashboard/attention:
     get:
@@ -6614,6 +6740,32 @@ components:
                   items: { type: string }
 
   schemas:
+    ShiftRow:
+      type: object
+      description: 065 — satu shift pada daftar/panel. Uang berupa string 2 desimal; shift tertutup membaca nilai tersimpan.
+      properties:
+        id: { type: integer }
+        source: { type: string, enum: [app, web], description: "app = shift dari tablet (terminal terisi), web = tanpa terminal." }
+        terminal_name: { type: string, nullable: true }
+        cashier: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string } } }
+        outlet: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string } } }
+        status: { type: string, enum: [open, closed] }
+        business_date: { type: string, format: date, nullable: true }
+        opened_at: { type: string, format: date-time }
+        closed_at: { type: string, format: date-time, nullable: true }
+        opening_cash: { $ref: '#/components/schemas/Money' }
+        order_count: { type: integer }
+        sales_total: { $ref: '#/components/schemas/Money' }
+        cash_net: { $ref: '#/components/schemas/Money' }
+        noncash_total: { $ref: '#/components/schemas/Money' }
+        cash_in: { $ref: '#/components/schemas/Money' }
+        cash_out: { $ref: '#/components/schemas/Money' }
+        void_count: { type: integer }
+        void_total: { $ref: '#/components/schemas/Money' }
+        expected_cash: { $ref: '#/components/schemas/Money' }
+        counted_total: { $ref: '#/components/schemas/Money', nullable: true }
+        difference: { $ref: '#/components/schemas/Money', nullable: true }
+
     Device:
       type: object
       properties:
@@ -6811,6 +6963,15 @@ components:
             per_page: { type: integer }
             total: { type: integer }
             last_page: { type: integer }
+
+    PaginationMeta:
+      type: object
+      description: 065 — amplop paginasi buatan tangan yang sama dengan `Paginated.meta`.
+      properties:
+        current_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+        last_page: { type: integer }
 
     Money:
       type: string
@@ -7429,7 +7590,7 @@ components:
         cash_difference: { $ref: '#/components/schemas/Money' }
         status: { type: string, enum: [open, closed] }
         counted_total: { $ref: '#/components/schemas/Money', nullable: true, description: '048 — jumlah hitungan buta (null untuk penutupan bentuk lama).' }
-        edc_batch_total: { $ref: '#/components/schemas/Money', nullable: true }
+        edc_batch_total: { $ref: '#/components/schemas/Money', nullable: true, deprecated: true, description: "065 — tidak diisi lagi untuk penutupan baru; nilai lama tetap sebagai riwayat." }
         variance: { $ref: '#/components/schemas/Money', nullable: true }
         z_report: { type: object, nullable: true, description: '048 — salinan angka shift saat tutup.' }
         device_id: { type: integer, nullable: true }

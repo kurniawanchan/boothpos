@@ -193,9 +193,8 @@ fun XReportScreen(store: PosStore) {
 /** S21 — tutup shift dengan hitung buta. Kasir hanya mengisi hitungan; nilai seharusnya TIDAK ditampilkan di sini. */
 @Composable
 fun CloseShiftScreen(store: PosStore) {
-    val counts = remember { mutableStateMapOf<Int, Int>() }
-    var edc by remember { mutableStateOf("") }
-    val counted = PosCatalog.denominations.sumOf { it * (counts[it] ?: 0) }
+    var input by remember { mutableStateOf(com.warkop.pos.state.CountInput()) }
+    val counted = input.total
     val online = store.conn == Conn.ONLINE
     val noPending = !store.hasPendingPayment()
     val ready = online && noPending
@@ -208,35 +207,48 @@ fun CloseShiftScreen(store: PosStore) {
             )
             if (compact) gates.forEach { (ok, t, sub) -> Gate(ok, t, sub, Modifier.fillMaxWidth().padding(bottom = 8.dp)) }
             else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) { gates.forEach { (ok, t, sub) -> Gate(ok, t, sub, Modifier.weight(1f)) } }
-            Text("Hitung uang per pecahan. Server menjumlahkan hitungan ini; nilai seharusnya baru tampil setelah dikirim.", Modifier.padding(vertical = 8.dp), fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            Surface(Modifier.fillMaxWidth().alpha(if (ready) 1f else 0.45f), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
-                val perRow = if (compact) 1 else 3
-                Column(Modifier.padding(horizontal = 22.dp, vertical = 6.dp)) {
-                    PosCatalog.denominations.chunked(perRow).forEach { rowItems ->
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(36.dp)) {
-                            rowItems.forEach { d ->
-                                val c = counts[d] ?: 0
-                                Column(Modifier.weight(1f)) {
-                                    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Text(if (d >= 1000) "Rp ${num(d)}" else "Koin Rp ${num(d)}", Modifier.weight(1f), fontSize = 17.sp, maxLines = 1, softWrap = false)
-                                        CircleStepper(c, { if (ready && c > 0) counts[d] = c - 1 }, { if (ready) counts[d] = c + 1 })
-                                    }
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                                }
-                            }
-                            repeat(perRow - rowItems.size) { Spacer(Modifier.weight(1f)) }
+
+            // 065 / US3 — informasi penjualan shift sebelum menghitung, termasuk kas seharusnya (keputusan pemilik Q2 = B).
+            // Semua angka dari server (X-report); tidak ada hitungan di klien. Tanpa baris EDC: informasi EDC dihapus dari alur ini.
+            SectionLabel("Penjualan shift", Modifier.padding(start = 6.dp, top = 6.dp, bottom = 8.dp))
+            ReportGate(store.report, { store.refreshShiftReport() }) { r ->
+                val cells = listOf(
+                    Triple("Penjualan", rp(r.totalSales), "${r.orderCount} struk"),
+                    Triple("Tunai bersih", rp(r.netCash), "Setelah kembalian ${rp(r.changeGiven)}"),
+                    Triple("Transfer", rp(r.amountOf("bank_transfer")), "Non-tunai"),
+                    Triple("QRIS", rp(r.amountOf("qr_ewallet")), "Sudah terverifikasi"),
+                    Triple("Kas masuk / keluar", "${rp(r.cashIn)} / ${rp(r.cashOut)}", "Selama shift"),
+                    Triple("Void / batal", r.voidCount.toString(), rp(r.voidTotal)),
+                )
+                cells.chunked(if (compact) 2 else 3).forEach { rowCells ->
+                    Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        rowCells.forEach { (l, v, n) -> Cell(l, v, n, Modifier.weight(1f)) }
+                        repeat((if (compact) 2 else 3) - rowCells.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+                r.expectedCash?.let { expected ->
+                    Surface(Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
+                        Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) { Text("Kas seharusnya di laci", fontSize = 14.sp); Text("Modal + tunai bersih + kas masuk − kas keluar", fontSize = 12.sp) }
+                            Text(rp(expected), fontSize = 28.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
             }
-            SectionLabel("Total batch EDC (dari mesin EDC)", Modifier.padding(start = 6.dp, top = 10.dp, bottom = 4.dp))
-            OutlinedTextField(edc, { if (ready) edc = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(if (compact) 1f else 0.5f), singleLine = true, enabled = ready, shape = RoundedCornerShape(8.dp))
-            Text("Pencocokan EDC dengan sistem belum tersedia; isi total batch sesuai mesin.", Modifier.padding(start = 6.dp, top = 4.dp, bottom = 8.dp), fontSize = 14.sp)
-            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+
+            Text("Hitung uang di laci per pecahan, atau ketik total. Server menilai selisih terhadap kas seharusnya.", Modifier.padding(vertical = 8.dp), fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            Surface(Modifier.fillMaxWidth().alpha(if (ready) 1f else 0.45f), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+                // Kolom mengikuti lebar yang tersedia (tanpa subtotal di layar ini, jadi sel boleh lebih sempit).
+                BoxWithConstraints(Modifier.padding(horizontal = 22.dp, vertical = 6.dp)) {
+                    DenominationGrid(input, { input = it }, DenominationLayout.columnsFor(maxWidth.value, minCellDp = 300f), showSubtotal = false, enabled = ready)
+                }
+            }
+            TypedAmountField(input, { input = it }, Modifier.padding(top = 12.dp).fillMaxWidth(if (compact) 1f else 0.5f), label = "Atau ketik total uang di laci", enabled = ready)
+            Surface(Modifier.fillMaxWidth().padding(top = 12.dp), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) { Text("Total hitungan Anda", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(rp(counted), fontSize = 34.sp, fontWeight = FontWeight.Light) }
+                    Column(Modifier.weight(1f)) { Text("Total hitungan Anda", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(rp(counted), fontSize = 34.sp, fontWeight = FontWeight.Medium) }
                     PrimaryPill("Kirim hitungan", {
-                        store.show(Sheet.Confirm("Kirim hitungan ${rp(counted)}?", "Hitungan tidak dapat diubah setelah dikirim.", "Kirim") { store.submitCount(counts.toMap(), edc.toIntOrNull()) })
+                        store.show(Sheet.Confirm("Kirim hitungan ${rp(counted)}?", "Hitungan tidak dapat diubah setelah dikirim.", "Kirim") { store.submitCount(input.toCount()) })
                     }, enabled = ready, icon = Icons.Filled.Check)
                 }
             }
@@ -281,7 +293,6 @@ fun CloseResultScreen(store: PosStore) {
                 }
                 r.tolerance?.let { Text("Toleransi server: ${rp(it)}.", Modifier.padding(top = 10.dp), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (within == false) Text("Selisih melewati toleransi — perlu persetujuan. Persetujuan belum tersedia di aplikasi ini.", Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.error)
-                r.edcBatch?.let { Text("Total batch EDC: ${rp(it)}", Modifier.padding(top = 18.dp), fontSize = 17.sp) }
                 Text("Z-report tersimpan di server. Cetak belum tersedia: printer belum tersambung.", Modifier.padding(vertical = 18.dp), fontSize = 17.sp)
                 PrimaryPill("Selesai", { store.finishShift() })
             }

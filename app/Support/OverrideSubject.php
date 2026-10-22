@@ -21,7 +21,7 @@ final class OverrideSubject
         'void_line' => ['tab_id', 'line_id', 'reason_code', 'kitchen_status', 'stock_decision', 'reason'],
         'cancel_order' => ['tab_id', 'reason_code', 'reason'],
         'cash_out' => ['session_id', 'direction', 'amount', 'reason_code'],
-        'variance' => ['session_id', 'counted_by_denomination'],
+        'variance' => ['session_id', 'counted_by_denomination', 'counted_total'],
         'availability' => ['product_id', 'reason_code_id', 'note', 'outlet_ids'],
         'qris_verify' => ['tab_id', 'payment_id', 'reference'],
         'qris_fail' => ['tab_id', 'payment_id'],
@@ -60,7 +60,7 @@ final class OverrideSubject
         if ($value === null) {
             return null;
         }
-        if ($field === 'amount' || $field === 'percent') {
+        if ($field === 'amount' || $field === 'percent' || $field === 'counted_total') {
             return number_format((float) $value, 2, '.', '');
         }
         if ($field === 'counted_by_denomination') {

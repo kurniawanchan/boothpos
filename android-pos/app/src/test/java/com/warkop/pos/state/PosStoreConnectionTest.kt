@@ -1,7 +1,6 @@
 package com.warkop.pos.state
 
 import com.warkop.core.domain.ApiError
-import com.warkop.pos.data.ServerEndpoint
 import com.warkop.pos.data.TerminalConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -97,54 +96,38 @@ class PosStoreConnectionTest {
 
     private fun terminal(url: String) = TerminalConfig(serverUrl = url, outletId = 1, outletName = "Warkop WJM 3", deviceId = 7, deviceName = "Kasir Belakang")
 
-    @Test fun `alamat yang dipilih admin dipindah setelah roster berhasil (054 US3)`() = runTest(dispatcher) {
-        val adopted = mutableListOf<String>()
-        backend.endpoint = ServerEndpoint("online", "https://pos.example.com")
-        val store = PosStore(backend = backend, onServerUrl = { adopted += it })
+    /**
+     * 065 / research D8 — MENGGANTIKAN empat uji adopsi alamat 054: tablet tidak lagi berpindah alamat sendiri.
+     * Alamat dibaca sekali saat penyiapan dan dipakai sampai data dihapus; probe roster di layar PIN hanya
+     * memperbarui status koneksi.
+     */
+    @Test fun `probe layar PIN tidak pernah mengubah alamat tersimpan (065)`() = runTest(dispatcher) {
+        backend.setServerUrl("http://192.168.1.10:8010")
+        val store = PosStore(backend = backend)
         store.setConfig(terminal("http://192.168.1.10:8010"))
 
         store.startPinProbe()
         runCurrent()
-        assertEquals(listOf("https://pos.example.com"), adopted)
-        assertEquals("https://pos.example.com", store.config?.serverUrl)
-        store.stopPinProbe()
-    }
-
-    @Test fun `url kosong dari server tidak memindahkan tablet dari alamat pairing (054 US3)`() = runTest(dispatcher) {
-        val adopted = mutableListOf<String>()
-        backend.endpoint = ServerEndpoint("local", null)
-        val store = PosStore(backend = backend, onServerUrl = { adopted += it })
-        store.setConfig(terminal("http://192.168.1.10:8010"))
-
-        store.startPinProbe()
+        advanceTimeBy(30_000L)
         runCurrent()
-        assertTrue(adopted.isEmpty())
+
         assertEquals("http://192.168.1.10:8010", store.config?.serverUrl)
+        assertEquals("http://192.168.1.10:8010", backend.serverUrl())
+        assertEquals(Conn.ONLINE, store.conn)
         store.stopPinProbe()
     }
 
-    @Test fun `alamat yang sama tidak menulis ulang penyimpanan (054 US3)`() = runTest(dispatcher) {
-        val adopted = mutableListOf<String>()
-        backend.endpoint = ServerEndpoint("local", "http://192.168.1.10:8010")
-        val store = PosStore(backend = backend, onServerUrl = { adopted += it })
-        store.setConfig(terminal("http://192.168.1.10:8010"))
-
-        store.startPinProbe()
-        runCurrent()
-        assertTrue(adopted.isEmpty())
-        store.stopPinProbe()
-    }
-
-    @Test fun `tanpa koneksi tidak ada alamat yang dipindah (054 US3)`() = runTest(dispatcher) {
-        val adopted = mutableListOf<String>()
+    @Test fun `tanpa koneksi probe tetap tidak mengubah alamat tersimpan (065)`() = runTest(dispatcher) {
+        backend.setServerUrl("http://192.168.1.10:8010")
         backend.rosterResult = { throw ApiError.Network() }
-        backend.endpoint = ServerEndpoint("online", "https://pos.example.com")
-        val store = PosStore(backend = backend, onServerUrl = { adopted += it })
+        val store = PosStore(backend = backend)
         store.setConfig(terminal("http://192.168.1.10:8010"))
 
         store.startPinProbe()
         runCurrent()
-        assertTrue("tidak boleh pindah saat server tidak terjangkau", adopted.isEmpty())
+
+        assertEquals("http://192.168.1.10:8010", backend.serverUrl())
+        assertEquals(Conn.OFFLINE, store.conn)
         store.stopPinProbe()
     }
 

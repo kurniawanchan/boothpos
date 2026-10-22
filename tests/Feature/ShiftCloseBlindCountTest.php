@@ -178,7 +178,8 @@ class ShiftCloseBlindCountTest extends TestCase
             ->assertJsonPath('total_sales', '100000.00')
             ->assertJsonPath('cash_received', '150000.00')
             ->assertJsonPath('change_given', '50000.00')
-            ->assertJsonMissingPath('expected_cash')
+            // 065 — kas seharusnya kini ikut (Q2 = B): 150.000 modal + 150.000 diterima − 50.000 kembalian.
+            ->assertJsonPath('expected_cash', '250000.00')
             ->assertJsonPath('hourly.0.order_count', 1);
 
         $this->assertSame('open', $shift->fresh()->status);
@@ -192,18 +193,33 @@ class ShiftCloseBlindCountTest extends TestCase
         $this->assertSame('open', $shift->fresh()->status);
     }
 
-    public function test_the_cashier_never_sees_the_expected_cash_before_the_blind_count(): void
+    /**
+     * 065 (keputusan pemilik Q2 = B) — MENGGANTIKAN aturan 048 "kasir tidak pernah melihat kas seharusnya sebelum
+     * menghitung": ringkasan dan X-report kini menampilkannya, dan selisih di atas toleransi tetap butuh persetujuan.
+     */
+    public function test_the_expected_cash_is_shown_before_counting_since_q2_b(): void
     {
         $shift = CashierSession::factory()->create(['user_id' => $this->cashier->id, 'status' => 'open', 'opening_cash' => 150000]);
         $this->sell($shift, 100000);
 
-        // Sebelum hitungan dikirim, kas seharusnya TIDAK boleh ada di ringkasan maupun X-report.
-        $this->getJson("/api/v1/sessions/{$shift->id}/summary")->assertOk()->assertJsonMissingPath('expected_cash');
-        $this->getJson("/api/v1/sessions/{$shift->id}/x-report")->assertOk()->assertJsonMissingPath('expected_cash');
+        $this->getJson("/api/v1/sessions/{$shift->id}/summary")->assertOk()
+            ->assertJsonPath('expected_cash', '250000.00')->assertJsonPath('void_count', 0)->assertJsonPath('void_total', '0.00');
+        $this->getJson("/api/v1/sessions/{$shift->id}/x-report")->assertOk()->assertJsonPath('expected_cash', '250000.00');
 
-        // Setelah hitungan dikirim, respons tutup memperlihatkan selisih dan kas seharusnya.
         $this->postJson("/api/v1/sessions/{$shift->id}/close", ['counted_by_denomination' => $this->denominations(250000)])
             ->assertOk()->assertJsonPath('expected_cash', '250000.00')->assertJsonPath('cash_difference', '0.00');
+    }
+
+    /** 065 — EDC dihapus dari alur tutup: klien lama yang masih mengirim `edc_batch_total` diabaikan (tidak disimpan). */
+    public function test_an_old_clients_edc_batch_total_is_ignored_and_never_stored(): void
+    {
+        $shift = CashierSession::factory()->create(['user_id' => $this->cashier->id, 'status' => 'open', 'opening_cash' => 150000]);
+
+        $res = $this->postJson("/api/v1/sessions/{$shift->id}/close", ['counted_by_denomination' => $this->denominations(150000), 'edc_batch_total' => 987654])->assertOk();
+
+        $this->assertNull($shift->fresh()->edc_batch_total);
+        $this->assertArrayNotHasKey('edc_batch_total', $shift->fresh()->z_report);
+        $this->assertNull($res->json('edc_batch_total'));
     }
 
     public function test_a_retried_close_with_the_same_key_returns_the_stored_result(): void
