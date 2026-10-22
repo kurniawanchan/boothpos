@@ -54,7 +54,7 @@ fun OrdersScreen(store: PosStore) {
                                 if (tab == 0) { Surface(Modifier.size(52.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.primaryContainer) { Box(contentAlignment = Alignment.Center) { androidx.compose.material3.Icon(Icons.Outlined.Receipt, null, Modifier.size(26.dp)) } }; Spacer(Modifier.width(16.dp)) }
                                 Column(Modifier.weight(1f)) {
                                     Text(if (tab == 1) (o.receiptNo ?: "Dibatalkan") else o.label, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                                    Text(if (tab == 0) "${if (o.kind == OrderKind.DINE_IN) "${o.pax} tamu · " else ""}Dibuka ${o.openedAt} · ${o.waiter} · ${o.otherDevice ?: "T01"}" else (o.cancelledReason?.let { "Dibatalkan: $it" } ?: "${o.label} · ${o.closedAt}"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(if (tab == 0) "${if (o.kind == OrderKind.DINE_IN) "${o.pax} tamu · " else ""}Dibuka ${o.openedAt} · ${o.waiter}${(o.terminalName ?: store.config?.deviceName)?.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()}" else (o.cancelledReason?.let { "Dibatalkan: $it" } ?: "${o.label} · ${o.closedAt}"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 if (o.hasPendingQris) Pill("QRIS", MaterialTheme.pos.warnContainer, MaterialTheme.pos.onWarnContainer)
                                 if (o.billPrinted && !o.closed) Pill("Bill", MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)

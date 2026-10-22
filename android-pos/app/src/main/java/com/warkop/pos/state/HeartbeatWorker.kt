@@ -27,7 +27,7 @@ data class HeartbeatState(
 )
 
 /** Hasil satu heartbeat yang berhasil, sudah dipetakan dari DTO. */
-data class HeartbeatResult(val serverTimeMs: Long, val skewSeconds: Int, val menuRelease: String?)
+data class HeartbeatResult(val serverTimeMs: Long, val skewSeconds: Int, val menuRelease: String?, val terminalName: String? = null)
 
 /** Peringatan jam: hanya bila server sudah memberi selisih dan |selisih| melewati [SKEW_WARN_SECONDS]. */
 fun skewWarns(skewSeconds: Int?): Boolean = skewSeconds != null && abs(skewSeconds) > SKEW_WARN_SECONDS

@@ -37,7 +37,8 @@ import kotlinx.serialization.Serializable
     @SerialName("paid_at") val paidAt: String? = null,
 )
 
-@Serializable data class DeviceRefDto(val id: Long = 0, val code: String = "")
+/** 064 — terminal yang membuka tab: id (untuk membandingkan) dan nama (untuk tampilan). */
+@Serializable data class DeviceRefDto(val id: Long = 0, val name: String = "")
 
 @Serializable data class TabDto(
     val id: Long,
@@ -88,7 +89,8 @@ import kotlinx.serialization.Serializable
     @SerialName("unsent_count") val unsentCount: Int = 0,
     @SerialName("guest_count") val guestCount: Int? = null,
     @SerialName("bill_printed") val billPrinted: Boolean = false,
-    @SerialName("device_code") val deviceCode: String? = null,
+    @SerialName("device_id") val deviceId: Long? = null,
+    @SerialName("device_name") val deviceName: String? = null,
     @SerialName("queue_no") val queueNo: String? = null,
     @SerialName("tab_label") val tabLabel: String? = null,
 )

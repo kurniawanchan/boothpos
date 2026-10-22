@@ -9,5 +9,6 @@ object HeartbeatMapper {
         serverTimeMs = dto.serverTimeMs,
         skewSeconds = dto.skewSeconds,
         menuRelease = dto.menuRelease?.takeIf { it.isNotBlank() },
+        terminalName = dto.name?.trim()?.takeIf { it.isNotBlank() },
     )
 }

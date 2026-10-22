@@ -58,6 +58,12 @@ class DeviceHeartbeatTest extends TestCase
         $this->assertNotNull($device->last_seen_at);
     }
 
+    /** 064 — tablet yang dipasang sebelum fitur ini belum menyimpan namanya; heartbeat mengembalikannya. */
+    public function test_the_heartbeat_response_carries_the_terminal_name(): void
+    {
+        $this->beat()->assertOk()->assertJsonPath('name', 'Tablet kasir');
+    }
+
     public function test_a_device_clock_ahead_by_90_seconds_has_a_positive_skew(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-10-16 10:00:00', 'UTC'));

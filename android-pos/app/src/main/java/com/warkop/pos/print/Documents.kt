@@ -75,6 +75,10 @@ object Documents {
         r.paidAtText?.let { add(PrintLine(text = "Tanggal", right = it)) }
         r.cashier?.let { add(PrintLine(text = "Kasir", right = it)) }
         r.queueNo?.let { add(PrintLine(text = "Antrean", right = it)) }
+        // 064 — nama terminal yang mengambil order (null bila tanpa terminal). SENGAJA satu baris kiri ("Terminal: nama"),
+        // bukan pasangan kiri/kanan: pada pasangan, nama panjang mendorong sisi kiri menjadi 1 huruf per baris dan baris
+        // melebihi 32 kolom TM-58V. Baris kiri tunggal dibungkus apa adanya oleh EscPos.wrap.
+        r.terminalName?.let { add(PrintLine(text = "Terminal: $it")) }
         add(separator())
         r.items.forEach { line ->
             add(PrintLine(text = "${line.qty} x ${line.name}", right = rp(line.lineTotal)))

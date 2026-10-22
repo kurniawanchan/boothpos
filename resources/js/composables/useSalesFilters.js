@@ -26,6 +26,7 @@ export const SORT_ACCESSORS = {
   outlet_names: (tx) => [...(tx.outlet_names ?? [])].sort((a, b) => a.localeCompare(b))[0] ?? null,
   created_at: (tx) => Date.parse(tx.created_at),
   cashier_name: (tx) => tx.cashier_name || null,
+  terminal_name: (tx) => tx.terminal_name || null,
   sold_at_name: (tx) => tx.sold_at_name || null,
   item_count: (tx) => Number(tx.item_count ?? 0),
   payment_methods: (tx) => (tx.payment_methods ?? [])[0] ?? null,
@@ -40,6 +41,8 @@ const num = (value) => parseFloat(value) || 0;
 // perubahan payload di masa depan tidak diam-diam menghitung uang yang belum ada.
 const isCounted = (tx) => tx.status !== 'voided' && tx.status !== 'open';
 const cashierKey = (tx) => tx.cashier_id ?? tx.cashier_name;
+// 064 — terminal ditautkan ke order lewat id; nama hanya label (bisa diganti admin).
+const terminalKey = (tx) => tx.terminal_id ?? tx.terminal_name;
 const listOf = (raw) => String(raw ?? '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, MAX_LIST);
 
 function compareValues(a, b) {
@@ -54,7 +57,7 @@ export function useSalesFilters({ transactions, sessions }) {
   const search = ref('');
   const includeVoided = ref(false);
   const filters = reactive({
-    dateFrom: '', dateTo: '', cashiers: [], outlets: [], payments: [], sessions: [],
+    dateFrom: '', dateTo: '', cashiers: [], terminals: [], outlets: [], payments: [], sessions: [],
     customerType: '', paymentState: '', settlement: '', minTotal: '', maxTotal: '',
   });
   const sortKey = ref('created_at');
@@ -72,6 +75,13 @@ export function useSalesFilters({ transactions, sessions }) {
   const cashierOptions = computed(() => {
     const seen = new Map();
     for (const tx of all.value) if (tx.cashier_name && !seen.has(cashierKey(tx))) seen.set(cashierKey(tx), tx.cashier_name);
+    return [...seen].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  });
+
+  // 064 — terminal yang mengambil order (baris tanpa terminal, mis. dari SPA web, tidak punya opsi).
+  const terminalOptions = computed(() => {
+    const seen = new Map();
+    for (const tx of all.value) if (tx.terminal_name && !seen.has(terminalKey(tx))) seen.set(terminalKey(tx), tx.terminal_name);
     return [...seen].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   });
 
@@ -96,6 +106,7 @@ export function useSalesFilters({ transactions, sessions }) {
   function matchesFilters(tx) {
     const f = filters;
     if (f.cashiers.length && !f.cashiers.some((v) => v == cashierKey(tx))) return false;
+    if (f.terminals.length && !f.terminals.some((v) => v == terminalKey(tx))) return false;
     if (f.outlets.length && !(tx.outlet_names ?? []).some((name) => f.outlets.includes(name))) return false;
     if (f.payments.length && !(tx.payment_methods ?? []).some((m) => f.payments.includes(m))) return false;
     if (f.sessions.length && !f.sessions.some((id) => id == tx.session_id)) return false;
@@ -126,7 +137,7 @@ export function useSalesFilters({ transactions, sessions }) {
   const activeCount = computed(() => {
     const f = filters;
     return [
-      search.value.trim() !== '', f.dateFrom !== '', f.dateTo !== '', f.cashiers.length > 0, f.outlets.length > 0,
+      search.value.trim() !== '', f.dateFrom !== '', f.dateTo !== '', f.cashiers.length > 0, f.terminals.length > 0, f.outlets.length > 0,
       f.payments.length > 0, f.sessions.length > 0, f.customerType !== '', f.paymentState !== '', f.settlement !== '',
       f.minTotal !== '' && f.minTotal !== null, f.maxTotal !== '' && f.maxTotal !== null,
     ].filter(Boolean).length;
@@ -135,7 +146,7 @@ export function useSalesFilters({ transactions, sessions }) {
   function reset() {
     search.value = '';
     Object.assign(filters, {
-      dateFrom: '', dateTo: '', cashiers: [], outlets: [], payments: [], sessions: [],
+      dateFrom: '', dateTo: '', cashiers: [], terminals: [], outlets: [], payments: [], sessions: [],
       customerType: '', paymentState: '', settlement: '', minTotal: '', maxTotal: '',
     });
   }
@@ -226,7 +237,7 @@ export function useSalesFilters({ transactions, sessions }) {
     const put = (key, value) => { if (value !== '' && value !== null && value !== undefined && !(Array.isArray(value) && !value.length)) q[key] = Array.isArray(value) ? value.join(',') : String(value); };
     put('q', search.value.trim());
     put('from', f.dateFrom); put('to', f.dateTo);
-    put('cashier', f.cashiers); put('outlet', f.outlets); put('pay', f.payments); put('session', f.sessions);
+    put('cashier', f.cashiers); put('terminal', f.terminals); put('outlet', f.outlets); put('pay', f.payments); put('session', f.sessions);
     put('cust', f.customerType); put('pstate', f.paymentState); put('settle', f.settlement);
     put('min', f.minTotal); put('max', f.maxTotal);
     if (includeVoided.value) q.voided = '1';
@@ -245,6 +256,7 @@ export function useSalesFilters({ transactions, sessions }) {
     filters.dateFrom = date(query.from);
     filters.dateTo = date(query.to);
     filters.cashiers = listOf(one(query.cashier));
+    filters.terminals = listOf(one(query.terminal));
     filters.outlets = listOf(one(query.outlet));
     filters.payments = listOf(one(query.pay));
     filters.sessions = listOf(one(query.session));
@@ -264,7 +276,7 @@ export function useSalesFilters({ transactions, sessions }) {
 
   return {
     search, filters, includeVoided, sortKey, sortDir,
-    cashierOptions, outletOptions, paymentMethods,
+    cashierOptions, terminalOptions, outletOptions, paymentMethods,
     filtered, sorted, summary, shiftSummary, hasMargin,
     activeCount, hasFilterOtherThanSearch,
     reset, sortBy, toQuery, applyQuery,

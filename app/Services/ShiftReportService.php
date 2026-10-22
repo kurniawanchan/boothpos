@@ -86,6 +86,8 @@ class ShiftReportService
 
         return [
             'session_id' => $session->id,
+            // 064 — terminal tempat shift berjalan (null untuk shift SPA web / terminal yang sudah dihapus).
+            'terminal_name' => $session->device?->name,
             'status' => $session->status,
             'opening_cash' => $this->money($session->opening_cash),
             'order_count' => $completed->count(),

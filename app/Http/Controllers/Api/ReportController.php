@@ -214,6 +214,8 @@ class ReportController extends Controller
                     'customer' => $r['customer_name'],
                     'sellers' => implode(', ', $r['outlet_names']->all()),
                     'cashier' => $r['cashier_name'],
+                    // 064 — terminal yang mengambil order (kosong bila tanpa terminal).
+                    'terminal' => $r['terminal_name'],
                     'items' => $r['items_text'],
                     'units' => $r['unit_count'],
                     // Angka (bukan string) supaya bisa dijumlah langsung di Excel.

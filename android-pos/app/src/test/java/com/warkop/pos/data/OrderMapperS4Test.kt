@@ -16,7 +16,7 @@ class OrderMapperS4Test {
     )
 
     @Test fun `diskon dan total dibaca dari server, tidak dihitung ulang di klien`() {
-        val o = OrderMapper.tab(tab(), myDeviceCode = null)
+        val o = OrderMapper.tab(tab(), myDeviceId = null)
         assertEquals(1000, o.discount)
         assertEquals(8000, o.total)
         assertEquals(8000, o.paid)
@@ -25,7 +25,7 @@ class OrderMapperS4Test {
     @Test fun `refunded_at menandai refund, status tetap completed, angka refund dari server`() {
         val o = OrderMapper.tab(
             tab(",\"refunded_at\":\"2026-10-16T06:00:00+07:00\",\"refund_total\":\"8000.00\",\"cash_returned\":\"8000.00\""),
-            myDeviceCode = null,
+            myDeviceId = null,
         )
         assertTrue(o.refunded)
         assertTrue(o.closed)
@@ -34,7 +34,7 @@ class OrderMapperS4Test {
     }
 
     @Test fun `tanpa refunded_at bukan refund, meski status completed`() {
-        val o = OrderMapper.tab(tab(), myDeviceCode = null)
+        val o = OrderMapper.tab(tab(), myDeviceId = null)
         assertFalse(o.refunded)
         assertNull(o.refundTotal)
         assertNull(o.cashReturned)

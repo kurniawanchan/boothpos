@@ -74,7 +74,7 @@ const transactions = computed(() => sales.value?.transactions ?? []);
 const sessions = computed(() => sales.value?.sessions ?? []);
 const {
   search, filters, includeVoided, sortKey, sortDir,
-  cashierOptions, outletOptions, paymentMethods,
+  cashierOptions, terminalOptions, outletOptions, paymentMethods,
   filtered, sorted, summary, shiftSummary, hasMargin,
   activeCount, hasFilterOtherThanSearch,
   reset, sortBy, toQuery, applyQuery,
@@ -124,7 +124,7 @@ async function load() {
 }
 
 // --- filter tersimpan di URL (bisa di-bookmark / dibagikan) -----------------------
-const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'outlet', 'pay', 'session', 'cust', 'pstate', 'min', 'max', 'voided', 'sort', 'dir'];
+const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'terminal', 'outlet', 'pay', 'session', 'cust', 'pstate', 'min', 'max', 'voided', 'sort', 'dir'];
 watch(() => JSON.stringify(toQuery()), (json) => {
   if (!restored || !router) return;
   const others = Object.fromEntries(Object.entries(route.query).filter(([k]) => !OUR_QUERY_KEYS.includes(k)));
@@ -183,6 +183,8 @@ const columns = computed(() => [
   { key: 'outlet_names', label: t('reports.col_artist'), sortable: true },
   { key: 'created_at', label: t('reports.col_time'), sortable: true },
   { key: 'cashier_name', label: t('reports.col_cashier'), sortable: true },
+  // 064 — terminal yang mengambil order; kolom ada hanya bila setidaknya satu baris punya terminal.
+  ...(terminalOptions.value.length ? [{ key: 'terminal_name', label: t('reports.col_terminal'), sortable: true }] : []),
   // 045 Stage 4 — outlet tempat penjualan (outlet shift); hanya bila ada lebih dari satu outlet.
   ...(outletStore.multi ? [{ key: 'sold_at_name', label: t('reports.col_sold_at'), sortable: true }] : []),
   { key: 'item_count', label: t('reports.col_item'), sortable: true },
@@ -438,6 +440,8 @@ function viewFinishedTransaction(orderId) {
             <input v-model="filters.dateTo" type="date" :aria-label="t('reports.filter_date_to')" :class="inputClass" />
 
             <BaseMultiSelect v-model="filters.cashiers" :options="cashierOptions" :all-label="t('reports.filter_cashier_all')" />
+            <!-- 064 — pilihan terminal hanya berguna bila ada lebih dari satu; selebihnya disembunyikan, bukan dinonaktifkan. -->
+            <BaseMultiSelect v-if="terminalOptions.length >= 2" v-model="filters.terminals" data-testid="filter-terminal" :options="terminalOptions" :all-label="t('reports.filter_terminal_all')" />
             <BaseMultiSelect v-model="filters.sessions" :options="sessionOptions" :all-label="t('reports.filter_session_all')" />
             <BaseMultiSelect v-model="filters.outlets" :options="outletOptions" :all-label="t('reports.filter_seller_all')" />
 
@@ -519,6 +523,7 @@ function viewFinishedTransaction(orderId) {
             </span>
           </template>
           <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
+          <template #cell-terminal_name="{ row }">{{ row.terminal_name || '—' }}</template>
           <template #cell-item_count="{ row }">
             <div class="flex max-w-[240px] flex-col gap-0.5">
               <span>{{ row.item_count }}</span>

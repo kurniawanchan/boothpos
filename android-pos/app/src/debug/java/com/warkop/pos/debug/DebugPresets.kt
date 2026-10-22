@@ -19,14 +19,14 @@ object DebugPresets {
         }
         val seeds = listOf(
             Order("a1", OrderKind.DINE_IN, "3", 2, null, "Andi", "18:42", listOf(l(1, "m3", 1, m("Sedang"), fired = true), l(2, "n2", 1, fired = true))),
-            Order("a2", OrderKind.DINE_IN, "5", 4, null, "Andi", "18:55", listOf(l(3, "m3", 2, m("Pedas"), fired = true), l(4, "e1", 1, fired = true)), otherDevice = "T02"),
+            Order("a2", OrderKind.DINE_IN, "5", 4, null, "Andi", "18:55", listOf(l(3, "m3", 2, m("Pedas"), fired = true), l(4, "e1", 1, fired = true)), otherDevice = "Kasir Belakang"),
             Order("a3", OrderKind.DINE_IN, "T2", 3, null, "Andi", "18:30", listOf(l(5, "m5", 3, m("Sedang"), fired = true), l(6, "s2", 1, fired = true)), billPrinted = true),
         )
         val lines = listOf(l(11, "k3", 2, m("Kurang manis"), m("Sedikit es")), l(12, "m1", 1, m("Pedas"), m("Telur", 4000), note = "Telur setengah matang"), l(13, "k1", 1))
         val counter = Order("c24", OrderKind.COUNTER, null, 0, "A-024", "Rina", "10:38", lines)
-        val paid = counter.copy(id = "c24p", closed = true, receiptNo = "T01-000124", closedAt = "10:44", tenders = listOf(Tender(1, TenderMethod.CASH, 66_000, TenderStatus.OK, received = 100_000)))
-        val closed1 = Order("z1", OrderKind.DINE_IN, "5", 4, null, "Andi", "09:20", listOf(l(21, "m3", 2, m("Pedas"), fired = true)), closed = true, receiptNo = "T01-000122", closedAt = "09:55", tenders = listOf(Tender(2, TenderMethod.EDC, 48_400, TenderStatus.OK, ref = "448231")))
-        val closed2 = Order("z2", OrderKind.DINE_IN, "1", 2, null, "Andi", "08:30", listOf(l(22, "k3", 1, fired = true), l(23, "m4", 1, fired = true)), closed = true, receiptNo = "T01-000123", closedAt = "08:50", tenders = listOf(Tender(3, TenderMethod.CASH, 36_300, TenderStatus.OK, received = 40_000)))
+        val paid = counter.copy(id = "c24p", closed = true, receiptNo = "000124", terminalName = "Kasir Depan", closedAt = "10:44", tenders = listOf(Tender(1, TenderMethod.CASH, 66_000, TenderStatus.OK, received = 100_000)))
+        val closed1 = Order("z1", OrderKind.DINE_IN, "5", 4, null, "Andi", "09:20", listOf(l(21, "m3", 2, m("Pedas"), fired = true)), closed = true, receiptNo = "000122", terminalName = "Kasir Depan", closedAt = "09:55", tenders = listOf(Tender(2, TenderMethod.EDC, 48_400, TenderStatus.OK, ref = "448231")))
+        val closed2 = Order("z2", OrderKind.DINE_IN, "1", 2, null, "Andi", "08:30", listOf(l(22, "k3", 1, fired = true), l(23, "m4", 1, fired = true)), closed = true, receiptNo = "000123", terminalName = "Kasir Depan", closedAt = "08:50", tenders = listOf(Tender(3, TenderMethod.CASH, 36_300, TenderStatus.OK, received = 40_000)))
         var orders = seeds + counter + paid + closed1 + closed2
         var active: String? = "c24"; var dest = Dest.EDITOR; var sheet: Sheet? = null; var conn = Conn.ONLINE
         var dark: Boolean? = null; var tab = 0; var close: CloseOutcome? = null

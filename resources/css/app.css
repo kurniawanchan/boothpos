@@ -1,4 +1,9 @@
-@import 'tailwindcss';
+/* BUG YANG DITEMUKAN & DIPERBAIKI — tanpa source() Tailwind v4 memindai SELURUH repo
+   (android-pos/, specs/, docs/, tests/ …): lewat bind mount Docker request app.css di dev
+   menggantung >2 menit sehingga halaman kosong, dan setiap perubahan berkas apa pun di repo
+   memicu "page reload". Kelas Tailwind hanya dipakai di resources/js, jadi pindai itu saja.
+   Dijaga oleh qa-tests/unit/tailwindSources.test.js. */
+@import 'tailwindcss' source('../js');
 
 /*
  * Design tokens — extracted from docs/UI-mockups/BoothPOS.dc.html (the

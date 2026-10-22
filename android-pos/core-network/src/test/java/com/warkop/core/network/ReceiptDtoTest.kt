@@ -10,8 +10,9 @@ class ReceiptDtoTest {
     private val json = ApiClient.json
 
     @Test fun `struk membaca nomor struk, antrean, dan pajak`() {
-        val r = json.decodeFromString(ReceiptDto.serializer(), """{"receipt_no":"T01-000014","queue_no":"A-025","tax_amount":"5400.00","tax_rate":"10.00","total_amount":"59400.00"}""")
-        assertEquals("T01-000014", r.receiptNo)
+        val r = json.decodeFromString(ReceiptDto.serializer(), """{"receipt_no":"000014","queue_no":"A-025","terminal_name":"Kasir Depan","tax_amount":"5400.00","tax_rate":"10.00","total_amount":"59400.00"}""")
+        assertEquals("000014", r.receiptNo)
+        assertEquals("Kasir Depan", r.terminalName)
         assertEquals("A-025", r.queueNo)
         assertEquals("5400.00", r.taxAmount)
         assertEquals("59400.00", r.totalAmount)

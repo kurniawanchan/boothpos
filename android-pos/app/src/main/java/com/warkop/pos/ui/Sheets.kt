@@ -692,6 +692,7 @@ private fun ReceiptPaper(r: com.warkop.pos.model.ReceiptView) {
             Text(r.receiptNo ?: r.orderNumber, fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 1.dp))
             Text(listOfNotNull(r.paidAtText, r.cashier?.let { "Kasir $it" }).joinToString(" · "), fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp))
             r.queueNo?.let { Text("Antrean $it", fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp)) }
+            r.terminalName?.let { Text("Terminal $it", fontFamily = mono, fontSize = 15.sp, color = ink, modifier = Modifier.padding(vertical = 3.dp)) }
             Dash()
             r.items.forEach { l -> Line("${l.qty}× ${l.name}", rp(l.lineTotal)) }
             Dash()

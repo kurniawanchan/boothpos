@@ -19,6 +19,8 @@ import kotlinx.serialization.Serializable
     @SerialName("order_number") val orderNumber: String = "",
     @SerialName("receipt_no") val receiptNo: String? = null,
     @SerialName("queue_no") val queueNo: String? = null,
+    /** 064 — nama terminal yang mengambil order; null bila order tanpa terminal. */
+    @SerialName("terminal_name") val terminalName: String? = null,
     @SerialName("copy_no") val copyNo: Int? = null,
     @SerialName("cashier_name") val cashierName: String? = null,
     @SerialName("tax_amount") val taxAmount: String = "0.00",

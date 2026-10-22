@@ -165,7 +165,7 @@ fun XReportScreen(store: PosStore) {
                 }
                 ReportGate(store.report, { store.refreshShiftReport() }) { r ->
                     val rows = listOf(
-                        "Outlet / terminal" to (store.config?.let { "${it.outletName} · ${it.deviceCode}" } ?: "—"),
+                        "Outlet / terminal" to (store.config?.let { c -> listOf(c.outletName, c.deviceName).filter { it.isNotBlank() }.joinToString(" · ") } ?: "—"),
                         "Kasir / shift" to "${store.user?.name} · dibuka ${store.shift?.openedAt ?: "—"}",
                         "Modal awal" to rp(r.openingCash),
                         "Jumlah struk" to "${r.orderCount}",

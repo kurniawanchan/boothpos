@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DeviceHeartbeatRequest;
 use App\Http\Requests\PairDeviceRequest;
+use App\Http\Requests\RenameDeviceRequest;
 use App\Models\Device;
 use App\Services\DeviceService;
 use App\Support\ServerAddress;
@@ -27,12 +28,18 @@ class DeviceController extends Controller
     {
         abort_unless($request->user()->isOwnerOrAdmin(), 403, __('devices.forbidden'));
 
-        return response()->json(['data' => Device::query()->orderBy('code')->get()->map(fn (Device $d) => $this->present($d))->values()]);
+        return response()->json(['data' => Device::query()->orderBy('name')->get()->map(fn (Device $d) => $this->present($d))->values()]);
     }
 
     public function pair(PairDeviceRequest $request): JsonResponse
     {
         return response()->json($this->present($this->devices->pair($request->validated(), $request->user())), 201);
+    }
+
+    /** 064 — ganti nama terminal (owner/admin; perangkat outlet lain → 404 lewat route-model binding ber-scope). */
+    public function rename(RenameDeviceRequest $request, Device $device): JsonResponse
+    {
+        return response()->json($this->present($this->devices->rename($device, $request->validated()['name'], $request->user())));
     }
 
     /**
@@ -83,7 +90,7 @@ class DeviceController extends Controller
     private function present(Device $d): array
     {
         return [
-            'id' => $d->id, 'code' => $d->code, 'name' => $d->name, 'outlet_id' => $d->outlet_id,
+            'id' => $d->id, 'name' => $d->name, 'outlet_id' => $d->outlet_id,
             'app_version' => $d->app_version, 'last_seen_at' => $d->last_seen_at?->toIso8601String(),
             'revoked' => $d->revoked_at !== null,
         ];

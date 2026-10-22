@@ -17,7 +17,7 @@ class StrukIdentityTest {
         storeName = "Warkop WJM",
         storeAddress = "Jl. Melati 1",
         orderNumber = "O-1",
-        receiptNo = "T01-000001",
+        receiptNo = "000001",
         queueNo = null,
         copyNo = 1,
         cashier = "Budi",

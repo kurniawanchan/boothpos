@@ -124,6 +124,36 @@ class SalesTransactionsTest extends TestCase
         $this->assertEquals((float) $totals['pos_unit_count'], (float) $totals['unit_count']);
     }
 
+    /** 064 — setiap baris membawa terminal (id + NAMA) dari tautan orders.device_id; `device` dimuat sekali (tanpa N+1). */
+    public function test_rows_carry_the_terminal_and_do_not_query_per_row(): void
+    {
+        $device = \App\Models\Device::forceCreate(['outlet_id' => $this->session->outlet_id, 'name' => 'Kasir Depan']);
+        $orders = [$this->makeOrder(), $this->makeOrder(), $this->makeOrder()];
+        foreach ($orders as $o) {
+            $o->forceFill(['device_id' => $device->id])->save();
+        }
+
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+        $rows = collect($this->getJson('/api/v1/reports/sales')->assertOk()->json('transactions'));
+        $deviceQueries = collect(\Illuminate\Support\Facades\DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'from `devices`'))->count();
+        \Illuminate\Support\Facades\DB::disableQueryLog();
+
+        $this->assertCount(3, $rows);
+        $this->assertSame(['Kasir Depan'], $rows->pluck('terminal_name')->unique()->values()->all());
+        $this->assertSame([$device->id], $rows->pluck('terminal_id')->unique()->values()->all());
+        $this->assertLessThanOrEqual(1, $deviceQueries, 'terminal harus dimuat dengan satu kueri, bukan per baris');
+    }
+
+    public function test_rows_without_a_terminal_have_null_terminal_fields(): void
+    {
+        $this->makeOrder();
+
+        $row = $this->getJson('/api/v1/reports/sales')->assertOk()->json('transactions.0');
+
+        $this->assertNull($row['terminal_id']);
+        $this->assertNull($row['terminal_name']);
+    }
+
     public function test_rows_are_ordered_newest_first(): void
     {
         $this->travelTo(now()->subHours(2));

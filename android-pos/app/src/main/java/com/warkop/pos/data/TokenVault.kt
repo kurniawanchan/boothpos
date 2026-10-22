@@ -73,6 +73,9 @@ class TokenVault(context: Context) {
         const val OUTLET_ID = "outlet_id"
         const val OUTLET_NAME = "outlet_name"
         const val DEVICE_ID = "device_id"
+        const val DEVICE_NAME = "device_name"
+
+        /** 064 — kode terminal (T01…) sudah tidak dipakai; konstanta ini hanya untuk MEMBERSIHKAN nilai lama saat reset. */
         const val DEVICE_CODE = "device_code"
     }
 }

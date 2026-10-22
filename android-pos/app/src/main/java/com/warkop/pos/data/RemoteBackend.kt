@@ -53,9 +53,10 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     private var sessionToken: String? = vault.get(TokenVault.SESSION_TOKEN)
     private var outletId: Long? = vault.get(TokenVault.OUTLET_ID)?.toLongOrNull()
     private var deviceId: Long? = vault.get(TokenVault.DEVICE_ID)?.toLongOrNull()
-    // Kode perangkat dibaca SEKALI dari brankas (saat konstruksi) lalu disimpan di memori: pembacaan Keystore
+    // Nama terminal dibaca SEKALI dari brankas (saat konstruksi) lalu disimpan di memori: pembacaan Keystore
     // tidak boleh dilakukan di main thread setiap kali tulisan selesai (sumber ANR saat persetujuan).
-    private var myDeviceCode: String? = vault.get(TokenVault.DEVICE_CODE)
+    // 064 — "terminal ini" dikenali lewat deviceId (di atas), bukan nama; nama hanya untuk tampilan.
+    private var myDeviceName: String = vault.get(TokenVault.DEVICE_NAME).orEmpty()
     private var apiFor: Pair<String, PosApi>? = null
 
     /** Terminal yang sudah disiapkan (URL + outlet + perangkat), atau null → layar penyiapan. */
@@ -63,7 +64,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         val url = serverUrl?.takeIf { it.isNotBlank() } ?: return null
         val outlet = outletId ?: return null
         val device = deviceId ?: return null
-        return TerminalConfig(url, outlet, vault.get(TokenVault.OUTLET_NAME).orEmpty(), device, vault.get(TokenVault.DEVICE_CODE).orEmpty())
+        return TerminalConfig(url, outlet, vault.get(TokenVault.OUTLET_NAME).orEmpty(), device, myDeviceName)
     }
 
     fun hasValidSession(nowMillis: Long = System.currentTimeMillis()): Boolean =
@@ -71,8 +72,8 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
 
     fun resetTerminal() {
         vault.clear(TokenVault.SERVER_URL, TokenVault.ADMIN_TOKEN, TokenVault.SESSION_TOKEN, TokenVault.SESSION_EXPIRES,
-            TokenVault.OUTLET_ID, TokenVault.OUTLET_NAME, TokenVault.DEVICE_ID, TokenVault.DEVICE_CODE)
-        serverUrl = null; adminToken = null; sessionToken = null; outletId = null; deviceId = null; apiFor = null; myDeviceCode = null
+            TokenVault.OUTLET_ID, TokenVault.OUTLET_NAME, TokenVault.DEVICE_ID, TokenVault.DEVICE_NAME, TokenVault.DEVICE_CODE)
+        serverUrl = null; adminToken = null; sessionToken = null; outletId = null; deviceId = null; apiFor = null; myDeviceName = ""
     }
 
     private fun api(): PosApi {
@@ -105,9 +106,9 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         vault.put(TokenVault.OUTLET_ID, outlet.id.toString())
         vault.put(TokenVault.OUTLET_NAME, outlet.name)
         vault.put(TokenVault.DEVICE_ID, device.id.toString())
-        vault.put(TokenVault.DEVICE_CODE, device.code)
-        myDeviceCode = device.code
-        return TerminalConfig(serverUrl.orEmpty(), outlet.id, outlet.name, device.id, device.code)
+        vault.put(TokenVault.DEVICE_NAME, device.name)
+        myDeviceName = device.name
+        return TerminalConfig(serverUrl.orEmpty(), outlet.id, outlet.name, device.id, device.name)
     }
 
     override fun serverUrl(): String? = serverUrl
@@ -271,7 +272,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     override suspend fun floor(version: String?): FloorSnapshot? {
         val res = apiCall { api().floor(version) }
         if (res.unchanged) return null
-        val mine = myDeviceCode
+        val mine = deviceId
         return FloorSnapshot(
             version = res.version,
             tables = res.areas.flatMap { area -> area.tables.map { OrderMapper.floorTable(it, area.area, mine) } },
@@ -282,32 +283,32 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     override suspend fun openTab(sessionId: Long, tableId: Long?, guests: Int?, localRef: String): Order =
         OrderMapper.tab(
             apiCall { api().openTab(OpenTabRequestDto(sessionId = sessionId, tableId = tableId, guestCount = guests, localRef = localRef)) },
-            myDeviceCode,
+            deviceId,
         )
 
-    override suspend fun tab(id: String): Order = OrderMapper.tab(apiCall { api().tab(id.toLong()) }, myDeviceCode)
+    override suspend fun tab(id: String): Order = OrderMapper.tab(apiCall { api().tab(id.toLong()) }, deviceId)
 
     override suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order =
         OrderMapper.tab(
             apiCall {
                 api().addLine(tabId.toLong(), key, AddLineRequestDto(variantId = variantId.toLong(), qty = qty, note = note.ifBlank { null }, modifierOptionIds = modifierIds))
             },
-            myDeviceCode,
+            deviceId,
         )
 
     override suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order =
         OrderMapper.tab(
             apiCall { api().updateLine(tabId.toLong(), lineId.toLong(), key, UpdateLineRequestDto(qty = qty, note = note)) },
-            myDeviceCode,
+            deviceId,
         )
 
     override suspend fun removeLine(tabId: String, lineId: Int, key: String): Order =
-        OrderMapper.tab(apiCall { api().removeLine(tabId.toLong(), lineId.toLong(), key) }, myDeviceCode)
+        OrderMapper.tab(apiCall { api().removeLine(tabId.toLong(), lineId.toLong(), key) }, deviceId)
 
     override suspend fun sendToKitchen(tabId: String, key: String): KitchenSend {
         // 050 / T006 — tiket dari respons yang sama dipakai untuk KOT; sebelumnya dibuang di sini.
         val res = apiCall { api().send(tabId.toLong(), key) }
-        return KitchenSend(OrderMapper.tab(res.tab, myDeviceCode), res.tickets.map(TicketMapper::kot))
+        return KitchenSend(OrderMapper.tab(res.tab, deviceId), res.tickets.map(TicketMapper::kot))
     }
 
     override suspend fun ticket(ticketId: Long): PrintableKot =
@@ -320,16 +321,16 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
                     PaymentInputDto(method, Money.toServer(amount.toLong()), approvalCode = approvalCode, confirmDuplicate = confirmDuplicate, channelId = channelId),
                 )))
             },
-            myDeviceCode,
+            deviceId,
         )
 
     override suspend fun voidLine(tabId: String, lineId: Int, reasonCode: String, kitchenStatus: String, stockDecision: String, reason: String?, overrideToken: String?): Order =
         OrderMapper.tab(apiCall {
             api().voidLine(tabId.toLong(), lineId.toLong(), VoidLineRequestDto(reasonCode = reasonCode, kitchenStatus = kitchenStatus, stockDecision = stockDecision, reason = reason, overrideToken = overrideToken))
-        }, myDeviceCode)
+        }, deviceId)
 
     override suspend fun cancelTab(tabId: String, reasonCode: String, reason: String?, overrideToken: String?): Order =
-        OrderMapper.tab(apiCall { api().cancelTab(tabId.toLong(), CancelTabRequestDto(reasonCode = reasonCode, reason = reason, overrideToken = overrideToken)) }, myDeviceCode)
+        OrderMapper.tab(apiCall { api().cancelTab(tabId.toLong(), CancelTabRequestDto(reasonCode = reasonCode, reason = reason, overrideToken = overrideToken)) }, deviceId)
 
     override suspend fun soldOut(productId: String, reasonCodeId: Long, note: String?, overrideToken: String?) {
         val res = apiCall { api().soldOut(productId.toLong(), SoldOutRequestDto(reasonCodeId = reasonCodeId, note = note?.takeIf { it.isNotBlank() }, overrideToken = overrideToken)) }
@@ -349,18 +350,25 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
             .map { BankChannel(it.id, it.provider?.takeIf { p -> p.isNotBlank() } ?: it.accountName.orEmpty().ifBlank { "Bank ${it.id}" }) }
 
     override suspend fun verifyPayment(tabId: String, paymentId: Long, reference: String, overrideToken: String?): Order =
-        OrderMapper.tab(apiCall { api().verifyPayment(tabId.toLong(), paymentId, VerifyPaymentRequestDto(reference = reference, overrideToken = overrideToken)) }, myDeviceCode)
+        OrderMapper.tab(apiCall { api().verifyPayment(tabId.toLong(), paymentId, VerifyPaymentRequestDto(reference = reference, overrideToken = overrideToken)) }, deviceId)
 
     override suspend fun failPayment(tabId: String, paymentId: Long, overrideToken: String?): Order =
-        OrderMapper.tab(apiCall { api().failPayment(tabId.toLong(), paymentId, FailPaymentRequestDto(overrideToken = overrideToken)) }, myDeviceCode)
+        OrderMapper.tab(apiCall { api().failPayment(tabId.toLong(), paymentId, FailPaymentRequestDto(overrideToken = overrideToken)) }, deviceId)
 
-    override suspend fun prebill(tabId: String): Order = OrderMapper.tab(apiCall { api().prebill(tabId.toLong()) }, myDeviceCode)
+    override suspend fun prebill(tabId: String): Order = OrderMapper.tab(apiCall { api().prebill(tabId.toLong()) }, deviceId)
 
     override suspend fun receipt(orderId: String): com.warkop.pos.model.ReceiptView =
         ReceiptMapper.map(apiCall { api().receipt(orderId.toLong()) }, serverBase = serverUrl)
 
-    override suspend fun heartbeat(clockMs: Long, queueDepth: Int): com.warkop.pos.state.HeartbeatResult =
-        HeartbeatMapper.result(apiCall { api().heartbeat(com.warkop.core.network.dto.HeartbeatRequestDto(com.warkop.pos.state.APP_VERSION, clockMs, queueDepth)) })
+    override suspend fun heartbeat(clockMs: Long, queueDepth: Int): com.warkop.pos.state.HeartbeatResult {
+        val result = HeartbeatMapper.result(apiCall { api().heartbeat(com.warkop.core.network.dto.HeartbeatRequestDto(com.warkop.pos.state.APP_VERSION, clockMs, queueDepth)) })
+        // 064 — nama dari server menang: mengisi tablet yang dipasang sebelum fitur ini, dan mengikuti ganti-nama.
+        result.terminalName?.takeIf { it != myDeviceName }?.let {
+            myDeviceName = it
+            vault.put(TokenVault.DEVICE_NAME, it)
+        }
+        return result
+    }
 
     /**
      * 054 / US3 — pindah ke alamat yang dipilih admin. Hanya URL yang berubah: sesi, outlet, dan perangkat tetap,
@@ -380,10 +388,10 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     }
 
     override suspend fun setDiscount(tabId: String, percent: Double, reasonCode: String, scope: String, lineId: Int?, overrideToken: String?, key: String): Order =
-        OrderMapper.tab(apiCall { api().setDiscount(tabId.toLong(), key, DiscountRequestDto(percent, reasonCode, scope, lineId, overrideToken)) }, myDeviceCode)
+        OrderMapper.tab(apiCall { api().setDiscount(tabId.toLong(), key, DiscountRequestDto(percent, reasonCode, scope, lineId, overrideToken)) }, deviceId)
 
     override suspend fun clearDiscount(tabId: String, key: String): Order =
-        OrderMapper.tab(apiCall { api().clearDiscount(tabId.toLong(), key) }, myDeviceCode)
+        OrderMapper.tab(apiCall { api().clearDiscount(tabId.toLong(), key) }, deviceId)
 
     override suspend fun splitEqual(tabId: String, parts: Int, key: String): List<SplitPart> =
         apiCall { api().splitEqual(tabId.toLong(), key, SplitEqualRequestDto(clientRef = key, mode = "equal", parts = parts)) }
@@ -397,14 +405,14 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
                 payments = listOf(PaymentInputDto("cash", cashAmount)),
             ))
         }
-        return SplitItemsResult(OrderMapper.tab(res.paidOrder, myDeviceCode), OrderMapper.tab(res.tab, myDeviceCode))
+        return SplitItemsResult(OrderMapper.tab(res.paidOrder, deviceId), OrderMapper.tab(res.tab, deviceId))
     }
 
     override suspend fun reprintOrder(orderId: String, copyNo: Int, overrideToken: String?, key: String): Int =
         apiCall { api().reprint(orderId.toLong(), key, ReprintRequestDto(copyNo = copyNo, overrideToken = overrideToken)) }.copyNo
 
     override suspend fun refundOrder(orderId: String, reasonCode: String, reason: String?, overrideToken: String?, key: String): Order =
-        OrderMapper.tab(apiCall { api().refund(orderId.toLong(), key, RefundRequestDto(reasonCode, reason, overrideToken)) }, myDeviceCode)
+        OrderMapper.tab(apiCall { api().refund(orderId.toLong(), key, RefundRequestDto(reasonCode, reason, overrideToken)) }, deviceId)
 
     override suspend fun closedOrders(): List<Order> =
         apiCall { api().closedOrders(25) }.data.map { OrderMapper.closed(it) }

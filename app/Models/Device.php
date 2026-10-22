@@ -7,6 +7,9 @@ use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Model;
 
 /**
+ * 064 — terminal dikenali lewat `name`. `code` (T01…) hanya data riwayat: tidak diisi, dikirim, atau ditampilkan lagi
+ * (maka tidak fillable).
+ *
  * 048 — terminal POS (tablet/telepon) milik satu outlet. `outlet_id` TIDAK fillable: dicap server
  * (BelongsToOutlet / DeviceService), tidak pernah dari input.
  */
@@ -14,7 +17,7 @@ class Device extends Model
 {
     use BelongsToOutlet, HasDataMode;
 
-    protected $fillable = ['code', 'name', 'app_version', 'os_info', 'last_seen_at', 'clock_skew_seconds', 'paired_at', 'revoked_at'];
+    protected $fillable = ['name', 'app_version', 'os_info', 'last_seen_at', 'clock_skew_seconds', 'paired_at', 'revoked_at'];
 
     protected function casts(): array
     {

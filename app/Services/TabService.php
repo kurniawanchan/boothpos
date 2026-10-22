@@ -672,7 +672,7 @@ class TabService
 
     public function loaded(Order $order): Order
     {
-        return $order->fresh(['items.ticketItem.ticket.station', 'payments', 'table', 'cashier:id,name', 'device:id,code']);
+        return $order->fresh(['items.ticketItem.ticket.station', 'payments', 'table', 'cashier:id,name', 'device:id,name']);
     }
 
     private function assertTableFree(DiningTable $table): void

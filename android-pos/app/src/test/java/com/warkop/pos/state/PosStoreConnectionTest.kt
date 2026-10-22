@@ -95,7 +95,7 @@ class PosStoreConnectionTest {
         assertTrue(store.roster is Load.Ready)
     }
 
-    private fun terminal(url: String) = TerminalConfig(serverUrl = url, outletId = 1, outletName = "Warkop WJM 3", deviceId = 7, deviceCode = "T02")
+    private fun terminal(url: String) = TerminalConfig(serverUrl = url, outletId = 1, outletName = "Warkop WJM 3", deviceId = 7, deviceName = "Kasir Belakang")
 
     @Test fun `alamat yang dipilih admin dipindah setelah roster berhasil (054 US3)`() = runTest(dispatcher) {
         val adopted = mutableListOf<String>()

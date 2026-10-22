@@ -40,6 +40,9 @@ class OrderResource extends JsonResource
             'cashier' => $this->whenLoaded('cashier', fn ($u) => ['id' => $u->id, 'name' => $u->name]),
             // 045 Stage 4 — outlet tempat penjualan (outlet shift); hanya bila relasinya dimuat (relationLoaded trap).
             'outlet' => $this->whenLoaded('outlet', fn ($o) => ['id' => $o->id, 'code' => $o->code, 'name' => $o->name]),
+            // 064 — terminal yang mengambil order (null = tanpa terminal). Hanya bila `device` dimuat (relationLoaded trap).
+            'terminal_id' => $this->whenLoaded('device', fn ($d) => $d->id),
+            'terminal_name' => $this->whenLoaded('device', fn ($d) => $d->name),
             'event' => $this->whenLoaded('event', fn ($e) => ['id' => $e->id, 'name' => $e->name]),
             'items' => $this->whenLoaded('items', fn () => $this->items->map(fn ($i) => [
                 'id' => $i->id, 'variant_id' => $i->variant_id, 'home_outlet_id' => $i->home_outlet_id,

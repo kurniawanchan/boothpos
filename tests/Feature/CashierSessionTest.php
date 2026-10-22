@@ -105,6 +105,22 @@ class CashierSessionTest extends TestCase
             ->assertJsonPath('order_count', 0);
     }
 
+    /** 064 — ringkasan shift menyebut terminal lewat NAMA (null bila shift tanpa terminal). */
+    public function test_the_session_summary_names_the_terminal(): void
+    {
+        $owner = User::factory()->create(['role' => 'owner']);
+        $session = CashierSession::factory()->create(['user_id' => User::factory()->create(['role' => 'cashier'])->id, 'status' => 'open']);
+        $this->actingAs($owner, 'sanctum');
+
+        $this->getJson("/api/v1/sessions/{$session->id}/summary")->assertOk()->assertJsonPath('terminal_name', null);
+
+        $device = \App\Models\Device::forceCreate(['outlet_id' => $session->outlet_id, 'name' => 'Kasir Depan']);
+        $session->forceFill(['device_id' => $device->id])->save();
+
+        $this->getJson("/api/v1/sessions/{$session->id}/summary")->assertOk()->assertJsonPath('terminal_name', 'Kasir Depan');
+        $this->getJson("/api/v1/sessions/{$session->id}/x-report")->assertOk()->assertJsonPath('terminal_name', 'Kasir Depan');
+    }
+
     public function test_cashier_can_view_own_session_summary(): void
     {
         $cashier = User::factory()->create(['role' => 'cashier']);

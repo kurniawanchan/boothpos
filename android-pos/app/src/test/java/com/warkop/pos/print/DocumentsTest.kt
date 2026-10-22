@@ -9,6 +9,7 @@ import com.warkop.pos.model.ReceiptLine
 import com.warkop.pos.model.ReceiptView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -31,7 +32,7 @@ class DocumentsTest {
     )
 
     private fun receipt(copyNo: Int = 1, discount: Int = 0, change: Int = 0) = ReceiptView(
-        storeName = "Warkop WJM 3", storeAddress = "Jl. Contoh 1", orderNumber = "O-2050", receiptNo = "T01-000014",
+        storeName = "Warkop WJM 3", storeAddress = "Jl. Contoh 1", orderNumber = "O-2050", receiptNo = "000014",
         queueNo = "A-025", copyNo = copyNo, cashier = "Rina", paidAtText = "16/10/2026 10:42",
         taxLabel = "PPN", taxRatePercent = "10", subtotal = 60000, discount = discount, tax = 5400, total = 59400,
         paid = 60000, change = change,
@@ -78,6 +79,24 @@ class DocumentsTest {
         val total = lines.first { it.text == "TOTAL" }
         assertEquals("59400", total.right!!.filter { it.isDigit() })
         assertTrue(lines.any { it.text == "Bayar" })
+    }
+
+    @Test fun `struk mencetak nama terminal sebagai satu baris kiri`() {
+        val line = Documents.struk(receipt().copy(terminalName = "Kasir Depan")).first { it.text.startsWith("Terminal") }
+        assertEquals("Terminal: Kasir Depan", line.text)
+        assertNull("tanpa pasangan kanan agar nama panjang tidak merusak baris", line.right)
+    }
+
+    @Test fun `nama terminal 40 huruf dibungkus dan tidak melebihi lebar kertas`() {
+        val long = "K".repeat(40)
+        val line = Documents.struk(receipt().copy(terminalName = long)).first { it.text.startsWith("Terminal") }
+        val rows = EscPos.wrap(line.text, EscPos.COLUMNS)
+        assertTrue(rows.size > 1)
+        assertTrue(rows.all { it.length <= EscPos.COLUMNS })
+    }
+
+    @Test fun `struk tanpa terminal tidak mencetak baris terminal`() {
+        assertFalse(texts(Documents.struk(receipt())).any { it.startsWith("Terminal") })
     }
 
     @Test fun `struk tanpa diskon tidak mencetak baris diskon`() {

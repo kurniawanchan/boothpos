@@ -44,6 +44,7 @@ class OrderController extends Controller
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
             ->when($request->filled('date_to'), fn ($q) => $q->whereDate('created_at', '<=', $request->date('date_to')))
+            ->with('device:id,name')
             ->withCount('items')
             ->orderByDesc('created_at')
             ->paginate($perPage);
@@ -83,7 +84,7 @@ class OrderController extends Controller
         // lain yang memakai resource ini tidak berubah bentuk.
         return response()->json(new OrderResource($order->load([
             'items.variant.product.category', 'items.homeOutlet',
-            'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
+            'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name', 'device:id,name',
         ])));
     }
 
@@ -103,7 +104,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name', 'device:id,name',
         ])), $replayed ? 200 : 201);
     }
 
@@ -123,7 +124,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name', 'device:id,name',
         ])));
     }
 
@@ -156,7 +157,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name', 'device:id,name',
         ])));
     }
 
@@ -179,7 +180,7 @@ class OrderController extends Controller
         }
 
         return response()->json(new OrderResource($order->load([
-            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name',
+            'items.variant.product.category', 'items.homeOutlet', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'customer', 'cashier', 'outlet:id,code,name', 'device:id,name',
         ])));
     }
 
@@ -219,7 +220,7 @@ class OrderController extends Controller
             return response()->json(['message' => __('orders_payments.receipt_unavailable_for_open_tab')], 409);
         }
 
-        $order->load(['items.homeOutlet', 'payments', 'cashier', 'customer', 'table', 'splitFrom', 'outlet:id,code,name']);
+        $order->load(['items.homeOutlet', 'payments', 'cashier', 'customer', 'table', 'splitFrom', 'outlet:id,code,name', 'device:id,name']);
         $summary = PaymentSummary::for($order);
 
         return response()->json([
@@ -263,8 +264,11 @@ class OrderController extends Controller
             'customer_phone' => $order->customer?->phone,
             'customer_email' => $order->customer?->email,
             'order_number' => $order->order_number,
-            // 048 — nomor struk per terminal (T01-000124), nomor antrean counter, jumlah tamu, dan pajak eksklusif.
+            // 048 — nomor struk, nomor antrean counter, jumlah tamu, dan pajak eksklusif.
+            // 064 — nomor struk urut polos per outlet (`000124`; nomor lama `T01-000124` tetap); terminal yang mengambil
+            // order tampil lewat NAMA (null untuk order dari SPA web / terminal yang sudah dihapus).
             'receipt_no' => $order->receipt_no,
+            'terminal_name' => $order->device?->name,
             'queue_no' => $order->queue_no,
             'guest_count' => $order->guest_count,
             'tax_amount' => number_format((float) $order->tax_amount, 2, '.', ''),

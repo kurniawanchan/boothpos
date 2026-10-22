@@ -53,7 +53,7 @@ class TabResource extends JsonResource
             'receipt_no' => $this->receipt_no,
             'guest_count' => $this->guest_count,
             'prebill_at' => $this->prebill_at?->toIso8601String(),
-            'device' => $this->relationLoaded('device') && $this->device ? ['id' => $this->device->id, 'code' => $this->device->code] : null,
+            'device' => $this->relationLoaded('device') && $this->device ? ['id' => $this->device->id, 'name' => $this->device->name] : null,
             'total_amount' => self::money($total),
             'paid_amount' => self::money($paid),
             'change_amount' => self::money($this->change_amount),

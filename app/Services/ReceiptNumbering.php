@@ -2,31 +2,31 @@
 
 namespace App\Services;
 
-use App\Models\Device;
 use App\Support\BusinessDay;
 use Illuminate\Support\Facades\DB;
 
 /**
- * 048 / T028 (api-gap B12) — SATU jalur alokasi nomor struk per terminal (`T01-000124`) dan nomor antrean per
- * outlet per hari bisnis (`A-024`).
+ * 048 / T028 (api-gap B12) — SATU jalur alokasi nomor struk dan nomor antrean per outlet per hari bisnis (`A-024`).
+ *
+ * 064 — nomor struk kini nomor urut polos PER OUTLET (`000124`), tanpa bagian terminal (terminal dikenali lewat nama dan
+ * tertaut ke order lewat `orders.device_id`). Dua outlet boleh sama-sama punya `000001`; keunikan dijaga indeks
+ * `(outlet_id, receipt_no)`. Nomor lama (`T01-000124`) tidak berubah dan tak bisa bentrok dengan 6 digit.
  *
  * Konkurensi: baris penghitung dikunci (`lockForUpdate`) di dalam transaksi pemanggil, jadi dua pembayaran serentak di
- * terminal yang sama tidak pernah mendapat nomor sama dan nomor tidak berlubang selama transaksi pemanggil commit.
+ * outlet yang sama tidak pernah mendapat nomor sama dan nomor tidak berlubang selama transaksi pemanggil commit.
  * PANGGIL di dalam transaksi yang sama dengan perubahan statusnya: bila transaksi batal, penghitung ikut kembali.
  */
 class ReceiptNumbering
 {
-    public function receiptFor(Device $device): string
+    public function receiptFor(int $outletId): string
     {
-        $row = DB::table('terminal_counters')->where('device_id', $device->id)->lockForUpdate()->first();
-        if ($row === null) {
-            DB::table('terminal_counters')->insert(['device_id' => $device->id, 'receipt_seq' => 0]);
-            $row = DB::table('terminal_counters')->where('device_id', $device->id)->lockForUpdate()->first();
-        }
+        // insertOrIgnore lalu kunci: dua transaksi pertama serentak tidak saling menabrak saat baris belum ada.
+        DB::table('outlet_receipt_counters')->insertOrIgnore(['outlet_id' => $outletId, 'receipt_seq' => 0]);
+        $row = DB::table('outlet_receipt_counters')->where('outlet_id', $outletId)->lockForUpdate()->first();
         $next = (int) $row->receipt_seq + 1;
-        DB::table('terminal_counters')->where('device_id', $device->id)->update(['receipt_seq' => $next]);
+        DB::table('outlet_receipt_counters')->where('outlet_id', $outletId)->update(['receipt_seq' => $next]);
 
-        return sprintf('%s-%06d', $device->code, $next);
+        return sprintf('%06d', $next);
     }
 
     public function queueFor(int $outletId, ?string $businessDate = null): string

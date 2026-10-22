@@ -53,6 +53,7 @@ final class OutletScopeRegistry
         'preorders' => 'riwayat diam sejak 046 (modul pre-order dihapus): tidak ada jalur baca/tulis lagi; tabel dipertahankan apa adanya',
         'purchase_orders' => 'outlet = PENJUAL PO (atribusi item), bukan outlet operasional; menu purchase_orders',
         'outlet_queue_counters' => 'urutan antrean per outlet/hari bisnis: hanya ditulis ReceiptNumbering (satu jalur) pada outlet order itu sendiri',
+        'outlet_receipt_counters' => '064: urutan nomor struk per outlet: hanya ditulis ReceiptNumbering (satu jalur) pada outlet order itu sendiri, di dalam transaksi pelunasan',
         'session_opening_cash_entries' => 'kas awal per outlet ASAL (penjual) milik satu shift; ikut aksesnya',
     ];
 
