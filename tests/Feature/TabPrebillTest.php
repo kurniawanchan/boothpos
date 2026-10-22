@@ -29,7 +29,7 @@ class TabPrebillTest extends TestCase
         $session = $this->makeShift($this->waiter)->id;
         $table = DiningTable::factory()->create(['name' => '3', 'area' => 'Indoor']);
         $outlet = Outlet::first();
-        $device = Device::forceCreate(['outlet_id' => $outlet->id, 'code' => 'T01', 'name' => 'x']);
+        $device = Device::forceCreate(['outlet_id' => $outlet->id, 'name' => 'Kasir Depan']);
         $this->tab = $this->postJson('/api/v1/tabs', ['session_id' => $session, 'table_id' => $table->id, 'guest_count' => 2], ['X-Device-Id' => $device->id])->json('id');
         $this->apiAddLine($this->tab, $this->makeVariant(stock: 5, price: 10_000)->id, 1);
     }
@@ -48,7 +48,7 @@ class TabPrebillTest extends TestCase
         $tabBefore = $before['areas'][0]['tables'][0]['tab'];
         $this->assertFalse($tabBefore['bill_printed']);
         $this->assertSame(2, $tabBefore['guest_count']);
-        $this->assertSame('T01', $tabBefore['device_code']);
+        $this->assertSame('Kasir Depan', $tabBefore['device_name']);
 
         $this->postJson("/api/v1/tabs/{$this->tab}/prebill")->assertOk();
 

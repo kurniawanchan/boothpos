@@ -31,7 +31,7 @@ class FloorQuery
     {
         $tabs = Order::query()
             ->select(['id', 'outlet_id', 'order_number', 'table_id', 'tab_label', 'service_type', 'total_amount', 'session_id', 'created_at', 'guest_count', 'prebill_at', 'device_id', 'queue_no'])
-            ->with('device:id,code')
+            ->with('device:id,name')
             ->selectRaw('GREATEST(0, '.PaymentSummary::orderPaidSql('orders').') as paid_total')
             ->where('status', Order::STATUS_OPEN)
             ->withCount([
@@ -109,7 +109,9 @@ class FloorQuery
             // 048 — pax, status "Bill tercetak", dan terminal pemilik (kunci meja lintas perangkat). Nilai TIDAK bergantung jam.
             'guest_count' => $order->guest_count,
             'bill_printed' => $order->prebill_at !== null,
-            'device_code' => $order->device?->code,
+            // 064 — id untuk membandingkan "terminal ini" tanpa bergantung pada nama (nama bisa diganti); nama untuk tampilan.
+            'device_id' => $order->device_id,
+            'device_name' => $order->device?->name,
             'queue_no' => $order->queue_no,
         ];
     }

@@ -103,12 +103,13 @@ class SalesTransactionsExportTest extends TestCase
         $row = $this->exported(['keys' => ["order:{$order->id}"]])[0];
 
         $this->assertSame(
-            ['transaction_no', 'status', 'time', 'customer', 'sellers', 'cashier', 'items', 'units', 'discount', 'payment_methods', 'payment_status', 'cash', 'non_cash', 'total', 'paid', 'balance'],
+            ['transaction_no', 'status', 'time', 'customer', 'sellers', 'cashier', 'terminal', 'items', 'units', 'discount', 'payment_methods', 'payment_status', 'cash', 'non_cash', 'total', 'paid', 'balance'],
             array_keys($row),
         );
         $this->assertSame('Budi', $row['customer']);
         $this->assertSame('Nekoyama Studio', $row['sellers']);
         $this->assertSame('Kasir Satu', $row['cashier']);
+        $this->assertNull($row['terminal'], 'order tanpa terminal → kolom kosong');
         $this->assertSame('cash', $row['payment_methods']);
         $this->assertSame(3.0, (float) $row['units']);
         $this->assertSame(30000.0, $row['total']);   // angka, bukan string — bisa dijumlah di Excel
@@ -117,6 +118,20 @@ class SalesTransactionsExportTest extends TestCase
         $this->assertSame('fully_paid', $row['payment_status']);
         $this->assertSame(30000.0, $row['paid']);
         $this->assertSame(0.0, $row['balance']);
+    }
+
+    /** 064 — kolom Terminal berisi NAMA terminal yang mengambil order, sama dengan layar Sales. */
+    public function test_the_terminal_column_carries_the_terminal_name(): void
+    {
+        $device = \App\Models\Device::forceCreate(['outlet_id' => $this->session->outlet_id, 'name' => 'Kasir Depan']);
+        $named = $this->makeOrder();
+        $named->forceFill(['device_id' => $device->id])->save();
+        $plain = $this->makeOrder();
+
+        $rows = collect($this->exported(['keys' => ["order:{$named->id}", "order:{$plain->id}"]]))->keyBy('transaction_no');
+
+        $this->assertSame('Kasir Depan', $rows[$named->order_number]['terminal']);
+        $this->assertNull($rows[$plain->order_number]['terminal']);
     }
 
     public function test_a_partially_paid_sale_exports_its_paid_and_balance(): void

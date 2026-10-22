@@ -44,7 +44,7 @@ object OrderMapper {
 
     private fun rp(value: String): Int = Money.parse(value).toInt()
 
-    fun tab(t: TabDto, myDeviceCode: String?): Order {
+    fun tab(t: TabDto, myDeviceId: Long?): Order {
         val voided = t.status == "voided"
         val completed = t.status == "completed"
         // 048 / S4 — refund penuh: order tetap "completed"; penanda refund = refunded_at dari server.
@@ -74,7 +74,9 @@ object OrderMapper {
             cashReturned = t.cashReturned?.let { rp(it) },
             cancelledReason = if (voided) "Dibatalkan" else null,
             receiptNo = t.receiptNo,
-            otherDevice = t.device?.code?.takeIf { it != myDeviceCode },
+            // 064 — dibandingkan lewat ID (nama bisa diganti); tampil lewat nama.
+            otherDevice = t.device?.takeIf { it.id != myDeviceId }?.name?.takeIf { it.isNotBlank() },
+            terminalName = t.device?.name?.takeIf { it.isNotBlank() },
             serverSubtotal = rp(t.subtotal),
             serverDiscount = rp(t.discountAmount),
             serverTax = rp(t.taxAmount),
@@ -116,7 +118,7 @@ object OrderMapper {
         return Tender(id = p.id.toInt(), method = method, amount = amount, status = status, received = if (method == TenderMethod.CASH) amount else null)
     }
 
-    fun floorTab(t: FloorTabDto, myDeviceCode: String?, tableName: String?): FloorTab = FloorTab(
+    fun floorTab(t: FloorTabDto, myDeviceId: Long?, tableName: String?): FloorTab = FloorTab(
         id = t.id,
         label = t.tabLabel,
         tableName = tableName,
@@ -124,20 +126,20 @@ object OrderMapper {
         paid = rp(t.paidAmount),
         pax = t.guestCount ?: 0,
         billPrinted = t.billPrinted,
-        otherDevice = t.deviceCode?.takeIf { it != myDeviceCode },
+        otherDevice = t.deviceName?.takeIf { t.deviceId != null && t.deviceId != myDeviceId && it.isNotBlank() },
         queue = t.queueNo,
         unsent = t.unsentCount,
         ready = t.readyCount,
         openedAt = hhmm(t.openedAt),
     )
 
-    fun floorTable(t: FloorTableDto, area: String, myDeviceCode: String?): FloorTable = FloorTable(
+    fun floorTable(t: FloorTableDto, area: String, myDeviceId: Long?): FloorTable = FloorTable(
         id = t.id,
         name = t.name,
         area = area,
         seats = t.seats,
         active = t.isActive,
-        tab = t.tab?.let { floorTab(it, myDeviceCode, t.name) },
+        tab = t.tab?.let { floorTab(it, myDeviceId, t.name) },
     )
 
     /** Ringkasan tab dari denah, dipakai di daftar sebelum tab dimuat penuh. */

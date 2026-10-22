@@ -80,6 +80,7 @@ Route::prefix('v1')->group(function () {
         // 048 / B14 — terminal POS (owner/admin; outlet diturunkan server).
         Route::get('/devices', [\App\Http\Controllers\Api\DeviceController::class, 'index']);
         Route::post('/devices/pairings', [\App\Http\Controllers\Api\DeviceController::class, 'pair']);
+        Route::patch('/devices/{device}', [\App\Http\Controllers\Api\DeviceController::class, 'rename']);
         Route::delete('/devices/{device}', [\App\Http\Controllers\Api\DeviceController::class, 'destroy']);
         // 048 / T064 — heartbeat terminal, sengaja di luar pembatasan owner/admin (dikirim sesi kasir juga).
         Route::post('/devices/heartbeat', [\App\Http\Controllers\Api\DeviceController::class, 'heartbeat']);

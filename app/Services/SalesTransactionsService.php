@@ -39,7 +39,7 @@ class SalesTransactionsService
             : null;
 
         $orders = ($ids === []) ? collect() : Order::query()
-            ->with(['cashier', 'customer', 'items.homeOutlet', 'payments', 'session.user', 'outlet:id,code,name'])
+            ->with(['cashier', 'customer', 'items.homeOutlet', 'payments', 'session.user', 'outlet:id,code,name', 'device:id,name'])
             ->withCount('items')
             ->whereIn('status', filter_var($filters['include_voided'] ?? false, FILTER_VALIDATE_BOOLEAN) ? ['completed', 'voided'] : ['completed'])
             ->when(! empty($filters['date_from']), fn ($q) => $q->where('business_date', '>=', \Illuminate\Support\Carbon::parse($filters['date_from'])->toDateString()))
@@ -102,6 +102,9 @@ class SalesTransactionsService
             'created_at' => $order->created_at?->toIso8601String(),
             'cashier_id' => $order->user_id,
             'cashier_name' => $order->cashier?->name,
+            // 064 — terminal yang mengambil order (null = tanpa terminal, mis. SPA web).
+            'terminal_id' => $order->device_id,
+            'terminal_name' => $order->device?->name,
             // 045 Stage 4 — outlet TEMPAT penjualan terjadi (outlet shift), beda dari `outlet_names` (outlet asal item).
             'sold_at_name' => $order->outlet?->name,
             'sold_at_code' => $order->outlet?->code,

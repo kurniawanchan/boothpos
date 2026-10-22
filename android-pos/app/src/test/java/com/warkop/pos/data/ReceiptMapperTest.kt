@@ -12,13 +12,14 @@ class ReceiptMapperTest {
 
     @Test fun `struk membawa nomor, antrean, pajak, dan total dari server`() {
         val r = ReceiptMapper.map(dto("""{
-            "store_name":"Warkop WJM 3","order_number":"O-2050","receipt_no":"T01-000014","queue_no":"A-025",
+            "store_name":"Warkop WJM 3","order_number":"O-2050","receipt_no":"000014","queue_no":"A-025","terminal_name":"Kasir Depan",
             "cashier_name":"Rina","tax_amount":"5400.00","tax_rate":"10.00","tax_label":"PPN",
             "subtotal":"60000.00","discount_amount":"6000.00","total_amount":"59400.00","paid_amount":"59400.00","change_amount":"0.00",
             "items":[{"name":"Kopi Susu","qty":5,"price":"12000.00","line_total":"60000.00","note":null}],
             "payment_summary":[{"method":"cash","amount":"59400.00","paid_at":"2026-10-16T10:42:15+00:00"}]
         }"""))
-        assertEquals("T01-000014", r.receiptNo)
+        assertEquals("000014", r.receiptNo)
+        assertEquals("Kasir Depan", r.terminalName)
         assertEquals("A-025", r.queueNo)
         assertEquals(5400, r.tax)
         assertEquals("10", r.taxRatePercent)

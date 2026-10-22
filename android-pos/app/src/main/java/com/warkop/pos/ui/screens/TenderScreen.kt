@@ -148,7 +148,7 @@ fun DoneScreen(store: PosStore) {
                     Text(rp(if (change > 0) change else o.total), fontSize = 56.sp, fontWeight = FontWeight.Light)
                     Text("Diterima ${rp(o.tenders.sumOf { it.received ?: it.amount })}${if (o.tenders.all { it.method == TenderMethod.CASH }) " tunai" else ""} · Total ${rp(o.total)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(14.dp))
-                    StatusLine(Icons.Filled.Print, strukPrintLabel(printJobs, o.id) + " · " + (o.receiptNo ?: "tanpa nomor terminal"))
+                    StatusLine(Icons.Filled.Print, strukPrintLabel(printJobs, o.id) + " · " + (o.receiptNo ?: "tanpa nomor"))
                     StatusLine(Icons.Filled.CloudDone, if (store.conn == Conn.ONLINE) "Tersinkron ke server" else "Tersimpan di perangkat · dikirim saat online")
                     Spacer(Modifier.weight(1f, fill = !compact)); Spacer(Modifier.height(14.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

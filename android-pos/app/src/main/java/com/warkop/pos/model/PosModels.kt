@@ -55,6 +55,8 @@ data class Order(
     val tenders: List<Tender> = emptyList(), val discPct: Int = 0, val discReason: String? = null,
     val billPrinted: Boolean = false, val closed: Boolean = false, val cancelledReason: String? = null,
     val receiptNo: String? = null, val otherDevice: String? = null, val reprints: Int = 0,
+    /** 064 — nama terminal yang mengambil order (selalu terisi bila ada; beda dari [otherDevice]). */
+    val terminalName: String? = null,
     val closedAt: String? = null, val refunded: Boolean = false,
     /** Tanggal & jam struk (dd/MM/yyyy HH:mm, zona toko) dari server; null bila belum ada pembayaran. */
     val receiptDateTime: String? = null,
@@ -154,6 +156,8 @@ data class ReceiptView(
     val storeContactPhone: String? = null,
     val storeContactEmail: String? = null,
     val storeLogoUrl: String? = null,
+    /** 064 — nama terminal yang mengambil order; null bila tanpa terminal. */
+    val terminalName: String? = null,
 )
 
 /** 048 — hasil bagi per item: [paid] = bagian yang dibayar, [remaining] = sisa bill; total dari server. */

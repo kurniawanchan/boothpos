@@ -21,6 +21,7 @@ object ReceiptMapper {
         orderNumber = dto.orderNumber,
         receiptNo = dto.receiptNo?.takeIf { it.isNotBlank() },
         queueNo = dto.queueNo?.takeIf { it.isNotBlank() },
+        terminalName = dto.terminalName?.trim()?.takeIf { it.isNotBlank() },
         copyNo = dto.copyNo ?: 1,
         cashier = dto.cashierName?.takeIf { it.isNotBlank() },
         paidAtText = OrderMapper.receiptDateTime(dto.paymentSummary.map { it.paidAt }),

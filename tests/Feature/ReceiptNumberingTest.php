@@ -9,38 +9,42 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
-/** 048 / T028 (B12) — nomor struk per terminal dan antrean per outlet per hari. */
+/** 048 / T028 (B12) — nomor struk dan antrean per outlet per hari. 064: nomor struk urut polos per OUTLET, tanpa terminal. */
 class ReceiptNumberingTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function device(string $code = 'T01'): Device
-    {
-        $outlet = Outlet::first() ?? Outlet::factory()->create();
-        $d = Device::forceCreate(['outlet_id' => $outlet->id, 'code' => $code, 'name' => 'x']);
-        DB::table('terminal_counters')->insert(['device_id' => $d->id, 'receipt_seq' => 0]);
-
-        return $d;
-    }
-
-    public function test_receipt_numbers_are_sequential_per_terminal_without_gaps(): void
+    public function test_receipt_numbers_are_plain_sequential_per_outlet_without_gaps(): void
     {
         $n = app(ReceiptNumbering::class);
-        $a = $this->device('T01');
-        $b = $this->device('T02');
+        $o1 = Outlet::first() ?? Outlet::factory()->create();
+        $o2 = Outlet::factory()->create();
 
-        $this->assertSame('T01-000001', $n->receiptFor($a));
-        $this->assertSame('T01-000002', $n->receiptFor($a));
-        $this->assertSame('T02-000001', $n->receiptFor($b));
-        $this->assertSame('T01-000003', $n->receiptFor($a));
+        $this->assertSame('000001', $n->receiptFor($o1->id));
+        $this->assertSame('000002', $n->receiptFor($o1->id));
+        $this->assertSame('000001', $n->receiptFor($o2->id), 'outlet lain mulai dari 000001');
+        $this->assertSame('000003', $n->receiptFor($o1->id));
+    }
+
+    public function test_terminals_of_one_outlet_share_the_outlet_sequence(): void
+    {
+        $outlet = Outlet::first() ?? Outlet::factory()->create();
+        Device::forceCreate(['outlet_id' => $outlet->id, 'name' => 'Kasir Depan']);
+        Device::forceCreate(['outlet_id' => $outlet->id, 'name' => 'Kasir Belakang']);
+        $n = app(ReceiptNumbering::class);
+
+        // Nomor tidak lagi memuat terminal: dua terminal satu outlet satu deret.
+        $this->assertSame('000001', $n->receiptFor($outlet->id));
+        $this->assertSame('000002', $n->receiptFor($outlet->id));
     }
 
     public function test_a_missing_counter_row_is_created_not_a_crash(): void
     {
         $outlet = Outlet::first() ?? Outlet::factory()->create();
-        $d = Device::forceCreate(['outlet_id' => $outlet->id, 'code' => 'T09', 'name' => 'x']);
+        $this->assertSame(0, DB::table('outlet_receipt_counters')->where('outlet_id', $outlet->id)->count());
 
-        $this->assertSame('T09-000001', app(ReceiptNumbering::class)->receiptFor($d));
+        $this->assertSame('000001', app(ReceiptNumbering::class)->receiptFor($outlet->id));
+        $this->assertSame(1, DB::table('outlet_receipt_counters')->where('outlet_id', $outlet->id)->count());
     }
 
     public function test_queue_numbers_restart_each_business_day_and_are_per_outlet(): void
@@ -58,16 +62,16 @@ class ReceiptNumberingTest extends TestCase
     public function test_the_counter_rolls_back_with_the_caller_transaction(): void
     {
         $n = app(ReceiptNumbering::class);
-        $d = $this->device();
+        $outlet = Outlet::first() ?? Outlet::factory()->create();
 
         try {
-            DB::transaction(function () use ($n, $d) {
-                $n->receiptFor($d);
+            DB::transaction(function () use ($n, $outlet) {
+                $n->receiptFor($outlet->id);
                 throw new \RuntimeException('batal');
             });
         } catch (\RuntimeException) {
         }
 
-        $this->assertSame('T01-000001', $n->receiptFor($d));
+        $this->assertSame('000001', $n->receiptFor($outlet->id));
     }
 }

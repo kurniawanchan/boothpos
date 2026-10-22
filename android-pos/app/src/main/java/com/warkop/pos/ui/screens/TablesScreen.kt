@@ -99,7 +99,7 @@ private fun TableTile(store: PosStore, t: FloorTable) {
                     repeat(tab.pax.coerceIn(0, 8)) { Box(Modifier.size(9.dp).clip(CircleShape).background(fg)) }
                 }
                 Text(
-                    if (tab.billPrinted) "Bill tercetak" else if (other) "Perangkat ${tab.otherDevice}" else "Terisi",
+                    if (tab.billPrinted) "Bill tercetak" else if (other) "Terminal ${tab.otherDevice}" else "Terisi",
                     fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
                 )
                 Text("${tab.pax} tamu", fontSize = 12.sp, maxLines = 1)

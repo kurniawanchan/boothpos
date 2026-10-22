@@ -138,7 +138,7 @@ private fun BrandPanel(store: PosStore, modifier: Modifier) {
                 Surface(Modifier.size(52.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primary) {
                     Box(contentAlignment = Alignment.Center) { Text("W", color = MaterialTheme.colorScheme.onPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold) } }
                 Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) { Text(store.config?.outletName ?: store.serverUrl()?.let { "Outlet" } ?: "Warkop WJM", fontSize = 22.sp, fontWeight = FontWeight.SemiBold); Text("Terminal ${store.config?.deviceCode ?: ""}", fontSize = 14.sp) }
+                Column(Modifier.weight(1f)) { Text(store.config?.outletName ?: store.serverUrl()?.let { "Outlet" } ?: "Warkop WJM", fontSize = 22.sp, fontWeight = FontWeight.SemiBold); Text(store.config?.deviceName?.takeIf { it.isNotBlank() } ?: "Terminal", fontSize = 14.sp) }
                 IconButton(onClick = { store.goToSetup() }) {
                     Icon(imageVector = Icons.Filled.Settings, contentDescription = "Atur terminal", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
@@ -147,7 +147,7 @@ private fun BrandPanel(store: PosStore, modifier: Modifier) {
             Text(time, fontSize = 112.sp, fontWeight = FontWeight.Light, lineHeight = 112.sp)
             Text(java.text.SimpleDateFormat("EEEE, d MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date()), fontSize = 18.sp, fontWeight = FontWeight.Medium)
             Spacer(Modifier.weight(1f))
-            OutletStatusChips(store.conn, store.config?.let { "${it.outletName} · ${it.deviceCode}" } ?: "Terminal")
+            OutletStatusChips(store.conn, store.config?.let { c -> listOf(c.outletName, c.deviceName).filter { it.isNotBlank() }.joinToString(" · ") } ?: "Terminal")
         }
     }
 }

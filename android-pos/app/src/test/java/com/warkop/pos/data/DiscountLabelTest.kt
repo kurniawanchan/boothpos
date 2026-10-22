@@ -21,7 +21,7 @@ class DiscountLabelTest {
             TabDto.serializer(),
             """{"id":2050,"status":"completed","subtotal":"60000.00","discount_amount":"6000.00","tax_amount":"5400.00","total_amount":"59400.00","paid_amount":"59400.00"}""",
         )
-        val o = OrderMapper.tab(tab, myDeviceCode = null)
+        val o = OrderMapper.tab(tab, myDeviceId = null)
         assertEquals(6000, o.discount)
         assertEquals(0, o.discPct)
         assertEquals("Diskon", discountLabel(o.discPct))

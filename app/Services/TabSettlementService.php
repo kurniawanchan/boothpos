@@ -292,14 +292,17 @@ class TabSettlementService
         return ['total' => number_format($totalCents / 100, 2, '.', ''), 'mode' => 'equal', 'parts' => $amounts];
     }
 
-    /** 048 — nomor struk dari terminal pembuka order; order tanpa terminal (SPA web) tidak bernomor terminal (null). */
+    /**
+     * 048 — hanya order yang dibuka dari terminal terdaftar yang bernomor struk; order tanpa terminal (SPA web) null.
+     * 064 — nomornya urut polos per OUTLET order (bukan per terminal); terminalnya tertaut lewat `device_id`.
+     */
     private function receiptFor(Order $order): ?string
     {
         if ($order->device_id === null || $order->receipt_no !== null) {
             return $order->receipt_no;
         }
-        $device = \App\Models\Device::withoutGlobalScopes()->find($order->device_id);
+        $outletId = $order->outlet_id ?? \App\Models\Device::withoutGlobalScopes()->whereKey($order->device_id)->value('outlet_id');
 
-        return $device === null ? null : $this->numbering->receiptFor($device);
+        return $outletId === null ? null : $this->numbering->receiptFor((int) $outletId);
     }
 }

@@ -43,7 +43,9 @@ fun TerminalSetupScreen(backend: PosBackend, onDone: (TerminalConfig) -> Unit) {
     var showPassword by remember { mutableStateOf(false) }
     var outlets by remember { mutableStateOf<List<OutletChoice>>(emptyList()) }
     var chosen by remember { mutableStateOf<OutletChoice?>(null) }
-    var terminalName by remember { mutableStateOf("Tablet kasir") }
+    // 064 — kolom dikosongkan: nama kini identitas terminal dan harus unik per outlet, jadi nama bawaan yang sama untuk semua
+    // tablet akan selalu bentrok pada tablet kedua.
+    var terminalName by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
@@ -76,7 +78,7 @@ fun TerminalSetupScreen(backend: PosBackend, onDone: (TerminalConfig) -> Unit) {
                             RadioButton(chosen?.id == o.id, { chosen = o }); Text(o.name, fontSize = 17.sp)
                         }
                     }
-                    OutlinedTextField(terminalName, { terminalName = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nama terminal") }, singleLine = true, enabled = !busy)
+                    OutlinedTextField(terminalName, { terminalName = it }, Modifier.fillMaxWidth().padding(top = 12.dp), label = { Text("Nama terminal (mis. Kasir Depan)") }, singleLine = true, enabled = !busy)
                 }
                 error?.let { Text(it, Modifier.padding(top = 12.dp), color = MaterialTheme.colorScheme.error, fontSize = 14.sp) }
                 Spacer(Modifier.height(18.dp))
@@ -92,8 +94,8 @@ fun TerminalSetupScreen(backend: PosBackend, onDone: (TerminalConfig) -> Unit) {
                 }, Modifier.fillMaxWidth(), enabled = url.length > 3 && username.isNotBlank() && password.isNotEmpty())
                 else PrimaryPill("Daftarkan terminal", {
                     val o = chosen ?: return@PrimaryPill
-                    run { onDone(backend.pairTerminal(o, terminalName.ifBlank { "Terminal" })) }
-                }, Modifier.fillMaxWidth(), enabled = chosen != null, icon = Icons.Filled.Check)
+                    run { onDone(backend.pairTerminal(o, terminalName.trim())) }
+                }, Modifier.fillMaxWidth(), enabled = chosen != null && terminalName.isNotBlank(), icon = Icons.Filled.Check)
             }
         }
     }

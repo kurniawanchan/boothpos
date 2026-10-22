@@ -205,6 +205,9 @@ class PosStore(
             // Antrean lokal tidak ada (online-first): queue_depth dilaporkan 0.
             val result = b.heartbeat(System.currentTimeMillis(), queueDepth = 0)
             heartbeat = heartbeat.onSuccess(result, System.currentTimeMillis())
+            // 064 — tablet yang dipasang sebelum fitur nama-saja belum tahu namanya; heartbeat mengisinya (RemoteBackend
+            // sudah menyimpannya di brankas), dan ganti-nama dari admin ikut terbaca.
+            result.terminalName?.let { name -> config?.takeIf { it.deviceName != name }?.let { config = it.copy(deviceName = name) } }
             conn = Conn.ONLINE
         } catch (e: ApiError) {
             heartbeat = heartbeat.onFailure()

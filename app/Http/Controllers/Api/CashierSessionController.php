@@ -325,6 +325,7 @@ class CashierSessionController extends Controller
 
         return response()->json([
             'session' => $session->load('outlet:id,code,name'),
+            'terminal_name' => $figures['terminal_name'],
             'order_count' => $orders->count(),
             'total_sales' => $orders->sum('total_amount'),
             'by_method' => $byMethod,

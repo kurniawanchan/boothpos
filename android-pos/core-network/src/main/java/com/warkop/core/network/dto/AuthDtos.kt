@@ -27,11 +27,11 @@ import kotlinx.serialization.Serializable
     val multi: Boolean = false,
 )
 
-@Serializable data class PairDeviceRequest(val name: String, val code: String? = null)
+/** 064 — terminal dikenali lewat nama saja; kode T01/T02 tidak ada lagi. */
+@Serializable data class PairDeviceRequest(val name: String)
 
 @Serializable data class DeviceDto(
     val id: Long,
-    val code: String,
     val name: String,
     @SerialName("outlet_id") val outletId: Long,
     val revoked: Boolean = false,

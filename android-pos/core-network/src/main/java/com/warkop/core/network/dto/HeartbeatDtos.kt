@@ -20,4 +20,6 @@ import kotlinx.serialization.Serializable
     @SerialName("server_time_ms") val serverTimeMs: Long = 0,
     @SerialName("skew_seconds") val skewSeconds: Int = 0,
     @SerialName("menu_release") val menuRelease: String? = null,
+    /** 064 — nama terminal ini sekarang; tablet yang dipasang sebelum fitur nama-saja mengisinya dari sini. */
+    val name: String? = null,
 )

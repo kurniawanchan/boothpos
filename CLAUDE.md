@@ -434,6 +434,16 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 > - **Nomor struk per terminal** (`T01-000001`) dan **antrean per outlet per hari bisnis** (`A-001`).
 > - Diketahui belum selesai: server tidak menyimpan persen diskon (tampilan hanya nominal); bagi rata dan cetak ulang belum diuji di perangkat.
 
+## Terminal dikenali lewat nama saja (feature 064, 2026-10-22)
+
+> **Dated note — 2026-10-22 (feature 064).** Spesifikasi: `specs/064-terminal-name-only/`. Yang di atas tentang kode terminal `T01`/`T02` dan nomor struk `T01-000124` adalah riwayat, bukan perilaku sekarang.
+> - **Identitas terminal = `devices.name` saja.** `devices.code` nullable dan **legacy**: tidak dibuat, diterima (`code` di body pairing diabaikan), dikirim, atau ditampilkan lagi. Nama unik di antara terminal AKTIF satu outlet + mode data, tanpa membedakan huruf besar/kecil — dijaga `DeviceService::assertNameFree()` di bawah kunci baris outlet, BUKAN indeks unik (terminal yang dicabut melepas namanya; kolom generated merusak restore backup, lihat catatan 045). Migrasi `2026_12_26_000001` memberi akhiran " 2", " 3" pada nama kembar lama.
+> - **Ganti nama** lewat `PATCH /devices/{id}` (owner/admin, outlet-scope, 409 bila dicabut, audit `device_renamed`); belum ada layar web untuk itu.
+> - **Nomor struk baru = urut polos per OUTLET** (`000124`, tabel `outlet_receipt_counters`, satu jalur `ReceiptNumbering::receiptFor($outletId)`). Dua outlet boleh sama-sama punya `000001`: UNIQUE global `orders.receipt_no` diganti UNIQUE `(outlet_id, receipt_no)`. Nomor lama `T01-…` tidak berubah. `terminal_counters` dibiarkan sebagai riwayat (tidak dibaca/ditulis). Hanya order yang punya `device_id` yang bernomor struk (tidak berubah).
+> - **Tautan order ↔ terminal** = `orders.device_id` yang sudah ada; yang baru hanya NAMA yang ditampilkan: `terminal_name` di struk (`GET /orders/{id}/receipt`), `OrderResource` (`terminal_id`/`terminal_name`, hanya bila `device` dimuat — relationLoaded trap: gunakan `device:id,name`, JANGAN `device:id,code`), baris Sales + ekspor + filter Terminal (web), `terminal_name` pada X-report/summary shift (`ShiftReportService::figures`). Ganti nama terlihat di order lama (tidak ada salinan teks).
+> - **Android:** `TerminalConfig.deviceName` menggantikan `deviceCode`; "terminal lain" dibandingkan lewat ID (`myDeviceId`), tampil lewat nama. Tablet yang dipasang sebelum fitur ini mengisi namanya dari heartbeat (`name` di responsnya). Struk mencetak satu baris `Terminal: <nama>` (SENGAJA bukan pasangan kiri/kanan: nama panjang merusak lebar 32 kolom). Kolom nama di layar penyiapan dikosongkan (nama bawaan yang sama akan bentrok di tablet kedua).
+> - **Server dan APK dirilis bersama:** kunci `device.code` / `device_code` dihapus dari respons tanpa lapisan kompatibilitas.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -441,7 +451,10 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - A remote `origin` (github.com/kurniawanchan/boothpos) exists (dated note 2026-10-11; the earlier "no remote" line was outdated), but **pushing and opening PRs need the developer's explicit per-instance authorization** (constitution; the harness may also deny them) — never push on your own initiative.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/061-android-queue-screen-fixes/plan.md`
+Active feature plan: `specs/064-terminal-name-only/plan.md`
+(dibuat dari `develop-warkop-wjm`) — terminal Android dikenali HANYA lewat namanya: kode otomatis `T01`/`T02` tidak lagi dibuat, diterima, dikirim, atau ditampilkan; nama unik di antara terminal aktif satu outlet+mode; nomor struk baru menjadi nomor urut polos per outlet (`000124`, pilihan Q1 = A; nomor lama tidak berubah); nama terminal tampil di struk, daftar/detail order Android, baris dan ekspor Sales web (+ filter), dan ringkasan shift, lewat tautan `orders.device_id` yang sudah ada. Satu migrasi, satu endpoint ganti-nama (`PATCH /devices/{id}`), tanpa layar web baru. Lihat research.md D1–D11.
+
+Previous feature: `specs/061-android-queue-screen-fixes/plan.md`
 (dibuat dari `060`) — layar "Pembayaran selesai" Android POS: nomor antrean dipas agar tidak terpotong, centang dan lencana "Lunas" dalam satu baris, dan tombol "Panggil pelanggan" mengucapkan nomor antrean (Text-to-Speech, id-ID). Hanya Android; tanpa perubahan server. Lihat research.md R1–R8.
 
 Previous feature: `specs/060-android-app-icon-name/plan.md`

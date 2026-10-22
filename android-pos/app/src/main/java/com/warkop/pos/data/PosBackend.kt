@@ -25,7 +25,8 @@ data class TerminalConfig(
     val outletId: Long,
     val outletName: String,
     val deviceId: Long,
-    val deviceCode: String,
+    /** 064 — nama terminal; kosong untuk tablet yang dipasang sebelum fitur ini sampai heartbeat pertama. */
+    val deviceName: String,
 )
 
 data class OutletChoice(val id: Long, val name: String)
