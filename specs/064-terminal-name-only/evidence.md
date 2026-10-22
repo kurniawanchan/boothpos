@@ -15,5 +15,10 @@ No tablet or emulator was available in this session. What was verified instead: 
 - `migrate:rollback --step=1`: `devices.code` NOT NULL again.
 - Scratch schema dropped afterwards.
 
+## Full suites — DONE
+- Backend (real MySQL, safe `-e` flags): **1839 passed, 1 skipped, 0 failed** (8754 assertions, 2670 s).
+- Vitest: 189 files / 1649 tests passed; `npm run build` OK (`localeKeys` guard green).
+- Android `app` + `core-domain`: 274 tests, 0 failures (`core-network` tests blocked by the pre-existing compile error below).
+
 ## Known pre-existing failure (not caused by this feature)
 `android-pos` `:core-network:compileDebugUnitTestKotlin` fails in `S4DtosTest.kt:51` (`ReprintRequestDto()` — "No value passed for parameter 'seen0'/'copyNo'/'overrideToken'") on a clean HEAD too (verified by stashing this feature's changes). Consequence: `core-network`'s own unit tests (including the `ReceiptDtoTest` assertion added here) cannot run until that file is fixed; the same JSON field is covered by `ReceiptMapperTest` in `app`.
