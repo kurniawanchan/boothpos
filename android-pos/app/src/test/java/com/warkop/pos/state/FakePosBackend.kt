@@ -26,7 +26,7 @@ class FakePosBackend : PosBackend {
     override suspend fun roster(): List<StaffUser> = rosterResult()
     override suspend fun serverEndpoint(): ServerEndpoint? = endpoint
     override fun serverUrl(): String? = serverUrlValue
-    override fun setServerUrl(url: String) { serverUrlValue = url }
+    override fun setServerUrl(url: String) { serverUrlValue = url.trim().takeIf { it.isNotBlank() } }
     override suspend fun taxDisplay(): TaxDisplay? = tax
     var qris: com.warkop.pos.model.QrisChannel? = null
     /** 056 amandemen — unggahan yang diterima fake: (channelId, mime, ukuran). */
