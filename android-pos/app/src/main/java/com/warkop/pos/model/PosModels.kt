@@ -94,6 +94,8 @@ data class ShiftReport(
     val openingCash: Int, val orderCount: Int, val totalSales: Int, val voidCount: Int, val voidTotal: Int,
     val changeGiven: Int, val cashReceived: Int, val cashIn: Int, val cashOut: Int,
     val byMethod: List<MethodTotal>, val hourly: List<HourlyTotal>,
+    /** 065 — kas seharusnya di laci dari server (null bila server lama belum mengirim). Ditampilkan di layar tutup shift. */
+    val expectedCash: Int? = null,
 ) {
     /** Tunai bersih di laci = tunai diterima dikurangi kembalian. */
     val netCash: Int get() = cashReceived - changeGiven
@@ -112,7 +114,7 @@ data class CashMovement(
 
 /** Hasil tutup shift dari server: hanya angka yang dikembalikan server, tidak ada yang diisi dari layar. */
 data class CloseOutcome(
-    val expected: Int, val counted: Int, val variance: Int, val tolerance: Int?, val edcBatch: Int?,
+    val expected: Int, val counted: Int, val variance: Int, val tolerance: Int?,
 )
 
 /** 048 / S3 — alasan dari server (id untuk 86). */

@@ -52,6 +52,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/license/status', [LicenseController::class, 'status']);
     Route::post('/license/activate', [LicenseController::class, 'activate']);
 
+    // 065 / US6 — alamat server pilihan admin untuk tablet baru: tanpa token (tablet belum punya), hanya alamat terpilih.
+    Route::get('/server-address', [\App\Http\Controllers\Api\ServerAddressController::class, 'forTablets'])->middleware('throttle:30,1');
+
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
     // SetLocaleFromUser HANYA di sini, bukan pada POST /auth/login di
@@ -277,12 +280,16 @@ Route::prefix('v1')->group(function () {
         Route::get('/variants/{variant}/cost-breakdown', [MaterialController::class, 'costBreakdown']);
 
 
+        // 065 — daftar shift (owner/admin: semua; lainnya: milik sendiri). Sebelum rute `{session}`.
+        Route::get('/sessions', [CashierSessionController::class, 'index']);
         Route::get('/sessions/current', [CashierSessionController::class, 'current']);
         Route::post('/sessions', [CashierSessionController::class, 'store']);
         // 048 — `idempotent`: pengiriman ulang setelah respons hilang mengembalikan hasil tutup yang tersimpan, bukan 409.
         Route::post('/sessions/{session}/close', [CashierSessionController::class, 'close'])->middleware('idempotent');
         Route::get('/sessions/{session}/summary', [CashierSessionController::class, 'summary']);
         Route::get('/sessions/{session}/x-report', [CashierSessionController::class, 'xReport']);
+        // 065 — daftar kas masuk/keluar lintas shift (aturan lihat sama dengan daftar shift).
+        Route::get('/cash-movements', [\App\Http\Controllers\Api\CashMovementController::class, 'list']);
         Route::get('/sessions/{session}/cash-movements', [\App\Http\Controllers\Api\CashMovementController::class, 'index']);
         Route::post('/sessions/{session}/cash-movements', [\App\Http\Controllers\Api\CashMovementController::class, 'store'])->middleware('idempotent');
 
@@ -370,6 +377,8 @@ Route::prefix('v1')->group(function () {
         // 042-dashboard-revamp — Dashboard (izin menu `dashboard` dicek di controller).
         Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
         Route::get('/dashboard/attention', [DashboardController::class, 'attention']);
+        // 065 — shift terbuka semua pengguna (panel dashboard).
+        Route::get('/dashboard/shifts', [DashboardController::class, 'shifts']);
         Route::get('/dashboard/orders', [DashboardController::class, 'orders']);
         Route::get('/dashboard/orders/export', [DashboardController::class, 'ordersExport']);
         Route::get('/dashboard/export', [DashboardController::class, 'export']);

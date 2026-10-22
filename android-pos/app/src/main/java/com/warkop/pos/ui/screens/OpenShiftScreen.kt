@@ -17,37 +17,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.warkop.pos.model.PosCatalog
 import com.warkop.pos.model.num
 import com.warkop.pos.model.rp
-import com.warkop.pos.state.Dest
+import com.warkop.pos.state.CountInput
 import com.warkop.pos.state.PosStore
 import com.warkop.pos.state.Sheet
 import com.warkop.pos.ui.*
 
-/** S03 — modal awal dihitung per pecahan (desain 02-open-shift, 29 phone). */
+/**
+ * S03 — modal awal dihitung per pecahan ATAU diketik langsung (desain 02-open-shift, 29 phone).
+ * 065 — label pecahan tidak lagi terpotong (kolom mengikuti lebar), total modal bisa diketik, dan tautan
+ * "Lewati, ambil order saja" dihapus: order hanya bisa diterima setelah shift terbuka di server.
+ */
 @Composable
 fun OpenShiftScreen(store: PosStore) {
-    val counts = remember { mutableStateMapOf<Int, Int>() }
-    val total = PosCatalog.denominations.sumOf { it * (counts[it] ?: 0) }
+    var input by remember { mutableStateOf(CountInput()) }
+    val total = input.total
     val compact = windowSize() == Size.COMPACT
 
     fun open() {
-        if (total == 0) store.show(Sheet.Confirm("Buka shift dengan modal Rp 0?", "Pastikan memang tidak ada uang kembalian di kasir.", "Buka shift") { store.openShift(emptyMap()) })
-        else store.openShift(counts.toMap())
-    }
-
-    @Composable
-    fun DenomRow(d: Int, modifier: Modifier) {
-        val c = counts[d] ?: 0
-        Column(modifier) {
-            Row(Modifier.fillMaxWidth().padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(if (d >= 1000) "Rp ${num(d)}" else "Koin Rp ${num(d)}", Modifier.weight(1f), fontSize = 17.sp, maxLines = 1, softWrap = false)
-                CircleStepper(c, { if (c > 0) counts[d] = c - 1 }, { counts[d] = c + 1 })
-                Text(rp(d * c), Modifier.width(92.dp), fontSize = 15.sp, textAlign = TextAlign.End, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
+        if (total == 0) store.show(Sheet.Confirm("Buka shift dengan modal Rp 0?", "Pastikan memang tidak ada uang kembalian di kasir.", "Buka shift") { store.openShift(CountInput().toCount()) })
+        else store.openShift(input.toCount())
     }
 
     val left: @Composable (Modifier) -> Unit = { m ->
@@ -56,14 +46,14 @@ fun OpenShiftScreen(store: PosStore) {
             Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
                 Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.Schedule, null, Modifier.size(32.dp)); Spacer(Modifier.width(18.dp))
-                    Column { Text("Shift baru · ${store.user?.name}", fontSize = 20.sp, fontWeight = FontWeight.SemiBold); Text("Modal dicatat server sebagai rincian pecahan", fontSize = 14.sp) }
+                    Column { Text("Shift baru · ${store.user?.name}", fontSize = 20.sp, fontWeight = FontWeight.SemiBold); Text("Hitung per pecahan atau ketik total modal", fontSize = 14.sp) }
                 }
             }
             SectionLabel("Hitung modal per pecahan", Modifier.padding(start = 6.dp, top = 22.dp, bottom = 10.dp))
             Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
-                if (compact) Column(Modifier.padding(horizontal = 16.dp)) { PosCatalog.denominations.forEach { DenomRow(it, Modifier.fillMaxWidth()) } }
-                else Column(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
-                    PosCatalog.denominations.chunked(2).forEach { pair -> Row { pair.forEach { DenomRow(it, Modifier.weight(1f).padding(horizontal = 12.dp)) } } }
+                // Kolom dari lebar yang benar-benar tersedia, bukan dua per baris tetap (penyebab label terpotong).
+                BoxWithConstraints(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    DenominationGrid(input, { input = it }, DenominationLayout.columnsFor(maxWidth.value))
                 }
             }
         }
@@ -73,10 +63,10 @@ fun OpenShiftScreen(store: PosStore) {
             Column(Modifier.padding(28.dp)) {
                 Text("Total modal", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(num(total), fontSize = 76.sp, fontWeight = FontWeight.Light, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+                TypedAmountField(input, { input = it }, Modifier.padding(bottom = 12.dp), label = "Atau ketik total modal")
                 Text("Pembayaran hanya bisa diterima setelah shift terbuka di server.", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 24.sp)
                 Spacer(Modifier.weight(1f, fill = !compact)); Spacer(Modifier.height(16.dp))
                 PrimaryPill("Buka shift", ::open, Modifier.fillMaxWidth(), icon = Icons.Filled.Check)
-                TextButton(onClick = { store.go(Dest.TABLES) }, Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)) { Text("Lewati, ambil order saja", fontWeight = FontWeight.SemiBold, fontSize = 16.sp) }
             }
         }
     }

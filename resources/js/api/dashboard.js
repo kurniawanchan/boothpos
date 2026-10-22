@@ -27,6 +27,11 @@ export function attention(params) {
   return client.get('/dashboard/attention', { params: clean(params) }).then((r) => r.data);
 }
 
+/** 065 — shift terbuka semua pengguna (panel dashboard): `{ data: [...], total_open }`. */
+export function shifts() {
+  return client.get('/dashboard/shifts').then((r) => r.data);
+}
+
 /** tab, q, type[], method[], pstat[], from, to, outlet_id, page, per_page, sort. */
 export function orders(params) {
   return client.get('/dashboard/orders', { params: clean(params) }).then((r) => r.data);

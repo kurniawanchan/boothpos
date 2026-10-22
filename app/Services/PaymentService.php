@@ -423,9 +423,8 @@ class PaymentService
      */
     private function receivingSessionId(Order $target, string $method, ?User $user): ?int
     {
-        $session = $user
-            ? CashierSession::where('user_id', $user->id)->where('status', 'open')->first()
-            : null;
+        // 065 — shift SUMBER permintaan ini: pembayaran dari tablet masuk ke shift tablet, dari web ke shift web.
+        $session = $user ? \App\Support\ShiftSource::openFor($user) : null;
 
         if (! $session && $method === 'cash') {
             throw ValidationException::withMessages(['session_id' => __('orders_payments.payment_session_required')])->status(409);

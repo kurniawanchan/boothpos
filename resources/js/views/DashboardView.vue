@@ -12,6 +12,7 @@ import PageHeader from '../components/page/PageHeader.vue';
 import DashboardKpis from '../components/dashboard/DashboardKpis.vue';
 import DashboardOrdersTable from '../components/dashboard/DashboardOrdersTable.vue';
 import AttentionPanel from '../components/page/AttentionPanel.vue';
+import OpenShiftsPanel from '../components/dashboard/OpenShiftsPanel.vue';
 import ErrorState from '../components/ui/ErrorState.vue';
 import LoadingState from '../components/ui/LoadingState.vue';
 
@@ -97,12 +98,14 @@ async function loadAttention({ silent = false } = {}) {
 // Tabel "Order terbaru" memegang filter/halaman/detailnya sendiri; refresh hanya memintanya mengambil ulang
 // halaman yang sedang tampil (refresh() tidak mengubah filter dan tidak menutup detail yang terbuka).
 const ordersTable = ref(null);
+const shiftsPanel = ref(null);
 
 const refresher = useAutoRefresh(
   () => Promise.all([
     loadSummary({ silent: true }),
     loadAttention({ silent: true }),
     ordersTable.value?.refresh(),
+    shiftsPanel.value?.refresh(),
   ]),
   30_000,
 );
@@ -189,6 +192,9 @@ async function onExport() {
       :state="attentionState"
       @retry="loadAttention()"
     />
+
+    <!-- 065 — shift terbuka semua pengguna (aplikasi dan web). -->
+    <OpenShiftsPanel ref="shiftsPanel" />
 
     <!-- Tabel menunggu ringkasan selesai (ordersReady) agar angka utama mendapat giliran pertama pada PHP toko
          yang melayani permintaan hampir berurutan; sementara itu wilayahnya tampil sebagai kerangka. -->

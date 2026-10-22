@@ -51,7 +51,7 @@ object DebugPresets {
             "22" -> { dest = Dest.SHIFT; sheet = Sheet.CashOut(inflow = false) }
             "23" -> dest = Dest.XREPORT
             "24" -> dest = Dest.CLOSE_SHIFT
-            "25" -> { close = CloseOutcome(362_900, 359_900, -3_000, 5_000, 85_800); dest = Dest.CLOSE_RESULT }
+            "25" -> { close = CloseOutcome(362_900, 359_900, -3_000, 5_000); dest = Dest.CLOSE_RESULT }
             "26" -> { conn = Conn.OFFLINE; dest = Dest.SYNC }
             "27" -> dark = true
             "28" -> conn = Conn.OFFLINE_LIMITED
