@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -50,7 +51,7 @@ fun SheetHost(store: PosStore) {
     Box(Modifier.fillMaxSize().background(scrim).clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { store.show(null) }) {
         val consume = Modifier.clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
         when (sheet) {
-            is Sheet.Modifier, is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, is Sheet.Discount, is Sheet.CashOut ->
+            is Sheet.Modifier, is Sheet.VariantPicker, is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, is Sheet.Discount, is Sheet.CashOut ->
                 if (compact) Surface(Modifier.align(Alignment.BottomCenter).fillMaxWidth().heightIn(max = 640.dp).then(consume), shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
                 else Surface(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(if (windowSize() == Size.MEDIUM) 400.dp else 440.dp).then(consume), shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp), color = MaterialTheme.colorScheme.surfaceContainer) { SheetBody(store, sheet) }
             // 056 amandemen — modal QRIS 50 % lebih lebar (480 dp → 720 dp).
@@ -63,6 +64,7 @@ fun SheetHost(store: PosStore) {
 private fun SheetBody(store: PosStore, s: Sheet) {
     if (s is Sheet.Modifier) { ModifierSheet(store, s); return }
     if (s is Sheet.CashOut) { CashOutSheet(store, s.inflow); return }
+    if (s is Sheet.VariantPicker) { VariantPickerSheet(store, s); return }
     when (s) {
         is Sheet.LineActions -> { LineActionsSheet(store, s); return }
         Sheet.OrderActions -> { OrderActionsSheet(store); return }
@@ -73,7 +75,7 @@ private fun SheetBody(store: PosStore, s: Sheet) {
     Column(Modifier.statusBarsPadding().navigationBarsPadding().padding(24.dp).verticalScroll(rememberScrollState())) {
         when (s) {
             is Sheet.Pax -> PaxSheet(store, s)
-            is Sheet.Modifier -> Unit
+            is Sheet.Modifier, is Sheet.VariantPicker -> Unit
             is Sheet.LineActions, Sheet.OrderActions, Sheet.Split, is Sheet.Discount -> Unit
             is Sheet.Refund -> RefundDialog(store, s)
             is Sheet.Void -> VoidDialog(store, s)
@@ -712,6 +714,42 @@ private fun ReceiptPaper(r: com.warkop.pos.model.ReceiptView) {
             r.payments.forEach { (method, amount) -> Line(method, rp(amount)) }
             if (r.change > 0) Line("Kembali", rp(r.change))
             Text("Terima kasih", Modifier.padding(top = 14.dp), fontFamily = mono, fontSize = 15.sp, color = ink)
+        }
+    }
+}
+
+/**
+ * 075 — daftar varian satu produk (ketuk kartu produk multi-varian di Counter). Baris varian yang habis tetap terlihat
+ * tetapi tidak bisa ditambahkan; tahan baris = tandai habis per varian (kartu multi-varian sendiri tidak punya aksi tahan).
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun VariantPickerSheet(store: PosStore, s: Sheet.VariantPicker) {
+    val entry = store.menu?.entries?.firstOrNull { it.id == s.entryId }
+    if (entry == null) { LaunchedEffect(s) { store.show(null) }; return }
+    val tone = store.menu?.categories?.firstOrNull { it.id == entry.cat }?.tone ?: Tone.OUTLINE
+    SheetScaffold(entry.name, entry.categoryName.ifBlank { null }, onClose = { store.show(null) }) {
+        Text("Pilih varian untuk ditambahkan ke order", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp))
+        entry.variants.forEach { v ->
+            val habis = v.id in store.soldOut
+            Surface(
+                Modifier.fillMaxWidth().padding(bottom = 8.dp).combinedClickable(enabled = true, onClick = { if (!habis) store.pickVariant(v) }, onLongClick = { store.markSoldOut(v) }),
+                shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            ) {
+                Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    ProductPhoto(v.imageUrl, v.variantName.ifBlank { entry.name }, tone, Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)), dim = if (habis) 0.55f else 1f, initialsSize = 18.sp)
+                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                        Text(v.variantName.ifBlank { entry.name }, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        val meta = listOfNotNull(v.code.takeIf { it.isNotBlank() }, stockLabel(v.stock)).joinToString(" · ")
+                        if (meta.isNotEmpty()) Text(meta, fontSize = 12.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (v.groups.isNotEmpty()) Text("Pilihan", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(rp(v.price), fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, softWrap = false)
+                        if (habis) Pill("Habis", MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.padding(top = 4.dp))
+                    }
+                }
+            }
         }
     }
 }

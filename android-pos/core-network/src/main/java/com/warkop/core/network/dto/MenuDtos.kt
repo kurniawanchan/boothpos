@@ -21,6 +21,11 @@ import kotlinx.serialization.Serializable
     @SerialName("outlet_price") val outletPrice: String? = null,
     @SerialName("image_url") val imageUrl: String? = null,
     @SerialName("is_active") val isActive: Boolean = true,
+    // 075 — dibaca untuk daftar varian di Counter; server sudah mengirimnya (ProductVariantResource).
+    val sku: String? = null,
+    @SerialName("current_stock") val currentStock: Int? = null,
+    @SerialName("outlet_stock") val outletStock: Int? = null,
+    @SerialName("track_stock") val trackStock: Boolean = true,
 )
 
 @Serializable data class ProductDto(

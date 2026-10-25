@@ -5,6 +5,7 @@ import com.warkop.pos.data.KitchenSend
 import com.warkop.pos.data.OutletChoice
 import com.warkop.pos.data.PosBackend
 import com.warkop.pos.data.PosSession
+import com.warkop.pos.data.TerminalChoice
 import com.warkop.pos.data.TaxDisplay
 import com.warkop.pos.data.TerminalConfig
 import com.warkop.pos.model.*
@@ -32,12 +33,21 @@ class FakePosBackend : PosBackend {
 
     private fun unused(): Nothing = throw UnsupportedOperationException("tidak dipakai dalam uji koneksi")
 
-    override suspend fun adminLogin(serverUrl: String, username: String, password: String) = unused()
-    override suspend fun listOutlets(): List<OutletChoice> = unused()
-    override suspend fun pairTerminal(outlet: OutletChoice, terminalName: String): TerminalConfig = unused()
-    override suspend fun pinLogin(user: StaffUser, pin: String): PosSession = unused()
+    /** 073 — penyiapan tanpa login: hasil dapat diatur uji; null = panggilan tidak diharapkan. */
+    var outletsResult: (() -> List<OutletChoice>)? = null
+    var terminalsResult: ((OutletChoice) -> List<TerminalChoice>)? = null
+    var registerResult: ((OutletChoice, String) -> TerminalConfig)? = null
+    var forgotten = 0
+    override suspend fun outlets(): List<OutletChoice> = outletsResult?.invoke() ?: unused()
+    override suspend fun terminals(outlet: OutletChoice): List<TerminalChoice> = terminalsResult?.invoke(outlet) ?: unused()
+    override suspend fun registerTerminal(outlet: OutletChoice, terminalName: String): TerminalConfig = registerResult?.invoke(outlet, terminalName) ?: unused()
+    override fun forgetTerminal() { forgotten++ }
+    /** 073 — hasil login PIN uji; null = panggilan tidak diharapkan. */
+    var pinLoginResult: ((StaffUser, String) -> PosSession)? = null
+    override suspend fun pinLogin(user: StaffUser, pin: String): PosSession = pinLoginResult?.invoke(user, pin) ?: unused()
     override suspend fun refreshSession(): Long = unused()
-    override suspend fun logout() = unused()
+    var logouts = 0
+    override suspend fun logout() { logouts++ }
     override suspend fun loadMenu(): MenuCatalog = menuResult?.invoke() ?: unused()
     override suspend fun availability(since: String?): Availability? = unused()
     override suspend fun currentShift(): Shift? = unused()
@@ -66,7 +76,13 @@ class FakePosBackend : PosBackend {
     override suspend fun floor(version: String?): FloorSnapshot? = unused()
     override suspend fun openTab(sessionId: Long, tableId: Long?, guests: Int?, localRef: String): Order = unused()
     override suspend fun tab(id: String): Order = unused()
-    override suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order = unused()
+    /** 075 — varian yang dikirim ke addLine, berurutan; hasilnya diatur lewat [addLineResult]. */
+    val addLineCalls = mutableListOf<String>()
+    var addLineResult: ((String) -> Order)? = null
+    override suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order {
+        addLineCalls += variantId
+        return addLineResult?.invoke(variantId) ?: unused()
+    }
     override suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order = unused()
     override suspend fun removeLine(tabId: String, lineId: Int, key: String): Order = unused()
     override suspend fun sendToKitchen(tabId: String, key: String): KitchenSend = unused()

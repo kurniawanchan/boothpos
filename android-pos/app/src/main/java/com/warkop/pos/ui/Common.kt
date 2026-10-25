@@ -151,11 +151,21 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier, color: Color = Mat
 }
 
 @Composable
-fun MoneyRow(label: String, value: String, modifier: Modifier = Modifier, big: Boolean = false, muted: Boolean = true) {
+fun MoneyRow(label: String, value: String, modifier: Modifier = Modifier, big: Boolean = false, muted: Boolean = true, accent: Color = Color.Unspecified) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label, fontSize = if (big) 24.sp else 14.sp, fontWeight = if (big) FontWeight.Medium else FontWeight.Normal,
-            color = if (muted && !big) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
-        Text(value, fontSize = if (big) 26.sp else 14.sp, fontWeight = if (big) FontWeight.Medium else FontWeight.Normal)
+            color = if (accent != Color.Unspecified) accent else if (muted && !big) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
+        Text(value, fontSize = if (big) 26.sp else 14.sp, fontWeight = if (big) FontWeight.Medium else FontWeight.Normal, color = accent)
+    }
+}
+
+/** 075 — pembagi putus-putus di atas Total (referensi desain); warna dari tema, bukan literal. */
+@Composable
+fun DashedDivider(modifier: Modifier = Modifier) {
+    val color = MaterialTheme.colorScheme.outline
+    androidx.compose.foundation.Canvas(modifier.fillMaxWidth().height(1.dp)) {
+        drawLine(color, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 1.dp.toPx(),
+            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
     }
 }
 

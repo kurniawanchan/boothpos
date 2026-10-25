@@ -3,8 +3,6 @@ package com.warkop.core.network.dto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Serializable data class LoginRequest(val username: String, val password: String)
-
 @Serializable data class AuthUserDto(
     val id: Long,
     val name: String,
@@ -16,26 +14,21 @@ import kotlinx.serialization.Serializable
     @SerialName("photo_url") val photoUrl: String? = null,
 )
 
-@Serializable data class LoginResponse(val token: String, val user: AuthUserDto)
+/**
+ * 073 — penyiapan terminal TANPA login owner/admin: daftar outlet, daftar terminal outlet itu, dan pilih-atau-daftarkan terminal
+ * berdasarkan nama (server mengembalikan terminal yang sudah ada bila namanya sama). Terminal dikenali lewat nama (064).
+ */
+@Serializable data class SetupOutletDto(val id: Long, val name: String)
 
-@Serializable data class OutletDto(val id: Long, val name: String, val code: String? = null)
+@Serializable data class SetupOutletsResponse(val data: List<SetupOutletDto> = emptyList())
 
-@Serializable data class ScopeResponse(
-    val outlets: List<OutletDto> = emptyList(),
-    val selected: Long? = null,
-    @SerialName("can_see_all") val canSeeAll: Boolean = false,
-    val multi: Boolean = false,
-)
+@Serializable data class SetupTerminalDto(val id: Long, val name: String)
 
-/** 064 — terminal dikenali lewat nama saja; kode T01/T02 tidak ada lagi. */
-@Serializable data class PairDeviceRequest(val name: String)
+@Serializable data class SetupTerminalsResponse(val data: List<SetupTerminalDto> = emptyList())
 
-@Serializable data class DeviceDto(
-    val id: Long,
-    val name: String,
-    @SerialName("outlet_id") val outletId: Long,
-    val revoked: Boolean = false,
-)
+@Serializable data class RegisterTerminalRequest(val name: String)
+
+@Serializable data class RegisterTerminalResponse(val id: Long, val name: String, val created: Boolean = false)
 
 @Serializable data class RosterItemDto(
     val id: Long,
@@ -51,6 +44,8 @@ import kotlinx.serialization.Serializable
     @SerialName("outlet_id") val outletId: Long,
     @SerialName("user_id") val userId: Long,
     val pin: String,
+    /** 073 — terminal yang dipilih di layar penyiapan; server menolak (422) bila tidak aktif atau bukan milik outlet. */
+    @SerialName("device_id") val deviceId: Long,
 )
 
 @Serializable data class PinLoginResponse(

@@ -42,10 +42,15 @@ fun EditorScreen(store: PosStore) {
     val cat = keepOrPickCategory(catalog?.categories.orEmpty(), pickedCat)
     var query by remember { mutableStateOf("") }
     var paneOpen by remember { mutableStateOf(false) }
-    val items = remember(cat, query, catalog) {
-        val all = catalog?.products.orEmpty()
-        if (query.isNotBlank()) all.filter { it.name.contains(query, ignoreCase = true) } else all.filter { it.cat == cat }
+    // 075 — tanpa pencarian: satu kartu per PRODUK di kategori terpilih. Dengan pencarian: daftar VARIAN (nama "Produk — Varian"),
+    // supaya varian tertentu bisa dicapai langsung seperti di POS web.
+    val entries = remember(cat, query, catalog) {
+        if (query.isNotBlank()) emptyList() else catalog?.entries.orEmpty().filter { it.cat == cat }
     }
+    val found = remember(query, catalog) {
+        if (query.isBlank()) emptyList() else catalog?.products.orEmpty().filter { it.name.contains(query, ignoreCase = true) }
+    }
+    val shownCount = entries.size + found.size
     val qtyById = order.live.groupBy { it.itemId }.mapValues { (_, v) -> v.sumOf { it.qty } }
 
     val menu: @Composable (Modifier) -> Unit = { m ->
@@ -58,10 +63,23 @@ fun EditorScreen(store: PosStore) {
                 when (val c = store.catalog) {
                     is Load.Failed -> ErrorState(friendlyLoadError(c.error), onRetry = { store.loadMenu() }, offline = isOfflineError(c.error), modifier = Modifier.fillMaxWidth())
                     is Load.Loading, is Load.Idle -> Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    is Load.Ready -> if (items.isEmpty()) Text(if (query.isBlank()) "Belum ada menu di kategori ini." else "Tidak ada menu \"$query\"", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    is Load.Ready -> if (shownCount == 0) Text(if (query.isBlank()) "Belum ada menu di kategori ini." else "Tidak ada menu \"$query\"", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 LazyVerticalGrid(GridCells.Fixed(size.menuColumns()), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = if (size == Size.COMPACT) 88.dp else 8.dp)) {
-                    items(items, key = { it.id }) { p -> MenuCard(p, catalog?.categories.orEmpty(), items, qtyById[p.id] ?: 0, p.id in store.soldOut, onTap = { store.tapProduct(p) }, onHold = { store.markSoldOut(p) }) }
+                    items(entries, key = { "e${it.id}" }) { e ->
+                        val tone = categoryTone(catalog?.categories.orEmpty(), e.cat)
+                        ProductCard(
+                            e.name, e.categoryName, e.imageUrl, tone, e.variants.sumOf { qtyById[it.id] ?: 0 }, e.isSoldOut(store.soldOut),
+                            if (e.isSingle) null else variantCountLabel(e.variants.size), e.hasOptions && e.isSingle, priceLabel(e.minPrice, e.maxPrice), stockLabel(e.stock),
+                            onTap = { store.tapEntry(e) }, onHold = if (e.isSingle) ({ store.markSoldOut(e.variants.first()) }) else null,
+                        )
+                    }
+                    items(found, key = { "v${it.id}" }) { p ->
+                        ProductCard(
+                            p.name, categoryName(catalog?.categories.orEmpty(), p.cat), p.imageUrl, categoryTone(catalog?.categories.orEmpty(), p.cat), qtyById[p.id] ?: 0, p.id in store.soldOut,
+                            null, p.groups.isNotEmpty(), rp(p.price), stockLabel(p.stock), onTap = { store.tapProduct(p) }, onHold = { store.markSoldOut(p) },
+                        )
+                    }
                 }
             }
         }
@@ -110,28 +128,37 @@ private fun SearchField(value: String, onChange: (String) -> Unit) {
     }
 }
 
+private fun categoryTone(categories: List<MenuCategory>, id: String): Tone = categories.firstOrNull { it.id == id }?.tone ?: Tone.OUTLINE
+private fun categoryName(categories: List<MenuCategory>, id: String): String = categories.firstOrNull { it.id == id }?.name.orEmpty()
+
+/**
+ * 075 — kartu grid Counter, satu bentuk untuk entri produk dan hasil pencarian (varian). [variantBadge] terisi hanya
+ * untuk produk multi-varian ("N varian"); kartu itu membuka daftar varian, bukan menambah baris.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MenuCard(p: Product, categories: List<MenuCategory>, siblings: List<Product>, qty: Int, is86: Boolean, onTap: () -> Unit, onHold: () -> Unit) {
-    val cat = categories.firstOrNull { it.id == p.cat } ?: MenuCategory(p.cat, "", "?", Tone.OUTLINE)
-    val index = siblings.filter { it.cat == p.cat }.indexOf(p) + 1
-    val (tileBg, tileFg) = toneColors(cat.tone)
-    val dim = if (is86) 0.55f else 1f
+private fun ProductCard(
+    name: String, categoryName: String, imageUrl: String?, tone: Tone, qty: Int, soldOut: Boolean, variantBadge: String?,
+    hasOptions: Boolean, priceText: String, stockText: String?, onTap: () -> Unit, onHold: (() -> Unit)?,
+) {
+    val dim = if (soldOut) 0.55f else 1f
     Surface(
-        Modifier.fillMaxWidth().combinedClickable(onClick = onTap, onLongClick = onHold).then(if (is86) Modifier.hatched(MaterialTheme.colorScheme.outlineVariant) else Modifier),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onTap, onLongClick = onHold).then(if (soldOut) Modifier.hatched(MaterialTheme.colorScheme.outlineVariant) else Modifier),
         shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainerLow, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(Modifier.padding(8.dp)) {
-            Box(Modifier.fillMaxWidth().aspectRatio(1.15f).clip(RoundedCornerShape(14.dp)).background(tileBg.copy(alpha = dim))) {
-                Text("${cat.code}$index", Modifier.padding(10.dp), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = tileFg.copy(alpha = dim))
-                Icon(productIcon(p.icon), null, Modifier.align(Alignment.Center).size(64.dp), tint = tileFg.copy(alpha = dim))
+            Box(Modifier.fillMaxWidth().aspectRatio(1.15f).clip(RoundedCornerShape(14.dp))) {
+                ProductPhoto(imageUrl, name, tone, Modifier.fillMaxSize(), dim = dim, initialsSize = 32.sp)
                 if (qty > 0) Box(Modifier.align(Alignment.TopEnd).padding(6.dp).size(30.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) { Text(qty.toString(), color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
-                if (is86) Pill("Habis", MaterialTheme.colorScheme.surfaceContainerLowest, MaterialTheme.colorScheme.onSurfaceVariant, Modifier.align(Alignment.BottomStart).padding(8.dp))
-                else if (p.groups.isNotEmpty()) Pill("Pilihan", MaterialTheme.colorScheme.surfaceContainerLowest, MaterialTheme.colorScheme.onSurface, Modifier.align(Alignment.BottomStart).padding(8.dp))
+                // Satu slot pil: Habis > N varian > Pilihan (grup opsi). Lencana varian menggantikan "Pilihan" pada produk multi-varian.
+                val pill = when { soldOut -> "Habis"; variantBadge != null -> variantBadge; hasOptions -> "Pilihan"; else -> null }
+                if (pill != null) Pill(pill, MaterialTheme.colorScheme.surfaceContainerLowest, if (soldOut) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, Modifier.align(Alignment.BottomStart).padding(8.dp))
             }
             Spacer(Modifier.height(8.dp))
-            Text(p.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = 4.dp))
-            Text(rp(p.price), fontSize = 15.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = 4.dp))
+            if (categoryName.isNotBlank()) Text(categoryName, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(priceText, fontSize = 15.sp, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onSurface)
+            if (stockText != null) Text(stockText, fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -177,8 +204,9 @@ fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null)
             if (store.totalsVisible) {
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 MoneyRow("Subtotal", rp(o.gross))
-                if (o.discount > 0) MoneyRow(discountHeading(o.discPct, o.discReason), "-" + rp(o.discount))
+                MoneyRow(discountRowLabel(o.discount, o.discPct, o.discReason), discountRowAmount(o.discount), accent = if (o.discount > 0) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified)
                 MoneyRow(taxLine(store.tax), rp(o.tax))
+                DashedDivider(Modifier.padding(vertical = 8.dp))
                 MoneyRow("Total", rp(o.total), big = true)
                 if (o.paid > 0) MoneyRow("Terbayar", rp(o.paid))
                 Spacer(Modifier.height(10.dp))
