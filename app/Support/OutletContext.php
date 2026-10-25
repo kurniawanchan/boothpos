@@ -99,6 +99,33 @@ final class OutletContext
         return $this->selected !== null ? [$this->selected] : $this->permittedIds();
     }
 
+    /**
+     * 071 — outlet yang DIMINTA (`outlet_id[]` pada daftar) dipotong dengan outlet yang berlaku. Permintaan hanya
+     * menyempitkan, tidak pernah memperluas (Konstitusi IV); `[]` berarti tak satu pun boleh — pemanggil harus
+     * mengembalikan hasil kosong, bukan "semua". Satu implementasi untuk daftar Meja dan Stasiun.
+     *
+     * @param  list<int|string>  $requested
+     * @return list<int>
+     */
+    public function narrowedIds(array $requested): array
+    {
+        return array_values(array_intersect($this->effectiveIds(), array_unique(array_map('intval', $requested))));
+    }
+
+    /**
+     * 071 — bentuk untuk parameter `outlet_id[]` pada daftar: tanpa nilai terisi = TIDAK ada filter (null, perilaku lama);
+     * ada nilai = `narrowedIds`, yang `[]` bila tak satu pun boleh dilihat (pemanggil mengembalikan hasil kosong).
+     *
+     * @param  list<int|string|null>  $requested
+     * @return list<int>|null
+     */
+    public function narrowedOrNull(array $requested): ?array
+    {
+        $filled = array_filter($requested, fn ($v) => $v !== null && $v !== '');
+
+        return $filled === [] ? null : $this->narrowedIds($filled);
+    }
+
     /** Satu-satunya outlet yang berlaku; null bila nol atau lebih dari satu. */
     public function singleId(): ?int
     {

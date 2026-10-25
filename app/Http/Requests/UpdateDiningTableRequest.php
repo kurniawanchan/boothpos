@@ -16,6 +16,8 @@ class UpdateDiningTableRequest extends StoreDiningTableRequest
             'seats' => ['sometimes', 'integer', 'min:1', 'max:99'],
             'display_order' => ['sometimes', 'integer', 'min:-32768', 'max:32767'],
             'is_active' => ['sometimes', 'boolean'],
+            // 071 — pindah outlet (hanya pengguna dengan izin outlet tujuan; dicek di controller bersama OutletMoveGuard).
+            'outlet_id' => ['sometimes', 'integer', 'exists:outlets,id'],
         ];
     }
 }

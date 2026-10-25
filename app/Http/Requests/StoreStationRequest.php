@@ -39,19 +39,25 @@ class StoreStationRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator) {
-            if ($validator->errors()->isNotEmpty() || ! $this->has('name')) {
+            $current = $this->route('station');
+            // 071 — pemindahan tanpa mengirim nama tetap memeriksa nama saat ini di outlet tujuan.
+            $name = $this->has('name') ? $this->input('name') : $current?->name;
+            if ($validator->errors()->isNotEmpty() || $name === null) {
                 return;
             }
 
-            $current = $this->route('station');
-            $outletId = $current?->outlet_id ?? ($this->filled('outlet_id') ? $this->integer('outlet_id') : OutletDefaults::peekForNewRecord());
-            if ($outletId === null) {
+            // Pada UBAH outlet efektif = outlet tujuan bila dikirim, selain itu outlet saat ini; tujuan yang tak boleh
+            // dilihat dilewati (controller menolaknya 403 lebih dulu dari tabrakan nama).
+            $outletId = $current
+                ? ($this->filled('outlet_id') ? $this->integer('outlet_id') : $current->outlet_id)
+                : ($this->filled('outlet_id') ? $this->integer('outlet_id') : OutletDefaults::peekForNewRecord());
+            if ($outletId === null || ($current && (int) $outletId !== (int) $current->outlet_id && ! app(\App\Support\OutletContext::class)->isPermitted((int) $outletId))) {
                 return;
             }
 
             // Sama dengan indeks database uniq_stations_outlet_name: per outlet, lintas mode data.
             $taken = Station::withoutGlobalScopes()
-                ->where('name', $this->input('name'))
+                ->where('name', $name)
                 ->where('outlet_id', $outletId)
                 ->when($current, fn ($q) => $q->where('id', '!=', $current->id))
                 ->exists();

@@ -5879,6 +5879,7 @@ paths:
       description: Tidak berpaginasi — jumlah meja terbatas secara fisik. `?active=1` menyembunyikan meja nonaktif.
       parameters:
         - { name: active, in: query, schema: { type: boolean } }
+        - { name: outlet_id, in: query, style: form, explode: true, schema: { type: array, items: { type: integer } }, description: "071 — hanya outlet ini; dipotong dengan outlet yang boleh dilihat (dan header X-Outlet-Id bila ada). Tak satu pun boleh → daftar kosong. Bukan integer → 422." }
       responses:
         '200':
           description: Berhasil
@@ -5896,7 +5897,7 @@ paths:
       summary: Buat meja (menu `dining_setup`)
       description: >
         045 Stage 2 — body boleh membawa `outlet_id` (harus termasuk outlet yang boleh dilihat, selain itu 403
-        `outlet_forbidden`; kosong = outlet tunggal yang berlaku). Outlet tidak berubah sesudah dibuat. Nama unik per outlet (422).
+        `outlet_forbidden`; kosong = outlet tunggal yang berlaku). Nama unik per outlet (422). Outlet BISA dipindah sesudahnya lewat `PUT` (071).
       requestBody:
         required: true
         content:
@@ -5929,8 +5930,13 @@ paths:
       tags: [Restaurant]
       summary: Ubah / nonaktifkan meja (menu `dining_setup`)
       description: |
-        Semua field opsional. Nama harus unik per area (dalam mode DEMO/LIVE yang aktif).
+        Semua field opsional. Nama harus unik per outlet (422).
         Menonaktifkan meja yang sedang punya tab terbuka → `409`. Perubahan status aktif dicatat di log aktivitas.
+        071 — `outlet_id` memindahkan meja ke outlet lain (sama dengan sekarang = bukan pemindahan): outlet tujuan harus boleh
+        dilihat pengguna (selain itu `403 outlet_forbidden`) dan ada (422); meja dengan order `open` → `409` (selesaikan/batalkan
+        tab dulu); nama sudah dipakai di tujuan → `422` pada `name`. Pemindahan dan perubahan lain pada permintaan yang sama
+        berlaku bersama atau tidak sama sekali, dicatat di log aktivitas (`moved`, outlet lama → baru), dan tidak mengubah
+        outlet riwayat order.
       requestBody:
         required: true
         content:
@@ -6385,6 +6391,7 @@ paths:
       summary: Daftar stasiun persiapan (menu `dining_setup` ATAU `kitchen`)
       parameters:
         - { name: active, in: query, schema: { type: boolean } }
+        - { name: outlet_id, in: query, style: form, explode: true, schema: { type: array, items: { type: integer } }, description: "071 — hanya outlet ini; dipotong dengan outlet yang boleh dilihat (dan header X-Outlet-Id bila ada). Tak satu pun boleh → daftar kosong. Bukan integer → 422." }
       responses:
         '200':
           description: Berhasil
@@ -6433,6 +6440,12 @@ paths:
     put:
       tags: [Restaurant]
       summary: Ubah / nonaktifkan stasiun (menu `dining_setup`)
+      description: |
+        071 — `outlet_id` memindahkan stasiun ke outlet lain (sama dengan sekarang = bukan pemindahan): outlet tujuan harus boleh
+        dilihat pengguna (`403 outlet_forbidden`) dan ada (422); stasiun yang masih ditunjuk kategori atau item menu → `409`
+        (pindahkan penugasannya dulu); stasiun dengan tiket dapur yang belum selesai (new/preparing/ready) → `409`; nama sudah
+        dipakai di tujuan → `422` pada `name` (juga bila nama tidak dikirim). Atomik, dicatat di log aktivitas (`moved`), dan
+        tidak mengubah outlet riwayat tiket.
       requestBody:
         required: true
         content:
@@ -6446,6 +6459,7 @@ paths:
               schema: { $ref: '#/components/schemas/Station' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Restaurant]
@@ -8341,6 +8355,7 @@ components:
         seats: { type: integer, minimum: 1, maximum: 99 }
         display_order: { type: integer }
         is_active: { type: boolean }
+        outlet_id: { type: integer, description: "045: outlet saat membuat. 071: pada PUT = pindah outlet (lihat PUT /dining-tables/{id})." }
 
     FloorTab:
       type: object
@@ -8590,6 +8605,7 @@ components:
         name: { type: string, maxLength: 60 }
         display_order: { type: integer }
         is_active: { type: boolean }
+        outlet_id: { type: integer, description: "045: outlet saat membuat. 071: pada PUT = pindah outlet (lihat PUT /stations/{id})." }
 
     TicketItem:
       type: object

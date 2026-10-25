@@ -13,7 +13,7 @@ class DiningTableResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
-            // 045 Stage 2 — outlet pemilik (tetap sejak dibuat).
+            // 045 Stage 2 — outlet pemilik. 071: bisa dipindah lewat PUT (OutletMoveGuard); sebelumnya tetap sejak dibuat.
             'outlet_id' => $this->outlet_id,
             'area' => $this->area ?? '',
             'seats' => $this->seats,

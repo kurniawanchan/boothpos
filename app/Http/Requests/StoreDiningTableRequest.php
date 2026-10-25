@@ -61,8 +61,12 @@ class StoreDiningTableRequest extends FormRequest
                 return;
             }
 
-            $outletId = $current?->outlet_id ?? ($this->filled('outlet_id') ? $this->integer('outlet_id') : OutletDefaults::peekForNewRecord());
-            if ($outletId === null) {
+            // 071 — pada UBAH, outlet efektif = outlet tujuan bila dikirim (pemindahan), selain itu outlet saat ini; outlet
+            // tujuan yang tak boleh dilihat dilewati di sini (controller menolaknya 403 lebih dulu dari tabrakan nama).
+            $outletId = $current
+                ? ($this->filled('outlet_id') ? $this->integer('outlet_id') : $current->outlet_id)
+                : ($this->filled('outlet_id') ? $this->integer('outlet_id') : OutletDefaults::peekForNewRecord());
+            if ($outletId === null || ($current && ! app(\App\Support\OutletContext::class)->isPermitted((int) $outletId) && (int) $outletId !== (int) $current->outlet_id)) {
                 return;
             }
 

@@ -34,6 +34,9 @@ return [
     // Kitchen (US4)
     'station_name_taken' => 'A station with this name already exists.',
     'station_in_use' => 'This station is assigned to a category or product, or has received tickets. Deactivate it instead.',
+    'table_move_open_tab' => 'This table still has an open tab. Settle or cancel the tab before moving the table to another outlet.',
+    'station_move_in_use' => 'This station is still assigned to categories or menu items. Reassign them before moving the station to another outlet.',
+    'station_move_open_tickets' => 'This station still has unfinished kitchen tickets. Finish them before moving the station to another outlet.',
     'station_not_found' => 'The selected station does not exist.',
     'nothing_to_send' => 'There is nothing new to send to the kitchen.',
     'ticket_transition_invalid' => 'An item that is ":from" cannot be moved to ":to".',
