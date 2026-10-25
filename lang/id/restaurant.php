@@ -34,6 +34,9 @@ return [
     // Dapur (US4)
     'station_name_taken' => 'Stasiun dengan nama ini sudah ada.',
     'station_in_use' => 'Stasiun ini ditugaskan ke kategori/produk, atau pernah menerima tiket. Nonaktifkan saja.',
+    'table_move_open_tab' => 'Meja ini masih punya tab yang terbuka. Selesaikan atau batalkan tab sebelum memindahkan meja ke outlet lain.',
+    'station_move_in_use' => 'Stasiun ini masih ditunjuk kategori atau item menu. Pindahkan penugasannya dulu sebelum memindahkan stasiun ke outlet lain.',
+    'station_move_open_tickets' => 'Stasiun ini masih punya tiket dapur yang belum selesai. Selesaikan tiketnya dulu sebelum memindahkan stasiun ke outlet lain.',
     'station_not_found' => 'Stasiun yang dipilih tidak ada.',
     'nothing_to_send' => 'Tidak ada item baru untuk dikirim ke dapur.',
     'ticket_transition_invalid' => 'Item berstatus ":from" tidak bisa dipindah ke ":to".',

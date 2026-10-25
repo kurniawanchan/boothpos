@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { listDiningTables, createDiningTable, updateDiningTable, deleteDiningTable } from '../../api/diningTables';
 import { useToastStore } from '../../stores/toast';
@@ -13,11 +13,18 @@ import { useOutletStore } from '../../stores/outlet';
 import ConfirmDialog from '../ui/ConfirmDialog.vue';
 
 /**
+ * 071 — prop `outletIds` (filter Outlet halaman, [] = semua) menyaring daftar; daftar diminta TANPA header outlet bilah
+ * atas (filter halaman menggantikannya) dan tabel menampilkan kolom Outlet bila ada beberapa outlet.
+ *
  * 028 US1 — daftar + form meja (tab "Meja" pada Pengaturan Restoran). Layar ini
  * sendiri sudah digerbang rute `dining_setup`; server tetap memeriksa ulang.
  * Galat 409 (hapus meja yang pernah dipakai, nonaktifkan meja bertab terbuka)
  * sudah ditoast oleh penangan galat pusat.
  */
+const outletStore = useOutletStore();
+const props = defineProps({
+  outletIds: { type: Array, default: () => [] },
+});
 const { t } = useI18n();
 const toast = useToastStore();
 
@@ -27,24 +34,28 @@ const loading = ref(false);
 async function load() {
   loading.value = true;
   try {
-    rows.value = (await listDiningTables()).data;
+    rows.value = (await listDiningTables(props.outletIds.length ? { outlet_id: props.outletIds } : {}, { skipOutletHeader: true })).data;
   } finally {
     loading.value = false;
   }
 }
 onMounted(load);
+watch(() => props.outletIds.join(','), load);
 
 const columns = computed(() => [
   { key: 'name', label: t('dining_setup.col_name') },
+  ...(outletStore.multi ? [{ key: 'outlet', label: t('frame.outlet_label') }] : []),
   { key: 'area', label: t('dining_setup.col_area') },
   { key: 'seats', label: t('dining_setup.col_seats') },
   { key: 'is_active', label: t('dining_setup.col_status') },
   { key: 'actions', label: '' },
 ]);
 
+const outletOf = (row) => outletStore.outlets.find((o) => o.id === row.outlet_id) ?? null;
+const emptyMessage = computed(() => (props.outletIds.length ? t('dining_setup.no_tables_filtered') : t('dining_setup.no_tables')));
+
 const showForm = ref(false);
 const editing = ref(null);
-const outletStore = useOutletStore();
 const form = reactive({ name: '', area: '', seats: 4, display_order: 0, is_active: true, outlet_id: '' });
 const formErrors = reactive({});
 const saving = ref(false);
@@ -66,7 +77,8 @@ function openCreate() {
 
 function openEdit(table) {
   editing.value = table;
-  Object.assign(form, { name: table.name, area: table.area, seats: table.seats, display_order: table.display_order, is_active: table.is_active });
+  // 071 — outlet saat ini terisi; hanya dikirim bila diganti (pemindahan, diperiksa server).
+  Object.assign(form, { name: table.name, area: table.area, seats: table.seats, display_order: table.display_order, is_active: table.is_active, outlet_id: table.outlet_id ?? '' });
   clearErrors();
   showForm.value = true;
 }
@@ -80,8 +92,9 @@ async function save() {
     seats: Number(form.seats) || 1,
     display_order: Number(form.display_order) || 0,
     is_active: form.is_active,
-    // 045 Stage 2 — outlet hanya dikirim saat membuat; server menolak yang di luar outlet pengguna.
-    ...(!editing.value && form.outlet_id ? { outlet_id: Number(form.outlet_id) } : {}),
+    // 045 Stage 2 — saat membuat, outlet dikirim; server menolak yang di luar outlet pengguna. 071 — saat mengubah, hanya
+    // bila berbeda dari outlet saat ini: itu pemindahan, dan server memeriksa tab terbuka/izin/nama di outlet tujuan.
+    ...(form.outlet_id && (!editing.value || Number(form.outlet_id) !== editing.value.outlet_id) ? { outlet_id: Number(form.outlet_id) } : {}),
   };
   try {
     if (editing.value) {
@@ -131,8 +144,12 @@ async function performDelete() {
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="rows" :loading="loading" :empty-message="t('dining_setup.no_tables')">
+      <DataTable :columns="columns" :rows="rows" :loading="loading" :empty-message="emptyMessage">
         <template #cell-name="{ row }"><span class="font-bold text-ink">{{ row.name }}</span></template>
+        <template #cell-outlet="{ row }">
+          <template v-if="outletOf(row)"><span class="font-mono text-[11.5px] font-bold text-ink">{{ outletOf(row).code }}</span> <span class="text-muted-4">{{ outletOf(row).name }}</span></template>
+          <template v-else>—</template>
+        </template>
         <template #cell-area="{ row }">{{ row.area || '—' }}</template>
         <template #cell-is_active="{ row }">
           <div class="flex flex-wrap gap-1.5">
@@ -152,7 +169,7 @@ async function performDelete() {
     <BaseModal :open="showForm" :title="editing ? t('dining_setup.edit_table') : t('dining_setup.new_table')" max-width-class="max-w-[460px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="save">
         <BaseSelect
-          v-if="outletStore.multi && !editing"
+          v-if="outletStore.multi"
           v-model="form.outlet_id"
           :label="t('frame.outlet_label')"
           required

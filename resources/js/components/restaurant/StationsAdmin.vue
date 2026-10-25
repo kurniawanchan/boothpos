@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref, computed, onMounted } from 'vue';
+import { reactive, ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { listStations, createStation, updateStation, deleteStation } from '../../api/stations';
 import { useToastStore } from '../../stores/toast';
@@ -13,9 +13,16 @@ import { useOutletStore } from '../../stores/outlet';
 import ConfirmDialog from '../ui/ConfirmDialog.vue';
 
 /**
+ * 071 — prop `outletIds` (filter Outlet halaman, [] = semua) menyaring daftar tanpa header outlet bilah atas; tabel
+ * menampilkan kolom Outlet bila ada beberapa outlet.
+ *
  * 028 US4 — tab "Stasiun" pada Pengaturan Restoran: Dapur, Bar, dll. Penugasan ke menu dilakukan
  * di form Kategori/Produk. Galat 409 (hapus stasiun yang masih dipakai) sudah ditoast global.
  */
+const outletStore = useOutletStore();
+const props = defineProps({
+  outletIds: { type: Array, default: () => [] },
+});
 const { t } = useI18n();
 const toast = useToastStore();
 
@@ -25,23 +32,27 @@ const loading = ref(false);
 async function load() {
   loading.value = true;
   try {
-    rows.value = (await listStations()).data;
+    rows.value = (await listStations(props.outletIds.length ? { outlet_id: props.outletIds } : {}, { skipOutletHeader: true })).data;
   } finally {
     loading.value = false;
   }
 }
 onMounted(load);
+watch(() => props.outletIds.join(','), load);
 
 const columns = computed(() => [
   { key: 'name', label: t('dining_setup.st_col_name') },
+  ...(outletStore.multi ? [{ key: 'outlet', label: t('frame.outlet_label') }] : []),
   { key: 'display_order', label: t('dining_setup.st_col_order') },
   { key: 'is_active', label: t('dining_setup.col_status') },
   { key: 'actions', label: '' },
 ]);
 
+const outletOf = (row) => outletStore.outlets.find((o) => o.id === row.outlet_id) ?? null;
+const emptyMessage = computed(() => (props.outletIds.length ? t('dining_setup.st_none_filtered') : t('dining_setup.st_none')));
+
 const showForm = ref(false);
 const editing = ref(null);
-const outletStore = useOutletStore();
 const form = reactive({ name: '', display_order: 0, is_active: true, outlet_id: '' });
 const formErrors = reactive({});
 const saving = ref(false);
@@ -59,7 +70,8 @@ function openCreate() {
 
 function openEdit(station) {
   editing.value = station;
-  Object.assign(form, { name: station.name, display_order: station.display_order, is_active: station.is_active });
+  // 071 — outlet saat ini terisi; hanya dikirim bila diganti (pemindahan, diperiksa server).
+  Object.assign(form, { name: station.name, display_order: station.display_order, is_active: station.is_active, outlet_id: station.outlet_id ?? '' });
   clearErrors();
   showForm.value = true;
 }
@@ -71,8 +83,8 @@ async function save() {
     name: form.name,
     display_order: Number(form.display_order) || 0,
     is_active: form.is_active,
-    // 045 Stage 2 — outlet hanya dikirim saat membuat.
-    ...(!editing.value && form.outlet_id ? { outlet_id: Number(form.outlet_id) } : {}),
+    // 045 Stage 2 — saat membuat, outlet dikirim. 071 — saat mengubah, hanya bila berbeda dari outlet saat ini (pemindahan).
+    ...(form.outlet_id && (!editing.value || Number(form.outlet_id) !== editing.value.outlet_id) ? { outlet_id: Number(form.outlet_id) } : {}),
   };
   try {
     if (editing.value) {
@@ -117,8 +129,12 @@ async function performDelete() {
     </div>
 
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="rows" :loading="loading" :empty-message="t('dining_setup.st_none')">
+      <DataTable :columns="columns" :rows="rows" :loading="loading" :empty-message="emptyMessage">
         <template #cell-name="{ row }"><span class="font-bold text-ink">{{ row.name }}</span></template>
+        <template #cell-outlet="{ row }">
+          <template v-if="outletOf(row)"><span class="font-mono text-[11.5px] font-bold text-ink">{{ outletOf(row).code }}</span> <span class="text-muted-4">{{ outletOf(row).name }}</span></template>
+          <template v-else>—</template>
+        </template>
         <template #cell-is_active="{ row }"><StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill></template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
@@ -132,7 +148,7 @@ async function performDelete() {
     <BaseModal :open="showForm" :title="editing ? t('dining_setup.st_edit') : t('dining_setup.st_new')" max-width-class="max-w-[420px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="save">
         <BaseSelect
-          v-if="outletStore.multi && !editing"
+          v-if="outletStore.multi"
           v-model="form.outlet_id"
           :label="t('frame.outlet_label')"
           required

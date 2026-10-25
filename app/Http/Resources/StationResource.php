@@ -13,7 +13,7 @@ class StationResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
-            // 045 Stage 2 — outlet pemilik (tetap sejak dibuat).
+            // 045 Stage 2 — outlet pemilik. 071: bisa dipindah lewat PUT (OutletMoveGuard); sebelumnya tetap sejak dibuat.
             'outlet_id' => $this->outlet_id,
             'display_order' => $this->display_order,
             'is_active' => $this->is_active,

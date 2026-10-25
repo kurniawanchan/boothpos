@@ -7,6 +7,7 @@ use App\Http\Requests\StoreStationRequest;
 use App\Http\Requests\UpdateStationRequest;
 use App\Http\Resources\StationResource;
 use App\Models\Station;
+use App\Services\OutletMoveGuard;
 use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,8 +26,13 @@ class StationController extends Controller
         $user = $request->user();
         abort_unless($user?->canAccessMenu('dining_setup') || $user?->canAccessMenu('kitchen'), 403, __('restaurant.forbidden'));
 
+        $request->validate(['outlet_id' => ['sometimes', 'array'], 'outlet_id.*' => ['nullable', 'integer']]);
+        // 071 — filter outlet halaman Restaurant Setup: hanya menyempitkan; tak satu pun yang boleh dilihat -> kosong.
+        $outletIds = app(\App\Support\OutletContext::class)->narrowedOrNull((array) $request->input('outlet_id', []));
+
         $stations = Station::query()
             ->when($request->boolean('active'), fn ($q) => $q->where('is_active', true))
+            ->when($outletIds !== null, fn ($q) => $q->whereIn('outlet_id', $outletIds ?: [0]))
             ->orderBy('display_order')->orderBy('name')
             ->get();
 
@@ -58,7 +64,27 @@ class StationController extends Controller
 
     public function update(UpdateStationRequest $request, Station $station): JsonResponse
     {
-        $station->update($request->validated());
+        $data = $request->validated();
+        // 071 — `outlet_id` dipisah dari mass-assignment dan, bila berbeda dari sekarang, dijalankan sebagai pemindahan
+        // lewat OutletMoveGuard (izin outlet tujuan → penolakan alasan → tulis + log dalam transaksi bersama perubahan lain).
+        $toOutlet = array_key_exists('outlet_id', $data) ? (int) $data['outlet_id'] : null;
+        unset($data['outlet_id']);
+        $moving = $toOutlet !== null && $toOutlet !== (int) $station->outlet_id;
+        if ($moving) {
+            if (! app(\App\Support\OutletContext::class)->isPermitted($toOutlet)) {
+                return response()->json(['message' => __('outlets.forbidden'), 'code' => 'outlet_forbidden'], 403);
+            }
+            if ($blocker = app(OutletMoveGuard::class)->stationBlocker($station)) {
+                return response()->json(['message' => app(OutletMoveGuard::class)->message($blocker)], 409);
+            }
+        }
+
+        DB::transaction(function () use ($station, $data, $request, $moving, $toOutlet) {
+            $station->update($data);
+            if ($moving) {
+                app(OutletMoveGuard::class)->applyMove($station, $toOutlet, $request->user()?->id);
+            }
+        });
 
         return response()->json(new StationResource($station->fresh()));
     }
