@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Concerns\DataModeScope;
+use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Validation\ValidationException;
@@ -45,23 +45,130 @@ class ProductCodeGenerator
      */
     public function buildCodePrefix(string $outletCode, string $categoryCode, string $productSegment): string
     {
-        $prefix = strtoupper($outletCode).'-'.strtoupper($categoryCode).'-'.strtoupper($productSegment);
+        $prefix = $this->formatPrefix($outletCode, $categoryCode, $productSegment);
 
-        if (strlen($prefix) !== 10) {
-            throw new \InvalidArgumentException('Kombinasi kode outlet, kategori, dan segmen produk harus menghasilkan 10 karakter (format ART-CA-SEG).');
-        }
-
-        // 003-seed-demo-live — withoutGlobalScope: code_prefix UNIQUE lintas
-        // SELURUH tabel (bukan per data_mode), jadi pengecekan tabrakan di
-        // sini juga harus lintas mode, sama seperti alasan di
-        // OrderService::generateOrderNumber().
-        if (Product::withTrashed()->withoutGlobalScopes()->where('code_prefix', $prefix)->exists()) {
+        if ($this->prefixTaken($prefix)) {
             throw ValidationException::withMessages([
                 'product_segment' => "Kombinasi kode ini ({$prefix}) sudah dipakai produk lain. Ubah segmen nama produk secara manual.",
             ]);
         }
 
         return $prefix;
+    }
+
+    /**
+     * 068 (research D4) — untuk pengisian katalog massal, tempat admin tidak ada untuk menyunting segmen satu
+     * per satu (F19.5 tetap berlaku untuk layar produk lewat buildCodePrefix()). Mencoba kandidat
+     * segmentCandidates() berurutan dan mengembalikan [segmen, code_prefix] pertama yang belum dipakai di
+     * mode mana pun. Deterministik: nama dan isi DB yang sama selalu menghasilkan kode yang sama.
+     *
+     * @return array{0: string, 1: string}
+     */
+    public function firstFreeCodePrefix(string $outletCode, string $categoryCode, string $name): array
+    {
+        foreach ($this->segmentCandidates($name) as $segment) {
+            $prefix = $this->formatPrefix($outletCode, $categoryCode, $segment);
+            if (! $this->prefixTaken($prefix)) {
+                return [$segment, $prefix];
+            }
+        }
+
+        throw new \RuntimeException("Tidak ada segmen kode yang bebas untuk '{$name}'.");
+    }
+
+    /**
+     * 068 (research D4) — kandidat segmen 3 huruf, berurutan:
+     *  1. inisial tiga kata pertama; nama < 3 kata diisi huruf berikutnya dari kata terakhir ("Dimsum Isi 4" → DIS);
+     *  2. huruf pertama kata pertama + dua huruf pertama kata terakhir ("Roti Bakar Coklat" → RCO);
+     *  3. tiga huruf pertama nama (= deriveSegmentFromName());
+     *  4. dua huruf pertama + A…Z.
+     * Kata = deret huruf; angka dan simbol dibuang. Kandidat ganda dibuang dengan urutan tetap.
+     *
+     * @return list<string>
+     */
+    public function segmentCandidates(string $name): array
+    {
+        $words = $this->letterWords($name) ?: ['XXX'];
+        $last = $words[count($words) - 1];
+        $letters = implode('', $words);
+
+        $candidates = [
+            count($words) >= 3
+                ? $words[0][0].$words[1][0].$words[2][0]
+                : $this->pad(implode('', array_map(fn (string $w) => $w[0], $words)).substr($last, 1), 3),
+            $this->pad($words[0][0].substr($last, 0, 2), 3),
+            $this->deriveSegmentFromName($name),
+        ];
+        foreach (range('A', 'Z') as $letter) {
+            $candidates[] = $this->pad(substr($letters, 0, 2), 2).$letter;
+        }
+
+        return array_values(array_unique($candidates));
+    }
+
+    /**
+     * 068 (research D4) — kode kategori 2 karakter pertama yang bebas. `categories.code` UNIQUE di seluruh
+     * tabel (bukan per data_mode), jadi dicek lintas mode dan termasuk kategori terhapus. Kandidat: huruf
+     * pertama dua kata pertama (satu kata → dua huruf pertamanya), lalu huruf pertama + 1…9, huruf pertama +
+     * A…Z, lalu AA…Z9.
+     */
+    public function freeCategoryCode(string $name): string
+    {
+        $taken = Category::withTrashed()->withoutGlobalScopes()->pluck('code')
+            ->map(fn ($code) => strtoupper((string) $code))->flip();
+
+        $words = $this->letterWords($name) ?: ['XX'];
+        $first = $words[0][0];
+        $candidates = [count($words) >= 2 ? $words[0][0].$words[1][0] : $this->pad(substr($words[0], 0, 2), 2)];
+        foreach ([...range(1, 9), ...range('A', 'Z')] as $suffix) {
+            $candidates[] = $first.$suffix;
+        }
+        foreach (range('A', 'Z') as $a) {
+            foreach ([...range('A', 'Z'), ...range(0, 9)] as $b) {
+                $candidates[] = $a.$b;
+            }
+        }
+
+        foreach ($candidates as $code) {
+            if (! $taken->has($code)) {
+                return $code;
+            }
+        }
+
+        throw new \RuntimeException("Tidak ada kode kategori yang bebas untuk '{$name}'.");
+    }
+
+    private function formatPrefix(string $outletCode, string $categoryCode, string $productSegment): string
+    {
+        $prefix = strtoupper($outletCode).'-'.strtoupper($categoryCode).'-'.strtoupper($productSegment);
+
+        if (strlen($prefix) !== 10) {
+            throw new \InvalidArgumentException('Kombinasi kode outlet, kategori, dan segmen produk harus menghasilkan 10 karakter (format ART-CA-SEG).');
+        }
+
+        return $prefix;
+    }
+
+    // 003-seed-demo-live — withoutGlobalScope: code_prefix UNIQUE lintas
+    // SELURUH tabel (bukan per data_mode), jadi pengecekan tabrakan di
+    // sini juga harus lintas mode, sama seperti alasan di
+    // OrderService::generateOrderNumber().
+    private function prefixTaken(string $prefix): bool
+    {
+        return Product::withTrashed()->withoutGlobalScopes()->where('code_prefix', $prefix)->exists();
+    }
+
+    /** @return list<string> deret huruf dalam nama, huruf besar */
+    private function letterWords(string $name): array
+    {
+        preg_match_all('/[A-Za-z]+/', $name, $matches);
+
+        return array_map('strtoupper', $matches[0]);
+    }
+
+    private function pad(string $value, int $length): string
+    {
+        return str_pad(substr($value, 0, $length), $length, 'X');
     }
 
     /**

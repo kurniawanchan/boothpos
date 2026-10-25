@@ -35,6 +35,22 @@ class OutletMenuService
         );
     }
 
+    /**
+     * 069 research D10 — id produk yang TIDAK dijual di outlet ini (penanda `is_carried = false`). Satu-satunya aturan
+     * "tidak dijual di sini" bagi layar POS: dipakai daftar produk/varian (`pos=1`) dan daftar kategori POS, supaya
+     * tab kategori dan isi menu tidak pernah berbeda pendapat. `null` (tanpa outlet acuan) = tidak ada yang disaring.
+     *
+     * @return list<int>
+     */
+    public function notCarriedProductIds(?int $outletId): array
+    {
+        if ($outletId === null) {
+            return [];
+        }
+
+        return OutletItemSetting::query()->where('outlet_id', $outletId)->where('is_carried', false)->pluck('product_id')->map(fn ($id) => (int) $id)->all();
+    }
+
     public function isCarried(int $productId, int $outletId): bool
     {
         $row = OutletItemSetting::query()->where('product_id', $productId)->where('outlet_id', $outletId)->value('is_carried');

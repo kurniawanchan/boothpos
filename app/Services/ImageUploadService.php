@@ -45,6 +45,19 @@ class ImageUploadService
         return $file->storeAs($directory, $randomName, 'public');
     }
 
+    /**
+     * 068 — berkas lokal (mis. foto katalog WJM yang dibawa seeder), bukan unggahan HTTP. Dibungkus sebagai
+     * UploadedFile lalu lewat store(), supaya aturan MIME-dari-isi, batas ukuran, dan nama acak tetap satu.
+     * `$test = true` milik Symfony hanya melewati pemeriksaan is_uploaded_file() (CLI tidak punya unggahan);
+     * storeAs() menyalin lewat stream, jadi berkas sumber tidak dipindah.
+     *
+     * @throws \InvalidArgumentException bila tipe atau ukuran berkas tidak didukung.
+     */
+    public function storeLocalFile(string $absolutePath, string $directory): string
+    {
+        return $this->store(new UploadedFile($absolutePath, basename($absolutePath), null, null, true), $directory);
+    }
+
     public function delete(?string $path): void
     {
         if ($path !== null && $path !== '') {

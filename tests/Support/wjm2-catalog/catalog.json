@@ -1,0 +1,155 @@
+{
+  "format": 2,
+  "outlet": {
+    "name": "Warkop Uji 2",
+    "codes": [
+      "WU2"
+    ],
+    "create_when": "demo_missing"
+  },
+  "withdraw_others": {
+    "live": true,
+    "demo": true
+  },
+  "stations": {
+    "Bar": [
+      "Bar"
+    ],
+    "Dapur": [
+      "Dapur"
+    ]
+  },
+  "source": {
+    "system": "Odoo",
+    "exported_on": "2026-10-23",
+    "files": {
+      "categories": "kategori-uji-2.xlsx",
+      "attributes": "atribut-uji-2.xlsx",
+      "products": "produk-uji-2.xlsx"
+    },
+    "rows": {
+      "categories": 3,
+      "attribute_values": 0,
+      "products": 3
+    }
+  },
+  "approval": {
+    "status": "approved",
+    "approved_on": "2026-10-25",
+    "approved_by_role": "pemilik"
+  },
+  "initial_stock": 100,
+  "categories": [
+    {
+      "name": "Kopi Uji",
+      "source_name": "KOPI UJI",
+      "order": 0,
+      "station": "Bar"
+    },
+    {
+      "name": "Camilan Uji 2",
+      "source_name": "CAMILAN UJI 2",
+      "order": 1,
+      "station": "Dapur"
+    }
+  ],
+  "attributes": [
+    {
+      "name": "Suhu",
+      "creates_variants": true,
+      "values_from": "pemetaan",
+      "values": [
+        "Hot",
+        "Ice"
+      ]
+    },
+    {
+      "name": "Buah Uji",
+      "creates_variants": true,
+      "values_from": "pemetaan",
+      "values": [
+        "Jambu",
+        "Mangga"
+      ]
+    }
+  ],
+  "option_groups": [],
+  "items": [
+    {
+      "name": "Kopi Uji",
+      "category": "Kopi Uji",
+      "price": 9000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 9000,
+          "values": {
+            "Suhu": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 9000,
+          "values": {
+            "Suhu": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Keripik Uji",
+      "category": "Camilan Uji 2",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "4eea11424a7a.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Jus Uji",
+      "category": "Kopi Uji",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Jambu",
+          "price": 7000,
+          "values": {
+            "Buah Uji": "Jambu"
+          }
+        },
+        {
+          "name": "Mangga",
+          "price": 7000,
+          "values": {
+            "Buah Uji": "Mangga"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    }
+  ],
+  "excluded": [
+    {
+      "source": "categories",
+      "name": "MINUMAN KOSONG",
+      "reason": "Tanpa item di ekspor produk"
+    }
+  ]
+}

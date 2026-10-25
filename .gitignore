@@ -56,3 +56,7 @@ yarn-error.log
 
 # Playwright MCP browser-verification artifacts (screenshots, traces)
 /.playwright-mcp/
+
+# 068 — alat dev Python (specs/*/tools/); bytecode tidak di-commit.
+__pycache__/
+*.pyc

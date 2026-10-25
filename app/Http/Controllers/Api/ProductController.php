@@ -70,8 +70,7 @@ class ProductController extends Controller
         // ditawarkan, dan harga khusus outlet itu ikut dikirim (`outlet_price`) supaya kartu = yang akan ditagihkan.
         $orderingOutlet = $request->boolean('pos') ? app(\App\Support\OutletContext::class)->orderingId() : null;
         app(\App\Support\OutletPriceBook::class)->useOrderingOutlet($orderingOutlet);
-        $notCarriedHere = $orderingOutlet === null ? [] : \App\Models\OutletItemSetting::query()
-            ->where('outlet_id', $orderingOutlet)->where('is_carried', false)->pluck('product_id')->all();
+        $notCarriedHere = app(\App\Services\OutletMenuService::class)->notCarriedProductIds($orderingOutlet);
 
         $products = Product::query()
             ->with(array_merge(
@@ -509,8 +508,7 @@ class ProductController extends Controller
         // 045 Stage 5 — `stock_outlet` (layar Stok): saldo di outlet itu (harus boleh dilihat) tanpa memfilter menu.
         $stockOutlet = $request->filled('stock_outlet') && app(\App\Support\OutletContext::class)->isPermitted($request->integer('stock_outlet')) ? $request->integer('stock_outlet') : null;
         app(\App\Support\OutletPriceBook::class)->useOrderingOutlet($orderingOutlet ?? $stockOutlet);
-        $notCarriedHere = $orderingOutlet === null ? [] : \App\Models\OutletItemSetting::query()
-            ->where('outlet_id', $orderingOutlet)->where('is_carried', false)->pluck('product_id')->all();
+        $notCarriedHere = app(\App\Services\OutletMenuService::class)->notCarriedProductIds($orderingOutlet);
 
         $variants = ProductVariant::query()
             ->with(['product.homeOutlet', 'product.category'])
