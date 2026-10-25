@@ -38,6 +38,7 @@ function makeRouter() {
       { path: '/dashboard', name: 'dashboard', component: { template: '<div>Isi beranda</div>' } },
       { path: '/sales', name: 'sales', component: { template: '<div>Isi sales</div>' } },
       { path: '/custom', name: 'custom', component: PageWithHeader, meta: { titleKey: 'nav.sales' } },
+      { path: '/fill', name: 'fill', component: { template: '<div>Isi penuh</div>' }, meta: { titleKey: 'nav.sales', fillHeight: true } },
       { path: '/profile', name: 'profile', component: { template: '<div />' } },
     ],
   });
@@ -134,5 +135,42 @@ describe('AppShell — rel ciut/lebar', () => {
     localStorage.setItem('boothpos:rail-collapsed:2', 'collapsed');
     await renderShell();
     expect(screen.getByRole('navigation', { name: t('frame.rail_aria') })).toHaveClass('w-[240px]');
+  });
+});
+
+// 072-store-identity-branding
+describe('AppShell — identitas toko dan tinggi kerangka', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    customHeaderCount.value = 0;
+    document.title = 'BoothPOS';
+  });
+
+  it('judul tab memuat nama toko dan nama aplikasi, dan kembali ke bawaan saat kerangka dilepas', async () => {
+    const { unmount } = await renderShell();
+    await waitFor(() => expect(document.title).toBe('Sakana Fridge – BoothPOS'));
+
+    unmount();
+    expect(document.title).toBe('BoothPOS');
+  });
+
+  // Akar yang hanya `min-h-screen` tumbuh mengikuti isi, sehingga halaman POS menggulir dan footer keranjang
+  // (Total/Bayar) terdorong keluar layar. Akar harus setinggi layar; `main` satu-satunya penggulir halaman.
+  it('akar kerangka setinggi layar dan hanya area utama yang menggulir', async () => {
+    const { container } = await renderShell();
+    const root = container.firstElementChild;
+    expect(root).toHaveClass('h-screen');
+    expect(root).not.toHaveClass('min-h-screen');
+    expect(screen.getByRole('main')).toHaveClass('min-h-0', 'flex-1', 'overflow-auto');
+  });
+
+  // Halaman yang mengisi tinggi (POS) butuh area utama berupa kolom flex agar tingginya = sisa di bawah judul bawaan.
+  it('area utama menjadi kolom flex hanya untuk rute fillHeight', async () => {
+    const { unmount } = await renderShell({ at: '/fill' });
+    expect(screen.getByRole('main')).toHaveClass('flex', 'flex-col');
+    unmount();
+
+    await renderShell({ at: '/dashboard' });
+    expect(screen.getByRole('main')).not.toHaveClass('flex');
   });
 });

@@ -5,6 +5,7 @@ import { createRouter, createMemoryHistory } from 'vue-router';
 import RailNav from '../../resources/js/components/layout/RailNav.vue';
 import { NAV_SECTIONS, isGroup } from '../../resources/js/utils/navigation';
 import { useAuthStore } from '../../resources/js/stores/auth';
+import { useSettingsStore } from '../../resources/js/stores/settings';
 import { usePosCartStore } from '../../resources/js/stores/posCart';
 import { i18n } from '../../resources/js/i18n';
 
@@ -114,5 +115,57 @@ describe('RailNav — ciut/lebar', () => {
     expect(screen.getByRole('link', { name: t('nav.vendors') })).toBeInTheDocument();
     await fireEvent.click(trigger);
     expect(screen.queryByRole('link', { name: t('nav.vendors') })).toBeNull();
+  });
+});
+
+// 072-store-identity-branding (US1) — merek di sudut sidebar memakai identitas toko, dengan jatuh ke merek produk.
+describe('RailNav — merek toko', () => {
+  beforeEach(() => localStorage.clear());
+
+  const brand = (settings) => renderRail({
+    menuKeys: ['dashboard'],
+    beforeRender: () => useSettingsStore().$patch({ appName: 'BoothPOS', multiOutletEnabled: true, ...settings }),
+  });
+
+  it('menampilkan logo dan nama toko menggantikan huruf dan nama aplikasi', async () => {
+    const { container } = await brand({ storeName: 'Warkop WJM', storeLogoUrl: '/storage/store-logo/a.png' });
+    expect(screen.getByText('Warkop WJM')).toBeInTheDocument();
+    expect(screen.queryByText('BoothPOS')).toBeNull();
+    expect(container.querySelector('img[src="/storage/store-logo/a.png"]')).not.toBeNull();
+    expect(screen.getByText('Master')).toBeInTheDocument();
+  });
+
+  it('tanpa logo: kotak berisi huruf pertama nama toko', async () => {
+    const { container } = await brand({ storeName: 'warkop WJM', storeLogoUrl: null });
+    expect(container.querySelector('nav img')).toBeNull();
+    expect(screen.getByText('W')).toBeInTheDocument();
+  });
+
+  it('tanpa nama toko: perilaku lama (huruf dan nama aplikasi)', async () => {
+    await brand({ storeName: '', storeLogoUrl: null });
+    expect(screen.getByText('BoothPOS')).toBeInTheDocument();
+    expect(screen.getByText('B')).toBeInTheDocument();
+  });
+
+  it('logo gagal dimuat: jatuh ke kotak huruf', async () => {
+    const { container } = await brand({ storeName: 'Warkop WJM', storeLogoUrl: '/storage/rusak.png' });
+    await fireEvent.error(container.querySelector('nav img'));
+    expect(container.querySelector('nav img')).toBeNull();
+    expect(screen.getByText('W')).toBeInTheDocument();
+  });
+
+  it('diciut: nama tersembunyi, logo tetap tampil', async () => {
+    const { container } = await renderRail({
+      menuKeys: ['dashboard'],
+      collapsed: true,
+      beforeRender: () => useSettingsStore().$patch({ storeName: 'Warkop WJM', storeLogoUrl: '/storage/store-logo/a.png' }),
+    });
+    expect(screen.queryByText('Warkop WJM')).toBeNull();
+    expect(container.querySelector('nav img')).not.toBeNull();
+  });
+
+  it('nama berisi markup tampil sebagai teks biasa', async () => {
+    await brand({ storeName: '<b>Toko</b>', storeLogoUrl: null });
+    expect(screen.getByText('<b>Toko</b>')).toBeInTheDocument();
   });
 });

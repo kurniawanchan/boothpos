@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { useOutletStore } from '../../stores/outlet';
 import { activateOutletSelection } from '../../utils/outletSelection';
 import { useRailState } from '../../composables/useRailState';
+import { useBranding } from '../../composables/useBranding';
 import { customHeaderCount } from '../../composables/usePageHeader';
 import RailNav from './RailNav.vue';
 import TopBar from './TopBar.vue';
@@ -38,6 +39,8 @@ function onOutletChange(id) {
 const { t } = useI18n();
 
 const { collapsed, toggle } = useRailState(computed(() => auth.user?.id ?? null));
+// 072 — judul tab dan favicon dari identitas toko.
+useBranding();
 
 const pageTitle = computed(() => t(route.meta.titleKey ?? `nav.${route.name}`));
 const pageSubtitle = computed(() => t(route.meta.subtitleKey ?? `nav.${String(route.name)}_subtitle`));
@@ -57,7 +60,9 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-page">
+  <div class="flex h-screen bg-page">
+    <!-- 072 — setinggi layar (bukan min-h-screen): akar yang tumbuh mengikuti isi membuat halaman POS menggulir dan
+         footer keranjang (Total/Bayar) terdorong keluar layar. `main` di bawah satu-satunya penggulir halaman. -->
     <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:bg-brand focus:px-3 focus:py-2 focus:text-[13px] focus:font-bold focus:text-white">
       {{ t('frame.skip_to_content') }}
     </a>
@@ -65,7 +70,7 @@ async function handleLogout() {
     <div class="flex min-w-0 flex-1 flex-col">
       <TopBar :store-name="settings.storeName" :outlets="outlet.outlets" :outlet-id="outlet.selected" @update:outlet-id="onOutletChange" @logout="handleLogout" />
       <SchemaUpdateBanner v-if="settings.schemaUpdateRequired" />
-      <main id="main-content" tabindex="-1" class="min-h-0 flex-1 overflow-auto outline-none">
+      <main id="main-content" tabindex="-1" class="min-h-0 flex-1 overflow-auto outline-none" :class="route.meta.fillHeight ? 'flex flex-col' : ''">
         <!-- Judul bawaan untuk halaman yang belum memakai <PageHeader>. -->
         <div v-if="customHeaderCount === 0" class="flex flex-col gap-0.5 px-[26px] pt-5">
           <h1 id="page-heading" tabindex="-1" class="text-[22px] font-bold tracking-tight outline-none">{{ pageTitle }}</h1>

@@ -36,7 +36,8 @@ const routes = [
         path: 'pos',
         name: 'pos',
         component: () => import('../views/PosView.vue'),
-        meta: { menuKey: 'pos' },
+        // 072 — POS mengisi tinggi layar: area utama jadi kolom flex agar kolom produk bisa menggulir sendiri.
+        meta: { menuKey: 'pos', fillHeight: true },
       },
       {
         path: 'session',

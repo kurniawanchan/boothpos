@@ -25,6 +25,8 @@ export const useSettingsStore = defineStore('settings', {
     receiptFooterText: '',
     receiptShowLogo: true,
     storeName: '',
+    // 072 — logo toko untuk sidebar dan favicon; null = belum diunggah.
+    storeLogoUrl: null,
     appName: DEFAULT_APP_NAME,
     // 042-dashboard-revamp — zona waktu toko dan jam pergantian hari bisnis, hanya untuk MEMFORMAT tanggal bisnis
     // di layar. Penentuan hari bisnis sebuah transaksi tetap dilakukan server (App\Support\BusinessDay).
@@ -60,6 +62,7 @@ export const useSettingsStore = defineStore('settings', {
         this.receiptFooterText = data.receipt_footer_text ?? '';
         this.receiptShowLogo = data.receipt_show_logo ?? true;
         this.storeName = data.store_name ?? '';
+        this.storeLogoUrl = data.store_logo_url ?? null;
         this.appName = resolveAppName(data.app_name);
         this.storeTimezone = data.store_timezone || 'Asia/Jakarta';
         this.businessDayCutoff = data.business_day_cutoff || '00:00';
@@ -126,6 +129,11 @@ export const useSettingsStore = defineStore('settings', {
       ]);
       this.menuReleaseEnabled = enabled === true;
       this.priceRoundingDefault = roundingDefault === 'none' ? 'none' : '500';
+    },
+
+    /** 072 — dipanggil setelah unggah logo supaya sidebar dan favicon berubah tanpa muat ulang. */
+    setStoreLogoUrl(url) {
+      this.storeLogoUrl = url ?? null;
     },
 
     /** US7 */

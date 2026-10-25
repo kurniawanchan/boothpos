@@ -30,6 +30,12 @@ const { t } = useI18n();
 const route = useRoute();
 const auth = useAuthStore();
 const settings = useSettingsStore();
+
+// 072 — merek di sudut = identitas toko; kosong jatuh ke merek produk (nama aplikasi) seperti sebelumnya.
+const brandName = computed(() => settings.storeName?.trim() || settings.appName);
+// Logo yang gagal dimuat (berkas hilang) diingat per URL, supaya kembali ke kotak huruf dan tidak menampilkan ikon rusak.
+const failedLogoUrl = ref(null);
+const brandLogoUrl = computed(() => (settings.storeLogoUrl && settings.storeLogoUrl !== failedLogoUrl.value ? settings.storeLogoUrl : null));
 const { count: cartCount } = storeToRefs(usePosCartStore());
 
 const sections = computed(() =>
@@ -110,13 +116,14 @@ const tooltip =
     class="sticky top-0 flex h-screen flex-none flex-col bg-rail transition-[width] duration-200 ease-in-out motion-reduce:transition-none"
     :class="collapsed ? 'w-[64px]' : 'w-[240px]'"
   >
-    <!-- Merek: kotak aksen + (saat lebar) nama aplikasi dan tingkat lisensi. -->
+    <!-- Merek: logo toko (atau kotak aksen berisi huruf pertama) + (saat lebar) nama toko dan tingkat lisensi. -->
     <div class="flex h-[56px] flex-none items-center gap-3 px-[18px]">
-      <div class="flex h-7 w-7 flex-none items-center justify-center bg-brand text-[14px] font-extrabold text-white" aria-hidden="true">
-        {{ (settings.appName || 'B').slice(0, 1).toUpperCase() }}
+      <img v-if="brandLogoUrl" :src="brandLogoUrl" alt="" class="h-7 w-7 flex-none object-contain" @error="failedLogoUrl = brandLogoUrl" />
+      <div v-else class="flex h-7 w-7 flex-none items-center justify-center bg-brand text-[14px] font-extrabold text-white" aria-hidden="true">
+        {{ (brandName || 'B').slice(0, 1).toUpperCase() }}
       </div>
       <div v-if="!collapsed" class="flex min-w-0 flex-1 flex-col leading-tight">
-        <span class="truncate text-[14px] font-extrabold text-white">{{ settings.appName }}</span>
+        <span class="truncate text-[14px] font-extrabold text-white">{{ brandName }}</span>
         <span class="truncate text-[10.5px] font-semibold tracking-wide text-dark-muted">{{ settings.tierLabel }}</span>
       </div>
     </div>

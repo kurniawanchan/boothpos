@@ -619,6 +619,13 @@ paths:
                       toko (`store_name`). Diubah owner/admin lewat `PUT /settings`
                       (key `app_name`, maks. 50 karakter — lebih panjang ditolak
                       422); kosong/spasi saja berarti kembali ke default.
+                  store_logo_url:
+                    type: string
+                    nullable: true
+                    description: |
+                      072 — URL logo toko (dari setting `store_logo_path`, disk publik), `null` bila belum
+                      diunggah. Dipakai sidebar dan favicon; terbuka untuk semua peran (berbeda dari
+                      `GET /settings` yang hanya owner/admin).
                   store_timezone:
                     type: string
                     description: |

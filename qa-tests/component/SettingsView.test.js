@@ -5,6 +5,7 @@ import { createI18n } from 'vue-i18n';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import SettingsView from '../../resources/js/views/SettingsView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
+import { useSettingsStore } from '../../resources/js/stores/settings';
 import { listSettings, updateSettings, uploadStoreLogo, featureFlags } from '../../resources/js/api/settings';
 import { listPaymentChannels, deletePaymentChannel } from '../../resources/js/api/payments';
 import { listBackups } from '../../resources/js/api/backups';
@@ -130,6 +131,35 @@ describe('SettingsView — profil toko (US3)', () => {
     await user.click(screen.getByRole('button', { name: /unggah logo/i }));
 
     await waitFor(() => expect(uploadStoreLogo).toHaveBeenCalledWith(file));
+  });
+
+  // 072 — sidebar/judul tab membaca settings store; tanpa penyegaran di sini identitas baru baru tampil setelah muat ulang.
+  it('refreshes the settings store after saving so the sidebar shows the new store name', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    updateSettings.mockResolvedValue({ data: [] });
+    await renderSettings();
+    await screen.findByDisplayValue('Jl. Merdeka No. 1');
+    featureFlags.mockResolvedValue({ multi_outlet_enabled: false, outlet_count: 1, outlet_limit_reached: false, store_name: 'Toko Baru' });
+
+    await user.click(screen.getByRole('button', { name: /^simpan$/i }));
+
+    await waitFor(() => expect(useSettingsStore().storeName).toBe('Toko Baru'));
+  });
+
+  it('pushes the uploaded logo url into the settings store', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    uploadStoreLogo.mockResolvedValue({ data: {}, store_logo_url: 'http://localhost/storage/store-logo/new.png' });
+    await renderSettings();
+    await screen.findByDisplayValue('Jl. Merdeka No. 1');
+    await import('@testing-library/vue').then(({ fireEvent }) =>
+      fireEvent.change(screen.getByLabelText(/logo toko/i), { target: { files: [imageFile()] } }),
+    );
+
+    await user.click(screen.getByRole('button', { name: /unggah logo/i }));
+
+    await waitFor(() => expect(useSettingsStore().storeLogoUrl).toBe('http://localhost/storage/store-logo/new.png'));
   });
 });
 
