@@ -18,6 +18,7 @@ import BaseSelect from '../components/ui/BaseSelect.vue';
 import PageHeader from '../components/page/PageHeader.vue';
 import FilterBar from '../components/page/FilterBar.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import SetPinModal from '../components/users/SetPinModal.vue';
 
 const auth = useAuthStore();
 const { t, locale } = useI18n();
@@ -35,8 +36,15 @@ const statusFilterOptions = computed(() => [
   { value: '1', label: t('users.active') },
   { value: '0', label: t('users.inactive') },
 ]);
+// 074 — filter status PIN: '' semua, '1' sudah punya PIN, '0' belum (dikirim ke server sebagai has_pin).
+const pinFilterOptions = computed(() => [
+  { value: '', label: t('users.pin_filter_all') },
+  { value: '1', label: t('users.pin_filter_has') },
+  { value: '0', label: t('users.pin_filter_none') },
+]);
 const roleFilter = ref('');
 const statusFilter = ref('');
+const pinFilter = ref('');
 
 async function loadRoles() {
   try {
@@ -60,12 +68,13 @@ function onSearchInput(value) {
 }
 
 // Penghitung FilterBar menggambarkan HASIL yang sedang difilter — total dari server (daftar berpaginasi).
-const filtersActive = computed(() => Boolean(search.value || roleFilter.value || statusFilter.value));
+const filtersActive = computed(() => Boolean(search.value || roleFilter.value || statusFilter.value || pinFilter.value));
 function resetFilters() {
   search.value = '';
   roleFilter.value = '';
   statusFilter.value = '';
-  setFilter({ search: undefined, role_id: undefined, is_active: undefined });
+  pinFilter.value = '';
+  setFilter({ search: undefined, role_id: undefined, is_active: undefined, has_pin: undefined });
 }
 
 function onRoleFilterChange(value) {
@@ -76,6 +85,10 @@ function onStatusFilterChange(value) {
   statusFilter.value = value;
   setFilter({ is_active: value === '' ? undefined : value });
 }
+function onPinFilterChange(value) {
+  pinFilter.value = value;
+  setFilter({ has_pin: value === '' ? undefined : value });
+}
 
 // 045 Stage 2 — kolom Outlet hanya bila ada lebih dari satu outlet (di satu outlet disembunyikan, bukan dinonaktifkan).
 const columns = computed(() => [
@@ -83,6 +96,7 @@ const columns = computed(() => [
   { key: 'username', label: t('users.col_username') },
   { key: 'role', label: t('users.col_role') },
   ...(outletStore.multi ? [{ key: 'outlets', label: t('users.col_outlets') }] : []),
+  { key: 'pin', label: t('users.col_pin') },
   { key: 'last_login_at', label: t('users.col_last_access') },
   { key: 'is_active', label: t('users.col_status') },
   { key: 'actions', label: '' },
@@ -108,6 +122,24 @@ const photoFile = ref(null);
 const showDelete = ref(false);
 const deleteTarget = ref(null);
 const deleting = ref(false);
+
+// 074 — mengatur PIN pengguna. Tombolnya disembunyikan untuk yang tidak berhak (kosmetik; server menolak 403 lewat
+// SetUserPinRequest). `pinTarget` adalah salinan baris saat dialog dibuka: judulnya ("Atur"/"Reset") tidak berubah di tengah
+// dialog setelah baris diperbarui oleh respons simpan.
+const canSetPin = computed(() => auth.canAccessMenu('settings'));
+const showPin = ref(false);
+const pinTarget = ref(null);
+
+function openPin(row) {
+  pinTarget.value = { ...row };
+  showPin.value = true;
+}
+
+function onPinSaved(updated) {
+  const i = items.value.findIndex((u) => u.id === updated.id);
+  if (i !== -1) items.value.splice(i, 1, { ...items.value[i], ...updated });
+  toast.success(t('users.pin_saved', { name: updated.name }));
+}
 
 // FR-006 (swa-kunci) — kenyamanan UI untuk MENYEMBUNYIKAN aksi terhadap
 // akun sendiri, bukan penegakan; server (UserPolicy::isSelfLockout) yang
@@ -255,6 +287,9 @@ async function performDelete() {
         <div class="w-[160px]">
           <BaseSelect :model-value="statusFilter" :options="statusFilterOptions" :placeholder="t('users.all_status')" @update:model-value="onStatusFilterChange" />
         </div>
+        <div class="w-[170px]">
+          <BaseSelect :model-value="pinFilter" :options="pinFilterOptions" :placeholder="t('users.pin_filter_all')" @update:model-value="onPinFilterChange" />
+        </div>
       </FilterBar>
 
       <DataTable
@@ -280,6 +315,11 @@ async function performDelete() {
           <span v-else-if="!(row.outlet_ids ?? []).length" class="text-[12.5px] text-danger-text" data-testid="user-outlets-none">{{ t('users.outlets_none') }}</span>
           <span v-else class="text-[12.5px] text-muted-5" data-testid="user-outlets-codes">{{ outletCodes(row) }}</span>
         </template>
+        <template #cell-pin="{ row }">
+          <StatusPill v-if="row.pin_locked" variant="danger" data-testid="user-pin-status">{{ t('users.pin_locked') }}</StatusPill>
+          <StatusPill v-else-if="row.has_pin" variant="success" data-testid="user-pin-status">{{ t('users.pin_has') }}</StatusPill>
+          <StatusPill v-else variant="neutral" data-testid="user-pin-status">{{ t('users.pin_none') }}</StatusPill>
+        </template>
         <template #cell-last_login_at="{ row }">
           <span class="text-[12.5px] text-muted-4">{{ formatLastAccess(row.last_login_at) }}</span>
         </template>
@@ -288,6 +328,15 @@ async function performDelete() {
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
+            <button
+              v-if="canSetPin"
+              type="button"
+              class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active"
+              data-testid="user-pin-action"
+              @click="openPin(row)"
+            >
+              {{ row.has_pin ? t('users.pin_reset') : t('users.pin_set') }}
+            </button>
             <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
             <button
               v-if="!isSelf(row)"
@@ -363,4 +412,6 @@ async function performDelete() {
     @close="showDelete = false"
     @confirm="performDelete"
   />
+
+  <SetPinModal :open="showPin" :user="pinTarget" @close="showPin = false" @saved="onPinSaved" />
 </template>

@@ -263,6 +263,25 @@ Atas permintaan pemilik produk, Dashboard dibangun ulang mengikuti desain "Warko
 
 Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/042-dashboard-revamp/`.
 
+**Catatan perubahan pasca-MVP — 2026-10-26 (fitur 073, masuk Android: outlet → terminal → PIN)**
+
+Atas permintaan pemilik produk, aplikasi Android tidak lagi meminta login owner/admin untuk menyiapkan tablet. Layar pertama adalah pilih outlet; kolom Terminal muncul setelahnya (pilih terminal yang ada atau ketik nama baru, yang didaftarkan server di bawah outlet itu), lalu pilih staf dan PIN.
+
+- **Perubahan keamanan yang disengaja:** pendaftaran terminal dan daftar nama staf kini terbuka tanpa login (keputusan pemilik). Pengaman: throttle, data yang keluar hanya nama, dan kunci PIN per pengguna.
+- Daftar staf Android hanya memuat kasir dan inventory outlet itu; **owner/admin tidak bisa masuk lewat PIN di Android**.
+- Kunci PIN dipersingkat dari 15 menit menjadi **5 menit** (5 PIN salah); kunci yang sama menjaga PIN penyetuju dan ganti-PIN.
+
+Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/073-android-outlet-terminal-login/`.
+
+**Catatan perubahan pasca-MVP — 2026-10-26 (fitur 074, atur PIN dari layar Pengguna)**
+
+Atas permintaan pemilik produk, owner/admin dapat mengatur PIN pengguna langsung dari layar Pengguna di web (mengetik 6 digit atau "Buat PIN acak" yang tampil sekali), tanpa memanggil API manual. Daftar pengguna menampilkan status PIN (Ada PIN / Belum ada PIN / Terkunci) dan dapat difilter "Belum ada PIN".
+
+- Menyimpan PIN membuka kunci, mengakhiri sesi PIN pengguna di tablet, dan dicatat di log aktivitas tanpa PIN. Admin melihat PIN saat mengaturnya; setelah dialog ditutup tidak ada yang dapat membacanya lagi.
+- Hanya peran yang bisa membuka Pengaturan (owner/admin) yang boleh; menu Pengguna saja tidak cukup. PIN tidak harus unik antar pengguna.
+
+Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/074-set-user-pin-web/`.
+
 ### 7.3 Artist management
 
 **Model lisensi (v1.6):** BoothPOS dijual dalam dua tingkat harga. **Pro** — satu artist saja (toko itu sendiri), tanpa konsinyasi. **Master** — multi-artist dengan rekap hasil dan bagi hasil per artist. Perbedaan ini ditegakkan lewat satu pengaturan (`multi_artist_enabled`), bukan build kode terpisah — satu basis kode untuk kedua tingkat harga.

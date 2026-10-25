@@ -29,6 +29,9 @@ class UserResource extends JsonResource
             // mengandalkan array cast model.
             'photo_url' => app(ImageUploadService::class)->url($this->photo_path),
             'last_login_at' => $this->last_login_at,
+            // 074 — status PIN untuk layar Pengguna. Hanya status: hash dan hitungan salah-PIN tidak pernah keluar.
+            'has_pin' => $this->pin_hash !== null,
+            'pin_locked' => $this->pin_locked_until?->isFuture() ?? false,
         ];
     }
 }

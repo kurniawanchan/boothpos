@@ -7,4 +7,5 @@ return [
     'revoked_no_rename' => 'A revoked terminal cannot be renamed.',
     'forbidden' => 'Only the owner or an admin can manage terminals.',
     'invalid_device' => 'Unknown terminal, revoked, or not part of this outlet.',
+    'device_required' => 'Choose a terminal before signing in with a PIN.',
 ];

@@ -42,6 +42,8 @@ class UserController extends Controller
             })
             ->when($request->filled('role_id'), fn ($q) => $q->where('role_id', $request->integer('role_id')))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
+            // 074 — `has_pin=1` hanya yang punya PIN, `has_pin=0` hanya yang belum; tanpa parameter = semua.
+            ->when($request->has('has_pin'), fn ($q) => $request->boolean('has_pin') ? $q->whereNotNull('pin_hash') : $q->whereNull('pin_hash'))
             ->orderBy('name')
             ->paginate($perPage);
 

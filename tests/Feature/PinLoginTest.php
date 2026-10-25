@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
+use App\Models\Device;
 use App\Models\Outlet;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -19,6 +20,7 @@ class PinLoginTest extends TestCase
     private Outlet $outlet;
     private User $cashier;
     private User $terminal;
+    private Device $device;
 
     protected function setUp(): void
     {
@@ -28,7 +30,12 @@ class PinLoginTest extends TestCase
         $this->cashier->outlets()->sync([$this->outlet->id]);
         $this->cashier->forceFill(['pin_hash' => Hash::make('482916')])->save();
 
-        // Token terminal = login kata sandi owner/admin.
+        // 073 — login PIN kini terikat ke terminal yang dipilih (device_id wajib).
+        $this->device = new Device(['name' => 'Kasir Depan', 'paired_at' => now()]);
+        $this->device->setAttribute('outlet_id', $this->outlet->id);
+        $this->device->save();
+
+        // Token owner/admin tetap dipakai tes ganti/reset PIN (rute itu masih berotentikasi); roster dan login PIN tidak butuh.
         $this->terminal = User::factory()->create(['role' => 'owner']);
         $this->actingAs($this->terminal, 'sanctum');
     }
@@ -36,7 +43,7 @@ class PinLoginTest extends TestCase
     private function pinLogin(string $pin, ?int $userId = null)
     {
         return $this->postJson('/api/v1/auth/pin-sessions', [
-            'outlet_id' => $this->outlet->id, 'user_id' => $userId ?? $this->cashier->id, 'pin' => $pin,
+            'outlet_id' => $this->outlet->id, 'user_id' => $userId ?? $this->cashier->id, 'pin' => $pin, 'device_id' => $this->device->id,
         ]);
     }
 
@@ -80,7 +87,7 @@ class PinLoginTest extends TestCase
         $this->assertSame(1, $this->cashier->fresh()->pin_failed_attempts);
     }
 
-    public function test_five_wrong_pins_lock_for_15_minutes_and_even_the_right_pin_is_refused(): void
+    public function test_five_wrong_pins_lock_for_5_minutes_and_even_the_right_pin_is_refused(): void
     {
         foreach (range(1, 4) as $_) {
             $this->pinLogin('000111')->assertStatus(401);
@@ -88,10 +95,10 @@ class PinLoginTest extends TestCase
         $this->pinLogin('000111')->assertStatus(429)->assertJsonPath('code', 'pin_locked');
 
         $this->pinLogin('482916')->assertStatus(429);
-        $this->assertTrue($this->cashier->fresh()->pin_locked_until->between(now()->addMinutes(14), now()->addMinutes(15)->addSecond()));
+        $this->assertTrue($this->cashier->fresh()->pin_locked_until->between(now()->addMinutes(4), now()->addMinutes(5)->addSecond()));
         $this->assertSame(1, ActivityLog::where('action', 'pin_locked')->count());
 
-        $this->travel(16)->minutes();
+        $this->travel(6)->minutes();
         $this->pinLogin('482916')->assertOk();
     }
 
