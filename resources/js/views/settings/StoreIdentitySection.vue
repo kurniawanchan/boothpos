@@ -73,6 +73,9 @@ async function saveStoreIdentity() {
       { key: 'store_contact_phone', value: storeForm.store_contact_phone, type: 'string', group: 'receipt' },
       { key: 'store_contact_email', value: storeForm.store_contact_email, type: 'string', group: 'receipt' },
     ]);
+    // 072 — sidebar dan judul tab membaca nama toko dari settings store; muat ulang agar langsung berubah. Gagal
+    // memuat ulang tidak boleh membuat penyimpanan yang sudah berhasil tampak gagal.
+    await settings.load().catch(() => {});
     toast.success(t('settings.store_identity_saved'));
   } catch (err) {
     if (err.isValidation) {
@@ -117,6 +120,7 @@ async function saveLogo() {
   try {
     const res = await uploadStoreLogo(logoFile.value);
     storeLogoUrl.value = res.store_logo_url;
+    settings.setStoreLogoUrl(res.store_logo_url);
     logoFile.value = null;
     if (logoInputEl.value) logoInputEl.value.value = '';
     toast.success(t('settings.store_logo_updated'));

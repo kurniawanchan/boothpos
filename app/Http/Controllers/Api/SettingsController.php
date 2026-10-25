@@ -58,6 +58,9 @@ class SettingsController extends Controller
             // menimpa. Disurfacekan di sini (bukan hanya GET /settings)
             // supaya tersedia app-wide tanpa endpoint owner/admin-only.
             'store_name' => Setting::get(ModeGate::current() === 'demo' ? 'store_name_demo' : 'store_name'),
+            // 072 — logo toko untuk sidebar dan favicon. Di sini (bukan hanya GET /settings) karena GET /settings
+            // hanya owner/admin, sedangkan kasir juga melihat sidebar. URL diselesaikan server seperti gambar lain.
+            'store_logo_url' => $this->imageUploadService->url(Setting::get('store_logo_path')),
             // 042-dashboard-revamp — dibaca SPA untuk memformat "tanggal bisnis"; terbuka untuk semua
             // peran (bukan rahasia), sama seperti system_mode.
             // 043 — dibaca SPA untuk menampilkan/menyembunyikan banner rilis, dialog rilis, dan kontrol persetujuan.

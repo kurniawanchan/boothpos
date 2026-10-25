@@ -235,3 +235,35 @@ describe('PosView — product photo on search results (030)', () => {
     expect(screen.getByAltText('MCYT — Slippery')).toHaveAttribute('src', PHOTO);
   });
 });
+
+// 072-store-identity-branding (US4) — POS pas satu layar: pencarian/filter tetap di atas, hanya daftar produk menggulir,
+// dan akar mengisi sisa tinggi area utama (bukan h-full, yang ditambah judul bawaan melampaui area utama).
+describe('PosView — satu layar, daftar produk menggulir sendiri (072)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentSession.mockResolvedValue(null);
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+    listOutlets.mockResolvedValue({ data: [{ id: 1, name: 'Outlet A' }] });
+    listProducts.mockResolvedValue({ data: PRODUCTS });
+  });
+
+  it('grid produk berada di wadah gulir sendiri dan pencarian berada di luarnya', async () => {
+    renderPos();
+    const scroller = await screen.findByTestId('pos-product-scroll');
+
+    expect(scroller).toHaveClass('min-h-0', 'flex-1', 'overflow-auto');
+    expect(scroller.contains(screen.getByLabelText(/cari nama produk/i))).toBe(false);
+    await waitFor(() => expect(scroller.querySelector('button')).not.toBeNull());
+  });
+
+  it('kolom produk tidak menggulir sendiri dan akar mengisi sisa tinggi', async () => {
+    const { container } = renderPos();
+    const scroller = await screen.findByTestId('pos-product-scroll');
+    const column = scroller.parentElement;
+
+    expect(column).not.toHaveClass('overflow-auto');
+    expect(column).toHaveClass('min-h-0');
+    expect(container.firstElementChild).toHaveClass('flex', 'min-h-0', 'flex-1');
+    expect(container.firstElementChild).not.toHaveClass('h-full');
+  });
+});

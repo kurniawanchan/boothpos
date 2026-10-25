@@ -286,8 +286,11 @@ async function resumeDraft(draftId) {
 </script>
 
 <template>
-  <div class="flex h-full">
-    <div class="flex min-w-0 flex-1 flex-col gap-3.5 overflow-auto px-[22px] py-5">
+  <!-- 072 — mengisi sisa tinggi area utama di bawah judul bawaan (area utama = kolom flex lewat meta.fillHeight di
+       router); `h-full` melampaui area utama sebesar tinggi judul sehingga footer keranjang terpotong. Kolom produk
+       tidak menggulir sendiri: pencarian dan filter tetap di atas, hanya daftar produk di wadah gulir di bawah. -->
+  <div class="flex min-h-0 flex-1">
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3.5 px-[22px] pt-5">
       <div v-if="sessionChecked && !session" class="flex items-center gap-3 rounded-card border border-warn-border bg-warn-bg px-4 py-3.5 text-[13px] text-warn-text">
         <i class="ph-duotone ph-lock-key text-[19px]" aria-hidden="true"></i>
         {{ t('pos.no_session_open') }}
@@ -323,6 +326,7 @@ async function resumeDraft(draftId) {
         <BaseMultiSelect v-model="selectedCategoryIds" :options="categoryOptions" :all-label="t('master_data.all_categories')" class="w-52" />
       </div>
 
+      <div data-testid="pos-product-scroll" class="min-h-0 flex-1 overflow-auto">
       <EmptyState v-if="!loadingGrid && cards.length === 0" icon="ph-package" :message="t('pos.no_matching_products')" />
       <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-3.5 pb-5">
         <!-- Search results stay variant-granular: the cashier searched
@@ -395,6 +399,7 @@ async function resumeDraft(draftId) {
             </div>
           </button>
         </template>
+      </div>
       </div>
     </div>
 
