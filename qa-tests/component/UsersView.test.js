@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import UsersView from '../../resources/js/views/UsersView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listUsers, createUser, updateUser, deleteUser, uploadUserPhoto } from '../../resources/js/api/users';
+import { listUsers, createUser, updateUser, deleteUser, uploadUserPhoto, setUserPin } from '../../resources/js/api/users';
 import { listRoles } from '../../resources/js/api/roles';
 
 vi.mock('../../resources/js/api/users', () => ({
@@ -13,6 +13,8 @@ vi.mock('../../resources/js/api/users', () => ({
   updateUser: vi.fn(),
   deleteUser: vi.fn(),
   uploadUserPhoto: vi.fn(),
+  setUserPin: vi.fn(),
+  suggestPin: vi.fn(),
 }));
 vi.mock('../../resources/js/api/roles', () => ({
   listRoles: vi.fn(),
@@ -232,3 +234,71 @@ describe('UsersView', () => {
     expect(listUsers).toHaveBeenCalledTimes(2);
   });
 });
+
+// 074 — status PIN, filter, dan aksi "Atur/Reset PIN" di layar Pengguna.
+describe('UsersView — PIN (074)', () => {
+  const ADMIN = { id: 1, role: 'Owner', name: 'Owner', menu_keys: ['dashboard', 'users', 'settings'] };
+  const rows = [
+    { id: 2, name: 'Kasir Satu', username: 'kasir01', role: { id: 2, name: 'Kasir' }, is_active: true, photo_url: null, last_login_at: null, has_pin: true, pin_locked: false },
+    { id: 3, name: 'Kasir Dua', username: 'kasir02', role: { id: 2, name: 'Kasir' }, is_active: true, photo_url: null, last_login_at: null, has_pin: false, pin_locked: false },
+    { id: 4, name: 'Kasir Tiga', username: 'kasir03', role: { id: 2, name: 'Kasir' }, is_active: true, photo_url: null, last_login_at: null, has_pin: true, pin_locked: true },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listUsers.mockResolvedValue({ data: rows.map((r) => ({ ...r })), meta: { current_page: 1, per_page: 25, total: 3, last_page: 1 } });
+    listRoles.mockResolvedValue({ data: [{ id: 2, name: 'Kasir' }] });
+  });
+
+  it('shows Ada PIN, Belum ada PIN and Terkunci per row', async () => {
+    renderUsers(ADMIN);
+    await screen.findByText('Kasir Satu');
+
+    expect(screen.getAllByTestId('user-pin-status').map((n) => n.textContent.trim())).toEqual(['Ada PIN', 'Belum ada PIN', 'Terkunci']);
+  });
+
+  it('labels the action "Atur PIN" without a PIN and "Reset PIN" with one, for owner/admin only', async () => {
+    renderUsers(ADMIN);
+    await screen.findByText('Kasir Satu');
+
+    expect(screen.getAllByTestId('user-pin-action').map((n) => n.textContent.trim())).toEqual(['Reset PIN', 'Atur PIN', 'Reset PIN']);
+  });
+
+  it('hides the action from a user who has the Users menu but not Settings', async () => {
+    renderUsers({ id: 9, role: 'Staf', name: 'Staf', menu_keys: ['dashboard', 'users'] });
+    await screen.findByText('Kasir Satu');
+
+    expect(screen.queryByTestId('user-pin-action')).not.toBeInTheDocument();
+  });
+
+  it('sends has_pin when the PIN filter is chosen and clears it on reset', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderUsers(ADMIN);
+    await screen.findByText('Kasir Satu');
+
+    await user.click(screen.getByText('Semua status PIN'));
+    await user.click(await screen.findByRole('option', { name: /belum ada pin/i }));
+    await waitFor(() => expect(listUsers).toHaveBeenLastCalledWith(expect.objectContaining({ has_pin: '0' })));
+  });
+
+  it('updates the row from the response after a PIN is saved (locked user becomes Ada PIN)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    setUserPin.mockResolvedValue({ ...rows[2], has_pin: true, pin_locked: false });
+    renderUsers(ADMIN);
+    await screen.findByText('Kasir Tiga');
+
+    await user.click(screen.getAllByTestId('user-pin-action')[2]);
+    const input = await screen.findByTestId('pin-input');
+    await user.type(input, '739204');
+    await waitFor(() => expect(input).toHaveValue('739204'));
+    await user.click(screen.getByTestId('pin-save'));
+
+    await waitFor(() => expect(setUserPin).toHaveBeenCalledWith(4, '739204', 'typed'));
+    await user.click(await screen.findByTestId('pin-close'));
+    await waitFor(() => expect(screen.getAllByTestId('user-pin-status').map((n) => n.textContent.trim())).toEqual(['Ada PIN', 'Belum ada PIN', 'Ada PIN']));
+    expect(document.body.textContent).not.toContain('739204');
+  });
+});
+

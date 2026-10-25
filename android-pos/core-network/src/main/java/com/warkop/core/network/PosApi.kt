@@ -18,11 +18,12 @@ import retrofit2.http.Query
  */
 interface PosApi {
     // --- identitas & perangkat (S1) ---
-    @POST("auth/login") suspend fun login(@Body body: LoginRequest): LoginResponse
-    @GET("me/scope") suspend fun scope(): ScopeResponse
+    // 073 — penyiapan terminal tanpa token (tablet belum punya akun): outlet, terminal per outlet, daftar/pilih terminal.
+    @GET("pos-setup/outlets") suspend fun setupOutlets(): SetupOutletsResponse
+    @GET("pos-setup/outlets/{id}/terminals") suspend fun setupTerminals(@Path("id") outletId: Long): SetupTerminalsResponse
+    @POST("pos-setup/outlets/{id}/terminals") suspend fun registerTerminal(@Path("id") outletId: Long, @Body body: RegisterTerminalRequest): RegisterTerminalResponse
     @GET("auth/me") suspend fun me(): AuthUserDto
     @POST("auth/logout") suspend fun logout(): retrofit2.Response<Unit>
-    @POST("devices/pairings") suspend fun pairDevice(@Body body: PairDeviceRequest): DeviceDto
     @GET("staff/roster") suspend fun roster(@Query("outlet_id") outletId: Long): RosterResponse
     @POST("auth/pin-sessions") suspend fun pinLogin(@Body body: PinLoginRequest): PinLoginResponse
     @POST("auth/token-refresh") suspend fun refreshToken(): RefreshResponse

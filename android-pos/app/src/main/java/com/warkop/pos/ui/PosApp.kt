@@ -23,7 +23,10 @@ fun PosApp(store: PosStore, preset: String? = null) {
             Box(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                 when (store.dest) {
-                    Dest.SETUP -> store.backendForSetup?.let { TerminalSetupScreen(it) { cfg -> store.setConfig(cfg) } }
+                    Dest.SETUP -> store.backendForSetup?.let {
+                        // 073 — "Batal" hanya bila tablet sudah punya outlet + terminal: pilihan lama berlaku sampai yang baru dibuat.
+                        TerminalSetupScreen(it, notice = store.setupNotice, onCancel = if (store.config != null) ({ store.go(Dest.PIN) }) else null) { cfg -> store.setConfig(cfg) }
+                    }
                     Dest.PIN -> PinScreen(store)
                     Dest.OPEN_SHIFT -> OpenShiftScreen(store)
                     // 055 / T028–T031 — tarik-untuk-segarkan di layar yang memuat data server (counter punya pembungkus sendiri).

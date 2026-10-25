@@ -16,7 +16,27 @@ data class ModGroup(val id: String, val name: String, val min: Int, val max: Int
 data class Product(
     val id: String, val icon: String, val cat: String, val name: String, val price: Int,
     val groups: List<String> = emptyList(), val is86: Boolean = false, val imageUrl: String? = null,
+    /** 075 — nama varian saja (tanpa nama produk), kode (sku) dan stok tampilan; stok null = tidak dilacak. */
+    val variantName: String = "", val code: String = "", val stock: Int? = null,
 )
+
+/**
+ * 075 — satu kartu grid Counter = satu PRODUK. Unit order tetap varian ([variants] berisi [Product] yang sama dengan
+ * daftar datar `MenuCatalog.products`), sehingga keranjang, habis (86) dan grup opsi tidak berubah.
+ */
+data class ProductEntry(
+    val id: String, val name: String, val cat: String, val categoryName: String,
+    val imageUrl: String?, val variants: List<Product>,
+) {
+    val isSingle: Boolean get() = variants.size == 1
+    val minPrice: Int get() = variants.minOfOrNull { it.price } ?: 0
+    val maxPrice: Int get() = variants.maxOfOrNull { it.price } ?: 0
+    /** Jumlah stok varian yang dilacak; null bila tidak ada satu pun yang dilacak. */
+    val stock: Int? get() = variants.mapNotNull { it.stock }.takeIf { it.isNotEmpty() }?.sum()
+    /** Habis hanya bila SEMUA varian habis menurut himpunan ketersediaan server (R4). */
+    fun isSoldOut(soldOut: Set<String>): Boolean = variants.isNotEmpty() && variants.all { it.id in soldOut }
+    val hasOptions: Boolean get() = variants.any { it.groups.isNotEmpty() }
+}
 
 data class StaffUser(
     val id: String, val name: String, val role: String, val code: String,
@@ -175,7 +195,11 @@ data class Approver(val id: Long, val name: String, val role: String)
 data class ShiftLimits(val varianceTolerance: Int?, val cashOutThreshold: Int?)
 
 /** Katalog menu dari server untuk outlet aktif: kategori, item (satu kartu per varian), dan grup modifier. */
-data class MenuCatalog(val categories: List<MenuCategory>, val products: List<Product>, val groups: Map<String, ModGroup>)
+data class MenuCatalog(
+    val categories: List<MenuCategory>, val products: List<Product>, val groups: Map<String, ModGroup>,
+    /** 075 — kartu per produk untuk grid; [products] tetap daftar varian (pencarian, keranjang). */
+    val entries: List<ProductEntry> = emptyList(),
+)
 
 /** Item yang sedang habis (86), berisi id varian. `etag` dipakai untuk poll berikutnya. */
 data class Availability(val etag: String, val soldOutVariantIds: Set<String>)

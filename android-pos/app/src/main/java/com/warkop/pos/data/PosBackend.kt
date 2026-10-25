@@ -31,6 +31,9 @@ data class TerminalConfig(
 
 data class OutletChoice(val id: Long, val name: String)
 
+/** 073 — terminal yang sudah terdaftar di sebuah outlet; hanya id dan nama (terminal dikenali lewat nama, 064). */
+data class TerminalChoice(val id: Long, val name: String)
+
 /** 055 — label dan tarif pajak dari server untuk baris "Pajak" di layar kasir; ratePercent null = tarif tidak diketahui. */
 data class TaxDisplay(val label: String, val ratePercent: Double?)
 
@@ -51,10 +54,18 @@ data class PosSession(
  * Bagian ditambah per irisan; tidak ada implementasi data contoh di build rilis (FR-020).
  */
 interface PosBackend {
-    // --- penyiapan terminal (admin/owner, sekali) ---
-    suspend fun adminLogin(serverUrl: String, username: String, password: String)
-    suspend fun listOutlets(): List<OutletChoice>
-    suspend fun pairTerminal(outlet: OutletChoice, terminalName: String): TerminalConfig
+    // --- penyiapan terminal (sekali, tanpa login) ---
+    /**
+     * 073 — penyiapan TANPA login owner/admin: alamat server sudah diisi lewat [setServerUrl], lalu outlet → terminal.
+     * Semua panggilan tanpa token. [registerTerminal] juga dipakai untuk MEMILIH terminal yang sudah ada: server mengembalikan
+     * terminal aktif bernama sama (tanpa beda huruf/spasi) alih-alih menolak, jadi dua tablet boleh memakai satu terminal.
+     */
+    suspend fun outlets(): List<OutletChoice>
+    suspend fun terminals(outlet: OutletChoice): List<TerminalChoice>
+    suspend fun registerTerminal(outlet: OutletChoice, terminalName: String): TerminalConfig
+
+    /** 073 — lupakan outlet + terminal tersimpan (dan sesi) tetapi pertahankan alamat server; dipakai bila terminal tak berlaku lagi. */
+    fun forgetTerminal()
 
     /** Baca alamat server yang tersimpan di vault (untuk tampilan/penyiapan). Null bila belum pernah disiapkan. */
     fun serverUrl(): String?

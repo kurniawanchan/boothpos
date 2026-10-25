@@ -44,12 +44,11 @@ import com.warkop.pos.model.StaffUser
 import java.time.Instant
 
 /**
- * Implementasi HTTP dari [PosBackend]. Memegang keadaan sesi ringan (URL, token penyiapan, token PIN, outlet,
+ * Implementasi HTTP dari [PosBackend]. Memegang keadaan sesi ringan (URL, token PIN, outlet,
  * perangkat) yang dipulihkan dari [TokenVault] saat aplikasi mulai. Token TIDAK dicatat ke log.
  */
 class RemoteBackend(private val vault: TokenVault, private val log: (String) -> Unit = {}) : PosBackend {
     private var serverUrl: String? = vault.get(TokenVault.SERVER_URL)
-    private var adminToken: String? = vault.get(TokenVault.ADMIN_TOKEN)
     private var sessionToken: String? = vault.get(TokenVault.SESSION_TOKEN)
     private var outletId: Long? = vault.get(TokenVault.OUTLET_ID)?.toLongOrNull()
     private var deviceId: Long? = vault.get(TokenVault.DEVICE_ID)?.toLongOrNull()
@@ -58,6 +57,12 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     // 064 — "terminal ini" dikenali lewat deviceId (di atas), bukan nama; nama hanya untuk tampilan.
     private var myDeviceName: String = vault.get(TokenVault.DEVICE_NAME).orEmpty()
     private var apiFor: Pair<String, PosApi>? = null
+
+    init {
+        // 073 — token owner/admin dari penyiapan lama dibuang saat aplikasi dimulai: tidak dipakai lagi, dan kredensial
+        // berhak tinggi tidak boleh tertinggal di tablet kasir.
+        LegacyVaultCleanup.run { vault.clear(it) }
+    }
 
     /** Terminal yang sudah disiapkan (URL + outlet + perangkat), atau null → layar penyiapan. */
     fun savedConfig(): TerminalConfig? {
@@ -70,38 +75,32 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     fun hasValidSession(nowMillis: Long = System.currentTimeMillis()): Boolean =
         sessionToken != null && (vault.get(TokenVault.SESSION_EXPIRES)?.toLongOrNull() ?: 0L) > nowMillis
 
-    fun resetTerminal() {
-        vault.clear(TokenVault.SERVER_URL, TokenVault.ADMIN_TOKEN, TokenVault.SESSION_TOKEN, TokenVault.SESSION_EXPIRES,
-            TokenVault.OUTLET_ID, TokenVault.OUTLET_NAME, TokenVault.DEVICE_ID, TokenVault.DEVICE_NAME, TokenVault.DEVICE_CODE)
-        serverUrl = null; adminToken = null; sessionToken = null; outletId = null; deviceId = null; apiFor = null; myDeviceName = ""
+    override fun forgetTerminal() {
+        vault.clear(TokenVault.SESSION_TOKEN, TokenVault.SESSION_EXPIRES, TokenVault.OUTLET_ID, TokenVault.OUTLET_NAME,
+            TokenVault.DEVICE_ID, TokenVault.DEVICE_NAME, TokenVault.DEVICE_CODE)
+        sessionToken = null; outletId = null; deviceId = null; myDeviceName = ""
     }
 
     private fun api(): PosApi {
         val url = serverUrl ?: throw ApiError.Network("Terminal belum disiapkan.")
         apiFor?.takeIf { it.first == url }?.let { return it.second }
-        val created = ApiClient.create(url, RequestContext({ sessionToken ?: adminToken }, { outletId }, { deviceId }), log)
+        val created = ApiClient.create(url, RequestContext({ sessionToken }, { outletId }, { deviceId }), log)
         apiFor = url to created
         return created
     }
 
-    // --- penyiapan terminal ---
-    override suspend fun adminLogin(serverUrl: String, username: String, password: String) {
-        this.serverUrl = serverUrl.trim()
-        this.sessionToken = null
-        this.adminToken = null
-        this.apiFor = null
-        val res = apiCall { api().login(LoginRequest(username.trim(), password)) }
-        adminToken = res.token
-        vault.put(TokenVault.SERVER_URL, this.serverUrl)
-        vault.put(TokenVault.ADMIN_TOKEN, res.token)
-    }
+    // --- penyiapan terminal (073: tanpa login, tanpa token) ---
+    override suspend fun outlets(): List<OutletChoice> =
+        apiCall { api().setupOutlets() }.data.map { OutletChoice(it.id, it.name) }
 
-    override suspend fun listOutlets(): List<OutletChoice> =
-        apiCall { api().scope() }.outlets.map { OutletChoice(it.id, it.name) }
+    override suspend fun terminals(outlet: OutletChoice): List<TerminalChoice> =
+        apiCall { api().setupTerminals(outlet.id) }.data.map { TerminalChoice(it.id, it.name) }
 
-    override suspend fun pairTerminal(outlet: OutletChoice, terminalName: String): TerminalConfig {
-        outletId = outlet.id // X-Outlet-Id: server menurunkan outlet dari sini (hanya menyempit)
-        val device = apiCall { api().pairDevice(PairDeviceRequest(terminalName.trim())) }
+    override suspend fun registerTerminal(outlet: OutletChoice, terminalName: String): TerminalConfig {
+        val device = apiCall { api().registerTerminal(outlet.id, RegisterTerminalRequest(terminalName.trim())) }
+        // Pilihan baru menggantikan yang lama; sesi PIN lama (outlet/terminal lain) tidak berlaku lagi.
+        dropSession()
+        outletId = outlet.id
         deviceId = device.id
         vault.put(TokenVault.OUTLET_ID, outlet.id.toString())
         vault.put(TokenVault.OUTLET_NAME, outlet.name)
@@ -131,7 +130,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
             rosterFor(outlet)
         } catch (e: ApiError) {
             if (!SessionRecovery.dropsSession(e, hasSession = sessionToken != null)) throw e
-            // 057 / US7 — buang sesi PIN yang sudah tidak berlaku, lalu satu percobaan ulang dengan token admin (tidak berulang).
+            // 057 / US7 — buang sesi PIN yang sudah tidak berlaku, lalu satu percobaan ulang tanpa token (073: roster terbuka; tidak berulang).
             dropSession()
             rosterFor(outlet)
         }
@@ -140,7 +139,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     private suspend fun rosterFor(outlet: Long): List<StaffUser> =
         apiCall { api().roster(outlet) }.data.map { StaffUser(it.id.toString(), it.name, it.role.orEmpty(), roleCode(it.role), hasPin = it.hasPin, locked = it.locked) }
 
-    /** Membuang token sesi PIN dari memori dan penyimpanan; token admin dari penyiapan tetap ada. */
+    /** Membuang token sesi PIN dari memori dan penyimpanan. */
     fun dropSession() {
         sessionToken = null
         vault.clear(TokenVault.SESSION_TOKEN, TokenVault.SESSION_EXPIRES)
@@ -148,9 +147,10 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
 
     override suspend fun pinLogin(user: StaffUser, pin: String): PosSession {
         val outlet = outletId ?: throw ApiError.Network("Terminal belum disiapkan.")
-        // Login PIN memakai token penyiapan, bukan sesi lama yang mungkin sudah habis.
+        val device = deviceId ?: throw ApiError.Network("Terminal belum disiapkan.")
+        // Login PIN tanpa token: sesi lama yang mungkin sudah habis tidak boleh ikut terkirim.
         sessionToken = null
-        val res = apiCall { api().pinLogin(PinLoginRequest(outlet, user.id.toLong(), pin)) }
+        val res = apiCall { api().pinLogin(PinLoginRequest(outlet, user.id.toLong(), pin, device)) }
         val expires = parseInstant(res.expiresAt)
         sessionToken = res.token
         vault.put(TokenVault.SESSION_TOKEN, res.token)
@@ -185,7 +185,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         } while (res.meta.currentPage < res.meta.lastPage)
         // 055 / T011 — kategori dari server untuk mode aktif; tidak diturunkan dari produk.
         val categories = apiCall { api().posCategories() }.data
-        return MenuMapper.toCatalog(all, categories)
+        return MenuMapper.toCatalog(all, categories, serverBase = serverUrl)
     }
 
     override suspend fun availability(since: String?): Availability? {

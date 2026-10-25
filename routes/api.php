@@ -55,6 +55,17 @@ Route::prefix('v1')->group(function () {
     // 065 / US6 — alamat server pilihan admin untuk tablet baru: tanpa token (tablet belum punya), hanya alamat terpilih.
     Route::get('/server-address', [\App\Http\Controllers\Api\ServerAddressController::class, 'forTablets'])->middleware('throttle:30,1');
 
+    // 073 — penyiapan tablet TANPA login owner/admin (spec Q1: pendaftaran terbuka). Pengecualian Konstitusi IV: belum
+    // ada pengguna, jadi outlet dari path (divalidasi aktif) dan hanya nama yang keluar. Pembatasnya throttle.
+    Route::get('/pos-setup/outlets', [\App\Http\Controllers\Api\PosSetupController::class, 'outlets'])->middleware('throttle:30,1');
+    Route::get('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'terminals'])->whereNumber('outlet')->middleware('throttle:30,1');
+    Route::post('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'registerTerminal'])->whereNumber('outlet')->middleware('throttle:10,1');
+
+    // 073 — roster dan login PIN TANPA token (spec Q1/Q3). Sebelumnya butuh token owner/admin dari penyiapan. Pertahanan utama
+    // tetap kunci 5-salah per pengguna di PinAuthService; throttle hanya meredam banjir. Roster tidak memuat owner/admin.
+    Route::get('/staff/roster', [\App\Http\Controllers\Api\PinAuthController::class, 'roster'])->middleware('throttle:30,1');
+    Route::post('/auth/pin-sessions', [\App\Http\Controllers\Api\PinAuthController::class, 'login'])->middleware('throttle:30,1');
+
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
     // SetLocaleFromUser HANYA di sini, bukan pada POST /auth/login di
@@ -72,13 +83,13 @@ Route::prefix('v1')->group(function () {
         Route::put('/auth/password', [AuthController::class, 'updatePassword']);
         Route::post('/auth/photo', [AuthController::class, 'updatePhoto']);
 
-        // 048 / api-gap B1 — login PIN terminal. Butuh token (token terminal dari login kata sandi owner/admin);
-        // kunci 5-salah di PinAuthService adalah pertahanan utama, throttle hanya meredam banjir.
-        Route::get('/staff/roster', [\App\Http\Controllers\Api\PinAuthController::class, 'roster']);
-        Route::post('/auth/pin-sessions', [\App\Http\Controllers\Api\PinAuthController::class, 'login'])->middleware('throttle:30,1');
+        // 048 / api-gap B1 — ganti PIN, perpanjang token, reset PIN. (073: roster dan login PIN pindah ke luar grup ini.)
         Route::post('/auth/pin-changes', [\App\Http\Controllers\Api\PinAuthController::class, 'change'])->middleware('throttle:10,1');
         Route::post('/auth/token-refresh', [\App\Http\Controllers\Api\PinAuthController::class, 'refresh']);
         Route::post('/users/{user}/pin-reset', [\App\Http\Controllers\Api\PinAuthController::class, 'reset']);
+        // 074 — owner/admin mengatur PIN pengguna dari layar Pengguna (ketik atau "Generate"); PIN tidak pernah ada di respons.
+        Route::put('/users/{user}/pin', [\App\Http\Controllers\Api\PinAuthController::class, 'setUserPin'])->middleware('throttle:30,1');
+        Route::post('/pin-suggestions', [\App\Http\Controllers\Api\PinAuthController::class, 'suggest'])->middleware('throttle:30,1');
 
         // 048 / B14 — terminal POS (owner/admin; outlet diturunkan server).
         Route::get('/devices', [\App\Http\Controllers\Api\DeviceController::class, 'index']);

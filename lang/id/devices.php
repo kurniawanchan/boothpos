@@ -7,4 +7,5 @@ return [
     'revoked_no_rename' => 'Terminal yang sudah dicabut tidak dapat diganti namanya.',
     'forbidden' => 'Hanya pemilik atau admin yang dapat mengelola terminal.',
     'invalid_device' => 'Terminal tidak dikenal, sudah dicabut, atau bukan milik outlet ini.',
+    'device_required' => 'Terminal wajib dipilih sebelum masuk dengan PIN.',
 ];

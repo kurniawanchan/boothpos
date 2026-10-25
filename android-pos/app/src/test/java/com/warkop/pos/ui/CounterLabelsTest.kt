@@ -24,3 +24,37 @@ class CounterLabelsTest {
         assertEquals(false, bayarLabel(waiter = false).contains("verifikasi"))
     }
 }
+
+/** 075 / T011 — label kartu produk Counter. */
+class ProductCardLabelsTest {
+    @Test fun `harga tunggal atau rentang`() {
+        assertEquals("Rp 7.000", priceLabel(7000, 7000))
+        assertEquals("Rp 7.000–Rp 8.000", priceLabel(7000, 8000))
+    }
+
+    @Test fun `stok tidak dilacak tidak punya baris`() {
+        assertEquals(null, stockLabel(null))
+        assertEquals("Stok 0", stockLabel(0))
+        assertEquals("Stok 12", stockLabel(12))
+    }
+
+    @Test fun `lencana varian dan inisial`() {
+        assertEquals("2 varian", variantCountLabel(2))
+        assertEquals("AK", initialsOf("ABC Klepon"))
+        assertEquals("R", initialsOf(" roti "))
+        assertEquals("?", initialsOf("  "))
+    }
+}
+
+/** 075 / T024 — baris Diskon selalu ada; angka tetap dari server. */
+class DiscountRowLabelsTest {
+    @Test fun `tanpa potongan baris tetap ada dengan Rp 0`() {
+        assertEquals("Diskon", discountRowLabel(0, 0, null))
+        assertEquals("Rp 0", discountRowAmount(0))
+    }
+
+    @Test fun `dengan potongan label dan jumlah negatif`() {
+        assertEquals("Potongan 10 % · Promo", discountRowLabel(6000, 10, "Promo"))
+        assertEquals("-Rp 6.000", discountRowAmount(6000))
+    }
+}

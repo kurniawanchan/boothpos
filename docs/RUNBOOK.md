@@ -565,10 +565,15 @@ Peran dan akses outlet: setiap pengguna bisa dibatasi ke satu atau beberapa outl
 Aplikasi tablet kasir ada di `android-pos/` (Kotlin, Compose). Ia online-first dan memanggil API yang sama dengan SPA. Spesifikasi: `specs/048-wire-android-pos-api/`.
 
 ### 13.1 Menyiapkan terminal
-1. Buka aplikasi, masukkan alamat server (di emulator: `http://10.0.2.2:8010`; di perangkat sungguhan: alamat LAN host).
-2. Masuk dengan akun **owner atau admin** (kata sandi), lalu pilih outlet.
-3. Daftarkan terminal (mis. `T01`). Server membuat `devices` per outlet dan mengembalikan id perangkat; aplikasi menyimpannya di Keystore.
-4. Pilih staf dan masuk dengan PIN 6 digit. Staf dibaca dari server; PIN tidak pernah disimpan di perangkat.
+> **Catatan bertanggal — 2026-10-26 (fitur 073):** penyiapan **tidak lagi memakai login owner/admin**. Langkah lama (login owner/admin → pilih outlet → daftarkan terminal) diganti alur di bawah. Tablet yang sudah terpasang tetap bekerja tanpa dipasangkan ulang; token owner/admin lamanya dibuang dari brankas saat aplikasi dibuka pertama kali setelah pembaruan.
+
+1. Buka aplikasi. Alamat server dicari otomatis (di emulator: `http://10.0.2.2:8010`; di perangkat sungguhan: alamat dari Pengaturan › Server address, 065).
+2. Layar pertama adalah **pilih outlet**. Setelah outlet dipilih, kolom **Terminal** muncul: pilih terminal yang sudah ada (boleh terminal yang sama dengan tablet lain) **atau** ketik nama terminal baru. Nama yang sama dengan terminal aktif outlet itu (tanpa beda huruf besar/kecil/spasi) memakai terminal yang ada; nama baru didaftarkan server di bawah outlet itu (`devices`, dicatat sebagai `device_registered`). Aplikasi menyimpan outlet + terminal di Keystore.
+3. **Beri PIN dulu** (fitur 074, 2026-10-26): staf baru belum punya PIN. Di web buka **Pengguna**, kolom **PIN** menunjukkan "Ada PIN" / "Belum ada PIN" / "Terkunci" (filter "Belum ada PIN" menampilkan yang perlu PIN). Owner/admin menekan **Atur PIN** (atau **Reset PIN** bila sudah punya), lalu mengetik 6 digit **atau** menekan **Buat PIN acak** — PIN acak hanya tampil sekali di dialog itu (catat dan sampaikan ke staf sebelum menutupnya). Menyimpan PIN membuka kunci dan mengakhiri sesi tablet staf itu. PIN tidak pernah bisa ditampilkan lagi. (Cara lama lewat API — `POST /auth/pin-changes` dengan kata sandi, `POST /users/{id}/pin-reset` — tetap ada.)
+4. Pilih staf dan masuk dengan PIN 6 digit. Daftar staf = kasir dan inventory yang boleh bekerja di outlet itu; **owner dan admin tidak muncul dan tidak bisa masuk lewat PIN di Android**. Lima PIN salah mengunci staf itu **5 menit** di semua tablet. PIN tidak pernah disimpan di perangkat.
+5. Salah outlet/terminal? Di layar PIN pilih **Ganti outlet / terminal** (alamat server dipertahankan; pilihan lama berlaku sampai yang baru dibuat, atau tekan Batal).
+
+> **Risiko yang diterima pemilik:** pendaftaran terminal dan daftar nama staf terbuka tanpa login bagi siapa pun yang dapat menjangkau server (keputusan pemilik, spec 073 Q1). Pengamannya hanya throttle, data yang hanya berupa nama, dan kunci PIN per pengguna.
 
 ### 13.2 Emulator
 - Emulator mencapai host lewat `10.0.2.2` (bukan `localhost`). Backend dev berjalan di `http://localhost:8010` pada host, sehingga alamat di aplikasi adalah `http://10.0.2.2:8010`.
@@ -584,7 +589,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ### 13.4 Mencabut dan memasang ulang perangkat
 - Cabut: `DELETE /devices/{id}` (owner/admin). Server mengisi `revoked_at`; perangkat tidak dihapus dari basis data (jejak audit). Permintaan dari perangkat yang dicabut ditolak (422 pada `device_id`).
-- Pasang ulang: jalankan penyiapan lagi (13.1) untuk membuat pasangan baru. Heartbeat (`POST /devices/heartbeat`, tiap 60 dtk) menandai `last_seen_at` dan selisih jam; selisih di atas 5 dtk ditampilkan sebagai peringatan.
+- Pasang ulang: jalankan penyiapan lagi (13.1); nama terminal yang dicabut boleh dipakai lagi dan membuat rekaman baru (order lama tetap menempel pada rekaman lama). Bila terminal dicabut saat staf sedang masuk, tab yang sedang dikerjakan boleh selesai; order baru ditolak (422 `device_id`) dan tablet kembali ke layar pilih outlet dengan pesan. Heartbeat (`POST /devices/heartbeat`, tiap 60 dtk) menandai `last_seen_at` dan selisih jam; selisih di atas 5 dtk ditampilkan sebagai peringatan.
 
 ### 13.5 Membaca log
 ```bash

@@ -30,3 +30,16 @@ export function uploadUserPhoto(id, file) {
   form.append('image', file);
   return client.post(`/users/${id}/photo`, form, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data);
 }
+
+/**
+ * 074 — owner/admin mengatur PIN pengguna. `source` ('typed' | 'generated') hanya penanda log. PIN dikirim sekali dan tidak
+ * disimpan di sini; respons berisi pengguna (`has_pin`), bukan PIN.
+ */
+export function setUserPin(id, pin, source = 'typed') {
+  return client.put(`/users/${id}/pin`, { pin, source }).then((r) => r.data);
+}
+
+/** 074 — saran PIN acak untuk tombol "Generate" (tidak disimpan di server sampai admin menyimpannya). */
+export function suggestPin() {
+  return client.post('/pin-suggestions').then((r) => r.data);
+}

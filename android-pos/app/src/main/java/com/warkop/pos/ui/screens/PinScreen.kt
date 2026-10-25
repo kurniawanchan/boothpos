@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -44,7 +45,9 @@ import java.util.Locale
 @Composable
 fun PinScreen(store: PosStore) {
     val compact = windowSize() == Size.COMPACT
-    val staff = (store.roster as? Load.Ready)?.value.orEmpty().filter { it.hasPin }
+    // 073 / FR-011 — staf tanpa PIN tetap tampil (redup, tidak bisa dipilih) supaya jelas kenapa tidak bisa masuk, bukan hilang.
+    val everyone = (store.roster as? Load.Ready)?.value.orEmpty()
+    val staff = everyone.filter { it.hasPin }
     var selected by remember { mutableStateOf<StaffUser?>(null) }
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -72,10 +75,14 @@ fun PinScreen(store: PosStore) {
             when (val r = store.roster) {
                 is Load.Loading, is Load.Idle -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 is Load.Failed -> ErrorState(r.error.message, onRetry = { store.loadRoster() }, modifier = Modifier.fillMaxWidth())
-                is Load.Ready -> if (staff.isEmpty()) {
-                    Text("Belum ada staf dengan PIN di outlet ini. Atur PIN dari akun masing-masing atau minta admin.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    staff.forEach { u -> StaffChip(u, u.id == selected?.id, compact, Modifier.weight(1f)) { selected = u; pin = ""; error = null } }
+                is Load.Ready -> {
+                    if (staff.isEmpty()) {
+                        Text("Belum ada staf dengan PIN di outlet ini. Atur PIN dari akun masing-masing atau minta admin.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(12.dp))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        everyone.forEach { u -> StaffChip(u, u.id == selected?.id, compact, Modifier.weight(1f)) { if (u.hasPin) { selected = u; pin = ""; error = null } } }
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))
@@ -92,6 +99,8 @@ fun PinScreen(store: PosStore) {
                 onBackspace = { if (!busy) pin = pin.dropLast(1) },
                 modifier = Modifier.widthIn(max = 340.dp), keyHeight = if (compact) 56.dp else 72.dp,
             )
+            // 073 — jalan keluar bila tablet salah outlet/terminal; di layar sempit tidak ada panel merek dengan ikon pengaturan.
+            TextButton({ store.goToSetup() }, Modifier.padding(top = 8.dp)) { Text("Ganti outlet / terminal") }
         }
     }
 
@@ -108,7 +117,9 @@ fun PinScreen(store: PosStore) {
 
 @Composable
 private fun StaffChip(u: StaffUser, selected: Boolean, compact: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    // 073 — tanpa PIN: redup, tidak bisa diklik, dan baris peran diganti alasannya.
+    val usable = u.hasPin
+    Column(modifier.alpha(if (usable) 1f else 0.5f).clip(RoundedCornerShape(16.dp)).clickable(enabled = usable, onClick = onClick).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
             Modifier.size(if (compact) 52.dp else 64.dp), shape = CircleShape,
             color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
@@ -116,7 +127,7 @@ private fun StaffChip(u: StaffUser, selected: Boolean, compact: Boolean, modifie
         ) { Box(contentAlignment = Alignment.Center) { Text(u.initials, fontSize = if (compact) 17.sp else 20.sp, fontWeight = FontWeight.Bold) } }
         Spacer(Modifier.height(6.dp))
         Text(u.name, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        Text(u.role, fontSize = if (compact) 11.sp else 12.sp, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (usable) u.role else "Belum ada PIN", fontSize = if (compact) 11.sp else 12.sp, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -140,7 +151,7 @@ private fun BrandPanel(store: PosStore, modifier: Modifier) {
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) { Text(store.config?.outletName ?: store.serverUrl()?.let { "Outlet" } ?: "Warkop WJM", fontSize = 22.sp, fontWeight = FontWeight.SemiBold); Text(store.config?.deviceName?.takeIf { it.isNotBlank() } ?: "Terminal", fontSize = 14.sp) }
                 IconButton(onClick = { store.goToSetup() }) {
-                    Icon(imageVector = Icons.Filled.Settings, contentDescription = "Atur terminal", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Icon(imageVector = Icons.Filled.Settings, contentDescription = "Ganti outlet / terminal", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
             Spacer(Modifier.weight(1f))

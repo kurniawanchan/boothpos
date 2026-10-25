@@ -10,6 +10,7 @@ import com.warkop.core.domain.ApiError
 import com.warkop.pos.audio.QueueAnnouncer
 import com.warkop.pos.audio.QueuePhrase
 import com.warkop.pos.audio.SilentSpeech
+import com.warkop.pos.data.OutletChoice
 import com.warkop.pos.data.PosBackend
 import com.warkop.pos.data.PosSession
 import com.warkop.pos.data.RemoteBackend
@@ -41,6 +42,9 @@ import java.util.Date
 import java.util.Locale
 
 enum class Dest { SETUP, PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, SHIFT, XREPORT, CLOSE_SHIFT, CLOSE_RESULT, SYNC }
+
+/** 073 / FR-018 — layar alur "menyelesaikan order": terminal yang dicabut tidak memotongnya di tengah jalan. */
+internal val FINISHING_ORDER = setOf(Dest.EDITOR, Dest.TENDER, Dest.DONE)
 
 /**
  * Layar setelah shift dimuat ulang dari server (GET /sessions/current): kasir tanpa shift terbuka → layar buka shift,
@@ -96,6 +100,8 @@ sealed interface Sheet {
     data class Override(val summary: String, val action: String, val subject: JsonObject, val onApproved: (token: String) -> Unit) : Sheet
     /** 86: pilih alasan dari server sebelum item ditandai habis. */
     data class SoldOut(val product: Product) : Sheet
+    /** 075 — daftar varian satu produk; menyimpan id supaya muat-ulang menu diam-diam memperbarui tanda habis. */
+    data class VariantPicker(val entryId: String) : Sheet
     data object Edc : Sheet
     data object QrisRecord : Sheet
     data class QrisVerify(val tenderId: Int) : Sheet
@@ -134,6 +140,8 @@ class PosStore(
     var refreshing by mutableStateOf(false); private set
     fun refreshCounter() {
         refreshing = true
+        // 075 — tarik-untuk-segarkan sengaja (bukan polling diam-diam): foto yang ditimpa di back office ikut diambil ulang.
+        com.warkop.pos.data.MenuImageLoader.clear()
         viewModelScope.launch { try { loadMenu(silent = true).join() } finally { refreshing = false } }
     }
 
@@ -181,6 +189,10 @@ class PosStore(
     var sheet by mutableStateOf<Sheet?>(null); private set
     var toast by mutableStateOf<String?>(null); private set
     var pinFails by mutableIntStateOf(0); private set
+    /** 073 — pesan di layar penyiapan saat tablet dikembalikan ke sana (terminal dicabut / tak berlaku lagi); null = tanpa pesan. */
+    var setupNotice by mutableStateOf<String?>(null); private set
+    /** 073 / FR-018 — server menjawab 422 `device_id`: terminal ini dicabut. Tab yang sedang dikerjakan boleh selesai; order baru tidak. */
+    var terminalRevoked by mutableStateOf(false); private set
     var lockedUntil by mutableStateOf<Long?>(null); private set
     // 048 / US6 — keadaan dari POST /devices/heartbeat. Tidak ada antrean atau cetak tiruan: yang tampil hanya angka server.
     var heartbeat by mutableStateOf(HeartbeatState()); private set
@@ -210,6 +222,7 @@ class PosStore(
         } catch (e: ApiError) {
             heartbeat = heartbeat.onFailure()
             if (e is ApiError.Network) conn = Conn.OFFLINE
+            if (isTerminalRevoked(e)) markTerminalRevoked()
         }
     }
 
@@ -236,10 +249,53 @@ class PosStore(
     fun bootstrap() {
         val saved = remote?.savedConfig()
         config = saved
-        // 050 / T066 — selalu langsung ke PIN; jika belum ada konfigurasi, serverUrl
-        // diambil dari vault (atau nilai default bila ada), roster tetap dimuat.
+        // 073 — tablet yang belum punya outlet + terminal mulai dari layar penyiapan (pilih outlet → terminal), bukan dari layar
+        // PIN. Yang sudah punya langsung ke pilih-staf; terminal yang ternyata sudah tidak berlaku diperiksa di latar.
+        if (saved == null) {
+            dest = Dest.SETUP
+            return
+        }
         dest = Dest.PIN
         loadRoster()
+        validateSavedTerminal(saved)
+    }
+
+    /**
+     * 073 / FR-013 — outlet atau terminal tersimpan bisa sudah tidak ada (terminal dicabut, outlet dinonaktifkan). Dicek sekali saat
+     * mulai lewat daftar terminal outlet itu. Hanya jawaban server yang menentukan: gangguan jaringan membiarkan tablet apa adanya
+     * (tidak ada alasan membuang pilihan yang mungkin masih sah).
+     */
+    private fun validateSavedTerminal(saved: TerminalConfig) {
+        val b = backend ?: return
+        viewModelScope.launch {
+            val stillValid = try {
+                b.terminals(OutletChoice(saved.outletId, saved.outletName)).any { it.id == saved.deviceId }
+            } catch (e: ApiError.NotFound) { false } catch (_: ApiError) { return@launch }
+            if (!stillValid) returnToSetup("Terminal ini tidak berlaku lagi. Pilih outlet dan terminal lagi.")
+        }
+    }
+
+    /** Lupakan pilihan tersimpan, tutup sesi, dan kembali ke layar penyiapan dengan [notice]. */
+    private fun returnToSetup(notice: String) {
+        val b = backend
+        clearSessionState()
+        // Melupakan terminal TIDAK boleh bergantung pada keberhasilan logout (server bisa tak terjangkau, token sudah mati).
+        viewModelScope.launch { try { b?.logout() } catch (_: ApiError) { } finally { b?.forgetTerminal() } }
+        config = null; terminalRevoked = false; roster = Load.Idle
+        setupNotice = notice
+        dest = Dest.SETUP
+    }
+
+    /**
+     * 073 / FR-018 — terminal dicabut saat staf masuk. Tab yang sedang dikerjakan (editor/bayar/selesai) boleh diselesaikan; begitu
+     * staf keluar dari alur itu — atau bila sedang tidak mengerjakan order — tablet kembali ke layar penyiapan. Order BARU ditolak
+     * di sini dan oleh server (422 `device_id` pada buka tab/shift).
+     */
+    private fun markTerminalRevoked() {
+        if (terminalRevoked) return
+        terminalRevoked = true
+        if (revokedStepAt(dest) == RevokedStep.FINISH_ORDER) say("Terminal ini dicabut. Selesaikan order ini; setelah itu pilih terminal lagi.")
+        else returnToSetup("Terminal ini sudah dicabut. Pilih outlet dan terminal lagi.")
     }
 
     /**
@@ -296,7 +352,7 @@ class PosStore(
     /** Navigasi ke layar penyiapan terminal dari PIN (untuk mengganti server/alamat). */
     fun goToSetup() { dest = Dest.SETUP }
 
-    internal fun setConfig(c: TerminalConfig) { config = c; dest = Dest.PIN; loadRoster() }
+    internal fun setConfig(c: TerminalConfig) { config = c; setupNotice = null; terminalRevoked = false; dest = Dest.PIN; loadRoster() }
 
     /** Hanya untuk preset pembandingan visual (src/debug); tidak ada jalur produk yang memanggilnya. */
     internal fun debugInstall(
@@ -308,7 +364,11 @@ class PosStore(
     }
 
     // ---------- navigasi & umpan balik ----------
-    fun go(d: Dest) { dest = d; sheet = null }
+    fun go(d: Dest) {
+        // 073 — terminal dicabut: tab yang dikerjakan boleh selesai, tetapi keluar dari alur itu berarti kembali ke penyiapan.
+        if (exitsOnNavigate(terminalRevoked, d)) { returnToSetup("Terminal ini sudah dicabut. Pilih outlet dan terminal lagi."); return }
+        dest = d; sheet = null
+    }
     fun show(s: Sheet?) {
         // Hasil bagi dari percobaan sebelumnya tidak ikut terbawa saat layar bagi dibuka lagi.
         if (s == Sheet.Split) { splitResult = Load.Idle; itemSplitResult = Load.Idle }
@@ -324,13 +384,18 @@ class PosStore(
     }
     fun clearToast() { toast = null }
     fun lock() {
+        clearSessionState()
+        // Daftar staf dimuat SETELAH logout selesai: sebelum itu token sesi lama masih terpasang dan server menolaknya (401).
+        viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { }; loadRoster() }
+    }
+
+    /** Bagian lokal dari keluar: semua keadaan sesi dikosongkan; logout ke server dan muat ulang staf dilakukan pemanggil. */
+    private fun clearSessionState() {
         availabilityJob?.cancel()
         floorJob?.cancel(); floor = Load.Idle; closedCache = emptyList(); keys.clear()
         session = null; user = null; shift = null; activeId = null; catalog = Load.Idle; soldOut = emptySet(); dest = Dest.PIN; sheet = null
         heartbeat = HeartbeatState()
         report = Load.Idle; cashMovements = Load.Idle; closeResult = null; limits = null
-        // Daftar staf dimuat SETELAH logout selesai: sebelum itu token sesi lama masih terpasang dan server menolaknya (401).
-        viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { }; loadRoster() }
     }
 
     // ---------- PIN (server) ----------
@@ -357,6 +422,8 @@ class PosStore(
                 startFloorPolling()
                 loadLimits()
             } catch (e: ApiError) {
+                // 073 — terminal tersimpan ditolak server (dicabut / bukan milik outlet): pilihan lama tidak berlaku, ulangi penyiapan.
+                if (isTerminalRevoked(e)) { onFailure(e.message); returnToSetup("Terminal ini tidak berlaku lagi. Pilih outlet dan terminal lagi."); return@launch }
                 onFailure(pinMessage(e))
                 if (e is ApiError.TooMany || e is ApiError.Unauthorized) loadRoster(silent = true)
             }
@@ -365,13 +432,14 @@ class PosStore(
 
     private fun pinMessage(e: ApiError): String = when {
         e is ApiError.Unauthorized && e.code == "invalid_pin" -> e.attemptsRemaining?.let { "PIN salah. Sisa $it percobaan." } ?: "PIN salah."
-        e is ApiError.TooMany && e.code == "pin_locked" -> "Login dikunci 15 menit karena PIN salah 5 kali."
+        // 073 — lama kunci dari server (`locked_until`), bukan angka yang ditulis di sini.
+        e is ApiError.TooMany && e.code == "pin_locked" -> PinLockMessage.text(e.lockedUntil, System.currentTimeMillis())
         else -> e.message
     }
 
     // ---------- menu & ketersediaan ----------
     var catalog by mutableStateOf<Load<MenuCatalog>>(Load.Idle); private set
-    var soldOut by mutableStateOf<Set<String>>(emptySet()); private set
+    var soldOut by mutableStateOf<Set<String>>(emptySet()); internal set
     private var availabilityEtag: String? = null
     private var availabilityJob: kotlinx.coroutines.Job? = null
 
@@ -489,6 +557,7 @@ class PosStore(
             } catch (e: ApiError) {
                 if (e is ApiError.Network) conn = Conn.OFFLINE
                 onShiftRefused(e)
+                if (isTerminalRevoked(e)) markTerminalRevoked()
                 say(writeErrorText(e))
             }
         }
@@ -515,6 +584,7 @@ class PosStore(
 
     fun newCounter() {
         val b = backend ?: return
+        if (terminalRevoked) { say("Terminal ini dicabut. Tidak bisa membuka order baru."); return }
         val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka order."); return }
         val intent = "open:counter"
         val key = keys.keyFor(intent)
@@ -526,6 +596,7 @@ class PosStore(
         val b = backend ?: return
         val ft = tables.firstOrNull { it.name == table } ?: run { say("Meja $table tidak ditemukan."); return }
         ft.tab?.let { openOrder(it.id.toString()); sheet = null; return }
+        if (terminalRevoked) { say("Terminal ini dicabut. Tidak bisa membuka order baru."); return }
         val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka order."); return }
         val intent = "open:table:${ft.id}:$pax"
         val key = keys.keyFor(intent)
@@ -543,6 +614,16 @@ class PosStore(
             } catch (e: ApiError) { say(e.message) }
         }
     }
+
+    /** 075 — kartu produk: satu varian langsung masuk jalur lama; beberapa varian membuka daftar varian. */
+    fun tapEntry(e: ProductEntry) {
+        if (e.isSingle) { tapProduct(e.variants.first()); return }
+        if (e.isSoldOut(soldOut)) { say("${e.name} sedang habis."); return }
+        sheet = Sheet.VariantPicker(e.id)
+    }
+
+    /** 075 — varian dipilih dari daftar varian: tutup daftar lalu pakai jalur lama (cek habis, langkah opsi, addLine). */
+    fun pickVariant(p: Product) { sheet = null; tapProduct(p) }
 
     fun tapProduct(p: Product) {
         if (p.id in soldOut) { say("${p.name} sedang habis."); return }

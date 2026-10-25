@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Device;
+use App\Models\Outlet;
 use App\Models\User;
 use App\Support\OutletContext;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +47,21 @@ class DeviceService
         });
     }
 
+    /**
+     * 073 — terminal AKTIF milik outlet ini, atau 422 `device_id` dengan pesan yang sama seperti heartbeat. Dipakai login
+     * PIN supaya "masuk di terminal X" bukan klaim klien semata (FR-009); terminal outlet lain, dicabut, atau tak dikenal
+     * ditolak SEBELUM PIN diperiksa, jadi tidak menaikkan hitungan salah-PIN siapa pun.
+     */
+    public function activeTerminalOf(Outlet $outlet, int $deviceId): Device
+    {
+        $device = Device::query()->where('outlet_id', $outlet->id)->whereNull('revoked_at')->find($deviceId);
+        if ($device === null) {
+            throw ValidationException::withMessages(['device_id' => __('devices.invalid_device')]);
+        }
+
+        return $device;
+    }
+
     /** 064 — ganti nama terminal. Terminal yang sudah dicabut tidak bisa diganti (409). */
     public function rename(Device $device, string $name, User $by): Device
     {
@@ -66,27 +82,76 @@ class DeviceService
     }
 
     /**
+     * 073 — pilih-atau-daftarkan terminal dari layar penyiapan tablet (tanpa pengguna login). Nama yang sudah dipakai
+     * terminal AKTIF outlet ini (tanpa beda huruf/spasi) mengembalikan terminal itu, BUKAN galat: tablet kedua yang
+     * mengetik nama yang sama berarti "terminal ini" (FR-006/FR-017). Nama kosong tetap 422.
+     *
+     * Outlet datang dari path rute dan sudah divalidasi aktif oleh pemanggil — pengecualian Konstitusi IV yang dicatat
+     * di plan.md (belum ada pengguna untuk menurunkannya). Aturan nama sama persis dengan `pair()` (cleanName +
+     * activeByName di bawah kunci baris outlet), jadi dua tablet yang mengetik nama baru yang sama serentak
+     * menghasilkan satu baris.
+     *
+     * @return array{device: Device, created: bool}
+     */
+    public function findOrRegister(Outlet $outlet, string $name): array
+    {
+        return DB::transaction(function () use ($outlet, $name) {
+            $name = $this->cleanName($name);
+            $this->lockOutlet((int) $outlet->id);
+
+            $existing = $this->activeByName((int) $outlet->id, $name);
+            if ($existing !== null) {
+                return ['device' => $existing, 'created' => false];
+            }
+
+            $device = new Device(['name' => $name, 'paired_at' => now()]);
+            $device->setAttribute('outlet_id', $outlet->id);
+            $device->save();
+
+            // Tanpa pengguna: pelaku null (activity_logs.user_id nullable). Satu transaksi dengan penyimpanannya.
+            $this->log->log(null, 'device_registered', 'Device', $device->id, "Terminal {$device->name} didaftarkan dari tablet (outlet {$outlet->name})");
+
+            return ['device' => $device, 'created' => true];
+        });
+    }
+
+    /**
      * Nama (dipangkas) wajib diisi dan belum dipakai terminal AKTIF lain di outlet + mode ini. Baris outlet dikunci
      * dulu supaya dua pendaftaran serentak dengan nama sama tidak lolos bersamaan.
      */
     private function assertNameFree(int $outletId, string $name, ?int $exceptId = null): string
+    {
+        $name = $this->cleanName($name);
+        $this->lockOutlet($outletId);
+
+        if ($this->activeByName($outletId, $name, $exceptId) !== null) {
+            throw ValidationException::withMessages(['name' => [__('devices.name_taken', ['name' => $name])]]);
+        }
+
+        return $name;
+    }
+
+    private function cleanName(string $name): string
     {
         $name = trim($name);
         if ($name === '') {
             throw ValidationException::withMessages(['name' => [__('devices.name_required')]]);
         }
 
-        DB::table('outlets')->where('id', $outletId)->lockForUpdate()->first();
+        return $name;
+    }
 
-        $taken = Device::query()->where('outlet_id', $outletId)->whereNull('revoked_at')
+    private function lockOutlet(int $outletId): void
+    {
+        DB::table('outlets')->where('id', $outletId)->lockForUpdate()->first();
+    }
+
+    private function activeByName(int $outletId, string $name, ?int $exceptId = null): ?Device
+    {
+        return Device::query()->where('outlet_id', $outletId)->whereNull('revoked_at')
             ->when($exceptId, fn ($q) => $q->where('id', '!=', $exceptId))
             ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
-            ->exists();
-        if ($taken) {
-            throw ValidationException::withMessages(['name' => [__('devices.name_taken', ['name' => $name])]]);
-        }
-
-        return $name;
+            ->first();
     }
 
     public function revoke(Device $device, User $by): Device

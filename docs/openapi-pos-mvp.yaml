@@ -150,8 +150,11 @@ paths:
       tags: [Auth]
       summary: Daftar staf aktif satu outlet untuk layar pilih-nama terminal (048/B1)
       description: |
-        Hanya data layar pilih-staf — tanpa username dan tanpa hash PIN. Butuh token (token penyiapan terminal dari
-        login owner/admin). Staf = pengguna aktif yang ditugaskan ke outlet itu, atau yang perannya melihat semua outlet.
+        Hanya data layar pilih-staf — tanpa username dan tanpa hash PIN. **073 — TANPA token** (tablet belum login; tidak
+        ada lagi login owner/admin saat penyiapan). Staf = pengguna aktif yang ditugaskan ke outlet itu, atau yang perannya
+        melihat semua outlet — **kecuali owner/admin** (peran dengan menu `settings`), yang tidak pernah terdaftar di sini.
+        Dibatasi throttle 30/menit.
+      security: []
       parameters:
         - { name: outlet_id, in: query, required: true, schema: { type: integer } }
       responses:
@@ -172,29 +175,35 @@ paths:
                         role: { type: string, nullable: true }
                         has_pin: { type: boolean }
                         locked: { type: boolean, description: Login PIN sedang terkunci }
-        '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { description: Outlet tidak ada atau tidak aktif }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { description: Terlalu sering (throttle) }
 
   /auth/pin-sessions:
     post:
       tags: [Auth]
       summary: Masuk dengan PIN 6 digit (048/B1)
       description: |
-        Mengeluarkan token sesi PIN berumur 12 jam. Lima PIN salah berturut-turut mengunci login PIN staf itu 15
-        menit (429 `pin_locked`); kata sandi tetap dapat dipakai lewat `/auth/login`. Pengguna yang tidak ada, tidak
-        aktif, atau bukan staf outlet dijawab sama (401 `invalid_pin`) tanpa hitungan.
+        Mengeluarkan token sesi PIN berumur 12 jam. **073 — TANPA token** dan **terikat ke terminal**: `device_id` wajib dan
+        harus terminal AKTIF milik `outlet_id`; selain itu 422 `device_id` (diperiksa SEBELUM PIN, jadi tidak menaikkan
+        hitungan salah-PIN). Lima PIN salah berturut-turut mengunci login PIN staf itu **5 menit** di semua tablet (429
+        `pin_locked`, `locked_until`; sebelumnya 15 menit — kunci yang sama juga menjaga PIN penyetuju dan ganti-PIN);
+        kata sandi tetap dapat dipakai lewat `/auth/login`. Pengguna yang tidak ada, tidak aktif, bukan staf outlet, atau
+        owner/admin dijawab sama (401 `invalid_pin`) tanpa hitungan. Berhasil → catatan aktivitas `pin_login` (pengguna,
+        outlet, terminal).
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [outlet_id, user_id, pin]
+              required: [outlet_id, user_id, pin, device_id]
               properties:
                 outlet_id: { type: integer }
                 user_id: { type: integer }
                 pin: { type: string, pattern: '^[0-9]{6}$' }
+                device_id: { type: integer, description: Terminal yang dipilih di layar penyiapan }
       responses:
         '200':
           description: Berhasil
@@ -260,6 +269,61 @@ paths:
         '204': { description: PIN dan kunci dihapus; sesi PIN staf itu dicabut }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /users/{id}/pin:
+    put:
+      tags: [Auth]
+      summary: Atur PIN seorang pengguna dari layar Pengguna (owner/admin) (074)
+      description: |
+        Hanya owner/admin (menu `settings`); punya menu Pengguna saja tidak cukup (403). Mengatur PIN pertama kali atau
+        menggantinya dalam satu langkah, tanpa kata sandi pengguna. Dalam satu transaksi: PIN diganti, hitungan salah dan
+        kunci dibersihkan, sesi PIN (`pos-pin`) pengguna itu dihapus (token kata sandi tidak disentuh), dan satu catatan
+        aktivitas `pin_set` (belum punya PIN) atau `pin_replaced` ditulis — TANPA PIN maupun hash. PIN tidak pernah ada di
+        respons. `source` hanya penanda log yang dilaporkan klien (server tidak bisa membuktikan PIN itu dibuat sistem).
+        PIN lemah (semua digit sama, urut naik/turun penuh) → 422 `pin_too_weak`. PIN tidak harus unik antar pengguna.
+        Throttle 30/menit.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pin]
+              properties:
+                pin: { type: string, pattern: '^[0-9]{6}$' }
+                source: { type: string, enum: [typed, generated], default: typed }
+      responses:
+        '200':
+          description: "Pengguna setelah diperbarui (`has_pin` true, `pin_locked` false); tanpa PIN"
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Pengguna tidak ada }
+        '422': { description: "PIN bukan 6 digit / `source` salah (galat per kolom), atau PIN lemah (`code: pin_too_weak`)" }
+        '429': { description: Terlalu sering (throttle) }
+
+  /pin-suggestions:
+    post:
+      tags: [Auth]
+      summary: Saran PIN acak 6 digit untuk tombol "Generate" (owner/admin) (074)
+      description: |
+        Mengembalikan PIN acak (CSPRNG) yang lolos aturan PIN lemah yang sama dengan penolakan. TIDAK disimpan, tidak terikat
+        pengguna, tidak dicatat; baru tersimpan bila admin menyimpannya lewat `PUT /users/{id}/pin`. POST (bukan GET) supaya
+        tidak tersimpan di cache. Throttle 30/menit.
+      responses:
+        '200':
+          description: Saran PIN
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pin: { type: string, pattern: '^[0-9]{6}$' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { description: Terlalu sering (throttle) }
+
   /devices:
     get:
       tags: [Devices]
@@ -276,6 +340,96 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/Device' }
         '403': { $ref: '#/components/responses/Forbidden' }
+
+  /pos-setup/outlets:
+    get:
+      tags: [Devices]
+      summary: Daftar outlet aktif untuk penyiapan tablet, tanpa login (073)
+      description: |
+        Layar pertama aplikasi Android: tanpa login owner/admin dan tanpa token. Hanya `id` dan `name` outlet aktif pada
+        mode data berlaku. Pengecualian Konstitusi IV dicatat di specs/073-android-outlet-terminal-login/plan.md.
+        Throttle 30/menit.
+      security: []
+      responses:
+        '200':
+          description: Daftar outlet (boleh kosong)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+        '429': { description: Terlalu sering (throttle) }
+
+  /pos-setup/outlets/{outlet}/terminals:
+    get:
+      tags: [Devices]
+      summary: Terminal aktif sebuah outlet, tanpa login (073)
+      description: |
+        Hanya `id` dan `name` terminal yang belum dicabut. Tanpa metadata perangkat. Outlet dari path (bukan body);
+        outlet tidak ada atau tidak aktif → 404. Throttle 30/menit.
+      security: []
+      parameters:
+        - { name: outlet, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Daftar terminal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+        '404': { description: Outlet tidak ada atau tidak aktif }
+        '429': { description: Terlalu sering (throttle) }
+    post:
+      tags: [Devices]
+      summary: Pilih atau daftarkan terminal berdasarkan nama, tanpa login (073)
+      description: |
+        Pendaftaran terbuka (keputusan pemilik, spec Q1). Nama (dipangkas, wajib, ≤ 80). Bila sudah ada terminal AKTIF
+        dengan nama itu di outlet ini (tanpa membedakan huruf besar/kecil/spasi), terminal itu dikembalikan dengan
+        `created: false` (200) dan tidak ada yang dibuat — beberapa tablet boleh memakai satu terminal. Selain itu terminal
+        baru dibuat (201) di bawah outlet dari path, dengan catatan aktivitas `device_registered` tanpa pelaku. Nama
+        terminal yang dicabut bisa dipakai lagi (rekaman baru). Throttle 10/menit. `POST /devices/pairings` (owner/admin,
+        duplikat → 422) tidak berubah.
+      security: []
+      parameters:
+        - { name: outlet, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 80, example: Kasir Depan }
+      responses:
+        '200':
+          description: Terminal yang sudah ada dipakai
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetupTerminal' }
+        '201':
+          description: Terminal baru terdaftar
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetupTerminal' }
+        '404': { description: Outlet tidak ada atau tidak aktif }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { description: Terlalu sering (throttle) }
 
   /devices/pairings:
     post:
@@ -4196,6 +4350,7 @@ paths:
         - { name: search, in: query, schema: { type: string }, description: "Mencocokkan name atau username (FR-004)." }
         - { name: role_id, in: query, schema: { type: integer } }
         - { name: is_active, in: query, schema: { type: boolean } }
+        - { name: has_pin, in: query, schema: { type: boolean }, description: "074 — 1 hanya yang punya PIN, 0 hanya yang belum; tanpa parameter = semua." }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -6793,6 +6948,13 @@ components:
                   items: { type: string }
 
   schemas:
+    SetupTerminal:
+      type: object
+      description: Terminal pada penyiapan tablet (073) — hanya identitas, tanpa metadata perangkat.
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        created: { type: boolean, description: "true = baru dibuat (201); false = terminal aktif bernama sama dipakai (200)" }
     ShiftRow:
       type: object
       description: 065 — satu shift pada daftar/panel. Uang berupa string 2 desimal; shift tertutup membaca nilai tersimpan.
@@ -7124,7 +7286,9 @@ components:
         is_active: { type: boolean }
         photo_url: { type: string, nullable: true, readOnly: true }
         last_login_at: { type: string, format: date-time, nullable: true }
-      description: password TIDAK PERNAH disertakan (FR-007), termasuk pada ekspor massal.
+        has_pin: { type: boolean, description: "074 — sudah punya PIN (hanya status; hash tidak pernah keluar)" }
+        pin_locked: { type: boolean, description: "074 — PIN sedang terkunci (kunci 5-salah belum lewat)" }
+      description: password dan PIN TIDAK PERNAH disertakan (FR-007), termasuk pada ekspor massal; hanya status `has_pin`/`pin_locked`.
 
     Role:
       type: object
@@ -7548,6 +7712,10 @@ components:
         cost_price: { $ref: '#/components/schemas/Money' }
         sell_price: { $ref: '#/components/schemas/Money' }
         current_stock: { type: integer, readOnly: true }
+        outlet_price: { type: string, nullable: true, readOnly: true, example: "9000.00", description: "045 — harga khusus di outlet yang berlaku; null = mengikuti sell_price. Layar kasir menampilkan outlet_price bila ada." }
+        outlet_stock: { type: integer, nullable: true, readOnly: true, description: "045 — saldo di outlet pemesanan; hanya terisi untuk `pos=1`. Layar kasir menampilkan outlet_stock bila ada, selain itu current_stock." }
+        track_stock: { type: boolean, readOnly: true, description: "028 — false untuk hidangan made-to-order (tanpa stok fisik); layar kasir tidak menampilkan angka stok untuknya." }
+        image_url: { type: string, nullable: true, readOnly: true, description: "URL siap-pakai (disk publik) foto varian sendiri; null bila tidak ada (foto produk induk adalah field terpisah di Product)." }
         low_stock_alert: { type: integer, nullable: true }
         is_active: { type: boolean }
         bom_complete: { type: boolean, description: "034 — BOM ditandai selesai; cost_price mengikuti biaya BOM dan dikunci." }
