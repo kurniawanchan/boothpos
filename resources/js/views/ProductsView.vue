@@ -67,6 +67,7 @@ const { state, set } = useQueryState({
   q: '',
   category: [],
   status: [],
+  outlet: [],
   quality: '',
   availability: '',
   view: readStoredView(userId),
@@ -79,6 +80,19 @@ const tab = computed(() => (TABS.includes(state.tab) ? state.tab : 'menu'));
 const view = computed(() => (VIEW_MODES.includes(state.view) ? state.view : 'grid'));
 const statusFilter = computed(() => state.status.filter((s) => STATUSES.includes(s)));
 const categoryFilter = computed(() => state.category.filter((c) => /^\d+$/.test(c)).map(Number));
+
+// 070 — filter Outlet halaman. Hanya outlet yang boleh dilihat pengguna yang berlaku (id asing dari URL diabaikan, server
+// tetap memotong). Kosong = semua outlet. Nilai `all` di URL = pilihan "Semua outlet" yang disengaja saat bilah atas
+// sedang memilih satu outlet; tanpa penanda itu, URL kosong akan terisi ulang dari bilah atas saat dimuat ulang.
+const outletStore = useOutletStore();
+const permittedOutletIds = computed(() => outletStore.outlets.map((o) => o.id));
+const outletFilter = computed(() => {
+  if (!outletStore.multi) return [];
+  return state.outlet.filter((o) => /^\d+$/.test(o)).map(Number).filter((id) => permittedOutletIds.value.includes(id));
+});
+const topBarOutlet = () => (outletStore.selected != null ? [String(outletStore.selected)] : []);
+// Filter belum disentuh dan URL tidak menyebut outlet -> mulai dari outlet bilah atas (sebelum permintaan pertama).
+if (state.outlet.length === 0 && outletStore.selected != null) state.outlet = topBarOutlet();
 const quality = computed(() => (QUALITIES.includes(state.quality) ? state.quality : ''));
 const availability = computed(() => (state.availability === 'sold_out' ? 'sold_out' : ''));
 const sort = computed(() => (SORTS.includes(state.sort) ? state.sort : ''));
@@ -89,13 +103,35 @@ const canManage = computed(() => auth.canAccessMenu('products'));
 // --- strip angka ---------------------------------------------------------------------------------------------
 const summary = ref(null);
 const summaryState = ref('loading');
+// 070 — saat filter berubah angka lama tetap tampil tetapi diberi tanda sibuk (redup, aria-busy), seperti daftar di
+// bawahnya; hanya muatan pertama dan Coba lagi yang memakai kerangka memuat. Respons usang dibuang lewat urutan.
+const summaryBusy = ref(false);
+let summarySeq = 0;
+
+// Himpunan yang sama dengan daftar (outlet, kategori, status, cari). Sengaja TANPA quality/availability/tab/urutan/halaman:
+// dua yang pertama dipasang oleh klik pada kartu ini sendiri (D3), sisanya tidak mengubah himpunan item.
+function summaryParams() {
+  const params = {};
+  if (outletFilter.value.length) params.outlet_id = outletFilter.value;
+  if (categoryFilter.value.length) params.category_id = categoryFilter.value;
+  if (statusFilter.value.length) params.status = statusFilter.value;
+  if (state.q) params.q = state.q;
+  return params;
+}
+
 async function loadSummary() {
-  summaryState.value = 'loading';
+  const mine = ++summarySeq;
+  if (summary.value && summaryState.value === 'ready') summaryBusy.value = true;
+  else summaryState.value = 'loading';
   try {
-    summary.value = await productSummary();
+    const res = await productSummary(summaryParams(), { skipOutletHeader: true });
+    if (mine !== summarySeq) return;
+    summary.value = res;
     summaryState.value = 'ready';
   } catch {
-    summaryState.value = 'error';
+    if (mine === summarySeq) summaryState.value = 'error';
+  } finally {
+    if (mine === summarySeq) summaryBusy.value = false;
   }
 }
 
@@ -116,12 +152,11 @@ const error = ref(false);
 const selected = ref([]);
 let requestSeq = 0;
 
-// 045 Stage 3 — outlet terpilih di topbar menyaring daftar ke item yang DIBAWA outlet itu (memilih memuat ulang halaman).
-const outletStore = useOutletStore();
+// 045 Stage 3 / 070 — outlet bilah atas hanya MENGISI filter Outlet di atas; ia tidak lagi dikirim sebagai header.
 
 function listParams() {
   return {
-    outlet_id: outletStore.selected != null ? [outletStore.selected] : undefined,
+    outlet_id: outletFilter.value.length ? outletFilter.value : undefined,
     tab: tab.value,
     page: page.value,
     per_page: PER_PAGE,
@@ -143,7 +178,7 @@ async function loadList() {
   loading.value = isProductTab.value;
   error.value = false;
   try {
-    const res = await listProducts(params);
+    const res = await listProducts(params, { skipOutletHeader: true });
     if (mine !== requestSeq) return; // respons permintaan yang sudah tersusul diabaikan
     if (res.counts) counts.value = res.counts;
     if (isProductTab.value) {
@@ -169,7 +204,12 @@ watch(tab, () => {
 });
 
 // Satu watcher untuk SEMUA keadaan yang mengubah permintaan (juga saat URL berubah dari luar: back/forward).
-watch(() => JSON.stringify([tab.value, page.value, state.q, categoryFilter.value, statusFilter.value, quality.value, availability.value, sort.value]), loadList);
+watch(() => JSON.stringify([tab.value, page.value, state.q, categoryFilter.value, statusFilter.value, outletFilter.value, quality.value, availability.value, sort.value]), loadList);
+
+watch(() => JSON.stringify(summaryParams()), loadSummary);
+
+// Bilah atas berganti outlet -> filter Outlet halaman ikut (D1); pengguna masih bisa memilih lagi dari filter.
+watch(() => outletStore.selected, () => set({ outlet: topBarOutlet(), page: 1 }));
 
 // --- referensi untuk filter dan formulir ----------------------------------------------------------------------
 const outlets = ref([]);
@@ -207,10 +247,19 @@ const statusModel = computed({
   set: (values) => set({ status: values, page: 1 }),
 });
 
-const filtersActive = computed(() => !!state.q || categoryFilter.value.length > 0 || statusFilter.value.length > 0 || !!quality.value || !!availability.value);
+const outletOptions = computed(() => outletStore.outlets.map((o) => ({ value: o.id, label: o.name })));
+const outletModel = computed({
+  get: () => outletFilter.value,
+  // Mengosongkan saat bilah atas memilih satu outlet harus tahan di URL: tanpa `all`, muat ulang mengisinya lagi.
+  set: (ids) => set({ outlet: ids.length ? ids.map(String) : outletStore.selected != null ? ['all'] : [], page: 1 }),
+});
+// Filter Outlet dianggap aktif hanya bila berbeda dari titik awalnya (outlet bilah atas, atau semua).
+const outletActive = computed(() => outletFilter.value.join(',') !== topBarOutlet().join(','));
+
+const filtersActive = computed(() => !!state.q || categoryFilter.value.length > 0 || statusFilter.value.length > 0 || outletActive.value || !!quality.value || !!availability.value);
 function resetFilters() {
   searchText.value = '';
-  set({ q: '', category: [], status: [], quality: '', availability: '', page: 1 });
+  set({ q: '', category: [], status: [], outlet: topBarOutlet(), quality: '', availability: '', page: 1 });
 }
 
 function onFigureFilter(f) {
@@ -358,7 +407,7 @@ const emptyMessage = computed(() => (filtersActive.value ? t('products.empty_fil
       </template>
     </PageHeader>
 
-    <ProductFigures :summary="summary" :state="summaryState" @retry="loadSummary" @filter="onFigureFilter" />
+    <ProductFigures :summary="summary" :state="summaryState" :busy="summaryBusy" @retry="loadSummary" @filter="onFigureFilter" />
 
     <ReleaseBanner :unreleased="summary?.unreleased ?? null" @release="releaseOpen = true" @approvals="approvalsOpen = true" />
 
@@ -377,6 +426,7 @@ const emptyMessage = computed(() => (filtersActive.value ? t('products.empty_fil
         >
           <BaseMultiSelect v-model="categoryModel" :options="categoryOptions" :all-label="t('products.filter_category_all')" class="w-52" />
           <BaseMultiSelect v-model="statusModel" :options="statusOptions" :all-label="t('products.filter_status_all')" class="w-44" />
+          <BaseMultiSelect v-if="outletStore.multi" v-model="outletModel" :options="outletOptions" :all-label="t('products.filter_outlet_all')" class="w-52" data-testid="outlet-filter" />
           <!-- Kelompok kanan (hitungan · Grid|Tabel · + Menu item) memakai slot `trailing` FilterBar. -->
           <template #trailing>
             <ViewToggle v-model="viewModel" :options="viewOptions" :label="t('products.view_aria')" />

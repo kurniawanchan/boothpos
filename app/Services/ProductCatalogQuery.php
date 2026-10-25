@@ -51,10 +51,19 @@ class ProductCatalogQuery
         return $paginator;
     }
 
-    /** Jumlah per tab, tidak bergantung pada filter. @return array<string,int> */
-    public function counts(): array
+    /**
+     * Jumlah per tab. Hanya `outlet_id` yang dipakai (070): tab menunjukkan total tiap jenis item, jadi kategori, status,
+     * dan pencarian tidak menyempitkannya, tetapi item yang tidak dibawa outlet terpilih tidak boleh ikut terhitung.
+     * Bahan baku dan modifier bukan item per outlet, sehingga tidak berubah.
+     *
+     * @param  array<string,mixed>  $f
+     * @return array<string,int>
+     */
+    public function counts(array $f = []): array
     {
-        $products = Product::query()->selectRaw('is_retail, COUNT(*) as n')->groupBy('is_retail')->pluck('n', 'is_retail');
+        $outletOnly = ['tab' => 'any'] + array_intersect_key($f, ['outlet_id' => true]);
+        $products = $this->filtered($outletOnly)->toBase()
+            ->selectRaw('products.is_retail, COUNT(DISTINCT products.id) as n')->groupBy('products.is_retail')->pluck('n', 'is_retail');
         $materials = Material::query()->selectRaw('kind, COUNT(*) as n')->groupBy('kind')->pluck('n', 'kind');
 
         return [
@@ -67,18 +76,33 @@ class ProductCatalogQuery
         ];
     }
 
-    /** Angka header (GET /products/summary). */
-    public function summary(): array
+    /**
+     * Angka header (GET /products/summary), dihitung dari himpunan tersaring yang SAMA dengan daftar (070): outlet,
+     * kategori, status, dan pencarian ikut. `quality` dan `availability` sengaja TIDAK ikut — keduanya dipasang oleh
+     * klik pada kartu ini sendiri, jadi kartu yang disaring olehnya akan mengosongkan kartu lain dan dirinya sendiri.
+     * Banner rilis (`unreleased`) tetap milik organisasi, bukan item tersaring.
+     *
+     * @param  array<string,mixed>  $f
+     */
+    public function summary(array $f = []): array
     {
-        $byStatus = Product::query()->where('is_retail', false)
-            ->selectRaw("SUM(discontinued_at IS NULL AND published_at IS NOT NULL) as active, SUM(published_at IS NULL AND discontinued_at IS NULL) as draft, SUM(discontinued_at IS NOT NULL) as discontinued, COUNT(*) as total")
+        $set = ['tab' => 'menu'] + array_intersect_key($f, array_flip(['outlet_id', 'category_id', 'status', 'q', 'search']));
+        $setIds = fn () => $this->filtered($set)->select('products.id');
+
+        $byStatus = $this->filtered($set)->toBase()
+            ->selectRaw("SUM(products.discontinued_at IS NULL AND products.published_at IS NOT NULL) as active, SUM(products.published_at IS NULL AND products.discontinued_at IS NULL) as draft, SUM(products.discontinued_at IS NOT NULL) as discontinued, COUNT(*) as total")
             ->first();
 
-        $marks = ItemAvailabilityMark::query()->active()->with('product:id,name')->orderBy('marked_at')->get();
+        // Tanda 86 berlaku di outlet-nya, atau di semua outlet bila `outlet_id` NULL (045 Stage 3); tanpa filter outlet semua dihitung.
+        $outletIds = $this->requestedOutletIds($f);
+        $marks = ItemAvailabilityMark::query()->active()
+            ->whereIn('product_id', $setIds())
+            ->when($outletIds !== null, fn ($q) => $q->where(fn ($w) => $w->whereNull('outlet_id')->orWhereIn('outlet_id', $outletIds ?: [0])))
+            ->with('product:id,name')->orderBy('marked_at')->get();
 
         $quality = null;
         foreach (self::QUALITY_KINDS as $kind) {
-            $q = $this->qualityQuery($kind);
+            $q = $this->qualityQuery($kind)->whereIn('products.id', $setIds());
             $count = (clone $q)->count();
             if ($count > 0) {
                 $quality = ['count' => $count, 'examples' => $q->orderBy('name')->limit(2)->pluck('name')->all(), 'kind' => $kind];
@@ -117,20 +141,32 @@ class ProductCatalogQuery
 
     // --- dasar query -----------------------------------------------------------------------------
 
+    /**
+     * Daftar + eager-load. Seluruh penyaringan hidup di `filtered()` supaya daftar, hitungan tab, dan angka header
+     * (070) dihitung dari SATU definisi himpunan — angka header = baris di bawahnya dengan konstruksi, bukan kebetulan.
+     */
     private function base(array $f): Builder
     {
-        $q = Product::query()
-            ->with([
-                'category:id,name,station_id', 'category.station:id,name', 'station:id,name',
-                'variants:id,product_id,sku,variant_name,sell_price,cost_price,is_active',
-                'modifierGroups:id,name', 'category.modifierGroups:id,name',
-                'availabilityMarks' => fn ($m) => $m->active()->with('reason:id,code,label_id,label_en'),
-                // 045 Stage 3 — hanya pasangan yang TIDAK dibawa yang perlu dimuat (tanpa baris = dibawa).
-                'outletItemSettings' => fn ($s) => $s->where('is_carried', false),
-            ]);
+        return $this->filtered($f)->with([
+            'category:id,name,station_id', 'category.station:id,name', 'station:id,name',
+            'variants:id,product_id,sku,variant_name,sell_price,cost_price,is_active',
+            'modifierGroups:id,name', 'category.modifierGroups:id,name',
+            'availabilityMarks' => fn ($m) => $m->active()->with('reason:id,code,label_id,label_en'),
+            // 045 Stage 3 — hanya pasangan yang TIDAK dibawa yang perlu dimuat (tanpa baris = dibawa).
+            'outletItemSettings' => fn ($s) => $s->where('is_carried', false),
+        ]);
+    }
 
+    /** Himpunan item tersaring tanpa eager-load (dipakai daftar, hitungan tab, dan angka header). */
+    private function filtered(array $f): Builder
+    {
+        $q = Product::query();
+
+        // `any` (internal, hanya hitungan tab) = kedua jenis sekaligus; tab dari permintaan hanya menu atau retail.
         $tab = $f['tab'] ?? 'menu';
-        $q->where('products.is_retail', $tab === 'retail');
+        if ($tab !== 'any') {
+            $q->where('products.is_retail', $tab === 'retail');
+        }
 
         if (($term = trim((string) ($f['q'] ?? $f['search'] ?? ''))) !== '') {
             $like = '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term).'%';
@@ -159,8 +195,7 @@ class ProductCatalogQuery
         }
 
         // 045 Stage 3 — filter outlet: item yang dibawa SALAH SATU outlet terpilih (tanpa baris relasi = dibawa).
-        if (! empty($f['outlet_id'])) {
-            $ids = array_values(array_intersect(app(OutletContext::class)->effectiveIds(), array_map('intval', (array) $f['outlet_id'])));
+        if (($ids = $this->requestedOutletIds($f)) !== null) {
             if ($ids === []) {
                 $q->whereRaw('1 = 0');
             } else {
@@ -179,6 +214,21 @@ class ProductCatalogQuery
         }
 
         return $q;
+    }
+
+    /**
+     * Outlet yang diminta, dipotong dengan outlet yang boleh dilihat pengguna (Konstitusi IV: permintaan hanya
+     * menyempitkan). null = tidak ada filter outlet; `[]` = ada filter tetapi tak satu pun boleh dilihat.
+     *
+     * @return list<int>|null
+     */
+    private function requestedOutletIds(array $f): ?array
+    {
+        if (empty($f['outlet_id'])) {
+            return null;
+        }
+
+        return array_values(array_intersect(app(OutletContext::class)->effectiveIds(), array_map('intval', (array) $f['outlet_id'])));
     }
 
     private function applySort(Builder $q, string $sort): void

@@ -5,6 +5,9 @@ import { listOutlets } from '../../resources/js/api/outlets';
 import { listCategories } from '../../resources/js/api/categories';
 import { ROW, COUNTS, SUMMARY, META, renderProducts, userEv } from './productsViewHarness';
 
+// 070 — halaman Produk meminta daftar tanpa header outlet bilah atas (filter Outlet-nya sendiri).
+const SKIP_HEADER = { skipOutletHeader: true };
+
 vi.mock('../../resources/js/api/products', () => ({
   listProducts: vi.fn(), productSummary: vi.fn(), getProduct: vi.fn(), createProduct: vi.fn(), updateProduct: vi.fn(), deleteProduct: vi.fn(),
   addVariant: vi.fn(), updateVariant: vi.fn(), uploadProductImage: vi.fn(), uploadVariantImage: vi.fn(),
@@ -111,11 +114,11 @@ describe('ProductsView — grid (043)', () => {
 
     await user.click(screen.getByText(/semua kategori/i));
     await user.click(await screen.findByRole('option', { name: 'Kopi' }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: [3], page: 1 })));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: [3], page: 1 }), SKIP_HEADER));
 
     await user.click(screen.getByText(/semua status/i));
     await user.click(await screen.findByRole('option', { name: 'Draft' }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: [3], status: ['draft'] })));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: [3], status: ['draft'] }), SKIP_HEADER));
     await waitFor(() => expect(router.currentRoute.value.query).toMatchObject({ category: '3', status: 'draft' }));
   });
 
@@ -124,14 +127,14 @@ describe('ProductsView — grid (043)', () => {
     await waitFor(() => expect(listProducts).toHaveBeenCalled());
     expect(listProducts).toHaveBeenCalledWith({
       tab: 'retail', page: 2, per_page: 15, q: 'es', category_id: [3], status: ['active'], quality: 'no_station', availability: undefined, sort: '-price',
-    });
+    }, SKIP_HEADER);
     expect(await screen.findByRole('tab', { name: /^Item ritel/, selected: true })).toBeInTheDocument();
 
     // nilai tak dikenal jatuh ke bawaan, bukan galat
     listProducts.mockClear();
     const second = await renderProducts({ url: '/products?tab=zzz&sort=hack&page=-4&quality=nope&view=cube' });
     await waitFor(() => expect(listProducts).toHaveBeenCalled());
-    expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'menu', page: 1, sort: undefined, quality: undefined }));
+    expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'menu', page: 1, sort: undefined, quality: undefined }), SKIP_HEADER);
     expect(second.container).toBeTruthy();
   });
 
@@ -143,7 +146,7 @@ describe('ProductsView — grid (043)', () => {
 
     listProducts.mockResolvedValueOnce({ data: [ROW(16)], meta: META(24, 2), counts: COUNTS });
     await user.click(screen.getByRole('button', { name: /halaman berikutnya/i }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 })));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }), SKIP_HEADER));
     expect(await screen.findByText('Menampilkan 16–24 dari 24')).toBeInTheDocument();
   });
 
@@ -171,7 +174,7 @@ describe('ProductsView — grid (043)', () => {
     await screen.findByText('Item 1');
 
     await user.click(await screen.findByTestId('figure-sold_out'));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ availability: 'sold_out', page: 1 })));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ availability: 'sold_out', page: 1 }), SKIP_HEADER));
     const chip = await screen.findByRole('button', { name: /lepas filter 86 hari ini/i });
 
     await user.click(chip);
@@ -183,7 +186,7 @@ describe('ProductsView — grid (043)', () => {
     await renderProducts();
     await screen.findByText('Item 1');
     await user.click(await screen.findByTestId('figure-quality'));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ quality: 'no_station' })));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ quality: 'no_station' }), SKIP_HEADER));
     expect(await screen.findByRole('button', { name: /lepas filter kualitas data: tanpa station dapur/i })).toBeInTheDocument();
   });
 
@@ -194,7 +197,7 @@ describe('ProductsView — grid (043)', () => {
 
     listProducts.mockResolvedValueOnce({ data: [ROW(9, { name: 'Kopi botol', is_retail: true })], meta: META(1), counts: COUNTS });
     await user.click(screen.getByRole('tab', { name: /^Item ritel/ }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'retail' })));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ tab: 'retail' }), SKIP_HEADER));
     expect(await screen.findByText('Kopi botol')).toBeInTheDocument();
     expect(screen.queryByText('Item 1')).not.toBeInTheDocument();
   });

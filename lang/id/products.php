@@ -50,6 +50,8 @@ return [
     'recipe_cost_locked' => 'Harga modal varian ini mengikuti resep. Buat versi resep baru untuk mengubahnya.',
     'bulk_price_scope_invalid' => 'Pilih cakupan harga yang valid.',
     'bulk_price_outlets_required' => 'Pilih minimal satu outlet.',
+    'outlet_price_duplicate' => 'Outlet ini sudah punya harga pada varian yang sama.',
+    'outlet_price_not_carried' => 'Outlet ini tidak membawa item ini, jadi tidak bisa diberi harga khusus.',
     'outlet_price_release_unavailable' => 'Harga per outlet belum bisa diubah saat rilis menu aktif.',
     'outlet_ids_required' => 'Pilih minimal satu outlet untuk ditandai habis.',
 ];

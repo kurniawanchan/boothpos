@@ -27,7 +27,15 @@ describe('api/products (043)', () => {
 
   it('reads the summary from GET /products/summary', async () => {
     await products.productSummary();
-    expect(client.get).toHaveBeenCalledWith('/products/summary');
+    expect(client.get).toHaveBeenCalledWith('/products/summary', { params: {} });
+  });
+
+  it('forwards filters and the skip-outlet-header option on list and summary (070)', async () => {
+    const params = { outlet_id: [2, 3], category_id: [1], status: ['active'], q: 'mie' };
+    await products.listProducts({ tab: 'menu', ...params }, { skipOutletHeader: true });
+    expect(client.get).toHaveBeenCalledWith('/products', { params: { tab: 'menu', ...params }, skipOutletHeader: true });
+    await products.productSummary(params, { skipOutletHeader: true });
+    expect(client.get).toHaveBeenCalledWith('/products/summary', { params, skipOutletHeader: true });
   });
 
   it('marks and clears sold-out through POST/DELETE /products/{id}/sold-out', async () => {

@@ -84,4 +84,21 @@ describe('ProductFigures', () => {
     await user.click(screen.getByRole('button', { name: /coba lagi/i }));
     expect(events).toEqual([['retry']]);
   });
+
+  it('marks the region busy while refreshing but keeps the numbers (070)', () => {
+    renderFigures({ busy: true });
+    const region = screen.getByTestId('product-figures');
+    expect(region).toHaveAttribute('aria-busy', 'true');
+    expect(within(screen.getByTestId('figure-active')).getByText('22')).toBeInTheDocument();
+  });
+
+  it('is not busy by default (070)', () => {
+    renderFigures();
+    expect(screen.getByTestId('product-figures')).toHaveAttribute('aria-busy', 'false');
+  });
+
+  it('words the active note for the filtered set (070)', () => {
+    renderFigures({ summary: { ...SUMMARY, active: { count: 4, total: 6, draft: 1, discontinued: 1 } } });
+    expect(within(screen.getByTestId('figure-active')).getByText('dari 6 item · 1 draft · 1 discontinued')).toBeInTheDocument();
+  });
 });

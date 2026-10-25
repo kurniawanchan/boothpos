@@ -1287,7 +1287,11 @@ paths:
         pemanggil). Dengan lebih dari satu outlet terlihat, `availability` berisi satu entri per outlet
         `{outlet_id, outlet_code, outlet_name, state: available|sold_out|not_carried, reason}`; dengan satu outlet
         bentuk lama (satu entri tanpa outlet). Tanpa `tab`, bentuk lama
-        tidak berubah. Biaya (`food_cost_pct`) hanya untuk pengguna dengan menu products/reports.
+        tidak berubah.
+        070: `counts.menu` dan `counts.retail` mengikuti `outlet_id[]` (hanya item yang dibawa outlet terpilih); jenis lain
+        (bahan, setengah jadi, kemasan, modifier) tidak berubah, dan kategori/status/pencarian tidak menyempitkan hitungan
+        tab. Layar Produk meminta daftar TANPA header `X-Outlet-Id` dan mengirim `outlet_id[]` sendiri; server tetap
+        memotongnya dengan outlet yang boleh dilihat pengguna. Biaya (`food_cost_pct`) hanya untuk pengguna dengan menu products/reports.
       parameters:
         - { name: tab, in: query, schema: { type: string, enum: [menu, retail] }, description: "043 — mengaktifkan mode katalog" }
         - { name: q, in: query, schema: { type: string, maxLength: 100 }, description: "043 — nama, nama pendek, SKU, atau awalan kode" }
@@ -1342,6 +1346,12 @@ paths:
         `code_prefix` = artist.code + "-" + category.code + "-" + product_segment
         (format "ART-CA-SEG", 10 karakter). `sku` = code_prefix + "-" + urutan
         varian 3 digit (format "ART-CA-SEG-001", 14 karakter).
+        070: `outlet_ids` (opsional; bila dikirim minimal satu outlet yang boleh dilihat, selain itu 422; tanpa
+        `outlet_ids` semua outlet membawa item) dan `variants[].outlet_prices` = `[{outlet_id, price}]` harga khusus per
+        outlet. Setiap `outlet_id` harus boleh dilihat pengguna, termasuk outlet pembawa, dan unik per varian (422);
+        `price` angka 0 atau lebih. Harga ditulis LANGSUNG lewat PriceService (riwayat `source = created`, audit
+        `outlet_price_changed`), dalam transaksi yang sama dengan item — gagal di tengah membatalkan seluruh item.
+        Harga yang sama dengan harga dasar tidak membuat baris (baris hanya ada bila berbeda).
       requestBody:
         required: true
         content:
@@ -3402,8 +3412,19 @@ paths:
         = item dengan tanda 86 yang berlaku; `unreleased` = perubahan menu yang belum dirilis, `null` bila
         `menu_release_enabled` mati; `quality` = jenis kekurangan data pertama yang ada (`no_station`, `no_price`,
         `no_cost`) beserta contoh namanya.
+        070: angka dihitung dari himpunan item yang SAMA dengan daftar di bawahnya — filter `outlet_id[]` (dipotong dengan
+        outlet yang boleh dilihat pengguna), `category_id[]`, `status[]`, dan `q`/`search` ikut; `quality` dan `availability`
+        sengaja diabaikan (keduanya dipasang oleh klik pada kartu ini sendiri). Tanda 86 dihitung bila `outlet_id`-nya NULL
+        (berlaku di semua outlet) atau termasuk outlet terpilih. `unreleased` tetap milik organisasi, bukan item tersaring.
+        Tanpa filter, hasilnya sama dengan sebelumnya. Nilai filter tak valid → 422.
+      parameters:
+        - { name: outlet_id, in: query, style: form, explode: true, schema: { type: array, items: { type: integer } } }
+        - { name: category_id, in: query, style: form, explode: true, schema: { type: array, items: { type: integer } } }
+        - { name: status, in: query, style: form, explode: true, schema: { type: array, items: { type: string, enum: [draft, active, discontinued] } } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
       responses:
         '200': { description: Berhasil }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /reason-codes:
     get:
@@ -7563,10 +7584,28 @@ components:
         name: { type: string, maxLength: 150 }
         description: { type: string, nullable: true }
         is_active: { type: boolean, default: true }
+        outlet_ids:
+          type: array
+          minItems: 1
+          items: { type: integer }
+          description: "070 — outlet yang membawa item; tanpa bidang ini semua outlet. Daftar kosong → 422."
         variants:
           type: array
           minItems: 1
-          items: { $ref: '#/components/schemas/VariantInput' }
+          items:
+            allOf:
+              - { $ref: '#/components/schemas/VariantInput' }
+              - type: object
+                properties:
+                  outlet_prices:
+                    type: array
+                    description: "070 — harga khusus per outlet saat membuat; sel kosong di UI tidak dikirim (ikut harga dasar)."
+                    items:
+                      type: object
+                      required: [outlet_id, price]
+                      properties:
+                        outlet_id: { type: integer }
+                        price: { type: number, minimum: 0 }
 
     StockMovement:
       type: object

@@ -1,15 +1,19 @@
 import client from './client';
 
-export function listProducts(params = {}) {
-  return client.get('/products', { params }).then((r) => r.data);
+// 070 — `skipOutletHeader` dipakai halaman Produk (filter Outlet-nya sendiri menggantikan header bilah atas).
+const outletOpts = (options) => (options?.skipOutletHeader ? { skipOutletHeader: true } : {});
+
+export function listProducts(params = {}, options = {}) {
+  return client.get('/products', { params, ...outletOpts(options) }).then((r) => r.data);
 }
 
 /**
  * 043 — angka kepala halaman Produk (menu item aktif, 86 hari ini, belum dirilis, kualitas data).
- * Satu panggilan; tiap angka dihitung server dari data yang sama dengan daftar (SC-001).
+ * Satu panggilan; tiap angka dihitung server dari data yang sama dengan daftar (SC-001). 070: menerima filter
+ * himpunan tersaring (outlet_id[], category_id[], status[], q) supaya angkanya mengikuti daftar.
  */
-export function productSummary() {
-  return client.get('/products/summary').then((r) => r.data);
+export function productSummary(params = {}, options = {}) {
+  return client.get('/products/summary', { params, ...outletOpts(options) }).then((r) => r.data);
 }
 
 export function getProduct(id) {

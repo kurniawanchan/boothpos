@@ -58,7 +58,10 @@ describe('ProductFormDrawer — create mode follows the Menu item design (043)',
     expect(screen.getByText(P.f_kicker_new)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: P.f_menu_item })).toBeInTheDocument();
     const headings = within(screen.getByTestId('product-form')).getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(headings).toEqual([P.f_sec_basic, P.f_sec_price, P.f_sec_variants, P.f_sec_modifier, P.f_sec_kitchen, P.f_sec_availability, P.f_sec_other]);
+    expect(headings).toEqual([P.f_sec_basic, P.f_sec_price, P.f_sec_variants, P.f_sec_modifier, P.f_sec_kitchen, P.f_sec_other]);
+    // 070 — formulir buat tanpa bagian Ketersediaan/Status (Status Draft/Aktif ada di formulir ubah).
+    expect(screen.queryByRole('heading', { name: P.f_sec_availability })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-toggle')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: id.common.cancel })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: P.f_save_item })).toBeInTheDocument();
     expect(screen.getByLabelText(/^nama item/i)).toHaveAttribute('placeholder', P.f_item_name_ph);
@@ -80,9 +83,9 @@ describe('ProductFormDrawer — create mode follows the Menu item design (043)',
     for (const text of [/harga terbuka/i, /aktif di outlet/i, /wjm/i, /channel/i, /dine-in|takeaway|gofood|grabfood|qr self/i, /kuota harian/i, /porsi/i, /per outlet|harga outlet|outlet price/i]) {
       expect(within(form).queryByText(text)).not.toBeInTheDocument();
     }
-    // tabel varian: hanya kolom yang punya backend
+    // tabel varian (070: tata letak sama dengan mode ubah, harga modal bagi yang boleh melihat biaya): tanpa kolom per outlet
     const headers = within(screen.getByTestId('variants-table')).getAllByRole('columnheader').map((h) => h.textContent.trim()).filter(Boolean);
-    expect(headers).toEqual([P.f_col_variant, P.f_col_sku, P.f_col_image, P.f_col_price, P.f_col_stock, P.f_col_active]);
+    expect(headers).toEqual([P.f_col_variant, P.f_col_sku, P.f_col_image, P.f_col_cost, P.f_col_price, P.f_col_stock, P.f_col_active]);
   });
 
   it('keeps what the API needs: outlet, segment, retail checkbox, product image (and no pre-order controls, 046)', async () => {
@@ -134,39 +137,47 @@ describe('ProductFormDrawer — create mode follows the Menu item design (043)',
     expect(base).toHaveValue(15500);
   });
 
-  it('sends several variants, with a name for each, and the status as is_active', async () => {
+  it('sends several variants, with a name for each (the new item is active)', async () => {
     const { user } = await openCreate();
     await fillMinimum(user);
     await user.type(screen.getByLabelText(P.f_variant_name_aria.replace('{n}', '1')), 'Panas');
     await user.click(screen.getByRole('button', { name: P.f_add_variant }));
     await user.type(screen.getByLabelText(P.f_variant_name_aria.replace('{n}', '2')), 'Es');
     await user.type(screen.getByLabelText(P.f_variant_price_aria.replace('{n}', '2')), '20000');
-    await user.click(screen.getByRole('button', { name: P.f_status_draft }));
     createProduct.mockResolvedValue({ id: 55, variants: [{ id: 501 }, { id: 502 }] });
     await save(user);
 
     await waitFor(() => expect(createProduct).toHaveBeenCalled());
     const payload = createProduct.mock.calls[0][0];
-    expect(payload.is_active).toBe(false);
+    expect(payload.is_active).toBe(true);
     expect(payload.variants.map((v) => [v.variant_name, v.sell_price])).toEqual([['Panas', '18000.00'], ['Es', '20000.00']]);
   });
 
-  it('defaults the status to Aktif', async () => {
-    const { user } = await openCreate();
-    expect(screen.getByRole('button', { name: P.f_status_active })).toHaveAttribute('aria-pressed', 'true');
+  it('has no status control on create: the item is sent active, and menu release only adds the price note', async () => {
+    const { user, unmount } = await openCreate();
+    expect(screen.queryByRole('button', { name: P.f_status_active })).not.toBeInTheDocument();
     await fillMinimum(user);
     await save(user);
     await waitFor(() => expect(createProduct).toHaveBeenCalled());
     expect(createProduct.mock.calls[0][0].is_active).toBe(true);
+    unmount();
+
+    await openCreate({ release: true });
+    expect(screen.queryByTestId('status-release-note')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-toggle')).not.toBeInTheDocument();
+    expect(screen.getByText(P.f_sec_price_desc_release, { exact: false })).toBeInTheDocument();
   });
 
-  it('shows the status as read-only text, without the toggle, while menu release is on', async () => {
-    await openCreate({ release: true });
+  it('shows the cost price column, low-stock row and row actions on create like the edit table (070)', async () => {
+    await openCreate();
+    const table = screen.getByTestId('variants-table');
 
-    expect(screen.getByTestId('status-release-note')).toHaveTextContent(P.f_status_release);
-    expect(screen.queryByTestId('status-toggle')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: P.f_status_draft })).not.toBeInTheDocument();
-    expect(screen.getByText(P.f_sec_price_desc_release, { exact: false })).toBeInTheDocument();
+    expect(within(table).getByLabelText(P.f_variant_cost_aria.replace('{n}', '1'))).toBeInTheDocument();
+    expect(within(table).getByTestId('variant-extra')).toHaveTextContent(P.f_low_stock_alert);
+    expect(within(table).getByLabelText(id.master_data.apply_markup)).toBeInTheDocument();
+    expect(within(table).getByLabelText(id.master_data.duplicate_variant)).toBeInTheDocument();
+    expect(within(table).queryByLabelText(id.master_data.bom_open)).not.toBeInTheDocument(); // varian baru belum punya BOM
+    expect(screen.getByDisplayValue('150')).toBeInTheDocument(); // kolom Markup % di kepala bagian
   });
 
   it('marks unchecked variants inactive with ONE follow-up call after the item is created', async () => {
@@ -465,17 +476,40 @@ describe('ProductFormDrawer — edit mode is the same form as create mode (043)'
     return { user, ...host };
   }
 
-  it('shows "Ubah" over the item name and the same sections in the same order as create, minus Status', async () => {
+  it('shows "Ubah" over the item name and the same sections as create, plus Status before Lainnya (070)', async () => {
     await openEdit();
     await screen.findByRole('heading', { name: P.f_sec_modifier });
 
     expect(screen.getByText(P.f_kicker_edit)).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 2, name: 'Keychain A' })).toBeInTheDocument();
     const headings = within(screen.getByTestId('product-form')).getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(headings).toEqual([P.f_sec_basic, P.f_sec_price, P.f_sec_variants, P.f_sec_modifier, P.f_sec_kitchen, P.f_sec_other]);
+    expect(headings).toEqual([P.f_sec_basic, P.f_sec_price, P.f_sec_variants, P.f_sec_modifier, P.f_sec_kitchen, P.f_status, P.f_sec_other]);
     expect(screen.queryByRole('heading', { name: P.f_sec_availability })).not.toBeInTheDocument();
-    expect(screen.queryByTestId('status-toggle')).not.toBeInTheDocument();
+    expect(screen.getByTestId('status-toggle')).toBeInTheDocument();
     expect(screen.queryByTestId('code-note')).not.toBeInTheDocument();
+  });
+
+  it('shows the current status in the edit form and saves Draft or Aktif as is_active (070)', async () => {
+    const { user } = await openEdit();
+    expect(screen.getByRole('button', { name: P.f_status_active })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(P.f_status_hint)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: P.f_status_draft }));
+    await user.click(screen.getByRole('button', { name: P.f_save_item }));
+
+    await waitFor(() => expect(updateProduct).toHaveBeenCalled());
+    expect(updateProduct.mock.calls[0][1].is_active).toBe(false);
+  });
+
+  it('starts the edit status from a draft item and replaces the toggle with a note while menu release is on (070)', async () => {
+    getProduct.mockResolvedValue(FULL({ is_active: false }));
+    const first = await openEdit();
+    expect(screen.getByRole('button', { name: P.f_status_draft })).toHaveAttribute('aria-pressed', 'true');
+    first.unmount();
+
+    await openEdit({ release: true });
+    expect(screen.getByTestId('status-release-note')).toHaveTextContent(P.f_status_release_edit);
+    expect(screen.queryByTestId('status-toggle')).not.toBeInTheDocument();
   });
 
   it('uses the same drawer width, footer and form controls as create mode', async () => {

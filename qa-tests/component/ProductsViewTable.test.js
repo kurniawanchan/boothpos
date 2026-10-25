@@ -6,6 +6,9 @@ import { listCategories } from '../../resources/js/api/categories';
 import { exportMasterData } from '../../resources/js/api/masterData';
 import { ROW, COUNTS, SUMMARY, META, renderProducts, userEv } from './productsViewHarness';
 
+// 070 — halaman Produk meminta daftar tanpa header outlet bilah atas (filter Outlet-nya sendiri).
+const SKIP_HEADER = { skipOutletHeader: true };
+
 vi.mock('../../resources/js/api/products', () => ({
   listProducts: vi.fn(), productSummary: vi.fn(), getProduct: vi.fn(), createProduct: vi.fn(), updateProduct: vi.fn(), deleteProduct: vi.fn(),
   addVariant: vi.fn(), updateVariant: vi.fn(), uploadProductImage: vi.fn(), uploadVariantImage: vi.fn(),
@@ -69,9 +72,9 @@ describe('ProductsView — table (043)', () => {
     expect(sortable).toEqual(['Item', 'SKU', 'Harga dasar', 'Status']);
 
     await user.click(screen.getByRole('columnheader', { name: /harga dasar/i }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'price', page: 1 })));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'price', page: 1 }), SKIP_HEADER));
     await user.click(screen.getByRole('columnheader', { name: /harga dasar/i }));
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ sort: '-price' })));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ sort: '-price' }), SKIP_HEADER));
     await waitFor(() => expect(router.currentRoute.value.query.sort).toBe('-price'));
     expect(screen.getByRole('columnheader', { name: /harga dasar/i })).toHaveAttribute('aria-sort', 'descending');
   });

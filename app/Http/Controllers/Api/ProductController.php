@@ -121,16 +121,16 @@ class ProductController extends Controller
         return response()->json([
             'data' => $page->items(),
             'meta' => ['current_page' => $page->currentPage(), 'per_page' => $page->perPage(), 'total' => $page->total(), 'last_page' => $page->lastPage()],
-            'counts' => $query->counts(),
+            'counts' => $query->counts($filters),
         ]);
     }
 
-    /** 043 — GET /products/summary: empat angka header (sama dengan baris di bawahnya). */
-    public function summary(): JsonResponse
+    /** 043 — GET /products/summary: empat angka header (sama dengan baris di bawahnya). 070: mengikuti filter daftar. */
+    public function summary(\App\Http\Requests\ProductCatalogRequest $request): JsonResponse
     {
         $this->authorize('viewAny', Product::class);
 
-        return response()->json(app(\App\Services\ProductCatalogQuery::class)->summary());
+        return response()->json(app(\App\Services\ProductCatalogQuery::class)->summary($request->validated()));
     }
 
     public function store(StoreProductRequest $request): JsonResponse
@@ -164,7 +164,7 @@ class ProductController extends Controller
 
             foreach ($data['variants'] as $variantInput) {
                 $sku = $this->codeGenerator->nextVariantSku($product);
-                $product->variants()->create([
+                $variant = $product->variants()->create([
                     'sku' => $sku,
                     'variant_name' => $variantInput['variant_name'],
                     'cost_price' => $variantInput['cost_price'] ?? 0,
@@ -173,6 +173,16 @@ class ProductController extends Controller
                     // 028 — default true: perilaku lama tak berubah.
                     'track_stock' => $variantInput['track_stock'] ?? true,
                 ]);
+
+                // 070 — harga khusus outlet ditulis LANGSUNG (source `created`), sejajar dengan harga dasar di atas: item
+                // baru berstatus draft saat rilis aktif sehingga belum terjual, dan satu transaksi dengan item ini membuat
+                // kegagalan di tengah tidak meninggalkan item setengah jadi. Baris hanya ada bila berbeda dari harga dasar.
+                foreach ($variantInput['outlet_prices'] ?? [] as $row) {
+                    if (round((float) $row['price'], 2) === round((float) $variant->sell_price, 2)) {
+                        continue;
+                    }
+                    app(\App\Services\PriceService::class)->writeOutletPrice($variant, (int) $row['outlet_id'], (float) $row['price'], request()->user(), 'created');
+                }
             }
 
             // 043 — dengan rilis AKTIF, penerbitan item baru menunggu rilis berikutnya (menu_change item_publish).
