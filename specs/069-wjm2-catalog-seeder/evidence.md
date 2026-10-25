@@ -96,3 +96,34 @@ Katalog WJM 2: 76 item, 107 varian, 11 foto, `approval.status = approved`. Tes k
 
 **Belum dilakukan:** pemeriksaan peramban/tablet (menu WJM 2 saja, tiket Bar/Dapur ke stasiun WJM 2, POS WJM 3 tanpa tab baru, konsol bersih) dan pengisian ke server pelanggan (T039, butuh otorisasi eksplisit). Empat item yang ditunda menunggu nama varian dari pemilik.
 
+
+## 6. Halaman 2 ekspor produk (2026-10-25)
+
+**Klasifikasi**: CONFIDENTIAL — merujuk katalog nyata milik pelanggan.
+
+Berkas baru `Templete Produk (product.template) page 2.xlsx`: 51 baris, kolom `Atribut produk` ada, **tanpa** kolom kategori dan **tanpa** kolom jumlah varian, tanpa gambar. Kolom "Penanggung Jawab" (nama staf) tidak dibaca. Berkas `Order Point of Sale` tidak dibuka.
+
+**Alat bangkit.** `build_catalog.py` membaca `… page N.xlsx` sesudah berkas utama. Halaman tanpa kolom jumlah varian memakai jumlah dari tabel pemetaan dan mencatatnya di `variant_count_override`. Katalog WJM 3 dibangkitkan ulang: `catalog.json` dan `photos/` **byte-identik** dengan yang ada di repo.
+
+**Pemetaan (inferensi, disetujui pemilik 2026-10-25 "apa adanya")**: 48 item baru, 56 varian; Hot/Ice untuk 8 minuman (ASSUMPTION: jumlah varian tidak ada di ekspor); 4 item berharga Rp0 (TOP CAPPUCINO, SUSU COKLAT/JAHE/PUTIH) diterima; kategori baru "Lain Lain"; "Roti & Pisang" dipakai bersama WJM 3. Ditunda: NUTRISARI ALL VARIANT, TEAJUS ALL VARIANT (nama rasa belum diketahui). Dikecualikan otomatis: Partial Payment (`nf_partial_payment`). Pertanggungjawaban: 131 baris sumber = 124 item + 7 dikecualikan.
+
+**Temuan lewat pratinjau, sebelum menulis apa pun.** Pratinjau LIVE berbeda dari DEMO (49 item akan dibuat dan 5 akan ditarik dari menu, DEMO 48 dan 0). Pemeriksaan read-only: pemilik sudah membuat **empat item yang ditunda langsung di LIVE** (MIE SEDAP DOUBLE, MIE SEDAP KUAH, JASJUS, ALL VARIANT MINUMAN DINGIN (SHOWCASE), 34 varian bernama dan berharga) dan mengganti nama MARIMAS ALL VARIANT menjadi MARIMAS. Dua akibat bila dijalankan apa adanya:
+1. Aturan `withdraw_others` LIVE=ya menarik empat item buatan pemilik itu (dan MARIMAS) dari menu WJM 2 → perbaikan: di LIVE hanya item milik outlet LAIN yang ditarik (`WjmCatalogSeedService::withdrawOtherItems`). Tes regresi `test_a_live_run_keeps_items_the_owner_made_at_the_second_outlet_but_still_withdraws_the_first_outlets`: **merah tanpa perbaikan** (item pemilik tertarik), hijau dengan perbaikan.
+2. Item kembar "MARIMAS ALL VARIANT" di LIVE → pemilik memilih: `## Nama item khusus` MARIMAS ALL VARIANT → MARIMAS, dan item DEMO hasil seeder (#1291) diganti nama menjadi MARIMAS lewat skrip sekali pakai. Tidak ada data LIVE yang disentuh.
+
+**Pengisian sungguhan di DB dev.** Cadangan `storage/app/backups/2026-10-25_093258`. `app:seed-wjm-catalog --catalog=database/seeders/data/wjm2-odoo/catalog.json`, kedua mode `applied`:
+
+| Mode | Outlet | Item dibuat / sudah ada | Varian dibuat | Kategori dibuat | Stok awal |
+|---|---|---|---|---|---|
+| LIVE | `WJD` | 48 / 76 | 56 | 1 (Lain Lain) | 56 |
+| DEMO | `WJ2` | 48 / 76 | 56 | 1 (Lain Lain) | 56 |
+
+Pemeriksaan sesudahnya:
+- LIVE WJD: 128 item = 124 katalog + 4 buatan pemilik; 197 varian = 163 + 34. Semua varian stok 100 di outlet WJM 2, **0 baris stok di outlet lain**, 163 gerakan `initial`, semua item katalog punya `station_id` (Dapur Minuman/Dapur Makanan outlet itu), 124/124 dijual di WJM 2 dan 0 di outlet lain, **0 item WJM 3 dijual di WJM 2**. DEMO WJ2: 124 item, 163 varian, hasil sama.
+- Total DB dev: produk 410 = 310 + 4 (pemilik) + 2×48; varian 582 = 436 + 34 + 2×56.
+- **Potret WJM 3 (15 kelompok per mode) identik** sebelum dan sesudah pengisian dan sesudah jalan ulang.
+- **Empat item buatan pemilik di LIVE** (produk, varian, penanda menu, stok; hash `md5`) identik sebelum dan sesudah.
+- Jalan ulang: semua "Dibuat" = 0, kode keluar 0.
+- Varian berharga 0: LIVE 8, DEMO 12 (pemilik sudah memberi harga pada ABC MOCCA dan KAPAL API KOPI SUSU di LIVE; di DEMO keduanya masih Rp0).
+
+**Belum dilakukan:** pemeriksaan peramban/tablet, pengisian ke server pelanggan (butuh otorisasi eksplisit).

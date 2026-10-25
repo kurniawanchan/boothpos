@@ -451,11 +451,20 @@ class WjmCatalogSeedService
      * (di LIVE item buatan pemilik tidak boleh hilang dari menu), katalog WJM 2 di keduanya. Yang ditulis hanya
      * penanda "dijual" untuk outlet tujuan, tidak pernah untuk outlet lain.
      *
+     * BUG YANG DITEMUKAN & DIPERBAIKI (2026-10-25, halaman 2 katalog WJM 2): di LIVE, item yang dibuat pemilik
+     * sendiri di outlet tujuan (home outlet = outlet tujuan) ikut ditarik, padahal alasan penarikan hanya item
+     * MILIK outlet lain yang terbawa ke menu outlet ini. Pemilik sudah membuat empat item WJM 2 lewat layar
+     * manajemen; jalan ulang katalog WJM 2 menyembunyikannya dari POS. Kini hanya item outlet lain yang ditarik
+     * di LIVE. DEMO tetap menarik semuanya (item contoh lama milik outlet tujuan ikut disingkirkan).
+     *
      * @param  list<int>  $catalogProductIds
      */
     private function withdrawOtherItems(Outlet $outlet, array $catalogProductIds, WjmCatalogSeedReport $report): void
     {
         foreach (Product::query()->whereNotIn('id', $catalogProductIds)->orderBy('id')->get() as $product) {
+            if ($report->mode === 'live' && (int) $product->home_outlet_id === (int) $outlet->id) {
+                continue;
+            }
             if ($this->menu->isCarried($product->id, $outlet->id)) {
                 $this->menu->setCarried($product, [], [$outlet->id]);
                 $report->withdrawn[] = $product->name;

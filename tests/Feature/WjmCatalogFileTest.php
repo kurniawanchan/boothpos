@@ -52,7 +52,7 @@ class WjmCatalogFileTest extends TestCase
         }
     }
 
-    public function test_the_bundled_wjm2_catalog_is_valid_and_approved_with_four_items_deferred_until_their_variant_names_are_known(): void
+    public function test_the_bundled_wjm2_catalog_is_valid_and_approved_with_six_items_deferred_until_their_variant_names_are_known(): void
     {
         $path = database_path('seeders/data/wjm2-odoo/catalog.json');
         $catalog = WjmCatalog::fromFile($path);
@@ -62,21 +62,25 @@ class WjmCatalogFileTest extends TestCase
         $this->assertSame(['name' => 'Warkop WJM 2', 'codes' => ['WJ2', 'WD2'], 'create_when' => 'demo_missing'], $catalog->outlet());
         $this->assertSame(['live' => true, 'demo' => true], ['live' => $catalog->withdrawOthers('live'), 'demo' => $catalog->withdrawOthers('demo')]);
         $this->assertSame(100, $catalog->initialStock());
-        $this->assertCount(8, $catalog->categories());
-        $this->assertCount(76, $catalog->items());
-        $this->assertSame(107, collect($catalog->items())->sum(fn (array $i) => count($i['variants'])));
+        $this->assertCount(10, $catalog->categories());
+        $this->assertCount(124, $catalog->items());
+        $this->assertSame(163, collect($catalog->items())->sum(fn (array $i) => count($i['variants'])));
         $this->assertSame(
-            ['MAKANAN', 'LAIN LAIN', 'NASI', 'ROTI & PISANG', 'SIGNATURE COFFEE'],
+            ['MAKANAN', 'NASI', 'SIGNATURE COFFEE'],
             collect($catalog->excluded())->where('source', 'categories')->pluck('name')->all(),
         );
         $this->assertEqualsCanonicalizing(
-            ['JASJUS ALL VARIANT', 'ALL VARIANT MINUMAN DINGIN(SHOWCASE)', 'MIE SEDAP KUAH', 'MIE SEDAP DOUBLE'],
+            ['JASJUS ALL VARIANT', 'ALL VARIANT MINUMAN DINGIN(SHOWCASE)', 'MIE SEDAP KUAH', 'MIE SEDAP DOUBLE', 'NUTRISARI ALL VARIANT', 'TEAJUS ALL VARIANT', 'Partial Payment'],
             collect($catalog->excluded())->where('source', 'products')->pluck('name')->all(),
         );
-        $this->assertTrue(collect($catalog->excluded())->where('source', 'products')->every(fn (array $e) => str_starts_with($e['reason'], 'Ditunda:')));
-        $this->assertSame([13, 0, 80], [$catalog->source()['rows']['categories'], $catalog->source()['rows']['attribute_values'], $catalog->source()['rows']['products']]);
+        $this->assertTrue(collect($catalog->excluded())->where('source', 'products')->where('name', '!=', 'Partial Payment')->every(fn (array $e) => str_starts_with($e['reason'], 'Ditunda:')));
+        $this->assertStringContainsString('nf_partial_payment', collect($catalog->excluded())->firstWhere('name', 'Partial Payment')['reason'], 'produk teknis Odoo dikecualikan otomatis');
+        $this->assertSame([13, 0, 131], [$catalog->source()['rows']['categories'], $catalog->source()['rows']['attribute_values'], $catalog->source()['rows']['products']]);
         $this->assertSame(0, collect($catalog->items())->flatMap(fn (array $i) => $i['variants'])->filter(fn (array $v) => str_starts_with($v['name'], '(belum diisi'))->count(), 'katalog disetujui tidak boleh memuat nama sementara');
         $this->assertSame(11, collect($catalog->items())->pluck('photo')->filter()->count());
+        $this->assertSame(['product_pages' => ['Templete Produk (product.template) page 2.xlsx']], array_diff_key($catalog->source()['files'], array_flip(['categories', 'attributes', 'products'])));
+        $this->assertSame(48, collect($catalog->items())->filter(fn (array $i) => str_starts_with((string) $i['variant_count_override'], 'Jumlah varian dari tabel pemetaan'))->count(), 'item halaman 2 tanpa jumlah varian Odoo');
+        $this->assertContains('MARIMAS', collect($catalog->items())->pluck('name')->all(), 'nama yang diubah pemilik di LIVE');
         $this->assertDoesNotMatchRegularExpression('/penanggung|responsible/i', (string) file_get_contents($path));
     }
 
