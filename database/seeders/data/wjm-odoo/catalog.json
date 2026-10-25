@@ -1,0 +1,1871 @@
+{
+  "format": 2,
+  "outlet": {
+    "name": "Warkop WJM 3",
+    "codes": [
+      "WJ3",
+      "WJM"
+    ],
+    "create_when": "mode_empty"
+  },
+  "withdraw_others": {
+    "live": false,
+    "demo": true
+  },
+  "stations": {
+    "Bar": [
+      "Bar",
+      "Dapur Minuman"
+    ],
+    "Dapur": [
+      "Dapur",
+      "Dapur Makanan"
+    ]
+  },
+  "source": {
+    "system": "Odoo",
+    "exported_on": "2026-10-23",
+    "files": {
+      "categories": "Point of Sale Category (pos.category).xlsx",
+      "attributes": "Product Attribute (product.attribute).xlsx",
+      "products": "Product Template (product.template).xlsx"
+    },
+    "rows": {
+      "categories": 10,
+      "attribute_values": 26,
+      "products": 80
+    }
+  },
+  "approval": {
+    "status": "approved",
+    "approved_on": "2026-10-25",
+    "approved_by_role": "Pemilik"
+  },
+  "initial_stock": 100,
+  "categories": [
+    {
+      "name": "Add on",
+      "source_name": "Add on",
+      "order": 0,
+      "station": "Dapur"
+    },
+    {
+      "name": "Coffee",
+      "source_name": "Coffee",
+      "order": 1,
+      "station": "Bar"
+    },
+    {
+      "name": "Indomie",
+      "source_name": "Indomie",
+      "order": 2,
+      "station": "Dapur"
+    },
+    {
+      "name": "Mie & Pangsit Level",
+      "source_name": "Mie & Pangsit Level",
+      "order": 3,
+      "station": "Dapur"
+    },
+    {
+      "name": "Nasi",
+      "source_name": "Nasi",
+      "order": 4,
+      "station": "Dapur"
+    },
+    {
+      "name": "Non Coffee",
+      "source_name": "Non Coffee",
+      "order": 5,
+      "station": "Bar"
+    },
+    {
+      "name": "Roti & Pisang",
+      "source_name": "Roti & Pisang",
+      "order": 6,
+      "station": "Dapur"
+    },
+    {
+      "name": "Signature Coffee",
+      "source_name": "Signature Coffee",
+      "order": 7,
+      "station": "Bar"
+    },
+    {
+      "name": "Snacks",
+      "source_name": "Snacks",
+      "order": 8,
+      "station": "Dapur"
+    },
+    {
+      "name": "Tea",
+      "source_name": "Tea",
+      "order": 9,
+      "station": "Bar"
+    }
+  ],
+  "attributes": [
+    {
+      "name": "Varian",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Hot",
+        "Ice"
+      ]
+    },
+    {
+      "name": "variant indomie",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "SOTO",
+        "AYAM BAWANG",
+        "KARI AYAM",
+        "GORENG ORIGINAL",
+        "RENDANG",
+        "MIE ACEH"
+      ]
+    },
+    {
+      "name": "Varian kopi",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "1 shoot",
+        "2 shoot"
+      ]
+    },
+    {
+      "name": "Nasi",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "1 Porsi",
+        "½ Porsi"
+      ]
+    },
+    {
+      "name": "Rasa",
+      "creates_variants": false,
+      "values_from": "odoo",
+      "values": [
+        "Hazelnut",
+        "Vanilla",
+        "Gula Aren"
+      ]
+    },
+    {
+      "name": "Paket Hemat",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Nasi + Ayam",
+        "test"
+      ]
+    },
+    {
+      "name": "Paket Komplit",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Nasi + Ayam + Tahu, Tempe + Sate Kulit"
+      ]
+    },
+    {
+      "name": "Paket Kenyang",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Nasi + Ayam + Tahu, Tempe + Sate Kulit + Es Tesh"
+      ]
+    },
+    {
+      "name": "Ayam",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Penyet",
+        "Bakar"
+      ]
+    },
+    {
+      "name": "Buah",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Jambu",
+        "Alpukat"
+      ]
+    },
+    {
+      "name": "Paket",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Hemat (Nasi + Ayam Penyet / Bakar)",
+        "Komplit (Nasi Ayam Penyet / Bakar + Tahu, Tempe + Sate Kulit)",
+        "Kenyang (Nasi Ayam Penyet / Bakar + Tahu, Tempe + Sate Kulit + Es Teh)"
+      ]
+    }
+  ],
+  "option_groups": [
+    {
+      "name": "Rasa",
+      "from_attribute": "Rasa",
+      "required": true,
+      "options": [
+        "Hazelnut",
+        "Vanilla",
+        "Gula Aren"
+      ],
+      "attach_to": []
+    }
+  ],
+  "items": [
+    {
+      "name": "ABC Klepon",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "ee4c6ebebde8.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "ABC Susu",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "Air Mineral",
+      "category": "Non Coffee",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "74291468a27a.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Americano",
+      "category": "Signature Coffee",
+      "price": 10000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "1 shoot",
+          "price": 10000,
+          "values": {
+            "Varian kopi": "1 shoot"
+          }
+        },
+        {
+          "name": "2 shoot",
+          "price": 12000,
+          "values": {
+            "Varian kopi": "2 shoot"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "e66da4e36778.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Ayam Penyet & Bakar Cabe Ijo",
+      "category": "Nasi",
+      "price": 18000,
+      "odoo_variant_count": 6,
+      "variants": [
+        {
+          "name": "Penyet Hemat (Nasi + Ayam Penyet)",
+          "price": 18000,
+          "values": {
+            "Ayam": "Penyet",
+            "Paket": "Hemat (Nasi + Ayam Penyet / Bakar)"
+          }
+        },
+        {
+          "name": "Penyet Komplit (Nasi Ayam Penyet + Tahu, Tempe + Sate Kulit)",
+          "price": 23000,
+          "values": {
+            "Ayam": "Penyet",
+            "Paket": "Komplit (Nasi Ayam Penyet / Bakar + Tahu, Tempe + Sate Kulit)"
+          }
+        },
+        {
+          "name": "Penyet Kenyang (Nasi Ayam Penyet + Tahu, Tempe + Sate Kulit + Es Teh)",
+          "price": 28000,
+          "values": {
+            "Ayam": "Penyet",
+            "Paket": "Kenyang (Nasi Ayam Penyet / Bakar + Tahu, Tempe + Sate Kulit + Es Teh)"
+          }
+        },
+        {
+          "name": "Bakar Hemat (Nasi + Ayam Bakar)",
+          "price": 18000,
+          "values": {
+            "Ayam": "Bakar",
+            "Paket": "Hemat (Nasi + Ayam Penyet / Bakar)"
+          }
+        },
+        {
+          "name": "Bakar Komplit (Nasi Ayam Bakar + Tahu, Tempe + Sate Kulit)",
+          "price": 23000,
+          "values": {
+            "Ayam": "Bakar",
+            "Paket": "Komplit (Nasi Ayam Penyet / Bakar + Tahu, Tempe + Sate Kulit)"
+          }
+        },
+        {
+          "name": "Bakar Kenyang (Nasi Ayam Bakar + Tahu, Tempe + Sate Kulit + Es Teh)",
+          "price": 28000,
+          "values": {
+            "Ayam": "Bakar",
+            "Paket": "Kenyang (Nasi Ayam Penyet / Bakar + Tahu, Tempe + Sate Kulit + Es Teh)"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": true
+    },
+    {
+      "name": "Ayam Penyet / Bakar",
+      "category": "Nasi",
+      "price": 15000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Penyet",
+          "price": 15000,
+          "values": {
+            "Ayam": "Penyet"
+          }
+        },
+        {
+          "name": "Bakar",
+          "price": 15000,
+          "values": {
+            "Ayam": "Bakar"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Bakso Aci + Telor",
+      "category": "Snacks",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "a5342478622f.jpg",
+      "photo_issue": null,
+      "odoo_kit": true
+    },
+    {
+      "name": "Basreng",
+      "category": "Snacks",
+      "price": 6000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 6000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "eb59b5ff01c5.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Cappuchino",
+      "category": "Signature Coffee",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "75867c9441be.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Caramel Latte",
+      "category": "Signature Coffee",
+      "price": 17000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 17000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "3cb23d5eb68e.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Chicken Ricebowl Cabe Hijau",
+      "category": "Nasi",
+      "price": 22000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 22000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "7d7539652596.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Chicken Ricebowl Sambal Bawang",
+      "category": "Nasi",
+      "price": 22000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 22000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "7d7539652596.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Chocolatos Coklat",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "695ec8f6435f.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Chocolatos Matcha",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "12142c972700.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Cireng Isi Ayam Pedas",
+      "category": "Snacks",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "2caa1c6a0c1a.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Cireng Rujak",
+      "category": "Snacks",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "790839849829.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "DIMSUM GORENG KEJU LUMER",
+      "category": "Snacks",
+      "price": 20000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 20000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DIMSUM GORENG KEJU LUMER SAUS MENTAI",
+      "category": "Snacks",
+      "price": 25000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 25000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "Dancow Coklat",
+      "category": "Non Coffee",
+      "price": 8000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 8000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 10000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "ac18164792c9.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Dancow Vanila",
+      "category": "Non Coffee",
+      "price": 8000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 8000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 10000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "51140d7b890f.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Dimsum Isi 4",
+      "category": "Snacks",
+      "price": 20000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 20000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "39d914a2b4d5.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Dimsum Mentai Isi 4",
+      "category": "Snacks",
+      "price": 25000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 25000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "0c1b06ad13ec.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Drink Beng-Beng",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "69aa45c4d721.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "ES JERUK",
+      "category": "Non Coffee",
+      "price": 12000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 12000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "Es Batu",
+      "category": "Add on",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "46bfe55755f8.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Es Teh",
+      "category": "Tea",
+      "price": 3000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 3000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Extrajoss",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "517ccc92f646.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Extrajoss Susu",
+      "category": "Non Coffee",
+      "price": 10000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 10000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "cc955d0e385d.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Good Day Freeze All",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "77b952c276d9.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Good day All Variant",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "3b3a69fc64b4.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Hazelnut Latte",
+      "category": "Signature Coffee",
+      "price": 17000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 17000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "cd384b28d8a0.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Indocafe Coffeemix",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "f0df4ae09ba2.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Indomie Double",
+      "category": "Indomie",
+      "price": 15000,
+      "odoo_variant_count": 6,
+      "variants": [
+        {
+          "name": "SOTO",
+          "price": 15000,
+          "values": {
+            "variant indomie": "SOTO"
+          }
+        },
+        {
+          "name": "AYAM BAWANG",
+          "price": 15000,
+          "values": {
+            "variant indomie": "AYAM BAWANG"
+          }
+        },
+        {
+          "name": "KARI AYAM",
+          "price": 15000,
+          "values": {
+            "variant indomie": "KARI AYAM"
+          }
+        },
+        {
+          "name": "GORENG ORIGINAL",
+          "price": 15000,
+          "values": {
+            "variant indomie": "GORENG ORIGINAL"
+          }
+        },
+        {
+          "name": "RENDANG",
+          "price": 15000,
+          "values": {
+            "variant indomie": "RENDANG"
+          }
+        },
+        {
+          "name": "MIE ACEH",
+          "price": 15000,
+          "values": {
+            "variant indomie": "MIE ACEH"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "0dd7fa107a10.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Indomie Goreng",
+      "category": "Indomie",
+      "price": 8000,
+      "odoo_variant_count": 3,
+      "variants": [
+        {
+          "name": "GORENG ORIGINAL",
+          "price": 8000,
+          "values": {
+            "variant indomie": "GORENG ORIGINAL"
+          }
+        },
+        {
+          "name": "RENDANG",
+          "price": 8000,
+          "values": {
+            "variant indomie": "RENDANG"
+          }
+        },
+        {
+          "name": "MIE ACEH",
+          "price": 8000,
+          "values": {
+            "variant indomie": "MIE ACEH"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "cd22a7e3fb90.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Indomie Kuah",
+      "category": "Indomie",
+      "price": 8000,
+      "odoo_variant_count": 3,
+      "variants": [
+        {
+          "name": "SOTO",
+          "price": 8000,
+          "values": {
+            "variant indomie": "SOTO"
+          }
+        },
+        {
+          "name": "AYAM BAWANG",
+          "price": 8000,
+          "values": {
+            "variant indomie": "AYAM BAWANG"
+          }
+        },
+        {
+          "name": "KARI AYAM",
+          "price": 8000,
+          "values": {
+            "variant indomie": "KARI AYAM"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "0dd7fa107a10.jpg",
+      "photo_issue": null,
+      "odoo_kit": true
+    },
+    {
+      "name": "Jus",
+      "category": "Non Coffee",
+      "price": 15000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Jambu",
+          "price": 15000,
+          "values": {
+            "Buah": "Jambu"
+          }
+        },
+        {
+          "name": "Alpukat",
+          "price": 15000,
+          "values": {
+            "Buah": "Alpukat"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Kapal Api",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "9dff9c8d61fd.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Keju",
+      "category": "Add on",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "f29fbd9b6465.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Kentang Goreng",
+      "category": "Snacks",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "44b1b23036cf.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Kerupuk",
+      "category": "Add on",
+      "price": 3000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 3000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Kol Goreng",
+      "category": "Add on",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Kopi Liong",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "de01a589b755.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Kopi Susu Gula Aren",
+      "category": "Signature Coffee",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "07b03465ad74.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Kornet",
+      "category": "Add on",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "5385de621d80.jpg",
+      "photo_issue": null,
+      "odoo_kit": true
+    },
+    {
+      "name": "Kukubima",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "c3f639f01c9f.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Kukubima Susu",
+      "category": "Non Coffee",
+      "price": 10000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 10000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "effab58e1d81.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Lemon Tea",
+      "category": "Tea",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "c195300c7cdc.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Luwak White Coffee",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "6924aab91a38.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "MARTABAK TELUR KORNET",
+      "category": "Snacks",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "Mie Level 1-2",
+      "category": "Mie & Pangsit Level",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "f4b99853cd29.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Mie Level 3-5",
+      "category": "Mie & Pangsit Level",
+      "price": 17000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 17000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "f4b99853cd29.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Mie Nyemek",
+      "category": "Indomie",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": true
+    },
+    {
+      "name": "Milo",
+      "category": "Non Coffee",
+      "price": 8000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 8000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 10000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "3b277c32cd98.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Mix Platter (Sosis, Otak² & Kentang)",
+      "category": "Snacks",
+      "price": 20000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 20000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "dc15f2787a84.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Nasi Goreng Spesial",
+      "category": "Nasi",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "c34201398b5a.jpg",
+      "photo_issue": null,
+      "odoo_kit": true
+    },
+    {
+      "name": "Nasi Putih",
+      "category": "Add on",
+      "price": 0,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "1 Porsi",
+          "price": 0,
+          "values": {
+            "Nasi": "1 Porsi"
+          }
+        },
+        {
+          "name": "½ Porsi",
+          "price": 0,
+          "values": {
+            "Nasi": "½ Porsi"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Nutrisari All Variant",
+      "category": "Non Coffee",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "bb2933d6c824.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Omelette Mie",
+      "category": "Indomie",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "b7c70e826706.jpg",
+      "photo_issue": null,
+      "odoo_kit": true
+    },
+    {
+      "name": "Otak-otak Goreng",
+      "category": "Snacks",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "0470b7e97e30.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Pangsit Chillie Oil lvl 1-2",
+      "category": "Mie & Pangsit Level",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "6f6a2dc03a12.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Pangsit Chillie Oil lvl 3-5",
+      "category": "Mie & Pangsit Level",
+      "price": 17000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 17000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "6f6a2dc03a12.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Pangsit Goreng",
+      "category": "Snacks",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "335f218ca6e8.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Pisang Bakar Coklat",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "68bc7ce13457.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Pisang Bakar Coklat Keju",
+      "category": "Roti & Pisang",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "f0aa44579f2a.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Pisang Bakar Keju",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "f5e3f00eb5f1.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Blueberry",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "50429edc548a.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Choco Crunchy",
+      "category": "Roti & Pisang",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "1bb3c4fbe9d6.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Coklat",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "adf8eea71bf5.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Coklat Keju",
+      "category": "Roti & Pisang",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "7dd2841c3dc4.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Keju",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "e6fdff5e7213.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Strawberry",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "389cd735a0d9.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Tiramisu Crunchy",
+      "category": "Roti & Pisang",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "32af7e225e34.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Sambal Cabe Ijo",
+      "category": "Add on",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Sate Kulit (Tusuk)",
+      "category": "Add on",
+      "price": 3000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 3000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Soda Susu",
+      "category": "Non Coffee",
+      "price": 10000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 10000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "aeeeb7255084.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Sosis Bakar",
+      "category": "Snacks",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "a351f30bec86.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Sukro",
+      "category": "Snacks",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Susu Jahe",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "da50957d799e.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Susu Putih",
+      "category": "Non Coffee",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    }
+  ],
+  "excluded": [
+    {
+      "source": "products",
+      "name": "Partial Payment",
+      "reason": "Produk teknis Odoo (nf_partial_payment), bukan menu"
+    },
+    {
+      "source": "attributes",
+      "name": "Paket Hemat",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "Paket Komplit",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "Paket Kenyang",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attribute_values",
+      "name": "Paket Hemat: test",
+      "reason": "Data uji"
+    }
+  ]
+}

@@ -1,0 +1,1788 @@
+{
+  "format": 2,
+  "outlet": {
+    "name": "Warkop WJM 2",
+    "codes": [
+      "WJ2",
+      "WD2"
+    ],
+    "create_when": "demo_missing"
+  },
+  "withdraw_others": {
+    "live": true,
+    "demo": true
+  },
+  "stations": {
+    "Bar": [
+      "Dapur Minuman",
+      "Bar"
+    ],
+    "Dapur": [
+      "Dapur Makanan",
+      "Dapur"
+    ]
+  },
+  "source": {
+    "system": "Odoo",
+    "exported_on": "2026-10-23",
+    "files": {
+      "categories": "Kategori Point of Sale (pos.category).xlsx",
+      "attributes": "Atribut produk (product.attribute).xlsx",
+      "products": "Templete Produk (product.template).xlsx"
+    },
+    "rows": {
+      "categories": 13,
+      "attribute_values": 0,
+      "products": 80
+    }
+  },
+  "approval": {
+    "status": "approved",
+    "approved_on": "2026-10-25",
+    "approved_by_role": "Pemilik"
+  },
+  "initial_stock": 100,
+  "categories": [
+    {
+      "name": "Mie",
+      "source_name": "MIE",
+      "order": 0,
+      "station": "Dapur"
+    },
+    {
+      "name": "Coffee",
+      "source_name": "COFFEE",
+      "order": 1,
+      "station": "Bar"
+    },
+    {
+      "name": "Non Coffee",
+      "source_name": "NON-COFFEE",
+      "order": 2,
+      "station": "Bar"
+    },
+    {
+      "name": "Snacks",
+      "source_name": "SNACKS",
+      "order": 3,
+      "station": "Dapur"
+    },
+    {
+      "name": "Tea",
+      "source_name": "TEA",
+      "order": 4,
+      "station": "Bar"
+    },
+    {
+      "name": "Add on",
+      "source_name": "ADD ON",
+      "order": 5,
+      "station": "Dapur"
+    },
+    {
+      "name": "Mie & Pangsit Level",
+      "source_name": "MIE & PANGSIT LEVEL",
+      "order": 6,
+      "station": "Dapur"
+    },
+    {
+      "name": "Snack Ringan",
+      "source_name": "SNACK RINGAN",
+      "order": 7,
+      "station": "Dapur"
+    }
+  ],
+  "attributes": [
+    {
+      "name": "Varian",
+      "creates_variants": true,
+      "values_from": "pemetaan",
+      "values": [
+        "Hot",
+        "Ice"
+      ]
+    },
+    {
+      "name": "VARIANT INDOMIE",
+      "creates_variants": true,
+      "values_from": "pemetaan",
+      "values": [
+        "Goreng Original",
+        "Rendang",
+        "Mie Aceh",
+        "Soto",
+        "Ayam Bawang",
+        "Kari Ayam"
+      ]
+    }
+  ],
+  "option_groups": [],
+  "items": [
+    {
+      "name": "ABC KLEPON",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "ABC MOCCA",
+      "category": "Coffee",
+      "price": 0,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 0,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 0,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "ABC SUSU",
+      "category": "Coffee",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 5000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "AIR MINERAL",
+      "category": "Non Coffee",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "AIR MINERAL 1.5L",
+      "category": "Non Coffee",
+      "price": 10000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 10000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "AIR PUTIH PANAS",
+      "category": "Non Coffee",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "ASTOR",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "BAKSO ACI + TELOR",
+      "category": "Snacks",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "BASRENG",
+      "category": "Snacks",
+      "price": 6000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 6000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "BENG BENG",
+      "category": "Snack Ringan",
+      "price": 4000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 4000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "CHACHA",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "c08cf11525cc.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "CHOCOLATOS COKLAT",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "CHOCOLATOS MATCHA",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "CHUBA",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "CIKI",
+      "category": "Snack Ringan",
+      "price": 3000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 3000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "CIRENG ISI AYAM SUIR",
+      "category": "Snacks",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "CIRENG RUJAK",
+      "category": "Snacks",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DANCOW COKLAT",
+      "category": "Non Coffee",
+      "price": 8000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 8000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DANCOW VANILA",
+      "category": "Non Coffee",
+      "price": 8000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 8000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DIMSUM",
+      "category": "Snacks",
+      "price": 16000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 16000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DIMSUM GORENG KEJU LUMER",
+      "category": "Snacks",
+      "price": 20000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 20000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DIMSUM GORENG KEJU LUMER SAUS MENTAI",
+      "category": "Snacks",
+      "price": 25000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 25000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DIMSUM ISI 6",
+      "category": "Snacks",
+      "price": 23000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 23000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DIMSUM MENTAI ISI 4",
+      "category": "Snacks",
+      "price": 22000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 22000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DIMSUM MENTAI ISI 6",
+      "category": "Snacks",
+      "price": 30000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 30000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "DRINK BENG BENG",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "82b471d56f49.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "ENERGEN",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "ES BATU",
+      "category": "Add on",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "073ca27c76ae.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "ES JERUK",
+      "category": "Non Coffee",
+      "price": 12000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 12000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "EXTRAJOSS",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "EXTRAJOSS SUSU",
+      "category": "Non Coffee",
+      "price": 10000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 10000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "FREEZE COOKIES AND CREAM",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "FREEZE HAZELNUT",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "FREEZE MOCHAFRIO",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "GERY",
+      "category": "Snack Ringan",
+      "price": 4000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 4000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "GOLDA",
+      "category": "Coffee",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "GOOD DAY CAPPUCHINO",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "GOOD DAY CHOCOCINO",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "GOODDAY MOCHACINO",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "INDOCAFE",
+      "category": "Coffee",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "INDOMIE DOUBLE",
+      "category": "Mie",
+      "price": 15000,
+      "odoo_variant_count": 6,
+      "variants": [
+        {
+          "name": "Goreng Original",
+          "price": 15000,
+          "values": {
+            "VARIANT INDOMIE": "Goreng Original"
+          }
+        },
+        {
+          "name": "Rendang",
+          "price": 15000,
+          "values": {
+            "VARIANT INDOMIE": "Rendang"
+          }
+        },
+        {
+          "name": "Mie Aceh",
+          "price": 15000,
+          "values": {
+            "VARIANT INDOMIE": "Mie Aceh"
+          }
+        },
+        {
+          "name": "Soto",
+          "price": 15000,
+          "values": {
+            "VARIANT INDOMIE": "Soto"
+          }
+        },
+        {
+          "name": "Ayam Bawang",
+          "price": 15000,
+          "values": {
+            "VARIANT INDOMIE": "Ayam Bawang"
+          }
+        },
+        {
+          "name": "Kari Ayam",
+          "price": 15000,
+          "values": {
+            "VARIANT INDOMIE": "Kari Ayam"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "INDOMIE GORENG",
+      "category": "Mie",
+      "price": 8000,
+      "odoo_variant_count": 3,
+      "variants": [
+        {
+          "name": "Goreng Original",
+          "price": 8000,
+          "values": {
+            "VARIANT INDOMIE": "Goreng Original"
+          }
+        },
+        {
+          "name": "Rendang",
+          "price": 8000,
+          "values": {
+            "VARIANT INDOMIE": "Rendang"
+          }
+        },
+        {
+          "name": "Mie Aceh",
+          "price": 8000,
+          "values": {
+            "VARIANT INDOMIE": "Mie Aceh"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "INDOMIE KUAH",
+      "category": "Mie",
+      "price": 8000,
+      "odoo_variant_count": 3,
+      "variants": [
+        {
+          "name": "Soto",
+          "price": 8000,
+          "values": {
+            "VARIANT INDOMIE": "Soto"
+          }
+        },
+        {
+          "name": "Ayam Bawang",
+          "price": 8000,
+          "values": {
+            "VARIANT INDOMIE": "Ayam Bawang"
+          }
+        },
+        {
+          "name": "Kari Ayam",
+          "price": 8000,
+          "values": {
+            "VARIANT INDOMIE": "Kari Ayam"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "JELLY",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "5fca29d56195.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "KACANG KULIT BESAR",
+      "category": "Snack Ringan",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KACANG KULIT KECIL",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KAPAL API",
+      "category": "Coffee",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 5000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KAPAL API KOPI SUSU",
+      "category": "Coffee",
+      "price": 0,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 0,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 0,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KAPAL API PAHIT",
+      "category": "Coffee",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 5000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KEJU",
+      "category": "Add on",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "565147ecb3ae.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "KENTANG GORENG",
+      "category": "Snacks",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KERIPIK PANGSIT BAWANG",
+      "category": "Snack Ringan",
+      "price": 10000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 10000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KERIPIK PISANG",
+      "category": "Snack Ringan",
+      "price": 10000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 10000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KERIPIK SINGKONG SEDANG",
+      "category": "Snack Ringan",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KERUPUK KALENG",
+      "category": "Snack Ringan",
+      "price": 3000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 3000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KERUPUK KULIT",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KERUPUK SEBLAK",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KERUPUK TAHU",
+      "category": "Snack Ringan",
+      "price": 6000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 6000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "dc16226bab2e.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "KOPI LIONG",
+      "category": "Coffee",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 5000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KORNET",
+      "category": "Add on",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KUACI",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "309ea2cd6410.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "KUKUBIMA",
+      "category": "Non Coffee",
+      "price": 7000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 7000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "KUKUBIMA SUSU",
+      "category": "Non Coffee",
+      "price": 10000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 10000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "LARUTAN CAP KAKI 3",
+      "category": "Non Coffee",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "36aabd005e57.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "LEMON TEA",
+      "category": "Tea",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "LUWAK WHITE COFFEE",
+      "category": "Coffee",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 5000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "MAKARONI",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "MAKARONI BON CABE",
+      "category": "Snack Ringan",
+      "price": 4000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 4000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "43dfd4c29161.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "MALKIST ROMA",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "9160ff574360.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "MARIMAS ALL VARIANT",
+      "category": "Non Coffee",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "MARTABAK TELUR KORNET MINI",
+      "category": "Snacks",
+      "price": 20000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 20000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "MIE LEVEL 1-2",
+      "category": "Mie & Pangsit Level",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "MIE LEVEL 3-4",
+      "category": "Mie & Pangsit Level",
+      "price": 17000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 17000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "MIE SEDAP GORENG",
+      "category": "Mie",
+      "price": 8000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 8000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    },
+    {
+      "name": "MILO",
+      "category": "Non Coffee",
+      "price": 8000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 8000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 8000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "392cf73146e4.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "MIX PLATTER",
+      "category": "Snacks",
+      "price": 20000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 20000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": false
+    }
+  ],
+  "excluded": [
+    {
+      "source": "products",
+      "name": "ALL VARIANT MINUMAN DINGIN(SHOWCASE)",
+      "reason": "Ditunda: nama 19 varian dan harga (Rp0) belum diisi pemilik"
+    },
+    {
+      "source": "products",
+      "name": "JASJUS ALL VARIANT",
+      "reason": "Ditunda: nama 4 varian belum diisi pemilik"
+    },
+    {
+      "source": "products",
+      "name": "MIE SEDAP DOUBLE",
+      "reason": "Ditunda: nama 6 varian belum diisi pemilik"
+    },
+    {
+      "source": "products",
+      "name": "MIE SEDAP KUAH",
+      "reason": "Ditunda: nama 5 varian belum diisi pemilik"
+    },
+    {
+      "source": "categories",
+      "name": "MAKANAN",
+      "reason": "Tanpa item di ekspor produk"
+    },
+    {
+      "source": "categories",
+      "name": "LAIN LAIN",
+      "reason": "Tanpa item di ekspor produk"
+    },
+    {
+      "source": "categories",
+      "name": "NASI",
+      "reason": "Tanpa item di ekspor produk"
+    },
+    {
+      "source": "categories",
+      "name": "ROTI & PISANG",
+      "reason": "Tanpa item di ekspor produk"
+    },
+    {
+      "source": "categories",
+      "name": "SIGNATURE COFFEE",
+      "reason": "Tanpa item di ekspor produk"
+    },
+    {
+      "source": "attributes",
+      "name": "Varian Kentang",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "Varian Indomie",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "VARIAN ROTI",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "Mentai",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "VARIAN SNACK",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "VARIANT MINUMAN DINGIN SHOWCASE",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "NUTRISARI",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "TEAJUS",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "JASJUS",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "INDOMIE KUAH",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "VARIANT MIE SEDAP",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attributes",
+      "name": "Varian signature coffee",
+      "reason": "Tidak dipakai item mana pun"
+    }
+  ]
+}

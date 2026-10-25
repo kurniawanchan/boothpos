@@ -1,0 +1,297 @@
+{
+  "format": 2,
+  "outlet": {
+    "name": "Warkop WJM 3",
+    "codes": [
+      "WJ3",
+      "WJM"
+    ],
+    "create_when": "mode_empty"
+  },
+  "withdraw_others": {
+    "live": false,
+    "demo": true
+  },
+  "stations": {
+    "Bar": [
+      "Bar"
+    ],
+    "Dapur": [
+      "Dapur"
+    ]
+  },
+  "source": {
+    "system": "Odoo",
+    "exported_on": "2026-10-22",
+    "files": {
+      "categories": "kategori-uji.xlsx",
+      "attributes": "atribut-uji.xlsx",
+      "products": "produk-uji.xlsx"
+    },
+    "rows": {
+      "categories": 3,
+      "attribute_values": 9,
+      "products": 8
+    }
+  },
+  "approval": {
+    "status": "approved",
+    "approved_on": "2026-10-24",
+    "approved_by_role": "pemilik"
+  },
+  "initial_stock": null,
+  "categories": [
+    {
+      "name": "Kopi Uji",
+      "source_name": "Kopi Uji",
+      "order": 0,
+      "station": "Bar"
+    },
+    {
+      "name": "Makanan Uji",
+      "source_name": "Makanan Uji",
+      "order": 1,
+      "station": "Dapur"
+    },
+    {
+      "name": "Tambahan Uji",
+      "source_name": "Tambahan Uji",
+      "order": 2,
+      "station": "Dapur"
+    }
+  ],
+  "attributes": [
+    {
+      "name": "Suhu",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Hot",
+        "Ice"
+      ]
+    },
+    {
+      "name": "Porsi",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Kecil",
+        "Besar"
+      ]
+    },
+    {
+      "name": "Level",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "Pedas",
+        "Sedang"
+      ]
+    },
+    {
+      "name": "Rasa",
+      "creates_variants": false,
+      "values_from": "odoo",
+      "values": [
+        "Hazelnut",
+        "Vanilla"
+      ]
+    },
+    {
+      "name": "Lama",
+      "creates_variants": true,
+      "values_from": "odoo",
+      "values": [
+        "test"
+      ]
+    }
+  ],
+  "option_groups": [
+    {
+      "name": "Rasa",
+      "from_attribute": "Rasa",
+      "required": true,
+      "options": [
+        "Hazelnut",
+        "Vanilla"
+      ],
+      "attach_to": [
+        "Kopi Uji"
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Kopi Uji",
+      "category": "Kopi Uji",
+      "price": 10000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 10000,
+          "values": {
+            "Suhu": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 10000,
+          "values": {
+            "Suhu": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "4eea11424a7a.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Nasi Paket Uji",
+      "category": "Makanan Uji",
+      "price": 20000,
+      "odoo_variant_count": 4,
+      "variants": [
+        {
+          "name": "Kecil Pedas",
+          "price": 20000,
+          "values": {
+            "Porsi": "Kecil",
+            "Level": "Pedas"
+          }
+        },
+        {
+          "name": "Kecil Sedang",
+          "price": 20000,
+          "values": {
+            "Porsi": "Kecil",
+            "Level": "Sedang"
+          }
+        },
+        {
+          "name": "Besar Pedas",
+          "price": 25000,
+          "values": {
+            "Porsi": "Besar",
+            "Level": "Pedas"
+          }
+        },
+        {
+          "name": "Besar Sedang",
+          "price": 25000,
+          "values": {
+            "Porsi": "Besar",
+            "Level": "Sedang"
+          }
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Keju",
+      "category": "Makanan Uji",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": "4eea11424a7a.jpg",
+      "photo_issue": null,
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Coklat",
+      "category": "Makanan Uji",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Roti Bakar Coklat Keju",
+      "category": "Makanan Uji",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Nasi Putih Uji",
+      "category": "Tambahan Uji",
+      "price": 0,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 0,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "Kit Uji",
+      "category": "Tambahan Uji",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": null,
+      "photo": null,
+      "photo_issue": "truncated",
+      "odoo_kit": true
+    }
+  ],
+  "excluded": [
+    {
+      "source": "products",
+      "name": "Partial Payment Uji",
+      "reason": "Produk teknis Odoo (nf_partial_payment), bukan menu"
+    },
+    {
+      "source": "attributes",
+      "name": "Lama",
+      "reason": "Tidak dipakai item mana pun"
+    },
+    {
+      "source": "attribute_values",
+      "name": "Lama: test",
+      "reason": "Data uji"
+    }
+  ]
+}

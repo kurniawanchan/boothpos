@@ -1,0 +1,503 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://boothpos.local/schemas/wjm-odoo-catalog.v1.json",
+  "title": "Katalog Odoo WJM (format 2, 069)",
+  "description": "Format 2: menggantikan outlet_name dengan outlet, menambah withdraw_others, stations, attributes[].values_from, categories[].source_name, dan excluded source \"categories\". Dipakai katalog WJM 3 (dibangkitkan ulang) dan WJM 2. Lihat specs/069-wjm2-catalog-seeder/data-model.md §2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "outlet",
+    "stations",
+    "withdraw_others",
+    "source",
+    "approval",
+    "initial_stock",
+    "categories",
+    "attributes",
+    "option_groups",
+    "items",
+    "excluded"
+  ],
+  "properties": {
+    "format": {
+      "const": 2
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system",
+        "exported_on",
+        "files",
+        "rows"
+      ],
+      "properties": {
+        "system": {
+          "const": "Odoo"
+        },
+        "exported_on": {
+          "type": "string",
+          "format": "date"
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "categories",
+            "attributes",
+            "products"
+          ],
+          "properties": {
+            "categories": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attributes": {
+              "type": "string",
+              "minLength": 1
+            },
+            "products": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "rows": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "categories",
+            "attribute_values",
+            "products"
+          ],
+          "properties": {
+            "categories": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "attribute_values": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "products": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "initial_stock": {
+      "description": "Stok awal tiap varian baru di outlet tujuan; null = tanpa pelacakan stok (FR-013).",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "approved_on",
+        "approved_by_role"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "draft",
+            "approved"
+          ]
+        },
+        "approved_on": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        },
+        "approved_by_role": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "approved"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "approved_on": {
+            "type": "string",
+            "format": "date"
+          },
+          "approved_by_role": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "approved_on": {
+            "type": "null"
+          },
+          "approved_by_role": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "order",
+          "station",
+          "source_name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "station": {
+            "enum": [
+              "Bar",
+              "Dapur"
+            ]
+          },
+          "source_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      }
+    },
+    "attributes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "creates_variants",
+          "values",
+          "values_from"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "creates_variants": {
+            "type": "boolean"
+          },
+          "values": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "values_from": {
+            "enum": [
+              "odoo",
+              "pemetaan"
+            ]
+          }
+        }
+      }
+    },
+    "option_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "from_attribute",
+          "required",
+          "options",
+          "attach_to"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 90
+          },
+          "from_attribute": {
+            "type": "string",
+            "minLength": 1
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          "attach_to": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "category",
+          "price",
+          "odoo_variant_count",
+          "variants",
+          "variant_count_override",
+          "photo",
+          "photo_issue",
+          "odoo_kit"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 150
+          },
+          "category": {
+            "type": "string",
+            "minLength": 1
+          },
+          "price": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "odoo_variant_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "variants": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "price",
+                "values"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 100
+                },
+                "price": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "values": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          },
+          "variant_count_override": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1
+          },
+          "photo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^[0-9a-f]{12}\\.(jpg|png)$"
+          },
+          "photo_issue": {
+            "enum": [
+              "truncated",
+              "missing",
+              null
+            ]
+          },
+          "odoo_kit": {
+            "type": "boolean"
+          }
+        },
+        "if": {
+          "properties": {
+            "photo": {
+              "type": "null"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "photo_issue": {
+              "enum": [
+                "truncated",
+                "missing"
+              ]
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "photo_issue": {
+              "type": "null"
+            }
+          }
+        }
+      }
+    },
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "name",
+          "reason"
+        ],
+        "properties": {
+          "source": {
+            "enum": [
+              "products",
+              "categories",
+              "attributes",
+              "attribute_values"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "outlet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "codes",
+        "create_when"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "codes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{3}$"
+          }
+        },
+        "create_when": {
+          "enum": [
+            "mode_empty",
+            "demo_missing"
+          ]
+        }
+      }
+    },
+    "withdraw_others": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "live",
+        "demo"
+      ],
+      "properties": {
+        "live": {
+          "type": "boolean"
+        },
+        "demo": {
+          "type": "boolean"
+        }
+      }
+    },
+    "stations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Bar",
+        "Dapur"
+      ],
+      "properties": {
+        "Bar": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          }
+        },
+        "Dapur": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50
+          }
+        }
+      }
+    }
+  }
+}

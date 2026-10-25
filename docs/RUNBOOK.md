@@ -598,3 +598,54 @@ adb logcat -s AndroidRuntime:E  # galat fatal; harus kosong pada pengujian
 - APK membawa alamat online bawaan (`https://smasher-nullify-subgroup.ngrok-free.dev`). Dipakai tablet baru **hanya** bila admin memilih "Online" di Pengaturan → Umum → Server address tetapi kolom "Online server address" kosong; isian admin selalu didahulukan.
 - Ganti alamat bawaan bila ngrok berubah: (1) build APK dengan `pos.defaultOnlineUrl=<alamat baru>` di `android-pos/local.properties` atau `gradle.properties`; (2) set `SERVER_ADDRESS_DEFAULT_ONLINE=<alamat baru>` di `.env` server agar petunjuk di halaman web sama (lalu `php artisan config:clear` bila konfigurasi di-cache). Kedua nilai harus sama.
 - Tablet yang sudah menyimpan alamat tidak berubah sampai datanya dihapus (aturan 065).
+
+## 14. Katalog WJM dari Odoo (fitur 068, 2026-10-24)
+
+Mengisi katalog Warkop WJM 3 (10 kategori, 79 item, 111 varian, 57 foto) dari ekspor Odoo ke mode LIVE dan/atau DEMO. Hanya berjalan bila dipanggil; **tidak** ikut `db:seed` bawaan. Sumbernya `database/seeders/data/wjm-odoo/catalog.json`, dibangkitkan dari `specs/068-odoo-catalog-seeder/catalog-mapping.md`. Selama tabel itu belum disetujui pemilik (status `DRAF`), pengisian sungguhan ditolak; pratinjau tetap bisa.
+
+### 14.1 Urutan kerja
+```bash
+docker compose exec app php artisan app:backup                          # 1. cadangan dulu
+docker compose exec app php artisan app:seed-wjm-catalog --dry-run      # 2. pratinjau: baca laporannya
+docker compose exec app php artisan app:seed-wjm-catalog                # 3. isi LIVE lalu DEMO
+docker compose exec app php artisan app:seed-wjm-catalog                # 4. jalan ulang: semua "Dibuat" = 0
+```
+- Opsi: `--mode=live|demo|both` (bawaan both, LIVE lebih dulu); `--outlet=KODE` bersama satu `--mode`, bila mode punya beberapa outlet tanpa nama "Warkop WJM 3"; `--force` untuk APP_ENV=production; `--catalog=PATH` untuk berkas lain.
+- Setara tanpa opsi: `php artisan db:seed --class=WjmCatalogSeeder` (kedua mode). Di produksi tambahkan `--force` milik `db:seed`.
+- Kode keluar 0 hanya bila semua mode `applied` (atau `previewed`). Selain itu 1, dan mode yang gagal sudah dibatalkan seluruhnya, termasuk fotonya.
+
+### 14.2 Yang perlu diketahui
+- Kebijakan per outlet dibawa katalog (baris kepala `catalog-mapping.md`: **Outlet**, **Tarik item lain dari menu outlet**, **Stasiun**, **Stok awal**), bukan kode. Outlet tujuan per mode: pilihan `--outlet`, lalu outlet aktif bernama sama dengan katalog. Katalog WJM 3 (`mode kosong`) lalu memakai satu-satunya outlet aktif, dan mode tanpa outlet mendapat outlet baru (kode `WJ3`, atau `WJM` bila `WJ3` sudah dipakai mode lain). Katalog WJM 2 (`DEMO bila belum ada`) tidak pernah memakai outlet lain (§14.4).
+- Stasiun dikenali menurut peran Bar/Dapur lewat daftar nama di katalog, jadi stasiun yang sudah diganti nama ("Dapur Minuman", "Dapur Makanan") tidak digandakan. Outlet tanpa stasiun mendapat dua stasiun; outlet dengan stasiun yang tidak dikenali **ditolak**. Setiap item baru mendapat stasiun outletnya sendiri.
+- Item hanya dijual di outlet tujuan. Item di luar katalog **ditarik** dari menu outlet tujuan sesuai `withdraw_others` per mode (WJM 3: DEMO saja; WJM 2: LIVE dan DEMO). Penarikan tidak menghapus apa pun dan hanya menulis penanda untuk outlet tujuan; riwayat order dan penjualan di outlet pemiliknya tetap.
+- Item yang sudah ada (nama + kategori sama, **milik outlet tujuan**) dilewati tanpa diubah, termasuk yang sudah dihapus pemilik. Item yang **diganti nama** pemilik dianggap belum ada dan dibuat lagi, jadi selalu pratinjau sebelum jalan ulang. Item outlet lain tidak pernah dianggap sudah ada.
+- Stok awal: bila katalog punya `**Stok awal**: 100`, setiap varian baru melacak stok dan mendapat satu gerakan `initial` di outlet tujuan. Jalan ulang tidak menambah stok. Dengan "—" item tidak melacak stok. Harga pokok 0, sehingga margin di laporan terlihat 100% sampai harga pokok diisi.
+- Grup pilihan "Rasa" yang bentrok dengan grup bernama sama tetapi berbeda opsi dibuat sebagai "Rasa (WJM)".
+- Setiap mode yang berhasil mencatat satu log aktivitas `catalog_seeded`.
+
+### 14.3 Setelah pemilik menyetujui pemetaan
+1. Masukkan jawaban pemilik ke `catalog-mapping.md` (kategori, varian, `## Harga varian khusus`, `## Grup pilihan`), lalu ubah `**Status**:` menjadi `Disetujui` beserta peran dan tanggal.
+2. Bangkitkan ulang (berkas XLSX tetap di luar repo; jangan sunting `catalog.json` dengan tangan):
+   ```bash
+   python3 -I specs/068-odoo-catalog-seeder/tools/build_catalog.py \
+     --src "<folder ekspor Odoo>" --mapping specs/068-odoo-catalog-seeder/catalog-mapping.md \
+     --out database/seeders/data/wjm-odoo
+   ```
+3. Jalankan tes dengan flag `-e` (§5): `docker compose exec -e APP_ENV=testing -e DB_DATABASE=warkop_wjm_test -e CACHE_STORE=array -e SESSION_DRIVER=array app php artisan test --filter='WjmCatalog|ImageUploadServiceLocalFile'`.
+4. Ulangi §14.1. Pemulihan bila perlu: `php artisan app:restore <berkas.sql>` (ingat: restore juga mengembalikan `license_activations`).
+
+### 14.4 Katalog Warkop WJM 2 (fitur 069, 2026-10-25)
+
+Katalog kedua `database/seeders/data/wjm2-odoo/catalog.json` (80 item, 141 varian dari ekspor yang berhenti di huruf M), dibangkitkan dari `specs/069-wjm2-catalog-seeder/catalog-mapping.md` oleh alat yang sama. Aturannya: **data outlet WJM 3 tidak boleh berubah**; satu-satunya penulisan yang menyangkut item WJM 3 adalah penanda "dijual di outlet WJM 2".
+```bash
+docker compose exec app php artisan app:backup
+docker compose exec app php artisan app:seed-wjm-catalog --catalog=database/seeders/data/wjm2-odoo/catalog.json --dry-run
+docker compose exec app php artisan app:seed-wjm-catalog --catalog=database/seeders/data/wjm2-odoo/catalog.json
+```
+Setara: `php artisan db:seed --class=Wjm2CatalogSeeder`.
+- **LIVE** harus sudah punya outlet "Warkop WJM 2" (buat lewat layar Outlet); bila tidak, mode itu ditolak. **DEMO** membuat outlet itu bila belum ada.
+- Item yang nama variannya belum diketahui dapat **ditunda** lewat bagian `## Item ditunda` di tabel pemetaan: item itu tidak dibuat, tetap tercatat sebagai produk dikecualikan, dan dibuat pada jalan ulang sesudah barisnya dihapus dan katalog dibangkitkan ulang (empat item WJM 2 saat ini: JASJUS ALL VARIANT, ALL VARIANT MINUMAN DINGIN(SHOWCASE), MIE SEDAP KUAH, MIE SEDAP DOUBLE).
+- Selama `catalog-mapping.md` berstatus `DRAF`, pratinjau jalan tetapi pengisian sungguhan ditolak. Nama varian bertanda `?` (34 varian) menjadi "(belum diisi n)" pada pratinjau, dan pembangkit menolak status `Disetujui` selama masih ada.
+- **Sebelum dan sesudah** pengisian di server sungguhan, ambil potret data WJM 3 (item, varian, harga, riwayat harga, foto, stok, gerakan stok, kategori, stasiun) dan bandingkan. Hasilnya harus sama, kecuali penanda menu untuk outlet WJM 2.
+- Kategori dipakai bersama dua outlet. `GET /pos/categories` menyembunyikan kategori yang seluruh itemnya dijual di outlet lain, sehingga tablet tidak menampilkan tab kosong.
+- Pemulihan: `php artisan app:restore <berkas.sql>` dari cadangan yang diambil sebelum pengisian.

@@ -1235,11 +1235,19 @@ paths:
   /pos/categories:
     get:
       tags: [Products]
-      summary: Kategori kasir menurut mode sistem aktif (055)
+      summary: Kategori kasir menurut mode sistem aktif dan outlet shift (055, 069)
       description: |
         Sumber kategori untuk layar kasir Android. Hanya kategori aktif dari mode sistem
         yang sedang aktif (DEMO/LIVE, lewat HasDataMode). Kategori tanpa produk yang bisa
         dijual tetap dikembalikan dengan product_count 0. Gerbang sama dengan GET /products?pos=1.
+
+        **Outlet (069).** Kategori dipakai bersama beberapa outlet. Outlet acuan adalah outlet shift
+        kasir (atau satu-satunya outlet), dengan aturan "dijual di outlet ini" yang sama dengan
+        GET /products?pos=1. Kategori yang PUNYA produk tetapi seluruhnya tidak dijual di outlet acuan
+        disembunyikan, supaya tablet satu outlet tidak menampilkan tab kosong milik outlet lain.
+        Kategori yang sama sekali belum punya produk tetap tampil (product_count 0). `product_count`
+        menghitung produk aktif yang dijual di outlet acuan. Tanpa outlet acuan (pengguna multi-outlet
+        tanpa shift) daftarnya tidak disaring.
       responses:
         '200':
           description: Berhasil; urut display_order lalu nama
