@@ -16,6 +16,11 @@ Odoo dan kolomnya menurut alias Inggris/Indonesia; nilai atribut yang tidak ada 
 bagian "## Nilai atribut" di tabel pemetaan; kebijakan per outlet (outlet tujuan, stasiun, penarikan item) ikut
 dari baris kepala tabel pemetaan, bukan dari kode.
 
+Halaman tambahan (069, catatan 2026-10-25): ekspor produk yang terpotong per halaman datang sebagai berkas
+tambahan "... (product.template) page N.xlsx" di folder yang sama. Barisnya ditambahkan sesudah berkas utama.
+Halaman tambahan boleh tanpa kolom jumlah varian; jumlahnya lalu diturunkan dari tabel pemetaan dan dicatat
+lewat `variant_count_override`, bukan dikarang sebagai angka Odoo.
+
 Semua masalah dikumpulkan dulu. Bila ada satu saja, tidak ada berkas yang ditulis dan alat keluar dengan
 kode 1, supaya catalog.json tidak pernah setengah jadi.
 """
@@ -34,6 +39,10 @@ import xml.etree.ElementTree as ET
 
 # Ekspor Odoo diberi nama menurut bahasa antarmuka; yang tetap hanya akhiran modelnya (research D2).
 MODEL_SUFFIXES = {'categories': '(pos.category).xlsx', 'attributes': '(product.attribute).xlsx', 'products': '(product.template).xlsx'}
+
+# Halaman tambahan ekspor produk: "<nama> (product.template) page 2.xlsx", diurutkan menurut nomor halaman.
+PAGE_PATTERN = re.compile(r'\(product\.template\) page (\d+)\.xlsx$')
+NO_COUNT_REASON = 'Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian'
 
 # Judul kolom per bahasa antarmuka Odoo (research D2). Kolom yang tidak ada dianggap kosong.
 ALIASES = {
@@ -146,6 +155,13 @@ def find_sources(src):
         else:
             found[key] = matches[0]
     return found, errors
+
+
+def find_pages(src):
+    """Berkas halaman tambahan ekspor produk, berurutan menurut nomor halaman."""
+    pages = [(int(m.group(1)), p) for p in src.iterdir()
+             if p.is_file() and not p.name.startswith('~') and (m := PAGE_PATTERN.search(p.name))]
+    return [p for _, p in sorted(pages)]
 
 
 def _get(row, key):
@@ -422,12 +438,24 @@ def build(src, mapping_path):
     mapping = parse_mapping(mapping_path.read_text(encoding='utf-8'), errors)
 
     sheets = {key: read_sheet(path) for key, path in files.items()}
+    pages = find_pages(src)
+    page_rows = []
+    for page in pages:
+        rows = read_sheet(page)
+        for column in ('name', 'price'):
+            if rows and not _has_column(rows, column):
+                errors.append(f"{page.name}: kolom {' / '.join(ALIASES[column])} tidak ditemukan")
+        no_count = bool(rows) and not _has_column(rows, 'variant_count')
+        for r in rows:
+            r['__no_count'] = no_count
+        page_rows += rows
     for key, required in REQUIRED_COLUMNS.items():
         for column in required:
             if sheets[key] and not _has_column(sheets[key], column):
                 errors.append(f"{files[key].name}: kolom {' / '.join(ALIASES[column])} tidak ditemukan")
     if errors:
         return None, {}, errors, notes
+    sheets['products'] = sheets['products'] + page_rows
 
     # Kategori: tiap kategori sumber punya bagian ### di tabel pemetaan; yang bertanda "tanpa item" dikecualikan.
     source_categories = [_norm(_get(r, 'category_name')) for r in sheets['categories'] if _get(r, 'category_name')]
@@ -521,15 +549,16 @@ def build(src, mapping_path):
         price = _to_int(_get(r, 'price'))
         if row['price'] != price:
             errors.append(f"Item '{name}': harga di tabel pemetaan {row['price']} ≠ Sales Price sumber {price}")
-        odoo_count = _to_int(_get(r, 'variant_count'))
         variants = expand_variants(row['variants'], attr_by_name, name, errors, notes['placeholders'])
+        no_count = r.get('__no_count', False)
+        odoo_count = max(len(variants), 1) if no_count else _to_int(_get(r, 'variant_count'))
         if odoo_attr_column:
             odoo_attrs = {_norm(x) for x in str(_get(r, 'item_attributes') or '').split(',') if x.strip()}
             mapped_attrs = spec_attribute_names(row['variants'])
             if odoo_attrs != mapped_attrs:
                 errors.append(f"Item '{name}': atribut di tabel pemetaan {sorted(mapped_attrs)} ≠ atribut item di Odoo {sorted(odoo_attrs)}")
         override = re.search(r'≠Odoo:\s*([^;]+)', row['note'])
-        override = override.group(1).strip() if override else None
+        override = override.group(1).strip() if override else (NO_COUNT_REASON if no_count else None)
         if variants and len(variants) != odoo_count and override is None:
             errors.append(f"Item '{name}': jumlah varian {len(variants)} ≠ Odoo {odoo_count} (tambahkan '≠Odoo: <alasan>' bila disengaja)")
         filename, data, issue = _photo(_get(r, 'image'), name, errors)
@@ -644,7 +673,7 @@ def build(src, mapping_path):
         'source': {
             'system': 'Odoo',
             'exported_on': exported_on(files['products']),
-            'files': {key: path.name for key, path in files.items()},
+            'files': {**{key: path.name for key, path in files.items()}, **({'product_pages': [p.name for p in pages]} if pages else {})},
             'rows': {'categories': len(source_categories),
                      'attribute_values': file_value_count,
                      'products': len(products)},

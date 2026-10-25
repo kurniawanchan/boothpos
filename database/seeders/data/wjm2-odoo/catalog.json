@@ -28,12 +28,15 @@
     "files": {
       "categories": "Kategori Point of Sale (pos.category).xlsx",
       "attributes": "Atribut produk (product.attribute).xlsx",
-      "products": "Templete Produk (product.template).xlsx"
+      "products": "Templete Produk (product.template).xlsx",
+      "product_pages": [
+        "Templete Produk (product.template) page 2.xlsx"
+      ]
     },
     "rows": {
       "categories": 13,
       "attribute_values": 0,
-      "products": 80
+      "products": 131
     }
   },
   "approval": {
@@ -80,15 +83,27 @@
       "station": "Dapur"
     },
     {
+      "name": "Lain Lain",
+      "source_name": "LAIN LAIN",
+      "order": 6,
+      "station": "Dapur"
+    },
+    {
       "name": "Mie & Pangsit Level",
       "source_name": "MIE & PANGSIT LEVEL",
-      "order": 6,
+      "order": 7,
+      "station": "Dapur"
+    },
+    {
+      "name": "Roti & Pisang",
+      "source_name": "ROTI & PISANG",
+      "order": 8,
       "station": "Dapur"
     },
     {
       "name": "Snack Ringan",
       "source_name": "SNACK RINGAN",
-      "order": 7,
+      "order": 9,
       "station": "Dapur"
     }
   ],
@@ -1550,7 +1565,7 @@
       "odoo_kit": false
     },
     {
-      "name": "MARIMAS ALL VARIANT",
+      "name": "MARIMAS",
       "category": "Non Coffee",
       "price": 5000,
       "odoo_variant_count": 1,
@@ -1676,9 +1691,902 @@
       "photo": null,
       "photo_issue": "truncated",
       "odoo_kit": false
+    },
+    {
+      "name": "MOMOGI",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "MONDE",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "NABATI",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "NESCAFFE AMERICANO",
+      "category": "Coffee",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 5000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "NORI ROLL",
+      "category": "Snack Ringan",
+      "price": 3000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 3000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "NYAM NYAM",
+      "category": "Snack Ringan",
+      "price": 3000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 3000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "OMELETTE MIE",
+      "category": "Mie",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "OREO MINI",
+      "category": "Snack Ringan",
+      "price": 3000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 3000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "OTAK-OTAK GORENG",
+      "category": "Snacks",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PANGSIT CHILLIE OIL LEVEL 1-2",
+      "category": "Mie & Pangsit Level",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PANGSIT CHILLIE OIL LEVEL 3-4",
+      "category": "Mie & Pangsit Level",
+      "price": 17000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 17000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PANGSIT GORENG ISI 5",
+      "category": "Snacks",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PEYEK KACANG",
+      "category": "Snack Ringan",
+      "price": 3000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 3000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PILUS IKAN",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PISANG BAKAR COKLAT",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PISANG BAKAR COKLAT KEJU",
+      "category": "Roti & Pisang",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PISANG BAKAR KEJU",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PISANG GORENG COKLAT KEJU",
+      "category": "Roti & Pisang",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PISANG GORENG ORIGINAL",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PISCOK LUMER COKLAT KEJU",
+      "category": "Roti & Pisang",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "PISCOK LUMER ORIGINAL",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "POCKY",
+      "category": "Snack Ringan",
+      "price": 6000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 6000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "REGAL",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "ROTI AOKA",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "ROTI BAGELEN KERING",
+      "category": "Snack Ringan",
+      "price": 12000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 12000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "ROTI BAKAR COKLAT",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "ROTI BAKAR COKLAT KEJU",
+      "category": "Roti & Pisang",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "ROTI BAKAR KEJU",
+      "category": "Roti & Pisang",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SARI GANDUM",
+      "category": "Snack Ringan",
+      "price": 4000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 4000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SINGKONG BALADO",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SO FRESH (FRESHCARE)",
+      "category": "Lain Lain",
+      "price": 15000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 15000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SOSIS BAKAR",
+      "category": "Snacks",
+      "price": 13000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 13000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "STICK KEJU",
+      "category": "Snack Ringan",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SUKRO",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SUKRO OVEN",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SUPERSTAR",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SUSU COKLAT",
+      "category": "Non Coffee",
+      "price": 0,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 0,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 0,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SUSU JAHE",
+      "category": "Non Coffee",
+      "price": 0,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 0,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 0,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SUSU PUTIH",
+      "category": "Non Coffee",
+      "price": 0,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 0,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 0,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "SUSU SODA",
+      "category": "Non Coffee",
+      "price": 10000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 10000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "TEH MANIS",
+      "category": "Tea",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 5000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "TEH TARIK",
+      "category": "Tea",
+      "price": 7000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 7000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 7000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "TEH TAWAR",
+      "category": "Tea",
+      "price": 5000,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 5000,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 5000,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "TELOR",
+      "category": "Add on",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "TICTAC",
+      "category": "Snack Ringan",
+      "price": 2000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 2000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "TISSUE TRAVEL",
+      "category": "Lain Lain",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "TOLAK ANGIN",
+      "category": "Lain Lain",
+      "price": 5000,
+      "odoo_variant_count": 1,
+      "variants": [
+        {
+          "name": "Standard",
+          "price": 5000,
+          "values": {}
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
+    },
+    {
+      "name": "TOP CAPPUCINO",
+      "category": "Coffee",
+      "price": 0,
+      "odoo_variant_count": 2,
+      "variants": [
+        {
+          "name": "Hot",
+          "price": 0,
+          "values": {
+            "Varian": "Hot"
+          }
+        },
+        {
+          "name": "Ice",
+          "price": 0,
+          "values": {
+            "Varian": "Ice"
+          }
+        }
+      ],
+      "variant_count_override": "Jumlah varian dari tabel pemetaan; halaman ekspor tanpa kolom jumlah varian",
+      "photo": null,
+      "photo_issue": "missing",
+      "odoo_kit": false
     }
   ],
   "excluded": [
+    {
+      "source": "products",
+      "name": "Partial Payment",
+      "reason": "Produk teknis Odoo (nf_partial_payment), bukan menu"
+    },
     {
       "source": "products",
       "name": "ALL VARIANT MINUMAN DINGIN(SHOWCASE)",
@@ -1700,23 +2608,23 @@
       "reason": "Ditunda: nama 5 varian belum diisi pemilik"
     },
     {
+      "source": "products",
+      "name": "NUTRISARI ALL VARIANT",
+      "reason": "Ditunda: nama rasa belum diisi pemilik (halaman 2 tanpa jumlah varian)"
+    },
+    {
+      "source": "products",
+      "name": "TEAJUS ALL VARIANT",
+      "reason": "Ditunda: nama rasa belum diisi pemilik (halaman 2 tanpa jumlah varian)"
+    },
+    {
       "source": "categories",
       "name": "MAKANAN",
       "reason": "Tanpa item di ekspor produk"
     },
     {
       "source": "categories",
-      "name": "LAIN LAIN",
-      "reason": "Tanpa item di ekspor produk"
-    },
-    {
-      "source": "categories",
       "name": "NASI",
-      "reason": "Tanpa item di ekspor produk"
-    },
-    {
-      "source": "categories",
-      "name": "ROTI & PISANG",
       "reason": "Tanpa item di ekspor produk"
     },
     {

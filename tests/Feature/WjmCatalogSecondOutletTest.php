@@ -221,6 +221,34 @@ class WjmCatalogSecondOutletTest extends TestCase
         }
     }
 
+    /**
+     * Regresi 2026-10-25: pemilik membuat item sendiri di outlet WJM 2 (LIVE) lewat layar manajemen. Jalan ulang
+     * katalog tidak boleh menyembunyikannya dari POS; item outlet pertama tetap ditarik.
+     */
+    public function test_a_live_run_keeps_items_the_owner_made_at_the_second_outlet_but_still_withdraws_the_first_outlets(): void
+    {
+        [$a, $b] = $this->prepareLive();
+        $menu = app(OutletMenuService::class);
+        $own = ModeGate::runAs('live', function () use ($b, $menu) {
+            $own = Product::factory()->create([
+                'home_outlet_id' => $b->id,
+                'category_id' => Category::factory()->create(['code' => 'ZZ', 'name' => 'Buatan Pemilik'])->id,
+                'code_prefix' => 'WJD-ZZ-AAA',
+                'name' => 'Item Buatan Pemilik',
+            ]);
+            $menu->setCarried($own, [$b->id]);
+
+            return $own;
+        });
+
+        $report = $this->wjmRun(['live'], path: $this->second())['live'];
+
+        $this->assertSame(WjmCatalogSeedReport::APPLIED, $report->status, implode(' | ', $report->problems));
+        $this->assertNotContains('Item Buatan Pemilik', $report->withdrawn);
+        $this->assertCount(7, $report->withdrawn, 'item outlet pertama tetap ditarik');
+        $this->assertTrue(ModeGate::runAs('live', fn () => $menu->isCarried($own->id, $b->id)), 'item pemilik tetap dijual di outlet kedua');
+    }
+
     /** Outlet pertama terisi di kedua mode; LIVE sudah punya outlet kedua (dibuat pengguna), DEMO belum. */
     private function prepareBothModes(): void
     {
