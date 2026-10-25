@@ -145,7 +145,7 @@ describe('ProductsView — page structure (043)', () => {
     await renderProducts();
     await screen.findByText('Item 1');
     expect(listProducts).toHaveBeenCalledTimes(1);
-    expect(listProducts).toHaveBeenCalledWith(expect.objectContaining({ tab: 'menu', page: 1, per_page: 15 }));
+    expect(listProducts).toHaveBeenCalledWith(expect.objectContaining({ tab: 'menu', page: 1, per_page: 15 }), { skipOutletHeader: true });
     expect(listProducts.mock.calls[0][0]).not.toHaveProperty('with_variants');
   });
 
@@ -156,7 +156,7 @@ describe('ProductsView — page structure (043)', () => {
     expect(screen.queryByRole('button', { name: /atur ulang filter/i })).not.toBeInTheDocument();
 
     await user.type(screen.getByRole('searchbox'), 'kopi');
-    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'kopi', page: 1 })));
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'kopi', page: 1 }), { skipOutletHeader: true }));
     // router.replace resolves asynchronously: the state changes first, the address a tick later.
     await waitFor(() => expect(router.currentRoute.value.query.q).toBe('kopi'));
 

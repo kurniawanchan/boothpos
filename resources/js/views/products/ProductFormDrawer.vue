@@ -38,6 +38,8 @@ import { modifierRuleText } from '../../utils/itemDetail';
  *   (`PUT /products/{id}/variants`), tautkan modifier (`PUT /products/{id}/modifier-links`), lalu stok awal
  *   (`POST /stock/adjustments`). Item SUDAH ada saat lanjutan gagal, jadi kegagalannya hanya menampilkan galat dan
  *   formulir tetap ditutup + `saved` dipancarkan — jangan mengulang POST (akan menggandakan item).
+ *   070: tabel varian mode buat memakai tata letak yang sama dengan mode ubah; bagian Ketersediaan di formulir buat
+ *   dihapus (outlet pembawa tetap lewat "Aktif di outlet"), dan Status Draft/Aktif kini ada di formulir UBAH.
  * - MODE UBAH: FORMULIR YANG SAMA dengan mode buat (bagian, urutan, tabel, kepala/kaki, lebar) — hanya Status yang
  *   tidak ada (status item yang sudah ada berubah lewat Hentikan/Aktifkan di halaman item) dan segmen kode yang
  *   terkunci (server tidak pernah menerimanya saat ubah). Tabel varian SAMA (`ProductVariantsTable`) dengan kolom
@@ -110,6 +112,7 @@ const productForm = reactive({
   is_retail: false,
 });
 const variantRows = ref([createVariant()]);
+
 const formErrors = reactive({});
 
 // "Harga dasar" item = harga varian pertama; menulis di sini atau di tabel varian mengubah nilai yang sama.
@@ -373,6 +376,8 @@ function validateCreate() {
     const price = String(row.sell_price).trim();
     if (price === '' || Number.isNaN(Number(price)) || Number(price) < 0) formErrors[`variants.${i}.sell_price`] = t('products.f_price_invalid');
   });
+  // 070 — item harus dijual di minimal satu outlet (server menolak daftar kosong juga).
+  if (outletStore.multi && productForm.outlet_ids.length === 0) formErrors.outlet_ids = t('products.f_availability_none');
   validateModifierRules();
   return Object.keys(formErrors).length === 0 && Object.keys(modifierErrors.value).length === 0;
 }
@@ -584,6 +589,7 @@ async function saveProduct() {
             <input v-model="productForm.outlet_ids" type="checkbox" :value="o.id" class="h-4 w-4 rounded border-line accent-brand" />
             {{ o.name }}
           </label>
+          <p v-if="formErrors.outlet_ids" class="text-[12px] font-medium text-danger-text" role="alert">{{ formErrors.outlet_ids }}</p>
         </fieldset>
         <ProductField v-slot="{ id }" :label="t('master_data.description')">
           <textarea :id="id" v-model="productForm.description" rows="3" :class="[textareaClass, borderOf('')]"></textarea>
@@ -616,7 +622,7 @@ async function saveProduct() {
       <!-- VARIAN & HARGA — SATU tabel untuk buat dan ubah. Markup (mode ubah, hanya bila boleh melihat biaya) ada di
            kepala bagian, seperti drawer lama. -->
       <ProductFormBlock :title="t('products.f_sec_variants')" :description="t('products.f_sec_variants_desc')">
-        <template v-if="!isCreate && canSeeCost" #actions>
+        <template v-if="canSeeCost" #actions>
           <label class="flex items-center gap-2 text-[12.5px] text-muted">
             {{ t('master_data.markup') }}
             <input v-model.number="markupPercent" type="number" class="h-8 w-[70px] border border-line px-2.5 text-right text-[13px] outline-none focus:border-brand focus:ring-2 focus:ring-mint-100" />
@@ -686,12 +692,13 @@ async function saveProduct() {
         </label>
       </ProductFormBlock>
 
-      <!-- KETERSEDIAAN — hanya Status (desain juga memuat outlet/channel/kuota: belum ada backend, sengaja tidak dibangun). -->
-      <ProductFormBlock v-if="isCreate" :title="t('products.f_sec_availability')">
-        <div class="flex flex-col gap-1.5">
-          <span class="text-[12.5px] font-semibold text-muted-5">{{ t('products.f_status') }}</span>
-          <p v-if="releaseOn" class="text-[13px] text-muted-5" data-testid="status-release-note">{{ t('products.f_status_release') }}</p>
-          <div v-else class="inline-flex self-start" role="group" :aria-label="t('products.f_status')" data-testid="status-toggle">
+      <!-- STATUS (070) — hanya saat UBAH: Draft atau Aktif. Saat buat item langsung aktif (atau draft bila rilis menu aktif);
+           saat rilis aktif status berubah lewat rilis, jadi hanya catatan. Catatan: menonaktifkan item yang sudah terbit
+           menjadikannya dihentikan (aturan Product::booted), bukan draft. -->
+      <ProductFormBlock v-if="!isCreate" :title="t('products.f_status')">
+        <p v-if="releaseOn" class="text-[13px] text-muted-5" data-testid="status-release-note">{{ t('products.f_status_release_edit') }}</p>
+        <div v-else class="flex flex-col gap-1.5">
+          <div class="inline-flex self-start" role="group" :aria-label="t('products.f_status')" data-testid="status-toggle">
             <button
               type="button"
               :aria-pressed="!productForm.is_active"
@@ -711,7 +718,7 @@ async function saveProduct() {
               {{ t('products.f_status_active') }}
             </button>
           </div>
-          <p v-if="!releaseOn" class="text-[11.5px] text-muted-3">{{ t('products.f_status_hint') }}</p>
+          <p class="text-[11.5px] text-muted-3">{{ t('products.f_status_hint') }}</p>
         </div>
       </ProductFormBlock>
 

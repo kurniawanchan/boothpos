@@ -22,10 +22,13 @@ import LoadingState from '../ui/LoadingState.vue';
  *
  * @prop {object|null} summary  isi GET /products/summary
  * @prop {'loading'|'error'|'ready'} state
+ * @prop {boolean} busy  070: sedang memuat ulang karena filter berubah — angka lama tetap tampil tetapi redup dan
+ *   `aria-busy`, sama dengan daftar di bawahnya; tidak ada angka lama yang tampil tanpa tanda.
  */
 const props = defineProps({
   summary: { type: Object, default: null },
   state: { type: String, default: 'loading' },
+  busy: { type: Boolean, default: false },
 });
 const emit = defineEmits(['retry', 'filter']);
 const { t } = useI18n();
@@ -101,7 +104,7 @@ function onSelect(key) {
 </script>
 
 <template>
-  <section class="mx-[26px] mb-5 border-2 border-line bg-white" :aria-label="t('products.fig_region')" data-testid="product-figures">
+  <section class="mx-[26px] mb-5 border-2 border-line bg-white" :class="busy ? 'opacity-60' : ''" :aria-label="t('products.fig_region')" :aria-busy="busy ? 'true' : 'false'" data-testid="product-figures">
     <LoadingState v-if="state === 'loading'" :rows="3" />
     <ErrorState v-else-if="state === 'error'" :message="t('products.fig_load_failed')" @retry="emit('retry')" />
     <EmptyState v-else-if="!hasData" icon="ph-chart-bar" :message="t('products.fig_load_failed')" />

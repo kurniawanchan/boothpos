@@ -50,6 +50,8 @@ return [
     'recipe_cost_locked' => 'This variant\'s cost price follows its recipe. Create a new recipe version to change it.',
     'bulk_price_scope_invalid' => 'Choose a valid price scope.',
     'bulk_price_outlets_required' => 'Choose at least one outlet.',
+    'outlet_price_duplicate' => 'This outlet already has a price on the same variant.',
+    'outlet_price_not_carried' => 'This outlet does not carry the item, so it cannot have its own price.',
     'outlet_price_release_unavailable' => 'Outlet prices cannot be changed while menu releases are on.',
     'outlet_ids_required' => 'Choose at least one outlet to mark as sold out.',
 ];

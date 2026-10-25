@@ -16,6 +16,9 @@ import ProductVariantImageCell from './ProductVariantImageCell.vue';
  * lama kartu varian): drawer membaca baris yang sama saat menyimpan. Yang butuh dunia luar dipancarkan:
  * tambah/hapus/duplikat/buka-BOM/perbesar-gambar.
  *
+ * - 070: mode `create` kini memakai tata letak yang SAMA dengan mode `edit` (kolom harga modal bila boleh melihat biaya,
+ *   baris kedua batas stok rendah/lacak stok/margin, aksi baris markup dan duplikat). Yang tetap berbeda hanya yang
+ *   memang belum ada untuk varian baru: SKU "Otomatis", kolom STOK = stok awal, tombol BOM (butuh varian tersimpan).
  * - mode `create`: SKU hanya keterangan "Otomatis" (server yang membangkitkannya); kolom STOK = stok awal; tanpa
  *   kolom modal (harga modal item baru 0, diisi lewat BOM/PO). Aksi baris hanya × untuk baris yang boleh dibuang.
  * - mode `edit`: SKU asli, STOK = stok saat ini, kolom HARGA MODAL hanya bila `canSeeCost` (server juga membuang
@@ -40,7 +43,8 @@ const emit = defineEmits(['add', 'remove', 'duplicate', 'open-bom', 'enlarge-ima
 const { t } = useI18n();
 
 const isEdit = computed(() => props.mode === 'edit');
-const showCost = computed(() => isEdit.value && props.canSeeCost);
+// 070 — kolom harga modal tampil di kedua mode bila boleh melihat biaya (tata letak buat = ubah).
+const showCost = computed(() => props.canSeeCost);
 // Jumlah kolom (untuk baris kedua yang membentang): varian, SKU, gambar, [modal], harga, stok, aktif, aksi.
 const colCount = computed(() => 7 + (showCost.value ? 1 : 0));
 
@@ -70,8 +74,6 @@ function markupFor(row) {
   return Math.round(((sell - cost) / cost) * 100);
 }
 
-// Mode ubah: baris utama tanpa garis bawah (garisnya milik baris kedua); mode buat: tiap sel bergaris bawah.
-const bb = computed(() => (isEdit.value ? '' : 'border-b'));
 const iconBtn = 'flex h-7 w-7 items-center justify-center border border-line-2 bg-white text-muted-5 hover:bg-surface-subtle hover:text-brand-active';
 const canRemove = (row) => !row.id && props.rows.length > 1;
 </script>
@@ -82,20 +84,20 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
       <table class="w-full table-fixed border-collapse text-left">
         <thead>
           <tr class="bg-surface-subtle text-[11px] font-semibold uppercase tracking-[0.05em] text-muted">
-            <th scope="col" class="border-b border-r border-line-2 px-3 py-2" :class="isEdit ? 'w-[22%]' : 'w-[30%]'">{{ t('products.f_col_variant') }}</th>
-            <th scope="col" class="border-b border-r border-line-2 px-3 py-2" :class="isEdit ? 'w-[18%]' : 'w-[18%]'">{{ t('products.f_col_sku') }}</th>
+            <th scope="col" class="w-[22%] border-b border-r border-line-2 px-3 py-2">{{ t('products.f_col_variant') }}</th>
+            <th scope="col" class="w-[18%] border-b border-r border-line-2 px-3 py-2">{{ t('products.f_col_sku') }}</th>
             <th scope="col" class="w-[92px] border-b border-r border-line-2 px-3 py-2">{{ t('products.f_col_image') }}</th>
             <th v-if="showCost" scope="col" class="w-[112px] border-b border-r border-line-2 px-3 py-2">{{ t('products.f_col_cost') }}</th>
             <th scope="col" class="w-[112px] border-b border-r border-line-2 px-3 py-2">{{ t('products.f_col_price') }}</th>
             <th scope="col" class="w-[88px] border-b border-r border-line-2 px-3 py-2">{{ isEdit ? t('products.f_col_stock_now') : t('products.f_col_stock') }}</th>
             <th scope="col" class="w-[56px] border-b border-line-2 px-2 py-2 text-center">{{ t('products.f_col_active') }}</th>
-            <th scope="col" class="border-b border-l border-line-2" :class="isEdit ? 'w-[116px]' : 'w-[36px]'" aria-hidden="true"></th>
+            <th scope="col" class="w-[116px] border-b border-l border-line-2" aria-hidden="true"></th>
           </tr>
         </thead>
         <!-- Satu <tbody> per varian: baris kedua (mode ubah) tetap serumpun dengan barisnya dan tidak ikut tertukar. -->
         <tbody v-for="(row, i) in rows" :key="i" data-testid="variant-row" :class="{ 'opacity-50': isEdit && row.id && !row.is_active }">
           <tr>
-            <td class="border-r border-line-2 p-0" :class="bb">
+            <td class="border-r border-line-2 p-0">
               <input
                 v-model="row.variant_name"
                 type="text"
@@ -106,14 +108,14 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
                 :aria-invalid="errorOf(i, 'variant_name') ? 'true' : undefined"
               />
             </td>
-            <td class="border-r border-line-2 px-3 text-[12px]" :class="[bb, isEdit && row.sku ? 'font-mono text-muted-5' : 'text-muted-3']">
+            <td class="border-r border-line-2 px-3 text-[12px]" :class="[isEdit && row.sku ? 'font-mono text-muted-5' : 'text-muted-3']">
               <span v-if="isEdit && row.sku" class="block truncate" :title="row.sku">{{ row.sku }}</span>
               <span v-else>{{ t('products.f_sku_auto') }}</span>
             </td>
-            <td class="border-r border-line-2" :class="bb">
+            <td class="border-r border-line-2">
               <ProductVariantImageCell :row="row" :index="i" @enlarge="(r) => emit('enlarge-image', r)" />
             </td>
-            <td v-if="showCost" class="border-r border-line-2 p-0" :class="bb">
+            <td v-if="showCost" class="border-r border-line-2 p-0">
               <input
                 v-model="row.cost_price"
                 type="number"
@@ -124,7 +126,7 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
                 :aria-label="t('products.f_variant_cost_aria', { n: i + 1 })"
               />
             </td>
-            <td class="border-r border-line-2 p-0" :class="bb">
+            <td class="border-r border-line-2 p-0">
               <input
                 v-model="row.sell_price"
                 type="number"
@@ -135,7 +137,7 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
                 :aria-invalid="errorOf(i, 'sell_price') ? 'true' : undefined"
               />
             </td>
-            <td class="border-r border-line-2 p-0" :class="bb">
+            <td class="border-r border-line-2 p-0">
               <input
                 v-model="row.current_stock"
                 type="number"
@@ -145,11 +147,11 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
                 :aria-label="isEdit ? t('products.f_variant_stock_now_aria', { n: i + 1 }) : t('products.f_variant_stock_aria', { n: i + 1 })"
               />
             </td>
-            <td class="text-center" :class="[bb, 'border-line-2']">
+            <td class="text-center" :class="['border-line-2']">
               <input v-model="row.is_active" type="checkbox" class="h-4 w-4 accent-brand" :aria-label="t('products.f_variant_active_aria', { n: i + 1 })" />
             </td>
-            <td class="border-l border-line-2 text-center" :class="bb">
-              <div v-if="isEdit" class="flex items-center justify-center gap-1 px-1">
+            <td class="border-l border-line-2 text-center">
+              <div class="flex items-center justify-center gap-1 px-1">
                 <!-- Urutan aksi: Buka BOM · Terapkan markup · Duplikat · (hapus bila belum tersimpan). -->
                 <BaseTooltip v-if="row.id" :text="t('master_data.bom_open_tip')" align="right">
                   <button type="button" :class="iconBtn" :aria-label="t('master_data.bom_open')" @click="emit('open-bom', row)">
@@ -170,14 +172,10 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
                   <i class="ph-duotone ph-x text-[12px]" aria-hidden="true"></i>
                 </button>
               </div>
-              <!-- Item wajib punya ≥ 1 varian: × hanya pada baris belum tersimpan yang masih boleh dibuang. -->
-              <button v-else-if="canRemove(row)" type="button" class="text-muted-3 hover:text-danger-text" :aria-label="t('products.f_variant_remove_aria', { n: i + 1 })" @click="emit('remove', i)">
-                <i class="ph-duotone ph-x text-[12px]" aria-hidden="true"></i>
-              </button>
             </td>
           </tr>
           <!-- Baris kedua redup (mode ubah): pengaturan yang jarang disentuh, satu baris per varian. -->
-          <tr v-if="isEdit" data-testid="variant-extra">
+          <tr data-testid="variant-extra">
             <td :colspan="colCount" class="border-b border-line-2 bg-surface-subtle px-3 py-1.5 text-[11.5px] text-muted-3">
               <div class="flex flex-wrap items-center gap-x-5 gap-y-1.5">
                 <label class="flex items-center gap-2">
@@ -231,6 +229,6 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
     <p v-for="(row, i) in rows" :key="`e${i}`" v-show="lineError(i)" class="text-[12px] font-medium text-danger-text">
       {{ lineError(i) }}
     </p>
-    <p class="text-[11.5px] text-muted-3">{{ isEdit ? t('products.f_variants_hint_edit') : t('products.f_variants_hint') }}</p>
+    <p class="text-[11.5px] text-muted-3">{{ t('products.f_variants_hint_edit') }}</p>
   </div>
 </template>

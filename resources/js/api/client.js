@@ -19,7 +19,9 @@ client.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
   // 045 Stage 2 — pilihan outlet hanya MENYEMPITKAN di server; header dikirim hanya bila pengguna memilih.
-  const outletId = selectedOutletId();
+  // 070 — `skipOutletHeader`: halaman Produk punya filter Outlet sendiri (`outlet_id[]`, tetap dipotong server dengan
+  // outlet yang diizinkan). Header bilah atas menyempitkan lebih dulu, sehingga filter tak bisa memilih outlet lain.
+  const outletId = config.skipOutletHeader ? null : selectedOutletId();
   if (outletId != null) {
     config.headers['X-Outlet-Id'] = String(outletId);
   }
