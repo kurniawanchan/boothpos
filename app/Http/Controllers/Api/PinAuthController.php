@@ -28,6 +28,9 @@ class PinAuthController extends Controller
             'id' => $u->id,
             'name' => $u->name,
             'role' => $u->role?->name,
+            // 077 — foto untuk avatar layar pilih-staf (inisial bila null). URL publik, kelas yang sama dengan logo toko; lihat
+            // plan.md → Constitution Check IV (risiko sisa: rute ini tanpa token).
+            'photo_url' => app(\App\Services\ImageUploadService::class)->url($u->photo_path),
             'has_pin' => $u->pin_hash !== null,
             'locked' => $u->pin_locked_until?->isFuture() ?? false,
         ])->values()]);

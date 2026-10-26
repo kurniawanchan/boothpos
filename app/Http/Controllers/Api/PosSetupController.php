@@ -7,6 +7,7 @@ use App\Http\Requests\RegisterTerminalRequest;
 use App\Models\Device;
 use App\Models\Outlet;
 use App\Services\DeviceService;
+use App\Support\StoreBranding;
 use Illuminate\Http\JsonResponse;
 
 /**
@@ -24,6 +25,16 @@ class PosSetupController extends Controller
     {
         return response()->json(['data' => Outlet::query()->where('is_active', true)->orderBy('name')->get()
             ->map(fn (Outlet $o) => ['id' => $o->id, 'name' => $o->name])->values()]);
+    }
+
+    /**
+     * 077 — nama toko, logo, dan mode data untuk layar PIN/penyiapan tablet (sebelum ada token). Pengecualian Konstitusi IV
+     * (plan.md): hanya tiga nilai yang sudah terlihat semua peran lewat `GET /settings/features`; tidak ada data usaha lain.
+     * Mode ikut dikirim karena outlet dan terminal berbeda per mode — tablet harus tahu mode mana yang sedang berlaku.
+     */
+    public function branding(): JsonResponse
+    {
+        return response()->json(StoreBranding::forTablet());
     }
 
     public function terminals(int $outlet): JsonResponse

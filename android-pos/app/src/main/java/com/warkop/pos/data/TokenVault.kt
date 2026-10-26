@@ -18,10 +18,10 @@ import javax.crypto.spec.GCMParameterSpec
  * (research.md D4). Bila nilai tak dapat didekripsi (kunci dihapus, data dari cadangan lain) nilainya dianggap TIDAK ADA
  * dan dibuang — pengguna diminta masuk lagi, bukan crash.
  */
-class TokenVault(context: Context) {
+class TokenVault(context: Context) : SecretStore {
     private val prefs = context.getSharedPreferences("wjm_vault", Context.MODE_PRIVATE)
 
-    fun get(key: String): String? {
+    override fun get(key: String): String? {
         val stored = prefs.getString(key, null) ?: return null
         return try {
             val raw = Base64.decode(stored, Base64.NO_WRAP)
@@ -34,7 +34,7 @@ class TokenVault(context: Context) {
         }
     }
 
-    fun put(key: String, value: String?) {
+    override fun put(key: String, value: String?) {
         if (value == null) {
             prefs.edit().remove(key).apply()
             return
@@ -44,7 +44,7 @@ class TokenVault(context: Context) {
         prefs.edit().putString(key, Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
     }
 
-    fun clear(vararg keys: String) = prefs.edit().apply { keys.forEach { remove(it) } }.apply()
+    override fun clear(vararg keys: String) = prefs.edit().apply { keys.forEach { remove(it) } }.apply()
 
     private fun secretKey(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -66,10 +66,19 @@ class TokenVault(context: Context) {
         private const val IV_BYTES = 12
         private const val TAG_BITS = 128
 
+        /** 077 — mode data terakhir yang diketahui, supaya mulai tanpa jaringan memakai pilihan terminal mode yang benar. */
+        const val SYSTEM_MODE = "system_mode"
         const val SERVER_URL = "server_url"
         const val ADMIN_TOKEN = "admin_token"
         const val SESSION_TOKEN = "session_token"
         const val SESSION_EXPIRES = "session_expires_ms"
+        /**
+         * 077 — outlet dan terminal berbeda per mode data (server: HasDataMode), jadi pilihan tersimpan per mode. Kunci LIVE
+         * tetap tanpa akhiran supaya tablet yang sudah terpasang sebelum 077 tidak kehilangan pilihannya; bila ternyata
+         * dipasang di DEMO, pemeriksaan terminal saat mulai (`validateSavedTerminal`) membuangnya dan penyiapan diulang.
+         */
+        fun terminalKey(base: String, demo: Boolean): String = if (demo) "${base}_demo" else base
+
         const val OUTLET_ID = "outlet_id"
         const val OUTLET_NAME = "outlet_name"
         const val DEVICE_ID = "device_id"

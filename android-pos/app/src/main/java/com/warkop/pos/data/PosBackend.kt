@@ -64,6 +64,24 @@ interface PosBackend {
     suspend fun terminals(outlet: OutletChoice): List<TerminalChoice>
     suspend fun registerTerminal(outlet: OutletChoice, terminalName: String): TerminalConfig
 
+    /**
+     * 077 — pilih mode data yang berlaku (dari [branding]/features). Outlet + terminal tersimpan PER MODE: memanggil ini
+     * memuat pilihan mode itu (atau kosong → penyiapan). Sesi PIN dibuang bila mode berubah karena tidak lagi cocok.
+     */
+    fun useMode(mode: com.warkop.pos.model.SystemMode)
+
+    /** 077 — mode data terakhir yang diketahui (disimpan di perangkat; LIVE bila belum pernah). */
+    fun currentMode(): com.warkop.pos.model.SystemMode
+
+    /** 077 — terminal tersimpan untuk mode yang dipilih lewat [useMode]; null → layar penyiapan. */
+    fun savedConfig(): TerminalConfig?
+
+    /** 077 — mode data + nama/logo toko SEBELUM login (tanpa token). */
+    suspend fun branding(): com.warkop.pos.model.Branding
+
+    /** 077 — mode data + nama/logo toko SESUDAH login (dari `features`); dipakai mendeteksi pergantian mode saat sesi berjalan. */
+    suspend fun sessionBranding(): com.warkop.pos.model.Branding
+
     /** 073 — lupakan outlet + terminal tersimpan (dan sesi) tetapi pertahankan alamat server; dipakai bila terminal tak berlaku lagi. */
     fun forgetTerminal()
 
@@ -122,6 +140,8 @@ interface PosBackend {
     suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order
     suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order
     suspend fun removeLine(tabId: String, lineId: Int, key: String): Order
+    /** 077 — catatan kasir untuk seluruh order; [notes] kosong menghapus. Server menolak bila tab sudah tidak terbuka (409). */
+    suspend fun setNote(tabId: String, notes: String): Order
     /** 050 / T006 — tab setelah kirim + tiket dapur yang baru dibuat (satu per stasiun) untuk dicetak sebagai KOT. */
     suspend fun sendToKitchen(tabId: String, key: String): KitchenSend
     /** 050 / T008 — satu tiket dapur (untuk cetak ulang KOT). */

@@ -8,8 +8,20 @@ fun kirimLabel(unsent: Int): String = "Kirim $unsent"
 
 fun bayarLabel(waiter: Boolean): String = if (waiter) "Cetak pre-bill" else "Bayar"
 
-/** 075 — satu harga bila semua varian sama, selain itu "terendah–tertinggi" (sama dengan kartu POS web). */
-fun priceLabel(min: Int, max: Int): String = if (min == max) com.warkop.pos.model.rp(min) else "${com.warkop.pos.model.rp(min)}–${com.warkop.pos.model.rp(max)}"
+/**
+ * 075/077 — satu harga bila semua varian sama, selain itu "Rp 7.000 – Rp 15.000". Spasi DI DALAM tiap harga dan sesudah tanda strip
+ * adalah spasi tak-putus, jadi kartu sempit hanya bisa membungkus tepat sebelum tanda strip ("Rp 7.000" / "– Rp 15.000"): angka
+ * tidak pernah terpotong. Dulu satu baris tanpa pembungkusan memotong menjadi "Rp 7.000-Rp".
+ */
+fun priceLabel(min: Int, max: Int): String =
+    if (min == max) com.warkop.pos.model.rp(min) else "${solidRp(min)} –$NBSP${solidRp(max)}"
+
+private const val NBSP = "\u00A0"
+
+private fun solidRp(n: Int): String = com.warkop.pos.model.rp(n).replace(" ", NBSP)
+
+/** 077 — kartu dengan rentang harga menyisakan dua baris harga supaya tinggi kartu tidak melompat saat membungkus. */
+fun priceLines(priceText: String): Int = if (priceText.contains('–')) 2 else 1
 
 /** 075 — null (stok tidak dilacak, mis. hidangan made-to-order) berarti baris stok tidak ditampilkan. */
 fun stockLabel(stock: Int?): String? = stock?.let { "Stok $it" }

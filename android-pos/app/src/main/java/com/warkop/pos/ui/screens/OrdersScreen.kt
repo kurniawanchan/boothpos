@@ -75,6 +75,8 @@ fun OrdersScreen(store: PosStore) {
                             Text(listOfNotNull(sel.label, sel.closedAt?.let { "ditutup $it" }, "cetak ulang ${sel.reprints}×").joinToString(" · "), Modifier.padding(top = 4.dp, bottom = 8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Spacer(Modifier.height(10.dp))
                             sel.live.forEach { l -> Row(Modifier.fillMaxWidth()) { Text("${l.qty}× ${l.name}", Modifier.weight(1f)); Text(num(l.net)) } }
+                            // 077 — catatan kasir untuk seluruh order, baca-saja pada order tertutup.
+                            if (sel.note.isNotBlank()) Text("“${sel.note}”", Modifier.padding(top = 6.dp), fontSize = 13.sp, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             HorizontalDivider(Modifier.padding(vertical = 8.dp))
                             MoneyRow("Total", rp(sel.total), big = true)
                             sel.tenders.filter { it.status == TenderStatus.OK }.forEach { MoneyRow(it.method.label, rp(it.amount)) }

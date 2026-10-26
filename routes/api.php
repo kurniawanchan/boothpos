@@ -57,6 +57,7 @@ Route::prefix('v1')->group(function () {
 
     // 073 — penyiapan tablet TANPA login owner/admin (spec Q1: pendaftaran terbuka). Pengecualian Konstitusi IV: belum
     // ada pengguna, jadi outlet dari path (divalidasi aktif) dan hanya nama yang keluar. Pembatasnya throttle.
+    Route::get('/pos-setup/branding', [\App\Http\Controllers\Api\PosSetupController::class, 'branding'])->middleware('throttle:30,1');
     Route::get('/pos-setup/outlets', [\App\Http\Controllers\Api\PosSetupController::class, 'outlets'])->middleware('throttle:30,1');
     Route::get('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'terminals'])->whereNumber('outlet')->middleware('throttle:30,1');
     Route::post('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'registerTerminal'])->whereNumber('outlet')->middleware('throttle:10,1');
@@ -357,6 +358,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/tabs/{order}/handover', [TabController::class, 'handover']);
         Route::post('/tabs/{order}/send', [TabController::class, 'send'])->middleware('idempotent');
         Route::post('/tabs/{order}/prebill', [TabController::class, 'prebill']);
+        // 077 / US4 — catatan kasir untuk seluruh order (menetapkan keadaan, jadi aman diulang tanpa kunci idempotensi).
+        Route::put('/tabs/{order}/note', [TabController::class, 'note']);
         Route::post('/tabs/{order}/void', [TabController::class, 'void']);
         // 048 / S3 — batal seluruh tab (409 has_payments bila sudah dibayar), persetujuan di titik aksi, dan
         // verifikasi/penandaan QRIS tab.

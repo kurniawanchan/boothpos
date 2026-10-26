@@ -29,7 +29,27 @@ class CounterLabelsTest {
 class ProductCardLabelsTest {
     @Test fun `harga tunggal atau rentang`() {
         assertEquals("Rp 7.000", priceLabel(7000, 7000))
-        assertEquals("Rp 7.000–Rp 8.000", priceLabel(7000, 8000))
+        assertEquals("Rp\u00A07.000 –\u00A0Rp\u00A08.000", priceLabel(7000, 8000))
+    }
+
+    /** 077 / US6 — satu-satunya tempat boleh membungkus adalah sebelum tanda strip; tiap harga tidak pernah terpotong. */
+    @Test fun `rentang hanya bisa putus sebelum tanda strip dan kedua harga utuh`() {
+        val label = priceLabel(7000, 15000)
+        val breakable = label.indices.filter { label[it] == ' ' }
+        assertEquals(1, breakable.size)
+        assertEquals("–", label.substring(breakable.single() + 1, breakable.single() + 2))
+        assertEquals(listOf("Rp\u00A07.000", "–\u00A0Rp\u00A015.000"), label.split(' '))
+    }
+
+    @Test fun `angka besar tetap membawa kedua harga lengkap`() {
+        val label = priceLabel(1_250_000, 12_500_000)
+        assertEquals(true, label.contains("Rp\u00A01.250.000"))
+        assertEquals(true, label.contains("Rp\u00A012.500.000"))
+    }
+
+    @Test fun `harga tunggal satu baris dan rentang dua baris`() {
+        assertEquals(1, priceLines(priceLabel(7000, 7000)))
+        assertEquals(2, priceLines(priceLabel(7000, 8000)))
     }
 
     @Test fun `stok tidak dilacak tidak punya baris`() {

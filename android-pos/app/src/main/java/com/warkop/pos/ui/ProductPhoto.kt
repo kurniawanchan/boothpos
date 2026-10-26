@@ -25,7 +25,11 @@ import com.warkop.pos.model.Tone
  * pemesanan dan tidak memunculkan galat.
  */
 @Composable
-fun ProductPhoto(imageUrl: String?, name: String, tone: Tone, modifier: Modifier = Modifier, dim: Float = 1f, initialsSize: TextUnit = 22.sp) {
+fun ProductPhoto(
+    imageUrl: String?, name: String, tone: Tone, modifier: Modifier = Modifier, dim: Float = 1f, initialsSize: TextUnit = 22.sp,
+    /** 077 — teks pengganti bila tak ada foto (avatar pengguna memakai inisial dua huruf pertama); null = inisial dua kata seperti produk. */
+    fallbackText: String? = null,
+) {
     val (bg, fg) = toneColors(tone)
     // Nilai awal dari cache sinkron: foto yang sudah pernah dimuat tidak berkedip jadi inisial saat kartu digulir masuk lagi.
     val photo: ImageBitmap? by produceState(initialValue = imageUrl?.let(MenuImageLoader::peek), imageUrl, MenuImageLoader.generation) {
@@ -34,6 +38,6 @@ fun ProductPhoto(imageUrl: String?, name: String, tone: Tone, modifier: Modifier
     Box(modifier.background(bg).alpha(dim), contentAlignment = Alignment.Center) {
         val loaded = photo
         if (loaded != null) Image(loaded, name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        else Text(initialsOf(name), color = fg, fontSize = initialsSize, fontWeight = FontWeight.SemiBold)
+        else Text(fallbackText ?: initialsOf(name), color = fg, fontSize = initialsSize, fontWeight = FontWeight.SemiBold)
     }
 }

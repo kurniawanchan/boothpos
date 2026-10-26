@@ -8,6 +8,7 @@ use App\Http\Requests\HandoverTabRequest;
 use App\Http\Requests\MergeTabRequest;
 use App\Http\Requests\MoveTabRequest;
 use App\Http\Requests\OpenTabRequest;
+use App\Http\Requests\UpdateTabNoteRequest;
 use App\Http\Requests\VoidTabRequest;
 use App\Http\Resources\TabResource;
 use App\Models\Order;
@@ -96,6 +97,12 @@ class TabController extends Controller
     }
 
     /** 048 / B13 — pra-bill tercetak (tidak butuh shift; kasir dan waiter boleh). */
+    /** 077 / US4 — catatan kasir untuk seluruh order; mengembalikan tab terbaru. */
+    public function note(UpdateTabNoteRequest $request, Order $order): JsonResponse
+    {
+        return $this->guarded(fn () => new TabResource($this->tabs->setNote($order, $request->validated('notes'), $request->user())));
+    }
+
     public function prebill(Request $request, Order $order): JsonResponse
     {
         $this->ensureFloorAccess($request);

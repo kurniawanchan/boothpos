@@ -83,6 +83,7 @@ object OrderMapper {
             serverTotal = rp(t.totalAmount),
             serverPaid = rp(t.paidAmount),
             serverChange = rp(t.changeAmount),
+            note = t.notes.orEmpty(),
         )
     }
 
@@ -174,5 +175,6 @@ object OrderMapper {
         serverTotal = rp(c.totalAmount),
         serverPaid = rp(c.paidAmount),
         serverChange = rp(c.changeAmount),
+        note = c.notes.orEmpty(),
     )
 }

@@ -34,6 +34,8 @@ class TabResource extends JsonResource
                 ? ['id' => $this->table->id, 'name' => $this->table->name, 'area' => $this->table->area]
                 : null,
             'tab_label' => $this->tab_label,
+            // 077 — catatan kasir untuk seluruh order (kolom `orders.notes`); null bila tidak ada.
+            'notes' => $this->notes,
             // 044 — siapa yang membuka tab (detail baca-saja di papan Meja). Hilang diam-diam bila `cashier` tak dimuat.
             'opened_by' => $this->relationLoaded('cashier') ? $this->cashier?->name : null,
             'session_id' => $this->session_id,

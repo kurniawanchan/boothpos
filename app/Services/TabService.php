@@ -461,6 +461,32 @@ class TabService
 
     // --- tutup kosong / serah-terima ---------------------------------------
 
+    /**
+     * 077 / US4 — catatan kasir untuk seluruh order (`orders.notes`). Hanya selagi tab terbuka (`lockOpen` → 409 bila sudah
+     * dibayar/ditutup). Teks kosong = hapus. Log aktivitas dalam transaksi yang sama (Konstitusi IV) dan SENGAJA mencatat
+     * bahwa catatan berubah, bukan isinya: teks bebas tidak boleh masuk log.
+     */
+    public function setNote(Order $tab, ?string $notes, User $user): Order
+    {
+        return DB::transaction(function () use ($tab, $notes, $user) {
+            $order = $this->lockOpen($tab);
+            $clean = $this->cleanNote($notes);
+            $had = $order->notes !== null && $order->notes !== '';
+
+            if ($clean === $order->notes) {
+                return $this->loaded($order);
+            }
+
+            $order->forceFill(['notes' => $clean])->save();
+            $this->activityLogger->log(
+                $user->id, 'tab_note_updated', 'Order', $order->id,
+                $clean === null ? "Catatan order {$order->order_number} dihapus" : ($had ? "Catatan order {$order->order_number} diubah" : "Catatan order {$order->order_number} ditambahkan"),
+            );
+
+            return $this->loaded($order);
+        });
+    }
+
     /** Tab tanpa baris ditutup tanpa efek stok/penjualan; mejanya kosong lagi. */
     /**
      * 048 / B13 — tandai pra-bill tercetak. Tidak mengubah status, stok, atau total; hanya penanda untuk denah ("Bill

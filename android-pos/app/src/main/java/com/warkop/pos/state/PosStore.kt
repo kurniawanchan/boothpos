@@ -81,6 +81,9 @@ enum class Conn(val label: String) { UNKNOWN("Memeriksa koneksi…"), ONLINE("On
 
 private const val PIN_PROBE_INTERVAL_MS = 10_000L
 
+/** 077 — batas catatan order; sama dengan server (UpdateTabNoteRequest). */
+const val ORDER_NOTE_MAX = 1000
+
 /** Lembar/dialog di atas layar. Satu pada satu waktu — sama seperti prototipe (satu `sheet` aktif). */
 sealed interface Sheet {
     data class Pax(val table: String) : Sheet
@@ -126,12 +129,24 @@ class PosStore(
     val printer: PrinterService? = null,
     /** 055 / T037 — pilihan tampil/sembunyi total; penyimpanan perangkat di Android, in-memory di uji. */
     private val totalsPref: TotalsPreference = TotalsPreference({ null }, {}),
+    /** 077 / US5 — lebar area produk vs panel order di Counter; penyimpanan perangkat di Android, in-memory di uji. */
+    private val splitPref: SplitPreference = SplitPreference({ null }, {}),
     /** 061 / T011 — suara panggilan antrean; default diam supaya uji tidak butuh mesin ucap. */
     private val announcer: QueueAnnouncer = QueueAnnouncer(SilentSpeech),
 ) : ViewModel() {
     /** 055 / T037 — area total (Subtotal, pajak, Total, Kirim, Bayar) tampil atau tersembunyi. */
     var totalsVisible by mutableStateOf(totalsPref.visible); private set
     fun changeTotalsVisibility(v: Boolean) { totalsVisible = v; totalsPref.visible = v }
+
+    /** 077 / US5 — porsi lebar area produk di Counter (0..1). Berubah selama digeser; disimpan saat jari diangkat. */
+    var splitFraction by mutableStateOf(splitPref.fraction); private set
+    /** Geser pembatas [deltaPx] dari total lebar [totalPx]/[totalDp]; hasil selalu dalam batas (kedua sisi tetap terpakai). */
+    fun dragSplit(deltaPx: Float, totalPx: Float, totalDp: Float) {
+        if (totalPx <= 0f) return
+        splitFraction = clampSplit(splitFraction + deltaPx / totalPx, totalDp)
+    }
+    fun commitSplit() { splitPref.fraction = splitFraction }
+    fun resetSplit() { splitFraction = SPLIT_DEFAULT; splitPref.fraction = SPLIT_DEFAULT }
 
     /** 055 / T036 — label dan tarif pajak dari server; null sampai dimuat. */
     var tax by mutableStateOf<TaxDisplay?>(null); private set
@@ -142,7 +157,7 @@ class PosStore(
         refreshing = true
         // 075 — tarik-untuk-segarkan sengaja (bukan polling diam-diam): foto yang ditimpa di back office ikut diambil ulang.
         com.warkop.pos.data.MenuImageLoader.clear()
-        viewModelScope.launch { try { loadMenu(silent = true).join() } finally { refreshing = false } }
+        viewModelScope.launch { try { if (!sessionModeChanged()) loadMenu(silent = true).join() } finally { refreshing = false } }
     }
 
     /**
@@ -175,6 +190,13 @@ class PosStore(
     var dest by mutableStateOf(Dest.PIN); private set
     /** Terminal yang sudah disiapkan (URL + outlet + perangkat); null → layar penyiapan. */
     var config by mutableStateOf<TerminalConfig?>(null); private set
+    /** 077 — mode data yang sedang berlaku (dari server; terakhir diketahui bila offline). Tablet tidak pernah mengubahnya sendiri. */
+    var mode by mutableStateOf(SystemMode.LIVE); private set
+    /** 077 — mode BARU yang terdeteksi saat sesi berjalan: menampilkan dialog "Mode berubah" dan memblokir tulis order (FR-004). */
+    var modeChanged by mutableStateOf<SystemMode?>(null); private set
+    /** 077 — nama/logo toko dari server (sebelum login: pos-setup/branding; sesudahnya: features). */
+    var branding by mutableStateOf<Branding?>(null); private set
+    private var beats = 0
     var session by mutableStateOf<PosSession?>(null); private set
     var roster by mutableStateOf<Load<List<StaffUser>>>(Load.Idle); private set
     var user by mutableStateOf<StaffUser?>(null); private set
@@ -219,10 +241,13 @@ class PosStore(
             // sudah menyimpannya di brankas), dan ganti-nama dari admin ikut terbaca.
             result.terminalName?.let { name -> config?.takeIf { it.deviceName != name }?.let { config = it.copy(deviceName = name) } }
             conn = Conn.ONLINE
+            // 077 — mode diperiksa tiap 3 heartbeat (±3 menit) selain saat galat: pergantian mode terlihat tanpa menunggu kasir gagal menulis.
+            if (++beats % 3 == 0) sessionModeChanged()
         } catch (e: ApiError) {
             heartbeat = heartbeat.onFailure()
             if (e is ApiError.Network) conn = Conn.OFFLINE
-            if (isTerminalRevoked(e)) markTerminalRevoked()
+            // 077 — 422 device_id juga muncul bila MODE berganti (terminal mode lama tak ada di mode baru): pastikan dulu, jangan langsung "dicabut".
+            if (isTerminalRevoked(e) && !isModeChange(e)) markTerminalRevoked()
         }
     }
 
@@ -247,32 +272,110 @@ class PosStore(
     // ---------- awal & sesi ----------
     /** Dipanggil sekali saat aplikasi mulai: selalu langsung ke layar PIN, membaca alamat server dari vault. */
     fun bootstrap() {
-        val saved = remote?.savedConfig()
+        val b = backend
+        mode = b?.currentMode() ?: SystemMode.LIVE
+        val saved = b?.savedConfig() ?: remote?.savedConfig()
         config = saved
         // 073 — tablet yang belum punya outlet + terminal mulai dari layar penyiapan (pilih outlet → terminal), bukan dari layar
         // PIN. Yang sudah punya langsung ke pilih-staf; terminal yang ternyata sudah tidak berlaku diperiksa di latar.
         if (saved == null) {
             dest = Dest.SETUP
+            refreshBrandingPreLogin()
             return
         }
         dest = Dest.PIN
-        loadRoster()
-        validateSavedTerminal(saved)
+        roster = Load.Loading
+        viewModelScope.launch {
+            // 077 — mode dibaca DULU: outlet/terminal tersimpan milik mode lama tidak ada di mode baru (HasDataMode di server),
+            // jadi memuat staf atau memeriksa terminal sebelum tahu mode akan menolak dan membuang pilihan yang masih sah.
+            if (pullBranding() == BrandingStep.SWITCHED) return@launch
+            loadRoster().join()
+            validateSavedTerminal(saved)
+        }
     }
+
+    private enum class BrandingStep { SAME, SWITCHED, UNKNOWN }
+
+    /** Baca identitas toko + mode sebelum login. Gagal (offline/server lama) = UNKNOWN: tetap pada mode terakhir yang diketahui. */
+    private suspend fun pullBranding(): BrandingStep {
+        val b = backend ?: return BrandingStep.UNKNOWN
+        val fresh = try { b.branding() } catch (_: ApiError) { return BrandingStep.UNKNOWN }
+        branding = fresh
+        if (fresh.mode == mode) return BrandingStep.SAME
+        switchMode(fresh.mode)
+        return BrandingStep.SWITCHED
+    }
+
+    private fun refreshBrandingPreLogin() { viewModelScope.launch { pullBranding() } }
+
+    /**
+     * 077 / FR-001–002 — pakai mode [new] sebelum/tanpa sesi: pilihan terminal mode itu dimuat (atau penyiapan bila belum ada),
+     * dan semua keadaan terikat-mode dikosongkan supaya tak ada item mode lama yang tersisa. Tidak ada data yang dihapus
+     * di sisi mana pun, dan pilihan mode lama tetap tersimpan untuk saat mode kembali.
+     */
+    private fun switchMode(new: SystemMode) {
+        val b = backend ?: return
+        b.useMode(new)
+        mode = new
+        com.warkop.pos.data.MenuImageLoader.clear()
+        catalog = Load.Idle; soldOut = emptySet(); orders = emptyList(); floor = Load.Idle; closedCache = emptyList()
+        terminalRevoked = false
+        val saved = b.savedConfig()
+        config = saved
+        if (saved == null) {
+            roster = Load.Idle
+            setupNotice = "Mode sistem sekarang ${new.name}. Pilih outlet dan terminal untuk mode ini."
+            dest = Dest.SETUP
+        } else {
+            setupNotice = null
+            dest = Dest.PIN
+            viewModelScope.launch { loadRoster().join(); validateSavedTerminal(saved) }
+        }
+    }
+
+    /**
+     * 077 — baca mode dari server saat sesi berjalan. true = berbeda dari mode sesi ini: dialog "Mode berubah" tampil dan tulis
+     * order diblokir sampai kasir keluar. Gagal membaca (offline) = tidak ada kesimpulan, bukan "tidak berubah".
+     */
+    private suspend fun sessionModeChanged(): Boolean {
+        val b = backend ?: return false
+        val fresh = try { b.sessionBranding() } catch (_: ApiError) { return false }
+        branding = fresh
+        if (fresh.mode == mode) return false
+        modeChanged = fresh.mode
+        return true
+    }
+
+    /** Galat yang bisa berarti "mode berubah" (outlet/terminal mode lama tidak ditemukan) — dipastikan lewat [sessionModeChanged]. */
+    private suspend fun isModeChange(e: ApiError): Boolean =
+        (isTerminalRevoked(e) || e is ApiError.NotFound || (e is ApiError.Forbidden && e.code == "outlet_forbidden")) && sessionModeChanged()
+
+    /** Kasir menekan Keluar pada dialog "Mode berubah": sesi ditutup, lalu pilihan terminal mode baru dipakai (atau penyiapan). */
+    fun leaveForNewMode() {
+        val new = modeChanged ?: return
+        val b = backend
+        clearSessionState()
+        modeChanged = null
+        viewModelScope.launch {
+            try { b?.logout() } catch (_: ApiError) { }
+            switchMode(new)
+        }
+    }
+
+    /** Tulis order diblokir selama mode berubah belum diakui; dialog sudah menjelaskan alasannya. */
+    private fun modeBlocked(): Boolean = modeChanged != null
 
     /**
      * 073 / FR-013 — outlet atau terminal tersimpan bisa sudah tidak ada (terminal dicabut, outlet dinonaktifkan). Dicek sekali saat
      * mulai lewat daftar terminal outlet itu. Hanya jawaban server yang menentukan: gangguan jaringan membiarkan tablet apa adanya
      * (tidak ada alasan membuang pilihan yang mungkin masih sah).
      */
-    private fun validateSavedTerminal(saved: TerminalConfig) {
+    private suspend fun validateSavedTerminal(saved: TerminalConfig) {
         val b = backend ?: return
-        viewModelScope.launch {
-            val stillValid = try {
-                b.terminals(OutletChoice(saved.outletId, saved.outletName)).any { it.id == saved.deviceId }
-            } catch (e: ApiError.NotFound) { false } catch (_: ApiError) { return@launch }
-            if (!stillValid) returnToSetup("Terminal ini tidak berlaku lagi. Pilih outlet dan terminal lagi.")
-        }
+        val stillValid = try {
+            b.terminals(OutletChoice(saved.outletId, saved.outletName)).any { it.id == saved.deviceId }
+        } catch (e: ApiError.NotFound) { false } catch (_: ApiError) { return }
+        if (!stillValid) returnToSetup("Terminal ini tidak berlaku lagi. Pilih outlet dan terminal lagi.")
     }
 
     /** Lupakan pilihan tersimpan, tutup sesi, dan kembali ke layar penyiapan dengan [notice]. */
@@ -328,7 +431,8 @@ class PosStore(
         pinProbe = viewModelScope.launch {
             while (true) {
                 // Tunggu hasil roster dulu: status koneksi dan roster baru terisi setelah panggilan selesai.
-                loadRoster(silent = true).join()
+                // 077 — owner bisa mengganti mode saat tablet berada di layar PIN: baca mode dulu, baru roster (outlet milik mode lama 404).
+                if (pullBranding() != BrandingStep.SWITCHED) loadRoster(silent = true).join()
                 delay(PIN_PROBE_INTERVAL_MS)
             }
         }
@@ -417,6 +521,8 @@ class PosStore(
                     s.user.code == "WTR" -> Dest.TABLES
                     else -> Dest.ORDERS
                 }
+                // 077 — nama/logo toko + mode sesudah login; mode sesi = mode saat masuk (pergantian sesudahnya terdeteksi di sini).
+                viewModelScope.launch { sessionModeChanged() }
                 loadMenu()
                 startAvailabilityPolling()
                 startFloorPolling()
@@ -547,6 +653,7 @@ class PosStore(
      * tersimpan); galat server ditampilkan apa adanya. Kunci dilepas hanya bila niat terkonfirmasi.
      */
     private fun send(intent: String, action: suspend () -> Order, retry: Boolean = true, after: (Order) -> Unit = {}) {
+        if (modeBlocked()) return
         viewModelScope.launch {
             try {
                 val o = if (retry) retryNetwork(block = action) else action()
@@ -557,6 +664,8 @@ class PosStore(
             } catch (e: ApiError) {
                 if (e is ApiError.Network) conn = Conn.OFFLINE
                 onShiftRefused(e)
+                // 077 — mode berganti: dialog menggantikan pesan galat/"dicabut" (tulis tidak pernah masuk ke mode lain; server menolaknya).
+                if (isModeChange(e)) return@launch
                 if (isTerminalRevoked(e)) markTerminalRevoked()
                 say(writeErrorText(e))
             }
@@ -582,7 +691,22 @@ class PosStore(
         }
     }
 
+    /**
+     * 077 / US4 — simpan catatan kasir untuk seluruh order lewat jalur tulis yang sama dengan baris (`send`): gangguan jaringan
+     * dicoba ulang, dan penyetelan keadaan (PUT) aman diulang sehingga tidak ada catatan ganda. [onSaved] hanya dipanggil bila
+     * server menerima — layar mempertahankan teks ketikan bila gagal, jadi catatan tidak hilang diam-diam.
+     */
+    fun saveOrderNote(text: String, onSaved: () -> Unit = {}) {
+        val b = backend ?: return
+        val o = active ?: return
+        val clean = text.trim()
+        if (clean.length > ORDER_NOTE_MAX) { say("Catatan maksimal $ORDER_NOTE_MAX karakter."); return }
+        if (o.closed) { say("Order sudah ditutup. Catatan tidak bisa diubah."); return }
+        send("note:${o.id}:$clean", { b.setNote(o.id, clean) }) { onSaved() }
+    }
+
     fun newCounter() {
+        if (modeBlocked()) return
         val b = backend ?: return
         if (terminalRevoked) { say("Terminal ini dicabut. Tidak bisa membuka order baru."); return }
         val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka order."); return }
@@ -593,6 +717,7 @@ class PosStore(
 
     /** Pilih jumlah tamu: tab terbuka di meja itu dibuka; meja kosong membuka tab baru. */
     fun openTable(table: String, pax: Int) {
+        if (modeBlocked()) return
         val b = backend ?: return
         val ft = tables.firstOrNull { it.name == table } ?: run { say("Meja $table tidak ditemukan."); return }
         ft.tab?.let { openOrder(it.id.toString()); sheet = null; return }
@@ -682,6 +807,7 @@ class PosStore(
 
     /** Kirim semua baris belum terkirim ke dapur. Kunci mengikuti himpunan baris, jadi item baru = niat baru. */
     fun fire() {
+        if (modeBlocked()) return
         val b = backend ?: return
         val o = active ?: return
         val n = o.unsent.size
@@ -862,6 +988,7 @@ class PosStore(
     }
 
     fun goPay() {
+        if (modeBlocked()) return
         val o = active ?: return
         if (user?.code == "WTR") { printPrebill(); return }
         if (o.live.isEmpty()) return
@@ -874,6 +1001,7 @@ class PosStore(
 
     /** Tunai: server menghitung kembalian sendiri. Pembayaran ber-`client_ref`, aman diulang. */
     fun payCash(received: Int) {
+        if (modeBlocked()) return
         val b = backend ?: return
         val o = active ?: return
         if (received <= 0) return
@@ -973,6 +1101,7 @@ class PosStore(
      * Duplikat 2 menit → konfirmasi kasir, lalu kirim ulang dengan confirm_duplicate.
      */
     fun payEdc(channelId: Long, code: String, confirmDuplicate: Boolean = false) {
+        if (modeBlocked()) return
         val b = backend ?: return
         val o = active ?: return
         val amount = o.remaining

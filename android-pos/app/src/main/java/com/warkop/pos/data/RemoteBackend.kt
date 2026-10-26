@@ -47,15 +47,19 @@ import java.time.Instant
  * Implementasi HTTP dari [PosBackend]. Memegang keadaan sesi ringan (URL, token PIN, outlet,
  * perangkat) yang dipulihkan dari [TokenVault] saat aplikasi mulai. Token TIDAK dicatat ke log.
  */
-class RemoteBackend(private val vault: TokenVault, private val log: (String) -> Unit = {}) : PosBackend {
+class RemoteBackend(private val vault: SecretStore, private val log: (String) -> Unit = {}) : PosBackend {
     private var serverUrl: String? = vault.get(TokenVault.SERVER_URL)
     private var sessionToken: String? = vault.get(TokenVault.SESSION_TOKEN)
-    private var outletId: Long? = vault.get(TokenVault.OUTLET_ID)?.toLongOrNull()
-    private var deviceId: Long? = vault.get(TokenVault.DEVICE_ID)?.toLongOrNull()
+    // 077 — pilihan outlet/terminal per mode data. Awal = LIVE (kunci tanpa akhiran, kompatibel dengan pemasangan lama);
+    // PosStore memanggil useMode() begitu mode diketahui dari server.
+    private var mode: com.warkop.pos.model.SystemMode = com.warkop.pos.model.SystemMode.parse(vault.get(TokenVault.SYSTEM_MODE))
+    private fun key(base: String) = TokenVault.terminalKey(base, demo = mode == com.warkop.pos.model.SystemMode.DEMO)
+    private var outletId: Long? = vault.get(key(TokenVault.OUTLET_ID))?.toLongOrNull()
+    private var deviceId: Long? = vault.get(key(TokenVault.DEVICE_ID))?.toLongOrNull()
     // Nama terminal dibaca SEKALI dari brankas (saat konstruksi) lalu disimpan di memori: pembacaan Keystore
     // tidak boleh dilakukan di main thread setiap kali tulisan selesai (sumber ANR saat persetujuan).
     // 064 — "terminal ini" dikenali lewat deviceId (di atas), bukan nama; nama hanya untuk tampilan.
-    private var myDeviceName: String = vault.get(TokenVault.DEVICE_NAME).orEmpty()
+    private var myDeviceName: String = vault.get(key(TokenVault.DEVICE_NAME)).orEmpty()
     private var apiFor: Pair<String, PosApi>? = null
 
     init {
@@ -65,21 +69,39 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     }
 
     /** Terminal yang sudah disiapkan (URL + outlet + perangkat), atau null → layar penyiapan. */
-    fun savedConfig(): TerminalConfig? {
+    override fun savedConfig(): TerminalConfig? {
         val url = serverUrl?.takeIf { it.isNotBlank() } ?: return null
         val outlet = outletId ?: return null
         val device = deviceId ?: return null
-        return TerminalConfig(url, outlet, vault.get(TokenVault.OUTLET_NAME).orEmpty(), device, myDeviceName)
+        return TerminalConfig(url, outlet, vault.get(key(TokenVault.OUTLET_NAME)).orEmpty(), device, myDeviceName)
     }
 
     fun hasValidSession(nowMillis: Long = System.currentTimeMillis()): Boolean =
         sessionToken != null && (vault.get(TokenVault.SESSION_EXPIRES)?.toLongOrNull() ?: 0L) > nowMillis
 
+    override fun currentMode(): com.warkop.pos.model.SystemMode = mode
+
+    override fun useMode(mode: com.warkop.pos.model.SystemMode) {
+        vault.put(TokenVault.SYSTEM_MODE, mode.name)
+        if (mode == this.mode) return
+        // Sesi PIN dikeluarkan untuk outlet/terminal mode lama; di mode baru tokennya tidak lagi cocok dengan header yang dikirim.
+        dropSession()
+        this.mode = mode
+        outletId = vault.get(key(TokenVault.OUTLET_ID))?.toLongOrNull()
+        deviceId = vault.get(key(TokenVault.DEVICE_ID))?.toLongOrNull()
+        myDeviceName = vault.get(key(TokenVault.DEVICE_NAME)).orEmpty()
+    }
+
+    // Hanya pilihan MODE INI yang dilupakan: pilihan mode lain tetap, jadi kembali ke mode itu tidak mengulang penyiapan.
     override fun forgetTerminal() {
-        vault.clear(TokenVault.SESSION_TOKEN, TokenVault.SESSION_EXPIRES, TokenVault.OUTLET_ID, TokenVault.OUTLET_NAME,
-            TokenVault.DEVICE_ID, TokenVault.DEVICE_NAME, TokenVault.DEVICE_CODE)
+        vault.clear(TokenVault.SESSION_TOKEN, TokenVault.SESSION_EXPIRES, key(TokenVault.OUTLET_ID), key(TokenVault.OUTLET_NAME),
+            key(TokenVault.DEVICE_ID), key(TokenVault.DEVICE_NAME), TokenVault.DEVICE_CODE)
         sessionToken = null; outletId = null; deviceId = null; myDeviceName = ""
     }
+
+    override suspend fun branding(): com.warkop.pos.model.Branding = BrandingMapper.fromBranding(apiCall { api().branding() }, serverUrl)
+
+    override suspend fun sessionBranding(): com.warkop.pos.model.Branding = BrandingMapper.fromFeatures(apiCall { api().features() }, serverUrl)
 
     private fun api(): PosApi {
         val url = serverUrl ?: throw ApiError.Network("Terminal belum disiapkan.")
@@ -102,10 +124,10 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         dropSession()
         outletId = outlet.id
         deviceId = device.id
-        vault.put(TokenVault.OUTLET_ID, outlet.id.toString())
-        vault.put(TokenVault.OUTLET_NAME, outlet.name)
-        vault.put(TokenVault.DEVICE_ID, device.id.toString())
-        vault.put(TokenVault.DEVICE_NAME, device.name)
+        vault.put(key(TokenVault.OUTLET_ID), outlet.id.toString())
+        vault.put(key(TokenVault.OUTLET_NAME), outlet.name)
+        vault.put(key(TokenVault.DEVICE_ID), device.id.toString())
+        vault.put(key(TokenVault.DEVICE_NAME), device.name)
         myDeviceName = device.name
         return TerminalConfig(serverUrl.orEmpty(), outlet.id, outlet.name, device.id, device.name)
     }
@@ -137,7 +159,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     }
 
     private suspend fun rosterFor(outlet: Long): List<StaffUser> =
-        apiCall { api().roster(outlet) }.data.map { StaffUser(it.id.toString(), it.name, it.role.orEmpty(), roleCode(it.role), hasPin = it.hasPin, locked = it.locked) }
+        apiCall { api().roster(outlet) }.data.map { StaffUser(it.id.toString(), it.name, it.role.orEmpty(), roleCode(it.role), hasPin = it.hasPin, locked = it.locked, photoUrl = ServerUrl.resolve(serverUrl, it.photoUrl)) }
 
     /** Membuang token sesi PIN dari memori dan penyimpanan. */
     fun dropSession() {
@@ -266,7 +288,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
     }
 
     private fun session(user: AuthUserDto, expires: Long) = PosSession(
-        user = StaffUser(user.id.toString(), user.name, user.role.orEmpty(), roleCode(user.role)),
+        user = StaffUser(user.id.toString(), user.name, user.role.orEmpty(), roleCode(user.role), photoUrl = ServerUrl.resolve(serverUrl, user.photoUrl)),
         expiresAtMillis = expires, permissions = user.permissions.toSet(), menuKeys = user.menuKeys.toSet(),
     )
 
@@ -307,6 +329,9 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
             apiCall { api().updateLine(tabId.toLong(), lineId.toLong(), key, UpdateLineRequestDto(qty = qty, note = note)) },
             deviceId,
         )
+
+    override suspend fun setNote(tabId: String, notes: String): Order =
+        OrderMapper.tab(apiCall { api().setNote(tabId.toLong(), UpdateNoteRequestDto(notes)) }, deviceId)
 
     override suspend fun removeLine(tabId: String, lineId: Int, key: String): Order =
         OrderMapper.tab(apiCall { api().removeLine(tabId.toLong(), lineId.toLong(), key) }, deviceId)
@@ -374,7 +399,7 @@ class RemoteBackend(private val vault: TokenVault, private val log: (String) -> 
         // 064 — nama dari server menang: mengisi tablet yang dipasang sebelum fitur ini, dan mengikuti ganti-nama.
         result.terminalName?.takeIf { it != myDeviceName }?.let {
             myDeviceName = it
-            vault.put(TokenVault.DEVICE_NAME, it)
+            vault.put(key(TokenVault.DEVICE_NAME), it)
         }
         return result
     }

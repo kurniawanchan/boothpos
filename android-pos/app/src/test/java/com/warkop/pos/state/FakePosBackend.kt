@@ -41,7 +41,21 @@ class FakePosBackend : PosBackend {
     override suspend fun outlets(): List<OutletChoice> = outletsResult?.invoke() ?: unused()
     override suspend fun terminals(outlet: OutletChoice): List<TerminalChoice> = terminalsResult?.invoke(outlet) ?: unused()
     override suspend fun registerTerminal(outlet: OutletChoice, terminalName: String): TerminalConfig = registerResult?.invoke(outlet, terminalName) ?: unused()
-    override fun forgetTerminal() { forgotten++ }
+    override fun forgetTerminal() { forgotten++; configs.remove(mode) }
+
+    // 077 — konfigurasi tersimpan PER MODE, seperti RemoteBackend; mode yang dipilih lewat useMode().
+    var mode: SystemMode = SystemMode.LIVE
+    val configs = mutableMapOf<SystemMode, TerminalConfig>()
+    val modesUsed = mutableListOf<SystemMode>()
+    override fun useMode(mode: SystemMode) { this.mode = mode; modesUsed += mode }
+    override fun savedConfig(): TerminalConfig? = configs[mode]
+    override fun currentMode(): SystemMode = mode
+    /** Hasil branding sebelum login; null = gagal jaringan (ApiError.Network). */
+    var brandingResult: (() -> Branding)? = null
+    /** Hasil branding sesudah login (features); default = sama dengan [brandingResult]. */
+    var sessionBrandingResult: (() -> Branding)? = null
+    override suspend fun branding(): Branding = brandingResult?.invoke() ?: throw ApiError.Network("tidak ada koneksi")
+    override suspend fun sessionBranding(): Branding = (sessionBrandingResult ?: brandingResult)?.invoke() ?: throw ApiError.Network("tidak ada koneksi")
     /** 073 — hasil login PIN uji; null = panggilan tidak diharapkan. */
     var pinLoginResult: ((StaffUser, String) -> PosSession)? = null
     override suspend fun pinLogin(user: StaffUser, pin: String): PosSession = pinLoginResult?.invoke(user, pin) ?: unused()
@@ -74,7 +88,9 @@ class FakePosBackend : PosBackend {
     override suspend fun failPayment(tabId: String, paymentId: Long, overrideToken: String?): Order = unused()
     override suspend fun shiftLimits(): ShiftLimits = unused()
     override suspend fun floor(version: String?): FloorSnapshot? = unused()
-    override suspend fun openTab(sessionId: Long, tableId: Long?, guests: Int?, localRef: String): Order = unused()
+    /** 077 — hasil buka tab uji; null = panggilan tidak diharapkan. */
+    var openTabResult: (() -> Order)? = null
+    override suspend fun openTab(sessionId: Long, tableId: Long?, guests: Int?, localRef: String): Order = openTabResult?.invoke() ?: unused()
     override suspend fun tab(id: String): Order = unused()
     /** 075 — varian yang dikirim ke addLine, berurutan; hasilnya diatur lewat [addLineResult]. */
     val addLineCalls = mutableListOf<String>()
@@ -84,6 +100,10 @@ class FakePosBackend : PosBackend {
         return addLineResult?.invoke(variantId) ?: unused()
     }
     override suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order = unused()
+    /** 077 — catatan yang dikirim ke setNote, berurutan; hasilnya diatur lewat [setNoteResult]. */
+    val noteCalls = mutableListOf<Pair<String, String>>()
+    var setNoteResult: ((String) -> Order)? = null
+    override suspend fun setNote(tabId: String, notes: String): Order { noteCalls += tabId to notes; return setNoteResult?.invoke(notes) ?: unused() }
     override suspend fun removeLine(tabId: String, lineId: Int, key: String): Order = unused()
     override suspend fun sendToKitchen(tabId: String, key: String): KitchenSend = unused()
     override suspend fun ticket(ticketId: Long): PrintableKot = unused()

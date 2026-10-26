@@ -9,6 +9,7 @@ import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -19,6 +20,8 @@ import retrofit2.http.Query
 interface PosApi {
     // --- identitas & perangkat (S1) ---
     // 073 — penyiapan terminal tanpa token (tablet belum punya akun): outlet, terminal per outlet, daftar/pilih terminal.
+    /** 077 — mode data + nama/logo toko sebelum login (tanpa token). */
+    @GET("pos-setup/branding") suspend fun branding(): BrandingDto
     @GET("pos-setup/outlets") suspend fun setupOutlets(): SetupOutletsResponse
     @GET("pos-setup/outlets/{id}/terminals") suspend fun setupTerminals(@Path("id") outletId: Long): SetupTerminalsResponse
     @POST("pos-setup/outlets/{id}/terminals") suspend fun registerTerminal(@Path("id") outletId: Long, @Body body: RegisterTerminalRequest): RegisterTerminalResponse
@@ -67,6 +70,8 @@ interface PosApi {
     suspend fun updateLine(@Path("id") id: Long, @Path("item") item: Long, @Header("Idempotency-Key") key: String, @Body body: UpdateLineRequestDto): TabDto
     @DELETE("tabs/{id}/items/{item}")
     suspend fun removeLine(@Path("id") id: Long, @Path("item") item: Long, @Header("Idempotency-Key") key: String): TabDto
+    /** 077 — catatan kasir untuk seluruh order; teks kosong menghapus. Menetapkan keadaan, jadi aman diulang. */
+    @PUT("tabs/{id}/note") suspend fun setNote(@Path("id") id: Long, @Body body: UpdateNoteRequestDto): TabDto
     @POST("tabs/{id}/send") suspend fun send(@Path("id") id: Long, @Header("Idempotency-Key") key: String): SendResponseDto
     @POST("tabs/{id}/payments") suspend fun pay(@Path("id") id: Long, @Body body: PayRequestDto): TabDto
     @POST("tabs/{id}/payments/{pay}/verify") suspend fun verifyPayment(@Path("id") id: Long, @Path("pay") pay: Long, @Body body: VerifyPaymentRequestDto): TabDto
