@@ -11,6 +11,7 @@ return [
     'session_already_closed' => 'Sesi sudah ditutup.',
     'not_authorized_view_summary' => 'Anda tidak berhak melihat ringkasan sesi ini.',
     'event_delete_has_transactions' => 'Event masih memiliki transaksi (order/pre-order) dan tidak dapat dihapus.',
+    'event_delete_has_settlements' => 'Event sudah memiliki settlement seller dan tidak dapat dihapus.',
 
     // 023-event-availability-invoice-redesign (US1)
     'available_on_requires_multi_day' => 'Hari tersedia hanya berlaku untuk event yang berlangsung lebih dari satu hari.',

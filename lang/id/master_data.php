@@ -2,6 +2,7 @@
 
 return [
     'artist_delete_has_active_products' => 'Penjual masih memiliki produk aktif dan tidak dapat dihapus.',
+    'artist_delete_has_settlements' => 'Penjual ini sudah memiliki settlement dan tidak dapat dihapus.',
     'category_delete_has_active_subcategories' => 'Kategori masih memiliki sub-kategori aktif dan tidak dapat dihapus.',
     'category_delete_has_active_products' => 'Kategori masih memiliki produk aktif dan tidak dapat dihapus.',
     'product_delete_has_active_variants' => 'Produk masih memiliki varian aktif. Nonaktifkan seluruh varian terlebih dahulu.',

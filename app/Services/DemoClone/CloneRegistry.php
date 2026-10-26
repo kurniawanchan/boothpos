@@ -92,6 +92,31 @@ final class CloneRegistry
             'stock_movements' => ['fks' => ['variant_id' => 'product_variants']],
             'material_stock_movements' => ['fks' => ['material_id' => 'materials']],
             'artist_settlements' => ['fks' => ['event_id' => 'events', 'artist_id' => 'artists']],
+            // 076 — settlement seller. Induk dulu, anak mengikuti mode induknya ('via').
+            // Berkas tanda tangan / bukti bayar DISALIN (disk privat), tidak pernah dibagi.
+            'seller_settlements' => [
+                'fks' => ['event_id' => 'events', 'artist_id' => 'artists'],
+                'suffix' => ['number' => 30],
+            ],
+            'seller_settlement_sources' => [
+                'fks' => ['settlement_id' => 'seller_settlements'],
+                'via' => 'seller_settlements.settlement_id',
+            ],
+            'seller_settlement_adjustments' => [
+                'fks' => ['settlement_id' => 'seller_settlements'],
+                'via' => 'seller_settlements.settlement_id',
+            ],
+            'seller_settlement_acknowledgements' => [
+                'fks' => ['settlement_id' => 'seller_settlements'],
+                'files' => ['signature_path' => 'local'],
+                'via' => 'seller_settlements.settlement_id',
+            ],
+            'seller_settlement_payments' => [
+                'fks' => ['settlement_id' => 'seller_settlements'],
+                'uuid' => ['client_ref'],
+                'files' => ['proof_path' => 'local'],
+                'via' => 'seller_settlements.settlement_id',
+            ],
         ];
 
         return array_map(fn (array $spec) => $spec + self::DEFAULTS, $raw);

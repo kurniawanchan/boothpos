@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\ShipmentController;
 use App\Http\Controllers\Api\StockController;
+use App\Http\Controllers\Api\SellerSettlementController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VariantBomController;
 use App\Http\Controllers\Api\PosDraftController;
@@ -294,5 +295,29 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/preorders', [ReportController::class, 'preorders']);
         Route::get('/reports/{report}/export', [ReportController::class, 'export'])
             ->where('report', 'sales|profit|artist-settlements|artist-profit|purchases|stock-by-artist|preorder');
+
+        // 076-settlement-tab-session-branding — settlement seller (menu 'settlements',
+        // Owner/Admin). Dipisah dari /reports/artist-settlements (Rekap Seller POS-only,
+        // fitur 040) dan tabel artist_settlements. '/preview' harus didaftarkan SEBELUM
+        // '/{settlement}' supaya tidak dibaca sebagai id.
+        Route::get('/settlements/preview', [SellerSettlementController::class, 'preview']);
+        Route::get('/settlements', [SellerSettlementController::class, 'index']);
+        Route::post('/settlements', [SellerSettlementController::class, 'store']);
+        Route::get('/settlements/{settlement}', [SellerSettlementController::class, 'show']);
+        Route::delete('/settlements/{settlement}', [SellerSettlementController::class, 'destroy']);
+        Route::post('/settlements/{settlement}/refresh', [SellerSettlementController::class, 'refresh']);
+        Route::post('/settlements/{settlement}/finalize', [SellerSettlementController::class, 'finalize']);
+        Route::post('/settlements/{settlement}/reopen', [SellerSettlementController::class, 'reopen']);
+        Route::post('/settlements/{settlement}/adjustments', [SellerSettlementController::class, 'storeAdjustment']);
+        Route::put('/settlements/{settlement}/adjustments/{adjustment}', [SellerSettlementController::class, 'updateAdjustment']);
+        Route::delete('/settlements/{settlement}/adjustments/{adjustment}', [SellerSettlementController::class, 'destroyAdjustment']);
+        // US3: pengakuan seller, pembayaran, berkas privat, dokumen cetak.
+        Route::post('/settlements/{settlement}/acknowledgement', [SellerSettlementController::class, 'acknowledge']);
+        Route::get('/settlements/{settlement}/acknowledgements/{acknowledgement}/signature', [SellerSettlementController::class, 'signature']);
+        Route::post('/settlements/{settlement}/payments', [SellerSettlementController::class, 'storePayment']);
+        Route::delete('/settlements/{settlement}/payments/{payment}', [SellerSettlementController::class, 'destroyPayment']);
+        Route::get('/settlements/{settlement}/payments/{payment}/proof', [SellerSettlementController::class, 'paymentProof']);
+        Route::get('/settlements/{settlement}/payments/{payment}/document', [SellerSettlementController::class, 'paymentDocument']);
+        Route::get('/settlements/{settlement}/document', [SellerSettlementController::class, 'document']);
     });
 });

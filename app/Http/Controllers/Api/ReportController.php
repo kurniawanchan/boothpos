@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Services\SettlementService;
 use App\Support\ModeGate;
+use App\Support\PreorderRecognizedRevenue;
 use App\Support\PreorderSellerSubtotals;
 use App\Support\ReportSplit;
 use Illuminate\Http\JsonResponse;
@@ -343,7 +344,7 @@ class ReportController extends Controller
      * satu ekspresi SQL yang dievaluasi per baris hasil JOIN, bukan
      * dihitung lewat loop PHP per-preorder.
      */
-    private const PREORDER_FRACTION_EXPR = 'CASE WHEN preorders.subtotal > 0 THEN COALESCE(pc.collected, 0) / preorders.subtotal ELSE 0 END';
+    private const PREORDER_FRACTION_EXPR = PreorderRecognizedRevenue::FRACTION_EXPR;
 
     /**
      * Dasar query (FROM + JOIN + filter, TANPA select) yang dipakai bersama
@@ -377,26 +378,13 @@ class ReportController extends Controller
 
     private function preorderRecognizedRevenueBase(Request $request)
     {
-        $collected = DB::table('payments')
-            ->select('preorder_id', DB::raw('SUM(amount) as collected'))
-            ->whereNotNull('preorder_id')
-            ->where('verification', '!=', 'rejected')
-            ->where('data_mode', ModeGate::current())
-            ->groupBy('preorder_id');
-
-        return DB::table('preorder_items')
-            ->join('preorders', 'preorders.id', '=', 'preorder_items.preorder_id')
-            ->join('product_variants', 'product_variants.id', '=', 'preorder_items.variant_id')
-            ->join('products', 'products.id', '=', 'product_variants.product_id')
-            ->join('categories', 'categories.id', '=', 'products.category_id')
-            ->join('artists', 'artists.id', '=', 'preorder_items.artist_id')
-            ->join('events', 'events.id', '=', 'preorders.event_id')
-            ->leftJoinSub($collected, 'pc', 'pc.preorder_id', '=', 'preorders.id')
-            ->where('preorders.status', '!=', 'cancelled')
-            ->where('preorder_items.data_mode', ModeGate::current())
-            ->when($request->filled('event_id'), fn ($q) => $q->where('preorders.event_id', $request->integer('event_id')))
-            ->when($request->filled('date_from'), fn ($q) => $q->whereDate('preorders.created_at', '>=', $request->date('date_from')))
-            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('preorders.created_at', '<=', $request->date('date_to')));
+        // 076 — definisinya dipindah ke satu kelas bersama (laporan + settlement
+        // seller); SQL identik, controller hanya menerjemahkan filter request.
+        return PreorderRecognizedRevenue::query(
+            $request->filled('event_id') ? $request->integer('event_id') : null,
+            $request->filled('date_from') ? $request->date('date_from') : null,
+            $request->filled('date_to') ? $request->date('date_to') : null,
+        );
     }
 
     public function profit(Request $request): JsonResponse

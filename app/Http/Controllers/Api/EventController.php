@@ -147,6 +147,14 @@ class EventController extends Controller
             ], 409);
         }
 
+        // 076 — settlement seller memegang snapshot nama event, tetapi FK restrict
+        // tidak menangkap SOFT delete; guard-nya harus di sini.
+        if (\App\Models\SellerSettlement::where('event_id', $event->id)->exists()) {
+            return response()->json([
+                'message' => __('events_sessions.event_delete_has_settlements'),
+            ], 409);
+        }
+
         // F13.4 — hapus data adalah tindakan sensitif; log ditulis DI DALAM
         // transaksi yang sama dengan delete-nya (atomik, ikut rollback bersama).
         DB::transaction(function () use ($event, $request) {

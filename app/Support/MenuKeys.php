@@ -40,6 +40,7 @@ class MenuKeys
         'invoices' => 'Invoice',
         'sales' => 'Penjualan',
         'reports' => 'Laporan',
+        'settlements' => 'Settlement',
         'users' => 'Pengguna',
         'roles' => 'Peran',
         'settings' => 'Pengaturan',

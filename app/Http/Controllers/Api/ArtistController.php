@@ -87,6 +87,14 @@ class ArtistController extends Controller
             }
         }
 
+        // 076 — seller yang sudah punya settlement tidak boleh dihapus (soft delete
+        // lolos dari FK restrict, jadi guard ada di sini).
+        if (\App\Models\SellerSettlement::where('artist_id', $artist->id)->exists()) {
+            return response()->json([
+                'message' => __('master_data.artist_delete_has_settlements'),
+            ], 409);
+        }
+
         // F13.4 — hapus data adalah tindakan sensitif; log ditulis DI DALAM
         // transaksi yang sama dengan delete-nya (atomik, ikut rollback bersama).
         DB::transaction(function () use ($artist, $request) {

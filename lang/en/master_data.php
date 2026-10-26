@@ -2,6 +2,7 @@
 
 return [
     'artist_delete_has_active_products' => 'This seller still has active products and cannot be deleted.',
+    'artist_delete_has_settlements' => 'This seller already has settlements and cannot be deleted.',
     'category_delete_has_active_subcategories' => 'This category still has active subcategories and cannot be deleted.',
     'category_delete_has_active_products' => 'This category still has active products and cannot be deleted.',
     'product_delete_has_active_variants' => 'This product still has active variants. Deactivate all variants first.',

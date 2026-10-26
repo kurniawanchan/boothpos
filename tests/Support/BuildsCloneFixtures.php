@@ -64,6 +64,8 @@ trait BuildsCloneFixtures
         $disk->put("products/{$mode}-variant.jpg", "{$mode}-variant-bytes");
         $disk->put("categories/{$mode}-category.jpg", "{$mode}-category-bytes");
         Storage::disk('local')->put("payment-proofs/{$mode}-proof.jpg", "{$mode}-proof-bytes");
+        Storage::disk('local')->put("settlement-signatures/{$mode}-signature.png", "{$mode}-signature-bytes");
+        Storage::disk('local')->put("settlement-proofs/{$mode}-payout.jpg", "{$mode}-payout-bytes");
 
         $g['user'] = $this->cloneUserId();
         $g['channel'] = $this->cloneChannelId();
@@ -187,6 +189,35 @@ trait BuildsCloneFixtures
             'reference_type' => 'purchase_order_item', 'reference_id' => $g['poItem'],
         ]);
         $g['settlement'] = $this->row('artist_settlements', $m + ['event_id' => $g['event'], 'artist_id' => $g['artist']]);
+
+        // 076 — settlement seller (CHECK: revenue = pos + preorder, net = revenue + penyesuaian,
+        // paid <= |net|). Anak tidak punya data_mode: ikut induknya.
+        $g['sellerSettlement'] = $this->row('seller_settlements', $m + [
+            'number' => "STL-{$tag}-0001", 'event_id' => $g['event'], 'artist_id' => $g['artist'],
+            'event_name' => "Event {$tag}", 'artist_name' => "Artist {$tag}", 'artist_code' => $c['artist'],
+            'status' => 'finalized', 'finalized_at' => now(), 'finalized_by' => $g['user'], 'created_by' => $g['user'],
+            'pos_units' => 1, 'pos_revenue' => '10000.00', 'revenue_total' => '10000.00',
+            'adjustments_total' => '-1000.00', 'net_amount' => '9000.00', 'paid_amount' => '3000.00',
+        ]);
+        $g['sellerSource'] = $this->row('seller_settlement_sources', [
+            'settlement_id' => $g['sellerSettlement'], 'source_type' => 'order', 'source_id' => $g['order'],
+            'source_number' => "TRX-{$tag}-0001", 'source_date' => now(), 'units' => 1,
+            'gross_amount' => '10000.00', 'amount' => '10000.00', 'cost_amount' => '5000.00',
+        ]);
+        $g['sellerAdjustment'] = $this->row('seller_settlement_adjustments', [
+            'settlement_id' => $g['sellerSettlement'], 'kind' => 'deduction', 'label' => 'Biaya booth',
+            'reason' => 'Bagian biaya booth', 'amount' => '-1000.00', 'created_by' => $g['user'],
+        ]);
+        $g['sellerAck'] = $this->row('seller_settlement_acknowledgements', [
+            'settlement_id' => $g['sellerSettlement'], 'method' => 'signature', 'signer_name' => "Signer {$tag}",
+            'signature_path' => "settlement-signatures/{$mode}-signature.png", 'acknowledged_at' => now(),
+            'recorded_by' => $g['user'],
+        ]);
+        $g['sellerPayment'] = $this->row('seller_settlement_payments', [
+            'settlement_id' => $g['sellerSettlement'], 'client_ref' => (string) Str::uuid(), 'amount' => '3000.00',
+            'paid_at' => now()->toDateString(), 'method' => 'bank_transfer', 'proof_path' => "settlement-proofs/{$mode}-payout.jpg",
+            'recorded_by' => $g['user'],
+        ]);
 
         return $g;
     }
