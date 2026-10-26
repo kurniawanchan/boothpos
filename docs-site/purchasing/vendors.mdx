@@ -1,0 +1,100 @@
+---
+title: "Vendors"
+description: "Keep a list of the suppliers you buy materials from, and see how many materials each one prices."
+keywords: ["pos", "vendors", "suppliers", "purchasing", "materials", "import", "export"]
+---
+
+The **Vendors** page lists the suppliers you buy materials and services from. A vendor on its own holds only contact details. Its prices per material are added from the [Materials](/purchasing/materials) page, and you pick a vendor when you create a [purchase order](/purchasing/purchase-orders).
+
+This is a back-office screen in the web app.
+
+## Before you start
+
+- Your role needs the **Vendors** menu (`vendors`). Without it the page does not appear in the navigation. The default Owner, Admin and Inventory roles have it. The default Cashier role does not. Owners can change this on the [Roles](/settings/roles) page.
+- The **Export .xlsx** and **Bulk import** buttons only show for users with the Vendors menu. The import and export themselves are checked on the server against a wider set of master-data menus. See [Import and export](#import-and-export).
+
+## Find a vendor
+
+The table shows **Code**, **Name**, **Contact** (phone, with email underneath), **Materials** (how many materials have a price from this vendor), **Status** and the row actions.
+
+Type in the search box to filter by vendor name. Search waits about 300 ms after you stop typing. The counter next to the search box shows the total number of matches. **Reset filters** clears the search. The list is sorted by name and paginated.
+
+## Add a vendor
+
+<Steps>
+  <Step title="Open the form">
+    Select **Add vendor**.
+  </Step>
+  <Step title="Fill in the fields">
+    Enter the details from the table below. **Vendor code** and **Vendor name** are required.
+  </Step>
+  <Step title="Save">
+    Select **Save**. You see "Vendor created." and the new vendor appears in the list.
+  </Step>
+</Steps>
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| Vendor code | Yes | Up to 20 characters. Letters, numbers, dashes and underscores only. Saved in uppercase. Must be unique among vendors that are not deleted. |
+| Vendor name | Yes | Up to 150 characters. |
+| Phone | No | Up to 30 characters. |
+| Email | No | Must be a valid email address, up to 100 characters. |
+| Notes | No | Free text. |
+| Active | No | Checked by default. |
+
+<Warning>
+The vendor code cannot be changed after you create it. The field is locked when you edit a vendor ("Permanent once created."), because Excel imports match vendors by code.
+</Warning>
+
+## Edit a vendor
+
+Select **Edit** on the row, change the fields and select **Save**. You see "Vendor updated." You can change the name, contact details, notes and the **Active** checkbox.
+
+Deactivating a vendor changes its status pill to **Inactive**. Inactive vendors are left out of the vendor list when you add a vendor price to a material. Prices already saved for the vendor are not removed.
+
+<Note>
+ASSUMPTION: the purchase order form loads vendors without an active filter, so an inactive vendor may still be selectable there. Not confirmed in a running app.
+</Note>
+
+## Delete a vendor
+
+<Steps>
+  <Step title="Select Delete">
+    Select **Delete** on the row. A dialog asks "Delete \{name\}? Rejected if it still has registered material prices."
+  </Step>
+  <Step title="Confirm">
+    Select **Yes, delete**. You see "Vendor deleted."
+  </Step>
+</Steps>
+
+A vendor that still has at least one material price is not deleted. The server answers with a 409 conflict and the message "This vendor still has registered material prices and cannot be deleted." Remove the vendor's prices from each material first (**Materials** > **Vendor prices** > **Delete**), or set the vendor to inactive instead.
+
+The deletion is recorded in the [Activity log](/insight/activity-log).
+
+## Import and export
+
+- **Export .xlsx** downloads the vendors sheet of the master-data workbook.
+- **Bulk import** opens the shared master-data import dialog. It reads the whole workbook (outlets, categories, products, stock, vendors, materials, vendor prices, BOM, roles, users), not just vendors. It shows a preview first and changes nothing until you select **Apply import**. The import is all-or-nothing.
+
+The server only allows export and import for users whose role holds at least one of the master-data menus (outlets, categories, products, stock, vendors, materials, roles, users). Others get a 403.
+
+## Troubleshooting
+
+| What you see | Cause | What to do |
+| --- | --- | --- |
+| Vendor code field is greyed out | You are editing an existing vendor. | Codes are permanent. Create a new vendor if you need a different code. |
+| Validation error under **Vendor code** | The code is already used, is longer than 20 characters or has spaces or symbols. | Use a unique code with letters, numbers, `-` or `_`. |
+| "This vendor still has registered material prices and cannot be deleted." (409) | The vendor is priced on at least one material. | Delete its prices on the materials, or deactivate the vendor. |
+| The page is missing from the navigation | Your role does not have the Vendors menu. | Ask an owner to add it in [Roles](/settings/roles). |
+| Export or import fails with a permission message | Your role has none of the master-data menus. | Ask an owner or admin. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Materials" href="/purchasing/materials">
+    Add materials and set each vendor's price.
+  </Card>
+  <Card title="Purchase orders" href="/purchasing/purchase-orders">
+    Order from a vendor and receive stock.
+  </Card>
+</Columns>

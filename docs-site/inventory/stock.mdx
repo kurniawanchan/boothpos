@@ -1,0 +1,150 @@
+---
+title: "Stock"
+description: "Read the stock movement ledger, find low-stock items, adjust stock per outlet, and import or export stock quantities."
+keywords: ["pos", "stock", "inventory", "stock movement", "adjustment", "low stock", "opname", "outlet", "import"]
+---
+
+**Classification: INTERNAL**
+
+The Stock page (**Stock Movements**) is a ledger: every change to an item's stock is recorded as a row with the quantity change, the balance before and after, the reason and who did it. You also use this page to correct stock with an adjustment, and to export or import stock quantities.
+
+Stock is held **per outlet**. With one outlet there is one balance per variant. With several outlets each outlet has its own balance, and the page shows an Outlet column and filter.
+
+## Before you start
+
+- You need the **Stock** menu (menu key `stock`). The page and its header buttons need it. The transfers page needs it too.
+- Adjustments are checked again on the server against the same menu.
+- The ledger endpoint is also open to users with the Products menu, which is how the per-item history on the product screens works.
+- Adjustments can only be made for outlets you are assigned to. See [Outlets](/concepts/outlets).
+- Stock figures in the summary of an item (for example on [Product detail](/inventory/product-detail)) come from the same balances.
+
+## The ledger
+
+The table shows 25 movements per page, newest first. Use the filter bar to narrow it. **Reset filters** clears everything.
+
+| Filter | Behaviour |
+| --- | --- |
+| Type | All types, Purchase, Sale, Adjustment, Return, Initial stock. |
+| Outlet | Shown only with more than one outlet. "All outlets" by default. |
+| From date, To date | Inclusive, compared on the movement's date. |
+
+| Column | What it shows |
+| --- | --- |
+| SKU | The variant SKU. With the Products menu it is a link that opens that product's detail dialog with the variant highlighted. Without it, plain text. |
+| Outlet | The outlet of the movement (several outlets only). |
+| Type | A coloured label for the movement type. |
+| Change | The quantity change. Positive in green with a plus sign, negative in red. |
+| Before → After | The outlet balance before and after the movement. |
+| Reference / reason | An order or transfer number (for example a sale or a transfer) and the reason text. A dash if neither exists. |
+| By | The user who made the change. |
+| Time | Date and time of the movement. |
+
+### Movement types
+
+| Type | Meaning |
+| --- | --- |
+| Purchase | Stock in. |
+| Sale | Stock out for a sold item. The Reference column shows the order number. |
+| Adjustment | A manual correction (this page, the item edit form, or an import). |
+| Return | Stock back in, for example from a returned order line. The Reference shows the order number. |
+| Initial stock | Opening stock. |
+| Stock out (legacy) | Old pre-order hand-over rows that remain in the ledger. They cannot be filtered. |
+| Transfer out, transfer in, transfer cancel | Created by [Stock transfers](/inventory/stock-transfers). The Reference shows the transfer number. These types are not in the Type filter. |
+
+<Note>
+ASSUMPTION: the English interface has no label text for the three transfer types, so those rows may show a raw label key instead of a name. The Reference column still shows the transfer number.
+</Note>
+
+Stock history is append-only. Rows are never edited or deleted, and the balance is only changed through the stock service. That is why the page is described as "Every stock change is recorded and auditable".
+
+### Low-stock view
+
+The Dashboard's low-stock item opens this page with a **Low stock only** chip. The page then lists variants instead of the ledger, with columns Product, SKU, Outlet (several outlets only), Stock and Low-stock limit. A row appears when the variant is active, has a low-stock alert threshold, and the outlet balance is at or below it. Select the chip to remove the filter and return to the ledger. The threshold is set per variant in the item form (**Low-stock alert**). See [Product detail](/inventory/product-detail).
+
+## Adjust stock
+
+Use an adjustment to correct a quantity, for example after a stock count or for damaged goods.
+
+<Steps>
+  <Step title="Open the dialog">
+    Select **Stock adjustment**.
+  </Step>
+  <Step title="Choose the outlet">
+    With more than one outlet, choose the outlet whose stock changes. It defaults to the outlet selected in the top bar. If you change the outlet, the rows you added are cleared.
+  </Step>
+  <Step title="Find the variants">
+    Type a product name or SKU in **Search variant**. Pick a result to add a row. The result shows the SKU and the stock at the chosen outlet. A variant can be added only once.
+  </Step>
+  <Step title="Set the change">
+    Use the minus and plus buttons to set the change for each row. Each press changes it by 1. The row shows "stock → new stock". Use the trash button to remove a row.
+  </Step>
+  <Step title="Enter a reason">
+    **Adjustment reason** is required, for example "stock opname Oct 25, one damaged-packaging unit". The same reason is saved on every row of the batch.
+  </Step>
+  <Step title="Save">
+    Select **Save adjustment**. It stays disabled until there is a reason, at least one row with a non-zero change, and (with several outlets) an outlet. You see "Stock adjustment saved."
+  </Step>
+</Steps>
+
+Each row writes one movement of type Adjustment, and also an entry in the [activity log](/insight/activity-log). There is no way to type a new stock figure directly. You can set the quantity you want from the item edit form, which works out the difference for you, or from an import (see below).
+
+### Rules and errors
+
+| Message | Status | Cause |
+| --- | --- | --- |
+| Insufficient stock for variant \{sku\}. Available: \{n\}. (\{outlet\}) | 422 | The adjustment would take the outlet balance below zero. Stock can never go negative. |
+| Choose the outlet whose stock this changes. | 422 | Several outlets are visible and no outlet was chosen. |
+| Standard field validation message | 422 | The reason is missing or longer than 255 characters, or a row has a zero or non-whole change. |
+| This outlet is not one you are allowed to access. | 403 | You are not assigned to that outlet. |
+| This account is not assigned to any outlet. Ask an administrator to assign it. | 409 | Your user has no outlet access. |
+| You do not have access to stock movements. | 403 | Your role has neither the Stock nor the Products menu. |
+
+<Note>
+When an adjustment fails validation, the dialog stays open and shows the first error as a notice. For other failures it shows the standard error notice and stays open.
+</Note>
+
+## Export and import stock
+
+- **Export .xlsx** downloads the stock sheet. If it fails you see "Failed to export stock data."
+- **Bulk import** opens the shared master-data import dialog. The upload, preview, apply, size limits and error table are described on [Products](/inventory/products#import-and-export-master-data).
+
+The `stock` sheet has the columns `sku`, `current_stock`, `reason` and `outlet_code`.
+
+- `current_stock` is the **final quantity you want**, not a difference. The system works out the adjustment itself, using the same stock service as the Stock adjustment dialog, so the import also writes ledger rows.
+- With more than one outlet, `outlet_code` is required: "Kode outlet wajib diisi karena ada beberapa outlet (stok dihitung per outlet)." (this row message is in Indonesian).
+- An unknown SKU is rejected. To give a **new** variant stock, fill `initial_stock` in the `products` sheet instead.
+- The import is all or nothing. If one row is invalid nothing changes.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Stock adjustment is greyed out">
+    Add a reason and at least one row with a non-zero change. With several outlets, choose the outlet too.
+  </Accordion>
+  <Accordion title="I do not see the Outlet filter or column">
+    They appear only when more than one outlet is visible to you.
+  </Accordion>
+  <Accordion title="The SKU is not a link">
+    The link needs the Products menu. Without it the SKU is plain text.
+  </Accordion>
+  <Accordion title="The dashboard shows low stock but the list is empty">
+    The low-stock view only counts active variants that have a low-stock alert set, and only outlets you can see.
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Stock transfers" href="/inventory/stock-transfers">
+    Move stock between outlets.
+  </Card>
+  <Card title="Products" href="/inventory/products">
+    Import and export master data, and set opening stock for new items.
+  </Card>
+  <Card title="Product detail" href="/inventory/product-detail">
+    Low-stock alert and track-stock settings per variant.
+  </Card>
+  <Card title="Outlets" href="/concepts/outlets">
+    How outlet assignment limits what you can adjust.
+  </Card>
+</Columns>

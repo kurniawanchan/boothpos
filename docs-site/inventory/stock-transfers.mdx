@@ -1,0 +1,172 @@
+---
+title: "Stock transfers"
+description: "Move items and materials between outlets: dispatch a transfer, receive it with any shortfall, cancel it while in transit, and review discrepancies."
+keywords: ["pos", "stock transfer", "transfer", "dispatch", "receive", "in transit", "discrepancy", "outlet"]
+---
+
+**Classification: INTERNAL**
+
+A stock transfer moves goods from one outlet to another in two steps. The source outlet **dispatches** the transfer, and the goods leave its stock immediately and stay **in transit**. The destination outlet then **receives** it, and the received quantity is added to its stock. A transfer that has not been received can be **cancelled**, which returns the goods to the source outlet.
+
+Transfers exist only when your installation has more than one outlet. With a single outlet the page shows "Transfers are available when there is more than one outlet."
+
+## Before you start
+
+- You need the **Stock** menu (menu key `stock`) to open the page. Open it from **Stock transfers** in the Stock page header, which appears only with more than one outlet.
+- Each action needs its own permission, set per role under [Roles](/settings/roles). The server checks them again.
+
+| Action | Permission | Also needs |
+| --- | --- | --- |
+| Create and dispatch a transfer | `stock.transfer.dispatch` | The source outlet must be one you may access. |
+| Receive a transfer | `stock.transfer.receive` | You must be assigned to the **destination** outlet. |
+| Cancel a transfer | `stock.transfer.cancel` | You must be assigned to the **source** outlet. |
+
+- Owner and Admin have all three permissions. The built-in Inventory role can dispatch and receive, but cannot cancel.
+- Users with access to all outlets can act on any outlet. Other users see and act only on transfers where the source or the destination is an outlet assigned to them. The outlet selected in the top bar narrows the list further. See [Outlets](/concepts/outlets).
+- Buttons are hidden when you lack the right. **New transfer** needs the dispatch permission. **Receive** and **Cancel** appear in a transfer's detail only when the server says you may use them, and only while the transfer is in transit.
+
+## The transfer list
+
+The page has two tabs.
+
+**All transfers** lists transfers 25 per page, newest dispatch first.
+
+| Column | What it shows |
+| --- | --- |
+| Number | The transfer number, in the form `TRF-YYYYMMDD-0001`. Select it to open the detail. |
+| Route | Source outlet code, an arrow, then the destination outlet code. |
+| Status | **In transit**, **Received** or **Cancelled**. A red **Discrepancy** label is added when the received quantity was lower than the sent quantity. |
+| Lines | How many item or material lines the transfer has. |
+| Dispatched | Date and time of dispatch. |
+
+Filters: **Status** (All statuses, In transit, Received, Cancelled) and **Outlet** (matches transfers where that outlet is the source or the destination).
+
+**Discrepancies** lists each line that was received short: Number, Item, Shortfall (shown as "shortfall / sent quantity") and Note (the reason entered at receiving). If there are none you see "No discrepancies."
+
+## Create and dispatch a transfer
+
+<Steps>
+  <Step title="Open the drawer">
+    Select **New transfer** (permission `stock.transfer.dispatch`).
+  </Step>
+  <Step title="Choose the route">
+    Pick **From outlet**. It defaults to the outlet selected in the top bar. Then pick **To outlet**. The destination list excludes the source. The two must differ, and both must be active outlets. Add an optional **Note** of up to 255 characters.
+  </Step>
+  <Step title="Add lines">
+    Choose **Kind**: **Item** (a variant) or **Material**. Type in **Search item / material**. Search is disabled until a source outlet is chosen. Results show "\{n\} available", which is the quantity at the **source outlet**. Pick a result to add a line.
+  </Step>
+  <Step title="Enter quantities">
+    Type the quantity for each line. A quantity must be above zero and cannot exceed the available quantity. Items must be whole numbers. Materials can have decimals (up to 3 places). Remove a line with **Delete**.
+  </Step>
+  <Step title="Dispatch">
+    Select **Dispatch transfer**. The button works only when the route, at least one line and valid quantities are set. You see "Transfer \{number\} dispatched".
+  </Step>
+</Steps>
+
+If you change **From outlet**, the lines are cleared, because availability belongs to the source outlet.
+
+When you dispatch, the stock of each line is taken from the source outlet at once, with a ledger entry that references the transfer number. The goods are then in neither outlet's stock until the transfer is received or cancelled.
+
+The drawer sends a unique reference when it opens. If your connection drops and the same request is sent again, the server returns the transfer that already exists instead of creating a second one.
+
+### Dispatch rules and errors
+
+| Message | Status | Cause |
+| --- | --- | --- |
+| The source and destination outlets must be different. | 422 | Same outlet on both sides. |
+| Transfers to or from an inactive outlet are not allowed. | 422 | An outlet is inactive. |
+| Add at least one line. | 422 | No lines. |
+| Each line needs a kind (variant or material), an item and a quantity above zero. | 422 | A line is incomplete. |
+| The same item appears twice in this transfer. | 422 | Duplicate line. |
+| Item not found. | 422 | The item or material no longer exists. |
+| Item \{sku\} does not track stock, so it cannot be transferred. | 422 | The variant has **Track stock** turned off. |
+| Items are transferred in whole units. | 422 | A decimal quantity for an item. |
+| Insufficient stock for variant \{sku\}. Available: \{n\}. (\{outlet\}) | 422 | The source balance is lower than the quantity. |
+| This outlet is not one you are allowed to access. | 403 | You may not dispatch from that outlet. |
+| This client reference was already used for a different transfer. | 409 | A repeated request does not match the earlier transfer. |
+
+## Review a transfer
+
+Select a number to open the detail. It shows the status, the route with outlet names, the note, and a table of lines with **Item**, **Sent**, **Received** and **Note**.
+
+- A line shows "Not sold at the destination — add it to the menu there to sell it." when the destination outlet does not carry that item. The stock still arrives. Set the item up for that outlet on [Product detail](/inventory/product-detail) to sell it.
+- The steps list who dispatched, received or cancelled the transfer, and when.
+- **Stock ledger trail** (expandable) lists the stock movements the transfer caused: outlet code, movement type, quantity and balance before and after. The same movements appear in the [Stock](/inventory/stock) ledger with the transfer number in the Reference column.
+
+## Receive a transfer
+
+<Steps>
+  <Step title="Open the transfer">
+    Open a transfer that is **In transit**. Select **Receive** (permission `stock.transfer.receive`, and you must be assigned to the destination outlet).
+  </Step>
+  <Step title="Enter what arrived">
+    Each line starts with the sent quantity. Change **Quantity received** to what actually arrived. You cannot enter more than was sent. If you enter less, **Reason for the shortfall** appears and is required (up to 255 characters).
+  </Step>
+  <Step title="Confirm">
+    Select **Receive**. You see "Transfer \{number\} received".
+  </Step>
+</Steps>
+
+What happens:
+
+- The received quantity of each line is added to the destination outlet's stock. A line received as 0 adds nothing.
+- The shortfall is **not** returned to the source and is not added anywhere. It stays recorded on the line as a discrepancy with your reason, and the transfer gets the **Discrepancy** label.
+- The transfer becomes **Received**. Quantities are final after that.
+
+| Message | Status | Cause |
+| --- | --- | --- |
+| You cannot receive more than was sent. | 422 | A quantity above the sent quantity. |
+| A reason is required when less than was sent is received. | 422 | A short line has no reason. |
+| This transfer has already been received. | 409 | Someone received it first. |
+| This transfer is no longer in transit. | 409 | It was cancelled. |
+| This outlet is not one you are allowed to access. | 403 | You are not assigned to the destination outlet. |
+
+## Cancel a transfer
+
+<Steps>
+  <Step title="Open the transfer">
+    Open a transfer that is **In transit** and select **Cancel** (permission `stock.transfer.cancel`, and you must be assigned to the source outlet).
+  </Step>
+  <Step title="Confirm">
+    The dialog "Cancel the transfer?" says "The goods of transfer \{number\} return to the source outlet." Select **Cancel** to confirm. You see "Transfer \{number\} cancelled".
+  </Step>
+</Steps>
+
+The full sent quantity goes back to the source outlet's stock, with a ledger entry. Only an in-transit transfer can be cancelled. A received or already cancelled transfer returns 409 ("This transfer is no longer in transit." or "This transfer has already been received."), and the list reloads.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="I do not see the Stock transfers button or the page says transfers are unavailable">
+    Your installation has a single outlet, or only one outlet is visible to your user.
+  </Accordion>
+  <Accordion title="New transfer is missing">
+    Your role lacks `stock.transfer.dispatch`. Ask an owner or admin to grant it.
+  </Accordion>
+  <Accordion title="Receive or Cancel is missing on an in-transit transfer">
+    You lack the permission, or you are not assigned to the destination outlet (receive) or the source outlet (cancel).
+  </Accordion>
+  <Accordion title="I cannot find the item I want to move">
+    Search uses the source outlet. The item must track stock, and materials are listed under the **Material** kind.
+  </Accordion>
+  <Accordion title="The transfer list looks short">
+    The outlet selected in the top bar narrows the list. Choose all outlets, or use the Outlet filter on the page.
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Stock" href="/inventory/stock">
+    The ledger shows every transfer movement.
+  </Card>
+  <Card title="Outlets" href="/concepts/outlets">
+    How outlet assignment limits what you can see and do.
+  </Card>
+  <Card title="Roles" href="/settings/roles">
+    Grant the dispatch, receive and cancel permissions.
+  </Card>
+  <Card title="Materials" href="/purchasing/materials">
+    Materials can be transferred too.
+  </Card>
+</Columns>

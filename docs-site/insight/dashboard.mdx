@@ -1,0 +1,135 @@
+---
+title: "Dashboard"
+description: "Read today's sales, orders, stock alerts and open shifts at a glance, and export the figures."
+keywords: ["dashboard", "kpi", "net sales", "needs attention", "latest orders", "open shifts", "export"]
+---
+
+The **Dashboard** is the first screen after sign-in. It shows four key figures, a "Needs attention" list, the shifts that are open right now, the latest orders, and a period breakdown. Figures are read-only and refresh by themselves every 30 seconds.
+
+## Before you start
+
+- You need the **Dashboard** menu (menu key `dashboard`). Every Dashboard request is checked on the server; without the menu key the server answers 403.
+- The **Reports**-style panels at the bottom ("Results per outlet" and "Per-Customer Statistics") appear only if your role also has the **Reports** menu (`reports`).
+- Dates on this screen are **business dates** in the store time zone, not calendar dates. See [Business day](/concepts/business-day).
+- With more than one outlet, the header shows the scope: **Outlet: \{name\}** or **All outlets · \{count\}**. Change it with the outlet selector. See [Outlets](/concepts/outlets).
+
+## Header
+
+| Item | What it shows |
+| --- | --- |
+| Business date | Today's business date, followed by "business date". |
+| Scope | **Outlet: \{name\}** or **All outlets · \{count\}**. Shown only when the organisation has more than one outlet. |
+| Updated | The time of the last successful calculation. If an automatic refresh fails, the old numbers stay on screen and this time stops moving. |
+| **Today / 7 days / 30 days** | Period for the key figures, the revenue breakdown and the latest-orders table. The choice is kept in the address bar (`?period=`), so reloading or sharing the link keeps it. |
+| **Export** | Downloads a CSV of the key figures for the chosen period (see [Export](#export)). |
+
+## Key figures
+
+Four cells, each with the value, a change chip against the comparison period, and a small trend line.
+
+| Figure | Meaning | Good direction |
+| --- | --- | --- |
+| **Total sales** (Net · IDR) | Net sales for the period. | Up |
+| **Total orders** (All statuses) | Number of orders, every status included. | Up |
+| **Average order value** (Net ÷ order) | Net sales divided by completed orders. Shows zero when there are no completed orders yet. | Up |
+| **Low-stock items** (Below reorder point) | Count of items below their reorder point. | Down (an increase is shown in the warning colour) |
+
+The comparison depends on the period:
+
+- **Today** compares with yesterday up to the same time of day ("vs yesterday until 14.30").
+- **7 days** and **30 days** compare with the previous period of the same length ("vs previous period").
+
+Zero is shown as a real value (`0`, `Rp 0`), never as a dash. A figure the server leaves out for your role, or one that is not available yet, shows **Unavailable**. If the summary cannot be loaded, only this area shows **Could not load the Dashboard key figures** with a retry button; the rest of the page stays usable.
+
+<Note>
+  When one outlet is selected, **Low-stock items** still counts the whole organisation and says so (**Organisation-wide**).
+</Note>
+
+### Revenue breakdown
+
+Below the four cells, one line splits the period's revenue: net sales, order-level discounts, tax (labelled with your store's tax label), and the gross total. The gross total is net minus discounts plus tax, the same figure that appears on the receipt and in the sales report.
+
+## Needs attention
+
+A list of four checks, always all four. They describe the **current business day**, not the period you selected, and are cached for up to 30 seconds. Each check has a severity: **OK**, **Needs attention** or **Critical**. Severity is shown with an icon and text, not only colour.
+
+| Check | Counts | Severity when above zero | Opens |
+| --- | --- | --- | --- |
+| **Payments awaiting verification** | Orders with a non-cash payment still pending (orders that also have a rejected payment are not counted). Shows the count and the pending amount. | Needs attention | **Sales**, filtered to pending payments |
+| **Void after fire** | Items cancelled after their ticket was sent to the kitchen or bar today, with their value and share of gross sales. Items cancelled without a recorded price show "n items without a recorded value". | Needs attention | **Activity Log**, filtered to the `item_cancelled` action and today's date |
+| **Shift cash difference** | Shifts closed today whose cash difference is larger than the tolerance. Shows the signed total difference and the tolerance. | Critical | **Cashier Session**, at the worst shift |
+| **Low-stock items** | Items below their reorder point. | Needs attention | **Stock**, filtered to low stock |
+
+The cash tolerance is set in [General settings](/settings/general) under the business day section. If the stored value is missing or invalid, the code falls back to Rp 5.000.
+
+A check is a link only when something needs follow-up **and** your role can open the target screen. Otherwise it is plain text, not a disabled button. When a check is fine, it shows a sentence such as **All payments are verified** or **All shifts within tolerance**.
+
+## Open shifts
+
+**Open shifts** lists every open shift, from the tablet app and the web, newest first (up to 50), with the source (**App** or **Web**), who opened it, since when, and the receipt count. Each row opens that shift in **Cashier Session** (`/session?id=`).
+
+- Owner and admin see everyone's open shifts.
+- Any other role sees only their own.
+- If there is none, the panel says **No shift is open right now.**
+
+See [Shifts](/operations/shifts).
+
+## Latest orders
+
+A table of orders for the selected period. It is the same list as the Sales page, and clicking a row opens the same order detail.
+
+**Tabs** (each with a count that already reflects your search and filters): **All**, **Open**, **Partially paid**, **Paid**, **Cancelled**. The server also knows tabs called `bill` and `closed`; they hold no data in this product and are not shown.
+
+**Search**: order number, table or item, up to 100 characters.
+
+**Filters**
+
+| Filter | Options |
+| --- | --- |
+| Order type | Retail, Dine-in, Takeaway |
+| Payment method | Cash, Bank transfer, QR / e-wallet |
+| Payment status | Unpaid, Awaiting verification, Partial, Successful |
+| From / To business date | Two dates. Leave both empty to follow the Dashboard period. If **To** is earlier than **From**, **To** is ignored. |
+
+Active filters appear as removable chips. Search, filters, tab and page are kept in the address bar.
+
+**Columns**: Order no., Time, Type / Table, Items, Status, Payment, Total. Pages hold 25 rows.
+
+**Export CSV** downloads the rows that match the current filters (not only the visible page). The file has the columns `order_number`, `at`, `type`, `table`, `items`, `status`, `payment_state`, `methods`, `total_amount`, `paid_amount`. It contains no customer contact data.
+
+The **Real-time** marker shows while auto-refresh is running. A refresh keeps your filters and any open order detail.
+
+## Period breakdown
+
+The lower section is a secondary summary for a date range. It defaults to **today** (business date); clearing both date boxes means all history.
+
+- **Sales per day** chart, with a link to the full report.
+- **Sales by category** and **Sales by outlet** charts.
+- **Low stock** list: items below threshold, plus the out-of-stock count, with a link to stock movements.
+- Shortcut buttons for **New Sale**, **Adjust Stock** and **Add Product**, shown only for the menus you can open (POS, Stock, Products).
+- Only with the **Reports** menu: **Results per outlet** (settlement recap), gross profit, and **Per-Customer Statistics** (customer, transaction count, total spend; sales without a customer show as **Walk-in customer**).
+
+## Export
+
+**Export** (header) downloads `dashboard-{period}-{business date}.csv` containing: calculation time, period, date range, comparison basis, the four figures with their comparison and change, the trend points of each figure, and the four "Needs attention" checks with severity, count and amount. If it fails you see **Could not export the Dashboard. Please try again.**
+
+## Troubleshooting
+
+| Message or symptom | Cause | What to do |
+| --- | --- | --- |
+| **Could not load the Dashboard key figures** | The summary request failed. | Click retry. Other panels are unaffected. |
+| **Could not load the attention list** | The attention request failed. | Click retry. |
+| **Could not load the latest orders** | The orders request failed. | Reload or change the filter. |
+| A figure shows **Unavailable** | The server left it out for your role, or it does not exist yet. | Ask an owner or admin if you need it. |
+| "Updated" time is old | Automatic refresh is failing; the last good numbers are kept. | Check the connection to the server, then reload. |
+| 403 on any Dashboard panel | Your role lacks the Dashboard menu. | Ask an owner or admin to add it under [Roles](/settings/roles). |
+| Order counts differ from the Sales page | The Dashboard filters by its own period and business date. | Align the date range, or open the order from the table. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Reports" href="/insight/reports">Profit, outlet recap and stock by outlet.</Card>
+  <Card title="Activity log" href="/insight/activity-log">Follow up void-after-fire items.</Card>
+  <Card title="Shifts" href="/operations/shifts">Open, close and review cashier shifts.</Card>
+  <Card title="Business day" href="/concepts/business-day">How the business date and cutoff work.</Card>
+</Columns>

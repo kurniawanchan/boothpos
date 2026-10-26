@@ -1,0 +1,77 @@
+---
+title: "Sign in and activate"
+description: "Activate a new BoothPOS installation, sign in with your username, and sign out."
+keywords: ["login", "sign in", "activation", "license key", "username"]
+---
+
+BoothPOS runs in your browser at the address of the machine that hosts it (for example `localhost` on a single-store laptop). Before anyone can sign in, the installation must be activated once with a license key.
+
+## Activate a new installation
+
+An installation that has not been activated locks every screen, including the sign-in page. You are sent to **Aktivasi instalasi** (installation activation) automatically.
+
+<Steps>
+  <Step title="Open BoothPOS">
+    Browse to the BoothPOS address. If the installation is not activated yet, the activation screen opens.
+  </Step>
+  <Step title="Paste the license key">
+    Paste the key you received after payment into **Kunci lisensi** (license key).
+  </Step>
+  <Step title="Submit">
+    Click **Aktivasi**. On success, a confirmation appears and you continue to the app.
+  </Step>
+</Steps>
+
+<Info>
+  One license activates one installation. The activation screen is shown only while the installation is not activated; once activated, opening `/activate` sends you to the dashboard.
+</Info>
+
+If the key is rejected, the field shows the validation message from the server and nothing is activated. Check the key for copy errors, then contact your provider.
+
+## Sign in
+
+<Steps>
+  <Step title="Enter your username">
+    Sign in with a **Username**, not an email address.
+  </Step>
+  <Step title="Enter your password">
+    Type your password in **Kata sandi** (password) and click **Masuk** (sign in).
+  </Step>
+  <Step title="Land on the dashboard">
+    After signing in you open the Dashboard. The menu you see depends on your role. See [Roles and permissions](/concepts/roles-and-permissions).
+  </Step>
+</Steps>
+
+The sign-in page is always shown in Bahasa Indonesia, because the app does not know your language preference before you sign in. After you sign in, you can change the interface language from the user menu.
+
+### Sign-in problems
+
+| What you see | Cause | What to do |
+| --- | --- | --- |
+| "Username atau kata sandi salah." | The username or password does not match an account. | Retype both. Ask an owner or admin to reset your password if you forgot it. |
+| A message under a field | The field was empty or invalid. | Fill in the field and submit again. |
+| Redirected to the activation screen | The installation is not activated. | Activate it with a license key. |
+| Redirected back to the sign-in page after a refresh | Your session expired or was cleared. | Sign in again. |
+
+<Note>
+  If you open a screen your role cannot use, for example by typing its address, BoothPOS sends you to the Dashboard instead of showing an error. The server enforces the same permissions on every request.
+</Note>
+
+## Sign out and personal settings
+
+Click your name at the top right to open the user menu. From there you can open your profile, change the language, and sign out. See [Profile](/settings/profile).
+
+<Warning>
+  Close your open cashier shift before you leave the counter and sign out. See [Cashier shifts](/operations/shifts).
+</Warning>
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Find your way around" icon="compass" href="/concepts/navigation">
+    The navigation rail, top bar, search, and notifications.
+  </Card>
+  <Card title="Ring up your first sale" icon="cash-register" href="/getting-started/first-sale">
+    Open a shift, add items, and take payment.
+  </Card>
+</Columns>

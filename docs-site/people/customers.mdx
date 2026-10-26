@@ -1,0 +1,156 @@
+---
+title: "Customers"
+description: "Keep a customer list, look up a customer's sales, and import or export customers with Excel."
+keywords: ["pos", "customers", "contacts", "import", "export", "xlsx", "transaction history"]
+---
+
+The **Customers** page holds the people you sell to: name, contact details and notes. You can attach a customer to a sale at the register, look up what a customer bought, and move the whole list in and out with an Excel file.
+
+Customer records contain personal data (phone, email, address, social media handle). Share the export file only with people who need it, and delete it when you are done.
+
+## Before you start
+
+- Your role needs the **Customers** menu (`customers`). The default Cashier role has it, so cashiers can look up and add customers.
+- Any signed-in role can view, add and edit customers. Only **owner** and **admin** can delete.
+- The **Export .xlsx** and **Import** buttons show only for the owner, admin and inventory roles. See [Import and export](#import-and-export).
+- Customers belong to the current data mode. Customers you create in DEMO mode are not visible in LIVE mode, and the other way around. See [Demo and live mode](/concepts/demo-and-live-mode).
+
+## Find a customer
+
+The table shows **Name**, **Phone**, **Email**, **Social media** and row actions. Empty values show a dash. The list is sorted by name.
+
+The search box matches **name, phone or social media handle** (not email), about 300 ms after you stop typing. It is a server-side search and returns to page 1. The counter shows the number of matches. **Reset filters** reloads the full list at once.
+
+## Add a customer
+
+<Steps>
+  <Step title="Open the form">
+    Select **New customer**.
+  </Step>
+  <Step title="Fill in the fields">
+    Only **Name** is required.
+  </Step>
+  <Step title="Save">
+    Select **Save**. You see "Customer created."
+  </Step>
+</Steps>
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| Name | Yes | Up to 100 characters. |
+| Phone | No | Up to 30 characters. |
+| Address | No | Free text. |
+| Email | No | Valid email address, up to 100 characters. |
+| Social media | No | Up to 100 characters. |
+| Notes | No | Free text. |
+
+Validation errors from the server (422) show under the field. Blank optional fields are saved as empty.
+
+## Edit a customer
+
+Select **Edit**, change the fields and select **Save**. You see "Customer updated." All roles with access to the page can edit.
+
+## View a customer's transactions
+
+Select **Transaction history**. The dialog lists the customer's sales, newest first, with **Transaction No.**, **Status**, **Total** and **Date**.
+
+- Only sales are listed. Tabs that are still open do not count as transactions yet.
+- A cancelled sale shows a **Cancelled** badge. Other sales show a dash.
+- Select a transaction number to open its details. If the details allow it, you can act on the transaction there (for example cancel it) and the list refreshes afterwards.
+- An empty list reads "This customer has no transactions yet."
+
+Pre-orders no longer exist, so they never appear here.
+
+## Delete a customer
+
+<Steps>
+  <Step title="Select Delete">
+    The button shows only for owner and admin. The dialog asks "Delete \{name\}? Rejected if this customer still has sales."
+  </Step>
+  <Step title="Confirm">
+    Select **Delete**. You see "Customer deleted."
+  </Step>
+</Steps>
+
+A customer who has any sale, whatever its status, cannot be deleted. The server answers 409: "This customer still has transactions (orders) and cannot be deleted." The deletion is written to the [Activity log](/insight/activity-log), and that entry keeps a copy of the customer's contact fields. Treat the log as sensitive.
+
+## Import and export
+
+### Who can use it
+
+Export and import are for the owner, admin and inventory roles. The buttons are shown by role name. The server checks something wider: the user must hold at least one of the master-data menus (Outlets, Categories, Products, Stock, Vendors, Materials, Roles, Users). The Customers menu alone does not count, so a cashier gets a 403: "Only owner/admin/inventory can access this feature."
+
+<Note>
+ASSUMPTION: a custom role that has master-data menus but a name other than owner, admin or inventory passes the server check, yet the buttons stay hidden because the page checks the role name.
+</Note>
+
+### Export
+
+Select **Export .xlsx**. The browser downloads `customers.xlsx` with every customer of the current data mode, sorted by name. Columns: `name`, `phone`, `address`, `email`, `social_handle`, `notes`. If the download fails you see "Failed to export customer data."
+
+### Import
+
+<Steps>
+  <Step title="Get the template">
+    Select **Import**, then **Download template**. You get `template-customers.xlsx` with the six column headings above.
+  </Step>
+  <Step title="Fill and choose the file">
+    Fill the sheet and choose it under **.xlsx file**. The file must be `.xlsx` and at most 10 MB. Only the first sheet is read.
+  </Step>
+  <Step title="Preview">
+    Select **Preview**. Nothing is saved. The dialog shows "\{created\} new customer(s) will be created, \{updated\} will be updated."
+  </Step>
+  <Step title="Confirm">
+    If there are no errors, select **Confirm import**. You see "Import successful — \{created\} new, \{updated\} updated." Select **Import another file** to start over.
+  </Step>
+</Steps>
+
+Rules the import follows:
+
+- **Name** is required in every row (up to 100 characters).
+- A row whose **email** matches an existing customer (not case sensitive, within the current data mode) **updates** that customer. It does not create a duplicate.
+- A **blank cell on an update row leaves the existing value unchanged.** It does not clear it.
+- A row **without an email always creates** a new customer, even when the name or phone matches someone already there.
+- Two rows in the same file with the same email update the same customer in order. The last row wins for the fields it fills.
+- Validation checks every row first. If any row has a problem, nothing is saved. The dialog lists the **Row** number (the Excel row, where row 1 is the heading) and the **Problem**, with "Errors found — nothing will be saved:". Fix the file and preview again.
+- Applying is all-or-nothing in one transaction, and one entry "Impor massal data pelanggan." goes to the activity log.
+
+Row problems you can see:
+
+| Message | Fix |
+| --- | --- |
+| Customer name is required. | Fill the `name` cell. |
+| Customer name is at most 100 characters. | Shorten it. |
+| Email address '\{email\}' is not valid. | Correct the address. |
+| Email address is at most 100 characters. | Shorten it. |
+| Phone number is at most 30 characters. | Shorten it. |
+| Social media handle is at most 100 characters. | Shorten it. |
+
+If the apply step itself fails with errors, you see "Nothing was saved because errors were found." and the same row table.
+
+## Troubleshooting
+
+| What you see | Cause | What to do |
+| --- | --- | --- |
+| No **Delete** button | Only owner and admin can delete. | Ask an owner or admin. |
+| No **Export** or **Import** buttons | Your role is not owner, admin or inventory. | Ask an owner. |
+| 409 on delete | The customer has sales. | Keep the customer. Edit the details instead. |
+| Preview says "0 new, 0 updated" | The sheet has no data rows, or the first sheet is empty. | Check that data is on the first sheet under the right headings. |
+| A customer from DEMO mode is missing | Data modes are separate. | Switch mode. See [Demo and live mode](/concepts/demo-and-live-mode). |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Sales" href="/operations/sales">
+    See the sales behind a customer's history.
+  </Card>
+  <Card title="Point of sale" href="/operations/pos">
+    Attach a customer to a sale.
+  </Card>
+  <Card title="Roles and permissions" href="/concepts/roles-and-permissions">
+    Which role sees which menu.
+  </Card>
+  <Card title="Activity log" href="/insight/activity-log">
+    Deletions and imports are recorded here.
+  </Card>
+</Columns>

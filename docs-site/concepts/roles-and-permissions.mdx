@@ -1,0 +1,121 @@
+---
+title: "Roles and permissions"
+description: "How menu access and action-level permissions decide what each user can see and do."
+keywords: ["roles", "permissions", "menu keys", "owner", "admin", "cashier", "inventory", "approval"]
+---
+
+BoothPOS controls access in two layers. Both are enforced by the server. The web app only hides what you cannot use.
+
+<Columns cols={2}>
+  <Card title="Menu access" icon="list">
+    Decides **which screens** you can open. Stored on the role as a list of menu keys.
+  </Card>
+  <Card title="Action permissions" icon="key">
+    Decides **which actions** you can take inside a screen, such as marking an item sold out or approving a discount.
+  </Card>
+</Columns>
+
+## Built-in roles
+
+Every installation starts with four roles. Owners and admins can edit roles, and can create custom ones, in [Roles](/settings/roles).
+
+| Role | Menu access at install | Action permissions | Outlet scope |
+| --- | --- | --- | --- |
+| Owner | Every menu | Every action permission | All outlets |
+| Admin | Every menu | Every action permission | All outlets |
+| Kasir (cashier) | Dashboard, POS, Cashier Session, Customers, Sales, Floor & Tabs, Kitchen & Bar | None by default | Only assigned outlets |
+| Inventory | Dashboard, POS, Cashier Session, Products, Outlets, Categories, Stock, Vendors, Materials, Customers, Sales, Restaurant Setup | Manage items, mark items 86, edit recipes, dispatch and receive stock transfers, mark sold out | Only assigned outlets |
+
+<Note>
+  ASSUMPTION: the menu lists above are the defaults created by the install migrations. Roles can be edited afterwards, so the role in front of you may differ. The Roles screen is the source of truth for a given store.
+</Note>
+
+Owner and admin are matched by role name (case-insensitive) for the built-in action permissions. A role you create yourself gets exactly the permissions you tick.
+
+## Menu keys
+
+A menu key opens a screen. Several navigation items can share one key.
+
+| Menu key | Opens |
+| --- | --- |
+| `dashboard` | Dashboard |
+| `pos` | POS |
+| `session` | Cashier Session |
+| `sales` | Sales |
+| `floor` | Floor & Tabs |
+| `kitchen` | Kitchen & Bar |
+| `dining_setup` | Restaurant Setup |
+| `categories` | Categories |
+| `products` | Products and product detail |
+| `stock` | Stock and stock transfers |
+| `vendors` | Vendors |
+| `materials` | Materials |
+| `purchase_orders` | Purchase Orders |
+| `customers` | Customers |
+| `outlets` | Outlets |
+| `reports` | Reports and Activity Log |
+| `settings` | General settings and Payment settings |
+| `users` | Users |
+| `roles` | Roles |
+| `companies`, `licenses`, `invoices` | Provider-side Admin group (not covered here) |
+
+<Warning>
+  The keys `users` and `roles` are protected. The store must always keep at least one role that includes both, so no installation can lock itself out of user and role management.
+</Warning>
+
+## Action permissions
+
+These are checked in addition to menu access.
+
+| Permission | What it allows |
+| --- | --- |
+| Manage items | Discontinue and reactivate items. |
+| Mark items sold out (86) | Mark an item unavailable. |
+| Mark sold out without approval | Mark an item sold out without needing someone else to approve. |
+| Bulk price change | Change prices in bulk. |
+| Approve price changes | Approve a pending price change. |
+| Publish menu releases | Publish a menu release. |
+| Edit recipes | Change an item's recipe (bill of materials). |
+| Dispatch stock transfers | Send stock to another outlet. |
+| Receive stock transfers | Receive stock sent from another outlet. |
+| Cancel stock transfers | Cancel a transfer that has not been received. |
+| Void sent lines | Void a line already sent to the kitchen. |
+| Cancel open tabs | Cancel a whole open tab. |
+| Approve cash out above limit | Approve a cash-out larger than the limit. |
+| Approve receipt reprints | Approve reprinting a receipt. |
+| Verify QRIS payments | Verify, or mark not found, a QRIS payment. |
+| Refund paid orders | Fully refund a paid order. |
+| Approve shift variance | Approve a closing cash difference above tolerance. |
+| Approve discounts above role limit | Approve a discount over the role's own discount limit. |
+
+### Approvals at the point of action
+
+Some actions, such as a void, a large discount, or a reprint, need someone with the matching permission. If you hold that permission, the action goes through. If you do not, the server asks for an approver's confirmation using an approval PIN. The approver's PIN is never shown anywhere. See [Users](/settings/users) for how PINs are set.
+
+<Warning>
+  The web app has no approval-PIN prompt. Approval flows are built for the Android POS. On the web, an action that needs approval you do not hold can fail instead of asking, for example cancelling an item already sent to the kitchen. The pages for each module say where this applies.
+</Warning>
+
+## Outlet scope
+
+Roles can be flagged to see **all outlets** (owner and admin). Every other user sees only the outlets assigned to them. See [Outlets](/concepts/outlets).
+
+## When access is denied
+
+| What you see | Meaning |
+| --- | --- |
+| A screen is missing from the rail | Your role has no menu access to it. Ask an owner or admin. |
+| Redirected to the Dashboard after typing an address | Same cause. |
+| A permission error (HTTP 403) when you click an action | The screen is open to you but the action needs a permission you lack. |
+| An approval prompt | The action needs an approver. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Edit roles" icon="user-gear" href="/settings/roles">
+    Choose menus and action permissions for a role.
+  </Card>
+  <Card title="Manage users" icon="users" href="/settings/users">
+    Assign roles and outlets, and set PINs.
+  </Card>
+</Columns>

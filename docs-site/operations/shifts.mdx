@@ -1,0 +1,140 @@
+---
+title: "Cashier session (shifts)"
+description: "Open your cashier shift, watch its totals, close it with a cash count, and review every shift and cash in/out entry."
+keywords: ["shift", "cashier session", "opening cash", "closing cash", "cash difference", "variance", "cash in", "cash out"]
+---
+
+{/* Classification: INTERNAL */}
+
+A **shift** (the menu is called **Cashier Session**, menu key `session`) is the period in which one cashier takes sales and cash. Every POS sale, tab and cash payment is attached to the shift that was open when it happened. Owners and admins also get an **All shifts** section at the bottom of the page.
+
+## Before you start
+
+- Your role needs the `session` menu.
+- You can have **one open shift on the web** at a time. The tablet app has its own shift per user, so a web shift and an app shift can be open together. The page you see is your own web shift.
+- The business date of a shift is in WIB, see [Business day](/concepts/business-day).
+
+## Open a shift
+
+<Steps>
+  <Step title="Open the page">
+    With no open shift, the page shows **Open cashier session**: "Every transaction must be tied to an open cashier session."
+  </Step>
+  <Step title="Choose the outlet">
+    If your installation has more than one outlet, pick the **Outlet** for this shift (required). With one outlet it is chosen for you. See [Outlets](/concepts/outlets).
+  </Step>
+  <Step title="Enter opening cash">
+    Type **Opening cash (Rp)**, the cash already in the drawer. Add optional **Notes**.
+  </Step>
+  <Step title="Click Open session">
+    A toast reads "Cashier session opened." and the page switches to the live shift view.
+  </Step>
+</Steps>
+
+### Per-outlet opening cash breakdown
+
+Tick **Per-outlet opening cash breakdown** to split the opening cash by outlet. Each row has an outlet and an amount, and **Add Outlet** adds a row. The total field is then locked to the sum of the rows. The server rejects the shift if the rows do not add up to the opening cash: "The per-outlet opening cash entries must sum to the total opening cash." The breakdown is shown again in the live shift view.
+
+## While the shift is open
+
+The left card shows **Session #id** with your name, the opened time, the outlet (only with several outlets) and an **Open** pill, followed by:
+
+| Tile | Meaning |
+| --- | --- |
+| Transactions | Number of completed orders in this shift. |
+| Total sales | Sum of completed order totals. |
+| Opening cash | What you entered at opening. |
+| Cash sales | Verified cash payments in this shift. |
+
+Below are the optional per-outlet opening cash rows and a **Payment method breakdown** (Cash, Bank transfer, QRIS / e-wallet) with count and amount. Only verified payments are counted here.
+
+## Close a shift
+
+<Steps>
+  <Step title="Count the drawer">
+    Type **Physical cash counted (Rp)**.
+  </Step>
+  <Step title="Check the preview">
+    The card shows **Expected cash (preview)** (opening cash plus cash sales) and **Difference (preview)**. The difference turns red when it is not zero.
+  </Step>
+  <Step title="Explain any difference">
+    If the difference is not zero, **Discrepancy notes (required)** must be filled in, otherwise you get "Notes are required because there is a cash discrepancy." If it is zero the notes are optional.
+  </Step>
+  <Step title="Click Close session">
+    A toast reads "Cashier session closed." and the form returns to **Open cashier session**.
+  </Step>
+</Steps>
+
+<Info>
+The preview is only an estimate. The server computes the expected cash itself when you close, and the stored difference is the server's figure. The server's expected cash is opening cash plus verified cash received, minus change given, plus cash in, minus cash out. The preview only adds opening cash and the cash line of the payment breakdown, so it can differ from the final figure when change was given or cash in/out entries exist. Trust the **Expected** value shown after closing.
+</Info>
+
+### What blocks closing
+
+- **Open tabs.** A shift cannot be closed while it still holds open tabs (409, "Close the shift only after every open tab is paid, voided or handed over."). The page lists each tab as a link to it, for example `TRX-... , Table 4`. Pay, void or hand over each one first, see [Floor and tabs](/operations/restaurant-floor).
+- **Not your shift.** Only the person who opened a shift, or an owner or admin, can close it (403, "You are not authorized to close this session.").
+- **Already closed** (409, "This session is already closed.").
+
+<Note>
+The web page submits the counted total as a typed amount. The tablet app counts by denomination and additionally checks unverified QRIS payments and variance approval. Those two checks are not applied to a web close.
+</Note>
+
+## All shifts (owner and admin)
+
+Shown when your role has the `settings` menu. It has three tabs.
+
+<Tabs>
+  <Tab title="Open / Closed">
+    Table columns: **Cashier**, **Source** (**Web**, or the terminal name for **App**), **Outlet**, **Opened** or **Closed**, **Opening cash**, **Sales** (with the receipt count), **Expected cash**. The Closed tab adds **Counted** and **Difference** (red when not zero, with a plus or minus sign). The **Source** filter has All sources, App and Web. Click **Details** on a row to open the shift detail below the table.
+  </Tab>
+  <Tab title="Cash in / out">
+    Every cash movement across shifts, with **Time**, **Type** (Cash in or Cash out), **Reason**, **Amount**, **By** and **Source**. The **In and out** filter narrows by direction, and the header shows the totals for cash in and cash out.
+  </Tab>
+</Tabs>
+
+The shift detail ("Shift #id details") shows who opened it and when, the terminal, the closed time, opening cash, sales, cash in / out, expected cash, and for a closed shift the counted cash and difference. It also lists the payment method breakdown and the cash in/out entries of that shift, plus the shift notes.
+
+### Cash in and cash out reasons
+
+| Direction | Reasons the server accepts |
+| --- | --- |
+| Cash in | Top up float, Change exchange, Other |
+| Cash out | Petty cash / purchases, Supplier payment, Bank / safe deposit, Other |
+
+"Other" requires a note. Cash out above the approval threshold needs an approver; the default threshold is Rp 200.000 and the default variance tolerance is Rp 5.000 (both come from POS settings).
+
+<Warning>
+You cannot record cash in or out from the web. The page only lists these entries; there is no form for them in the web app. The server only accepts an entry from the cashier who owns the shift, and only while it is open.
+</Warning>
+
+## Who sees what
+
+| Role | Sees |
+| --- | --- |
+| Owner, admin | Their own shift, plus every user's shifts and cash movements in **All shifts**. Can close another user's shift. |
+| Other roles with `settings` | Their own shift. The **All shifts** section appears but only lists their own shifts. |
+| Other roles | Their own shift only. |
+
+## Linking from the dashboard
+
+The page accepts `?id=<shift number>` in the address. Then a "Shift #id" card appears on top with opening cash, expected cash, counted cash and difference, and a dismiss link. The dashboard uses this link.
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| You still have an open cashier session. Close it first. (409) | You already have an open web shift. | Close it, or continue with it. |
+| Choose the outlet for this shift: you have more than one outlet. (422) | Several outlets and none chosen. | Pick an outlet. |
+| This account is not assigned to any outlet. Ask an administrator to assign it. (409) | Your user has no outlet assignment. | Ask an admin, see [Users](/settings/users). |
+| This outlet is not one you are allowed to access. (403) | You chose an outlet outside your assignment. | Pick an assigned outlet. |
+| The shift cannot be closed yet — open tabs remain. | Open tabs on this shift. | Settle them first. |
+| Notes are required because there is a cash discrepancy. | Counted cash differs from the preview. | Explain the difference in the notes. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="POS" href="/operations/pos" icon="cart-shopping">Sell during the shift.</Card>
+  <Card title="Sales" href="/operations/sales" icon="receipt">Filter transactions by shift and see the shift cash summary.</Card>
+  <Card title="Floor and tabs" href="/operations/restaurant-floor" icon="utensils">Tabs must be settled before closing.</Card>
+  <Card title="Roles and permissions" href="/concepts/roles-and-permissions" icon="shield">Who can approve what.</Card>
+</Columns>

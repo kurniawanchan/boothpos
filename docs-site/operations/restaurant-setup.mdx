@@ -1,0 +1,146 @@
+---
+title: "Restaurant setup"
+description: "Create and edit tables, kitchen and bar stations and modifier groups, and move tables or stations to another outlet."
+keywords: ["restaurant setup", "tables", "stations", "modifiers", "modifier group", "outlet move", "dining setup"]
+---
+
+{/* Classification: INTERNAL */}
+
+**Restaurant Setup** (menu key `dining_setup`, under the **Restaurant** group) holds the master data that the floor and kitchen screens depend on. It has three tabs: **Tables**, **Stations** and **Modifiers**.
+
+## Before you start
+
+- Your role needs the `dining_setup` menu. Without it the page redirects to the dashboard and the server answers 403 ("You are not allowed to do this.").
+- Every change here is a master-data change on the server. Table and station changes that matter (activate, deactivate, delete, move) are written to the [Activity log](/insight/activity-log).
+- With more than one outlet, the **Tables** and **Stations** tabs show an outlet filter, and each record belongs to one outlet. See [Outlets](/concepts/outlets).
+
+## Outlet filter
+
+When your installation has more than one outlet, a bar above the **Tables** and **Stations** tabs shows a multi-select ("All outlets"). It starts on the outlet currently selected in the app header. Leaving it empty lists every outlet you are allowed to see. **Reset filters** returns to the header's outlet. This filter does not apply to **Modifiers**, which are shared by all outlets.
+
+<Info>
+This page sends its own outlet list instead of the header outlet, so you can pick other outlets than the one in the header. The server still limits the result to outlets your user may access.
+</Info>
+
+## Tables
+
+A **table** is a place a dine-in tab can be opened on.
+
+<Steps>
+  <Step title="Click New table">
+    Use **New table**, or **Edit** on a row.
+  </Step>
+  <Step title="Fill in the form">
+    See the field table below. With several outlets, **Outlet** is required.
+  </Step>
+  <Step title="Save">
+    Click **Save**. Toasts read "Table created." or "Table updated."
+  </Step>
+</Steps>
+
+| Field | Rules |
+| --- | --- |
+| Outlet | Only shown with several outlets. Defaults to the header's outlet when creating. |
+| Table name / number | Required, up to 60 characters. Must be unique within its area: "A table with this name already exists in that area." |
+| Area | Optional, up to 60 characters, for example Indoor or Terrace. Empty means no area. Tables are grouped by area on the floor. |
+| Seats | Whole number from 1 to 99. Defaults to 4 on a new table. |
+| Display order | Whole number, sorts tables inside an area. |
+| Active | Inactive tables cannot receive a new tab and are left off the floor unless they still hold an open tab. |
+
+The list shows **Table**, **Outlet** (code and name, with several outlets), **Area**, **Seats** and **Status** (**Active** or **Inactive**, plus **Has an open tab**).
+
+### Deactivate or delete a table
+
+- You cannot deactivate a table that has an open tab: "This table has an open tab. Settle or void the tab before deactivating the table." (409).
+- **Delete** asks you to confirm. A table that has ever been used by an order cannot be deleted: "This table has been used by orders and cannot be deleted. Deactivate it instead." (409). Deactivate it instead.
+
+## Stations
+
+A **station** (Kitchen, Bar, Dessert) receives tickets. After creating stations, assign each category or product to a station on the Categories or Products screens; see [Categories](/inventory/categories) and [Products](/inventory/products). An item without a station is auto-ready when sent and never shows on a kitchen screen. See [Kitchen and bar](/operations/kitchen).
+
+| Field | Rules |
+| --- | --- |
+| Outlet | Only shown with several outlets. |
+| Station name | Required, up to 60 characters, unique: "A station with this name already exists." |
+| Display order | Whole number. New stations default to the current row count. Sorts the station tabs on the kitchen screen. |
+| Active | Only active stations receive tickets. The kitchen screen lists active stations only. |
+
+**Delete** is refused when the station is still assigned to a category or product, or has ever received tickets: "This station is assigned to a category or product, or has received tickets. Deactivate it instead." (409).
+
+<Warning>
+Deactivating a station has no guard. Items assigned to an inactive station are treated as having no station, so they become auto-ready and disappear from kitchen screens. Reassign items first.
+</Warning>
+
+## Modifier groups
+
+A **modifier group** is a set of choices shown when a waiter adds an item to a tab, such as Size, Sugar level or Toppings. Groups attach to products and to categories.
+
+<Steps>
+  <Step title="Create the group">
+    **New modifier group**, enter a **Group name** (up to 100 characters) and choose a **Selection type**: **Choose one** or **Choose several**.
+  </Step>
+  <Step title="Set the rule">
+    Tick **Must be chosen** if the guest has to choose. For **Choose several**, set **Minimum chosen** and **Maximum chosen**. Leave the maximum empty for no limit.
+  </Step>
+  <Step title="Add options">
+    Each option has a **Option name** (up to 100 characters) and a **Price difference (Rp)**, which may be zero or negative. **Add option** adds a row; the red button removes it. At least one option is required, up to 100.
+  </Step>
+  <Step title="Save, then attach">
+    Save, then click **Attach** on the row to link it to categories and products. Save the attachments.
+  </Step>
+</Steps>
+
+Rules enforced by the server:
+
+- **Choose one** always means a maximum of 1, and a minimum of 1 if it is required, otherwise 0.
+- For **Choose several**, a required group has a minimum of at least 1, and the minimum cannot be higher than the maximum ("The minimum selection cannot be higher than the maximum.").
+- Minimum is 0–50 and maximum is 1–50.
+- Removing an option from the list deactivates it. Existing orders keep what they were sold with. When you edit a group, only active options are shown.
+- A group is attached to selected products **and** every product in the selected categories ("The group applies to the selected products AND every product in the selected categories.").
+- A group with no active option cannot be attached: "Add at least one active option before attaching this group."
+- A group that has been used on orders cannot be deleted: "This group has been used on orders and cannot be deleted. Deactivate it instead." (409).
+
+The list shows **Group**, **Rule** (for example "Choose one · Required · choose 1"), **Options**, **Attached to** (`N products · N categories`) and **Status**.
+
+<Note>
+The attach dialog loads the first 100 products and first 100 categories only. If you have more, the rest cannot be picked from this dialog.
+</Note>
+
+## Move a table or station to another outlet
+
+Open **Edit** and change **Outlet**, then **Save**. The record keeps its name and settings and now belongs to the new outlet. Past orders and tickets stay with the outlet where they happened, and the move is logged as **moved** in the activity log. You can only move to an outlet your user is allowed to access (403, "This outlet is not one you are allowed to access.").
+
+| Item | The move is refused when |
+| --- | --- |
+| Table | The table has an open tab: "This table still has an open tab. Settle or cancel the tab before moving the table to another outlet." (409) |
+| Station | It is still assigned to categories or menu items: "This station is still assigned to categories or menu items. Reassign them before moving the station to another outlet." (409) |
+| Station | It has unfinished kitchen tickets: "This station still has unfinished kitchen tickets. Finish them before moving the station to another outlet." (409) |
+
+## Who can do what
+
+| Action | Needed |
+| --- | --- |
+| Open this page, create, edit, delete tables, stations, modifier groups | `dining_setup` menu |
+| List stations (for the kitchen station tabs) | `dining_setup` or `kitchen` menu |
+| List modifier groups (for the product screen) | `dining_setup` or `products` menu |
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| A table with this name already exists in that area. | Duplicate name in the same area. | Rename, or use another area. |
+| This table has been used by orders and cannot be deleted. | The table has order history. | Deactivate it. |
+| This table has an open tab... | Deactivating or moving a busy table. | Settle or void the tab. |
+| This station is assigned to a category or product, or has received tickets. | Deleting a used station. | Deactivate it. |
+| Group "X": choose N option(s). | Rule violated while ordering. | Check the group's minimum and maximum. |
+| The chosen options would make the item price negative. | Option discounts exceed the item price. | Reduce the negative price differences. |
+| No tables yet. / No stations yet. / No modifier groups yet. | Nothing created, or the outlet filter excludes all. | Create one, or use **Reset filters**. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Floor and tabs" href="/operations/restaurant-floor" icon="utensils">Uses tables and modifiers.</Card>
+  <Card title="Kitchen and bar" href="/operations/kitchen" icon="fire-burner">Uses stations.</Card>
+  <Card title="Outlets" href="/concepts/outlets" icon="store">How outlet scope works.</Card>
+  <Card title="Products" href="/inventory/products" icon="box">Assign stations and modifiers to items.</Card>
+</Columns>

@@ -1,0 +1,310 @@
+---
+title: "Products"
+description: "Browse, filter, add and bulk-manage menu items and retail items, and import or export your master data."
+keywords: ["pos", "products", "items", "variants", "modifiers", "bulk price", "menu release", "import", "export", "xlsx"]
+---
+
+**Classification: INTERNAL**
+
+The Products page (**Products & Variants**) is the master list of everything you sell. Each item has one or more variants (for example Hot and Iced), each with its own SKU and price. From here you filter the catalogue, add items, change prices in bulk, release menu changes, and import or export master data. To change or inspect a single item, open its page: see [Product detail](/inventory/product-detail).
+
+## Before you start
+
+- You need the **Products** menu (menu key `products`). Without it you cannot open the page, and the **Edit** links, **Add item**, **Import / export** and bulk actions are hidden.
+- Some controls need an action permission as well. These are set per role under [Roles](/settings/roles).
+
+| Control | Needs |
+| --- | --- |
+| Bulk price change | Permission `menu.price.bulk` (Change prices in bulk) |
+| Release changes (banner and dialog) | Permission `menu.release.publish` |
+| Price approvals (banner and dialog) | Permission `menu.price.approve` |
+| Opening stock when adding an item | The **Stock** menu (the stock adjustment is a separate request) |
+| Import, export, template download | Any one of the outlets, categories, products, stock, vendors, materials, roles or users menus |
+
+- The built-in Owner and Admin roles have all of these permissions. The Inventory role has `menu.item.manage`, `menu.item.86`, `menu.recipe.edit`, the two stock-transfer permissions and `menu.availability.set`, but not the price, approval or release permissions.
+- Prices on this page exclude tax.
+
+## The page layout
+
+<Steps>
+  <Step title="Header">
+    Shows the title and a short description. When menu release is on and a release is active, the description adds "menu release v\{n\} active". Buttons: **Import / export**, **Bulk price change** (item tabs only, with permission) and **Add item**.
+  </Step>
+  <Step title="Summary strip">
+    Four cells (three when menu release is off). See the table below.
+  </Step>
+  <Step title="Release banner">
+    Appears only when menu release is on. See [Menu release and price approvals](#menu-release-and-price-approvals).
+  </Step>
+  <Step title="Tabs and filters">
+    Six tabs, a search box, category, status and (with more than one outlet) outlet filters, and the Grid or Table switch.
+  </Step>
+  <Step title="List and pager">
+    15 items per page.
+  </Step>
+</Steps>
+
+Everything you set on the page (tab, search, filters, view, sort, page) is kept in the page address. You can refresh, press Back or share the link and get the same view.
+
+### Summary strip
+
+The figures follow the same outlet, category, status and search filters as the list. They ignore the tab, sort, page and the two figure filters below.
+
+| Cell | Meaning | Click behaviour |
+| --- | --- | --- |
+| Active menu items | Count of active menu items, with "of \{total\} items · \{draft\} draft · \{discontinued\} discontinued". | Not clickable. |
+| 86 today | Number of items currently marked sold out (86), with up to two examples. Shows "Every item is available" at 0. | Select it to filter the Menu items tab to sold-out items. Not clickable at 0. |
+| Unreleased | Number of changes waiting for a release, with "Release v\{n\} active since \{date\}" or "No active release yet". Only shown when menu release is on. | Not clickable. |
+| Data quality | Number of active menu items with a data gap, with up to two examples. Shows "All data complete" at 0. | Select it to filter the Menu items tab to that gap. Not clickable at 0. |
+
+**Data quality** checks active, non-retail menu items and reports the first gap type that has any items, in this order:
+
+1. **No kitchen station**: the item has no station and its category has none either.
+2. **No price**: no variant has a sell price above 0.
+3. **No cost price**: no variant has a cost price above 0.
+
+When you select a figure, the page switches to the **Menu items** tab and shows a removable chip such as "86 today" or "Data quality: No price". The two chips exclude each other. Remove the chip, or select **Reset filters**, to go back.
+
+### Tabs
+
+| Tab | Content |
+| --- | --- |
+| Menu items | Items that are not marked as retail. |
+| Raw materials | The materials list filtered to raw ingredients. |
+| Semi-finished | The materials list filtered to semi-finished materials. |
+| Packaging | The materials list filtered to packaging. |
+| Retail items | Items marked "Retail item (sold without kitchen preparation)". |
+| Modifiers & combos | The modifier group list, with its own "New modifier group" button. |
+
+Each tab label shows a count. The three material tabs embed the same list as [Materials](/purchasing/materials), and the header **Add item** button adds a material there. Search, filters and the view switch apply only to the two item tabs.
+
+### Filters, sorting and views
+
+| Control | Behaviour |
+| --- | --- |
+| Search | Matches the item name, short name, product code or any variant SKU. Waits about 300 ms after you stop typing. |
+| Category | Multi-select. Choosing a category also includes its sub-categories. |
+| Status | Multi-select: Draft, Active, Discontinued. |
+| Outlet | Multi-select. Shown only when more than one outlet is visible to you. See below. |
+| Grid / Table | Grid shows item cards. Table shows Item, SKU, Variants · modifiers, Base price, Availability and Status. The choice is remembered per user in this browser. |
+| Sort | Table view only. Click the Item, SKU, Base price or Status headers. |
+| Reset filters | Clears search, category, status, outlet and the two figure chips. |
+
+In Table view you can tick rows. The bulk bar then offers **Export all products** (it always exports the whole catalogue, not only the ticked rows) and, with permission, **Bulk price change**.
+
+Each item shows an **Availability** chip per outlet: **Available**, **86** or **Not sold**. With more than four outlets the chips collapse into counts such as "3 available". An item with no variants shows "No variants".
+
+<Note>
+The Outlet filter starts from the outlet selected in the top bar. Changing the top bar selection updates the filter, and you can then pick other outlets in the filter. Choosing "All outlets" while the top bar has one outlet selected is kept in the address, so a refresh does not reset it. The list only ever includes outlets you are allowed to see. See [Outlets](/concepts/outlets).
+</Note>
+
+## Add an item
+
+<Steps>
+  <Step title="Open the form">
+    Select **Add item** in the header, or the **Menu item** / **Retail item** button in the toolbar. On the Retail items tab the "Retail item" box is already ticked.
+  </Step>
+  <Step title="Fill basic information">
+    Item name, category and owner outlet are required.
+  </Step>
+  <Step title="Set price and variants">
+    Enter the base price and, if the item has choices, add variants.
+  </Step>
+  <Step title="Add modifiers, kitchen details and an image">
+    Optional.
+  </Step>
+  <Step title="Save">
+    Select **Save item**. You see "Product created." The drawer closes and the list, figures and tab counts refresh.
+  </Step>
+</Steps>
+
+### Form fields
+
+| Section | Field | Rules |
+| --- | --- | --- |
+| Basic information | Item name | Required, up to 150 characters. |
+| | Short name (KOT & receipt) | Optional, up to 24 characters. |
+| | Menu category | Required. |
+| | Owner outlet | Required. The outlet that owns the item. |
+| | Segment (3) | Optional, exactly 3 letters, "Auto" by default. When empty the server derives it from the item name. Locked after creation. |
+| | Active at outlets | Shown only with more than one outlet. Tick the outlets that sell the item. At least one is required. |
+| | Description | Optional. |
+| Price & tax | Base price | Required, 0 or more. This is the price of the first variant. |
+| | Tax category | Optional: Restaurant food & beverage, Retail, Other. |
+| Variants & prices | Variant, Image, Cost price (if you may see costs), Base price, Opening stock, Active | One row per variant. See below. |
+| Modifiers | Modifier groups | Optional. Link groups with Required, Min and Max. Hidden if the group list cannot be loaded for your role. |
+| Kitchen | Kitchen station | Hidden if stations cannot be loaded. "Follow the category" uses the category's station. |
+| | Preparation estimate | Optional, 0 to 600 minutes. |
+| | Retail item | Checkbox. |
+| Other | Product image | Optional. |
+
+The product code is generated by the server. SKUs are also generated by the server on save, so the SKU column shows "Automatic".
+
+**Variant rows.** The first row's price is the base price. If you have one row without a name, the server uses the name "Standard". If you have more than one row, each needs a name. Each row has a **Low-stock alert** threshold and a **Track stock** checkbox. Turn **Track stock** off for dishes made to order, which have no physical stock. Cost price appears only if your role has the Products or Reports menu. Unticking **Active** on a new row saves the variant as inactive.
+
+**Status.** New items are active, or draft when menu release is on (the server forces draft and queues a "Publish item" change). The create form has no status control. The Draft or Active toggle is on the edit form.
+
+### What happens after you save
+
+The server creates the item first. Then the form runs follow-up steps, each independent of the others:
+
+1. Deactivates variants whose **Active** box was cleared.
+2. Links the chosen modifier groups.
+3. Uploads the item image and variant images.
+4. Records opening stock as a stock adjustment with the reason "Opening stock of a new item".
+
+If a follow-up fails, the item already exists. You see one of these messages and the form still closes, so open the item page to finish the step instead of saving again:
+
+| Message | Meaning |
+| --- | --- |
+| The item was created, but marking some variants inactive failed. Change it from the item page. | Step 1 failed. |
+| The item was created, but the modifier links could not be saved. Link them from the item page. | Step 2 failed. |
+| Product saved, but the image upload failed. | Step 3 failed. The server accepts only JPEG or PNG up to 5 MB. |
+| Failed to save the stock adjustment. | Step 4 failed. Opening stock needs the **Stock** menu. |
+
+<Warning>
+Do not re-submit after a follow-up error. That would create a second item.
+</Warning>
+
+## Bulk price change
+
+Use **Bulk price change** to raise or lower many prices at once. It needs the `menu.price.bulk` permission. The control is hidden, not greyed out, without it.
+
+<Steps>
+  <Step title="Choose the scope">
+    Tick one or more categories. Every active item in those categories and their sub-categories changes. If you open the drawer from ticked rows in Table view, the scope is the categories of those items, so every active item in those categories changes, not only the ticked rows.
+  </Step>
+  <Step title="Choose the change">
+    Pick **Percentage** or **Amount (Rp)** and enter a value. Use a negative value to lower prices. Zero is not allowed. Rounding to the nearest Rp 500 is on by default (the default comes from your settings). Set **Effective from**: it defaults to today and cannot be in the past.
+  </Step>
+  <Step title="Choose the price to change (more than one outlet only)">
+    **Base price**, **Prices at all outlets**, or **Prices at chosen outlets**. Outlet prices are written as that outlet's own price, and only for outlets that carry the item.
+  </Step>
+  <Step title="Check the preview">
+    The table shows the old and new price per variant. It updates about 400 ms after you stop typing. Skipped lines (for example "unchanged after rounding") are listed under **Skipped**. Nothing is saved yet.
+  </Step>
+  <Step title="Apply">
+    Select **Apply prices** (or **Submit changes** when menu release is on). The result reports how many prices were applied, are waiting for release, or are waiting for approval.
+  </Step>
+</Steps>
+
+Rules enforced by the server:
+
+- If any new price would be zero or negative, the whole preview fails with "The new price for \{name\} would be zero or negative." Fix the value and preview again.
+- "No item matches this scope." means the chosen categories have no changeable prices.
+- With menu release **off**, a price applies immediately, unless **Effective from** is a future date. A future-dated change waits and is applied automatically when that business date arrives.
+- With menu release **on**, changes wait for a release. A change larger than the approval threshold also waits for an approver. See below.
+
+## Menu release and price approvals
+
+Menu release is an optional mode. An owner or admin turns it on in [General settings](/settings/general) under **Menu release** ("Enable menu release"). When it is off, none of the release or approval controls appear and changes apply immediately.
+
+When it is on:
+
+- Price changes, new items, discontinue, reactivate and modifier-link changes become **changes** that wait for a release.
+- A price change whose difference from the old price is more than the approval threshold (15% unless settings say otherwise) must be approved first. The requester cannot approve their own request.
+- The **banner** under the summary strip shows "\{n\} changes not released yet" with the first few changes. **Release changes** needs `menu.release.publish` and is hidden when nothing is waiting. **Price approvals** needs `menu.price.approve`.
+
+**Release dialog.** Tick the changes to include. Changes waiting for approval cannot be released yet. Choose **Now** or **Schedule** (enter a date and time) and an optional note, then select **Release now** or **Schedule release**. You see "Release v\{n\} created" or "Release v\{n\} scheduled". You can cancel a single change that is not yet released: the requester or a release publisher may do this.
+
+**Approvals dialog.** Each request shows the difference in percent. **Approve** records your decision. **Reject** asks for a reason code first. Your own requests show "Your own request; someone else must decide."
+
+| Message | Cause |
+| --- | --- |
+| Some changes are not ready to release. The list was reloaded; choose again and retry. (409) | A chosen change was approved, rejected or released by someone else meanwhile. |
+| There are no changes ready to release. | Nothing is eligible. |
+| You are not allowed to decide price approvals. (403) | You lack `menu.price.approve`. |
+| This approval has already been decided. (409) | Someone else decided it first. |
+| The requester cannot approve their own request. (409) | Self-approval is blocked. |
+| Only a scheduled release can be cancelled. (409) | The release is already published or cancelled. |
+| Menu releases are not enabled in settings. (409) | The setting is off. |
+
+## Import and export master data
+
+<Info>
+One `.xlsx` workbook carries all master-data sheets. The same **Import master data** dialog opens from Products, Categories, Stock and several other pages. Whichever page you use, the dialog processes every recognised sheet in the file.
+</Info>
+
+### Export
+
+Select **Import / export** then **Export .xlsx**. The file contains the product sheet with one row per variant. The exported file uses the same columns as the import, so you can edit it and upload it again. If the download fails you see "Failed to export product data."
+
+### Import
+
+<Steps>
+  <Step title="Get a template (optional)">
+    In the dialog, select **Download import template**. It has one sheet per entity with headers and an example row.
+  </Step>
+  <Step title="Choose the file">
+    Choose an `.xlsx` file of up to 10 MB. Sheets with unrecognised names are skipped and listed as "Ignored sheets", not treated as an error.
+  </Step>
+  <Step title="Add images (optional)">
+    Choose product or category image files. Each file name must match an `image_filename` (or `variant_image_filename`) cell. You can send up to 200 images at once.
+  </Step>
+  <Step title="Preview">
+    Select **Preview**. This runs the same validation as a real import and shows rows, new, updated and unchanged counts per sheet. Nothing is changed.
+  </Step>
+  <Step title="Apply">
+    Select **Apply import**. You see "Import successful." and the page refreshes behind the dialog. Close the dialog with **Close**, or select **Import another file**.
+  </Step>
+</Steps>
+
+Rules:
+
+- **All or nothing.** If any row is invalid, the whole import is cancelled with "Import cancelled: some rows are invalid. No data was changed." The dialog lists each problem with its sheet, row, column and message.
+- A **blank cell** means "leave unchanged" for existing records.
+- Leave `sku` empty to create a new product or variant. The server generates the SKU. A product code and an existing SKU's product, category and outlet cannot be changed through import.
+- `initial_stock` is for new variants only. To change stock of an existing SKU use the `stock` sheet. The stock value is the final quantity you want, not a difference. If you have more than one outlet, each stock row needs an `outlet_code`.
+- The `status` column is export-only. Change status with Discontinue and Reactivate on the item page.
+- Sheets are processed in dependency order (outlets, categories, products, stock, vendors, materials, vendor prices, BOM, items per outlet, prices per outlet, roles, users), regardless of their order in the file.
+- In `outlet_prices`, the `price` cell holds a number, or the word `base` to remove the outlet's own price.
+
+<Note>
+The row-level problem messages are written in Indonesian by the server, for example "SKU ... tidak ditemukan". The dialog's own text follows your interface language. The dialog text also says the template has 10 sheets, but the file contains 12.
+</Note>
+
+Import errors that are not row-specific:
+
+| Message | Cause |
+| --- | --- |
+| The import file must be .xlsx. / Maximum import file size is 10 MB. | Checked in the browser before upload. |
+| Unsupported file type. Only .xlsx. (422) | The file's real type is not a workbook. |
+| The file is not a valid .xlsx workbook. (422) | The file is a zip or corrupt. |
+| Only owner/admin/inventory can export master data. (403) | Your role has none of the master-data menus. |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="An item I created is missing from the list">
+    Check the filters. The Outlet filter hides items not carried by the selected outlets. Select **Reset filters**. With menu release on, a new item is a draft until its "Publish item" change is released: filter by Status Draft.
+  </Accordion>
+  <Accordion title="I cannot see Add item, Import / export or Edit">
+    You do not have the Products menu. Ask an owner or admin to add it to your role.
+  </Accordion>
+  <Accordion title="Bulk price change is missing">
+    You need the `menu.price.bulk` permission, and the button shows only on the Menu items and Retail items tabs.
+  </Accordion>
+  <Accordion title="The summary strip shows an error">
+    A summary failure does not clear the list. Select **Retry** in the strip.
+  </Accordion>
+  <Accordion title="Opening stock was not saved">
+    Opening stock needs the Stock menu, and an outlet must resolve for the adjustment. See [Stock](/inventory/stock).
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Product detail" href="/inventory/product-detail">
+    Edit variants, prices, availability, recipe and history for one item.
+  </Card>
+  <Card title="Categories" href="/inventory/categories">
+    Create the categories items belong to.
+  </Card>
+  <Card title="Stock" href="/inventory/stock">
+    Adjust stock and read the movement ledger.
+  </Card>
+  <Card title="Outlets" href="/concepts/outlets">
+    How the outlet selector and the Outlet filter work.
+  </Card>
+</Columns>

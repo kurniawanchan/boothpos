@@ -1,0 +1,86 @@
+---
+title: "BoothPOS web app guide"
+description: "User documentation for the BoothPOS web app: point of sale, restaurant, inventory, purchasing, reports, and settings."
+keywords: ["boothpos", "pos", "documentation", "web app", "user guide"]
+---
+
+**Classification: INTERNAL**
+
+BoothPOS is a point-of-sale system installed locally for each store. The web app is the screen your team uses at the counter and in the back office. It runs in a browser on the same machine or shared server as the BoothPOS API, so it keeps working at an event venue with poor internet.
+
+This guide covers every module of the web app that your store uses day to day. It is written for shopkeepers, cashiers, inventory staff, owners, and admins.
+
+<Info>
+  What you see depends on your role. Modules your role cannot use are hidden, not greyed out. See [Roles and permissions](/concepts/roles-and-permissions).
+</Info>
+
+## Start here
+
+<Columns cols={2}>
+  <Card title="Sign in and activate" icon="right-to-bracket" href="/getting-started/sign-in">
+    Activate a new installation and sign in with your username.
+  </Card>
+  <Card title="Ring up your first sale" icon="cash-register" href="/getting-started/first-sale">
+    Open a shift, build a cart, and take payment.
+  </Card>
+  <Card title="Navigation and layout" icon="compass" href="/concepts/navigation">
+    The rail, top bar, search, and notifications.
+  </Card>
+  <Card title="Roles and permissions" icon="shield-check" href="/concepts/roles-and-permissions">
+    Why you see the modules you see.
+  </Card>
+</Columns>
+
+## Modules
+
+<Columns cols={2}>
+  <Card title="Operations" icon="receipt" href="/operations/pos">
+    POS, cashier shifts, sales history, and the restaurant floor, kitchen, and setup.
+  </Card>
+  <Card title="Inventory" icon="cube" href="/inventory/products">
+    Categories, products, stock, and transfers between outlets.
+  </Card>
+  <Card title="Purchasing" icon="bag-shopping" href="/purchasing/purchase-orders">
+    Vendors, materials, and purchase orders.
+  </Card>
+  <Card title="Customers and outlets" icon="address-book" href="/people/customers">
+    Customer records and the outlets of your organisation.
+  </Card>
+  <Card title="Insight" icon="chart-bar" href="/insight/reports">
+    Dashboard, reports, and the activity log.
+  </Card>
+  <Card title="Settings" icon="gear" href="/settings/general">
+    Store settings, payment channels, users, roles, and your profile.
+  </Card>
+</Columns>
+
+## Android app
+
+<Columns cols={2}>
+  <Card title="Android POS overview" icon="tablet" href="/android/overview">
+    The tablet app for counter, table, and payment work. Its screens are in Indonesian.
+  </Card>
+  <Card title="Set up a tablet" icon="gear" href="/android/setup">
+    Connect a tablet to your server and register it as a terminal.
+  </Card>
+</Columns>
+
+## Key ideas
+
+<AccordionGroup>
+  <Accordion title="Outlets">
+    One organisation can run one or more outlets. Each sale, shift, table, and stock balance belongs to one outlet. See [Outlets](/concepts/outlets).
+  </Accordion>
+  <Accordion title="DEMO and LIVE">
+    Two separate data sets share one installation. The top bar badge always shows the active one. See [DEMO and LIVE mode](/concepts/demo-and-live-mode).
+  </Accordion>
+  <Accordion title="Business day">
+    Reports group by business date, set by your store time zone and cut-off. See [Business day](/concepts/business-day).
+  </Accordion>
+</AccordionGroup>
+
+## What this guide does not cover
+
+- Provider-side administration (Companies, Business Types, Licenses, Invoices).
+- Events and pre-orders. These modules were removed and old addresses redirect to the Dashboard.
+- Developer topics such as installation, Docker, and the API. See the repository `docs/RUNBOOK.md` and `docs/openapi-pos-mvp.yaml`.

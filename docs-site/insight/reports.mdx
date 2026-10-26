@@ -1,0 +1,106 @@
+---
+title: "Reports"
+description: "Review outlet recap, cost and profit, purchases and stock by outlet for a business-date range, and export each report to Excel."
+keywords: ["reports", "outlet recap", "cost and profit", "gross profit", "purchases", "stock by outlet", "export xlsx", "business date"]
+---
+
+The **Reports** page has five tabs: **Outlet Recap**, **Cost & Profit**, **Outlet Cost**, **Purchases** and **Stock by Outlet**. Each tab loads only when you open it, and each can be exported to an `.xlsx` file. Transaction-level sales figures live on a separate screen, see [Sales](/operations/sales).
+
+## Before you start
+
+- You need the **Reports** menu (menu key `reports`). Without it the page is not reachable, the tab bar is empty, and the server answers 403 with **Only owner/admin can access this report.**
+- Cost, profit and margin figures are for roles that have the `reports` menu only. That is why every tab on this page is gated by the same key: a cashier or inventory role without `reports` never sees cost data. Give the menu to a custom role under [Roles](/settings/roles).
+- Periods are **business dates**, not calendar dates. See [Business day](/concepts/business-day).
+- Data follows the current **DEMO or LIVE** mode. See [DEMO and LIVE mode](/concepts/demo-and-live-mode).
+
+## Date range
+
+Three tabs follow a period: **Outlet Recap**, **Cost & Profit** and **Outlet Cost**. For these, two date boxes appear (**From date**, **To date**).
+
+- Both default to today's business date.
+- If you clear both boxes, the server uses the current business day again.
+- If you fill only one, the range is open on the other side.
+- **To date** cannot be earlier than **From date** (the server returns 422).
+- **Purchases** and **Stock by Outlet** ignore the dates, because purchasing and warehouse stock are not per-period figures.
+
+<Note>
+  ASSUMPTION: the date boxes default to the browser's local date, while the server defaults to the business date in the store time zone. They can differ between midnight and the business-day cutoff.
+</Note>
+
+## Outlet filter
+
+On **Outlet Recap**, **Outlet Cost** and **Stock by Outlet**, an outlet drop-down (default **All outlets**) narrows the table. The filter works in the browser on rows already loaded, so the **Grand Total** row becomes the subtotal of the outlet you picked. The outlet list contains active outlets only.
+
+## Tabs
+
+<Tabs>
+  <Tab title="Outlet Recap">
+    One row per **active** outlet for the period, including outlets with no sales (they show zero). Columns: **Outlet**, **Unit**, **Sales**, and a **Transaction detail** button.
+
+    - A **Historical** tag marks a row for sales made before selling outlets existed. Those sales keep their former attribution so past figures do not move.
+    - **Transaction detail** opens a window **Transaction detail — \{outlet\}** listing the transactions behind the row, with SKU, name, quantity and subtotal per item. If none: **No transactions contributing to this outlet's recap yet.**
+    - A **Grand Total** row sums the rows currently shown.
+    - Empty state: **No active outlets yet — this recap lists every active outlet for this period, even without sales.**
+  </Tab>
+  <Tab title="Cost & Profit">
+    Three figures for the period: **Revenue**, **Cost of goods** and **Gross profit**.
+
+    A footnote explains that gross profit uses the snapshot values stored on each sold line, not the prices in master data when you open the report. Changing a cost price later does not rewrite past profit.
+  </Tab>
+  <Tab title="Outlet Cost">
+    One row per outlet with sales in the period. Columns: **Outlet**, **Sales**, **Cost**, **Gross profit**, plus the **Historical** tag where it applies and a **Grand Total** row. Empty state: **No outlet sales in this period yet.**
+  </Tab>
+  <Tab title="Purchases">
+    Not period-based. Two figures, **PO count** and **Total purchases**, then a table with **PO number**, **Vendor**, **Status**, **Date** and **Total**, and a **Grand Total** row.
+
+    A status drop-down filters the table: **All statuses**, draft, ordered, received, paid, cancelled. Empty state: **No purchases yet.** See [Purchase orders](/purchasing/purchase-orders).
+  </Tab>
+  <Tab title="Stock by Outlet">
+    Not period-based. One row per outlet: **Outlet**, **Variant count**, **Total stock**, and a **Stock detail** button, with a **Grand Total** row.
+
+    **Stock detail** opens **Stock detail — \{outlet\}** with the variant count, total stock and a table of SKU, name and current stock. It loads only when you click the row. Empty states: **No stock data yet.** and **No variants for this outlet yet.**
+  </Tab>
+</Tabs>
+
+The number next to the filters ("N items") is the count of rows currently shown on the active tab. **Cost & Profit** has no row count.
+
+## Export
+
+**Export .xlsx** (top right) exports the **active tab**, with the same date range for the three period tabs.
+
+| Tab | File name | Notes |
+| --- | --- | --- |
+| Outlet Recap | `outlet-settlements.xlsx` | Two sheets: a summary and a per-item transaction detail across all outlets in the period. |
+| Cost & Profit | `profit.xlsx` | One row with the summary figures. |
+| Outlet Cost | `outlet-profit.xlsx` | One row per outlet. |
+| Purchases | `purchases.xlsx` | Exports the rows for the purchases report. |
+| Stock by Outlet | `stock-by-outlet.xlsx` | Summary per outlet only (never the per-variant detail). |
+
+<Warning>
+  The export ignores the browser-side outlet filter. It exports the report as the server computes it, not only the outlet you picked.
+</Warning>
+
+If the download fails you see **Failed to export the report.** A user without `reports` receives 403 on export too; the file is never produced empty to hide a denial.
+
+## Outlet scope
+
+Cost & Profit and Outlet Cost respect your outlet access (the same outlet filter used for Dashboard figures). Stock by Outlet answers 403 (**This outlet is not one you are allowed to access.**) if an outlet you are not permitted to see is requested. See [Outlets](/concepts/outlets).
+
+## Troubleshooting
+
+| Message or symptom | Cause | What to do |
+| --- | --- | --- |
+| **Only owner/admin can access this report.** (403) | Your role lacks the `reports` menu. | Ask an owner or admin to add **Reports** to your role. |
+| Table is empty after a date change | No completed sales on those business dates. | Widen the range, or check the outlet filter. |
+| Retry state instead of a table | The request failed. | Use the retry button. |
+| Numbers differ from the Dashboard | Different date range or outlet scope. | Match the range and the outlet. |
+| Sales missing for a cancelled order | Only completed orders count; voided orders do not. | See [Sales](/operations/sales). |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Dashboard" href="/insight/dashboard">Live key figures for today or a period.</Card>
+  <Card title="Sales" href="/operations/sales">Transaction list and receipts.</Card>
+  <Card title="Roles" href="/settings/roles">Grant the Reports menu to a role.</Card>
+  <Card title="Purchase orders" href="/purchasing/purchase-orders">Source of the Purchases tab.</Card>
+</Columns>

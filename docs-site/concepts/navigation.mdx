@@ -1,0 +1,87 @@
+---
+title: "Navigation and layout"
+description: "How the navigation rail, top bar, search, and notifications work, and which modules appear for your role."
+keywords: ["navigation", "menu", "sidebar", "search", "notifications", "layout"]
+---
+
+Every screen after sign-in shares one frame: a dark **navigation rail** on the left, a **top bar** across the top, and the working area in the middle.
+
+## Navigation rail
+
+The rail lists the modules you can use, grouped into sections. You only see modules your role may open. Hidden modules are not greyed out, they are absent. A group such as **Restaurant** appears only when at least one module inside it is allowed for you.
+
+| Section | Module | Menu key | Page |
+| --- | --- | --- | --- |
+| Overview | Dashboard | `dashboard` | [Dashboard](/insight/dashboard) |
+| Operations | POS | `pos` | [POS](/operations/pos) |
+| Operations | Cashier Session | `session` | [Cashier shifts](/operations/shifts) |
+| Operations | Sales | `sales` | [Sales](/operations/sales) |
+| Operations → Restaurant | Floor & Tabs | `floor` | [Floor and tabs](/operations/restaurant-floor) |
+| Operations → Restaurant | Kitchen & Bar | `kitchen` | [Kitchen and bar](/operations/kitchen) |
+| Operations → Restaurant | Restaurant Setup | `dining_setup` | [Restaurant setup](/operations/restaurant-setup) |
+| Inventory & purchasing → Inventory | Categories | `categories` | [Categories](/inventory/categories) |
+| Inventory & purchasing → Inventory | Products | `products` | [Products](/inventory/products) |
+| Inventory & purchasing → Inventory | Stock | `stock` | [Stock](/inventory/stock) |
+| Inventory & purchasing → Purchase | Vendors | `vendors` | [Vendors](/purchasing/vendors) |
+| Inventory & purchasing → Purchase | Materials | `materials` | [Materials](/purchasing/materials) |
+| Inventory & purchasing → Purchase | Purchase Orders | `purchase_orders` | [Purchase orders](/purchasing/purchase-orders) |
+| Customers & outlets | Customers | `customers` | [Customers](/people/customers) |
+| Customers & outlets | Outlets | `outlets` | [Outlets](/people/outlets) |
+| Reports | Reports | `reports` | [Reports](/insight/reports) |
+| Reports | Activity Log | `reports` | [Activity log](/insight/activity-log) |
+| Configuration → Settings | General, Payment | `settings` | [General settings](/settings/general), [Payment channels](/settings/payment-channels) |
+| Configuration → Settings | Users | `users` | [Users](/settings/users) |
+| Configuration → Settings | Roles | `roles` | [Roles](/settings/roles) |
+
+<Note>
+  Stock transfers between outlets live under **Stock** and use the same `stock` menu key. See [Stock transfers](/inventory/stock-transfers). The Activity Log shares the `reports` key, so anyone who can open Reports can open it.
+</Note>
+
+<Info>
+  The Configuration section also contains an **Admin** group (Companies, Business Types, Licenses, Invoices). Those screens are provider-side administration for the license and billing relationship, not store operations, so this documentation does not cover them.
+</Info>
+
+### Collapse the rail
+
+Use the collapse control on the rail to shrink it to icons only. In collapsed mode:
+
+- Hover or focus an icon to see the module name.
+- Click or press Enter on a group icon to open its modules in a flyout. Press Escape or click outside to close it.
+
+The **POS** item shows a badge with the number of items currently in your cart.
+
+## Top bar
+
+From left to right the top bar shows:
+
+| Control | What it does |
+| --- | --- |
+| Breadcrumb | Shows where you are and links back up. |
+| Search | Opens global search. Press `Ctrl+K` (or `Cmd+K` on Mac). Type at least 2 letters. Results are filtered on the server by your permissions and outlets. |
+| Outlet selector | Narrows what you see to one outlet. Shown only when you can access more than one outlet. See [Outlets](/concepts/outlets). |
+| Mode badge | Always shows **DEMO** or **LIVE**. See [DEMO and LIVE mode](/concepts/demo-and-live-mode). |
+| Notifications | Lists items waiting for your action, with a count. It shows "Nothing needs your attention" when the list is empty. |
+| User menu | Your name and role. Opens profile, language, and sign out. |
+
+<Tip>
+  Search matches things like order numbers, tables, and customers. If search shows "Search is not available yet", the server did not provide a search source for this installation.
+</Tip>
+
+## Page behavior to know
+
+- **Focus moves to the page heading** every time you change screen, so screen readers announce the new page.
+- **The POS screen fills the window.** Its product grid scrolls on its own so the cart stays in view.
+- **The browser tab title** shows the store name and app name, and the tab icon is the store logo when one is set. See [General settings](/settings/general).
+- **Typed-in addresses are guarded.** Opening a screen you have no permission for sends you to the Dashboard.
+- **Old addresses still work.** `/artists` redirects to `/outlets`. Addresses under `/events` and `/preorders` redirect to the Dashboard because those modules were removed.
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Roles and permissions" icon="shield-check" href="/concepts/roles-and-permissions">
+    Why you see the modules you see.
+  </Card>
+  <Card title="Outlets" icon="map-pin" href="/concepts/outlets">
+    How the outlet selector narrows your data.
+  </Card>
+</Columns>

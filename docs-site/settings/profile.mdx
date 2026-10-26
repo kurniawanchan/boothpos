@@ -1,0 +1,84 @@
+---
+title: "My profile"
+description: "Change your own profile photo and password, and see your name, username and role."
+keywords: ["profile", "password", "photo", "account", "self-service"]
+---
+
+**My Profile** is the one settings screen every signed-in user can open, whatever their role. It only ever changes your own account.
+
+## Before you start
+
+- No menu permission is needed. The screen has no menu key, so cashier, inventory and custom roles can use it too.
+- Open it from your name at the top right of the app: click it and choose **Profile**.
+- To change another person's photo, name, role or password, an owner or admin uses [Users](/settings/users) instead.
+
+## What the screen shows
+
+| Item | Notes |
+| --- | --- |
+| **Profile photo** | Your current photo, or your initial if you have none. |
+| **Name** | Read-only. |
+| **Username** | Read-only. This is what you type to sign in. |
+| **Role** | Read-only. |
+
+You cannot edit your name, username or role here. Ask an owner or admin.
+
+## Change your photo
+
+<Steps>
+  <Step title="Click Change photo">
+    A file picker opens.
+  </Step>
+  <Step title="Choose an image">
+    JPEG or PNG, at most 5 MB.
+  </Step>
+  <Step title="Done">
+    The upload starts at once. You see **Profile photo updated successfully.** and the new photo replaces the old one.
+  </Step>
+</Steps>
+
+If the server rejects the file (wrong type or too large), the reason appears under the photo and your old photo stays.
+
+## Change your password
+
+<Steps>
+  <Step title="Enter your current password">
+    Type it in **Current password**.
+  </Step>
+  <Step title="Enter the new password twice">
+    Type the new password in **New password** and again in **Confirm new password**.
+  </Step>
+  <Step title="Save">
+    Click **Save password**. You see **Password updated successfully.** and the three fields are cleared.
+  </Step>
+</Steps>
+
+Rules enforced by the server (422, shown under the field):
+
+| Field | Rule |
+| --- | --- |
+| **Current password** | Required. If it is wrong: **Current password is incorrect.** and nothing changes. |
+| **New password** | Required, and must meet Laravel's default password rule. The code sets no custom rule, so this is a minimum length of 8 characters (an administrator-created account has the same 8-character minimum). |
+| **Confirm new password** | Must match **New password**. |
+
+Changing your password does not sign you out of the session you are using. An administrator resetting your password from [Users](/settings/users) is a different action.
+
+<Note>
+  This screen changes your sign-in password only. The tablet sign-in PIN is set by an owner or admin from [Users](/settings/users); there is no PIN field on your profile.
+</Note>
+
+## Troubleshooting
+
+| Message or symptom | Cause | Fix |
+| --- | --- | --- |
+| **Current password is incorrect.** | The current password was mistyped. | Retype it. If you have forgotten it, ask an owner or admin to reset your password in [Users](/settings/users). |
+| A message about the new password confirmation | The two new passwords differ. | Retype both. |
+| A message about the new password length | Fewer than 8 characters. | Use a longer password. |
+| Photo is rejected | Not JPEG or PNG, or over 5 MB. | Choose another file. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Sign in" href="/getting-started/sign-in">Username and password sign-in.</Card>
+  <Card title="Users" href="/settings/users">Admins manage other accounts.</Card>
+</Columns>

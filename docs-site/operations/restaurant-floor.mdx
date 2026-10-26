@@ -1,0 +1,155 @@
+---
+title: "Floor and tabs"
+description: "See every table, open a tab, add items with modifiers, send orders to the kitchen, move, merge or split a bill, and take payment."
+keywords: ["floor", "tab", "table", "takeaway", "modifier", "kitchen", "split bill", "merge", "move table", "restaurant"]
+---
+
+{/* Classification: INTERNAL */}
+
+**Floor & Tabs** (menu key `floor`, under the **Restaurant** group) is the waiter's screen. A **tab** is an open order for a table or a takeaway customer. You add items over time, send them to the kitchen in rounds, and pay at the end. Paying completes the tab and turns it into a normal sale that appears on [Sales](/operations/sales).
+
+## Before you start
+
+- Your role needs the `floor` menu. Opening a tab, adding items, moving, merging, splitting and paying all require it.
+- You need an open shift to open a tab or take payment. Without one the page shows "Open a cashier shift first to open tabs and take payments." with an **Open Cashier Shift** button. See [Cashier session](/operations/shifts).
+- Tables, stations and modifier groups are created under [Restaurant setup](/operations/restaurant-setup).
+- Tabs belong to the outlet of your shift. A tab cannot be moved to a table of another outlet. See [Outlets](/concepts/outlets).
+
+## The floor
+
+Tables are grouped by area (tables without an area go under **No area**). The floor refreshes itself about every 3 seconds, pauses while the browser tab is hidden, and backs off after errors ("Could not load the floor. Retrying automatically…").
+
+Each table card shows the name, seats, and a pill, **Free** or **Occupied**. An occupied card also shows the tab total, how many items are **ready to serve**, and how many are **not sent**.
+
+| Action | How |
+| --- | --- |
+| Open a dine-in tab | Click a free table, then **Open tab** to confirm "Open a tab for table X?". You land on the tab. |
+| Resume a tab | Click an occupied table, or a card under **Takeaway**. |
+| Start a takeaway tab | **Takeaway tab**, type an optional **Name / label** (up to 100 characters, for example the customer's name), **Open tab**. |
+
+If someone else opened the same table a moment before you, the server refuses with "This table already has an open tab." and you are taken to that existing tab. Inactive tables cannot receive a tab.
+
+## Work a tab
+
+The left side is the menu with a search box and a category filter. The right side is the tab: place and number, an **Occupied** or **Paid** pill, the lines, the totals and the action buttons. The tab refreshes every 4 seconds so you see the kitchen's progress.
+
+<Steps>
+  <Step title="Add items">
+    Click a menu card. A product with several variants opens **Pick a variant**. If the product has modifier groups, a dialog opens next (see below). Clicking the same item and options again before it is sent adds to the same line.
+  </Step>
+  <Step title="Adjust unsent lines">
+    Unsent lines have minus and plus for quantity, a note field ("Note (e.g. no ice)", saved when you leave the field) and a remove button. Minus at quantity 1 removes the line.
+  </Step>
+  <Step title="Send to kitchen">
+    **Send to kitchen (N)** sends all unsent lines at once. They are grouped into one ticket per station for that round. A toast says "Sent: N ticket(s)."
+  </Step>
+  <Step title="Serve">
+    When a line shows **Ready**, click **Mark served** on it.
+  </Step>
+  <Step title="Pay">
+    Click **Pay** when you are ready to settle, see Payment below.
+  </Step>
+</Steps>
+
+<Info>
+Stock is deducted the moment an item is added to a tab, not when the tab is paid. Removing an unsent line, lowering its quantity, or voiding the tab returns stock for items that have not started cooking.
+</Info>
+
+### Modifiers
+
+A modifier group is a set of choices such as size or toppings. In **Add to tab**:
+
+- Each group shows **Required** or **Optional** and its range ("choose 1", "choose 0–3").
+- A single-choice group lets you pick one option; clicking the chosen option again clears it unless the group is required. A multiple-choice group lets you tick options up to the maximum.
+- Each option may add or subtract a price (for example `+Rp 3.000`).
+- **Note for the kitchen** is free text.
+- **Add to tab** is disabled until every rule is met. If your choices would make the item price negative, the dialog shows "These choices would make the item price negative."
+
+### Line states
+
+| Pill | Meaning |
+| --- | --- |
+| *(none)* | Not yet sent. Quantity, note and removal are editable. |
+| Sent / New | Sent to the station, not started. |
+| Preparing | The station started it. |
+| Ready | Ready to serve. Shows **Mark served** for users with `floor` or `kitchen`. |
+| Served | Delivered. |
+
+A line also shows its station name. An item that has **no station** assigned is treated as ready at the moment it is sent, so it never appears on a kitchen screen.
+
+### Sold out and unavailable items
+
+Cards are dimmed and disabled when every variant has no stock, shown as **Sold out**, or when the item is marked **86** or discontinued. Clicking a 86 card shows "Item is sold out (86)." or "Item is no longer sold." If an item becomes unavailable after the card loaded, the server answers "Item SKU cannot be ordered: ...".
+
+### Cancel a sent item
+
+Sent lines show a **Cancel** button. A line the kitchen has not started can be cancelled by anyone with `floor`; once it is preparing, ready or served, only owners and admins see **Cancel**. The dialog asks for a required reason and warns that an item that has started cooking does not return stock.
+
+<Warning>
+In the current web build this dialog only sends the free-text reason. The server also expects a reason code, the kitchen status, a stock decision (return or waste), and an approval unless your role holds the `order.void` permission. Without them the request is refused ("A reason is required to cancel an item that was already sent.", 422). If this happens, cancel the item from the tablet app, or have an owner void the whole tab. This was found by reading the code and has not been run end to end.
+</Warning>
+
+## Move, merge and split
+
+These three buttons are under **Pay**.
+
+<Tabs>
+  <Tab title="Move table">
+    **Move table** lists free tables, grouped by area, that are not the current one. Click **Move to table X**. Only active tables of the same outlet work. A takeaway tab becomes a dine-in tab. "No free table to move to." appears when there is none.
+  </Tab>
+  <Tab title="Merge tab">
+    **Merge tab** lists other open tabs from the same shift. Pick one and click **Merge**: its items and tickets move onto this tab, and its table is freed. The merged tab is closed with the reason "Merged into TRX-...". Both tabs must be open, in the same shift, and the tab you merge in must have no payments.
+  </Tab>
+  <Tab title="Split bill">
+    **Split bill** lets one guest pay for part of the tab. Set how many of each item to pay now (plus and minus, or the quantity field). An item that is being prepared can only be split whole. Then pay the total shown with the payment panel and click **Pay this part**. A separate sale is created and its receipt opens; the rest stays open on the table. Once every item is split out, the original tab closes with "Paid in full through split bills". A tab that already has a payment cannot be split.
+  </Tab>
+</Tabs>
+
+## Payment
+
+**Pay** opens **Pay tab** with Total, Paid so far and Balance.
+
+- **Pay the balance** takes the whole balance. **Pay part** lets you type **Amount to pay now** (more than 0 and less than the balance) and **Apply**. The tab stays open until the total is fully paid.
+- Methods are Cash, Transfer and QRIS, with an optional reference, notes and proof photo for non-cash.
+- Cash may be more than due (the difference is change). Non-cash payments cannot exceed the remaining balance ("Non-cash payments exceed the remaining balance.").
+- While a QRIS payment on the tab is still unverified, another non-cash payment is refused ("A QRIS payment is not yet checked...").
+- When the balance reaches zero the tab becomes **Paid**, a receipt number is issued and the receipt opens. A partial payment shows "Partial payment recorded. Balance X."
+- A paid tab shows "This tab has been paid." and **View receipt**.
+
+<Note>
+The tab total includes tax when a tax rate is set. Discounts on a tab and pre-bill printing exist on the server but have no control in the web app; the **Discount** row appears only if a discount was already applied.
+</Note>
+
+## Close or void
+
+- **Close empty tab** (only when there are no lines) closes the tab and frees the table.
+- **Void tab** cancels the whole tab with a required reason (up to 255 characters). It is shown to users whose role has the `settings` menu, only when the tab has lines and nothing has been paid. The server only accepts owners and admins (403 otherwise), and refuses a tab with payments ("A tab with recorded payments cannot be voided."). Unfinished kitchen tickets are cancelled, and items not yet cooking return their stock.
+- A shift cannot be closed while it holds open tabs.
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| Open a cashier shift first... | No open shift. | Open one on [Cashier session](/operations/shifts). |
+| This table already has an open tab. (409) | Another waiter opened it. | You are redirected to that tab. |
+| This tab is no longer open. | It was paid, voided or merged elsewhere. | Go back to the floor. |
+| This item was already sent to preparation and can no longer be edited here. | Editing a sent line. | Cancel the item instead. |
+| The tab total cannot drop below the amount already paid. | Removing items after a partial payment. | Pay the remaining balance, or keep the items. |
+| The tab has no items to pay for. | Paying an empty tab. | Add items or close the tab. |
+| There is nothing new to send to the kitchen. | No unsent lines. | None needed. |
+| This table belongs to another outlet; a tab cannot be moved between outlets. | Moving across outlets. | Choose a table of the same outlet. |
+| Only tabs of the same cashier shift can be merged. | Different shift. | Hand over or settle one of them. |
+| The tab to merge already has payments and cannot be merged. | Source has a payment. | Settle it instead. |
+| Only whole units of "X" can be split while it is being prepared. | Partial split of a sent, unserved line. | Split the whole line. |
+| The quantity to split is more than what "X" has on the tab. | Too many units chosen. | Lower the quantity. |
+| Group "X": choose N option(s). | Modifier rule not met. | Pick the required options. |
+| Only an owner or admin can cancel an item once preparation has started. | Cancelling a cooking item. | Ask an owner or admin. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Kitchen and bar" href="/operations/kitchen" icon="fire-burner">What the station sees after you send.</Card>
+  <Card title="Restaurant setup" href="/operations/restaurant-setup" icon="gear">Tables, stations and modifier groups.</Card>
+  <Card title="Cashier session" href="/operations/shifts" icon="clock">Shift rules for tabs.</Card>
+  <Card title="Sales" href="/operations/sales" icon="receipt">Paid tabs and the live table board.</Card>
+</Columns>

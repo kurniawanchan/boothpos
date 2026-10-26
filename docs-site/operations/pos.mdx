@@ -1,0 +1,154 @@
+---
+title: "POS (cashier screen)"
+description: "Ring up a retail-style sale: pick products, apply a discount, take payment and show the receipt."
+keywords: ["pos", "cashier", "cart", "discount", "payment", "split payment", "draft", "receipt"]
+---
+
+{/* Classification: INTERNAL */}
+
+The **POS** screen (menu key `pos`) is where you build a cart and take payment for a sale that is paid on the spot. Every sale is tied to your open cashier shift, so you must open a shift first.
+
+<Note>
+Dine-in tables and takeaway tabs that are paid later live on [Floor and tabs](/operations/restaurant-floor), not here.
+</Note>
+
+## Before you start
+
+- Your role needs the `pos` menu. If you open the page by URL without it, you are sent back to the dashboard.
+- Open a shift on [Cashier session](/operations/shifts). Without one you can browse products, but **Pay** is blocked.
+- The menu you see follows the outlet of your open shift. Items that outlet does not carry are not offered, and outlet-specific prices apply. See [Outlets](/concepts/outlets).
+- Money is shown as whole rupiah, for example `Rp 25.000`. The business date used by reports is in WIB, see [Business day](/concepts/business-day).
+
+## Ring up a sale
+
+<Steps>
+  <Step title="Open a shift">
+    Without an open shift a banner reads "No cashier session is open yet..." with an **open one here** link to the shift screen.
+  </Step>
+  <Step title="Find products">
+    Browse the product grid, or type a product name or SKU in the search box. Search waits about 300 ms after you stop typing.
+  </Step>
+  <Step title="Add to the cart">
+    Click a card. A product with one variant goes straight into the cart. A product with several variants opens **Pick a variant**; click the variant you want. Clicking the same item again adds one more.
+  </Step>
+  <Step title="Adjust the cart">
+    Use the minus and plus buttons on a line. Minus on quantity 1 removes the line. Plus stops at the current stock. **Clear** empties the cart. Click a line photo to enlarge it.
+  </Step>
+  <Step title="Optional: customer and discount">
+    Click **Walk-in customer** to pick a customer. Type an order-level amount in **Discount (Rp)**.
+  </Step>
+  <Step title="Pay">
+    Click **Pay**, choose the payment method, then **Confirm & save transaction**. The receipt opens when the sale is saved.
+  </Step>
+</Steps>
+
+## The product grid
+
+| Control | What it does |
+| --- | --- |
+| Search box | Searches variants by name or SKU. Results are per variant (one card per SKU) and ignore the outlet and category filters. |
+| Outlet filter | Multi-select on the item's home outlet (who owns the item). Empty means all. |
+| Category filter | Multi-select on category. Empty means all. |
+| Card badge "N variants" | Shown when a product has more than one variant. |
+| Price range | A product with variants at different prices shows `min–max`. |
+| Stock `Stock N` | Total stock on browse cards, per-variant stock on search cards. |
+
+Card states:
+
+- **Out of stock** (red pill): the card is disabled.
+- **86** (red pill, dimmed): the item is marked sold out or discontinued. The card is still clickable so you get the reason as a notice, "Item is sold out (86)." or "Item is no longer sold." Nothing is added.
+
+Only active products are listed, up to 100 per load.
+
+## Totals and tax
+
+The cart preview uses the same formula as the server:
+
+1. Tax base = subtotal minus the order discount (never below zero).
+2. Tax = tax base times the tax rate, rounded half up to a whole rupiah, once per order.
+3. Total = tax base plus tax.
+
+The tax line only appears when the tax rate in settings is above 0, and it uses the store's tax label. A discount larger than the subtotal gives a total of Rp 0 in the preview, but the server rejects it when you submit (see Troubleshooting).
+
+<Info>
+The preview is only a preview. Prices, totals and stock are recomputed by the server, and the receipt shows the server's figures.
+</Info>
+
+## Payment
+
+The **Payment** dialog shows the total on the left and the order summary on the right.
+
+| Method | Notes |
+| --- | --- |
+| Cash | Enter the cash received, or tap a preset amount. **Change** is calculated for you. |
+| Transfer | Pick a payment channel. A proof photo is optional. |
+| QRIS | Pick a payment channel. A proof photo is optional. |
+
+Other fields: **Reference / transaction number (optional)** for non-cash methods (up to 100 characters), and **Notes (optional)**.
+
+### Split payment
+
+You can cover one total with several payments. Enter an amount that is lower than what is due and click **Add & continue**. It appears under **Payments recorded**, and you can remove an entry with the small x. Cash can overpay (the difference is change); non-cash entries cannot exceed the remaining balance.
+
+### Paying only part of the total
+
+Partial payment is only available when a customer is attached. Without a customer the dialog shows "To pay only part of the total, attach a customer first". With one, **Finish with the remaining balance ...** appears and asks you to confirm. The sale is completed and stock is deducted, and the customer owes the rest, which is settled later from [Sales](/operations/sales).
+
+<Warning>
+Cash that exceeds the cash actually received cannot be returned as change. The server answers "Change cannot exceed the cash amount received."
+</Warning>
+
+## Receipt
+
+After a successful sale the receipt dialog shows the store name and address, outlet name (only when you have more than one outlet), order number, table or takeaway label for tab sales, items with modifiers and notes, subtotal, discount, total, each payment, change, and a partial-payment block (**Sudah dibayar**, **Sisa tagihan**) when applicable.
+
+- **Unduh gambar** downloads a PNG, **Unduh PDF** downloads a PDF. Both are rendered in your browser.
+- **Transaksi berikutnya** closes the dialog.
+
+<Note>
+The receipt is intentionally always in Indonesian, whatever language the cashier uses, because the customer reads it.
+</Note>
+
+## Drafts
+
+A draft is a saved cart. It does not touch stock or payments.
+
+- **Save as draft** stores the current cart (items, quantities, prices, customer, discount) and clears the cart. The button is disabled while the cart is empty.
+- **Draft Transactions** lists your own drafts with item count, total and time. **Resume** replaces the current cart with the draft. **Delete** discards it.
+- On resume the server re-checks each variant. Items that are no longer active are dropped and a warning is shown per item. Prices come from the current price, not the saved one.
+
+<Warning>
+When you resume a draft, the saved discount comes back, but the customer is not re-selected in the cart. Pick the customer again before paying.
+</Warning>
+
+## Rules and limits
+
+- One checkout attempt has one unique reference, so a retried submit does not create a second sale or deduct stock twice.
+- The discount cannot exceed the subtotal (409).
+- A sale needs an open shift (409 "The cashier session is not open.").
+- The cart survives moving to another page and back; it is lost on a full page reload.
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| Open a cashier session first in the Cashier Session screen. | You clicked **Pay** with no open shift. | Open a shift, then pay. |
+| Insufficient stock for variant SKU. Available: N. (outlet) | Stock at the shift's outlet is lower than the quantity. | Lower the quantity or restock. |
+| Item SKU cannot be ordered: the item is sold out (86) / discontinued or not published / not sold at this outlet. | The item became unavailable after it was loaded. | Remove it from the cart. |
+| The order discount exceeds the subtotal. | Discount is larger than the subtotal. | Lower the discount. |
+| A customer is required to complete a sale that is not paid in full... | Paid less than the total with no customer. | Attach a customer, or pay in full. |
+| The cashier session is not open. | The shift was closed elsewhere. | Open a new shift. |
+| 403 | Your role cannot use this action. | Ask an owner or admin. |
+
+<Info>
+There is no approval prompt on the web POS. Discount limits per role and PIN approvals exist for other screens, but the web checkout only applies the rules above.
+</Info>
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Cashier session" href="/operations/shifts" icon="clock">Open and close your shift.</Card>
+  <Card title="Sales" href="/operations/sales" icon="receipt">Find, void and settle past sales.</Card>
+  <Card title="First sale" href="/getting-started/first-sale" icon="cart-shopping">A guided first transaction.</Card>
+  <Card title="Payment channels" href="/settings/payment-channels" icon="credit-card">Set up transfer and QRIS channels.</Card>
+</Columns>

@@ -1,0 +1,65 @@
+---
+title: "Outlets"
+description: "How one organisation runs one or more outlets, who sees which outlet, and how the outlet selector narrows your data."
+keywords: ["outlet", "multi-outlet", "outlet selector", "scope", "home outlet", "assignment"]
+---
+
+An **outlet** is a place where your organisation sells or operates, for example a counter, a stall, or a branch. One BoothPOS installation serves one organisation with one or more outlets. A single-outlet store never sees any outlet controls.
+
+<Info>
+  Earlier versions called outlets "artists" or "sellers". The screen is now **Outlets**, and the old `/artists` address redirects to it.
+</Info>
+
+## Who sees which outlets
+
+| User | Outlets visible |
+| --- | --- |
+| Owner and admin (roles flagged **all outlets**) | Every active outlet. |
+| Everyone else | Only the outlets assigned to that user on the [Users](/settings/users) screen. |
+
+The server applies this on every request. Choosing an outlet in the selector can only **narrow** what you see. It can never widen your access, and an outlet you are not assigned to is refused.
+
+## Outlet selector
+
+When you can see more than one outlet, an outlet selector appears in the top bar. When you can see exactly one, it is hidden.
+
+- Choose **All outlets** to see data across every outlet you may access. The count of outlets is shown next to the label.
+- Choose a single outlet to limit lists, figures, and reports to that outlet.
+- Your last choice is remembered for your user. If that outlet is later removed from your assignments, the selection resets to **All outlets** automatically.
+
+<Note>
+  Some pages manage their own outlet filter instead of using the top-bar selector. Products and Restaurant Setup have an **Outlet** filter on the page itself that can pick several outlets at once. See [Products](/inventory/products) and [Restaurant setup](/operations/restaurant-setup).
+</Note>
+
+## Where sales and stock are recorded
+
+Every sale, shift, table, and stock balance belongs to one outlet.
+
+- **POS and tabs use the outlet of your open shift.** Prices, availability, and 86 marks come from that outlet, and orders are stamped with it by the server. The client never chooses it. See [Cashier shifts](/operations/shifts).
+- **Stock is kept per outlet.** Movements and balances are tracked per outlet, and stock moves between outlets through [stock transfers](/inventory/stock-transfers).
+- **An item has a home outlet and can be sold at other outlets.** The home outlet is the item's owner. The outlets where it is sold decide where it appears on the POS. See [Products](/inventory/products).
+
+## Things to watch
+
+<AccordionGroup>
+  <Accordion title="I cannot see an outlet I expected">
+    Your user is probably not assigned to it, or the outlet is inactive. Ask an owner or admin to check your assignments in [Users](/settings/users).
+  </Accordion>
+  <Accordion title="Numbers differ between two screens">
+    Check each screen's outlet filter. One may be on **All outlets** and another on a single outlet. Reports also use a business-date range. See [Business day](/concepts/business-day).
+  </Accordion>
+  <Accordion title="A transfer I am owed does not show up">
+    Transfers in transit stay visible to users entitled to the outlet even if the outlet was deactivated meanwhile, so they can still be received or cancelled. Check your assignment and the transfer's destination. See [Stock transfers](/inventory/stock-transfers).
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Manage outlets" icon="map-pin" href="/people/outlets">
+    Create and maintain outlets.
+  </Card>
+  <Card title="Assign users to outlets" icon="users" href="/settings/users">
+    Control which outlets each user can see.
+  </Card>
+</Columns>

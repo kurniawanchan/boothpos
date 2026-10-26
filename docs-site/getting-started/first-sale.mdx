@@ -1,0 +1,65 @@
+---
+title: "Ring up your first sale"
+description: "Open a cashier shift, build a cart on the POS screen, take payment, and close the shift."
+keywords: ["first sale", "tutorial", "pos", "shift", "payment", "receipt"]
+---
+
+This walk-through takes about five minutes. You need a role with the **POS** and **Cashier Session** menus, and at least one active product with stock.
+
+<Warning>
+  Check the badge in the top bar first. In **DEMO** mode the sale is practice data and will not appear in LIVE reports. See [DEMO and LIVE mode](/concepts/demo-and-live-mode).
+</Warning>
+
+<Steps>
+  <Step title="Open a cashier shift">
+    Go to **Cashier Session**. Pick the **Outlet** if you have more than one, type **Opening cash (Rp)**, and click **Open session**. Every sale is tied to an open shift, and **Pay** is blocked without one. See [Cashier shifts](/operations/shifts).
+  </Step>
+  <Step title="Open the POS">
+    Go to **POS**. The product grid follows the outlet of your open shift.
+  </Step>
+  <Step title="Add products">
+    Click a product card. A product with several variants opens **Pick a variant**. Click the variant you want. Use the plus and minus buttons on the cart line to change the quantity.
+  </Step>
+  <Step title="Pay">
+    Click **Pay**, choose **Cash**, **Transfer** or **QRIS**, and click **Confirm & save transaction**. For cash, enter the amount received and check the **Change**. For Transfer and QRIS, pick a payment channel. See [Payment channels](/settings/payment-channels).
+  </Step>
+  <Step title="Hand over the receipt">
+    The receipt opens when the sale is saved. Download it as an image or PDF if the customer asks, then click **Transaksi berikutnya** for the next customer.
+  </Step>
+  <Step title="Close the shift at the end of the day">
+    Go back to **Cashier Session**, count the drawer, type **Physical cash counted (Rp)**, and click **Close session**. If the counted cash differs from the expected cash, a note is required.
+  </Step>
+</Steps>
+
+## Check your work
+
+<Check>
+  The sale appears in **Sales** with its order number, and the shift's **Transactions** and **Total sales** tiles went up.
+</Check>
+
+## If something goes wrong
+
+| Message | Fix |
+| --- | --- |
+| Open a cashier session first in the Cashier Session screen. | Open a shift (step 1). |
+| Insufficient stock for variant ... | Lower the quantity or add stock. See [Stock](/inventory/stock). |
+| Item cannot be ordered: sold out (86), discontinued, or not sold at this outlet | Remove it from the cart. |
+
+The full list is on [POS](/operations/pos).
+
+## Next steps
+
+<Columns cols={2}>
+  <Card title="Sales history" icon="receipt" href="/operations/sales">
+    Find, review, and settle past sales.
+  </Card>
+  <Card title="Restaurant tabs" icon="fork-knife" href="/operations/restaurant-floor">
+    Take dine-in orders that are paid later.
+  </Card>
+  <Card title="Add products" icon="cube" href="/inventory/products">
+    Build your menu and set prices.
+  </Card>
+  <Card title="Add users" icon="users" href="/settings/users">
+    Give each cashier their own login.
+  </Card>
+</Columns>

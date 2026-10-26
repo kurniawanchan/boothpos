@@ -1,0 +1,90 @@
+---
+title: "Set up a terminal"
+description: "Pick the outlet and name the terminal the first time a tablet runs BoothPOS, without signing in, and change or cancel it later."
+keywords: ["android", "setup", "terminal", "outlet", "server address", "no login", "discovery", "revoked terminal"]
+---
+
+{/* Classification: INTERNAL */}
+
+A **terminal** is one tablet registered to one outlet under a name you choose. Setup runs once per tablet. It needs no owner or admin login: you choose the outlet from a list, then pick or type a terminal name. Anyone holding the tablet can complete setup, so do it on a tablet you control.
+
+## Before you start
+
+- The tablet and the server must be reachable from each other. On the first launch the app looks for the server by itself.
+- An admin must have filled in the server address in the web settings (**Server address**). See [General settings](/settings/general).
+- The outlet must be active on the server. See [Outlets](/people/outlets).
+- Decide the terminal name. It must be unique within the outlet, so use something per device, for example "Kasir Depan".
+
+## Set up a tablet
+
+<Steps>
+  <Step title="Open the app">
+    A tablet with no saved terminal opens **Siapkan terminal** (set up terminal): "Pilih outlet, lalu pilih atau ketik nama terminal ini."
+  </Step>
+  <Step title="Wait for the server search">
+    The app shows **Mencari server…** (looking for the server). Then **Memuat outlet…** (loading outlets). Nothing is typed here; there is no server address field.
+  </Step>
+  <Step title="Choose the outlet">
+    Pick one **Outlet** (radio button). On a single-outlet installation it is already selected.
+  </Step>
+  <Step title="Pick or type the terminal">
+    The **Terminal** field appears only after an outlet is chosen. Either select an existing terminal in the list, or type in **Atau ketik nama terminal baru** (or type in **Nama terminal (mis. Kasir Depan)** when the outlet has no terminals yet).
+  </Step>
+  <Step title="Continue">
+    Tap **Lanjut** (continue). The tablet goes to the PIN screen. See [Sign in with a PIN](/android/pin-sign-in).
+  </Step>
+</Steps>
+
+### Rules for the name
+
+- A typed name wins over a selected one. Typing clears the radio selection.
+- The name is trimmed. **Lanjut** stays disabled until an outlet is chosen and the name is not blank.
+- If you type a name that an active terminal in that outlet already has, the server returns that terminal instead of refusing. Two tablets given the same name therefore share one terminal record.
+- The name field starts empty on purpose, so that a default name does not clash on the second tablet.
+- Changing the outlet clears the selected terminal and the typed name.
+
+## How the server address is found
+
+The app has default addresses built in: local first, then online. It asks the first one that answers which address the admin selected on the web, and saves that address on the tablet.
+
+- If the admin chose **Online** and left the online address empty, the build's own online default is used, but only after it proves reachable.
+- The address is read once. A tablet that already has an address keeps it, even after re-setup. Moving a tablet between a local and an online server means clearing the app's data on the tablet, then setting up again.
+
+## Change the terminal later
+
+On the PIN screen, tap **Ganti outlet / terminal** (change outlet / terminal). On a tablet layout the same action is the gear icon at the top right of the left panel. This reopens setup.
+
+- **Batal** (cancel) appears only when the tablet already has a saved outlet and terminal. It returns to the PIN screen and the old choice stays.
+- Until you tap **Lanjut**, the old choice remains in force.
+
+## When the tablet is sent back to setup
+
+The tablet clears its saved terminal and returns to **Siapkan terminal** with a red message when the server says the terminal is no longer valid:
+
+| Message | When |
+| --- | --- |
+| "Terminal ini tidak berlaku lagi. Pilih outlet dan terminal lagi." | At app start the saved terminal is gone from its outlet, or signing in with a PIN is refused because of the terminal. |
+| "Terminal ini sudah dicabut. Pilih outlet dan terminal lagi." | An admin revoked the terminal while the tablet was in use and the user left the order flow. |
+| "Terminal ini dicabut. Selesaikan order ini; setelah itu pilih terminal lagi." | Revoked while a user is in the editor, payment or done screen. The current tab can be finished first. |
+
+A network problem never clears the terminal. Only an answer from the server does.
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| "Alamat server belum diatur. Minta admin mengisinya di web (Pengaturan › Server address), lalu coba lagi." | The server answered but the admin's selected address is empty. | An admin fills it in on the web, then tap **Coba lagi**. |
+| "Server tidak terjangkau. Pastikan tablet satu jaringan dengan server outlet atau punya internet, lalu coba lagi." | No built-in address answered, or the chosen address did not. | Check Wi-Fi or internet, then **Coba lagi**. |
+| "Aplikasi ini dibuat tanpa alamat server bawaan. Hubungi admin untuk versi aplikasi yang benar." | The APK has no default address. | Install the correct build. There is no retry button. |
+| "Belum ada outlet aktif di server. Minta admin menambahkannya di web, lalu coba lagi." | No active outlet. | Add or activate an outlet on the web, then **Coba lagi**. |
+| **Lanjut** is greyed out | No outlet chosen, or the name is blank, or terminals are still loading. | Choose an outlet and enter a name. |
+| An error under **Lanjut** | The server refused the registration. The message is the server's. | Read it, fix the name or outlet, retry. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Sign in with a PIN" href="/android/pin-sign-in" />
+  <Card title="Android overview" href="/android/overview" />
+  <Card title="Outlets" href="/concepts/outlets" />
+  <Card title="General settings" href="/settings/general" />
+</Columns>

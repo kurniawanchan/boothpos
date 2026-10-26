@@ -1,0 +1,84 @@
+---
+title: "Activity log"
+description: "Review who did what and when for sensitive actions such as deletions, price changes, stock adjustments and voids."
+keywords: ["activity log", "audit", "history", "who did what", "void after fire", "filters"]
+---
+
+The **Activity Log** is a read-only history of sensitive actions in BoothPOS: who did what, to which record, and when. You cannot add, edit or delete entries from this screen.
+
+## Before you start
+
+- You need the **Reports** menu (menu key `reports`). The activity log has no menu of its own; it is gated by the same key as [Reports](/insight/reports). Without it, the server answers 403 with **You do not have access to the activity log.**
+- Entries are written by the system at the moment the action happens, inside the same database transaction as the change. If an action is rolled back, its log line is not kept, so the log never claims something that did not happen.
+- Open it from **Reports**-gated links, from a Dashboard "Needs attention" item, or by its address `/activity-log`.
+
+## Read the list
+
+Newest entries first, 25 per page.
+
+| Column | What it shows |
+| --- | --- |
+| **Time** | Date and time the action happened. |
+| **User** | The name of the user who did it, or a dash if there is none (for example a system action). |
+| **Action** | A machine-readable action name in monospace, such as `deleted` or `item_cancelled`. |
+| **Entity** | The kind of record, followed by its number, for example `order #12`. |
+| **Description** | A human-readable sentence about what changed. |
+
+Old and new values are stored with each entry, but this screen does not display them.
+
+### Common actions
+
+The log records many kinds of action. These names appear in the code; the list is not exhaustive and new ones can be added by new features.
+
+| Area | Example actions |
+| --- | --- |
+| Records | `created`, `updated`, `deleted`, `imported`, `moved`, `merged`, `activated`, `deactivated` |
+| Pricing and menu | `price_changed`, `outlet_price_changed`, `item_published`, `item_discontinued`, `item_reactivated`, `item_sold_out`, `item_sold_out_cleared`, `menu_release_created`, `menu_release_published`, `menu_release_cancelled`, `menu_change_requested`, `menu_change_cancelled` |
+| Stock | `stock_adjusted`, `material_stock_adjusted`, `stock_transfer_dispatched`, `stock_transfer_received`, `stock_transfer_cancelled` |
+| Orders and payments | `item_cancelled`, `tab_voided`, `payment_recorded`, `payment_verified`, `payment_rejected`, `payment_deleted`, `payment_confirmation_updated` |
+| Approvals | `approval_requested`, `approval_approved`, `approval_rejected` |
+| Shifts | `session_closed` |
+| Users and roles | `user_outlets_updated`, `role_outlet_scope_changed` |
+| Bill of materials | `bom_item_added`, `bom_item_removed`, `bom_qty_changed`, `bom_completed`, `bom_reopened`, `cost_price_synced` |
+| Settings | `reason_code_created`, `reason_code_updated` |
+
+PIN changes made from the Users screen are logged as `pin_set` (first PIN) and `pin_replaced` (existing PIN changed), with the entity `user`. The log says whether the PIN was typed or generated, but never contains the PIN.
+
+## Filter the list
+
+Filters apply when you leave a field or pick a date, not on every keystroke. The count next to the filters is the total number of matching entries.
+
+| Filter | How it works |
+| --- | --- |
+| **Action** (search box) | Exact match on the action name, for example `item_cancelled`. It is not a partial or free-text search. |
+| **Entity type** | Exact match on the entity type name, as shown in the **Entity** column. |
+| **From date** / **To date** | Entries created on or after / on or before that date. |
+| Reset | Clears all filters. |
+
+<Warning>
+  Because **Action** and **Entity type** are exact matches, a typo or different capitalisation returns **No activity recorded yet.** Copy the value from the **Action** column when in doubt.
+</Warning>
+
+### Business-date chip
+
+A link from the Dashboard "Void after fire" item opens this screen with `action = item_cancelled` and a **Business date: YYYY-MM-DD** chip. That chip filters by one **business day** in the store time zone (not UTC), so the list matches the count on the Dashboard exactly. Click the chip to remove it. Invalid dates in the link are ignored.
+
+Note that items that were cancelled because a whole tab was voided have no per-item entry; only a `tab_voided` entry exists.
+
+## Troubleshooting
+
+| Message or symptom | Cause | What to do |
+| --- | --- | --- |
+| **You do not have access to the activity log.** (403) | Your role lacks the `reports` menu. | Ask an owner or admin to add **Reports** to your role, see [Roles](/settings/roles). |
+| **No activity recorded yet.** | No entries, or the filters match nothing. | Reset filters; check exact spelling of action and entity type. |
+| **Could not load data** | Request failed. | Use the retry button. |
+| A change you made is missing | Only sensitive actions are logged, and rolled-back actions are not kept. | Check whether the action is one of the logged kinds. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Dashboard" href="/insight/dashboard">The "Void after fire" check links here.</Card>
+  <Card title="Reports" href="/insight/reports">Shares the same menu permission.</Card>
+  <Card title="Roles" href="/settings/roles">Control who can open the log.</Card>
+  <Card title="Business day" href="/concepts/business-day">How a business date is bounded.</Card>
+</Columns>

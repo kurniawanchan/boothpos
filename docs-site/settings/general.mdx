@@ -1,0 +1,207 @@
+---
+title: "General settings"
+description: "Set up store identity, receipts, theme, business day, DEMO or LIVE mode, license tier, reason codes, menu release, the tablet server address, and database backups."
+keywords: ["settings", "store identity", "logo", "receipt", "theme", "business day", "demo", "live", "license tier", "reason codes", "menu release", "backup", "restore"]
+---
+
+**Settings > General** groups every store-wide setting into twelve sections in three groups. The list of sections is on the left and one section is shown on the right. The open section is kept in the address bar (`?section=`), so you can link to it and it survives a refresh. An unknown value opens **Store identity**.
+
+## Before you start
+
+- You need the **Settings** menu (menu key `settings`). The server checks it on every read and write. Owner and admin have it by default; the project treats "owner or admin" as "has the Settings menu".
+- Every setting here applies to the whole installation, not to one outlet.
+- Changes apply to later activity. Nothing on this page rewrites past transactions.
+- Payment account details have their own page, see [Payment channels](/settings/payment-channels).
+
+## Sections at a glance
+
+| Group | Section | What it controls |
+| --- | --- | --- |
+| **Store** | **Store identity** | Logo, store name, address and contact details. |
+| | **Receipt Display** | Footer text and whether the logo prints on receipts. |
+| | **Payment channels** | Bank and QRIS accounts shown at payment. See [Payment channels](/settings/payment-channels). |
+| **Appearance** | **Application name** | The product name in the sidebar and "Powered by" lines. |
+| | **Theme** | The accent colour. |
+| **System** | **System mode** | DEMO or LIVE data. |
+| | **Server address** | Which server the cashier tablets connect to. |
+| | **License tier** | Pro (one outlet) or Master (unlimited outlets). |
+| | **Business day** | Time zone, cut-off, cash tolerance, offline threshold. |
+| | **Reason codes** | Reasons offered for sold out (86), discontinue and approval rejection. |
+| | **Menu release** | Whether price and status changes wait for a release. |
+| | **Backup & restore** | Database backups and restore. |
+
+## Store identity
+
+<Steps>
+  <Step title="Upload a logo (optional)">
+    Under **Store logo**, choose an image file. When a file is chosen, an **Upload logo** button appears; click it. The logo is saved on its own, separately from the text fields, and the sidebar and the browser tab icon update without a reload.
+  </Step>
+  <Step title="Fill in the text fields">
+    **Store name (printed on receipts)**, **Full address**, **Store contact**, **Contact person name**, **Phone**, **Email**.
+  </Step>
+  <Step title="Save">
+    Click **Save**. You see **Store identity saved.** The browser tab title and sidebar name refresh at once.
+  </Step>
+</Steps>
+
+Rules:
+
+- The logo must be a JPEG or PNG image of at most 5 MB. The browser only checks that the file is an image under 5 MB (**The file must be an image.** or **Maximum image size is 5 MB.**); the server then accepts only JPEG and PNG, so a GIF or WebP is rejected with the server's message under the field.
+- **Email** must be a valid email format, otherwise the field shows the server's message.
+- The store name is stored **separately for each mode**. In LIVE mode you edit the LIVE name; in DEMO mode you edit the DEMO name. Editing one never overwrites the other. Address and contact fields are shared by both modes.
+
+## Receipt Display
+
+| Control | Effect |
+| --- | --- |
+| **Receipt footer text** | Free text printed at the bottom of receipts, for example "Thank you for shopping with us!". Leave empty for no footer. |
+| **Show logo on receipts** | When ticked, the store logo is included on receipts. |
+
+Click **Save receipt display**. You see **Receipt display saved successfully.**
+
+## Application name
+
+**Application name** is the product name shown in the sidebar and as "Powered by …" on invoices and receipts. It is not your store name. Up to 50 characters. Leave it empty and save to go back to the default (BoothPOS). Saved message: **Application name saved.**
+
+## Theme
+
+Pick the **Accent color** with the colour picker; the hex code is shown next to it. A colour that is too light shows **This color is too light and may be hard to read.** You can still save it. Click **Save color**. The new colour is applied at once, with no reload, and is saved as a six-digit hex code (for example `#2f9e6e`); anything else is rejected by the server. Saved message: **Theme color saved successfully.**
+
+## System mode
+
+Two choices: **LIVE** and **DEMO**.
+
+- **DEMO** shows sample data for exploring the app.
+- **LIVE** shows only data your store actually created.
+- Switching never deletes data from either mode.
+
+Click the mode you want. A confirmation asks **Switch to \{mode\} mode? The lists and reports you see will change to match.** Click **Continue**. You see **Switched to \{mode\} mode.** Clicking the mode that is already active does nothing. See [DEMO and LIVE mode](/concepts/demo-and-live-mode).
+
+<Warning>
+  Switching mode changes what every screen, report and the Dashboard shows, for every user, at once. Do it when no shift is in progress.
+</Warning>
+
+## Server address
+
+Chooses which server the cashier tablets use. The change applies on each tablet's next connection check. This section is the only place the web app touches the Android setup. See the Android documentation for tablet steps.
+
+| Field | Meaning |
+| --- | --- |
+| **Local server address** | Address on the outlet network, for example `http://192.168.1.10:8010`. |
+| **Online server address** | Address of the live server, for example `https://pos.example.com`. If empty, tablets use the app's built-in address, shown in the hint; a value entered here always wins. |
+| **Choice used by tablets** | **Local (outlet network)** or **Online (live server)**. |
+
+Click **Save server address**. You see **Server address saved.** Rules enforced by the server: each address must be a valid `http` or `https` URL of at most 255 characters, and you can choose **Online** only if an online address is filled in or the app has a built-in one (otherwise **Pilih online hanya jika alamat online sudah diisi.**). Errors appear under the field they belong to.
+
+## License tier
+
+Two choices: **Pro** (one active outlet, representing the store itself) and **Master** (unlimited outlets). Clicking a tier saves it immediately and shows **Switched to \{tier\}.**
+
+Switching **Master → Pro** does not delete or merge existing outlet data. It only blocks creating new outlets: on Pro, creating an outlet while one is already active fails with **This installation uses a Pro license (one outlet). Upgrade to Master to add more outlets.** See [Outlets](/people/outlets).
+
+<Note>
+  ASSUMPTION: this section is a plain setting that anyone with the **Settings** menu can change from this screen; I found no separate license check behind the switch itself. The limit is enforced only when an outlet is created.
+</Note>
+
+## Business day
+
+Decides which business day a sale belongs to, and the thresholds used on the Dashboard. Changes apply to later transactions; past ones are not recalculated.
+
+| Field | Meaning | Rule |
+| --- | --- | --- |
+| **Store timezone** | Used for dates and times on the Dashboard. | Pick from the list: Asia/Jakarta (default), Asia/Makassar, Asia/Jayapura, Asia/Singapore, Asia/Kuala_Lumpur, Asia/Bangkok, Asia/Tokyo, Australia/Perth, UTC. A different zone already stored stays visible. |
+| **Business-day cut-off time** | Sales before this time count toward the previous business day. `00:00` means midnight. | `HH:MM`, 00:00 to 23:59. |
+| **Cash difference tolerance (Rp)** | A shift cash difference up to this amount needs no action. Above it, the Dashboard flags the shift as Critical. | A number, 0 or more. Default 5000. |
+| **Device offline threshold (minutes)** | A device that has not reported for longer than this is flagged as behind. | Whole number, 1 to 1440. Default 5. |
+
+Click **Save**. All four values are saved together; if one is invalid, none is saved, and the message appears under that field. You see **Business-day settings saved.** Client messages: **Choose a timezone.**, **Enter the time as HH:MM.**, **Tolerance must be a number, 0 or more.**, **Enter a whole number from 1 to 1440 minutes.** See [Business day](/concepts/business-day).
+
+## Reason codes
+
+The list of reasons users pick when they mark an item sold out (86), discontinue an item, or reject a price approval. Three tabs: **Sold out (86)**, **Discontinue**, **Approval rejection**.
+
+Table columns: **Reason (Indonesian)**, **Reason (English)**, **Order**, **Status**, plus an edit action and an activate switch.
+
+<Steps>
+  <Step title="Add a reason">
+    On the tab you want, click **Add reason**. Fill **Code**, **Label (Indonesian)**, **Label (English)** and **Order**.
+  </Step>
+  <Step title="Save">
+    Click Save. You see **Reason added.** (or **Reason updated.** when editing).
+  </Step>
+</Steps>
+
+Rules:
+
+- **Code**: lowercase letters, digits and underscores only, up to 40 characters, unique within its tab. It cannot be changed after creation, and neither can the category. Error: **The code may only contain lowercase letters, digits and underscores.**
+- Both labels are required (**Required.**), up to 120 characters each.
+- **Order** is a whole number, 0 or more; lower numbers appear first. A new reason starts 10 after the highest existing order.
+- Reasons are **never deleted**, because history refers to them. Switch a reason off with its activate switch; inactive reasons are hidden from the reason dialogs elsewhere but still listed here so you can switch them back on.
+- Creating and editing a reason is written to the [Activity log](/insight/activity-log) (`reason_code_created`, `reason_code_updated`).
+
+## Menu release
+
+Chooses whether price and item-status changes apply immediately or wait for a menu release.
+
+| Field | Meaning | Rule |
+| --- | --- | --- |
+| **Enable menu release** | When on, changes wait for a release and large price differences wait for approval. When off (the default), changes apply immediately. | On or off. |
+| **Price approval threshold (%)** | Price differences above this need approval. Shown only while release is on. Default 15. | 0 to 100. Error: **Enter a number from 0 to 100.** |
+| **Default rounding for bulk price changes** | **No rounding** or **Nearest Rp 500**. Default is Nearest Rp 500. | One of the two. |
+
+Click **Save settings**. You see **Menu release settings saved.** All three are saved together. See [Products](/inventory/products) for how releases and approvals work.
+
+## Backup & restore
+
+Keeps a copy of all store data (products, transactions, users, settings). Also keep a copy away from this laptop: download the file or copy it to a flash drive.
+
+**Back up now** creates a backup and adds it to the list (**Backup created.**). Each row shows the backup, whether it **Includes payment proofs**, and three actions: **Download** (a `.sql` file named `boothpos-backup-{id}.sql`), **Restore**, and **Delete**.
+
+**Delete** removes only the copy on this machine, after a normal confirmation. A copy on external storage is not touched.
+
+### Restore
+
+<Steps>
+  <Step title="Choose the source">
+    Click **Restore** on a listed backup, or under **Restore from a file** click **Choose .sql file**, pick a `.sql` backup made by this app (at most 50 MB), then click **Restore from file**.
+  </Step>
+  <Step title="Read the warnings">
+    The dialog **Restore the database?** states that the restore OVERWRITES ALL current data and cannot be undone, and that an automatic backup of the current state is taken first.
+  </Step>
+  <Step title="Type the confirmation word">
+    Type `RESTORE` in the field. The **Restore now** button stays disabled until the word matches exactly.
+  </Step>
+  <Step title="Restore">
+    Click **Restore now**. On success you see **Database restored. Safety backup: \{id\}. The page will reload.** and the page reloads. Your session may end, so sign in again.
+  </Step>
+</Steps>
+
+<Danger>
+  A restore replaces every table. The license activation is restored too. If the backup comes from another device, or was made before this app was activated, the app locks after the restore and must be activated again with a license key. Have one ready.
+</Danger>
+
+<Warning>
+  Payment proof files are backed up but this screen does not restore them.
+</Warning>
+
+Server rules: only users with the Settings menu can back up or restore (403 **Only owner/admin can back up or restore the database.**); the server itself requires the word `RESTORE`; an uploaded file must be a `.sql` file of at most 50 MB that looks like a dump from this app, otherwise **This file does not look like a database backup from this app (the settings and users tables are missing).**; if the safety backup cannot be taken, the restore is cancelled and nothing changes.
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| **The file must be an image.** / **Maximum image size is 5 MB.** | Wrong file type or too large. | Use a JPEG or PNG under 5 MB. |
+| A field shows a server message after Save | 422 validation, for example a bad email or time. | Fix the field and save again. |
+| **This installation uses a Pro license (one outlet)...** | Creating a second outlet on Pro. | Switch to Master in **License tier**. |
+| **Could not take a safety backup ... the restore was cancelled** | The pre-restore backup failed. The server answers with a 500 error and nothing is changed. | Free disk space or fix the reported reason, then retry. |
+| **Backup not found.** | The backup was deleted. | Refresh the list. |
+| The Settings page is not in the menu | Your role lacks `settings`. | Ask an owner or admin, see [Roles](/settings/roles). |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Payment channels" href="/settings/payment-channels">Bank and QRIS accounts.</Card>
+  <Card title="DEMO and LIVE mode" href="/concepts/demo-and-live-mode">What the mode switch changes.</Card>
+  <Card title="Business day" href="/concepts/business-day">Cut-off and business date.</Card>
+  <Card title="Users" href="/settings/users">Accounts, roles and PINs.</Card>
+</Columns>

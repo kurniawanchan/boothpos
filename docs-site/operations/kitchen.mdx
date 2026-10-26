@@ -1,0 +1,100 @@
+---
+title: "Kitchen and bar"
+description: "Follow incoming tickets per station, move each item from new to preparing to ready, mark items served, and print a ticket."
+keywords: ["kitchen", "bar", "station", "ticket", "kitchen display", "preparing", "ready", "served"]
+---
+
+{/* Classification: INTERNAL */}
+
+**Kitchen & Bar** (menu key `kitchen`, under the **Restaurant** group) is the screen for the people who prepare food and drinks. Each **station** (for example Kitchen or Bar) has its own board of tickets. A ticket appears when a waiter clicks **Send to kitchen** on a tab, see [Floor and tabs](/operations/restaurant-floor).
+
+## Before you start
+
+- Your role needs the `kitchen` menu. The ticket list itself is refused without it (403).
+- You need at least one active station. With none, the page says "No stations yet. Add some in Restaurant Setup." Stations are created in [Restaurant setup](/operations/restaurant-setup), and each category or product is assigned to a station on the category and product screens.
+- You see the stations and tickets of the outlet you have selected. See [Outlets](/concepts/outlets).
+
+## How a ticket reaches a station
+
+Sending a tab creates one ticket per station for that **round**. A tab can have several rounds ("Round 1", "Round 2") if the waiter sends more items later.
+
+- Items go to the station of the product, falling back to the station of its category. The first station that is active wins.
+- Items with **no active station** are not shown on any board. They are marked ready the moment they are sent, so the waiter can serve them directly.
+
+## Use the board
+
+<Steps>
+  <Step title="Pick a station">
+    Click a station tab at the top. The first active station is selected automatically. Switching clears the board and reloads it for that station.
+  </Step>
+  <Step title="Read the ticket">
+    Each ticket card shows the place (**Table X**, the takeaway label, or **Takeaway**), the order number, the **Round** number, and the minutes waiting since it was sent. Each item shows quantity, name, chosen modifiers, and the guest's note in italics.
+  </Step>
+  <Step title="Start an item">
+    Click **Start** on an item. Its pill changes from **New** to **Preparing**.
+  </Step>
+  <Step title="Finish an item">
+    Click **Ready** when it is done. The pill changes to **Ready**, and the waiter sees it on the tab and on the table card.
+  </Step>
+  <Step title="Mark served">
+    **Mark served** closes the item. Waiters can also do this from the tab. Served items stay visible for 30 minutes.
+  </Step>
+</Steps>
+
+You advance items one by one. Moves must go in order, New to Preparing to Ready to Served; skipping or going backwards is refused by the server ("An item that is "new" cannot be moved to "ready"." and so on).
+
+### Item states
+
+| Pill | Meaning | Button shown |
+| --- | --- | --- |
+| New | Waiting to be started. | **Start** |
+| Preparing | Being made. | **Ready** |
+| Ready | Waiting to be served. | **Mark served** |
+| Served | Delivered. | None |
+| Cancelled | Cancelled by the waiter or manager. Shown struck through in red with "Cancelled — reason". | None |
+
+### Sections of the board
+
+- **In progress**: tickets that still have an item that is New, Preparing or Ready. With none, the page shows "No tickets in progress."
+- **Recently finished**: tickets whose items are all served or cancelled within the last 30 minutes. These cards are dimmed and have no action buttons.
+
+### Late tickets
+
+A ticket with items still New or Preparing for 15 minutes or more gets a highlighted border and a highlighted waiting-time pill. This is only a visual cue.
+
+## Print a ticket
+
+Click the printer button on a ticket, then **Print** in the dialog. The dialog shows the station, place, round, and the items with modifiers and notes in a plain monospaced layout. Printing uses your browser's print dialog, so it works with any printer the computer can use.
+
+## Who can do what
+
+| Action | Needed |
+| --- | --- |
+| View the board, **Start**, **Ready** | `kitchen` menu |
+| **Mark served** | `kitchen` or `floor` menu |
+| View or print a single ticket | `kitchen` or `floor` menu |
+
+## Live updates
+
+The board polls the server about every 3 seconds, and only downloads new data when something changed. It pauses while the browser tab is hidden and slows down after errors. A banner reads "Could not load tickets. Retrying automatically…" if the connection drops. If an action fails, the board reloads so you see the true state.
+
+<Note>
+There is no sound or push alert. Keep the page visible on the kitchen screen so it keeps refreshing.
+</Note>
+
+## Troubleshooting
+
+| Symptom or message | Cause | Fix |
+| --- | --- | --- |
+| No stations yet. | No active station for this outlet. | Add one in [Restaurant setup](/operations/restaurant-setup), or check the outlet selector. |
+| A ticket you expected is missing | The item has no station, or belongs to another station, or the other outlet. | Check the station on the product or category, and your outlet. |
+| An item that is "X" cannot be moved to "Y". | Another person already moved it. | The board reloads; carry on from the new state. |
+| You are not allowed to do this. (403) | Your role lacks the needed menu. | Ask an owner or admin, see [Roles and permissions](/concepts/roles-and-permissions). |
+| Could not load tickets. Retrying automatically… | Network or server problem. | Wait; it recovers by itself. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Floor and tabs" href="/operations/restaurant-floor" icon="utensils">Where tickets are sent from.</Card>
+  <Card title="Restaurant setup" href="/operations/restaurant-setup" icon="gear">Create stations.</Card>
+</Columns>

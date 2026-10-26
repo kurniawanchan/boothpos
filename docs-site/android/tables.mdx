@@ -1,0 +1,160 @@
+---
+title: "Tables and dine-in orders"
+description: "Pick a table, open an order for it, send items to the kitchen, split the bill, void sent items, cancel an order, and move on to payment."
+keywords: ["android", "tablet", "tables", "floor", "dine-in", "pax", "guests", "kitchen", "split bill", "void", "cancel order", "pre-bill", "waiter"]
+---
+
+{/* Classification: INTERNAL */}
+
+**Meja** (tables) shows the floor plan of your outlet and opens dine-in orders. A dine-in order is the same editor as a counter order, so adding items, options, notes and discounts work as described in [Counter orders on the tablet](/android/counter). This page covers what is different for tables: choosing the table, guests, rounds to the kitchen, splitting, voiding and handing the bill over for payment.
+
+## Before you start
+
+- Sign in with your PIN, see [Sign in with a PIN](/android/pin-sign-in). Cashiers and waiters land on **Meja** after signing in; other roles land on **Order**.
+- Opening a new order needs an open shift: "Buka shift dulu sebelum membuka order." See [Shifts on the tablet](/android/shifts).
+- The floor plan comes from the server and refreshes every 3 seconds. Tables and areas are set up on the web, see [Restaurant setup](/operations/restaurant-setup).
+- You need a connection. There is no offline queue for orders, see [Offline and sync](/android/offline-and-sync).
+
+## Who can do what
+
+| Action | Needs | If you lack it |
+| --- | --- | --- |
+| Open a table, add items, send to kitchen, print pre-bill | Any signed-in staff member | Not applicable |
+| Take payment | Any role that is not a waiter. The waiter's pay button prints a pre-bill instead | Ask a cashier to take payment |
+| Void an item already sent to the kitchen | The order-void permission, or an approver's PIN | **Perlu persetujuan** sheet |
+| Cancel a whole order | The order-cancel permission, or an approver's PIN | **Perlu persetujuan** sheet |
+| Discount above your role limit | An approver's PIN | **Perlu persetujuan** sheet |
+
+Owners and admins hold the void and cancel permissions by default. Other roles need an administrator to grant them, see [Roles](/settings/roles) and [Approvals](/android/approvals). The padlock icon on **Void item** and **Void** appears for everyone except roles named Supervisor, Outlet Manager, owner and admin. It is only a hint; the server decides.
+
+## The floor
+
+Area chips at the top (for example **Indoor**, **Teras**) switch between areas. Tables without an area go under **Lainnya** (other). On wide screens the right side says "Denah dari server · diperbarui tiap 3 dtk", or "Denah terakhir · server tidak terjangkau" when the last refresh failed. Pull down to refresh at once.
+
+Each tile shows the table name and one of these states:
+
+| Tile | Meaning |
+| --- | --- |
+| Plain, **Tersedia** | No open order. |
+| Colored, **Terisi** (occupied) | An open order. It also shows a dot per guest (up to 8), "4 tamu" and the current total. |
+| Colored with a thick border, **Bill tercetak** | A pre-bill was printed for the order. |
+| Grey and hatched, **Terminal Kasir 2** | The order belongs to another terminal. You can still open it. |
+
+While the floor loads you see a spinner. If it cannot load at all you see the error with a retry button. After a first successful load, a failed refresh keeps the last floor on screen.
+
+<Note>
+ASSUMPTION: If the outlet has no tables, the grid is empty and the tablet shows no message. Check the setup on the web.
+</Note>
+
+## Open an order for a table
+
+<Steps>
+  <Step title="Tap a free table">
+    The sheet **Meja 5** opens with "Ketuk jumlah tamu untuk membuka order meja."
+  </Step>
+  <Step title="Tap the number of guests">
+    Buttons 1 to 8. The order opens at once, titled **Meja 5**, subtitle "Dine-in" with your name. For more than 8 guests choose 8 (ASSUMPTION: the tablet offers no other number, although the server accepts up to 99).
+  </Step>
+  <Step title="Add items">
+    Use the product grid on the left, or the **Lihat order** bar on a phone-size screen. See [Counter orders on the tablet](/android/counter).
+  </Step>
+</Steps>
+
+Tapping a table that already has an order opens that order instead of creating a second one. If two people open the same free table at the same moment, the server refuses the second one: "Meja ini sudah punya tab yang terbuka." Other refusals: "Meja ini nonaktif dan tidak bisa menerima tab baru." and, for a revoked terminal, "Terminal ini dicabut. Tidak bisa membuka order baru."
+
+You can also reach every open order, including takeaway ones, from **Order** then **Terbuka**, see [Orders](/android/orders). An order with a QRIS payment waiting for verification opens straight on the payment screen.
+
+## Send items to the kitchen
+
+New items sit under **Belum dikirim** (red). Tap **Kirim N** (send N) to send all of them as one round. They move under **Sudah dikirim ke dapur** and each shows "Terkirim 19:42". Waiters usually send after each round of ordering.
+
+- The message is "3 item dikirim ke dapur · KOT dikirim ke printer", or "... KOT belum tercetak, printer belum tersambung" when no printer is connected. The items still reach the kitchen screen. See [Printing](/android/printing) and [Kitchen](/operations/kitchen).
+- A red notice "KOT belum tercetak — kirim ulang ke dapur secara manual" stays on the panel while a kitchen ticket for this order is waiting or failed.
+- **Cetak ulang KOT** in **Aksi order** reprints the tickets already sent for this order.
+- A sent line has no stepper and cannot be edited. Removing it is a void.
+
+## Pre-bill and closing the tab for payment
+
+**Cetak pre-bill** (in **Aksi order**, or the main button for a waiter) marks the order as billed on the server and queues a printout marked "BELUM LUNAS" (not paid). The message is "Pra-bill masuk antrean cetak · BELUM LUNAS." The tile then shows **Bill tercetak**. You can print it again.
+
+To take payment, a non-waiter taps **Bayar**.
+
+- No shift: **Belum ada shift terbuka** appears with "Pembayaran hanya bisa diterima setelah shift terbuka. Order tetap tersimpan." and a **Buka shift** button.
+- Otherwise the payment screen opens, see [Payment](/android/payment). When the order is paid in full it becomes a sale and the table is free again.
+
+## Split the bill
+
+Open **Aksi order**, then **Bagi bill** (split bill). Two modes, chosen with **Per item** and **Rata** (equal).
+
+### Per item
+
+<Steps>
+  <Step title="Pick the items">
+    Tick the lines that go to a new bill. The button reads **Bayar 2 item tunai** (pay 2 items in cash).
+  </Step>
+  <Step title="Tap the button">
+    The selected lines are paid in cash for exactly their amount and become a separate completed sale. The sheet then shows **Bagian dibayar** (part paid) and **Sisa bill** (remaining bill) from the server. Tap **Selesai**.
+  </Step>
+</Steps>
+
+This pays immediately and only in cash. It needs an open shift. The remaining items stay on the order.
+
+### Rata (equal)
+
+Set **Jumlah orang** (number of people, 2 to 5) and tap **Bagi rata 3 orang**. The server returns each part ("3 bagian dari server": **Bagian 1**, **Bagian 2**, ...). This is only a preview: nothing is paid and the order does not change. Use the amounts when each guest pays their part from the same order.
+
+Server refusals: "Tab yang sudah punya pembayaran tidak bisa dipisah." and "Jumlah yang dipisah melebihi jumlah ... pada tab."
+
+<Note>
+The tablet has no controls to move an order to another table or merge two orders. The server supports both; use the web, see [Floor and tabs](/operations/restaurant-floor).
+</Note>
+
+## Void a sent item
+
+A line already sent to the kitchen cannot be deleted. Tap it, then **Void item**.
+
+<Steps>
+  <Step title="Choose a reason">
+    **Salah input**, **Pelanggan batal**, **Item tidak tersedia** or **Kualitas / keluhan**. The first one is preselected.
+  </Step>
+  <Step title="Say what the kitchen did">
+    **Belum dibuat** (not made yet) returns the stock. **Sudah dibuat (wastage)** records the stock as waste.
+  </Step>
+  <Step title="Tap Void">
+    A message reads "Es Teh di-void." A BATAL slip is queued for the kitchen printer. Without the void permission, the **Perlu persetujuan** sheet opens first.
+  </Step>
+</Steps>
+
+If the kitchen started the item meanwhile, the server answers "Status dapur berubah. Muat ulang tab lalu coba lagi." Reopen the order and try again. Stock cannot be returned once cooking started: "Stok tidak bisa dikembalikan setelah item mulai dimasak."
+
+## Cancel the whole order
+
+**Aksi order**, then **Batalkan order** ("Perlu alasan"). Choose **Pelanggan batal**, **Order ganda** or **Salah meja / tipe order**, then tap **Batalkan order**. The message is "Order dibatalkan." and the table is free. Sent items are processed as voids.
+
+- An order that already has a payment cannot be cancelled and no approval helps: "Tab yang sudah dibayar tidak bisa dibatalkan."
+- Without the order-cancel permission the approval sheet opens.
+
+## Closing a shift with open orders
+
+The server refuses to close a shift while it holds open orders: "Shift hanya bisa ditutup setelah semua tab terbuka dibayar, dibatalkan, atau diserahkan." The tablet cannot hand an order over to another shift. Pay or cancel each order first, see [Shifts on the tablet](/android/shifts).
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| Error with a retry button instead of the floor | The floor could not be loaded. | Check the connection, tap retry. |
+| "Meja Z tidak ditemukan." | The table is not in the last floor snapshot. | Pull down to refresh. |
+| "Meja ini sudah punya tab yang terbuka." | Someone else opened it first. | Open the table again; it now opens that order. |
+| "Meja ini milik outlet lain; tab tidak bisa dipindahkan antar-outlet." | The table belongs to another outlet. | Not applicable on the tablet. |
+| "Item sudah dikirim — perubahan lewat void." | You saved a change to a sent line. | Use **Void item**. |
+| "Tidak ada penyetuju yang memenuhi syarat untuk aksi ini." | No other approver with a PIN. | See [Approvals](/android/approvals). |
+| "Pembayaran ditolak: shift sudah ditutup. Buka shift untuk menerima pembayaran." | Shift closed. | Open a shift. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Counter orders on the tablet" href="/android/counter" />
+  <Card title="Payment" href="/android/payment" />
+  <Card title="Floor and tabs on the web" href="/operations/restaurant-floor" />
+  <Card title="Kitchen" href="/operations/kitchen" />
+</Columns>

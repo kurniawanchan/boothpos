@@ -1,0 +1,64 @@
+---
+title: "DEMO and LIVE mode"
+description: "What the DEMO and LIVE system modes mean, what switching does, and why no data is deleted."
+keywords: ["demo", "live", "system mode", "sample data", "training"]
+---
+
+BoothPOS keeps two separate sets of business data in the same database: **DEMO** and **LIVE**. A badge in the top bar always shows which one is active, for every role.
+
+| Mode | Shows | Use it for |
+| --- | --- | --- |
+| DEMO | Sample data for exploring the app | Training and trying features |
+| LIVE | Only data your store actually created | Real trading |
+
+A fresh installation starts in **LIVE**. It never starts in DEMO silently.
+
+## How it works
+
+- Business and transactional records (products, stock, orders, sessions, customers, and similar) are stamped with the mode that was active **when they were created**.
+- Every list and report shows only records of the active mode.
+- Switching mode **never deletes** data from either mode. Switch back and the records are there.
+- Users, roles, settings, activity log entries, and payment channels are shared. They do not change with the mode.
+
+<Warning>
+  Sales rung up in DEMO mode do not appear in LIVE reports, and the other way round. Before opening for real trade, confirm the badge says **LIVE**.
+</Warning>
+
+## Switch mode
+
+Owners and admins (anyone with the `settings` menu) switch mode from **Settings → General → System mode**.
+
+<Steps>
+  <Step title="Open General settings">
+    Go to **Settings → General** and find **System mode**. See [General settings](/settings/general).
+  </Step>
+  <Step title="Choose the mode">
+    Pick DEMO or LIVE.
+  </Step>
+  <Step title="Confirm">
+    Confirm the prompt: "Switch to \{mode\} mode? The lists and reports you see will change to match." A toast confirms the switch.
+  </Step>
+</Steps>
+
+<Note>
+  The badge only appears after settings finish loading, so you never see a guessed mode while the page loads.
+</Note>
+
+## A unique value must be unique across both modes
+
+Some values, such as a product code, must be unique across the whole database. The server checks both modes, so a code used by a DEMO record cannot be reused in LIVE. If you get a "already taken" validation error for a code you cannot find, check the other mode.
+
+<Note>
+  ASSUMPTION: this affects only values defined as database-wide unique. Which fields those are is decided per screen. The page for each module notes it where it matters.
+</Note>
+
+## Related
+
+<Columns cols={2}>
+  <Card title="General settings" icon="gear" href="/settings/general">
+    Where the system mode is changed.
+  </Card>
+  <Card title="Business day" icon="calendar" href="/concepts/business-day">
+    How dates are assigned to sales.
+  </Card>
+</Columns>

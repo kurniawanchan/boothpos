@@ -1,0 +1,90 @@
+---
+title: "Android POS app overview"
+description: "What the BoothPOS Android tablet app is, what device it needs, how its screens are laid out, and how it relates to the server and the web app."
+keywords: ["android", "tablet", "pos app", "navigation rail", "bottom navigation", "connection chip", "dark mode", "requirements"]
+---
+
+{/* Classification: INTERNAL */}
+
+The BoothPOS Android app is the touch-first till for cashiers and waiters. It takes orders, collects payment, prints receipts and kitchen tickets, and runs the cashier shift. The screens are in Indonesian, so this guide gives each on-screen label in bold with an English gloss on first mention.
+
+The app has no data of its own. Every order, price, stock level and shift lives on your BoothPOS server, and the app reads and writes it through the same API as the web app. It is **online-first**: it keeps no local queue of orders, so the tablet must reach the server to sell. See [Offline and sync](/android/offline-and-sync).
+
+## Before you start
+
+- A tablet or phone running **Android 8.0 or later** (API level 26).
+- A BoothPOS server the tablet can reach, on the outlet network or online. See [Set up a terminal](/android/setup).
+- An active staff account with a 6-digit PIN. An owner or admin sets the PIN on the web. See [Sign in with a PIN](/android/pin-sign-in).
+- Optional: a Bluetooth receipt printer, paired in Android settings first. See [Printing](/android/printing).
+
+<Note>
+  The app is distributed as an APK built for your installation. The build carries the default server addresses used during setup. If setup says the app was built without a default address, you need a different build from your administrator.
+</Note>
+
+## How the app relates to the server and the web app
+
+| Question | Answer |
+| --- | --- |
+| Where is the data? | On the server. The tablet stores only its terminal choice (outlet, terminal name, server address) and its session token. |
+| Who sets prices, menu, staff and roles? | Back office users on the web. See [Products](/inventory/products), [Users](/settings/users) and [Roles](/settings/roles). |
+| Do web and app shifts clash? | No. The app and the web each have their own open shift per user. See [Shifts on the web](/operations/shifts). |
+| Which outlet do I sell in? | The outlet chosen at setup. See [Outlets](/concepts/outlets). |
+
+## Screen layout
+
+The layout follows the width of the screen.
+
+| Width | Layout |
+| --- | --- |
+| Under 600 dp (phone) | Compact. A bottom navigation bar, a smaller title, and a short subtitle with your name and shift state. Menu grid shows 2 columns. |
+| 600 dp and wider (tablet) | A navigation rail on the left. The subtitle also shows your role and when the shift opened. Menu grid shows 3 to 5 columns as the screen widens. |
+
+The sign-in screen, the open-shift screen, the order editor and the payment screens use the whole screen and have no rail or bottom bar.
+
+### Navigation items
+
+| Item | What it opens |
+| --- | --- |
+| **Meja** (tables) | The floor plan for dine-in tabs. See [Tables](/android/tables). |
+| **Counter** | A counter order. If you already have a counter order open, it returns to it; otherwise it starts a new one. See [Counter](/android/counter). |
+| **Order** | Your open and completed orders. A badge shows how many are open. See [Orders](/android/orders). |
+| **Shift** | The shift hub: totals, cash in and out, close. See [Shifts](/android/shifts). |
+| **Perangkat** (device) | Connection, clock and printer status. Rail only, at the bottom. Compact screens open it from elsewhere in the app. |
+
+On the rail, the round **+** button above the items starts a new counter order (**Order baru**, new order).
+
+<Note>
+  ASSUMPTION: on a compact screen the bottom bar lists only Meja, Counter, Order and Shift, and the code shows no other way to reach **Perangkat**. Check on a phone before you tell staff to use it there.
+</Note>
+
+## Header
+
+The header shows the screen title and, below it, the signed-in user and shift state: **Belum ada shift** (no shift yet) or **Shift terbuka** (shift open). On the right are two controls:
+
+- **Connection chip.** Shows **Online**, **Offline**, **Offline terbatas** (offline, limited) or **Memeriksa koneksi…** (checking connection). A warning colour and a crossed Wi-Fi icon mean offline.
+- **Initials button.** The round button with your two initials locks the app and returns to the PIN screen. See [Switch user](/android/pin-sign-in).
+
+## Dark mode
+
+The app switches to dark mode by itself from 18:00 to 05:59 by the tablet clock. During the day it follows the Android system setting. There is no switch for it inside the app.
+
+## Pull to refresh
+
+On Meja, Order, Shift, the shift report screens and **Perangkat**, pull the screen down to reload from the server. The counter menu has its own pull-to-refresh, which also reloads product photos.
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| **Memeriksa koneksi…** stays | The first server check has not finished. | Wait a few seconds, then open **Perangkat** and press **Periksa koneksi**. |
+| The chip says **Offline** | The last request failed on the network. | Check Wi-Fi and the server. See [Offline and sync](/android/offline-and-sync). |
+| No **Perangkat** item on a phone | Compact layout has four bottom items. | ASSUMPTION: use a tablet or the rail layout for device status. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Set up a terminal" href="/android/setup" />
+  <Card title="Sign in with a PIN" href="/android/pin-sign-in" />
+  <Card title="Offline and sync" href="/android/offline-and-sync" />
+  <Card title="Roles and permissions" href="/concepts/roles-and-permissions" />
+</Columns>

@@ -1,0 +1,163 @@
+---
+title: "Outlets"
+description: "Create and manage the outlets of your organisation, and understand how outlet scope, assignments and the outlet selector work."
+keywords: ["pos", "outlets", "multi-outlet", "license", "pro", "master", "outlet selector", "assignment", "home outlet"]
+---
+
+An outlet is one place where you sell: a shop, a counter or a kitchen. One organisation can run one or more outlets on one machine or one shared server, with one database for the whole organisation. The **Outlets** page is where you create them, edit their details and deactivate them.
+
+The older address `/artists` redirects to this page.
+
+## Before you start
+
+- Your role needs the **Outlets** menu (`outlets`) to create, edit or delete. Every signed-in role can read the outlet list through the API.
+- The number of active outlets depends on your license. See [License limit](#license-limit).
+- The page lists every outlet of the current data mode. The top-bar outlet selector does not narrow this page.
+
+## The outlet table
+
+| Column | What it shows |
+| --- | --- |
+| Code | Three-letter code. |
+| Name | Outlet name. |
+| Contact | Phone, with email underneath. |
+| Products | Number of products whose **home outlet** is this outlet. |
+| Status | Active or Inactive. |
+
+Search filters by outlet name (about 300 ms after you stop typing). **Reset filters** clears it.
+
+## Add an outlet
+
+<Steps>
+  <Step title="Open the form">
+    Select **Add outlet**. The button is disabled when your license limit is reached.
+  </Step>
+  <Step title="Fill in the fields">
+    **Code (3 letters)** and **Outlet name** are required.
+  </Step>
+  <Step title="Save">
+    Select **Save**. You see "Outlet created."
+  </Step>
+</Steps>
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| Code (3 letters) | Yes | Exactly 3 letters, no digits. Saved in uppercase. Unique among outlets that are not deleted. |
+| Outlet name | Yes | Up to 100 characters. |
+| Phone | No | Up to 30 characters. |
+| Email | No | Valid email address, up to 100 characters. |
+| Notes | No | Free text. |
+| Active | No | Checked by default. |
+
+<Warning>
+The outlet code is permanent. "Permanent once created — becomes part of the SKU." The field is locked when you edit, and the server rejects a changed code with "The outlet code is permanent and cannot be changed after creation."
+</Warning>
+
+## Edit or deactivate an outlet
+
+Select **Edit**, change the name, contact details, notes or the **Active** checkbox, and select **Save**. You see "Outlet updated." Unchecking **Active** takes the outlet out of the lists people can pick from. Inactive outlets are also left out of what a user is allowed to see.
+
+### Delete (deactivate)
+
+Select **Delete**. The dialog is titled **Deactivate outlet** and asks "Deactivate \{name\}? Rejected if it still has active products." Confirm with **Yes, deactivate**. You see "Outlet deactivated."
+
+The outlet is removed from the list (the record is soft-deleted and the action is written to the [Activity log](/insight/activity-log)). If any active product still has this outlet as its home outlet, the server answers 409: "This outlet still has active products and cannot be deleted." Deactivate or move those products first.
+
+<Note>
+The button says Delete but the dialog and message say deactivate. The effect is a soft delete, not the same as clearing the **Active** checkbox. ASSUMPTION: a deleted outlet cannot be brought back from this screen.
+</Note>
+
+## License limit
+
+Your installation has either a Pro or a Master license. This is one setting, `multi_outlet_enabled`.
+
+| License | Active outlets allowed |
+| --- | --- |
+| Pro | One. A fresh install with no active outlet can still create its first. |
+| Master | Any number. |
+
+When a Pro install already has its one active outlet, a banner reads "Pro license — one outlet" with an **Upgrade to Master** link to [General settings](/settings/general), and **Add outlet** is disabled. The check also runs on the server: **POST /outlets** is refused with 403 "This installation uses a Pro license (one outlet). Upgrade to Master to add more outlets." The disabled button is only a hint. The count includes only active outlets, and the import re-checks the quota too.
+
+## Import and export
+
+**Export .xlsx** and **Bulk import** use the shared master-data workbook (outlets sheet, among others). The import previews first and is all-or-nothing. See [Vendors](/purchasing/vendors#import-and-export) for how the dialog behaves. The buttons show only for users with the Outlets menu.
+
+## How outlets work across the app
+
+### Home outlet and where an item is sold
+
+Two ideas are easy to mix up:
+
+- **Home outlet** is the item's owner. It is required, it is part of the item code, and it decides which purchase orders and BOM lines the item may use.
+- **Sold at** is a separate relation between the item and every outlet: carried or not, an optional price per variant, and sold-out state. An item can have one home outlet and be sold at several.
+
+When someone orders, the order's outlet decides what is allowed. An item not carried at that outlet, or sold out there, is refused with a 409. The line price is the outlet price if one is set, otherwise the base price. Marking an item sold out at one outlet does not change other outlets. Details are on [Products](/inventory/products) and [Product detail](/inventory/product-detail).
+
+### Assign users to outlets
+
+Users see only the outlets they are assigned to, unless their role is flagged **Sees all outlets** (owner and admin do this by default).
+
+<Steps>
+  <Step title="Open the user">
+    Go to [Users](/settings/users) and edit the user. This needs the Users menu.
+  </Step>
+  <Step title="Tick outlets">
+    The **Outlet** checkboxes appear only when you can see more than one outlet and the user's role does not see all outlets. The **Outlets** column on the table shows codes, "All outlets", or red "Not assigned".
+  </Step>
+  <Step title="Save">
+    Outlet assignments are saved in a second request after the user itself. If that fails you get an error toast but the user is still saved.
+  </Step>
+</Steps>
+
+Rules enforced by the server:
+
+- You cannot change your own outlet assignments (403).
+- Users whose role sees all outlets cannot be assigned: 409 "Owners and admins always see every outlet, so they are not assigned to particular outlets."
+- Without the "sees all outlets" flag you can only grant or revoke outlets you can see yourself (403 otherwise).
+- Only active outlets can be assigned: "The outlet was not found or is inactive."
+- Each change is logged in the Activity log with the old and new outlet ids.
+- A user without any outlet gets "This account is not assigned to any outlet. Ask an administrator to assign it." when a feature needs an outlet.
+
+### The outlet selector
+
+The top bar has an outlet dropdown. It appears **only when you can see more than one outlet**. With one outlet it is hidden, not disabled.
+
+- The first option is **All outlets (N)**. The others are your outlets by name.
+- The choice is remembered per user in your browser and restored at next sign-in if you still have access. If your access to the remembered outlet was removed, the selection is cleared.
+- The web app sends the choice as the `X-Outlet-Id` header. It can only narrow what you see within your assigned outlets. An outlet you are not allowed to use gets a 403 "This outlet is not one you are allowed to access." A header that is not a number gets a 422.
+- Some screens have their own outlet filter and ignore the selector. Examples: the Products page, the Restaurant Setup lists and the purchase order list.
+- The material stock adjustment dialog starts with the selected outlet.
+
+Sales, shifts, tables and reports follow the outlet scope. See [Outlets and scope](/concepts/outlets) for the full picture.
+
+<Info>
+Terminals (tablets running the Android POS) are registered per outlet. That is covered in the Android app documentation, not here.
+</Info>
+
+## Troubleshooting
+
+| What you see | Cause | What to do |
+| --- | --- | --- |
+| **Add outlet** is greyed out | Pro license with one active outlet already. | Upgrade to Master, or deactivate the existing outlet. |
+| 403 "This installation uses a Pro license..." | Same limit, hit on the server. | Same. |
+| 409 "This outlet still has active products..." | Products still have this outlet as home. | Deactivate or move the products. |
+| No outlet dropdown in the top bar | You can see only one outlet. | Ask an administrator to assign more. |
+| User shows "Not assigned" in red | No outlets ticked. | Edit the user and tick outlets. |
+| Code field locked | Codes are permanent. | Create a new outlet if needed. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Outlets and scope" href="/concepts/outlets">
+    How scope, home outlet and sold-at outlet work.
+  </Card>
+  <Card title="Users" href="/settings/users">
+    Assign outlets to staff.
+  </Card>
+  <Card title="Roles" href="/settings/roles">
+    The "Sees all outlets" flag.
+  </Card>
+  <Card title="Products" href="/inventory/products">
+    Carried, price and sold-out per outlet.
+  </Card>
+</Columns>

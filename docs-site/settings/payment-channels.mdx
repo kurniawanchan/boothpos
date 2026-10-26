@@ -1,0 +1,118 @@
+---
+title: "Payment channels"
+description: "Add the bank accounts and QRIS codes cashiers show to customers, and set the default payment details used on invoices."
+keywords: ["payment channels", "bank transfer", "qris", "qr code", "e-wallet", "settings", "invoice payment information"]
+---
+
+A **payment channel** is a bank account or a QRIS / e-wallet QR code that the cashier shows when a customer pays by transfer or QRIS. Channels are managed in two places, both under Settings.
+
+| Where | What it holds |
+| --- | --- |
+| **Settings > General > Payment channels** | The list of channels (add, edit, delete). |
+| **Settings > Payment** (`/settings/payment`) | One set of default bank details for invoices. |
+
+## Before you start
+
+- You need the **Settings** menu (menu key `settings`). Without it, add, edit and delete answer 403 with **Not authorized.**
+- Everyone who can take payments can **read** the active channels, but with different detail:
+  - Owner/admin (Settings menu) see the full account number.
+  - Other roles see it masked, only the last four characters visible, for example `******1234`. The full number is shown when the channel is selected for a transaction, because the cashier needs to show it to the customer.
+
+## Add a channel
+
+<Steps>
+  <Step title="Open the list">
+    Go to **Settings > General** and open **Payment channels**. Click **Add**.
+  </Step>
+  <Step title="Choose the type">
+    **Type** is **Bank transfer** or **QRIS**.
+  </Step>
+  <Step title="Fill the details">
+    Enter **Provider name** (for example "Bank Contoh" or "Gopay"), **Account holder name**, and, for a bank transfer, **Account number**. For QRIS, optionally add a **QR code image**.
+  </Step>
+  <Step title="Save">
+    Click **Save**. You see **Payment channel added.**
+  </Step>
+</Steps>
+
+### Field reference
+
+| Field | Shown for | Rule |
+| --- | --- | --- |
+| **Type** | Both | `Bank transfer` or `QRIS`. |
+| **Provider name** | Both | Required, up to 50 characters. |
+| **Account holder name** | Both | Required, up to 100 characters. |
+| **Account number** | Bank transfer only | Required for bank transfer, up to 50 characters. |
+| **QR code image** | QRIS only | Optional, can be added later. JPEG or PNG, up to 5 MB. |
+
+New channels are placed at the end of the list. The screen sends the display order automatically; there is no control to reorder channels.
+
+<Note>
+  The browser only checks that the QR file is an image under 5 MB (**The file must be an image.** or **Maximum image size is 5 MB.**). The server accepts JPEG and PNG only, so other image types are rejected with a message under the field.
+</Note>
+
+## Edit a channel
+
+Click **Edit** on a row. The same form opens. For a QRIS channel you can:
+
+- choose a new **QR code image**, which replaces the old one, or
+- tick **Remove the existing QR image** to delete it without a replacement.
+
+Choosing a new file unticks the remove box. You see **Payment channel updated.** after saving.
+
+## Delete a channel
+
+Click **Delete** on a row and confirm **Delete \{provider\}? This cannot be undone.** You see **Payment channel deleted.**
+
+A channel that has ever been used by a payment cannot be deleted. The server answers 409 with **This payment channel is in use and cannot be deleted.** (shown as **Failed to delete this payment channel.** if no server message is available). The record stays so past payments keep their history.
+
+<Warning>
+  There is no screen control to deactivate a channel instead of deleting it. ASSUMPTION: a channel already used by a payment can therefore not be removed from the picker using this web UI.
+</Warning>
+
+## What cashiers see
+
+On the payment step, the cashier picks a method (**Cash**, **Transfer** or **QRIS**). For Transfer and QRIS they then see the matching channels:
+
+- If there is more than one channel for that method, the cashier picks one. With exactly one channel it is selected automatically. With none, the prompt **Select a payment channel above.** stays.
+- For QRIS the QR image is shown and can be enlarged (**Enlarge QR code**); for a bank transfer the account holder and account number are shown.
+- Cash needs no channel and no proof.
+- A payment proof photo is optional for non-cash payments, and can be added later from the transaction detail. Proof photos accept JPEG or PNG. See [POS](/operations/pos) and [Sales](/operations/sales).
+
+Only **active** channels appear in the list and in the picker.
+
+## Invoice payment information
+
+**Settings > Payment** has a single form titled **Invoice Payment Information**, "used as the default payment information when creating a new invoice."
+
+| Field | Rule |
+| --- | --- |
+| **Bank Name** | Optional, up to 255 characters. |
+| **Account Number** | Optional, up to 255 characters. |
+| **Account Holder Name** | Optional, up to 255 characters. |
+| **Payment Instructions** | Optional text. |
+
+Click **Save**. You see **Payment information saved.** If loading fails you see an error with a retry button instead of an empty form, so you never overwrite real values by saving a blank form.
+
+<Note>
+  This form feeds the Companies / Licenses / Invoices admin screens, which are not covered in these docs. It does not affect the channels cashiers use at the register.
+</Note>
+
+## Troubleshooting
+
+| Message or symptom | Cause | Fix |
+| --- | --- | --- |
+| **Not authorized.** (403) | Your role lacks the Settings menu. | Ask an owner or admin, see [Roles](/settings/roles). |
+| Field error under **Provider name**, **Account holder name** or **Account number** | Missing or too long (422). | Correct it and save. |
+| Account number shows as `****1234` | You are not owner/admin. | Expected; the full number appears when the channel is chosen for a payment. |
+| **This payment channel is in use and cannot be deleted.** (409) | The channel has payments. | Edit it instead of deleting. |
+| QRIS has no image at the register | No QR uploaded. | Edit the channel and upload a QR image. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="General settings" href="/settings/general">Other store-wide settings.</Card>
+  <Card title="POS" href="/operations/pos">Where channels are used at payment.</Card>
+  <Card title="Sales" href="/operations/sales">Add or change payment proof afterwards.</Card>
+  <Card title="Roles" href="/settings/roles">Who gets the Settings menu.</Card>
+</Columns>

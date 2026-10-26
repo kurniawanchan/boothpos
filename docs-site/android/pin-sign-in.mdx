@@ -1,0 +1,101 @@
+---
+title: "Sign in with a PIN"
+description: "Choose your name on the tablet, enter your 6-digit PIN, understand lockouts, and switch user; admins set PINs on the web."
+keywords: ["android", "pin", "sign in", "roster", "lockout", "switch user", "initials", "set pin"]
+---
+
+{/* Classification: INTERNAL */}
+
+Staff sign in on the tablet with a **6-digit PIN**, not a username and password. The sign-in screen is **Siapa yang bertugas?** (who is on duty?). It lists the staff of the tablet's outlet, and you tap your name and enter your PIN.
+
+## Before you start
+
+- The tablet has a saved outlet and terminal. See [Set up a terminal](/android/setup).
+- Your account is active, assigned to this outlet and has a PIN. A person without a PIN appears dimmed and cannot be chosen.
+- Owner and admin accounts do not appear in the list. They cannot sign in on the tablet, but they can approve actions with their PIN. See [Approvals](/android/approvals).
+
+## Sign in
+
+<Steps>
+  <Step title="Choose your name">
+    Tap your name in the row of staff chips. Each chip shows your initials, name and role. The first person who can sign in is selected for you, so check that it is you.
+  </Step>
+  <Step title="Enter the PIN">
+    The prompt reads **PIN** followed by your name. Press the digits on the keypad. Six dots fill as you type. The backspace key removes the last digit.
+  </Step>
+  <Step title="Wait for the check">
+    The PIN is sent on the sixth digit. There is no confirm button. A correct PIN opens your first screen.
+  </Step>
+</Steps>
+
+### Where you land
+
+| Role on the server | First screen |
+| --- | --- |
+| **Kasir** (cashier) with no open shift | **Buka shift**, to open a shift. See [Shifts](/android/shifts). |
+| **Kasir** with an open shift | **Meja** |
+| **Waiter** | **Meja** |
+| Any other role (for example supervisor, manager) | **Order** |
+
+<Note>
+  Any role name the app does not recognise is treated as a cashier. ASSUMPTION: a custom role therefore lands on **Buka shift** or **Meja**, not **Order**.
+</Note>
+
+The app opens no order by itself on sign-in. An empty open tab would block closing the shift.
+
+## Screen controls
+
+| Control | What it does |
+| --- | --- |
+| Staff chip | Selects that person and clears any typed PIN and error. Dimmed chips are inert. |
+| Keypad | Enters digits, up to 6. Disabled while a check is running or when nobody has a PIN. |
+| **Ganti outlet / terminal** | Opens terminal setup. On tablet layout the gear icon in the left panel does the same. |
+| Connection chip | **Online**, **Offline** and so on, refreshed about every 10 seconds while this screen is shown. |
+| Left panel (tablet) | Outlet name, terminal name, clock and date. |
+
+## Wrong PIN and lockout
+
+| What you see | Meaning |
+| --- | --- |
+| "PIN salah. Sisa \{n\} percobaan." | Wrong PIN, \{n\} tries left before the lock. |
+| "PIN terkunci karena salah 5 kali. Coba lagi dalam \{n\} menit." | Five wrong PINs in a row locked your PIN. The minutes come from the server and are rounded up. |
+| "PIN terkunci karena salah 5 kali. Coba lagi sebentar lagi." | Locked, but the server gave no end time. |
+| "Pilih nama Anda terlebih dahulu." | No name was selected when the sixth digit was entered. |
+
+The dots clear after every failure. The lock is 5 minutes. It is per person and shared with approver PINs, so wrong approver PINs also count toward the same five. An admin can clear the lock early by resetting the PIN on the web.
+
+## Switch user
+
+Tap the round **initials button** at the top right of any screen with the header. The app signs you out and returns to the PIN screen so the next person can sign in. The tablet does not close your shift when you do this.
+
+<Warning>
+  Signing out does not cancel open tabs or close the shift. Open tabs stay on the server. Close the shift before you leave for the day.
+</Warning>
+
+Switching never needs a PIN, so any person at the tablet can press the button. Press it before you step away.
+
+## How admins set PINs
+
+PINs are set on the web, never on the tablet. An owner or admin with access to the **Settings** menu opens [Users](/settings/users), then uses **Set PIN** or **Reset PIN** for the person. That screen can also suggest a random PIN. Setting a PIN clears a lock and signs the person out of any tablet session. The PIN is never shown again afterwards. See [Roles and permissions](/concepts/roles-and-permissions) for who holds the **Settings** menu.
+
+The empty-list message points the same way: "Belum ada staf dengan PIN di outlet ini. Atur PIN dari akun masing-masing atau minta admin."
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| "Belum ada staf dengan PIN di outlet ini…" | Nobody at the outlet has a PIN. | An admin sets PINs on [Users](/settings/users). |
+| My name is missing | The account is inactive, not assigned to this outlet, or is owner/admin. | Check the assignment on Users. Owner and admin never appear. |
+| My name is dimmed, **Belum ada PIN** | The account has no PIN. | Ask an admin to set one. |
+| Error card with **Coba lagi** instead of names | The staff list could not be loaded. | Check the connection and tap **Coba lagi**. |
+| "Terminal ini tidak berlaku lagi…" | The terminal was revoked. | Choose the outlet and terminal again. See [Set up a terminal](/android/setup). |
+| Error message with a network failure | The server cannot be reached. | See [Offline and sync](/android/offline-and-sync). |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Set up a terminal" href="/android/setup" />
+  <Card title="Approvals" href="/android/approvals" />
+  <Card title="Users and PINs on the web" href="/settings/users" />
+  <Card title="Shifts" href="/android/shifts" />
+</Columns>

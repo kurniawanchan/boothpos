@@ -1,0 +1,128 @@
+---
+title: "Categories"
+description: "Create, edit, deactivate and bulk-import the category tree that groups your menu items and drives kitchen routing."
+keywords: ["pos", "categories", "category", "parent category", "station", "import", "export"]
+---
+
+**Classification: INTERNAL**
+
+Categories group your items on the register and in the Products list. A category can have a parent, so you can build a tree (for example "Drinks" with "Coffee" under it). A category can also point to a kitchen or bar station, which is the default station for every item in it.
+
+## Before you start
+
+- You need the **Categories** menu (menu key `categories`). The page, the create, edit and deactivate actions, and the server checks all use this one menu. There are no separate action permissions.
+- Export and import are shown to anyone who can open this page. The server allows them for any role that has at least one master-data menu (outlets, categories, products, stock, vendors, materials, roles or users).
+- Categories are shared by the whole installation. They are not split per outlet.
+- Data you create is stored in the current mode, DEMO or LIVE. See [Demo and live mode](/concepts/demo-and-live-mode).
+
+<Note>
+ASSUMPTION: the built-in Owner and Admin roles have every menu, and the built-in Inventory role was created with the Categories menu. Roles can be edited, so check yours under [Roles](/settings/roles).
+</Note>
+
+## The category list
+
+The list shows 25 categories per page, ordered by **Display order** and then by name. The search box filters by category name and waits about 300 ms after you stop typing. **Reset** clears the search.
+
+| Column | What it shows |
+| --- | --- |
+| Code | The 2-letter code, in a monospace font. |
+| Name | The category name. |
+| Parent | The parent category name, or a dash for a top-level category. |
+| Products | How many products are in the category. |
+| Status | **Active** or **Inactive**. |
+
+<Warning>
+The Parent column and the parent picker in the form are filled from the first 100 categories only. If you have more than 100, a parent outside that set shows as `#<id>` in the list and cannot be chosen in the picker.
+</Warning>
+
+## Create a category
+
+<Steps>
+  <Step title="Open the form">
+    Select **New category**.
+  </Step>
+  <Step title="Fill the fields">
+    Enter the code, name and, if needed, the parent, station, display order and image. See the field table below.
+  </Step>
+  <Step title="Save">
+    Select **Save**. You see "Category created." and the list refreshes.
+  </Step>
+</Steps>
+
+To change a category, select **Edit** on its row. The form is the same, except that the code is locked.
+
+### Fields
+
+| Field | Rules |
+| --- | --- |
+| Code (2 letters) | Required when creating. Exactly 2 letters. The form converts it to upper case. It must be unique among categories that are not deleted. **Permanent once created.** It becomes part of every product SKU in the category. |
+| Category name | Required, up to 100 characters. |
+| Parent category | Optional. "None (top-level category)" makes it a top-level category. A category cannot be its own parent, and you cannot pick a parent that would create a loop. |
+| Preparation station | Optional. Shown only when the station list loads for your role (it needs access to Restaurant setup or Kitchen). Choose "No station (no preparation needed)" if the category needs no cooking. Items without their own station follow the category. Items with no station at all are treated as ready to serve as soon as they are sent. |
+| Display order | A whole number, default 0. Lower numbers come first. |
+| Active | Checked by default. |
+| Category image | Optional. The form accepts any image file up to 5 MB, but the server accepts only **JPEG or PNG** up to 5 MB. |
+
+<Note>
+The image uploads after the category is saved. If the upload fails, you see "Category saved, but the image upload failed." The category itself is already saved, so open **Edit** and try another file.
+</Note>
+
+## Deactivate a category
+
+<Steps>
+  <Step title="Select Delete">
+    Select **Delete** on the row. The confirmation is titled **Deactivate category**.
+  </Step>
+  <Step title="Confirm">
+    Select **Yes, deactivate**. You see "Category deactivated."
+  </Step>
+</Steps>
+
+The server soft-deletes the category: it leaves the list, and its code stays reserved so a new category or an import cannot reuse it. The action is written to the [activity log](/insight/activity-log).
+
+To keep a category visible but unavailable, edit it and clear **Active** instead.
+
+### Delete guards
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| This category still has active subcategories and cannot be deleted. (409) | One or more child categories are active. | Deactivate or move the child categories first. |
+| This category still has active products and cannot be deleted. (409) | An active product uses this category. | Move the products to another category or deactivate them. |
+
+## Export and import
+
+- **Export .xlsx** downloads the category sheet. If the download fails you see "Failed to export category data."
+- **Bulk import** opens the shared master-data import dialog. A single `.xlsx` file can carry several sheets, so the same dialog is also used on the Products and Stock pages. The full procedure, limits and error table are on [Products](/inventory/products#import-and-export-master-data).
+
+The `categories` sheet uses these columns: `code`, `name`, `parent_code`, `display_order`, `is_active`, `image_filename`. A blank cell on an existing category means "leave unchanged". To attach images, choose the image files in the dialog and make each `image_filename` match a file name.
+
+## Troubleshooting
+
+| Message | Cause | Fix |
+| --- | --- | --- |
+| The code is permanent and cannot be changed after creation. (422) | A request tried to change the code of an existing category. | Create a new category with the right code. |
+| Code validation error (422) | The code is not exactly 2 letters, or another category already uses it. | Choose a different 2-letter code. |
+| The selected parent category would form a cycle. (422) | The parent you chose is a descendant of this category. | Pick a different parent. |
+| The selected station does not exist. (422) | The station was removed after you opened the form. | Reload and choose another station. |
+| Maximum image size is 5 MB. / The file must be an image. | The form's own file check. | Choose a smaller image file. |
+
+<Note>
+The two "cycle" messages come from the server and are written in Indonesian even when the interface is in English.
+</Note>
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Products" href="/inventory/products">
+    Items use a category and inherit its station.
+  </Card>
+  <Card title="Restaurant setup" href="/operations/restaurant-setup">
+    Create the stations that categories can point to.
+  </Card>
+  <Card title="Roles" href="/settings/roles">
+    Grant the Categories menu to a role.
+  </Card>
+  <Card title="Activity log" href="/insight/activity-log">
+    Review who deleted a category.
+  </Card>
+</Columns>

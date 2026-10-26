@@ -1,0 +1,184 @@
+---
+title: "Roles"
+description: "Create roles and choose which screens and sensitive actions each role can use."
+keywords: ["roles", "permissions", "menu access", "action permissions", "discount limit", "all outlets", "owner", "admin", "cashier", "inventory"]
+---
+
+A **role** decides what a user can open and do. BoothPOS has two layers, and a role holds both.
+
+| Layer | Question it answers | Set in the form as |
+| --- | --- | --- |
+| **Menu access** (menu keys) | Which screens can this role open, and read or change the data behind them? | **Menu access** checkboxes |
+| **Action permissions** | Which sensitive actions inside a screen can this role do (mark 86, publish a menu release, approve a price, and so on)? | **Action permissions** checkboxes |
+
+Menu access is the main gate. A role without a menu cannot reach that screen, and the server refuses its requests with 403. Action permissions are an extra layer on top, enforced by the server; the screen only hides the controls.
+
+## Before you start
+
+- You need the **Roles** menu (menu key `roles`) to open this screen and to create, edit or delete roles.
+- Users get a role in [Users](/settings/users). A role with no users does nothing yet.
+- For a broader explanation, see [Roles and permissions](/concepts/roles-and-permissions).
+
+## The role list
+
+| Column | Meaning |
+| --- | --- |
+| **Role Name** | The role's name. |
+| **Menu Access** | How many menus it includes, for example **12 menus**. |
+| **Users** | How many active users have this role. |
+| **Type** | **Default** (a system role) or **Custom**. |
+
+Search with **Search role name…**. Roles are sorted by name, 25 per page.
+
+## Create or edit a role
+
+<Steps>
+  <Step title="Add role">
+    Click **Add role**, or **Edit** on a row.
+  </Step>
+  <Step title="Name the role">
+    **Role name** is required, up to 50 characters, and must be unique among existing roles.
+  </Step>
+  <Step title="Tick the menus">
+    Under **Menu access**, tick the screens the role can open (see the table below).
+  </Step>
+  <Step title="Tick the action permissions">
+    Under **Action permissions**, tick the sensitive actions the role may do. The hint reads: "Controls actions inside a screen (e.g. marking 86). Screen access is still set by the menus above."
+  </Step>
+  <Step title="Choose outlet scope (multi-outlet only)">
+    If you see **Sees all outlets**, tick it to let users of this role see every outlet without per-user assignment.
+  </Step>
+  <Step title="Save">
+    Click **Save**. You see **Role created.** or **Role updated.**
+  </Step>
+</Steps>
+
+### Menu keys
+
+The checkbox labels come from the server and are shown in Indonesian (they are the same list the sidebar uses).
+
+| Checkbox label | Menu key | Screen |
+| --- | --- | --- |
+| Beranda | `dashboard` | [Dashboard](/insight/dashboard) |
+| Kasir | `pos` | [POS](/operations/pos) |
+| Sesi Kasir | `session` | [Shifts](/operations/shifts) |
+| Produk | `products` | [Products](/inventory/products) |
+| Outlet | `outlets` | [Outlets](/people/outlets) |
+| Kategori | `categories` | [Categories](/inventory/categories) |
+| Stok | `stock` | [Stock](/inventory/stock) |
+| Vendor | `vendors` | [Vendors](/purchasing/vendors) |
+| Bahan Baku | `materials` | [Materials](/purchasing/materials) |
+| Purchase Order | `purchase_orders` | [Purchase orders](/purchasing/purchase-orders) |
+| Pelanggan | `customers` | [Customers](/people/customers) |
+| Perusahaan, Lisensi, Invoice | `companies`, `licenses`, `invoices` | Admin onboarding screens (not covered in these docs) |
+| Penjualan | `sales` | [Sales](/operations/sales) |
+| Laporan | `reports` | [Reports](/insight/reports) and [Activity log](/insight/activity-log) |
+| Pengguna | `users` | [Users](/settings/users) |
+| Peran | `roles` | This screen |
+| Pengaturan | `settings` | [General settings](/settings/general) and [Payment channels](/settings/payment-channels) |
+| Lantai & Tab | `floor` | [Restaurant floor](/operations/restaurant-floor) |
+| Dapur & Bar | `kitchen` | [Kitchen](/operations/kitchen) |
+| Pengaturan Restoran | `dining_setup` | [Restaurant setup](/operations/restaurant-setup) |
+
+Some stock-transfer screens use the `stock` key. **My Profile** has no menu key; every user can open it.
+
+<Info>
+  The **Settings** menu is also what the server treats as "owner or admin" for actions such as backup and restore, payment-channel changes, and setting PINs. Give it only to people you would trust with those.
+</Info>
+
+### Action permissions
+
+Labels come from the server in Indonesian. In English they mean:
+
+| Permission (English meaning) | Key |
+| --- | --- |
+| Manage items (discontinue, reactivate) | `menu.item.manage` |
+| Mark item sold out (86) | `menu.item.86` |
+| Change prices in bulk | `menu.price.bulk` |
+| Approve price changes | `menu.price.approve` |
+| Publish a menu release | `menu.release.publish` |
+| Edit recipes | `menu.recipe.edit` |
+| Dispatch a stock transfer between outlets | `stock.transfer.dispatch` |
+| Receive a stock transfer between outlets | `stock.transfer.receive` |
+| Cancel a stock transfer not yet received | `stock.transfer.cancel` |
+| Void a line already sent to the kitchen | `order.void` |
+| Cancel a whole open tab | `order.cancel` |
+| Approve cash out above the limit | `cash.out.approve` |
+| Approve a receipt reprint | `order.reprint.approve` |
+| Verify, or mark not found, a QRIS payment | `payment.qris.verify` |
+| Fully refund a paid order | `order.refund` |
+| Mark an item sold out without approval | `menu.availability.set` |
+| Approve a shift cash difference above tolerance | `shift.variance.approve` |
+| Approve a discount above the role's limit | `order.discount.approve` |
+
+A user who holds an approver permission does not need someone else's approval at that action point.
+
+## System default roles and "default" permissions
+
+Four roles are created as system roles: **Owner**, **Admin**, **Kasir** (cashier) and **Inventory**. They show **Default** in the **Type** column. The role list and the checkboxes work the same on them as on custom roles.
+
+Action permissions have a built-in default by role **name** (case-insensitive) when the role has never had its permissions saved:
+
+| Role name | Default action permissions |
+| --- | --- |
+| Owner, Admin | All of them |
+| Inventory | Manage items, mark 86, edit recipes, dispatch and receive stock transfers, mark sold out without approval |
+| Anything else (including Kasir and custom roles) | None |
+
+When you open **Edit**, the checkboxes show the permissions in effect. Saving the form stores that list explicitly from then on, so later changes to the built-in default no longer apply to that role.
+
+<Note>
+  ASSUMPTION: the menu keys of the four system roles reflect the migration that created them and any later migrations that added keys (for example `dashboard` and `sales` for cashiers). Open **Edit** on each to see what it holds on your installation.
+</Note>
+
+## Discount limit
+
+Each role has a discount limit, in percent, that its users may give without approval. Above the limit, someone with the **Approve a discount above the role's limit** permission must approve. If no limit is stored: Owner and Admin default to 100 percent, every other role to 0 percent (every discount needs approval).
+
+<Warning>
+  The role form on the web has no field for the discount limit, and the create and update requests do not accept it. ASSUMPTION: it is set outside this screen (for example by seeding or directly in the database). Check with your installer before relying on a non-zero limit for a custom role.
+</Warning>
+
+## Sees all outlets
+
+Shown only when the organisation has more than one outlet and **you** can see all outlets. Owner and Admin default roles always have it on, so the checkbox is hidden for them. Rules:
+
+- A user who does not see all outlets cannot turn this on or off (403, **This outlet is not one you are allowed to access.**).
+- It cannot be turned off for Owner or Admin (409, **Owners and admins always see every outlet, so they are not assigned to particular outlets.**).
+- A change is written to the [Activity log](/insight/activity-log) as `role_outlet_scope_changed`.
+
+## Protected access: the last management role
+
+The store must always keep at least one role that has **both** the `users` and `roles` menus, so it cannot lose control of its own accounts and roles. The server refuses (409) any change that would leave none:
+
+| Action | Message |
+| --- | --- |
+| Save a role so it no longer has both menus, when it is the last one | **Cannot save — this is the last role able to manage users & roles. The store would lose its own management access.** |
+| Delete the last such role | **Cannot delete — this is the last role able to manage users & roles. The store would lose its own management access.** |
+
+## Delete a role
+
+Click **Delete** and confirm **The role '\{name\}' will be deleted. This action cannot be undone.** You see **Role deleted.**
+
+A role cannot be deleted while active users hold it (409, **Cannot delete — still used by \{count\} user(s).**). Move those users to another role first in [Users](/settings/users). Inactive users do not block the deletion. The protected-access rule above is checked after this one.
+
+## Troubleshooting
+
+| Message or symptom | Cause | Fix |
+| --- | --- | --- |
+| Field error under **Role name** | Empty, over 50 characters, or already used (422). | Choose a unique name. |
+| Error under **Menu access** | An unknown menu key was sent (422). | Reload the page and try again. |
+| **Cannot save — this is the last role able to manage users & roles.** | Removing `users` or `roles` from the only role that has both. | Keep both menus, or give another role both first. |
+| **Cannot delete — still used by N user(s).** | Active users hold the role. | Reassign them, then delete. |
+| **Could not load the permission list.** | The permission catalog request failed. | Use the retry link. You can still save, but the action permissions would be sent as shown. |
+| A user cannot open a screen | The role lacks the menu key (403). | Tick the menu on the role. |
+| A user sees the screen but a button is missing | The role lacks the action permission. | Tick the permission on the role. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Roles and permissions" href="/concepts/roles-and-permissions">How menus and permissions work together.</Card>
+  <Card title="Users" href="/settings/users">Assign roles to people.</Card>
+  <Card title="Outlets" href="/concepts/outlets">Outlet scope for roles and users.</Card>
+  <Card title="Activity log" href="/insight/activity-log">Role changes are recorded here.</Card>
+</Columns>

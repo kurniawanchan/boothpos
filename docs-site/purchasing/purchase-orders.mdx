@@ -1,0 +1,149 @@
+---
+title: "Purchase orders"
+description: "Record what you buy from vendors, receive materials into stock, track payments and print the invoice."
+keywords: ["pos", "purchase order", "po", "receiving", "vendor", "material stock", "bom", "invoice"]
+---
+
+A purchase order (PO) records a purchase of materials and services from one vendor for one outlet. Receiving a PO adds its materials to that outlet's stock. A PO's lines can also be used as the cost source for an item's BOM.
+
+<Info>
+Purchase orders were cut from the original MVP and added back later at the product owner's request (feature 006). They are not the same as the removed Pre-order feature. Pre-orders no longer exist.
+</Info>
+
+## Before you start
+
+- Your role needs the **Purchase Orders** menu (`purchase_orders`). Unlike vendors and materials, this menu also gates reading: without it you cannot even list POs, because lines carry actual buying prices. The default Owner, Admin and Inventory roles have it. The default Cashier role does not.
+- Create the [vendor](/purchasing/vendors) and the [materials](/purchasing/materials) first.
+- You need at least one outlet. The outlet on a PO is the outlet the purchase is for (labelled **Outlet** on the form). It is required, and only that outlet's BOMs can use the PO's lines.
+
+<Note>
+The PO list is narrowed only by the **Outlet** filter on this page. The code for the list does not apply the top-bar outlet selector (ASSUMPTION: this matches the intended design, where a PO's outlet is the outlet the goods are bought for, not the outlet you are working in).
+</Note>
+
+## Statuses
+
+| Status | Meaning | Next actions on the row |
+| --- | --- | --- |
+| Draft | Being prepared. Lines can still be edited or the PO deleted. | **Mark Ordered**, **Cancel** |
+| Ordered | Sent to the vendor. Lines are locked. | **Mark Received**, **Cancel** |
+| Received | Goods arrived. Material stock has been added. | **Mark Paid** |
+| Paid | Fully paid. Final. | none |
+| Cancelled | Called off. Final. | none |
+
+Only these moves are allowed: Draft to Ordered or Cancelled, Ordered to Received or Cancelled, Received to Paid. Anything else is rejected with a 409: "Cannot change status from \{from\} to \{to\}."
+
+<Warning>
+You cannot cancel a PO after it is received, and there is no "unreceive". If you received a PO by mistake, correct the stock with **Adjust stock** on the [Materials](/purchasing/materials) page.
+</Warning>
+
+## Find purchase orders
+
+The page has a tab per status (**All**, Draft, Ordered, Received, Paid, Cancelled) and an **Outlet** filter. The active tab shows the number of matches, but only when no outlet filter is set. **Reset filters** clears the outlet filter.
+
+Columns: **PO Number**, **Vendor**, **Outlet** (italic "No outlet assigned" for old POs without one), **Status**, **Total**. The list is sorted newest first.
+
+## Create a purchase order
+
+<Steps>
+  <Step title="Open the form">
+    Select **New PO**. A side panel opens.
+  </Step>
+  <Step title="Choose vendor and outlet">
+    Pick the **Vendor** and the **Outlet**. Hint: "The outlet this purchase is for. Only this outlet's BOMs can use these lines."
+  </Step>
+  <Step title="Add lines">
+    Each line is either **Material** or **Service**. For a material line pick the **Material**. For a service line type a **Description** (up to 255 characters). Enter **Qty** (at least 0.001) and **Unit Price** (zero or more). Use **Add Line** for more lines. The trash button removes a line, and the last line cannot be removed.
+  </Step>
+  <Step title="Save">
+    Add optional **Notes**, check the **Total** at the bottom and select **Save**. You see "Purchase order created successfully." The PO starts as Draft and gets a number like `PO-20261026-0001`.
+  </Step>
+</Steps>
+
+The total is the sum of qty times unit price over all lines and is computed again on the server. Service lines never affect stock.
+
+## Edit a purchase order
+
+Select **Edit** in the row actions. The panel loads the full PO first.
+
+- **Draft:** you can change vendor, outlet, notes and all lines.
+- **Other statuses:** lines are locked ("Items can only be changed while the status is Draft.") but vendor, outlet and notes can still be changed.
+- Changing the outlet of a PO whose lines are already used in a BOM is refused with a 409 under **Outlet**: "This purchase order's outlet cannot be changed because its lines are already used by a BOM."
+
+Changing vendor or lines is written to the [Activity log](/insight/activity-log). Notes-only changes are not.
+
+## Receive a purchase order
+
+<Steps>
+  <Step title="Mark it ordered">
+    On a Draft row select **Mark Ordered**. No stock changes.
+  </Step>
+  <Step title="Mark it received">
+    When the goods arrive select **Mark Received** on the Ordered row. You see "Status updated successfully."
+  </Step>
+</Steps>
+
+What happens at **Mark Received**, in one transaction:
+
+- Every **Material** line adds its quantity to that material's stock at the PO's outlet, as a stock movement of type purchase.
+- **Service** lines are skipped.
+- A PO from before outlets were required, with no outlet, adds stock to the first outlet.
+
+Stock changes only at this step. Draft and Ordered POs do not touch stock.
+
+## Cancel a purchase order
+
+Select **Cancel** on a Draft or Ordered row. The browser asks "Cancellation reason (optional):". Choose OK to cancel (an empty reason is fine) or Cancel in that prompt to stop. The reason is stored on the PO (up to 255 characters).
+
+## Detail, invoice and payments
+
+Select the PO number or **Detail**. The dialog shows the status, the outlet, the lines with quantities and totals, the total and the paid amount.
+
+- **Print Invoice** downloads a PDF built in your browser. The outlet line is not printed on it. A failure shows "Failed to download invoice."
+- **Used in \{count\} BOM row(s)** appears under a line that an item's BOM uses. The BOM itself is edited from [Product detail](/inventory/product-detail), which lists only Ordered, Received or Paid POs of the item's outlet.
+- **Linked Product** appears on lines that still carry an old product link. You cannot set it from the form.
+- A PO with **No outlet assigned** (and not cancelled) shows an outlet picker and **Assign outlet**. Assigning the first outlet is always allowed. It is logged.
+
+### Record a payment
+
+On Received and Paid POs, **Record Payment** opens a small form: payment method, **Amount** (at least 0.01), and optional **Notes**. After saving, the history lists each payment.
+
+- When the total of payments reaches the PO total on a Received PO, the status becomes Paid automatically.
+- You can also select **Mark Paid** on a Received row without recording payments.
+- The server does not compare a payment with the remaining balance, so a payment above the total is accepted.
+- Recording a payment on a Draft, Ordered or Cancelled PO is rejected: "A payment can only be recorded after the purchase order has been received."
+
+<Warning>
+The form offers Cash, Transfer and QRIS, but only **Cash** can be saved from this screen. For Transfer and QRIS the server needs a payment channel and a proof of payment, and the form sends neither. You see "A payment channel is required for non-cash methods." Non-cash payments cannot be recorded from this screen today.
+</Warning>
+
+## Delete a purchase order
+
+Only Draft POs. **Delete** is greyed out on other rows with the tooltip "Only draft purchase orders can be deleted. Cancel it instead." The server also refuses (409) when the PO has payments ("This purchase order has recorded payments and cannot be deleted.") or its lines are used by a BOM ("This purchase order is used by a BOM and cannot be deleted."). After a refused delete the list reloads so you see the current state.
+
+## Troubleshooting
+
+| What you see | Cause | What to do |
+| --- | --- | --- |
+| Whole page missing | No Purchase Orders menu. | Ask an owner to add it in [Roles](/settings/roles). |
+| 422 under **Material** or **Description** | A material line has no material, or a service line has no description. | Fill the field: "A material must be selected for a material-type line." or "A description is required for a service-type line." |
+| 422 under **Outlet** | No outlet chosen. | Choose the outlet. |
+| Edit panel shows no lines | The PO could not be loaded. | Close and retry. An error toast shows the cause. |
+| Stock did not change | The PO is not Received yet, or the lines are services. | Check the status and line types. |
+| Cannot cancel a Received PO | Received is not cancellable. | Adjust stock on the material instead. |
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Materials" href="/purchasing/materials">
+    Stock per outlet and vendor prices.
+  </Card>
+  <Card title="Vendors" href="/purchasing/vendors">
+    Who you buy from.
+  </Card>
+  <Card title="Product detail" href="/inventory/product-detail">
+    Use PO lines in an item's BOM.
+  </Card>
+  <Card title="Outlets" href="/people/outlets">
+    What the outlet on a PO means.
+  </Card>
+</Columns>

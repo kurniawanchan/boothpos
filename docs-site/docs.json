@@ -1,0 +1,110 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "BoothPOS",
+  "colors": {
+    "primary": "#0E7C66",
+    "light": "#34D3A8",
+    "dark": "#0E7C66"
+  },
+  "appearance": {
+    "default": "system"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": [
+          "index",
+          "getting-started/sign-in",
+          "getting-started/first-sale"
+        ]
+      },
+      {
+        "group": "Concepts",
+        "pages": [
+          "concepts/navigation",
+          "concepts/roles-and-permissions",
+          "concepts/outlets",
+          "concepts/demo-and-live-mode",
+          "concepts/business-day"
+        ]
+      },
+      {
+        "group": "Android app",
+        "pages": [
+          "android/overview",
+          "android/setup",
+          "android/pin-sign-in",
+          "android/shifts",
+          "android/counter",
+          "android/tables",
+          "android/payment",
+          "android/orders",
+          "android/printing",
+          "android/offline-and-sync",
+          "android/approvals"
+        ]
+      },
+      {
+        "group": "Operations",
+        "pages": [
+          "operations/pos",
+          "operations/shifts",
+          "operations/sales"
+        ]
+      },
+      {
+        "group": "Restaurant",
+        "pages": [
+          "operations/restaurant-floor",
+          "operations/kitchen",
+          "operations/restaurant-setup"
+        ]
+      },
+      {
+        "group": "Inventory",
+        "pages": [
+          "inventory/categories",
+          "inventory/products",
+          "inventory/product-detail",
+          "inventory/stock",
+          "inventory/stock-transfers"
+        ]
+      },
+      {
+        "group": "Purchasing",
+        "pages": [
+          "purchasing/vendors",
+          "purchasing/materials",
+          "purchasing/purchase-orders"
+        ]
+      },
+      {
+        "group": "Customers and outlets",
+        "pages": [
+          "people/customers",
+          "people/outlets"
+        ]
+      },
+      {
+        "group": "Insight",
+        "pages": [
+          "insight/dashboard",
+          "insight/reports",
+          "insight/activity-log"
+        ]
+      },
+      {
+        "group": "Settings",
+        "pages": [
+          "settings/general",
+          "settings/payment-channels",
+          "settings/users",
+          "settings/roles",
+          "settings/profile"
+        ]
+      }
+    ]
+  }
+}

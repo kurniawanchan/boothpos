@@ -1,0 +1,239 @@
+---
+title: "Product detail"
+description: "Manage one item: edit its details, variants and prices, mark it sold out (86), discontinue it, and maintain its modifiers, recipe, BOM and price history."
+keywords: ["pos", "product", "variants", "price", "86", "sold out", "discontinue", "recipe", "bom", "modifiers", "price history"]
+---
+
+**Classification: INTERNAL**
+
+Each item has its own page at `/products/<id>`. Open it by selecting an item name, a card, or **Edit** on the [Products](/inventory/products) list. The page shows the item's facts, variants and prices, modifier groups, availability per outlet, recipe and price history, and holds every action for that one item.
+
+## Before you start
+
+- You need the **Products** menu (menu key `products`). The page is part of the Products screen.
+- The buttons you see depend on what the server says you may do for this item. They are hidden, not greyed out.
+
+| Control | Needs |
+| --- | --- |
+| Edit item, Manage variants, Manage modifiers, outlet price cells | Products menu |
+| Mark 86 / Undo 86 | Permission `menu.item.86` (and not discontinued) |
+| Discontinue / Reactivate | Permission `menu.item.manage` |
+| Create recipe / Edit recipe / Recalculate cost | Permission `menu.recipe.edit` |
+| View or change a variant's BOM | Products menu to view. Products **and** Purchase Orders menus to change. |
+
+- Cost prices and BOM details are returned only to users with the Products or Reports menu.
+- Built-in roles: Owner and Admin have every permission. Inventory has `menu.item.manage`, `menu.item.86` and `menu.recipe.edit`, but not the price, approval or release permissions.
+- Dates and "until end of day" use the [business day](/concepts/business-day). Prices are in rupiah and exclude tax.
+
+<Note>
+When **menu release** is on in settings, price, discontinue, reactivate and modifier changes do not apply immediately. They become pending changes that wait for a release. The page then shows "The change is waiting for the next menu release." See [Products](/inventory/products#menu-release-and-price-approvals).
+</Note>
+
+## What the page shows
+
+| Area | Content |
+| --- | --- |
+| Header | "Menu item · \{code\}", the item name, and badges: status (Active, Draft, Discontinued), **86** when sold out, and the category. A "Back to Products" link returns to the list with the same tab, filters, page and sort when you came from it. |
+| Facts | Short name, tax category, station ("follows category" when it comes from the category), prep time, base price, and menu release version when release is on. |
+| Variants & price | Table of Variant, SKU, Base price, one price column per outlet (only with more than one outlet) and Status. |
+| Modifier groups | The groups that apply to the item. |
+| Availability per outlet | One row per outlet, or a single row for the whole installation. |
+| Recipe (BOM) | The active recipe or the BOM summary. |
+| Price history | A timeline of price changes. |
+
+If the page cannot load, you see "Could not load this item." with a retry button. If only the price history fails, only that section shows an error.
+
+## Edit item
+
+<Steps>
+  <Step title="Open the form">
+    Select **Edit item** in the header. A drawer opens with the same form used to add an item (see [Products](/inventory/products#add-an-item)).
+  </Step>
+  <Step title="Change the fields">
+    Everything can change except the segment, which is locked.
+  </Step>
+  <Step title="Save">
+    Select **Save item**. You see "Product updated."
+  </Step>
+</Steps>
+
+Differences from the add form:
+
+- There is a **Status** section with a **Draft** / **Active** toggle. When menu release is on, it shows "Status changes through the menu release — use Discontinue/Reactivate on the item page." instead. Making a published item inactive turns it into a discontinued item, not a draft.
+- The variants table shows the current stock and, if you may see costs, the cost price. Each row has actions: open BOM, apply markup, duplicate. A saved variant is never deleted. Clearing its **Active** box deactivates it.
+- If you change a stock number, a **Stock adjustment reason** is required ("A reason is required when changing stock."). The change is saved as a stock adjustment and needs the **Stock** menu. See [Stock](/inventory/stock).
+- **Duplicate variant** adds an unsaved copy below the source with the name "\{name\} (copy)". It copies price, low-stock alert, status and the stock quantity. The copied stock counts as new inventory when you save, so change it if you only want the prices. If the source variant has a BOM and you may manage BOMs, the BOM is copied when you save. Images, SKU and history are not copied.
+- **Markup** (shown only if you may see costs) sets a percentage (150 by default) that the apply-markup button on a row uses to fill the sell price: cost price plus that percentage, rounded to a whole rupiah.
+- Changes to modifier links are sent only if you changed them. Links that come from the category are shown read-only.
+
+Variant cost price can be locked. If a variant's BOM is complete or a recipe drives its cost, a manual cost change is refused with a 409: "This variant's cost price follows its completed BOM. Reopen the BOM to change it manually." or "This variant's cost price follows its recipe. Create a new recipe version to change it."
+
+## Manage variants and prices
+
+A variant is a choice with its own SKU and price, for example Hot or Iced. Extras such as sugar or toppings are modifier groups, not variants.
+
+<Steps>
+  <Step title="Open the drawer">
+    In **Variants & price**, select **Manage variants**.
+  </Step>
+  <Step title="Edit rows">
+    Change the variant name, the base price or the **Active** box. Use **+ Add variant** for a new row. A new row can be discarded before saving. SKUs for new variants are generated by the server.
+  </Step>
+  <Step title="Set the effective date (optional)">
+    **Effective from** applies to the whole batch. Empty means the prices apply immediately, or go into the next menu release when release is on. A future date schedules the change.
+  </Step>
+  <Step title="Save">
+    The button reads **Save**, or **Submit change** when menu release is on.
+  </Step>
+</Steps>
+
+Messages and rules:
+
+| Message | Cause |
+| --- | --- |
+| The variant name is required. | A row has no name. |
+| The price must be a number, 0 or more. | Empty, non-numeric or negative price. |
+| Variants saved. | All changes applied. |
+| \{n\} price change(s) are waiting for the next menu release. | Menu release is on, or the date is in the future. |
+| \{n\} price change(s) above the threshold are waiting for approval. | The change differs from the old price by more than the approval threshold. Another person with `menu.price.approve` must approve it. |
+| This variant's cost price is locked by its BOM or recipe and cannot be changed here. (409) | See above. |
+
+The drawer saves all rows together or none. At most 50 variants can be sent in one save. The effective date cannot be in the past.
+
+### Prices per outlet
+
+With more than one outlet, the table has a price column per outlet. A grey value means the outlet follows the base price. Type a number in a cell to give that outlet its own price. Clear the cell to go back to the base price. The price must be a number, 0 or more ("Outlet price must be a number, 0 or more"). You see "Outlet price saved" or, when menu release is on, "The change is waiting for the next menu release." An outlet can have its own price only for an item it carries.
+
+## Mark an item sold out (86)
+
+Marking 86 stops new orders for the item on this installation's ordering screens within about 5 seconds. It lasts until the business day ends. Existing orders do not change.
+
+<Steps>
+  <Step title="Select Mark 86">
+    The button is in the header, for users with `menu.item.86`. It is hidden for discontinued items.
+  </Step>
+  <Step title="Choose a reason">
+    A reason from the sold-out reason list is required. A note of up to 255 characters is optional. With more than one outlet you also tick the outlets to mark. The default is the outlet selected in the top bar, or all outlets.
+  </Step>
+  <Step title="Confirm">
+    Select **Mark 86**. You see "\{name\} marked 86."
+  </Step>
+</Steps>
+
+To reverse it, select **Undo 86** and confirm. Only the marks on the outlets that are currently sold out are cleared. You see "86 for \{name\} undone."
+
+| Message | Cause |
+| --- | --- |
+| There are no reason codes for this action yet. Add them in Settings. | The reason list is empty. An owner or admin adds reasons in settings. |
+| This item is already marked sold out. (409) | Another user marked it first. The page reloads. |
+| This item is not marked sold out. (409) | Someone else already undid it. |
+| A discontinued item cannot be marked sold out. (409) | Reactivate the item first. |
+| The reason is invalid or inactive. (422) | Choose another reason. |
+| This action needs approval from an authorised approver. (409) | Your role has `menu.item.86` but not `menu.availability.set`. See the warning below. |
+
+<Warning>
+The server decides whether you may mark 86 without approval: it requires `menu.availability.set`, or an approval token from a supervisor PIN. The web form has no approval step. A user who has `menu.item.86` but not `menu.availability.set` sees the Mark 86 button but gets the 409 above. Give those users `menu.availability.set`. Undo 86 only needs `menu.item.86`.
+</Warning>
+
+The **Availability per outlet** section lists each outlet with its state (Available, 86, Not sold), and for a sold-out item the reason, who marked it, until when and any note. The **Daily quota** and **Channels** columns always show a dash because those features do not exist yet.
+
+## Discontinue and reactivate
+
+A discontinued item can no longer be added to new orders, but it stays in history and reports. Nothing is deleted.
+
+- **Discontinue** asks for a reason (required) and an optional note. Any active 86 mark on the item is cleared. You see "\{name\} discontinued." If menu release is on, it takes effect after the next release and the page shows a pending notice instead.
+- **Reactivate** asks for confirmation. You see "\{name\} reactivated."
+
+Errors: "This item is already discontinued." and "This item is not discontinued." (409) mean the page was stale. The page reloads.
+
+## Modifier groups
+
+The section lists each group with its order, rule (Required or Optional, min, max, single choice), options and scope.
+
+<Steps>
+  <Step title="Open the drawer">
+    Select **Manage modifiers**.
+  </Step>
+  <Step title="Link groups">
+    Use **Link a group**, then set Required, Min and Max for each group and reorder with the up and down buttons. Unlink with the remove button.
+  </Step>
+  <Step title="Save">
+    Select **Save modifiers** (or **Submit change** with menu release on).
+  </Step>
+</Steps>
+
+Rules: Min is a whole number, 0 or more. Max is empty (no limit) or a whole number of 1 or more, and not below Min. A single-choice group allows maximum 1 and minimum 0 or 1. The same group cannot be linked twice, and at most 30 links are allowed. Groups inherited from the category are shown as "From the category (not changed here)". The contents of a group (options and prices) are edited only on the restaurant setup screen: see [Restaurant setup](/operations/restaurant-setup). The POS asks for required groups before the item can be sent to the kitchen.
+
+## Recipe
+
+A recipe lists the ingredients used for one portion, so the system can show portion cost, food cost percent and gross margin.
+
+<Steps>
+  <Step title="Open the drawer">
+    Select **Create recipe** (or **Edit recipe** when one exists). It needs `menu.recipe.edit`.
+  </Step>
+  <Step title="Set yield and date">
+    Enter the yield in portions (more than 0) and **Effective from** (at most 30 days in the past).
+  </Step>
+  <Step title="Choose variants">
+    Tick at least one variant that the recipe applies to. A variant whose BOM is complete cannot be chosen: it uses its BOM cost instead.
+  </Step>
+  <Step title="Add ingredients">
+    Choose an ingredient, quantity (more than 0) and shrinkage percent (0 to 99.99). Ingredients are grouped as Ingredients, Semi-finished and Packaging. The drawer previews portion cost, food cost and margin. If some ingredient has no price, the cost is shown as partial and food cost and margin are not computed.
+  </Step>
+  <Step title="Save">
+    The button reads **Save as v\{n\}**.
+  </Step>
+</Steps>
+
+Saving always creates a **new version**. Earlier versions are kept and listed under **Recipe versions** with the one that is **Active now**. Saving a recipe does not deduct ingredient stock. **Recalculate cost** rewrites the cost price of variants that use the recipe from current ingredient prices. Recorded sales do not change. Variants with incomplete cost are skipped and reported.
+
+Errors: "Variant(s) \{skus\} use a completed BOM as their cost source. Reopen the BOM before using a recipe." (409), "The yield must be greater than 0.", "Add at least one ingredient.", "Choose at least one variant." (422).
+
+## BOM (purchase-order based cost)
+
+A BOM (bill of materials) lists the materials and services, with their cost, used to make one finished unit of a variant. You open it from the **Open BOM** button on a saved variant row in the edit form.
+
+- Items come from purchase order lines of the variant's outlet whose purchase order is ordered, received or paid. Add them with **Add BOM Item**.
+- **Qty per 1 product** must be a whole number of 1 or more.
+- The dialog shows material cost, service cost, total BOM cost and the current stock (read-only).
+- **Mark BOM complete** makes the variant's cost price follow the BOM cost automatically and locks manual edits until you select **Reopen BOM**. An empty BOM cannot be completed, and rows without a purchase order source ("Legacy") must be replaced or removed first. A BOM that becomes empty is reopened automatically.
+- **Copy BOM** copies items, quantities and costs to another variant of the same product. If the target already has rows, you confirm that they are replaced. Each variant is independent afterwards.
+- A row can show "Newer price \{price\}" when a newer purchase order has a different price. Use **Use newer price** to adopt it. A row whose purchase order was cancelled shows "Source cancelled".
+
+If you lack the Purchase Orders menu you can view a BOM but not change it ("You are not allowed to manage purchase-order BOMs." 403). See [Purchase orders](/purchasing/purchase-orders).
+
+## Price history
+
+The timeline lists each price change, newest first, 25 entries per page, with **Load more**. Each entry shows the new price and the previous one, who changed it, and for released changes who proposed and approved it and the release version. Item creation shows "Initial price". Outlet prices are labelled with the outlet code. If there is no history you see "No price history yet."
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The page says the change is waiting for the next menu release">
+    Menu release is on. Someone with `menu.release.publish` must release it from the Products page. A price that is above the threshold also needs approval first.
+  </Accordion>
+  <Accordion title="Edit item shows but saving the stock change fails">
+    Stock changes need the Stock menu and a reason. If you have several outlets and none is selected, the adjustment asks you to choose one. See [Stock](/inventory/stock).
+  </Accordion>
+  <Accordion title="I cannot see the BOM button">
+    The BOM button appears only on saved variants in the edit form, for users with the Products menu.
+  </Accordion>
+</AccordionGroup>
+
+## Related
+
+<Columns cols={2}>
+  <Card title="Products" href="/inventory/products">
+    The list, bulk price change, release and import.
+  </Card>
+  <Card title="Stock" href="/inventory/stock">
+    Movement ledger and stock adjustments.
+  </Card>
+  <Card title="Materials" href="/purchasing/materials">
+    The ingredients a recipe and a BOM use.
+  </Card>
+  <Card title="Roles and permissions" href="/concepts/roles-and-permissions">
+    Which role can mark 86, discontinue or approve prices.
+  </Card>
+</Columns>
