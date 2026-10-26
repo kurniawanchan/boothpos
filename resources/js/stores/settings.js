@@ -25,6 +25,8 @@ export const useSettingsStore = defineStore('settings', {
     receiptFooterText: '',
     receiptShowLogo: true,
     storeName: '',
+    // 076 — URL logo toko yang sudah diselesaikan server (null = belum ada).
+    storeLogoUrl: null,
     appName: DEFAULT_APP_NAME,
     // 035-po-row-actions — hanya true untuk owner/admin saat database tertinggal; server yang menentukan.
     schemaUpdateRequired: false,
@@ -46,6 +48,7 @@ export const useSettingsStore = defineStore('settings', {
         this.receiptFooterText = data.receipt_footer_text ?? '';
         this.receiptShowLogo = data.receipt_show_logo ?? true;
         this.storeName = data.store_name ?? '';
+        this.storeLogoUrl = data.store_logo_url ?? null;
         this.appName = resolveAppName(data.app_name);
         this.schemaUpdateRequired = data.schema_update_required === true;
         applyThemeAccentColor(this.themeAccentColor);
@@ -58,6 +61,23 @@ export const useSettingsStore = defineStore('settings', {
     async setSystemMode(mode) {
       await updateSettings([{ key: 'system_mode', value: mode, type: 'string', group: 'system' }]);
       this.systemMode = mode;
+      // 076 — nama toko dibedakan per mode; muat ulang supaya judul tab & sidebar
+      // langsung memakai nama toko mode yang baru (kegagalannya tidak membatalkan pergantian).
+      try {
+        await this.load();
+      } catch {
+        // nilai lama tetap dipakai sampai muat berikutnya
+      }
+    },
+
+    /** 076 — dipanggil Pengaturan setelah nama toko tersimpan, agar judul/sidebar ikut berubah tanpa muat ulang. */
+    setStoreName(name) {
+      this.storeName = (name ?? '').trim();
+    },
+
+    /** 076 — dipanggil Pengaturan setelah logo diunggah: logo sidebar dan favicon berganti seketika. */
+    setStoreLogoUrl(url) {
+      this.storeLogoUrl = url || null;
     },
 
     /** US6 — applied immediately (no reload needed) once saved. */

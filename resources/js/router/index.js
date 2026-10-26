@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useLicenseStore } from '../stores/license';
+import { safeRedirect } from '../utils/safeRedirect';
 
 const routes = [
   {
@@ -157,6 +158,20 @@ const routes = [
         },
       },
       {
+        // 076-settlement-tab-session-branding — settlement seller (Owner/Admin lewat
+        // menu key 'settlements'; server tetap penentu aksesnya).
+        path: 'settlements',
+        name: 'settlements',
+        component: () => import('../views/SettlementsView.vue'),
+        meta: { titleKey: 'nav.settlements', subtitleKey: 'nav.settlements_subtitle', menuKey: 'settlements' },
+      },
+      {
+        path: 'settlements/:id(\\d+)',
+        name: 'settlement-detail',
+        component: () => import('../views/SettlementDetailView.vue'),
+        meta: { titleKey: 'nav.settlements', subtitleKey: 'nav.settlements_subtitle', menuKey: 'settlements', navParent: 'settlements' },
+      },
+      {
         path: 'activity-log',
         name: 'activity-log',
         component: () => import('../views/ActivityLogView.vue'),
@@ -247,13 +262,19 @@ router.beforeEach(async (to) => {
 
   if (to.meta.public) {
     if (auth.isAuthenticated && to.name === 'login') {
-      return { name: 'dashboard' };
+      // 076 — sudah login tetapi membuka /login?redirect=… (mis. dari tab lain): ikuti tujuannya.
+      return safeRedirect(to.query.redirect, router) ?? { name: 'dashboard' };
     }
     return true;
   }
 
   if (!auth.isAuthenticated) {
-    return { name: 'login' };
+    // 076 (US1/FR-004) — ingat halaman yang diminta supaya setelah login
+    // pengguna kembali ke sana, bukan ke dashboard. Divalidasi lagi di
+    // LoginView lewat safeRedirect (nilai ini datang dari URL).
+    return to.fullPath && to.fullPath !== '/'
+      ? { name: 'login', query: { redirect: to.fullPath } }
+      : { name: 'login' };
   }
 
   // Screens we can predict will 403 for the current role are hidden from

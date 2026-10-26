@@ -24,3 +24,19 @@ export function parseMoney(value) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
   return Number.isFinite(n) ? n : 0;
 }
+
+const idrExact = new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * 076 — untuk settlement: sen TIDAK dibulatkan (satu-satunya layar di mana
+ * baris harus bisa dijumlahkan persis dengan mata). Rupiah bulat tampil
+ * tanpa desimal; ada sen → dua desimal. Negatif: "-Rp 5.000".
+ */
+export function formatIDRExact(value) {
+  const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (!Number.isFinite(n)) return 'Rp 0';
+  const abs = Math.abs(n);
+  const hasCents = Math.round(abs * 100) % 100 !== 0;
+  const body = hasCents ? idrExact.format(abs) : idr.format(Math.round(abs));
+  return `${n < 0 ? '-' : ''}Rp ${body}`;
+}

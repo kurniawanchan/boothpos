@@ -82,6 +82,9 @@ const NAV_DEFS = [
   { name: 'artists', label: 'nav.artists', icon: 'ph-users-three', menuKey: 'artists' },
   { name: 'customers', label: 'nav.customers', icon: 'ph-address-book', menuKey: 'customers' },
   { name: 'reports', label: 'nav.reports', icon: 'ph-chart-bar', menuKey: 'reports' },
+  // 076 — settlement seller; terpisah dari Laporan karena memuat angka yang
+  // dicetak untuk seller dan punya menu key sendiri (Owner/Admin).
+  { name: 'settlements', label: 'nav.settlements', icon: 'ph-handshake', menuKey: 'settlements' },
   { name: 'activity-log', label: 'nav.activity_log', icon: 'ph-clock-clockwise', menuKey: 'reports' },
   {
     key: 'settings-group',
@@ -113,6 +116,17 @@ const navItems = computed(() =>
   }).filter(Boolean)
 );
 
+// 076 (US4) — nama toko bila ada, selain itu nama aplikasi. Logo yang gagal dimuat dicatat di sini
+// dan di-reset tiap URL logo berganti (logo baru boleh dicoba lagi).
+const logoBroken = ref(false);
+watch(() => settings.storeLogoUrl, () => { logoBroken.value = false; });
+const brandName = computed(() => (settings.storeName || '').trim() || settings.appName);
+
+// Item tetap menyala di halaman anaknya (mis. detail settlement) lewat meta.navParent.
+function isActive(name) {
+  return route.name === name || route.meta?.navParent === name;
+}
+
 const expandedGroups = ref(new Set());
 function isGroupExpanded(item) {
   return expandedGroups.value.has(item.key) || item.children.some((c) => c.name === route.name);
@@ -141,11 +155,21 @@ watch(
 <template>
   <nav :aria-label="t(`nav.aria_label`)" class="sticky top-0 flex h-screen w-[228px] flex-none flex-col border-r border-line-2 bg-white">
     <div class="flex items-center gap-2.5 px-[18px] pb-[18px] pt-5">
-      <div class="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-brand text-[18px] text-white">
+      <!-- 076 (US4) — logo & nama TOKO; tanpa logo/nama kembali ke ikon bawaan & nama aplikasi.
+           Logo yang gagal dimuat jatuh ke ikon bawaan (tidak ada gambar rusak). -->
+      <img
+        v-if="settings.storeLogoUrl && !logoBroken"
+        :src="settings.storeLogoUrl"
+        :alt="brandName"
+        class="h-8 w-8 flex-none rounded-lg bg-white object-contain"
+        data-testid="brand-logo"
+        @error="logoBroken = true"
+      />
+      <div v-else class="flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-brand text-[18px] text-white" data-testid="brand-icon">
         <i class="ph-duotone ph-storefront" aria-hidden="true"></i>
       </div>
       <div class="flex min-w-0 flex-1 flex-col leading-tight">
-        <span class="text-[15.5px] font-extrabold tracking-tight">{{ settings.appName }}</span>
+        <span class="truncate text-[15.5px] font-extrabold tracking-tight" :title="brandName" data-testid="brand-name">{{ brandName }}</span>
         <span class="text-[10.5px] font-semibold tracking-wide text-muted-3">{{ settings.tierLabel }}</span>
       </div>
       <!-- Toggle sembunyikan sidebar — state & persistensi ditangani
@@ -167,14 +191,14 @@ watch(
           v-if="!item.children"
           :to="{ name: item.name }"
           class="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2.5 text-[13.5px] font-medium text-muted-4 transition-colors hover:bg-line-7"
-          :class="route.name === item.name ? 'bg-mint-100 font-bold text-brand-active' : ''"
+          :class="isActive(item.name) ? 'bg-mint-100 font-bold text-brand-active' : ''"
         >
           <i class="ph-duotone text-[17px]" :class="item.icon" aria-hidden="true"></i>
           <span class="flex-1 text-left">{{ t(item.label) }}</span>
           <span
             v-if="item.badge"
             class="rounded-full px-1.5 py-0.5 text-[10.5px] font-bold"
-            :class="route.name === item.name ? 'bg-mint-200 text-brand-active' : 'bg-line-7 text-muted-2'"
+            :class="isActive(item.name) ? 'bg-mint-200 text-brand-active' : 'bg-line-7 text-muted-2'"
           >
             {{ item.badge }}
           </span>

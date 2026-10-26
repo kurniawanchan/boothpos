@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import * as authApi from '../api/auth';
 import { getToken, setToken, clearToken } from '../utils/storage';
+import { adoptTokenFromOtherTabs, broadcastLogout } from '../utils/tabSession';
 import { i18n } from '../i18n';
 
 // Satu-satunya tempat locale FRONTEND diputuskan dari data user (cermin
@@ -63,6 +64,18 @@ export const useAuthStore = defineStore('auth', {
       }
       clearToken();
       this.user = null;
+      // 076 (FR-002) — tab lain ikut berakhir; disiarkan SETELAH pembersihan
+      // lokal supaya logout tidak pernah bergantung pada kanal tersedia/tidak.
+      broadcastLogout();
+    },
+    /**
+     * 076 — dipanggil ketika TAB LAIN mengakhiri sesi: hanya membersihkan
+     * state tab ini. Tidak memanggil server (token sudah dicabut oleh tab
+     * yang logout) dan tidak menyiarkan ulang (mencegah pantulan pesan).
+     */
+    endSessionFromAnotherTab() {
+      clearToken();
+      this.user = null;
     },
     /**
      * Restores a sessionStorage-backed session. Called eagerly from
@@ -78,7 +91,10 @@ export const useAuthStore = defineStore('auth', {
       if (this._restorePromise) return this._restorePromise;
 
       this._restorePromise = (async () => {
-        if (!getToken()) {
+        // 076 (US1) — tab baru yang dibuka dari tab yang sedang login tidak
+        // mewarisi sessionStorage; minta token ke tab lain dulu. Token yang
+        // diterima tetap divalidasi lewat authApi.me() di bawah.
+        if (!getToken() && !(await adoptTokenFromOtherTabs())) {
           this.ready = true;
           return;
         }

@@ -32,7 +32,11 @@ client.interceptors.response.use(
     if (apiError.status === 401) {
       clearToken();
       if (!window.location.pathname.startsWith('/login')) {
-        window.location.href = '/login';
+        // 076 (US1/FR-004) — bawa halaman saat ini supaya setelah login
+        // pengguna kembali ke sana. Nilainya divalidasi ulang di LoginView
+        // (utils/safeRedirect.js); di sini hanya path internal milik sendiri.
+        const here = `${window.location.pathname}${window.location.search}`;
+        window.location.href = here === '/' ? '/login' : `/login?redirect=${encodeURIComponent(here)}`;
       }
       return Promise.reject(apiError);
     }
