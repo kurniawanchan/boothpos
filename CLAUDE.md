@@ -361,6 +361,31 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **`LiveToDemoCloner::run()` must be called outside an outer DB transaction** (post-commit deletion of old DEMO files assumes the inner `DB::transaction` is the real commit; tests are wrapped by `RefreshDatabase`, so it is not enforced in code). A failure while deleting old files AFTER commit does not throw: the report carries `files_cleanup_failed` and the command prints a warning instead of "rolled back".
 - **`CloneRegistryDriftTest` fails when the schema and `CloneRegistry` drift apart** (a FK into a registered table not declared, a registered table pointing at an unregistered non-shared parent, a `data_mode` table neither registered nor on the exclusion list). Its three allowlists (`UNREGISTERED_CHILDREN`, `SHARED_PARENTS`, `EXCLUDED_DATA_MODE_TABLES`) are the explicit decisions; extend them only deliberately.
 
+## Seller settlement, cross-tab session, store branding (feature 076, 2026-10-26)
+
+**Settlement** (`/settlements`, menu key `settlements`, Owner/Admin by default; `seller_settlements*` tables). Rules a future change must not break:
+
+- **Separate from the Seller Recap.** `artist_settlements` / `SettlementService` / `GET /reports/artist-settlements` stay POS-only (feature 040) and untouched. New names carry `Seller` (`SellerSettlementService`, `SellerSettlementBuilder`) to avoid the clash.
+- **No commission, anywhere.** The seller's share is the full revenue (POS + collected pre-order); only explicit deductions/adjustments typed by the owner change it. Cost of goods is a read-only memo, never deducted. Do not add a commission setting without a product-owner decision.
+- **One settlement per (seller, EVENT)** — enforced by `UNIQUE(artist_id, event_id, active_slot)`, not by code alone. A free date "period" was deliberately dropped: it can overlap events and let one sale be settled twice.
+- **`SellerSettlementService` is the ONLY writer** of the five tables (draft/refresh/adjust/finalize/reopen/acknowledge/payments), one transaction + one `ActivityLogger` row each. Payouts live in `seller_settlement_payments`, NOT `payments` (that table is the customer-receipts ledger with order/pre-order/PO CHECKs; mixing them would leak payouts into shift cash and reports).
+- **One revenue rule.** Pre-order revenue is `App\Support\PreorderRecognizedRevenue` (extracted from `ReportController`; the reports delegate to it with identical SQL). Never add a second "POS vs pre-order" formula. Each source row is rounded to the cent ONCE and totals are sums of rows, so a statement always adds up; it can differ from the aggregate-rounded report by ≤ 1 cent per pre-order row (pinned by `SellerSettlementReportParityTest`).
+- **Settlement caps the pre-order fraction at 1; the reports do NOT (known inherited issue).** Reports divide collected by `preorders.subtotal`, but collected can reach `total_amount` (= subtotal + shipping − discount), so a fully paid pre-order with shipping yields a fraction > 1 and the reports credit the shipping fee to the seller. `SellerSettlementBuilder` uses `LEAST(1, fraction)` because this is money paid out. Consequence: for such pre-orders the settlement is lower than the report by design (found in security review; pinned by `test_shipping_paid_on_top_of_the_items_is_never_credited_to_the_seller`). Fixing the report formula is a separate product decision.
+- **A draft that was ever finalized (has a number) cannot be deleted** (409 `was_finalized`): deleting would free the number for reuse and orphan the superseded signature files. Only never-finalized drafts are deletable.
+- **Balance is enforced three ways:** per-row rounding, `SettlementReconciliation` (independent re-sum, must be `0.00` or finalize 409s `reconciliation_mismatch`), and DB `CHECK`s (`net = revenue + adjustments`, `paid <= |net|`, finalized ⇒ number). `adjustments_total` is maintained incrementally and is deliberately NOT recomputed at finalize — the reconciliation proves it still equals its rows.
+- **Frozen after finalize.** Later voids/payments surface as a read-time `source_changed` cue and never rewrite the snapshot. Corrections after finalize = a post-finalization `adjustment` (supersedes the acknowledgement; refused if the net would drop below what was paid or flip direction once money moved) or `reopen` (only with no payments). The number is assigned once and kept through a reopen.
+- **Acknowledgement is append-only** (`superseded_at`, never deleted). "Digital signature" = drawn PNG / typed name / recorded-outside — NOT a certified e-signature. Signature and payout-proof files live on the private `local` disk under random names and are served only through authorizing endpoints with `Cache-Control: private, no-store`.
+- **Printed proof never carries customer data and hides cost/profit** unless the owner ticks "include cost & profit" (`GET …/document?include_cost=1`). Documents render in the browser through `utils/pdfCapture.js` (images swapped by `src`, never by index); the signature is converted to a data URL first. `utils/printElement.js` prints one element via a hidden iframe.
+- **New `HasDataMode` table ⇒ add it to `CloneRegistry`.** All five settlement tables are registered (children ride the parent through `via`); `CloneRegistryDriftTest` guards the parent/child order and the file columns.
+- Deleting an event or a seller that has a settlement is refused (409): FK `restrict` does not catch soft deletes.
+- Money on this screen uses `formatIDRExact` (cents are shown, not rounded away) because its rows must add up to the eye.
+
+**Cross-tab session.** The token lives in per-tab `sessionStorage` (so closing every window still ends the session — the shared-terminal rule). A new tab with no token asks live tabs over a same-origin `BroadcastChannel` (`utils/tabSession.js`, called from `auth.restore()`), stores the answer in ITS OWN `sessionStorage`, and `GET /auth/me` still validates it. Never move the token to `localStorage`/cookies/URL. Logout is broadcast; the router guard and the 401 interceptor carry `?redirect=` and `LoginView` only follows it through `utils/safeRedirect.js` (open-redirect guard). No `BroadcastChannel` ⇒ today's behaviour (log in again). Accepted trade-off: a new tab adopts whoever is signed in elsewhere (that is the requested behaviour); the handed-over value is the SAME token, so logging out anywhere revokes it for every tab, and nobody can be signed in as two users in one browser session.
+
+**Branding.** `useBranding` (mounted once in `App.vue`) owns `document.title` (`<store name> · <app name>`) and the favicon (store logo drawn "contain" onto 64×64; falls back to `/favicon.ico` on any failure). It applies store identity only while signed in — the login screen keeps the defaults. `GET /settings/features` carries `store_logo_url` (all roles); `receipt_show_logo` is receipt-only and must not hide it. `SettingsView` writes through `settings.setStoreName()/setStoreLogoUrl()`; `setSystemMode()` reloads features because the store name is per mode.
+
+**Testing/e2e gotchas found in this feature.** `php artisan serve` re-reads `.env`, so a second instance on another database must use `php -S` (see RUNBOOK). Two `php artisan test` runs in one container race on the shared file cache and `storage/framework/testing` fake disks — run them one at a time or give the second `-e CACHE_STORE=array` and its own database.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -368,7 +393,22 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/046-segment-length-unlimited/plan.md`
+Active feature plan: `specs/047-settlement-tab-session-branding/plan.md`
+(branch `076-settlement-tab-session-branding`, from `develop`; spec dir number ≠ branch number) — three slices:
+(1) **new-tab session** — the token lives in per-tab `sessionStorage`, so a new tab had none; a live signed-in tab now
+hands it over on a same-origin `BroadcastChannel` (`utils/tabSession.js`, via `auth.restore()`), logout propagates to all
+tabs, the token is still never in `localStorage` (closing the browser ends the session), and login now returns to the
+requested page through a validated `?redirect=` (`utils/safeRedirect.js`); (2) **seller settlement** — a new owner/admin
+module (`settlements` menu key), one reconciled statement per (seller, EVENT) with NO commission and no automatic cost
+deduction (only explicit deductions/adjustments), built by `SellerSettlementBuilder` from the same revenue rules as the
+reports (pre-order rule extracted to `App\Support\PreorderRecognizedRevenue`, never copied), frozen at finalize into
+per-transaction source rows (rounded once per row so lines add up exactly), reconciliation must be `0.00` to finalize,
+acknowledgement (drawn / typed / recorded outside) and a dedicated payout ledger written only by
+`SellerSettlementService`; new `seller_settlements*` tables are separate from the POS-only `artist_settlements` recap
+and must stay registered in `CloneRegistry`; (3) **branding** — tab title `<store name> · <app name>`, sidebar logo +
+store name, favicon = store logo (`useBranding`, `features.store_logo_url`). See research.md / data-model.md / contracts/.
+
+Previous feature: `specs/046-segment-length-unlimited/plan.md`
 (branch `053-variant-sku-manual-edit`, the feature directory is `046-segment-length-unlimited`) — the product segment
 grows from 1–3 to 1–6 letters; product code ≤ 13 characters, variant SKU ≤ 20 (widened by a new migration). One rule in
 `App\Support\ProductSegment` holds the constants.

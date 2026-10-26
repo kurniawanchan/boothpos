@@ -381,6 +381,8 @@ Catatan kepatuhan: data kontak pelanggan adalah data pribadi. Sistem harus memba
 | F12.5 | Ringkasan sesi mencakup jumlah transaksi dan rincian metode bayar | M |
 | F12.6 | Ringkasan sesi dapat diekspor sebagai berkas untuk arsip harian | S |
 
+**Catatan pasca-MVP — 2026-10-26 (sesi lintas-tab dan identitas toko).** Dua perubahan kecil di luar F-number: (1) membuka menu di tab baru tidak lagi meminta login ulang — token tetap hanya di `sessionStorage` (menutup seluruh jendela peramban tetap mengakhiri sesi), tab yang sedang login menyerahkannya ke tab baru lewat kanal same-origin, logout berlaku di semua tab, dan login kembali ke halaman yang diminta; (2) judul tab = "<nama toko> · <nama aplikasi>", blok merek sidebar memakai logo dan nama toko, dan favicon memakai logo toko (layar login tetap bawaan).
+
 ### 7.13 User management
 
 | ID | Kebutuhan | Prioritas |
@@ -900,6 +902,19 @@ cakupan MVP awal yang pernah dirancang maupun dipotong.
   operasional yang terpengaruh.
 - Berpindah mode bersifat non-destruktif: tidak ada data yang dihapus,
   hanya disembunyikan/ditampilkan sesuai mode aktif.
+
+**Catatan perubahan cakupan — 2026-10-26 (settlement seller)**
+
+Modul **Settlement** (penyelesaian hasil penjualan antara toko dan tiap penjual, per event) ditambahkan pasca-MVP atas permintaan eksplisit pemilik produk. Ini bukan menghidupkan kembali pembayaran-ke-artist pada Rekap Seller yang dihapus pada fitur 040 — Rekap Seller tetap hanya Penjual / Unit / Penjualan dan **tidak berubah**. Aturan yang ditetapkan pemilik produk:
+
+- **Tidak ada komisi** yang dipotong dari seller, dan tidak ada pengaturan komisi. Bagian seller adalah seluruh pendapatannya (penjualan POS ditambah bagian pre-order yang sudah terkumpul); hanya potongan/penyesuaian yang diketik pemilik secara eksplisit yang mengurangi atau menambahnya. Harga pokok tidak dipotong otomatis.
+- **Satu settlement = satu penjual untuk satu event.** Rentang tanggal bebas ("periode") sengaja tidak dibuat karena bisa tumpang tindih dengan event dan membuat transaksi yang sama ter-settle dua kali.
+- **Angka harus seimbang.** Pendapatan memakai aturan yang sama dengan laporan (porsi pre-order = uang yang benar-benar terkumpul), dibulatkan sekali per transaksi; rekonsiliasi independen harus selisih 0,00 agar dapat difinalkan, dan angka final dibekukan.
+- **Pengakuan seller** dapat berupa tanda tangan yang digambar di layar, nama yang diketik, atau dicatat di luar sistem. Ini BUKAN tanda tangan elektronik tersertifikasi dan tidak memakai layanan pihak ketiga.
+- Pembayaran settlement dicatat di buku tersendiri, bukan di tabel pembayaran pelanggan; bukti settlement dan bukti pembayaran dicetak/diunduh dari browser.
+- Hanya **Owner/Admin** (menu key `settlements`).
+
+Spesifikasi: `specs/047-settlement-tab-session-branding/`. Kontrak API: `docs/openapi-pos-mvp.yaml` (tag Settlement).
 
 ### 10.3 Cakupan MVP Oktober
 
