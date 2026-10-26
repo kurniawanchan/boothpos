@@ -171,6 +171,8 @@ async function saveStoreIdentity() {
       { key: 'store_contact_phone', value: storeForm.store_contact_phone, type: 'string', group: 'receipt' },
       { key: 'store_contact_email', value: storeForm.store_contact_email, type: 'string', group: 'receipt' },
     ]);
+    // 076 — judul tab & sidebar ikut berubah seketika, tanpa muat ulang.
+    settings.setStoreName(storeForm.store_name);
     toast.success(t('settings.store_identity_saved'));
   } catch (err) {
     if (err.isValidation) {
@@ -215,6 +217,8 @@ async function saveLogo() {
   try {
     const res = await uploadStoreLogo(logoFile.value);
     storeLogoUrl.value = res.store_logo_url;
+    // 076 — logo sidebar & favicon berganti seketika.
+    settings.setStoreLogoUrl(res.store_logo_url);
     logoFile.value = null;
     if (logoInputEl.value) logoInputEl.value.value = '';
     toast.success(t('settings.store_logo_updated'));

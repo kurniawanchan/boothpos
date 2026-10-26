@@ -57,6 +57,11 @@ class SettingsController extends Controller
             // menimpa. Disurfacekan di sini (bukan hanya GET /settings)
             // supaya tersedia app-wide tanpa endpoint owner/admin-only.
             'store_name' => Setting::get(ModeGate::current() === 'demo' ? 'store_name_demo' : 'store_name'),
+            // 076-settlement-tab-session-branding — logo toko untuk sidebar & favicon. URL yang
+            // sudah diselesaikan server (konvensi ImageUploadService, seperti gambar lain);
+            // BUKAN dipengaruhi `receipt_show_logo` (flag itu hanya untuk struk/dokumen).
+            // Tidak sensitif: logo yang sama sudah tercetak di setiap struk dan invoice.
+            'store_logo_url' => $this->imageUploadService->url(Setting::get('store_logo_path')),
             // 035-po-row-actions — database tertinggal dari versi aplikasi? Hanya
             // owner/admin (menu `settings`) yang diberi tahu — itu yang berwenang
             // menerapkannya; daftar migrasinya sendiri tidak pernah dikirim.

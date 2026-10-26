@@ -43,7 +43,7 @@ class LiveToDemoClonerTest extends TestCase
 
         $this->assertSame(['demo_delete' => 1, 'live_clone' => 1], $plan['tables']['orders']);
         $this->assertSame(['demo_delete' => 2, 'live_clone' => 2], $plan['tables']['preorders']);
-        $this->assertSame(4, $plan['files']['files']); // 3 gambar + 1 bukti bayar LIVE
+        $this->assertSame(6, $plan['files']['files']); // 3 gambar + 1 bukti bayar + 1 tanda tangan + 1 bukti bayar settlement LIVE
         $this->assertGreaterThan(0, $plan['files']['bytes']);
         $this->assertSame(1, $this->mode('orders', 'demo')->count());
         $this->assertSame($this->oldDemo['order'], $this->demo('orders')->id);
@@ -151,6 +151,48 @@ class LiveToDemoClonerTest extends TestCase
             DB::table('payment_proofs')->where('data_mode', 'live')->value('proof_token'),
             $this->demo('payment_proofs')->proof_token,
         );
+    }
+
+    public function test_seller_settlements_are_cloned_with_their_own_numbers_refs_and_files(): void
+    {
+        (new LiveToDemoCloner)->run();
+
+        $settlement = $this->demo('seller_settlements');
+        $this->assertSame('STL-LIVE-0001-DM', $settlement->number);
+        $this->assertSame('demo', DB::table('events')->where('id', $settlement->event_id)->value('data_mode'));
+        $this->assertSame('demo', DB::table('artists')->where('id', $settlement->artist_id)->value('data_mode'));
+        // Pengguna dibagi: nilainya tetap id yang sama.
+        $this->assertSame($this->live['user'], (int) $settlement->created_by);
+
+        $liveRef = DB::table('seller_settlement_payments')->where('settlement_id', $this->live['sellerSettlement'])->value('client_ref');
+        $demoPayment = DB::table('seller_settlement_payments')->where('settlement_id', $settlement->id)->first();
+        $this->assertNotSame($liveRef, $demoPayment->client_ref);
+        $this->assertSame(36, strlen($demoPayment->client_ref));
+
+        // Berkas DISALIN (path berbeda, isi sama), tidak pernah dibagi dengan LIVE.
+        $livePath = DB::table('seller_settlement_payments')->where('settlement_id', $this->live['sellerSettlement'])->value('proof_path');
+        $this->assertNotSame($livePath, $demoPayment->proof_path);
+        $this->assertSame('live-payout-bytes', Storage::disk('local')->get($demoPayment->proof_path));
+
+        $demoAck = DB::table('seller_settlement_acknowledgements')->where('settlement_id', $settlement->id)->first();
+        $this->assertSame('live-signature-bytes', Storage::disk('local')->get($demoAck->signature_path));
+        $this->assertTrue(Storage::disk('local')->exists($livePath));
+    }
+
+    public function test_old_demo_settlement_files_are_removed_but_a_live_file_is_never_deleted(): void
+    {
+        $oldSignature = DB::table('seller_settlement_acknowledgements')->where('id', $this->oldDemo['sellerAck'])->value('signature_path');
+        $liveSignature = DB::table('seller_settlement_acknowledgements')->where('id', $this->live['sellerAck'])->value('signature_path');
+        // Sisa kloning lama: baris DEMO menunjuk berkas LIVE yang sama. Berkas itu tidak boleh ikut terhapus.
+        DB::table('seller_settlement_payments')->where('id', $this->oldDemo['sellerPayment'])
+            ->update(['proof_path' => DB::table('seller_settlement_payments')->where('id', $this->live['sellerPayment'])->value('proof_path')]);
+        $this->assertTrue(Storage::disk('local')->exists($oldSignature));
+
+        (new LiveToDemoCloner)->run();
+
+        $this->assertFalse(Storage::disk('local')->exists($oldSignature), 'berkas DEMO lama yang tak dirujuk lagi harus terhapus');
+        $this->assertTrue(Storage::disk('local')->exists($liveSignature), 'berkas LIVE tidak boleh tersentuh');
+        $this->assertTrue(Storage::disk('local')->exists(DB::table('seller_settlement_payments')->where('settlement_id', $this->live['sellerSettlement'])->value('proof_path')));
     }
 
     public function test_stock_movement_references_are_remapped_by_type(): void

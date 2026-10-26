@@ -4,12 +4,14 @@
 // Bahasa Indonesia for everyone, before any account identity is known.
 // Do not add a language toggle here.
 import { reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { safeRedirect } from '../utils/safeRedirect';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuthStore();
 
 const form = reactive({ username: '', password: '' });
@@ -24,7 +26,9 @@ async function onSubmit() {
   submitting.value = true;
   try {
     await auth.login(form.username, form.password);
-    router.push({ name: 'dashboard' });
+    // 076 (US1/FR-004) — kembali ke halaman yang diminta sebelum diminta login;
+    // nilai dari URL divalidasi (bukan open redirect), selain itu dashboard.
+    router.push(safeRedirect(route.query.redirect, router) ?? { name: 'dashboard' });
   } catch (err) {
     if (err.isValidation) {
       errors.username = err.errors?.username?.[0] ?? '';

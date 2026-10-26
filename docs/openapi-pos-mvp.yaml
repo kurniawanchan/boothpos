@@ -49,6 +49,7 @@ tags:
   - name: Purchase Order
   - name: Import & Export
   - name: Company Onboarding
+  - name: Settlement
 
 security:
   - bearerAuth: []
@@ -301,6 +302,17 @@ paths:
                       toko (`store_name`). Diubah owner/admin lewat `PUT /settings`
                       (key `app_name`, maks. 50 karakter — lebih panjang ditolak
                       422); kosong/spasi saja berarti kembali ke default.
+                  store_logo_url:
+                    type: string
+                    nullable: true
+                    description: |
+                      076-settlement-tab-session-branding — URL logo toko yang sudah
+                      diselesaikan server (`null` bila belum diunggah). Terbuka untuk
+                      semua peran yang login (logo yang sama sudah tercetak di setiap
+                      struk/invoice). Dipakai SPA untuk logo sidebar dan favicon;
+                      `receipt_show_logo` hanya berlaku untuk struk dan TIDAK
+                      memengaruhi nilai ini. Layar login (belum ada sesi) memakai
+                      judul/ikon bawaan.
                   schema_update_required:
                     type: boolean
                     description: |
@@ -5348,6 +5360,406 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/MasterDataImportResult' }
 
+  # ------------------------------------------------------------------
+  # SETTLEMENT SELLER (076-settlement-tab-session-branding)
+  # ------------------------------------------------------------------
+  /settlements:
+    get:
+      tags: [Settlement]
+      summary: Daftar settlement seller
+      description: |
+        Menu key `settlements` (Owner/Admin secara default); peran lain 403.
+        `status` memakai STATUS TAMPILAN turunan (bukan kolom): `acknowledged` /
+        `partially_paid` / `settled` hanya berlaku bila ada pengakuan seller yang
+        masih berlaku. `totals` dihitung dari BARIS TERFILTER (bukan seluruh tabel).
+      parameters:
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: artist_id, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string, enum: [draft, finalized, acknowledged, partially_paid, settled] } }
+        - { name: payment_status, in: query, schema: { type: string, enum: [net_zero, unpaid, partially_paid, settled] } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/SellerSettlement' }
+                  meta:
+                    type: object
+                    properties:
+                      current_page: { type: integer }
+                      per_page: { type: integer }
+                      total: { type: integer }
+                      last_page: { type: integer }
+                  totals: { $ref: '#/components/schemas/SellerSettlementTotals' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Settlement]
+      summary: Buat draf settlement untuk satu (seller, event)
+      description: |
+        Sumber (transaksi POS dan pre-order terkumpul) dibentuk SERVER dari data
+        hidup; tidak ada angka pendapatan yang diterima dari klien. Satu settlement
+        aktif per (seller, event) — dijaga indeks UNIQUE di database.
+        Tidak ada komisi yang dipotong dari seller.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_id, artist_id]
+              properties:
+                event_id: { type: integer }
+                artist_id: { type: integer }
+      responses:
+        '201':
+          description: Dibuat (draf)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: "`code: settlement_exists` — sudah ada settlement aktif; `existing_id` menunjuknya."
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SettlementRuleError' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /settlements/preview:
+    get:
+      tags: [Settlement]
+      summary: Pratinjau isi settlement tanpa menyimpan
+      description: |
+        Seller tanpa aktivitas menghasilkan nol, bukan galat.
+        `existing_settlement_id` terisi bila pasangan ini sudah punya settlement aktif.
+      parameters:
+        - { name: event_id, in: query, required: true, schema: { type: integer } }
+        - { name: artist_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/SellerSettlementPreview' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /settlements/{settlement}:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Settlement]
+      summary: Detail settlement
+      description: |
+        Memuat sumber beku, potongan/penyesuaian, pengakuan, pembayaran, rekonsiliasi,
+        memo (informasi, tidak mengubah jumlah), dan `can.*` (hak aksi dihitung server).
+        `source_changed` (hanya untuk settlement final) membandingkan pendapatan hidup
+        dengan yang dibekukan dan TIDAK PERNAH mengubah angka beku. Settlement milik mode
+        data lain → 404.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Settlement]
+      summary: Hapus draf
+      description: "Hanya draf yang BELUM PERNAH difinalkan (hard delete, tercatat di log aktivitas). Yang sudah final → 409 `not_draft`; draf hasil buka-kembali (sudah bernomor) → 409 `was_finalized` supaya nomor tidak dipakai ulang dan berkas pengakuan lama tidak yatim."
+      responses:
+        '204': { description: Dihapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+
+  /settlements/{settlement}/refresh:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Settlement]
+      summary: Segarkan sumber draf dari data terbaru
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+
+  /settlements/{settlement}/finalize:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Settlement]
+      summary: Finalkan settlement
+      description: |
+        Dalam satu transaksi: segarkan sumber, jalankan rekonsiliasi independen, bekukan,
+        beri nomor `STL-YYYYMMDD-NNNN` (sekali; dipertahankan bila dibuka kembali).
+        409: `not_draft`, `nothing_to_settle`, `reconciliation_mismatch` (`figure` menyebut
+        angka yang tidak cocok).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+
+  /settlements/{settlement}/reopen:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Settlement]
+      summary: Buka kembali menjadi draf
+      description: |
+        Hanya bila belum ada pembayaran (`has_payments`). Pengakuan yang berlaku
+        digantikan (alasan `reopened`). Nomor dipertahankan.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+
+  /settlements/{settlement}/adjustments:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Settlement]
+      summary: Tambah potongan atau penyesuaian
+      description: |
+        `kind=deduction`: diketik POSITIF, disimpan negatif; hanya pada draf.
+        `kind=adjustment`: boleh positif/negatif, tidak nol; setelah final pun boleh
+        (ditandai `post_finalization`, membatalkan pengakuan seller — alasan `adjusted`).
+        Setelah ada pembayaran: tidak boleh membalik arah (`direction_locked`) atau
+        membuat total lebih kecil dari yang sudah dibayar (`net_below_paid`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SellerSettlementAdjustmentInput' }
+      responses:
+        '201':
+          description: Dibuat; mengembalikan detail terbaru
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /settlements/{settlement}/adjustments/{adjustment}:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+      - { name: adjustment, in: path, required: true, schema: { type: integer } }
+    put:
+      tags: [Settlement]
+      summary: Ubah potongan/penyesuaian (hanya draf)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SellerSettlementAdjustmentInput' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Settlement]
+      summary: Hapus potongan/penyesuaian (hanya draf)
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+
+  /settlements/{settlement}/acknowledgement:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Settlement]
+      summary: Catat pengakuan seller
+      description: |
+        Tiga cara: `signature` (gambar PNG ≤ 512 KB + nama), `typed` (nama), `external`
+        (dicatat di luar sistem; catatan wajib dan diberi label di dokumen). Yang baru
+        MENGGANTIKAN yang berlaku (`superseded_at`, alasan `replaced`); tidak ada baris
+        atau berkas yang dihapus. Ini bukan tanda tangan elektronik tersertifikasi.
+        Tidak mengubah angka.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [method]
+              properties:
+                method: { type: string, enum: [signature, typed, external] }
+                signer_name: { type: string, maxLength: 120, description: Wajib untuk `signature` dan `typed` }
+                note: { type: string, maxLength: 255, description: Wajib untuk `external` }
+                signature: { type: string, format: binary, description: PNG ≤ 512 KB; wajib untuk `signature` }
+      responses:
+        '201':
+          description: Dicatat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /settlements/{settlement}/acknowledgements/{acknowledgement}/signature:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+      - { name: acknowledgement, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Settlement]
+      summary: Gambar tanda tangan (disk privat)
+      description: "Hanya lewat endpoint ini; `Cache-Control: private, no-store`. 404 bila tidak ada tanda tangan atau milik settlement lain."
+      responses:
+        '200':
+          description: PNG
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /settlements/{settlement}/payments:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+    post:
+      tags: [Settlement]
+      summary: Catat pembayaran settlement
+      description: |
+        Jumlah dibatasi sisa terutang (422 `amount` menyebut maksimum; sudah lunas 409
+        `already_settled`; net nol 409 `nothing_to_pay`). Idempoten lewat `client_ref`:
+        referensi yang sama pada settlement yang sama → 200 (tanpa baris baru); pada
+        settlement lain → 422. Arah mengikuti tanda net (net negatif = uang DITERIMA
+        dari seller). Pembayaran ini BUKAN baris `payments` (buku kas pelanggan).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [client_ref, amount, paid_at, method]
+              properties:
+                client_ref: { type: string, format: uuid }
+                amount: { type: string, example: '25000.00' }
+                paid_at: { type: string, format: date }
+                method: { type: string, enum: [cash, bank_transfer, ewallet, other] }
+                reference: { type: string, maxLength: 120 }
+                notes: { type: string, maxLength: 255 }
+                proof: { type: string, format: binary, description: JPEG/PNG ≤ 5 MB (opsional) }
+      responses:
+        '200':
+          description: Diputar ulang (client_ref sama)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '201':
+          description: Dicatat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /settlements/{settlement}/payments/{payment}:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+      - { name: payment, in: path, required: true, schema: { type: integer } }
+    delete:
+      tags: [Settlement]
+      summary: Hapus pembayaran
+      description: Cache `paid_amount` dihitung ulang dalam transaksi yang sama; berkas bukti dihapus sesudah commit.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SellerSettlementDetailEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+
+  /settlements/{settlement}/payments/{payment}/proof:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+      - { name: payment, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Settlement]
+      summary: Berkas bukti pembayaran (disk privat)
+      responses:
+        '200':
+          description: Gambar
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+            image/jpeg:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /settlements/{settlement}/document:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Settlement]
+      summary: Bahan dokumen bukti settlement (untuk dicetak di browser)
+      description: |
+        Hanya settlement final (409 `not_finalized`). Identitas toko, seller, event,
+        angka beku, rekonsiliasi, pembayaran, dan blok pengakuan. TIDAK memuat data
+        pribadi pelanggan. Biaya pokok & laba kotor hanya bila `include_cost=1`.
+      parameters:
+        - { name: include_cost, in: query, schema: { type: integer, enum: [0, 1], default: 0 } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object, additionalProperties: true }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+
+  /settlements/{settlement}/payments/{payment}/document:
+    parameters:
+      - { name: settlement, in: path, required: true, schema: { type: integer } }
+      - { name: payment, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Settlement]
+      summary: Bahan dokumen bukti pembayaran
+      description: Memuat `total_paid_after` dan `balance_after` (saldo SESUDAH pembayaran ini, urut tanggal bayar lalu id).
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: object, additionalProperties: true }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/SettlementConflict' }
+
 # =====================================================================
 # COMPONENTS
 # =====================================================================
@@ -5394,6 +5806,15 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    SettlementConflict:
+      description: |
+        076 — pelanggaran aturan bisnis settlement; `code` mesin-terbaca:
+        `settlement_exists`, `not_draft`, `not_finalized`, `nothing_to_settle`,
+        `reconciliation_mismatch`, `has_payments`, `net_below_paid`, `direction_locked`,
+        `already_settled`, `nothing_to_pay`, `was_finalized`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SettlementRuleError' }
     SchemaOutdated:
       description: |
         035-po-row-actions — struktur database TERTINGGAL dari versi aplikasi
@@ -6970,3 +7391,191 @@ components:
         old_values: { type: object, nullable: true, additionalProperties: true }
         new_values: { type: object, nullable: true, additionalProperties: true }
         created_at: { type: string, format: date-time }
+
+
+    SettlementRuleError:
+      type: object
+      properties:
+        message: { type: string }
+        code: { type: string }
+        existing_id: { type: integer, nullable: true, description: Hanya untuk `settlement_exists` }
+        figure: { type: string, nullable: true, description: Hanya untuk `reconciliation_mismatch` }
+
+    SellerSettlementTotals:
+      type: object
+      description: Dihitung dari baris terfilter.
+      properties:
+        revenue_total: { type: string, example: '45000.00' }
+        net_amount: { type: string, example: '40000.00' }
+        paid_amount: { type: string, example: '10000.00' }
+        balance: { type: string, example: '30000.00' }
+
+    SellerSettlement:
+      type: object
+      properties:
+        id: { type: integer }
+        number: { type: string, nullable: true, example: STL-20261026-0001, description: Diberi saat finalisasi pertama; draf yang belum pernah final = null. }
+        status: { type: string, enum: [draft, finalized], description: Satu-satunya status yang disimpan. }
+        display_status: { type: string, enum: [draft, finalized, acknowledged, partially_paid, settled], description: Turunan. }
+        event: { type: object, properties: { id: { type: integer }, name: { type: string } }, description: Snapshot nama saat dibuat }
+        seller: { type: object, properties: { id: { type: integer }, name: { type: string }, code: { type: string, nullable: true } } }
+        pos_units: { type: integer }
+        pos_revenue: { type: string }
+        preorder_units: { type: integer }
+        preorder_revenue: { type: string, description: Hanya bagian pre-order yang sudah terkumpul; dibulatkan SEKALI per transaksi. }
+        revenue_total: { type: string }
+        adjustments_total: { type: string, description: Bertanda; potongan = negatif. }
+        net_amount: { type: string, description: "= revenue_total + adjustments_total (dijaga CHECK database)." }
+        direction: { type: string, enum: [store_pays_seller, seller_pays_store, none] }
+        paid_amount: { type: string }
+        balance: { type: string }
+        payment_status: { type: string, enum: [net_zero, unpaid, partially_paid, settled] }
+        acknowledged: { type: boolean }
+        finalized_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    SellerSettlementSource:
+      type: object
+      description: Baris sumber beku — hanya nomor transaksi, tidak ada data pelanggan.
+      properties:
+        id: { type: integer }
+        source_type: { type: string, enum: [order, preorder] }
+        source_id: { type: integer }
+        source_number: { type: string }
+        source_date: { type: string, format: date-time }
+        units: { type: integer }
+        gross_amount: { type: string }
+        amount: { type: string }
+        uncollected_amount: { type: string }
+        cost_amount: { type: string }
+
+    SellerSettlementAdjustment:
+      type: object
+      properties:
+        id: { type: integer }
+        kind: { type: string, enum: [deduction, adjustment] }
+        label: { type: string }
+        reason: { type: string }
+        basis: { type: string, nullable: true }
+        amount: { type: string }
+        post_finalization: { type: boolean }
+        created_by_name: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    SellerSettlementAdjustmentInput:
+      type: object
+      required: [kind, label, reason, amount]
+      properties:
+        kind: { type: string, enum: [deduction, adjustment] }
+        label: { type: string, maxLength: 120 }
+        reason: { type: string, maxLength: 2000 }
+        basis: { type: string, nullable: true, maxLength: 160, description: Dasar alokasi biaya yang dibebankan, mis. "40% menurut porsi penjualan". }
+        amount: { type: string, example: '25000', description: "Potongan diketik POSITIF; penyesuaian bertanda, tidak nol. Maks. 2 desimal." }
+
+    SellerSettlementAcknowledgement:
+      type: object
+      properties:
+        id: { type: integer }
+        method: { type: string, enum: [signature, typed, external] }
+        signer_name: { type: string, nullable: true }
+        note: { type: string, nullable: true }
+        has_signature: { type: boolean }
+        acknowledged_at: { type: string, format: date-time }
+        recorded_by_name: { type: string, nullable: true }
+        superseded_at: { type: string, format: date-time, nullable: true }
+        superseded_reason: { type: string, enum: [replaced, reopened, adjusted], nullable: true }
+
+    SellerSettlementPayment:
+      type: object
+      properties:
+        id: { type: integer }
+        amount: { type: string }
+        paid_at: { type: string, format: date }
+        method: { type: string, enum: [cash, bank_transfer, ewallet, other] }
+        reference: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        has_proof: { type: boolean }
+        recorded_by_name: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    SellerSettlementReconciliation:
+      type: object
+      description: Dijumlah ulang dari baris-baris (bukan membaca total sendiri).
+      properties:
+        sources_sum: { type: string }
+        adjustments_sum: { type: string }
+        expected_net: { type: string }
+        net_amount: { type: string }
+        difference: { type: string, example: '0.00' }
+        pos_check: { type: string }
+        preorder_check: { type: string }
+        payment_check: { type: string }
+        balanced: { type: boolean }
+        failing: { type: string, nullable: true }
+
+    SellerSettlementDetail:
+      allOf:
+        - $ref: '#/components/schemas/SellerSettlement'
+        - type: object
+          properties:
+            sources:
+              type: array
+              items: { $ref: '#/components/schemas/SellerSettlementSource' }
+            adjustments:
+              type: array
+              items: { $ref: '#/components/schemas/SellerSettlementAdjustment' }
+            acknowledgement:
+              nullable: true
+              allOf: [ { $ref: '#/components/schemas/SellerSettlementAcknowledgement' } ]
+            acknowledgement_history:
+              type: array
+              items: { $ref: '#/components/schemas/SellerSettlementAcknowledgement' }
+            payments:
+              type: array
+              items: { $ref: '#/components/schemas/SellerSettlementPayment' }
+            reconciliation: { $ref: '#/components/schemas/SellerSettlementReconciliation' }
+            memo:
+              type: object
+              description: Informasi saja; tidak mengubah jumlah.
+              properties:
+                preorder_uncollected: { type: string }
+                cost_of_goods: { type: string }
+                gross_profit: { type: string }
+            source_changed:
+              type: object
+              nullable: true
+              properties:
+                pos_delta: { type: string }
+                preorder_delta: { type: string }
+                as_of: { type: string, format: date-time }
+            can:
+              type: object
+              description: Hak aksi dihitung server; SPA tidak menurunkannya sendiri.
+              properties:
+                finalize: { type: boolean }
+                reopen: { type: boolean }
+                delete: { type: boolean }
+                acknowledge: { type: boolean }
+                add_payment: { type: boolean }
+                adjust: { type: boolean }
+
+    SellerSettlementDetailEnvelope:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/SellerSettlementDetail' }
+
+    SellerSettlementPreview:
+      type: object
+      properties:
+        event: { type: object, properties: { id: { type: integer }, name: { type: string } } }
+        seller: { type: object, properties: { id: { type: integer }, name: { type: string }, code: { type: string, nullable: true } } }
+        pos_units: { type: integer }
+        pos_revenue: { type: string }
+        preorder_units: { type: integer }
+        preorder_revenue: { type: string }
+        revenue_total: { type: string }
+        adjustments_total: { type: string, example: '0.00' }
+        net_amount: { type: string }
+        sources: { type: array, items: { type: object, additionalProperties: true } }
+        memo: { type: object, additionalProperties: { type: string } }
+        existing_settlement_id: { type: integer, nullable: true }

@@ -345,6 +345,19 @@ melihat banner "Database perlu diperbarui" di atas halaman. Setelah migrasi
 diterapkan, "Coba lagi" langsung bekerja tanpa memuat ulang halaman. Aplikasi
 sendiri TIDAK PERNAH menjalankan migrasi dari request web.
 
+Fitur 076 (settlement seller) menambahkan migrasi `2026_11_20_000001` (lima tabel
+`seller_settlement*`) dan `2026_11_20_000002` (menu key `settlements` untuk peran
+Owner dan Admin). Tanpa keduanya, menu Settlement tidak muncul dan API-nya menjawab
+503 `schema_outdated`. Peran kustom yang dibuat sebelum fitur ini tidak otomatis
+mendapat menu `settlements` — tambahkan lewat layar Peran bila perlu.
+
+Menguji di browser dengan data terpisah: `php artisan serve` MEMBACA ULANG `.env`
+dan mengabaikan `DB_DATABASE` dari environment container, jadi server yang dijalankan
+dengan `artisan serve` selalu memakai database di `.env`. Untuk menjalankan instans
+kedua pada database lain (mis. `boothpos_test_*`), pakai server bawaan PHP
+(`php -S`, direktori kerja `public/`, router `vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php`)
+supaya environment dihormati.
+
 ## 8. Troubleshooting cepat
 
 | Gejala | Penyebab | Solusi |

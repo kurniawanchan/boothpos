@@ -83,6 +83,32 @@ class CloneRegistryDriftTest extends TestCase
         $this->assertSame([], $problems, "Registry tidak sinkron dengan skema:\n".implode("\n", $problems));
     }
 
+    /**
+     * 076 — settlement seller. Tabel anak tidak punya data_mode sehingga test
+     * "data_mode terdaftar" di bawah TIDAK akan menangkap kalau mereka lupa
+     * didaftarkan; test ini menjaganya secara eksplisit.
+     */
+    public function test_seller_settlement_tables_are_registered_with_parent_first_and_children_via_parent(): void
+    {
+        $tables = array_keys(CloneRegistry::tables());
+        $parentAt = array_search('seller_settlements', $tables, true);
+
+        $this->assertNotFalse($parentAt, 'seller_settlements belum terdaftar di CloneRegistry.');
+
+        foreach (['sources', 'adjustments', 'acknowledgements', 'payments'] as $child) {
+            $name = "seller_settlement_{$child}";
+            $at = array_search($name, $tables, true);
+
+            $this->assertNotFalse($at, "{$name} belum terdaftar di CloneRegistry.");
+            $this->assertGreaterThan($parentAt, $at, "{$name} harus berada SETELAH induknya (urutan FK).");
+            $this->assertSame('seller_settlements.settlement_id', CloneRegistry::spec($name)['via']);
+        }
+
+        $this->assertSame(['signature_path' => 'local'], CloneRegistry::spec('seller_settlement_acknowledgements')['files']);
+        $this->assertSame(['proof_path' => 'local'], CloneRegistry::spec('seller_settlement_payments')['files']);
+        $this->assertSame(['client_ref'], CloneRegistry::spec('seller_settlement_payments')['uuid']);
+    }
+
     public function test_every_table_with_a_data_mode_column_is_registered_or_explicitly_excluded(): void
     {
         $registered = CloneRegistry::tables();
