@@ -1,146 +1,146 @@
 ---
-title: "Restaurant setup"
-description: "Create and edit tables, kitchen and bar stations and modifier groups, and move tables or stations to another outlet."
-keywords: ["restaurant setup", "tables", "stations", "modifiers", "modifier group", "outlet move", "dining setup"]
+title: "Pengaturan restoran"
+description: "Buat dan ubah meja, stasiun dapur dan bar, serta grup modifier, dan pindahkan meja atau stasiun ke outlet lain."
+keywords: ["pengaturan restoran", "meja", "stasiun", "modifier", "grup modifier", "pindah outlet", "dining setup"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-**Restaurant Setup** (menu key `dining_setup`, under the **Restaurant** group) holds the master data that the floor and kitchen screens depend on. It has three tabs: **Tables**, **Stations** and **Modifiers**.
+**Pengaturan Restoran** (menu key `dining_setup`, di bawah grup **Restoran**) menyimpan data master yang dibutuhkan layar lantai dan dapur. Halaman ini memiliki tiga tab: **Meja**, **Stasiun**, dan **Modifier**.
 
-## Before you start
+## Sebelum mulai
 
-- Your role needs the `dining_setup` menu. Without it the page redirects to the dashboard and the server answers 403 ("You are not allowed to do this.").
-- Every change here is a master-data change on the server. Table and station changes that matter (activate, deactivate, delete, move) are written to the [Activity log](/insight/activity-log).
-- With more than one outlet, the **Tables** and **Stations** tabs show an outlet filter, and each record belongs to one outlet. See [Outlets](/concepts/outlets).
+- Peran Anda harus memiliki menu `dining_setup`. Tanpanya halaman dialihkan ke dasbor dan server menjawab 403 ("Anda tidak diizinkan melakukan ini.").
+- Setiap perubahan di sini adalah perubahan data master di server. Perubahan meja dan stasiun yang penting (aktifkan, nonaktifkan, hapus, pindah) dicatat di [Log aktivitas](/insight/activity-log).
+- Dengan lebih dari satu outlet, tab **Meja** dan **Stasiun** menampilkan filter outlet, dan setiap record milik satu outlet. Lihat [Outlet](/concepts/outlets).
 
-## Outlet filter
+## Filter outlet
 
-When your installation has more than one outlet, a bar above the **Tables** and **Stations** tabs shows a multi-select ("All outlets"). It starts on the outlet currently selected in the app header. Leaving it empty lists every outlet you are allowed to see. **Reset filters** returns to the header's outlet. This filter does not apply to **Modifiers**, which are shared by all outlets.
+Bila instalasi Anda memiliki lebih dari satu outlet, sebuah bilah di atas tab **Meja** dan **Stasiun** menampilkan pilihan ganda ("Semua outlet"). Bilah ini dimulai pada outlet yang sedang dipilih di header aplikasi. Mengosongkannya mendaftar setiap outlet yang boleh Anda lihat. **Atur ulang filter** mengembalikan ke outlet di header. Filter ini tidak berlaku untuk **Modifier**, yang dipakai bersama oleh semua outlet.
 
 <Info>
-This page sends its own outlet list instead of the header outlet, so you can pick other outlets than the one in the header. The server still limits the result to outlets your user may access.
+Halaman ini mengirim daftar outlet sendiri, bukan outlet di header, sehingga Anda bisa memilih outlet selain yang ada di header. Server tetap membatasi hasil pada outlet yang boleh diakses pengguna Anda.
 </Info>
 
-## Tables
+## Meja
 
-A **table** is a place a dine-in tab can be opened on.
+**Meja** adalah tempat tab dine-in bisa dibuka.
 
 <Steps>
-  <Step title="Click New table">
-    Use **New table**, or **Edit** on a row.
+  <Step title="Klik Meja baru">
+    Gunakan **Meja baru**, atau **Edit** pada sebuah baris.
   </Step>
-  <Step title="Fill in the form">
-    See the field table below. With several outlets, **Outlet** is required.
+  <Step title="Isi formulir">
+    Lihat tabel isian di bawah. Dengan beberapa outlet, **Outlet** wajib diisi.
   </Step>
-  <Step title="Save">
-    Click **Save**. Toasts read "Table created." or "Table updated."
+  <Step title="Simpan">
+    Klik **Simpan**. Toast bertuliskan "Meja dibuat." atau "Meja diperbarui."
   </Step>
 </Steps>
 
-| Field | Rules |
+| Isian | Aturan |
 | --- | --- |
-| Outlet | Only shown with several outlets. Defaults to the header's outlet when creating. |
-| Table name / number | Required, up to 60 characters. Must be unique within its area: "A table with this name already exists in that area." |
-| Area | Optional, up to 60 characters, for example Indoor or Terrace. Empty means no area. Tables are grouped by area on the floor. |
-| Seats | Whole number from 1 to 99. Defaults to 4 on a new table. |
-| Display order | Whole number, sorts tables inside an area. |
-| Active | Inactive tables cannot receive a new tab and are left off the floor unless they still hold an open tab. |
+| Outlet | Hanya tampil dengan beberapa outlet. Bawaannya outlet di header saat membuat. |
+| Nama / nomor meja | Wajib, maksimal 60 karakter. Harus unik dalam areanya: "Meja dengan nama ini sudah ada di area tersebut." |
+| Area | Opsional, maksimal 60 karakter, misalnya Indoor atau Terrace. Kosong berarti tanpa area. Meja dikelompokkan menurut area di lantai. |
+| Jumlah kursi | Bilangan bulat dari 1 sampai 99. Bawaannya 4 pada meja baru. |
+| Urutan tampil | Bilangan bulat, mengurutkan meja di dalam area. |
+| Aktif | Meja nonaktif tidak bisa menerima tab baru dan tidak ditampilkan di lantai kecuali masih memiliki tab terbuka. |
 
-The list shows **Table**, **Outlet** (code and name, with several outlets), **Area**, **Seats** and **Status** (**Active** or **Inactive**, plus **Has an open tab**).
+Daftar menampilkan **Meja**, **Outlet** (kode dan nama, dengan beberapa outlet), **Area**, **Kursi**, dan **Status** (**Aktif** atau **Nonaktif**, ditambah **Ada tab terbuka**).
 
-### Deactivate or delete a table
+### Menonaktifkan atau menghapus meja
 
-- You cannot deactivate a table that has an open tab: "This table has an open tab. Settle or void the tab before deactivating the table." (409).
-- **Delete** asks you to confirm. A table that has ever been used by an order cannot be deleted: "This table has been used by orders and cannot be deleted. Deactivate it instead." (409). Deactivate it instead.
+- Anda tidak bisa menonaktifkan meja yang memiliki tab terbuka: "Meja ini memiliki tab yang masih terbuka. Selesaikan atau batalkan tab sebelum menonaktifkan meja." (409).
+- **Hapus** meminta Anda mengonfirmasi. Meja yang pernah dipakai order tidak bisa dihapus: "Meja ini pernah dipakai order dan tidak bisa dihapus. Nonaktifkan saja." (409). Nonaktifkan saja.
 
-## Stations
+## Stasiun
 
-A **station** (Kitchen, Bar, Dessert) receives tickets. After creating stations, assign each category or product to a station on the Categories or Products screens; see [Categories](/inventory/categories) and [Products](/inventory/products). An item without a station is auto-ready when sent and never shows on a kitchen screen. See [Kitchen and bar](/operations/kitchen).
+**Stasiun** (Dapur, Bar, Dessert) menerima tiket. Setelah membuat stasiun, tetapkan setiap kategori atau produk ke stasiun di layar Kategori atau Produk; lihat [Kategori](/inventory/categories) dan [Produk](/inventory/products). Item tanpa stasiun otomatis siap saat dikirim dan tidak pernah tampil di layar dapur. Lihat [Dapur dan bar](/operations/kitchen).
 
-| Field | Rules |
+| Isian | Aturan |
 | --- | --- |
-| Outlet | Only shown with several outlets. |
-| Station name | Required, up to 60 characters, unique: "A station with this name already exists." |
-| Display order | Whole number. New stations default to the current row count. Sorts the station tabs on the kitchen screen. |
-| Active | Only active stations receive tickets. The kitchen screen lists active stations only. |
+| Outlet | Hanya tampil dengan beberapa outlet. |
+| Nama stasiun | Wajib, maksimal 60 karakter, unik: "Stasiun dengan nama ini sudah ada." |
+| Urutan tampil | Bilangan bulat. Stasiun baru bawaannya jumlah baris saat ini. Mengurutkan tab stasiun di layar dapur. |
+| Aktif | Hanya stasiun aktif yang menerima tiket. Layar dapur hanya mendaftar stasiun aktif. |
 
-**Delete** is refused when the station is still assigned to a category or product, or has ever received tickets: "This station is assigned to a category or product, or has received tickets. Deactivate it instead." (409).
+**Hapus** ditolak bila stasiun masih ditetapkan ke kategori atau produk, atau pernah menerima tiket: "Stasiun ini ditugaskan ke kategori/produk, atau pernah menerima tiket. Nonaktifkan saja." (409).
 
 <Warning>
-Deactivating a station has no guard. Items assigned to an inactive station are treated as having no station, so they become auto-ready and disappear from kitchen screens. Reassign items first.
+Menonaktifkan stasiun tidak memiliki pengaman. Item yang ditetapkan ke stasiun nonaktif dianggap tidak memiliki stasiun, sehingga otomatis siap dan menghilang dari layar dapur. Tetapkan ulang item terlebih dahulu.
 </Warning>
 
-## Modifier groups
+## Grup modifier
 
-A **modifier group** is a set of choices shown when a waiter adds an item to a tab, such as Size, Sugar level or Toppings. Groups attach to products and to categories.
+**Grup modifier** adalah sekumpulan pilihan yang ditampilkan saat pelayan menambahkan item ke tab, seperti Ukuran, Tingkat gula, atau Topping. Grup dilampirkan ke produk dan ke kategori.
 
 <Steps>
-  <Step title="Create the group">
-    **New modifier group**, enter a **Group name** (up to 100 characters) and choose a **Selection type**: **Choose one** or **Choose several**.
+  <Step title="Buat grup">
+    **Grup modifier baru**, masukkan **Nama grup** (maksimal 100 karakter) dan pilih **Jenis pilihan**: **Pilih satu** atau **Pilih beberapa**.
   </Step>
-  <Step title="Set the rule">
-    Tick **Must be chosen** if the guest has to choose. For **Choose several**, set **Minimum chosen** and **Maximum chosen**. Leave the maximum empty for no limit.
+  <Step title="Atur aturannya">
+    Centang **Wajib dipilih** bila tamu harus memilih. Untuk **Pilih beberapa**, atur **Minimum dipilih** dan **Maksimum dipilih**. Kosongkan maksimum bila tanpa batas.
   </Step>
-  <Step title="Add options">
-    Each option has a **Option name** (up to 100 characters) and a **Price difference (Rp)**, which may be zero or negative. **Add option** adds a row; the red button removes it. At least one option is required, up to 100.
+  <Step title="Tambahkan opsi">
+    Setiap opsi memiliki **Nama opsi** (maksimal 100 karakter) dan **Selisih harga (Rp)**, yang boleh nol atau negatif. **Tambah opsi** menambah baris; tombol merah menghapusnya. Minimal satu opsi wajib ada, maksimal 100.
   </Step>
-  <Step title="Save, then attach">
-    Save, then click **Attach** on the row to link it to categories and products. Save the attachments.
+  <Step title="Simpan, lalu lampirkan">
+    Simpan, lalu klik **Lampirkan** pada baris untuk menautkannya ke kategori dan produk. Simpan lampirannya.
   </Step>
 </Steps>
 
-Rules enforced by the server:
+Aturan yang ditegakkan server:
 
-- **Choose one** always means a maximum of 1, and a minimum of 1 if it is required, otherwise 0.
-- For **Choose several**, a required group has a minimum of at least 1, and the minimum cannot be higher than the maximum ("The minimum selection cannot be higher than the maximum.").
-- Minimum is 0–50 and maximum is 1–50.
-- Removing an option from the list deactivates it. Existing orders keep what they were sold with. When you edit a group, only active options are shown.
-- A group is attached to selected products **and** every product in the selected categories ("The group applies to the selected products AND every product in the selected categories.").
-- A group with no active option cannot be attached: "Add at least one active option before attaching this group."
-- A group that has been used on orders cannot be deleted: "This group has been used on orders and cannot be deleted. Deactivate it instead." (409).
+- **Pilih satu** selalu berarti maksimum 1, dan minimum 1 bila wajib, selain itu 0.
+- Untuk **Pilih beberapa**, grup wajib memiliki minimum setidaknya 1, dan minimum tidak boleh lebih tinggi dari maksimum ("Pilihan minimum tidak boleh lebih besar dari maksimum.").
+- Minimum adalah 0–50 dan maksimum adalah 1–50.
+- Menghapus opsi dari daftar menonaktifkannya. Order yang sudah ada tetap memakai apa yang dijual. Saat Anda mengubah grup, hanya opsi aktif yang ditampilkan.
+- Grup dilampirkan ke produk terpilih **dan** setiap produk dalam kategori terpilih ("Grup berlaku untuk produk yang dipilih DAN semua produk dalam kategori yang dipilih.").
+- Grup tanpa opsi aktif tidak bisa dilampirkan: "Tambahkan minimal satu opsi aktif sebelum melampirkan grup ini."
+- Grup yang pernah dipakai pada order tidak bisa dihapus: "Grup ini pernah dipakai pada order dan tidak bisa dihapus. Nonaktifkan saja." (409).
 
-The list shows **Group**, **Rule** (for example "Choose one · Required · choose 1"), **Options**, **Attached to** (`N products · N categories`) and **Status**.
+Daftar menampilkan **Grup**, **Aturan** (misalnya "Pilih satu · Wajib · pilih 1"), **Opsi**, **Dilampirkan ke** (`N produk · N kategori`), dan **Status**.
 
 <Note>
-The attach dialog loads the first 100 products and first 100 categories only. If you have more, the rest cannot be picked from this dialog.
+Dialog lampirkan hanya memuat 100 produk pertama dan 100 kategori pertama. Jika Anda memiliki lebih banyak, sisanya tidak bisa dipilih dari dialog ini.
 </Note>
 
-## Move a table or station to another outlet
+## Memindahkan meja atau stasiun ke outlet lain
 
-Open **Edit** and change **Outlet**, then **Save**. The record keeps its name and settings and now belongs to the new outlet. Past orders and tickets stay with the outlet where they happened, and the move is logged as **moved** in the activity log. You can only move to an outlet your user is allowed to access (403, "This outlet is not one you are allowed to access.").
+Buka **Edit** dan ubah **Outlet**, lalu **Simpan**. Record mempertahankan nama dan pengaturannya dan kini milik outlet yang baru. Order dan tiket lama tetap bersama outlet tempat kejadiannya, dan perpindahan dicatat sebagai **moved** di log aktivitas. Anda hanya bisa memindahkan ke outlet yang boleh diakses pengguna Anda (403, "Outlet ini tidak termasuk outlet yang boleh Anda akses.").
 
-| Item | The move is refused when |
+| Item | Perpindahan ditolak bila |
 | --- | --- |
-| Table | The table has an open tab: "This table still has an open tab. Settle or cancel the tab before moving the table to another outlet." (409) |
-| Station | It is still assigned to categories or menu items: "This station is still assigned to categories or menu items. Reassign them before moving the station to another outlet." (409) |
-| Station | It has unfinished kitchen tickets: "This station still has unfinished kitchen tickets. Finish them before moving the station to another outlet." (409) |
+| Meja | Meja memiliki tab terbuka: "Meja ini masih punya tab yang terbuka. Selesaikan atau batalkan tab sebelum memindahkan meja ke outlet lain." (409) |
+| Stasiun | Masih ditetapkan ke kategori atau item menu: "Stasiun ini masih ditunjuk kategori atau item menu. Pindahkan penugasannya dulu sebelum memindahkan stasiun ke outlet lain." (409) |
+| Stasiun | Memiliki tiket dapur yang belum selesai: "Stasiun ini masih punya tiket dapur yang belum selesai. Selesaikan tiketnya dulu sebelum memindahkan stasiun ke outlet lain." (409) |
 
-## Who can do what
+## Siapa bisa melakukan apa
 
-| Action | Needed |
+| Aksi | Dibutuhkan |
 | --- | --- |
-| Open this page, create, edit, delete tables, stations, modifier groups | `dining_setup` menu |
-| List stations (for the kitchen station tabs) | `dining_setup` or `kitchen` menu |
-| List modifier groups (for the product screen) | `dining_setup` or `products` menu |
+| Membuka halaman ini, membuat, mengubah, menghapus meja, stasiun, grup modifier | menu `dining_setup` |
+| Mendaftar stasiun (untuk tab stasiun di dapur) | menu `dining_setup` atau `kitchen` |
+| Mendaftar grup modifier (untuk layar produk) | menu `dining_setup` atau `products` |
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| A table with this name already exists in that area. | Duplicate name in the same area. | Rename, or use another area. |
-| This table has been used by orders and cannot be deleted. | The table has order history. | Deactivate it. |
-| This table has an open tab... | Deactivating or moving a busy table. | Settle or void the tab. |
-| This station is assigned to a category or product, or has received tickets. | Deleting a used station. | Deactivate it. |
-| Group "X": choose N option(s). | Rule violated while ordering. | Check the group's minimum and maximum. |
-| The chosen options would make the item price negative. | Option discounts exceed the item price. | Reduce the negative price differences. |
-| No tables yet. / No stations yet. / No modifier groups yet. | Nothing created, or the outlet filter excludes all. | Create one, or use **Reset filters**. |
+| Meja dengan nama ini sudah ada di area tersebut. | Nama ganda dalam area yang sama. | Ganti nama, atau pakai area lain. |
+| Meja ini pernah dipakai order dan tidak bisa dihapus. | Meja memiliki riwayat order. | Nonaktifkan. |
+| Meja ini memiliki tab yang masih terbuka... | Menonaktifkan atau memindahkan meja yang sedang dipakai. | Selesaikan atau batalkan tab. |
+| Stasiun ini ditugaskan ke kategori/produk, atau pernah menerima tiket. | Menghapus stasiun yang sudah dipakai. | Nonaktifkan. |
+| Grup "X": pilih N opsi. | Aturan dilanggar saat memesan. | Periksa minimum dan maksimum grup. |
+| Opsi yang dipilih membuat harga item menjadi negatif. | Potongan opsi melebihi harga item. | Kurangi selisih harga yang negatif. |
+| Belum ada meja. / Belum ada stasiun. / Belum ada grup modifier. | Belum ada yang dibuat, atau filter outlet menyisihkan semuanya. | Buat satu, atau gunakan **Atur ulang filter**. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Floor and tabs" href="/operations/restaurant-floor" icon="utensils">Uses tables and modifiers.</Card>
-  <Card title="Kitchen and bar" href="/operations/kitchen" icon="fire-burner">Uses stations.</Card>
-  <Card title="Outlets" href="/concepts/outlets" icon="store">How outlet scope works.</Card>
-  <Card title="Products" href="/inventory/products" icon="box">Assign stations and modifiers to items.</Card>
+  <Card title="Lantai dan tab" href="/operations/restaurant-floor" icon="utensils">Memakai meja dan modifier.</Card>
+  <Card title="Dapur dan bar" href="/operations/kitchen" icon="fire-burner">Memakai stasiun.</Card>
+  <Card title="Outlet" href="/concepts/outlets" icon="store">Cara kerja cakupan outlet.</Card>
+  <Card title="Produk" href="/inventory/products" icon="box">Tetapkan stasiun dan modifier ke item.</Card>
 </Columns>

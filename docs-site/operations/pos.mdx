@@ -1,154 +1,154 @@
 ---
-title: "POS (cashier screen)"
-description: "Ring up a retail-style sale: pick products, apply a discount, take payment and show the receipt."
-keywords: ["pos", "cashier", "cart", "discount", "payment", "split payment", "draft", "receipt"]
+title: "POS (layar kasir)"
+description: "Catat penjualan ala ritel: pilih produk, beri diskon, terima pembayaran, lalu tampilkan struk."
+keywords: ["pos", "kasir", "keranjang", "diskon", "pembayaran", "split payment", "pembayaran terpisah", "draft", "struk"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-The **POS** screen (menu key `pos`) is where you build a cart and take payment for a sale that is paid on the spot. Every sale is tied to your open cashier shift, so you must open a shift first.
+Layar **Kasir** (menu key `pos`) adalah tempat Anda menyusun keranjang dan menerima pembayaran untuk penjualan yang dibayar langsung di tempat. Setiap penjualan terikat pada shift kasir Anda yang sedang terbuka, jadi Anda harus membuka shift terlebih dahulu.
 
 <Note>
-Dine-in tables and takeaway tabs that are paid later live on [Floor and tabs](/operations/restaurant-floor), not here.
+Meja dine-in dan tab takeaway yang dibayar belakangan ada di [Lantai dan tab](/operations/restaurant-floor), bukan di sini.
 </Note>
 
-## Before you start
+## Sebelum mulai
 
-- Your role needs the `pos` menu. If you open the page by URL without it, you are sent back to the dashboard.
-- Open a shift on [Cashier session](/operations/shifts). Without one you can browse products, but **Pay** is blocked.
-- The menu you see follows the outlet of your open shift. Items that outlet does not carry are not offered, and outlet-specific prices apply. See [Outlets](/concepts/outlets).
-- Money is shown as whole rupiah, for example `Rp 25.000`. The business date used by reports is in WIB, see [Business day](/concepts/business-day).
+- Peran Anda harus memiliki menu `pos`. Jika Anda membuka halaman lewat URL tanpa menu itu, Anda dikembalikan ke dasbor.
+- Buka shift di [Sesi kasir](/operations/shifts). Tanpa shift, Anda tetap bisa menelusuri produk, tetapi **Bayar** diblokir.
+- Menu yang tampil mengikuti outlet dari shift Anda yang sedang terbuka. Item yang tidak dijual di outlet itu tidak ditawarkan, dan harga khusus outlet berlaku. Lihat [Outlet](/concepts/outlets).
+- Uang ditampilkan dalam rupiah utuh, misalnya `Rp 25.000`. Tanggal bisnis yang dipakai laporan menggunakan WIB, lihat [Hari bisnis](/concepts/business-day).
 
-## Ring up a sale
+## Mencatat penjualan
 
 <Steps>
-  <Step title="Open a shift">
-    Without an open shift a banner reads "No cashier session is open yet..." with an **open one here** link to the shift screen.
+  <Step title="Buka shift">
+    Tanpa shift terbuka, sebuah banner bertuliskan "Belum ada sesi kasir terbuka..." dengan tautan **buka di sini** ke layar shift.
   </Step>
-  <Step title="Find products">
-    Browse the product grid, or type a product name or SKU in the search box. Search waits about 300 ms after you stop typing.
+  <Step title="Cari produk">
+    Telusuri grid produk, atau ketik nama produk atau SKU di kotak pencarian. Pencarian menunggu sekitar 300 ms setelah Anda berhenti mengetik.
   </Step>
-  <Step title="Add to the cart">
-    Click a card. A product with one variant goes straight into the cart. A product with several variants opens **Pick a variant**; click the variant you want. Clicking the same item again adds one more.
+  <Step title="Tambahkan ke keranjang">
+    Klik kartu. Produk dengan satu varian langsung masuk ke keranjang. Produk dengan beberapa varian membuka **Pilih varian**; klik varian yang Anda inginkan. Mengklik item yang sama lagi menambah satu.
   </Step>
-  <Step title="Adjust the cart">
-    Use the minus and plus buttons on a line. Minus on quantity 1 removes the line. Plus stops at the current stock. **Clear** empties the cart. Click a line photo to enlarge it.
+  <Step title="Atur keranjang">
+    Gunakan tombol minus dan plus pada baris. Minus pada jumlah 1 menghapus baris. Plus berhenti pada stok saat ini. **Kosongkan** mengosongkan keranjang. Klik foto pada baris untuk memperbesarnya.
   </Step>
-  <Step title="Optional: customer and discount">
-    Click **Walk-in customer** to pick a customer. Type an order-level amount in **Discount (Rp)**.
+  <Step title="Opsional: pelanggan dan diskon">
+    Klik **Pelanggan walk-in** untuk memilih pelanggan. Ketik nominal diskon tingkat order di **Diskon (Rp)**.
   </Step>
-  <Step title="Pay">
-    Click **Pay**, choose the payment method, then **Confirm & save transaction**. The receipt opens when the sale is saved.
+  <Step title="Bayar">
+    Klik **Bayar**, pilih metode pembayaran, lalu **Konfirmasi & simpan transaksi**. Struk terbuka setelah penjualan tersimpan.
   </Step>
 </Steps>
 
-## The product grid
+## Grid produk
 
-| Control | What it does |
+| Kontrol | Fungsinya |
 | --- | --- |
-| Search box | Searches variants by name or SKU. Results are per variant (one card per SKU) and ignore the outlet and category filters. |
-| Outlet filter | Multi-select on the item's home outlet (who owns the item). Empty means all. |
-| Category filter | Multi-select on category. Empty means all. |
-| Card badge "N variants" | Shown when a product has more than one variant. |
-| Price range | A product with variants at different prices shows `min–max`. |
-| Stock `Stock N` | Total stock on browse cards, per-variant stock on search cards. |
+| Kotak pencarian | Mencari varian berdasarkan nama atau SKU. Hasilnya per varian (satu kartu per SKU) dan mengabaikan filter outlet dan kategori. |
+| Filter outlet | Pilihan ganda berdasarkan outlet asal item (pemilik item). Kosong berarti semua. |
+| Filter kategori | Pilihan ganda berdasarkan kategori. Kosong berarti semua. |
+| Lencana kartu "N varian" | Tampil bila produk memiliki lebih dari satu varian. |
+| Rentang harga | Produk dengan varian berharga berbeda menampilkan `min–max`. |
+| Stok `Stok N` | Total stok pada kartu telusur, stok per varian pada kartu hasil pencarian. |
 
-Card states:
+Status kartu:
 
-- **Out of stock** (red pill): the card is disabled.
-- **86** (red pill, dimmed): the item is marked sold out or discontinued. The card is still clickable so you get the reason as a notice, "Item is sold out (86)." or "Item is no longer sold." Nothing is added.
+- **Habis** (pil merah): kartu dinonaktifkan.
+- **86** (pil merah, redup): item ditandai habis atau dihentikan. Kartu tetap bisa diklik sehingga Anda mendapat alasannya sebagai pemberitahuan, "Item sedang habis (86)." atau "Item sudah tidak dijual." Tidak ada yang ditambahkan.
 
-Only active products are listed, up to 100 per load.
+Hanya produk aktif yang ditampilkan, maksimal 100 per pemuatan.
 
-## Totals and tax
+## Total dan pajak
 
-The cart preview uses the same formula as the server:
+Pratinjau keranjang memakai rumus yang sama dengan server:
 
-1. Tax base = subtotal minus the order discount (never below zero).
-2. Tax = tax base times the tax rate, rounded half up to a whole rupiah, once per order.
-3. Total = tax base plus tax.
+1. Dasar pajak = subtotal dikurangi diskon order (tidak pernah di bawah nol).
+2. Pajak = dasar pajak dikali tarif pajak, dibulatkan ke atas (half up) ke rupiah utuh, sekali per order.
+3. Total = dasar pajak ditambah pajak.
 
-The tax line only appears when the tax rate in settings is above 0, and it uses the store's tax label. A discount larger than the subtotal gives a total of Rp 0 in the preview, but the server rejects it when you submit (see Troubleshooting).
+Baris pajak hanya muncul bila tarif pajak di pengaturan lebih dari 0, dan memakai label pajak toko. Diskon yang lebih besar dari subtotal menghasilkan total Rp 0 di pratinjau, tetapi server menolaknya saat Anda mengirim (lihat Pemecahan masalah).
 
 <Info>
-The preview is only a preview. Prices, totals and stock are recomputed by the server, and the receipt shows the server's figures.
+Pratinjau hanyalah pratinjau. Harga, total, dan stok dihitung ulang oleh server, dan struk menampilkan angka dari server.
 </Info>
 
-## Payment
+## Pembayaran
 
-The **Payment** dialog shows the total on the left and the order summary on the right.
+Dialog **Pembayaran** menampilkan total di sebelah kiri dan ringkasan order di sebelah kanan.
 
-| Method | Notes |
+| Metode | Catatan |
 | --- | --- |
-| Cash | Enter the cash received, or tap a preset amount. **Change** is calculated for you. |
-| Transfer | Pick a payment channel. A proof photo is optional. |
-| QRIS | Pick a payment channel. A proof photo is optional. |
+| Tunai | Masukkan uang yang diterima, atau ketuk nominal yang sudah tersedia. **Kembalian** dihitung otomatis. |
+| Transfer | Pilih kanal pembayaran. Foto bukti bersifat opsional. |
+| QRIS | Pilih kanal pembayaran. Foto bukti bersifat opsional. |
 
-Other fields: **Reference / transaction number (optional)** for non-cash methods (up to 100 characters), and **Notes (optional)**.
+Isian lain: **Nomor referensi / transaksi (opsional)** untuk metode non-tunai (maksimal 100 karakter), dan **Catatan (opsional)**.
 
-### Split payment
+### Pembayaran terpisah (split payment)
 
-You can cover one total with several payments. Enter an amount that is lower than what is due and click **Add & continue**. It appears under **Payments recorded**, and you can remove an entry with the small x. Cash can overpay (the difference is change); non-cash entries cannot exceed the remaining balance.
+Anda bisa menutup satu total dengan beberapa pembayaran. Masukkan nominal yang lebih rendah dari yang harus dibayar, lalu klik **Tambah & lanjutkan**. Pembayaran itu muncul di bawah **Pembayaran tercatat**, dan Anda bisa menghapus entri dengan tanda x kecil. Tunai boleh melebihi tagihan (selisihnya menjadi kembalian); pembayaran non-tunai tidak boleh melebihi sisa tagihan.
 
-### Paying only part of the total
+### Membayar sebagian dari total
 
-Partial payment is only available when a customer is attached. Without a customer the dialog shows "To pay only part of the total, attach a customer first". With one, **Finish with the remaining balance ...** appears and asks you to confirm. The sale is completed and stock is deducted, and the customer owes the rest, which is settled later from [Sales](/operations/sales).
+Pembayaran sebagian hanya tersedia bila pelanggan dipilih. Tanpa pelanggan, dialog menampilkan "Untuk membayar sebagian, pilih pelanggan dulu". Dengan pelanggan, **Selesaikan dengan sisa tagihan ...** muncul dan meminta Anda mengonfirmasi. Penjualan diselesaikan dan stok berkurang, dan pelanggan masih berutang sisanya, yang dilunasi nanti dari [Penjualan](/operations/sales).
 
 <Warning>
-Cash that exceeds the cash actually received cannot be returned as change. The server answers "Change cannot exceed the cash amount received."
+Uang tunai yang melebihi uang tunai yang benar-benar diterima tidak bisa dikembalikan sebagai kembalian. Server menjawab "Kembalian tidak dapat melebihi jumlah tunai yang diterima."
 </Warning>
 
-## Receipt
+## Struk
 
-After a successful sale the receipt dialog shows the store name and address, outlet name (only when you have more than one outlet), order number, table or takeaway label for tab sales, items with modifiers and notes, subtotal, discount, total, each payment, change, and a partial-payment block (**Sudah dibayar**, **Sisa tagihan**) when applicable.
+Setelah penjualan berhasil, dialog struk menampilkan nama dan alamat toko, nama outlet (hanya bila Anda memiliki lebih dari satu outlet), nomor order, label meja atau takeaway untuk penjualan tab, item beserta modifier dan catatannya, subtotal, diskon, total, setiap pembayaran, kembalian, dan blok pembayaran sebagian (**Sudah dibayar**, **Sisa tagihan**) bila berlaku.
 
-- **Unduh gambar** downloads a PNG, **Unduh PDF** downloads a PDF. Both are rendered in your browser.
-- **Transaksi berikutnya** closes the dialog.
+- **Unduh gambar** mengunduh PNG, **Unduh PDF** mengunduh PDF. Keduanya dibuat di peramban Anda.
+- **Transaksi berikutnya** menutup dialog.
 
 <Note>
-The receipt is intentionally always in Indonesian, whatever language the cashier uses, because the customer reads it.
+Struk sengaja selalu berbahasa Indonesia, apa pun bahasa yang dipakai kasir, karena struk dibaca oleh pelanggan.
 </Note>
 
-## Drafts
+## Draft
 
-A draft is a saved cart. It does not touch stock or payments.
+Draft adalah keranjang yang disimpan. Draft tidak menyentuh stok maupun pembayaran.
 
-- **Save as draft** stores the current cart (items, quantities, prices, customer, discount) and clears the cart. The button is disabled while the cart is empty.
-- **Draft Transactions** lists your own drafts with item count, total and time. **Resume** replaces the current cart with the draft. **Delete** discards it.
-- On resume the server re-checks each variant. Items that are no longer active are dropped and a warning is shown per item. Prices come from the current price, not the saved one.
+- **Simpan sebagai draft** menyimpan keranjang saat ini (item, jumlah, harga, pelanggan, diskon) dan mengosongkan keranjang. Tombol dinonaktifkan selama keranjang kosong.
+- **Draft Transaksi** menampilkan draft milik Anda sendiri beserta jumlah item, total, dan waktunya. **Lanjutkan** mengganti keranjang saat ini dengan draft. **Hapus** membuang draft.
+- Saat dilanjutkan, server memeriksa ulang setiap varian. Item yang sudah tidak aktif dibuang dan peringatan ditampilkan per item. Harga diambil dari harga saat ini, bukan harga yang tersimpan.
 
 <Warning>
-When you resume a draft, the saved discount comes back, but the customer is not re-selected in the cart. Pick the customer again before paying.
+Saat Anda melanjutkan draft, diskon yang tersimpan kembali, tetapi pelanggan tidak dipilih ulang di keranjang. Pilih pelanggan lagi sebelum membayar.
 </Warning>
 
-## Rules and limits
+## Aturan dan batasan
 
-- One checkout attempt has one unique reference, so a retried submit does not create a second sale or deduct stock twice.
-- The discount cannot exceed the subtotal (409).
-- A sale needs an open shift (409 "The cashier session is not open.").
-- The cart survives moving to another page and back; it is lost on a full page reload.
+- Satu percobaan checkout memiliki satu referensi unik, sehingga pengiriman ulang tidak membuat penjualan kedua atau mengurangi stok dua kali.
+- Diskon tidak boleh melebihi subtotal (409).
+- Penjualan membutuhkan shift terbuka (409 "Sesi kasir tidak dalam status terbuka.").
+- Keranjang bertahan saat Anda pindah ke halaman lain dan kembali; keranjang hilang saat halaman dimuat ulang penuh.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| Open a cashier session first in the Cashier Session screen. | You clicked **Pay** with no open shift. | Open a shift, then pay. |
-| Insufficient stock for variant SKU. Available: N. (outlet) | Stock at the shift's outlet is lower than the quantity. | Lower the quantity or restock. |
-| Item SKU cannot be ordered: the item is sold out (86) / discontinued or not published / not sold at this outlet. | The item became unavailable after it was loaded. | Remove it from the cart. |
-| The order discount exceeds the subtotal. | Discount is larger than the subtotal. | Lower the discount. |
-| A customer is required to complete a sale that is not paid in full... | Paid less than the total with no customer. | Attach a customer, or pay in full. |
-| The cashier session is not open. | The shift was closed elsewhere. | Open a new shift. |
-| 403 | Your role cannot use this action. | Ask an owner or admin. |
+| Buka sesi kasir terlebih dahulu di layar Sesi Kasir. | Anda mengklik **Bayar** tanpa shift terbuka. | Buka shift, lalu bayar. |
+| Stok tidak mencukupi untuk varian SKU. Tersedia: N. (outlet) | Stok di outlet shift lebih rendah dari jumlah yang dipesan. | Kurangi jumlah atau tambah stok. |
+| Item SKU tidak bisa dipesan: item sedang habis (86) / sudah didiskontinu atau belum diterbitkan / tidak dijual di outlet ini. | Item menjadi tidak tersedia setelah dimuat. | Hapus dari keranjang. |
+| Diskon transaksi melebihi subtotal. | Diskon lebih besar dari subtotal. | Kurangi diskon. |
+| Penjualan yang tidak dibayar penuh wajib memiliki pelanggan... | Membayar kurang dari total tanpa pelanggan. | Pilih pelanggan, atau bayar penuh. |
+| Sesi kasir tidak dalam status terbuka. | Shift ditutup di tempat lain. | Buka shift baru. |
+| 403 | Peran Anda tidak bisa memakai aksi ini. | Hubungi owner atau admin. |
 
 <Info>
-There is no approval prompt on the web POS. Discount limits per role and PIN approvals exist for other screens, but the web checkout only applies the rules above.
+Kasir web tidak memiliki permintaan persetujuan. Batas diskon per peran dan persetujuan PIN ada untuk layar lain, tetapi checkout web hanya menerapkan aturan di atas.
 </Info>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Cashier session" href="/operations/shifts" icon="clock">Open and close your shift.</Card>
-  <Card title="Sales" href="/operations/sales" icon="receipt">Find, void and settle past sales.</Card>
-  <Card title="First sale" href="/getting-started/first-sale" icon="cart-shopping">A guided first transaction.</Card>
-  <Card title="Payment channels" href="/settings/payment-channels" icon="credit-card">Set up transfer and QRIS channels.</Card>
+  <Card title="Sesi kasir" href="/operations/shifts" icon="clock">Buka dan tutup shift Anda.</Card>
+  <Card title="Penjualan" href="/operations/sales" icon="receipt">Cari, void, dan lunasi penjualan lama.</Card>
+  <Card title="Penjualan pertama" href="/getting-started/first-sale" icon="cart-shopping">Transaksi pertama dengan panduan.</Card>
+  <Card title="Kanal pembayaran" href="/settings/payment-channels" icon="credit-card">Atur kanal transfer dan QRIS.</Card>
 </Columns>

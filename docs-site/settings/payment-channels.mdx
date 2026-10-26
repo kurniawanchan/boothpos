@@ -1,118 +1,118 @@
 ---
-title: "Payment channels"
-description: "Add the bank accounts and QRIS codes cashiers show to customers, and set the default payment details used on invoices."
-keywords: ["payment channels", "bank transfer", "qris", "qr code", "e-wallet", "settings", "invoice payment information"]
+title: "Kanal pembayaran"
+description: "Tambahkan rekening bank dan kode QRIS yang ditunjukkan kasir kepada pelanggan, dan atur rincian pembayaran bawaan untuk invoice."
+keywords: ["kanal pembayaran", "transfer bank", "qris", "kode qr", "e-wallet", "pengaturan", "informasi pembayaran invoice"]
 ---
 
-A **payment channel** is a bank account or a QRIS / e-wallet QR code that the cashier shows when a customer pays by transfer or QRIS. Channels are managed in two places, both under Settings.
+**Kanal pembayaran** adalah rekening bank atau kode QR QRIS / e-wallet yang ditunjukkan kasir saat pelanggan membayar dengan transfer atau QRIS. Kanal dikelola di dua tempat, keduanya di bawah Pengaturan.
 
-| Where | What it holds |
+| Tempat | Isinya |
 | --- | --- |
-| **Settings > General > Payment channels** | The list of channels (add, edit, delete). |
-| **Settings > Payment** (`/settings/payment`) | One set of default bank details for invoices. |
+| **Pengaturan > General > Kanal pembayaran** | Daftar kanal (tambah, ubah, hapus). |
+| **Pengaturan > Pembayaran** (`/settings/payment`) | Satu set rincian bank bawaan untuk invoice. |
 
-## Before you start
+## Sebelum mulai
 
-- You need the **Settings** menu (menu key `settings`). Without it, add, edit and delete answer 403 with **Not authorized.**
-- Everyone who can take payments can **read** the active channels, but with different detail:
-  - Owner/admin (Settings menu) see the full account number.
-  - Other roles see it masked, only the last four characters visible, for example `******1234`. The full number is shown when the channel is selected for a transaction, because the cashier needs to show it to the customer.
+- Anda memerlukan menu **Pengaturan** (kunci menu `settings`). Tanpanya, tambah, ubah, dan hapus dijawab 403 dengan **Tidak berhak.**
+- Semua orang yang dapat menerima pembayaran dapat **membaca** kanal aktif, tetapi dengan rincian berbeda:
+  - Owner/admin (menu Pengaturan) melihat nomor rekening lengkap.
+  - Peran lain melihatnya tersamar, hanya empat karakter terakhir yang terlihat, misalnya `******1234`. Nomor lengkap ditampilkan saat kanal dipilih untuk sebuah transaksi, karena kasir perlu menunjukkannya kepada pelanggan.
 
-## Add a channel
+## Menambah kanal
 
 <Steps>
-  <Step title="Open the list">
-    Go to **Settings > General** and open **Payment channels**. Click **Add**.
+  <Step title="Buka daftar">
+    Buka **Pengaturan > General** lalu buka **Kanal pembayaran**. Klik **Tambah**.
   </Step>
-  <Step title="Choose the type">
-    **Type** is **Bank transfer** or **QRIS**.
+  <Step title="Pilih tipe">
+    **Tipe** adalah **Transfer bank** atau **QRIS**.
   </Step>
-  <Step title="Fill the details">
-    Enter **Provider name** (for example "Bank Contoh" or "Gopay"), **Account holder name**, and, for a bank transfer, **Account number**. For QRIS, optionally add a **QR code image**.
+  <Step title="Isi rinciannya">
+    Masukkan **Nama penyedia** (misalnya "Bank Contoh" atau "Gopay"), **Nama pemilik rekening**, dan, untuk transfer bank, **Nomor rekening**. Untuk QRIS, tambahkan **Gambar kode QR** secara opsional.
   </Step>
-  <Step title="Save">
-    Click **Save**. You see **Payment channel added.**
+  <Step title="Simpan">
+    Klik **Simpan**. Anda melihat **Kanal pembayaran ditambahkan.**
   </Step>
 </Steps>
 
-### Field reference
+### Referensi kolom
 
-| Field | Shown for | Rule |
+| Kolom | Ditampilkan untuk | Aturan |
 | --- | --- | --- |
-| **Type** | Both | `Bank transfer` or `QRIS`. |
-| **Provider name** | Both | Required, up to 50 characters. |
-| **Account holder name** | Both | Required, up to 100 characters. |
-| **Account number** | Bank transfer only | Required for bank transfer, up to 50 characters. |
-| **QR code image** | QRIS only | Optional, can be added later. JPEG or PNG, up to 5 MB. |
+| **Tipe** | Keduanya | `Transfer bank` atau `QRIS`. |
+| **Nama penyedia** | Keduanya | Wajib, maksimal 50 karakter. |
+| **Nama pemilik rekening** | Keduanya | Wajib, maksimal 100 karakter. |
+| **Nomor rekening** | Hanya transfer bank | Wajib untuk transfer bank, maksimal 50 karakter. |
+| **Gambar kode QR** | Hanya QRIS | Opsional, dapat ditambahkan nanti. JPEG atau PNG, maksimal 5 MB. |
 
-New channels are placed at the end of the list. The screen sends the display order automatically; there is no control to reorder channels.
+Kanal baru ditempatkan di akhir daftar. Layar mengirim urutan tampilan secara otomatis; tidak ada kontrol untuk mengurutkan ulang kanal.
 
 <Note>
-  The browser only checks that the QR file is an image under 5 MB (**The file must be an image.** or **Maximum image size is 5 MB.**). The server accepts JPEG and PNG only, so other image types are rejected with a message under the field.
+  Browser hanya memeriksa bahwa berkas QR adalah gambar di bawah 5 MB (**Berkas harus berupa gambar.** atau **Ukuran gambar maksimal 5 MB.**). Server hanya menerima JPEG dan PNG, sehingga tipe gambar lain ditolak dengan pesan di bawah kolom.
 </Note>
 
-## Edit a channel
+## Mengubah kanal
 
-Click **Edit** on a row. The same form opens. For a QRIS channel you can:
+Klik **Edit** pada sebuah baris. Formulir yang sama terbuka. Untuk kanal QRIS Anda dapat:
 
-- choose a new **QR code image**, which replaces the old one, or
-- tick **Remove the existing QR image** to delete it without a replacement.
+- memilih **Gambar kode QR** baru, yang menggantikan yang lama, atau
+- mencentang **Hapus gambar QR yang ada** untuk menghapusnya tanpa pengganti.
 
-Choosing a new file unticks the remove box. You see **Payment channel updated.** after saving.
+Memilih berkas baru menghapus centang pada kotak hapus. Anda melihat **Kanal pembayaran diperbarui.** setelah menyimpan.
 
-## Delete a channel
+## Menghapus kanal
 
-Click **Delete** on a row and confirm **Delete \{provider\}? This cannot be undone.** You see **Payment channel deleted.**
+Klik **Hapus** pada sebuah baris dan konfirmasi **Hapus \{provider\}? Tindakan ini tidak dapat dibatalkan.** Anda melihat **Kanal pembayaran dihapus.**
 
-A channel that has ever been used by a payment cannot be deleted. The server answers 409 with **This payment channel is in use and cannot be deleted.** (shown as **Failed to delete this payment channel.** if no server message is available). The record stays so past payments keep their history.
+Kanal yang pernah dipakai oleh sebuah pembayaran tidak dapat dihapus. Server menjawab 409 dengan **Kanal ini sedang dipakai dan tidak dapat dihapus.** (ditampilkan sebagai **Gagal menghapus kanal pembayaran ini.** bila tidak ada pesan dari server). Record tetap ada agar pembayaran lama mempertahankan riwayatnya.
 
 <Warning>
-  There is no screen control to deactivate a channel instead of deleting it. ASSUMPTION: a channel already used by a payment can therefore not be removed from the picker using this web UI.
+  Tidak ada kontrol di layar untuk menonaktifkan kanal sebagai ganti menghapusnya. ASUMSI: kanal yang sudah dipakai oleh sebuah pembayaran karena itu tidak dapat dikeluarkan dari pemilih lewat UI web ini.
 </Warning>
 
-## What cashiers see
+## Yang dilihat kasir
 
-On the payment step, the cashier picks a method (**Cash**, **Transfer** or **QRIS**). For Transfer and QRIS they then see the matching channels:
+Pada langkah pembayaran, kasir memilih metode (**Tunai**, **Transfer**, atau **QRIS**). Untuk Transfer dan QRIS mereka kemudian melihat kanal yang sesuai:
 
-- If there is more than one channel for that method, the cashier picks one. With exactly one channel it is selected automatically. With none, the prompt **Select a payment channel above.** stays.
-- For QRIS the QR image is shown and can be enlarged (**Enlarge QR code**); for a bank transfer the account holder and account number are shown.
-- Cash needs no channel and no proof.
-- A payment proof photo is optional for non-cash payments, and can be added later from the transaction detail. Proof photos accept JPEG or PNG. See [POS](/operations/pos) and [Sales](/operations/sales).
+- Bila ada lebih dari satu kanal untuk metode itu, kasir memilih salah satu. Dengan tepat satu kanal, kanal itu terpilih otomatis. Bila tidak ada, perintah **Pilih kanal pembayaran di atas.** tetap tampil.
+- Untuk QRIS gambar QR ditampilkan dan dapat diperbesar (**Perbesar kode QR**); untuk transfer bank, pemilik rekening dan nomor rekening ditampilkan.
+- Tunai tidak memerlukan kanal dan bukti.
+- Foto bukti pembayaran bersifat opsional untuk pembayaran non-tunai, dan dapat ditambahkan nanti dari detail transaksi. Foto bukti menerima JPEG atau PNG. Lihat [Kasir](/operations/pos) dan [Penjualan](/operations/sales).
 
-Only **active** channels appear in the list and in the picker.
+Hanya kanal **aktif** yang muncul di daftar dan di pemilih.
 
-## Invoice payment information
+## Informasi pembayaran invoice
 
-**Settings > Payment** has a single form titled **Invoice Payment Information**, "used as the default payment information when creating a new invoice."
+**Pengaturan > Pembayaran** memiliki satu formulir berjudul **Informasi Pembayaran Invoice**, "Digunakan sebagai informasi pembayaran default saat membuat invoice baru."
 
-| Field | Rule |
+| Kolom | Aturan |
 | --- | --- |
-| **Bank Name** | Optional, up to 255 characters. |
-| **Account Number** | Optional, up to 255 characters. |
-| **Account Holder Name** | Optional, up to 255 characters. |
-| **Payment Instructions** | Optional text. |
+| **Nama Bank** | Opsional, maksimal 255 karakter. |
+| **Nomor Rekening** | Opsional, maksimal 255 karakter. |
+| **Nama Pemilik Rekening** | Opsional, maksimal 255 karakter. |
+| **Instruksi Pembayaran** | Teks opsional. |
 
-Click **Save**. You see **Payment information saved.** If loading fails you see an error with a retry button instead of an empty form, so you never overwrite real values by saving a blank form.
+Klik **Simpan**. Anda melihat **Informasi pembayaran disimpan.** Bila pemuatan gagal, Anda melihat galat dengan tombol coba lagi alih-alih formulir kosong, sehingga Anda tidak pernah menimpa nilai asli dengan menyimpan formulir kosong.
 
 <Note>
-  This form feeds the Companies / Licenses / Invoices admin screens, which are not covered in these docs. It does not affect the channels cashiers use at the register.
+  Formulir ini mengisi layar admin Company / Lisensi / Invoice, yang tidak dibahas dalam dokumentasi ini. Formulir ini tidak memengaruhi kanal yang dipakai kasir di register.
 </Note>
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message or symptom | Cause | Fix |
+| Pesan atau gejala | Penyebab | Solusi |
 | --- | --- | --- |
-| **Not authorized.** (403) | Your role lacks the Settings menu. | Ask an owner or admin, see [Roles](/settings/roles). |
-| Field error under **Provider name**, **Account holder name** or **Account number** | Missing or too long (422). | Correct it and save. |
-| Account number shows as `****1234` | You are not owner/admin. | Expected; the full number appears when the channel is chosen for a payment. |
-| **This payment channel is in use and cannot be deleted.** (409) | The channel has payments. | Edit it instead of deleting. |
-| QRIS has no image at the register | No QR uploaded. | Edit the channel and upload a QR image. |
+| **Tidak berhak.** (403) | Peran Anda tidak punya menu Pengaturan. | Minta owner atau admin, lihat [Peran](/settings/roles). |
+| Galat kolom di bawah **Nama penyedia**, **Nama pemilik rekening**, atau **Nomor rekening** | Kosong atau terlalu panjang (422). | Perbaiki lalu simpan. |
+| Nomor rekening tampil sebagai `****1234` | Anda bukan owner/admin. | Memang demikian; nomor lengkap muncul saat kanal dipilih untuk pembayaran. |
+| **Kanal ini sedang dipakai dan tidak dapat dihapus.** (409) | Kanal punya pembayaran. | Ubah saja, jangan dihapus. |
+| QRIS tidak punya gambar di register | Belum ada QR yang diunggah. | Edit kanal dan unggah gambar QR. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="General settings" href="/settings/general">Other store-wide settings.</Card>
-  <Card title="POS" href="/operations/pos">Where channels are used at payment.</Card>
-  <Card title="Sales" href="/operations/sales">Add or change payment proof afterwards.</Card>
-  <Card title="Roles" href="/settings/roles">Who gets the Settings menu.</Card>
+  <Card title="Pengaturan umum" href="/settings/general">Pengaturan toko lainnya.</Card>
+  <Card title="Kasir" href="/operations/pos">Tempat kanal dipakai saat pembayaran.</Card>
+  <Card title="Penjualan" href="/operations/sales">Tambah atau ubah bukti pembayaran sesudahnya.</Card>
+  <Card title="Peran" href="/settings/roles">Siapa yang mendapat menu Pengaturan.</Card>
 </Columns>

@@ -1,106 +1,106 @@
 ---
-title: "Reports"
-description: "Review outlet recap, cost and profit, purchases and stock by outlet for a business-date range, and export each report to Excel."
-keywords: ["reports", "outlet recap", "cost and profit", "gross profit", "purchases", "stock by outlet", "export xlsx", "business date"]
+title: "Laporan"
+description: "Tinjau rekap outlet, modal dan laba, pembelian, dan stok per outlet untuk rentang tanggal bisnis, lalu ekspor tiap laporan ke Excel."
+keywords: ["laporan", "rekap outlet", "modal dan untung", "laba kotor", "pembelian", "stok per outlet", "ekspor xlsx", "tanggal bisnis"]
 ---
 
-The **Reports** page has five tabs: **Outlet Recap**, **Cost & Profit**, **Outlet Cost**, **Purchases** and **Stock by Outlet**. Each tab loads only when you open it, and each can be exported to an `.xlsx` file. Transaction-level sales figures live on a separate screen, see [Sales](/operations/sales).
+Halaman **Laporan** memiliki lima tab: **Rekap Outlet**, **Modal & Untung**, **Modal Outlet**, **Pembelian**, dan **Stok per Outlet**. Setiap tab dimuat hanya saat Anda membukanya, dan masing-masing dapat diekspor ke berkas `.xlsx`. Angka penjualan tingkat transaksi ada di layar terpisah, lihat [Penjualan](/operations/sales).
 
-## Before you start
+## Sebelum mulai
 
-- You need the **Reports** menu (menu key `reports`). Without it the page is not reachable, the tab bar is empty, and the server answers 403 with **Only owner/admin can access this report.**
-- Cost, profit and margin figures are for roles that have the `reports` menu only. That is why every tab on this page is gated by the same key: a cashier or inventory role without `reports` never sees cost data. Give the menu to a custom role under [Roles](/settings/roles).
-- Periods are **business dates**, not calendar dates. See [Business day](/concepts/business-day).
-- Data follows the current **DEMO or LIVE** mode. See [DEMO and LIVE mode](/concepts/demo-and-live-mode).
+- Anda memerlukan menu **Laporan** (kunci menu `reports`). Tanpa menu ini halaman tidak dapat dijangkau, bilah tab kosong, dan server menjawab 403 dengan **Hanya owner/admin yang dapat mengakses laporan ini.**
+- Angka modal, laba, dan margin hanya untuk peran yang memiliki menu `reports`. Karena itu setiap tab di halaman ini dibatasi oleh kunci yang sama: peran kasir atau inventory tanpa `reports` tidak pernah melihat data modal. Berikan menu ini kepada peran kustom di [Peran](/settings/roles).
+- Periode adalah **tanggal bisnis**, bukan tanggal kalender. Lihat [Hari bisnis](/concepts/business-day).
+- Data mengikuti mode **DEMO atau LIVE** saat ini. Lihat [Mode DEMO dan LIVE](/concepts/demo-and-live-mode).
 
-## Date range
+## Rentang tanggal
 
-Three tabs follow a period: **Outlet Recap**, **Cost & Profit** and **Outlet Cost**. For these, two date boxes appear (**From date**, **To date**).
+Tiga tab mengikuti sebuah periode: **Rekap Outlet**, **Modal & Untung**, dan **Modal Outlet**. Untuk tab-tab ini muncul dua kotak tanggal (**Dari tanggal**, **Sampai tanggal**).
 
-- Both default to today's business date.
-- If you clear both boxes, the server uses the current business day again.
-- If you fill only one, the range is open on the other side.
-- **To date** cannot be earlier than **From date** (the server returns 422).
-- **Purchases** and **Stock by Outlet** ignore the dates, because purchasing and warehouse stock are not per-period figures.
+- Keduanya bawaannya adalah tanggal bisnis hari ini.
+- Bila Anda mengosongkan keduanya, server kembali memakai hari bisnis saat ini.
+- Bila Anda mengisi hanya satu, rentangnya terbuka di sisi yang lain.
+- **Sampai tanggal** tidak boleh lebih awal dari **Dari tanggal** (server mengembalikan 422).
+- **Pembelian** dan **Stok per Outlet** mengabaikan tanggal, karena pembelian dan stok gudang bukan angka per periode.
 
 <Note>
-  ASSUMPTION: the date boxes default to the browser's local date, while the server defaults to the business date in the store time zone. They can differ between midnight and the business-day cutoff.
+  ASUMSI: kotak tanggal bawaannya adalah tanggal lokal browser, sedangkan bawaan server adalah tanggal bisnis di zona waktu toko. Keduanya dapat berbeda antara tengah malam dan batas pergantian hari bisnis.
 </Note>
 
-## Outlet filter
+## Filter outlet
 
-On **Outlet Recap**, **Outlet Cost** and **Stock by Outlet**, an outlet drop-down (default **All outlets**) narrows the table. The filter works in the browser on rows already loaded, so the **Grand Total** row becomes the subtotal of the outlet you picked. The outlet list contains active outlets only.
+Pada **Rekap Outlet**, **Modal Outlet**, dan **Stok per Outlet**, drop-down outlet (bawaan **Semua outlet**) mempersempit tabel. Filter ini bekerja di browser pada baris yang sudah dimuat, sehingga baris **Grand Total** menjadi subtotal outlet yang Anda pilih. Daftar outlet hanya berisi outlet aktif.
 
-## Tabs
+## Tab
 
 <Tabs>
-  <Tab title="Outlet Recap">
-    One row per **active** outlet for the period, including outlets with no sales (they show zero). Columns: **Outlet**, **Unit**, **Sales**, and a **Transaction detail** button.
+  <Tab title="Rekap Outlet">
+    Satu baris per outlet **aktif** untuk periode itu, termasuk outlet tanpa penjualan (tampil nol). Kolom: **Outlet**, **Unit**, **Penjualan**, dan tombol **Detail transaksi**.
 
-    - A **Historical** tag marks a row for sales made before selling outlets existed. Those sales keep their former attribution so past figures do not move.
-    - **Transaction detail** opens a window **Transaction detail — \{outlet\}** listing the transactions behind the row, with SKU, name, quantity and subtotal per item. If none: **No transactions contributing to this outlet's recap yet.**
-    - A **Grand Total** row sums the rows currently shown.
-    - Empty state: **No active outlets yet — this recap lists every active outlet for this period, even without sales.**
+    - Tag **Riwayat** menandai baris untuk penjualan yang terjadi sebelum outlet penjualan ada. Penjualan itu mempertahankan atribusi lamanya agar angka masa lalu tidak bergeser.
+    - **Detail transaksi** membuka jendela **Detail transaksi — \{outlet\}** yang mencantumkan transaksi di balik baris itu, dengan SKU, nama, jumlah, dan subtotal per item. Bila tidak ada: **Belum ada transaksi yang menyumbang ke rekap outlet ini.**
+    - Baris **Grand Total** menjumlahkan baris yang sedang ditampilkan.
+    - Keadaan kosong: **Belum ada outlet aktif — rekap ini mendaftar setiap outlet aktif untuk periode ini, sekalipun belum ada penjualan.**
   </Tab>
-  <Tab title="Cost & Profit">
-    Three figures for the period: **Revenue**, **Cost of goods** and **Gross profit**.
+  <Tab title="Modal & Untung">
+    Tiga angka untuk periode: **Pendapatan**, **Harga pokok**, dan **Laba kotor**.
 
-    A footnote explains that gross profit uses the snapshot values stored on each sold line, not the prices in master data when you open the report. Changing a cost price later does not rewrite past profit.
+    Sebuah catatan kaki menjelaskan bahwa laba kotor memakai nilai snapshot yang tersimpan pada setiap baris yang terjual, bukan harga di data master saat Anda membuka laporan. Mengubah harga modal belakangan tidak menulis ulang laba masa lalu.
   </Tab>
-  <Tab title="Outlet Cost">
-    One row per outlet with sales in the period. Columns: **Outlet**, **Sales**, **Cost**, **Gross profit**, plus the **Historical** tag where it applies and a **Grand Total** row. Empty state: **No outlet sales in this period yet.**
+  <Tab title="Modal Outlet">
+    Satu baris per outlet yang punya penjualan pada periode itu. Kolom: **Outlet**, **Penjualan**, **Modal**, **Laba kotor**, ditambah tag **Riwayat** bila berlaku dan baris **Grand Total**. Keadaan kosong: **Belum ada penjualan outlet pada periode ini.**
   </Tab>
-  <Tab title="Purchases">
-    Not period-based. Two figures, **PO count** and **Total purchases**, then a table with **PO number**, **Vendor**, **Status**, **Date** and **Total**, and a **Grand Total** row.
+  <Tab title="Pembelian">
+    Bukan berbasis periode. Dua angka, **Jumlah PO** dan **Total pembelian**, lalu tabel dengan **No. PO**, **Vendor**, **Status**, **Tanggal**, dan **Total**, serta baris **Grand Total**.
 
-    A status drop-down filters the table: **All statuses**, draft, ordered, received, paid, cancelled. Empty state: **No purchases yet.** See [Purchase orders](/purchasing/purchase-orders).
+    Drop-down status memfilter tabel: **Semua status**, draft, dipesan, diterima, dibayar, dibatalkan. Keadaan kosong: **Belum ada pembelian.** Lihat [Purchase order](/purchasing/purchase-orders).
   </Tab>
-  <Tab title="Stock by Outlet">
-    Not period-based. One row per outlet: **Outlet**, **Variant count**, **Total stock**, and a **Stock detail** button, with a **Grand Total** row.
+  <Tab title="Stok per Outlet">
+    Bukan berbasis periode. Satu baris per outlet: **Outlet**, **Jumlah varian**, **Total stok**, dan tombol **Detail stok**, dengan baris **Grand Total**.
 
-    **Stock detail** opens **Stock detail — \{outlet\}** with the variant count, total stock and a table of SKU, name and current stock. It loads only when you click the row. Empty states: **No stock data yet.** and **No variants for this outlet yet.**
+    **Detail stok** membuka **Detail stok — \{outlet\}** dengan jumlah varian, total stok, dan tabel SKU, nama, serta stok saat ini. Data ini dimuat hanya saat Anda mengklik baris. Keadaan kosong: **Belum ada data stok.** dan **Belum ada varian untuk outlet ini.**
   </Tab>
 </Tabs>
 
-The number next to the filters ("N items") is the count of rows currently shown on the active tab. **Cost & Profit** has no row count.
+Angka di samping filter ("N data") adalah jumlah baris yang sedang ditampilkan pada tab aktif. **Modal & Untung** tidak punya jumlah baris.
 
-## Export
+## Ekspor
 
-**Export .xlsx** (top right) exports the **active tab**, with the same date range for the three period tabs.
+**Ekspor .xlsx** (kanan atas) mengekspor **tab aktif**, dengan rentang tanggal yang sama untuk tiga tab periode.
 
-| Tab | File name | Notes |
+| Tab | Nama berkas | Catatan |
 | --- | --- | --- |
-| Outlet Recap | `outlet-settlements.xlsx` | Two sheets: a summary and a per-item transaction detail across all outlets in the period. |
-| Cost & Profit | `profit.xlsx` | One row with the summary figures. |
-| Outlet Cost | `outlet-profit.xlsx` | One row per outlet. |
-| Purchases | `purchases.xlsx` | Exports the rows for the purchases report. |
-| Stock by Outlet | `stock-by-outlet.xlsx` | Summary per outlet only (never the per-variant detail). |
+| Rekap Outlet | `outlet-settlements.xlsx` | Dua sheet: ringkasan dan detail transaksi per item di semua outlet pada periode itu. |
+| Modal & Untung | `profit.xlsx` | Satu baris berisi angka ringkasan. |
+| Modal Outlet | `outlet-profit.xlsx` | Satu baris per outlet. |
+| Pembelian | `purchases.xlsx` | Mengekspor baris untuk laporan pembelian. |
+| Stok per Outlet | `stock-by-outlet.xlsx` | Hanya ringkasan per outlet (tidak pernah detail per varian). |
 
 <Warning>
-  The export ignores the browser-side outlet filter. It exports the report as the server computes it, not only the outlet you picked.
+  Ekspor mengabaikan filter outlet di sisi browser. Ekspor mengeluarkan laporan seperti yang dihitung server, bukan hanya outlet yang Anda pilih.
 </Warning>
 
-If the download fails you see **Failed to export the report.** A user without `reports` receives 403 on export too; the file is never produced empty to hide a denial.
+Bila unduhan gagal Anda melihat **Gagal mengekspor laporan.** Pengguna tanpa `reports` juga menerima 403 pada ekspor; berkas tidak pernah dibuat kosong untuk menyembunyikan penolakan.
 
-## Outlet scope
+## Cakupan outlet
 
-Cost & Profit and Outlet Cost respect your outlet access (the same outlet filter used for Dashboard figures). Stock by Outlet answers 403 (**This outlet is not one you are allowed to access.**) if an outlet you are not permitted to see is requested. See [Outlets](/concepts/outlets).
+Modal & Untung dan Modal Outlet menghormati akses outlet Anda (filter outlet yang sama dengan angka Dashboard). Stok per Outlet menjawab 403 (**Outlet ini tidak termasuk outlet yang boleh Anda akses.**) bila outlet yang tidak boleh Anda lihat diminta. Lihat [Outlet](/concepts/outlets).
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message or symptom | Cause | What to do |
+| Pesan atau gejala | Penyebab | Yang harus dilakukan |
 | --- | --- | --- |
-| **Only owner/admin can access this report.** (403) | Your role lacks the `reports` menu. | Ask an owner or admin to add **Reports** to your role. |
-| Table is empty after a date change | No completed sales on those business dates. | Widen the range, or check the outlet filter. |
-| Retry state instead of a table | The request failed. | Use the retry button. |
-| Numbers differ from the Dashboard | Different date range or outlet scope. | Match the range and the outlet. |
-| Sales missing for a cancelled order | Only completed orders count; voided orders do not. | See [Sales](/operations/sales). |
+| **Hanya owner/admin yang dapat mengakses laporan ini.** (403) | Peran Anda tidak punya menu `reports`. | Minta owner atau admin menambahkan **Laporan** ke peran Anda. |
+| Tabel kosong setelah tanggal diubah | Tidak ada penjualan selesai pada tanggal bisnis itu. | Perlebar rentang, atau periksa filter outlet. |
+| Keadaan coba lagi alih-alih tabel | Permintaan gagal. | Gunakan tombol coba lagi. |
+| Angka berbeda dari Dashboard | Rentang tanggal atau cakupan outlet berbeda. | Samakan rentang dan outletnya. |
+| Penjualan tidak ada untuk order yang dibatalkan | Hanya order selesai yang dihitung; order yang di-void tidak. | Lihat [Penjualan](/operations/sales). |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Dashboard" href="/insight/dashboard">Live key figures for today or a period.</Card>
-  <Card title="Sales" href="/operations/sales">Transaction list and receipts.</Card>
-  <Card title="Roles" href="/settings/roles">Grant the Reports menu to a role.</Card>
-  <Card title="Purchase orders" href="/purchasing/purchase-orders">Source of the Purchases tab.</Card>
+  <Card title="Dashboard" href="/insight/dashboard">Angka utama langsung untuk hari ini atau suatu periode.</Card>
+  <Card title="Penjualan" href="/operations/sales">Daftar transaksi dan struk.</Card>
+  <Card title="Peran" href="/settings/roles">Berikan menu Laporan ke sebuah peran.</Card>
+  <Card title="Purchase order" href="/purchasing/purchase-orders">Sumber tab Pembelian.</Card>
 </Columns>

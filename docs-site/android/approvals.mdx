@@ -1,114 +1,114 @@
 ---
-title: "Approvals"
-description: "How a second person approves a sensitive action on the Android app with their PIN, which actions need it, and who can approve."
-keywords: ["android", "approval", "override", "approver", "pin", "void", "discount", "refund", "cash out", "variance", "permissions"]
+title: "Persetujuan"
+description: "Cara orang kedua menyetujui aksi sensitif di aplikasi Android dengan PIN-nya, aksi apa saja yang memerlukannya, dan siapa yang dapat menyetujui."
+keywords: ["android", "persetujuan", "override", "penyetuju", "pin", "void", "diskon", "refund", "kas keluar", "selisih", "izin"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-Some actions need a second person to agree. When you do one of them without the right permission, the app opens the **Perlu persetujuan** (approval needed) dialog. An approver chooses their name, enters their own PIN, and the action is repeated with a one-time approval. You, the requester, do not need to know the approver's PIN.
+Beberapa aksi memerlukan persetujuan orang kedua. Saat Anda melakukan salah satunya tanpa izin yang sesuai, aplikasi membuka dialog **Perlu persetujuan**. Penyetuju memilih namanya, memasukkan PIN miliknya sendiri, dan aksi diulang dengan persetujuan sekali pakai. Anda, sebagai peminta, tidak perlu tahu PIN penyetuju.
 
-## Before you start
+## Sebelum mulai
 
-- You are signed in and have started the action (for example **Void** on a line).
-- An approver who holds the matching permission is available, is not you, has a PIN and is assigned to this outlet.
-- The tablet is online. Approvals are checked by the server and cannot be done offline. See [Offline and sync](/android/offline-and-sync).
+- Anda sudah masuk dan sudah memulai aksinya (misalnya **Void** pada satu baris).
+- Seorang penyetuju yang memegang izin yang sesuai tersedia, bukan Anda, punya PIN, dan ditugaskan ke outlet ini.
+- Tablet online. Persetujuan diperiksa oleh server dan tidak dapat dilakukan saat offline. Lihat [Offline dan sinkronisasi](/android/offline-and-sync).
 
-## Ask for an approval
+## Minta persetujuan
 
 <Steps>
-  <Step title="Do the action">
-    Fill in the action as usual, with its reason, and confirm it. If your role may not do it alone, the server answers that approval is needed, and the dialog opens by itself.
+  <Step title="Lakukan aksinya">
+    Isi aksi seperti biasa, beserta alasannya, lalu konfirmasi. Jika peran Anda tidak boleh melakukannya sendiri, server menjawab bahwa persetujuan diperlukan, dan dialog terbuka dengan sendirinya.
   </Step>
-  <Step title="Read the summary">
-    The dialog repeats what is being approved, for example "Void 1× Kopi Susu · Salah pesan. Diminta oleh \{your name\}."
+  <Step title="Baca ringkasannya">
+    Dialog mengulang apa yang disetujui, misalnya "Void 1× Kopi Susu · Salah pesan. Diminta oleh \{nama Anda\}."
   </Step>
-  <Step title="Pass the tablet to the approver">
-    The approver list shows each eligible person with initials, name and role. The first person is selected. The approver taps their own name.
+  <Step title="Serahkan tablet ke penyetuju">
+    Daftar penyetuju menampilkan setiap orang yang memenuhi syarat dengan inisial, nama, dan peran. Orang pertama terpilih otomatis. Penyetuju mengetuk namanya sendiri.
   </Step>
-  <Step title="Approver enters the PIN">
-    Six dots show the digits typed. The approver presses **Setujui** (approve) once all six are in.
+  <Step title="Penyetuju memasukkan PIN">
+    Enam titik menunjukkan digit yang diketik. Penyetuju menekan **Setujui** setelah keenam digit masuk.
   </Step>
-  <Step title="The action runs again">
-    The dialog closes and the app repeats the action with the approval. A toast confirms the result as for any normal action.
+  <Step title="Aksi dijalankan lagi">
+    Dialog menutup dan aplikasi mengulang aksi dengan persetujuan tersebut. Toast mengonfirmasi hasilnya seperti aksi biasa.
   </Step>
 </Steps>
 
-## Controls
+## Kontrol
 
-| Control | What it does |
+| Kontrol | Fungsi |
 | --- | --- |
-| Approver chips | Choose who approves. Changing the choice clears the PIN and the error. |
-| Keypad | Six digits. Locked while the check runs. |
-| **Setujui** | Enabled only with an approver chosen and all six digits entered. |
-| **Batal** (cancel) | Closes the dialog. The action is not done. |
+| Chip penyetuju | Memilih siapa yang menyetujui. Mengganti pilihan menghapus PIN dan galat. |
+| Keypad | Enam digit. Terkunci saat pemeriksaan berjalan. |
+| **Setujui** | Aktif hanya bila penyetuju sudah dipilih dan keenam digit sudah dimasukkan. |
+| **Batal** | Menutup dialog. Aksi tidak dilakukan. |
 
-The dialog notes: "Persetujuan berlaku untuk satu aksi ini saja dan dicatat." The approval is for this one action only and is recorded in the activity log.
+Dialog mencantumkan: "Persetujuan berlaku untuk satu aksi ini saja dan dicatat." Persetujuan hanya untuk satu aksi ini dan dicatat di log aktivitas.
 
-## Which actions need approval
+## Aksi yang memerlukan persetujuan
 
-| Action on the tablet | Approval is needed when |
+| Aksi di tablet | Persetujuan diperlukan bila |
 | --- | --- |
-| Void a line already sent to the kitchen | You lack the void permission. |
-| Cancel a whole open tab | You lack the cancel permission. |
-| Cash out of the drawer | The amount is above the cash-out limit set on the server and you lack the cash-out approval permission. Cash in never needs approval. |
-| Close shift | The cash difference is above the tolerance set on the server and you lack the variance permission. |
-| Mark an item sold out (86) | You lack the sold-out permission. |
-| Verify a QRIS payment, or mark it not found | You lack the QRIS verification permission. |
-| Discount | The percent is above your role's limit. |
-| Reprint a receipt | The reprint is past the number of free reprints set on the server. Earlier reprints need no approval. |
-| Full refund of a paid order | Always. |
+| Void baris yang sudah dikirim ke dapur | Anda tidak punya izin void. |
+| Batalkan seluruh tab terbuka | Anda tidak punya izin pembatalan. |
+| Kas keluar dari laci | Jumlahnya di atas batas kas keluar yang diatur di server dan Anda tidak punya izin persetujuan kas keluar. Kas masuk tidak pernah memerlukan persetujuan. |
+| Tutup shift | Selisih kas di atas toleransi yang diatur di server dan Anda tidak punya izin selisih. |
+| Tandai item habis (86) | Anda tidak punya izin habis. |
+| Verifikasi pembayaran QRIS, atau tandai tidak ditemukan | Anda tidak punya izin verifikasi QRIS. |
+| Diskon | Persentasenya di atas batas peran Anda. |
+| Cetak ulang struk | Cetak ulang melewati jumlah cetak ulang gratis yang diatur di server. Cetak ulang sebelumnya tidak memerlukan persetujuan. |
+| Refund penuh pesanan yang sudah lunas | Selalu. |
 
-For **discount**, **reprint** and **refund**, holding the approval permission yourself does not let you skip the dialog. Someone else must approve, so nobody approves their own discount, reprint or refund. For the other actions, a user who holds the permission acts without any dialog.
+Untuk **diskon**, **cetak ulang**, dan **refund**, memegang izin persetujuan sendiri tidak membuat Anda melewati dialog. Orang lain harus menyetujui, sehingga tidak ada yang menyetujui diskon, cetak ulang, atau refund miliknya sendiri. Untuk aksi lain, pengguna yang memegang izin bertindak tanpa dialog apa pun.
 
-## What each permission is called
+## Nama setiap izin
 
-The permissions are set per role on [Roles](/settings/roles) under **Action permissions**. The English meanings, with the key the server uses:
+Izin diatur per peran di [Peran](/settings/roles) pada bagian **Izin aksi**. Arti izin dalam bahasa Indonesia, beserta kunci yang dipakai server:
 
-| Meaning | Key |
+| Arti | Kunci |
 | --- | --- |
-| Void a line already sent to the kitchen | `order.void` |
-| Cancel a whole open tab | `order.cancel` |
-| Approve cash out above the limit | `cash.out.approve` |
-| Approve a shift cash difference above tolerance | `shift.variance.approve` |
-| Mark an item sold out without approval | `menu.availability.set` |
-| Verify or mark not found a QRIS payment | `payment.qris.verify` |
-| Approve a discount above the role's limit | `order.discount.approve` |
-| Approve a receipt reprint | `order.reprint.approve` |
-| Refund a fully paid order | `order.refund` |
+| Void baris yang sudah dikirim ke dapur | `order.void` |
+| Batalkan seluruh tab terbuka | `order.cancel` |
+| Setujui kas keluar di atas batas | `cash.out.approve` |
+| Setujui selisih kas shift di atas toleransi | `shift.variance.approve` |
+| Tandai item habis tanpa persetujuan | `menu.availability.set` |
+| Verifikasi atau tandai tidak ditemukan pembayaran QRIS | `payment.qris.verify` |
+| Setujui diskon di atas batas peran | `order.discount.approve` |
+| Setujui cetak ulang struk | `order.reprint.approve` |
+| Refund pesanan yang sudah lunas | `order.refund` |
 
-By default, Owner and Admin hold all of them. The built-in Inventory role holds only the sold-out permission among these. Other roles hold none until a role is edited. Owner and admin cannot sign in on the tablet, but they can be the approver, so an owner with a PIN can approve a cashier's void. See [Roles and permissions](/concepts/roles-and-permissions).
+Secara bawaan, Owner dan Admin memegang semuanya. Peran Inventory bawaan hanya memegang izin habis di antara izin ini. Peran lain tidak memegang satu pun sampai perannya diubah. Pemilik dan admin tidak dapat masuk di tablet, tetapi dapat menjadi penyetuju, sehingga pemilik yang punya PIN dapat menyetujui void kasir. Lihat [Peran dan izin](/concepts/roles-and-permissions).
 
-## Rules and limits
+## Aturan dan batas
 
-- The approver must be a different person from the requester.
-- The approver's PIN uses the same lock as sign-in: five wrong PINs lock it for 5 minutes. Wrong PINs also count against that person's own tablet sign-in.
-- An approval lasts 120 seconds and can be used once.
-- An approval is tied to the exact action. If you change the amount, line or reason after approval, it is refused and you ask again.
-- The PIN is cleared from the screen as soon as **Setujui** is pressed and is not stored.
+- Penyetuju harus orang yang berbeda dari peminta.
+- PIN penyetuju memakai kunci yang sama dengan masuk: lima kali PIN salah mengunci selama 5 menit. PIN yang salah juga dihitung terhadap masuk di tablet milik orang itu sendiri.
+- Persetujuan berlaku 120 detik dan hanya dapat dipakai sekali.
+- Persetujuan terikat pada aksi yang persis sama. Jika Anda mengubah jumlah, baris, atau alasan setelah disetujui, persetujuan ditolak dan Anda meminta lagi.
+- PIN dihapus dari layar begitu **Setujui** ditekan dan tidak disimpan.
 
-## What the cashier sees
+## Yang dilihat kasir
 
-The cashier sees the dialog open, hands over the tablet, and gets the normal result. If nobody is eligible, the dialog reads "Tidak ada penyetuju yang memenuhi syarat untuk aksi ini." Ask an admin to give someone the permission and a PIN.
+Kasir melihat dialog terbuka, menyerahkan tablet, dan mendapat hasil normal. Jika tidak ada yang memenuhi syarat, dialog berbunyi "Tidak ada penyetuju yang memenuhi syarat untuk aksi ini." Minta admin memberi seseorang izin dan PIN.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| "Tidak ada penyetuju yang memenuhi syarat untuk aksi ini." | No one else at this outlet holds the permission and has a PIN. | Grant the permission on [Roles](/settings/roles) and set a PIN on [Users](/settings/users). |
-| "PIN salah. Sisa \{n\} percobaan." | Wrong approver PIN. | Re-enter. |
-| "PIN penyetuju terkunci sementara karena salah berulang kali. Coba lagi nanti." | Five wrong PINs. | Wait 5 minutes or choose another approver. |
-| "Penyetuju ini tidak berwenang menyetujui aksi ini." | The approver lacks the permission or is not in this outlet. | Choose another approver. |
-| "Penyetuju tidak boleh orang yang sama dengan peminta." | Requester and approver are the same person. | Another person must approve. |
-| "Persetujuan sudah kedaluwarsa. Minta persetujuan ulang." | More than 120 seconds passed, or it was used. | Repeat the action. |
-| "Data aksi berubah sejak disetujui. Minta persetujuan ulang." | The action no longer matches what was approved. | Repeat the action unchanged. |
-| Error card with **Coba lagi** | The approver list could not load. | Check the connection and retry. |
+| "Tidak ada penyetuju yang memenuhi syarat untuk aksi ini." | Tidak ada orang lain di outlet ini yang memegang izin dan punya PIN. | Beri izin di [Peran](/settings/roles) dan atur PIN di [Pengguna](/settings/users). |
+| "PIN salah. Sisa \{n\} percobaan." | PIN penyetuju salah. | Masukkan ulang. |
+| "PIN penyetuju terkunci sementara karena salah berulang kali. Coba lagi nanti." | Lima kali PIN salah. | Tunggu 5 menit atau pilih penyetuju lain. |
+| "Penyetuju ini tidak berwenang menyetujui aksi ini." | Penyetuju tidak punya izin atau tidak berada di outlet ini. | Pilih penyetuju lain. |
+| "Penyetuju tidak boleh orang yang sama dengan peminta." | Peminta dan penyetuju orang yang sama. | Orang lain harus menyetujui. |
+| "Persetujuan sudah kedaluwarsa. Minta persetujuan ulang." | Lebih dari 120 detik berlalu, atau sudah terpakai. | Ulangi aksinya. |
+| "Data aksi berubah sejak disetujui. Minta persetujuan ulang." | Aksi tidak lagi sama dengan yang disetujui. | Ulangi aksi tanpa perubahan. |
+| Kartu galat dengan **Coba lagi** | Daftar penyetuju tidak dapat dimuat. | Periksa koneksi dan coba lagi. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Roles" href="/settings/roles" />
-  <Card title="Shifts" href="/android/shifts" />
-  <Card title="Payment" href="/android/payment" />
-  <Card title="Orders" href="/android/orders" />
+  <Card title="Peran" href="/settings/roles" />
+  <Card title="Shift" href="/android/shifts" />
+  <Card title="Pembayaran" href="/android/payment" />
+  <Card title="Pesanan" href="/android/orders" />
 </Columns>

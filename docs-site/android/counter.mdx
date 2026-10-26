@@ -1,172 +1,172 @@
 ---
-title: "Counter orders on the tablet"
-description: "Build a counter order from the product grid, choose variants and options, mark items sold out, adjust lines, apply discounts, and send the order to the kitchen."
-keywords: ["android", "tablet", "counter", "product grid", "variant", "modifier", "sold out", "86", "cart", "discount", "kitchen", "queue number"]
+title: "Order counter di tablet"
+description: "Susun order counter dari grid produk, pilih varian dan opsi, tandai item habis, ubah baris, terapkan diskon, dan kirim order ke dapur."
+keywords: ["android", "tablet", "counter", "grid produk", "varian", "modifier", "habis", "86", "keranjang", "diskon", "dapur", "nomor antrean"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-**Counter** is the order screen for walk-up customers. You tap products into an order, adjust the lines, optionally send the items to the kitchen, and then pay. The same editor is used for table orders, see [Tables and dine-in orders](/android/tables). Prices, totals, discounts and tax on the screen always come from the server.
+**Counter** adalah layar order untuk pelanggan yang datang langsung. Anda mengetuk produk ke dalam order, mengubah baris, mengirim item ke dapur bila perlu, lalu menerima pembayaran. Editor yang sama dipakai untuk order meja, lihat [Meja dan order dine-in](/android/tables). Harga, total, diskon, dan pajak di layar selalu berasal dari server.
 
-## Before you start
+## Sebelum mulai
 
-- Sign in with your PIN, see [Sign in with a PIN](/android/pin-sign-in).
-- Open a shift first. Without one, **Order baru** gives "Buka shift dulu sebelum membuka order." See [Shifts on the tablet](/android/shifts).
-- You need a connection. Every change to the order is saved on the server at once; there is no offline order queue, see [Offline and sync](/android/offline-and-sync).
-- The menu is the one your outlet sells. Products carried only by another outlet do not appear, see [Outlets](/concepts/outlets).
+- Masuk dengan PIN, lihat [Masuk dengan PIN](/android/pin-sign-in).
+- Buka shift terlebih dahulu. Tanpa shift, **Order baru** memberi pesan "Buka shift dulu sebelum membuka order." Lihat [Shift di tablet](/android/shifts).
+- Anda membutuhkan koneksi. Setiap perubahan pada order langsung disimpan di server; tidak ada antrean order offline, lihat [Offline dan sinkronisasi](/android/offline-and-sync).
+- Menu adalah menu yang dijual outlet Anda. Produk yang hanya dijual outlet lain tidak muncul, lihat [Outlet](/concepts/outlets).
 
-## Start a counter order
+## Mulai order counter
 
-On wide screens the left rail has a round **Order baru** (new order) button and a **Counter** item. On a phone-size screen the bottom bar has **Counter**.
+Pada layar lebar, rel kiri memiliki tombol bulat **Order baru** dan item **Counter**. Pada layar seukuran ponsel, bilah bawah memiliki **Counter**.
 
-- **Order baru** always opens a new order. The title reads **Counter** plus the queue number the server assigned, and the subtitle reads "Counter · panggil dengan nomor antrean" with your name.
-- **Counter** in the rail returns to the counter order you are working on, or opens a new one if the active order is not a counter order.
-- **Counter** in the bottom bar (phone size) opens a new order each time you tap it.
-- If the terminal was revoked you see "Terminal ini dicabut. Tidak bisa membuka order baru."
+- **Order baru** selalu membuka order baru. Judulnya **Counter** ditambah nomor antrean yang diberikan server, dan subjudulnya "Counter · panggil dengan nomor antrean" beserta nama Anda.
+- **Counter** di rel kembali ke order counter yang sedang Anda kerjakan, atau membuka order baru bila order aktif bukan order counter.
+- **Counter** di bilah bawah (ukuran ponsel) membuka order baru setiap kali Anda mengetuknya.
+- Jika terminal dicabut, Anda melihat "Terminal ini dicabut. Tidak bisa membuka order baru."
 
 <Warning>
-An empty order stays open on the server. An open order blocks closing the shift. Do not tap **Counter** or **Order baru** without needing an order. See "Empty orders" below for how to clear one.
+Order kosong tetap terbuka di server. Order yang terbuka menghalangi penutupan shift. Jangan mengetuk **Counter** atau **Order baru** tanpa membutuhkan order. Lihat "Order kosong" di bawah untuk cara membersihkannya.
 </Warning>
 
-## The layout
+## Tata letak
 
-| Screen size | Layout |
+| Ukuran layar | Tata letak |
 | --- | --- |
-| Wide (landscape tablet) | Products on the left (60 percent), the order on the right (40 percent). |
-| Medium | Products on top, the order panel below. |
-| Phone size | Products only, with a bar at the bottom: "3 item · Lihat order" and the total. Tap it to open the order; the back arrow (**Kembali**) returns to the products. |
+| Lebar (tablet lanskap) | Produk di kiri (60 persen), order di kanan (40 persen). |
+| Sedang | Produk di atas, panel order di bawah. |
+| Ukuran ponsel | Hanya produk, dengan bilah di bawah: "3 item · Lihat order" dan total. Ketuk untuk membuka order; panah kembali (**Kembali**) mengembalikan ke produk. |
 
-Pull down on the product area to refresh the menu. This also clears the cached photos, so a photo changed in the back office is fetched again.
+Tarik ke bawah pada area produk untuk menyegarkan menu. Tindakan ini juga mengosongkan foto yang tersimpan di cache, sehingga foto yang diganti di back office diambil lagi.
 
-## Find products
+## Cari produk
 
 <Steps>
-  <Step title="Pick a category">
-    The strip at the top lists every category from the server. Swipe sideways to reach more. If the list is empty it reads "Belum ada kategori". Your choice is kept when the menu reloads; if the category disappears the first one is selected.
+  <Step title="Pilih kategori">
+    Strip di atas mencantumkan setiap kategori dari server. Geser ke samping untuk menjangkau lebih banyak. Jika daftarnya kosong, tertulis "Belum ada kategori". Pilihan Anda dipertahankan saat menu dimuat ulang; jika kategorinya hilang, kategori pertama dipilih.
   </Step>
-  <Step title="Or search">
-    Type in **Cari menu** (search menu). Searching ignores the category and lists matching items. Clearing the text, or picking a category, returns to the grid.
+  <Step title="Atau cari">
+    Ketik di **Cari menu**. Pencarian mengabaikan kategori dan mendaftar item yang cocok. Menghapus teks, atau memilih kategori, mengembalikan ke grid.
   </Step>
 </Steps>
 
-If a category has no products you see "Belum ada menu di kategori ini." A search with no match reads **Tidak ada menu "teh"** with your text. While the menu loads you see a spinner; if loading fails you see the error with a retry button.
+Jika suatu kategori tidak memiliki produk, Anda melihat "Belum ada menu di kategori ini." Pencarian tanpa hasil berbunyi **Tidak ada menu "teh"** dengan teks Anda. Saat menu dimuat Anda melihat indikator pemuatan; jika gagal, Anda melihat galatnya dengan tombol coba lagi.
 
-### What a product card shows
+### Isi kartu produk
 
-Without a search, the grid has one card per product.
+Tanpa pencarian, grid memiliki satu kartu per produk.
 
-| Part | Meaning |
+| Bagian | Arti |
 | --- | --- |
-| Photo | The image saved for the product or variant. With no photo (or if it fails to load) a tile with the initials is shown. |
-| Round number at the top right | How many of this product are already in the order (all variants added up). |
-| Pill at the bottom left | One pill at most. **Habis** (sold out) takes priority over a variant count such as **2 varian**, which takes priority over **Pilihan** (options). |
-| Name and category | Product name and its category. |
-| Price | One price, or a range such as "Rp 7.000–Rp 8.000" when variants differ. |
-| **Stok 12** | The tracked stock, added up over variants. Not shown for items without tracked stock. |
+| Foto | Gambar yang disimpan untuk produk atau varian. Tanpa foto (atau bila gagal dimuat), ditampilkan ubin dengan inisial. |
+| Angka bulat di kanan atas | Berapa banyak produk ini sudah ada di order (semua varian dijumlahkan). |
+| Pil di kiri bawah | Paling banyak satu pil. **Habis** didahulukan daripada jumlah varian seperti **2 varian**, yang didahulukan daripada **Pilihan**. |
+| Nama dan kategori | Nama produk dan kategorinya. |
+| Harga | Satu harga, atau rentang seperti "Rp 7.000–Rp 8.000" bila harga varian berbeda. |
+| **Stok 12** | Stok yang dilacak, dijumlahkan dari semua varian. Tidak ditampilkan untuk item tanpa stok terlacak. |
 
-Search results work per variant. The name reads "Produk — Varian" and each result is added directly, as on the web POS.
+Hasil pencarian bekerja per varian. Namanya berbunyi "Produk — Varian" dan setiap hasil langsung ditambahkan, seperti pada POS web.
 
-## Add an item
+## Tambahkan item
 
-- **Product with one variant and no options:** tap the card. The line is added.
-- **Product with one variant and options:** tap the card. The options sheet opens, see below.
-- **Product with several variants:** tap the card. The variant list opens, titled with the product name and category, with "Pilih varian untuk ditambahkan ke order". Each row shows the photo, variant name, code, stock, price and **Pilihan** if it has options. Tap a row to add that variant; the list closes. If the variant has options the options sheet opens next.
+- **Produk dengan satu varian tanpa opsi:** ketuk kartu. Baris ditambahkan.
+- **Produk dengan satu varian dan opsi:** ketuk kartu. Lembar opsi terbuka, lihat di bawah.
+- **Produk dengan beberapa varian:** ketuk kartu. Daftar varian terbuka, berjudul nama produk dan kategori, dengan "Pilih varian untuk ditambahkan ke order". Setiap baris menampilkan foto, nama varian, kode, stok, harga, dan **Pilihan** bila punya opsi. Ketuk baris untuk menambahkan varian itu; daftar tertutup. Jika varian punya opsi, lembar opsi terbuka berikutnya.
 
-If every variant of a product is sold out, tapping the card gives "Kopi Susu sedang habis." and nothing opens. Inside the variant list a sold-out row shows **Habis** and does nothing when tapped.
+Jika semua varian suatu produk habis, mengetuk kartu memberi "Kopi Susu sedang habis." dan tidak ada yang terbuka. Di dalam daftar varian, baris yang habis menampilkan **Habis** dan tidak bereaksi saat diketuk.
 
-### Options sheet
+### Lembar opsi
 
-The sheet is titled with the item name and price. Each option group shows its rule: **Pilih 1** (choose 1), **Hingga 2** (up to 2) or **Pilih 1–2**, with a badge **Wajib** (required), **Terpilih** (chosen) or **Opsional**. Options with a surcharge show "+4.000".
+Lembar berjudul nama dan harga item. Setiap grup opsi menampilkan aturannya: **Pilih 1**, **Hingga 2**, atau **Pilih 1–2**, dengan lencana **Wajib**, **Terpilih**, atau **Opsional**. Opsi dengan biaya tambahan menampilkan "+4.000".
 
-- Single-choice groups behave like radio buttons; multi-choice groups stop at the maximum.
-- Add a **Catatan untuk dapur** (note for the kitchen) of up to 100 characters.
-- Use the stepper for the quantity, then tap **Tambah** (add), which shows the line total.
-- If a required group is empty, **Tambah** does not add the item. The group is outlined in red and the sheet says "Pilih level gula dulu."
+- Grup pilihan tunggal bekerja seperti tombol radio; grup pilihan ganda berhenti di jumlah maksimum.
+- Tambahkan **Catatan untuk dapur** hingga 100 karakter.
+- Gunakan stepper untuk jumlah, lalu ketuk **Tambah**, yang menampilkan total baris.
+- Jika grup wajib masih kosong, **Tambah** tidak menambahkan item. Grup itu diberi garis merah dan lembar menyatakan "Pilih level gula dulu."
 
-The server merges identical lines that were not yet sent, so tapping the same product twice raises the quantity of one line.
+Server menggabungkan baris identik yang belum dikirim, jadi mengetuk produk yang sama dua kali menaikkan jumlah pada satu baris.
 
-## Mark an item sold out (86)
+## Tandai item habis (86)
 
-Press and hold a single-variant product card, a search result, or a row in the variant list. Multi-variant cards do not react to a long press; open the list and hold the variant you want.
+Tekan lama kartu produk satu varian, hasil pencarian, atau baris di daftar varian. Kartu multi-varian tidak bereaksi terhadap tekan lama; buka daftarnya dan tekan lama varian yang Anda inginkan.
 
 <Steps>
-  <Step title="Choose a reason">
-    The dialog **Tandai Es Teh habis?** asks you to pick an **alasan** from the server list. The item cannot be ordered until it is available again.
+  <Step title="Pilih alasan">
+    Dialog **Tandai Es Teh habis?** meminta Anda memilih **alasan** dari daftar server. Item tidak dapat dipesan sampai tersedia lagi.
   </Step>
-  <Step title="Tap Tandai habis">
-    A message reads "Es Teh ditandai habis." Every tablet sees it within about five seconds.
+  <Step title="Ketuk Tandai habis">
+    Muncul pesan "Es Teh ditandai habis." Setiap tablet melihatnya dalam sekitar lima detik.
   </Step>
 </Steps>
 
-- If the server has no active reason in the sold-out category, the dialog says so and the item cannot be marked from the tablet.
-- Holders of the menu availability permission mark items without approval. Everyone else gets the **Perlu persetujuan** sheet and an approver's PIN, see [Approvals](/android/approvals). Owners, admins and the inventory role hold it by default.
-- Sold-out cards are dimmed and hatched with the **Habis** pill. There is no button on the tablet to make the item available again. ASSUMPTION: this is done in the back office, see [Products](/inventory/products).
-- The sold-out state is the server's list; the **Stok** number is for display only and does not block an order.
+- Jika server tidak memiliki alasan aktif dalam kategori habis, dialog menyatakannya dan item tidak dapat ditandai dari tablet.
+- Pemegang izin ketersediaan menu menandai item tanpa persetujuan. Yang lain mendapat lembar **Perlu persetujuan** dan PIN penyetuju, lihat [Persetujuan](/android/approvals). Owner, admin, dan peran inventory memegangnya secara bawaan.
+- Kartu yang habis diredupkan dan diarsir dengan pil **Habis**. Tidak ada tombol di tablet untuk membuat item tersedia lagi. ASUMSI: hal ini dilakukan di back office, lihat [Produk](/inventory/products).
+- Status habis adalah daftar dari server; angka **Stok** hanya untuk tampilan dan tidak memblokir order.
 
-## The order panel
+## Panel order
 
-Lines are grouped under **Belum dikirim** (not yet sent, red) and **Sudah dikirim ke dapur** (already sent to the kitchen). A new order shows "Ketuk menu untuk menambah item".
+Baris dikelompokkan di bawah **Belum dikirim** (merah) dan **Sudah dikirim ke dapur**. Order baru menampilkan "Ketuk menu untuk menambah item".
 
-| On a line | Meaning |
+| Pada baris | Arti |
 | --- | --- |
-| Plus and minus stepper | Only on lines not yet sent. Minus at 1 removes the line. The quantity stops at 999. |
-| **2×** pill and "Terkirim 14:05" | A sent line. It has no stepper. |
-| Options, note | Chosen options and the note in quotes. |
-| Discount pill | The percentage when a line discount applies. |
-| Number at the right | The line total from the server. |
+| Stepper plus dan minus | Hanya pada baris yang belum dikirim. Minus pada 1 menghapus baris. Jumlah berhenti di 999. |
+| Pil **2×** dan "Terkirim 14:05" | Baris yang sudah dikirim. Tidak memiliki stepper. |
+| Opsi, catatan | Opsi yang dipilih dan catatan dalam tanda kutip. |
+| Pil diskon | Persentase saat diskon baris berlaku. |
+| Angka di kanan | Total baris dari server. |
 
-### Line actions
+### Aksi baris
 
-Tap a line to open its sheet.
+Ketuk baris untuk membuka lembarnya.
 
-- **Not sent yet:** stepper for **Jumlah**, a **Catatan** field (100 characters), **Diskon item…**, **Hapus** (delete) and **Simpan** (save). Changing nothing and tapping **Simpan** just closes the sheet.
-- **Already sent:** the sheet says "sudah dikirim ke dapur" and "Perubahan jumlah dilakukan lewat void." The only action is **Void item**, see [Tables and dine-in orders](/android/tables).
+- **Belum dikirim:** stepper untuk **Jumlah**, kolom **Catatan** (100 karakter), **Diskon item…**, **Hapus**, dan **Simpan**. Tidak mengubah apa pun lalu mengetuk **Simpan** hanya menutup lembar.
+- **Sudah dikirim:** lembar menyatakan "sudah dikirim ke dapur" dan "Perubahan jumlah dilakukan lewat void." Satu-satunya aksi adalah **Void item**, lihat [Meja dan order dine-in](/android/tables).
 
-### Order actions
+### Aksi order
 
-The three-dot button on the panel opens **Aksi order**: **Cetak pre-bill**, **Cetak ulang KOT** (only when something was sent), **Diskon order**, **Bagi bill** and **Batalkan order**. Splitting and cancelling are described in [Tables and dine-in orders](/android/tables).
+Tombol tiga titik pada panel membuka **Aksi order**: **Cetak pre-bill**, **Cetak ulang KOT** (hanya bila ada yang sudah dikirim), **Diskon order**, **Bagi bill**, dan **Batalkan order**. Membagi dan membatalkan dijelaskan di [Meja dan order dine-in](/android/tables).
 
-## Discounts
+## Diskon
 
-Open **Diskon order** from the order actions, or **Diskon item…** from a line. Use the stepper to set **Potongan** (1 to 100 percent, starting at 10), pick an **Alasan** (reason) from the server list and tap **Terapkan diskon**. Messages: "Diskon order diterapkan." or "Diskon item diterapkan." **Hapus diskon order** appears when an order discount exists.
+Buka **Diskon order** dari aksi order, atau **Diskon item…** dari sebuah baris. Gunakan stepper untuk mengatur **Potongan** (1 sampai 100 persen, mulai dari 10), pilih **Alasan** dari daftar server, lalu ketuk **Terapkan diskon**. Pesannya: "Diskon order diterapkan." atau "Diskon item diterapkan." **Hapus diskon order** muncul bila ada diskon order.
 
-- Each role has a discount limit on the server. Owners and admins default to 100 percent; other roles default to 0, so every discount from a cashier needs an approver unless an administrator set a limit. Above your limit the **Perlu persetujuan** sheet opens. A person cannot approve their own discount. See [Approvals](/android/approvals).
-- If the server has no active discount reason, the sheet says "Server belum punya alasan diskon aktif" and you cannot apply a discount.
+- Setiap peran memiliki batas diskon di server. Owner dan admin bawaannya 100 persen; peran lain bawaannya 0, sehingga setiap diskon dari kasir membutuhkan penyetuju kecuali administrator menetapkan batas. Di atas batas Anda, lembar **Perlu persetujuan** terbuka. Seseorang tidak dapat menyetujui diskonnya sendiri. Lihat [Persetujuan](/android/approvals).
+- Jika server tidak memiliki alasan diskon aktif, lembar menyatakan "Server belum punya alasan diskon aktif" dan Anda tidak dapat menerapkan diskon.
 
-## Totals, sending and paying
+## Total, kirim, dan bayar
 
-When totals are visible the panel shows **Subtotal**, **Diskon** (red, negative; "Rp 0" when none), the tax line named by the server with its rate, **Total** and **Terbayar** (paid) once something was paid. **Sembunyikan total** (hide totals) collapses this to a single "Total Rp 45.000" line with **Tampilkan total**; the tablet remembers your choice.
+Saat total terlihat, panel menampilkan **Subtotal**, **Diskon** (merah, negatif; "Rp 0" bila tidak ada), baris pajak dengan nama dari server beserta tarifnya, **Total**, dan **Terbayar** setelah ada yang dibayar. **Sembunyikan total** meringkasnya menjadi satu baris "Total Rp 45.000" dengan **Tampilkan total**; tablet mengingat pilihan Anda.
 
-- **Kirim N** sends the N unsent items to the kitchen. It is disabled with nothing to send. The message is "3 item dikirim ke dapur · KOT dikirim ke printer", or "... KOT belum tercetak, printer belum tersambung" when no printer is connected. A red notice "KOT belum tercetak — kirim ulang ke dapur secara manual" stays on the panel while the kitchen ticket is waiting or failed. See [Printing](/android/printing).
-- **Bayar** goes to the payment screen. It is disabled while the order is empty. For a waiter the button reads **Cetak pre-bill** instead. See [Payment](/android/payment).
-- Sending is optional for a counter order: you can pay without sending.
+- **Kirim N** mengirim N item yang belum terkirim ke dapur. Tombol ini nonaktif bila tidak ada yang dikirim. Pesannya "3 item dikirim ke dapur · KOT dikirim ke printer", atau "... KOT belum tercetak, printer belum tersambung" bila tidak ada printer yang tersambung. Pemberitahuan merah "KOT belum tercetak — kirim ulang ke dapur secara manual" tetap ada di panel selama tiket dapur menunggu atau gagal. Lihat [Pencetakan](/android/printing).
+- **Bayar** menuju layar pembayaran. Tombol ini nonaktif selama order kosong. Untuk waiter, tombolnya berbunyi **Cetak pre-bill**. Lihat [Pembayaran](/android/payment).
+- Mengirim bersifat opsional untuk order counter: Anda dapat membayar tanpa mengirim.
 
-### Empty orders
+### Order kosong
 
-An order with no items can only be removed with **Batalkan order**, which needs the order-cancel permission or an approver. There is no separate "close empty order" button on the tablet.
+Order tanpa item hanya dapat dihapus dengan **Batalkan order**, yang membutuhkan izin pembatalan order atau seorang penyetuju. Tidak ada tombol terpisah "tutup order kosong" di tablet.
 
 <Note>
-ASSUMPTION: The server allows closing an empty tab, but the tablet code has no control that calls it. Ask an administrator to cancel stray empty orders if a shift will not close.
+ASUMSI: Server mengizinkan penutupan tab kosong, tetapi kode tablet tidak memiliki kontrol yang memanggilnya. Minta administrator membatalkan order kosong yang tersisa bila shift tidak mau ditutup.
 </Note>
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| "Buka shift dulu sebelum membuka order." | No open shift. | Open one, see [Shifts on the tablet](/android/shifts). |
-| "Kopi Susu sedang habis." | The item or all variants are sold out. | Choose another item. |
-| "Pilih level gula dulu." | A required option group is empty. | Choose an option, then **Tambah**. |
-| "Item sudah dikirim ke dapur — batalkan lewat void." | You tried to delete a sent line. | Use **Void item**. |
-| "Mengurangi jumlah dilakukan lewat void." | Minus on a sent line. | Use **Void item**. |
-| "Item ini sudah dikirim ke dapur dan tidak bisa diubah di sini." | The line was sent from another tablet meanwhile. | Reopen the order and use void. |
-| "Tidak ada item baru untuk dikirim ke dapur." | Everything was already sent. | None needed. |
-| Spinner, then an error with a retry button | The menu could not be loaded. | Tap the retry button or pull down. |
+| "Buka shift dulu sebelum membuka order." | Tidak ada shift terbuka. | Buka satu, lihat [Shift di tablet](/android/shifts). |
+| "Kopi Susu sedang habis." | Item atau semua variannya habis. | Pilih item lain. |
+| "Pilih level gula dulu." | Grup opsi wajib masih kosong. | Pilih opsi, lalu **Tambah**. |
+| "Item sudah dikirim ke dapur — batalkan lewat void." | Anda mencoba menghapus baris yang sudah dikirim. | Gunakan **Void item**. |
+| "Mengurangi jumlah dilakukan lewat void." | Minus pada baris yang sudah dikirim. | Gunakan **Void item**. |
+| "Item ini sudah dikirim ke dapur dan tidak bisa diubah di sini." | Baris dikirim dari tablet lain sementara itu. | Buka ulang order dan gunakan void. |
+| "Tidak ada item baru untuk dikirim ke dapur." | Semuanya sudah dikirim. | Tidak perlu tindakan. |
+| Indikator pemuatan, lalu galat dengan tombol coba lagi | Menu tidak dapat dimuat. | Ketuk tombol coba lagi atau tarik ke bawah. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Tables and dine-in orders" href="/android/tables" />
-  <Card title="Payment" href="/android/payment" />
-  <Card title="POS on the web" href="/operations/pos" />
-  <Card title="Products" href="/inventory/products" />
+  <Card title="Meja dan order dine-in" href="/android/tables" />
+  <Card title="Pembayaran" href="/android/payment" />
+  <Card title="POS di web" href="/operations/pos" />
+  <Card title="Produk" href="/inventory/products" />
 </Columns>

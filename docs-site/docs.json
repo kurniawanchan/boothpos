@@ -13,7 +13,7 @@
   "navigation": {
     "groups": [
       {
-        "group": "Get started",
+        "group": "Mulai",
         "pages": [
           "index",
           "getting-started/sign-in",
@@ -21,7 +21,7 @@
         ]
       },
       {
-        "group": "Concepts",
+        "group": "Konsep",
         "pages": [
           "concepts/navigation",
           "concepts/roles-and-permissions",
@@ -31,7 +31,7 @@
         ]
       },
       {
-        "group": "Android app",
+        "group": "Aplikasi Android",
         "pages": [
           "android/overview",
           "android/setup",
@@ -47,7 +47,7 @@
         ]
       },
       {
-        "group": "Operations",
+        "group": "Operasional",
         "pages": [
           "operations/pos",
           "operations/shifts",
@@ -55,7 +55,7 @@
         ]
       },
       {
-        "group": "Restaurant",
+        "group": "Restoran",
         "pages": [
           "operations/restaurant-floor",
           "operations/kitchen",
@@ -63,7 +63,7 @@
         ]
       },
       {
-        "group": "Inventory",
+        "group": "Inventori",
         "pages": [
           "inventory/categories",
           "inventory/products",
@@ -73,7 +73,7 @@
         ]
       },
       {
-        "group": "Purchasing",
+        "group": "Pembelian",
         "pages": [
           "purchasing/vendors",
           "purchasing/materials",
@@ -81,14 +81,14 @@
         ]
       },
       {
-        "group": "Customers and outlets",
+        "group": "Pelanggan dan outlet",
         "pages": [
           "people/customers",
           "people/outlets"
         ]
       },
       {
-        "group": "Insight",
+        "group": "Wawasan",
         "pages": [
           "insight/dashboard",
           "insight/reports",
@@ -96,7 +96,7 @@
         ]
       },
       {
-        "group": "Settings",
+        "group": "Pengaturan",
         "pages": [
           "settings/general",
           "settings/payment-channels",

@@ -1,100 +1,100 @@
 ---
-title: "Offline and sync"
-description: "How the Android app shows connection state, what the Perangkat screen reports, and what still works when the server cannot be reached."
-keywords: ["android", "offline", "sync", "heartbeat", "perangkat", "connection", "clock skew", "pull to refresh", "retry"]
+title: "Offline dan sinkronisasi"
+description: "Cara aplikasi Android menampilkan status koneksi, apa yang dilaporkan layar Perangkat, dan apa yang tetap berfungsi saat server tidak terjangkau."
+keywords: ["android", "offline", "sinkronisasi", "heartbeat", "perangkat", "koneksi", "selisih jam", "tarik untuk menyegarkan", "coba lagi"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-The Android app is **online-first**. It does not keep a local queue of orders or payments to send later. Each action goes to the server when you press it, and the server is the record. This page explains what you see when the connection drops and how to check it.
+Aplikasi Android **mengutamakan koneksi online** (online-first). Aplikasi tidak menyimpan antrean pesanan atau pembayaran untuk dikirim nanti. Setiap aksi dikirim ke server saat Anda menekannya, dan server adalah catatan resminya. Halaman ini menjelaskan apa yang Anda lihat saat koneksi putus dan cara memeriksanya.
 
-## Before you start
+## Sebelum mulai
 
-- Everyone signed in can open the **Perangkat** screen and see the connection state. No special permission is needed.
-- Wi-Fi problems are the usual cause. The server may also be switched off or on another network.
+- Semua orang yang sudah masuk dapat membuka layar **Perangkat** dan melihat status koneksi. Tidak perlu izin khusus.
+- Masalah Wi-Fi adalah penyebab yang paling umum. Server juga mungkin mati atau berada di jaringan lain.
 
-## Connection states
+## Status koneksi
 
-The chip in the header shows the state the app last learned.
+Chip di header menampilkan status yang terakhir diketahui aplikasi.
 
-| Chip | Meaning |
+| Chip | Artinya |
 | --- | --- |
-| **Memeriksa koneksi…** | Nothing has been checked yet since the app started. |
-| **Online** | The last request reached the server. |
-| **Offline** | The last request failed on the network (no answer, timeout). |
-| **Offline terbatas** | Reserved for a tablet offline for a long time. See below. |
+| **Memeriksa koneksi…** | Belum ada yang diperiksa sejak aplikasi dimulai. |
+| **Online** | Permintaan terakhir sampai ke server. |
+| **Offline** | Permintaan terakhir gagal di jaringan (tidak ada jawaban, waktu habis). |
+| **Offline terbatas** | Dicadangkan untuk tablet yang offline dalam waktu lama. Lihat di bawah. |
 
-Only a network failure turns the chip to **Offline**. A refusal such as 401, 403, 409 or 422 still proves the server answered, so the chip stays **Online** and the message is shown instead.
+Hanya kegagalan jaringan yang mengubah chip menjadi **Offline**. Penolakan seperti 401, 403, 409, atau 422 tetap membuktikan bahwa server menjawab, sehingga chip tetap **Online** dan pesannya ditampilkan.
 
 <Warning>
-  The chip is also tappable and cycles through the states by hand. It is a leftover from the design prototype. The next request from the app sets it back to what it really found. Tell staff not to rely on a tap.
+  Chip juga dapat diketuk dan berganti status secara manual. Ini sisa dari prototipe desain. Permintaan berikutnya dari aplikasi mengembalikannya ke kondisi sebenarnya. Beri tahu staf agar tidak mengandalkan ketukan.
 </Warning>
 
-### Offline terbatas and the banner
+### Offline terbatas dan banner
 
-When the state is **Offline terbatas** a yellow banner appears under the header: "Perangkat offline lebih dari 4 jam. Order baru perlu persetujuan Outlet Manager dan tunai baru ditolak. EDC tetap bisa dipakai."
+Saat status **Offline terbatas**, banner kuning muncul di bawah header: "Perangkat offline lebih dari 4 jam. Order baru perlu persetujuan Outlet Manager dan tunai baru ditolak. EDC tetap bisa dipakai."
 
 <Note>
-  ASSUMPTION: this is a designed policy, not an enforced one. The code never moves the app to **Offline terbatas** by itself, and no rule in the app or the server blocks cash or requires approval after 4 hours offline. Only the manual chip tap shows the banner. Do not tell staff that cash is blocked offline.
+  ASUMSI: ini kebijakan yang dirancang, bukan yang ditegakkan. Kode tidak pernah memindahkan aplikasi ke **Offline terbatas** sendiri, dan tidak ada aturan di aplikasi maupun server yang memblokir tunai atau meminta persetujuan setelah 4 jam offline. Hanya ketukan manual pada chip yang menampilkan banner. Jangan beri tahu staf bahwa tunai diblokir saat offline.
 </Note>
 
-## What happens to actions while offline
+## Yang terjadi pada aksi saat offline
 
-Nothing is stored for later. Many actions (for example discount, refund, close shift) try up to three times on a network failure, with a short pause, then stop. Others fail on the first try.
+Tidak ada yang disimpan untuk nanti. Banyak aksi (misalnya diskon, refund, tutup shift) mencoba hingga tiga kali saat jaringan gagal, dengan jeda singkat, lalu berhenti. Aksi lain gagal pada percobaan pertama.
 
-| Action | While the server is unreachable |
+| Aksi | Saat server tidak terjangkau |
 | --- | --- |
-| Sign in with a PIN | Fails with a network message. You cannot sign in. |
-| Open the menu, floor, orders | Shows what was last loaded, or an error card with **Coba lagi** if nothing is loaded. |
-| Send items, take payment, discount, void | Fails with the network message in a toast. Nothing is recorded. Press again once online. |
-| Close shift | Toast: "Koneksi terputus. Kirim hitungan lagi; server tidak akan menutup dua kali." Send the count again. The server will not close twice. |
-| Approvals | The approver list cannot load and the PIN cannot be checked. See [Approvals](/android/approvals). |
-| Printing | The tablet talks to the printer directly. ASSUMPTION: a print of an already-loaded document works offline, but the order or payment behind it still needs the server. See [Printing](/android/printing). |
+| Masuk dengan PIN | Gagal dengan pesan jaringan. Anda tidak dapat masuk. |
+| Membuka menu, denah, pesanan | Menampilkan data yang terakhir dimuat, atau kartu galat dengan **Coba lagi** jika belum ada yang termuat. |
+| Kirim item, terima pembayaran, diskon, void | Gagal dengan pesan jaringan di toast. Tidak ada yang tercatat. Tekan lagi setelah online. |
+| Tutup shift | Toast: "Koneksi terputus. Kirim hitungan lagi; server tidak akan menutup dua kali." Kirim hitungan lagi. Server tidak akan menutup dua kali. |
+| Persetujuan | Daftar penyetuju tidak dapat dimuat dan PIN tidak dapat diperiksa. Lihat [Persetujuan](/android/approvals). |
+| Pencetakan | Tablet berbicara langsung dengan printer. ASUMSI: mencetak dokumen yang sudah termuat berfungsi saat offline, tetapi pesanan atau pembayaran di baliknya tetap membutuhkan server. Lihat [Pencetakan](/android/printing). |
 
-Actions that take money or change an order carry a one-time key. A retry after a dropped reply therefore uses the same key, and the server answers with the saved result instead of recording it twice.
+Aksi yang menyangkut uang atau mengubah pesanan membawa kunci sekali pakai. Percobaan ulang setelah balasan terputus karenanya memakai kunci yang sama, dan server menjawab dengan hasil tersimpan alih-alih mencatatnya dua kali.
 
 <Tip>
-  If you are unsure whether a payment or close went through, open **Order** or **Shift** and pull down to reload before you try again.
+  Jika Anda tidak yakin pembayaran atau penutupan sudah berhasil, buka **Order** atau **Shift** dan tarik ke bawah untuk memuat ulang sebelum mencoba lagi.
 </Tip>
 
-## The Perangkat screen
+## Layar Perangkat
 
-Open **Perangkat** (**Perangkat & sinkron**) from the rail. **Periksa koneksi** (check connection) sends a heartbeat now instead of waiting for the next one.
+Buka **Perangkat** (**Perangkat & sinkron**) dari rail. **Periksa koneksi** mengirim heartbeat sekarang, tanpa menunggu heartbeat berikutnya.
 
-| Tile | Shows | Notes |
+| Kartu | Menampilkan | Catatan |
 | --- | --- | --- |
-| **Koneksi** | **Belum terhubung**, **Terhubung** or **Terputus** | Plus "Heartbeat terakhir OK \{HH:mm:ss\}". **Terputus** adds "server tidak terjangkau". |
-| **Jam perangkat** (device clock) | Seconds of difference from the server | "Dalam batas ±5 dtk", or "Selisih lebih dari 5 dtk — koreksi jam perangkat". |
-| **Rilis menu** | The menu release the server reports | **Belum ada rilis** if none. |
-| **Siap EOD (perangkat ini)** | **Siap** with no open shift, otherwise **Belum** | End of day is run by the outlet manager in the back office. |
+| **Koneksi** | **Belum terhubung**, **Terhubung**, atau **Terputus** | Ditambah "Heartbeat terakhir OK \{HH:mm:ss\}". **Terputus** menambahkan "server tidak terjangkau". |
+| **Jam perangkat** | Selisih dalam detik dari server | "Dalam batas ±5 dtk", atau "Selisih lebih dari 5 dtk — koreksi jam perangkat". |
+| **Rilis menu** | Rilis menu yang dilaporkan server | **Belum ada rilis** bila tidak ada. |
+| **Siap EOD (perangkat ini)** | **Siap** bila tidak ada shift terbuka, selain itu **Belum** | Akhir hari (end of day) dijalankan manajer outlet di back office. |
 
-Below the tiles is the printer panel. See [Printing](/android/printing).
+Di bawah kartu ada panel printer. Lihat [Pencetakan](/android/printing).
 
 ## Heartbeat
 
-While the app is in front and someone is signed in, it sends a heartbeat to the server every 60 seconds. One is also sent right after sign-in. The heartbeat reports the app version and returns the server time, so the clock difference can be shown. It also refreshes the terminal name, so a rename by an admin on the web appears on the tablet. It stops when the app goes to the background. On the PIN screen there is no session, so the app instead reloads the staff list every 10 seconds to keep the chip honest.
+Selama aplikasi tampil di depan dan ada yang masuk, aplikasi mengirim heartbeat ke server setiap 60 detik. Satu heartbeat juga dikirim tepat setelah masuk. Heartbeat melaporkan versi aplikasi dan mengembalikan waktu server, sehingga selisih jam dapat ditampilkan. Heartbeat juga menyegarkan nama terminal, sehingga penggantian nama oleh admin di web muncul di tablet. Heartbeat berhenti saat aplikasi berpindah ke latar belakang. Di layar PIN tidak ada sesi, jadi aplikasi memuat ulang daftar staf setiap 10 detik agar chip tetap jujur.
 
-A heartbeat that fails keeps the last good values and only flips the state to **Terputus** and the chip to **Offline** (network failures only). If the server answers that the terminal was revoked, see [Set up a terminal](/android/setup).
+Heartbeat yang gagal mempertahankan nilai baik yang terakhir dan hanya mengubah status menjadi **Terputus** dan chip menjadi **Offline** (hanya untuk kegagalan jaringan). Jika server menjawab bahwa terminal dicabut, lihat [Siapkan terminal](/android/setup).
 
-## Pull to refresh
+## Tarik untuk menyegarkan
 
-Pull any of these screens down to reload: **Meja**, **Order**, **Shift**, the X report and close screens, and **Perangkat** (which rechecks the printer). The floor plan also reloads itself every few seconds. A failed refresh keeps the data already on screen.
+Tarik layar berikut ke bawah untuk memuat ulang: **Meja**, **Order**, **Shift**, layar laporan X dan tutup shift, serta **Perangkat** (yang memeriksa ulang printer). Denah meja juga memuat ulang sendiri setiap beberapa detik. Penyegaran yang gagal mempertahankan data yang sudah ada di layar.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| Chip **Offline** | Network failure on the last request. | Check Wi-Fi, then press **Periksa koneksi**. |
-| **Belum terhubung** | No heartbeat has succeeded since sign-in. | Press **Periksa koneksi**; check the server. |
-| "Selisih lebih dari 5 dtk — koreksi jam perangkat" | Tablet clock differs from the server. | Turn on automatic date and time in Android settings. |
-| "Sesi berakhir. Masuk kembali." | The PIN session is no longer valid. | Sign in again. See [Sign in with a PIN](/android/pin-sign-in). |
-| "Koneksi terputus. Kirim hitungan lagi…" | Network dropped while closing the shift. | Send the count again. |
+| Chip **Offline** | Kegagalan jaringan pada permintaan terakhir. | Periksa Wi-Fi, lalu tekan **Periksa koneksi**. |
+| **Belum terhubung** | Belum ada heartbeat yang berhasil sejak masuk. | Tekan **Periksa koneksi**; periksa server. |
+| "Selisih lebih dari 5 dtk — koreksi jam perangkat" | Jam tablet berbeda dari server. | Aktifkan tanggal dan waktu otomatis di pengaturan Android. |
+| "Sesi berakhir. Masuk kembali." | Sesi PIN tidak berlaku lagi. | Masuk lagi. Lihat [Masuk dengan PIN](/android/pin-sign-in). |
+| "Koneksi terputus. Kirim hitungan lagi…" | Jaringan putus saat menutup shift. | Kirim hitungan lagi. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Sign in with a PIN" href="/android/pin-sign-in" />
-  <Card title="Printing" href="/android/printing" />
-  <Card title="Shifts" href="/android/shifts" />
-  <Card title="Android overview" href="/android/overview" />
+  <Card title="Masuk dengan PIN" href="/android/pin-sign-in" />
+  <Card title="Pencetakan" href="/android/printing" />
+  <Card title="Shift" href="/android/shifts" />
+  <Card title="Ikhtisar Android" href="/android/overview" />
 </Columns>

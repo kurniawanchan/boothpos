@@ -1,100 +1,100 @@
 ---
-title: "Vendors"
-description: "Keep a list of the suppliers you buy materials from, and see how many materials each one prices."
-keywords: ["pos", "vendors", "suppliers", "purchasing", "materials", "import", "export"]
+title: "Vendor"
+description: "Simpan daftar pemasok tempat Anda membeli bahan, dan lihat berapa bahan yang diberi harga oleh masing-masing vendor."
+keywords: ["pos", "vendor", "pemasok", "pembelian", "bahan", "impor", "ekspor"]
 ---
 
-The **Vendors** page lists the suppliers you buy materials and services from. A vendor on its own holds only contact details. Its prices per material are added from the [Materials](/purchasing/materials) page, and you pick a vendor when you create a [purchase order](/purchasing/purchase-orders).
+Halaman **Vendor** berisi daftar pemasok tempat Anda membeli bahan dan jasa. Sebuah vendor hanya menyimpan data kontak. Harga per bahan ditambahkan dari halaman [Bahan Baku](/purchasing/materials), dan Anda memilih vendor saat membuat [purchase order](/purchasing/purchase-orders).
 
-This is a back-office screen in the web app.
+Ini adalah layar back-office di aplikasi web.
 
-## Before you start
+## Sebelum mulai
 
-- Your role needs the **Vendors** menu (`vendors`). Without it the page does not appear in the navigation. The default Owner, Admin and Inventory roles have it. The default Cashier role does not. Owners can change this on the [Roles](/settings/roles) page.
-- The **Export .xlsx** and **Bulk import** buttons only show for users with the Vendors menu. The import and export themselves are checked on the server against a wider set of master-data menus. See [Import and export](#import-and-export).
+- Peran Anda memerlukan menu **Vendor** (`vendors`). Tanpa menu ini, halaman tidak muncul di navigasi. Peran bawaan Owner, Admin, dan Inventory memilikinya. Peran bawaan Kasir tidak. Owner dapat mengubahnya di halaman [Peran](/settings/roles).
+- Tombol **Ekspor .xlsx** dan **Impor massal** hanya tampil bagi pengguna yang memiliki menu Vendor. Impor dan ekspornya sendiri diperiksa di server terhadap kumpulan menu data master yang lebih luas. Lihat [Impor dan ekspor](#impor-dan-ekspor).
 
-## Find a vendor
+## Mencari vendor
 
-The table shows **Code**, **Name**, **Contact** (phone, with email underneath), **Materials** (how many materials have a price from this vendor), **Status** and the row actions.
+Tabel menampilkan **Kode**, **Nama**, **Kontak** (telepon, dengan email di bawahnya), **Bahan** (jumlah bahan yang punya harga dari vendor ini), **Status**, dan tindakan baris.
 
-Type in the search box to filter by vendor name. Search waits about 300 ms after you stop typing. The counter next to the search box shows the total number of matches. **Reset filters** clears the search. The list is sorted by name and paginated.
+Ketik di kotak pencarian untuk memfilter menurut nama vendor. Pencarian menunggu sekitar 300 ms setelah Anda berhenti mengetik. Penghitung di samping kotak pencarian menampilkan jumlah total hasil yang cocok. **Atur ulang filter** mengosongkan pencarian. Daftar diurutkan menurut nama dan dibagi per halaman.
 
-## Add a vendor
+## Menambah vendor
 
 <Steps>
-  <Step title="Open the form">
-    Select **Add vendor**.
+  <Step title="Buka formulir">
+    Pilih **Tambah vendor**.
   </Step>
-  <Step title="Fill in the fields">
-    Enter the details from the table below. **Vendor code** and **Vendor name** are required.
+  <Step title="Isi kolom">
+    Masukkan data dari tabel di bawah. **Kode vendor** dan **Nama vendor** wajib diisi.
   </Step>
-  <Step title="Save">
-    Select **Save**. You see "Vendor created." and the new vendor appears in the list.
+  <Step title="Simpan">
+    Pilih **Simpan**. Anda melihat "Vendor dibuat." dan vendor baru muncul di daftar.
   </Step>
 </Steps>
 
-| Field | Required | Rules |
+| Kolom | Wajib | Aturan |
 | --- | --- | --- |
-| Vendor code | Yes | Up to 20 characters. Letters, numbers, dashes and underscores only. Saved in uppercase. Must be unique among vendors that are not deleted. |
-| Vendor name | Yes | Up to 150 characters. |
-| Phone | No | Up to 30 characters. |
-| Email | No | Must be a valid email address, up to 100 characters. |
-| Notes | No | Free text. |
-| Active | No | Checked by default. |
+| Kode vendor | Ya | Maksimal 20 karakter. Hanya huruf, angka, tanda hubung, dan garis bawah. Disimpan dalam huruf kapital. Harus unik di antara vendor yang belum dihapus. |
+| Nama vendor | Ya | Maksimal 150 karakter. |
+| Telepon | Tidak | Maksimal 30 karakter. |
+| Email | Tidak | Harus berupa alamat email yang valid, maksimal 100 karakter. |
+| Catatan | Tidak | Teks bebas. |
+| Aktif | Tidak | Dicentang secara bawaan. |
 
 <Warning>
-The vendor code cannot be changed after you create it. The field is locked when you edit a vendor ("Permanent once created."), because Excel imports match vendors by code.
+Kode vendor tidak dapat diubah setelah dibuat. Kolomnya terkunci saat Anda mengubah vendor ("Permanen setelah dibuat."), karena impor Excel mencocokkan vendor berdasarkan kode.
 </Warning>
 
-## Edit a vendor
+## Mengubah vendor
 
-Select **Edit** on the row, change the fields and select **Save**. You see "Vendor updated." You can change the name, contact details, notes and the **Active** checkbox.
+Pilih **Edit** pada baris, ubah kolomnya, lalu pilih **Simpan**. Anda melihat "Vendor diperbarui." Anda dapat mengubah nama, data kontak, catatan, dan kotak centang **Aktif**.
 
-Deactivating a vendor changes its status pill to **Inactive**. Inactive vendors are left out of the vendor list when you add a vendor price to a material. Prices already saved for the vendor are not removed.
+Menonaktifkan vendor mengubah label statusnya menjadi **Nonaktif**. Vendor nonaktif tidak ikut dalam daftar vendor saat Anda menambahkan harga vendor pada sebuah bahan. Harga yang sudah tersimpan untuk vendor itu tidak dihapus.
 
 <Note>
-ASSUMPTION: the purchase order form loads vendors without an active filter, so an inactive vendor may still be selectable there. Not confirmed in a running app.
+ASUMSI: formulir purchase order memuat vendor tanpa filter aktif, sehingga vendor nonaktif mungkin masih bisa dipilih di sana. Belum dikonfirmasi di aplikasi yang berjalan.
 </Note>
 
-## Delete a vendor
+## Menghapus vendor
 
 <Steps>
-  <Step title="Select Delete">
-    Select **Delete** on the row. A dialog asks "Delete \{name\}? Rejected if it still has registered material prices."
+  <Step title="Pilih Hapus">
+    Pilih **Hapus** pada baris. Sebuah dialog bertanya "Hapus \{name\}? Ditolak bila masih memiliki harga bahan yang terdaftar."
   </Step>
-  <Step title="Confirm">
-    Select **Yes, delete**. You see "Vendor deleted."
+  <Step title="Konfirmasi">
+    Pilih **Ya, hapus**. Anda melihat "Vendor dihapus."
   </Step>
 </Steps>
 
-A vendor that still has at least one material price is not deleted. The server answers with a 409 conflict and the message "This vendor still has registered material prices and cannot be deleted." Remove the vendor's prices from each material first (**Materials** > **Vendor prices** > **Delete**), or set the vendor to inactive instead.
+Vendor yang masih memiliki setidaknya satu harga bahan tidak dihapus. Server menjawab dengan konflik 409 dan pesan "Vendor masih memiliki harga bahan yang terdaftar dan tidak dapat dihapus." Hapus dulu harga vendor itu dari setiap bahan (**Bahan Baku** > **Harga vendor** > **Hapus**), atau jadikan vendor nonaktif.
 
-The deletion is recorded in the [Activity log](/insight/activity-log).
+Penghapusan dicatat di [Log Aktivitas](/insight/activity-log).
 
-## Import and export
+## Impor dan ekspor
 
-- **Export .xlsx** downloads the vendors sheet of the master-data workbook.
-- **Bulk import** opens the shared master-data import dialog. It reads the whole workbook (outlets, categories, products, stock, vendors, materials, vendor prices, BOM, roles, users), not just vendors. It shows a preview first and changes nothing until you select **Apply import**. The import is all-or-nothing.
+- **Ekspor .xlsx** mengunduh sheet vendor dari workbook data master.
+- **Impor massal** membuka dialog impor data master bersama. Dialog ini membaca seluruh workbook (outlet, kategori, produk, stok, vendor, bahan baku, harga vendor, BOM, peran, pengguna), bukan hanya vendor. Dialog menampilkan pratinjau terlebih dahulu dan tidak mengubah apa pun sampai Anda memilih **Terapkan impor**. Impor bersifat semua-atau-tidak-sama-sekali.
 
-The server only allows export and import for users whose role holds at least one of the master-data menus (outlets, categories, products, stock, vendors, materials, roles, users). Others get a 403.
+Server hanya mengizinkan ekspor dan impor bagi pengguna yang perannya memegang setidaknya satu menu data master (outlet, kategori, produk, stok, vendor, bahan baku, peran, pengguna). Yang lain mendapat 403.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| What you see | Cause | What to do |
+| Yang Anda lihat | Penyebab | Yang harus dilakukan |
 | --- | --- | --- |
-| Vendor code field is greyed out | You are editing an existing vendor. | Codes are permanent. Create a new vendor if you need a different code. |
-| Validation error under **Vendor code** | The code is already used, is longer than 20 characters or has spaces or symbols. | Use a unique code with letters, numbers, `-` or `_`. |
-| "This vendor still has registered material prices and cannot be deleted." (409) | The vendor is priced on at least one material. | Delete its prices on the materials, or deactivate the vendor. |
-| The page is missing from the navigation | Your role does not have the Vendors menu. | Ask an owner to add it in [Roles](/settings/roles). |
-| Export or import fails with a permission message | Your role has none of the master-data menus. | Ask an owner or admin. |
+| Kolom kode vendor berwarna abu-abu | Anda sedang mengubah vendor yang sudah ada. | Kode bersifat permanen. Buat vendor baru bila Anda memerlukan kode lain. |
+| Galat validasi di bawah **Kode vendor** | Kode sudah dipakai, lebih dari 20 karakter, atau berisi spasi atau simbol. | Gunakan kode unik berisi huruf, angka, `-`, atau `_`. |
+| "Vendor masih memiliki harga bahan yang terdaftar dan tidak dapat dihapus." (409) | Vendor diberi harga pada setidaknya satu bahan. | Hapus harganya pada bahan-bahan itu, atau nonaktifkan vendor. |
+| Halaman tidak ada di navigasi | Peran Anda tidak memiliki menu Vendor. | Minta owner menambahkannya di [Peran](/settings/roles). |
+| Ekspor atau impor gagal dengan pesan izin | Peran Anda tidak memiliki satu pun menu data master. | Minta owner atau admin. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Materials" href="/purchasing/materials">
-    Add materials and set each vendor's price.
+  <Card title="Bahan Baku" href="/purchasing/materials">
+    Tambah bahan dan atur harga tiap vendor.
   </Card>
-  <Card title="Purchase orders" href="/purchasing/purchase-orders">
-    Order from a vendor and receive stock.
+  <Card title="Purchase order" href="/purchasing/purchase-orders">
+    Pesan dari vendor dan terima stok.
   </Card>
 </Columns>

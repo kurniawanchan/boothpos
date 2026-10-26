@@ -1,84 +1,84 @@
 ---
-title: "My profile"
-description: "Change your own profile photo and password, and see your name, username and role."
-keywords: ["profile", "password", "photo", "account", "self-service"]
+title: "Profil saya"
+description: "Ubah foto profil dan password Anda sendiri, serta lihat nama, username, dan peran Anda."
+keywords: ["profil", "password", "foto", "akun", "layanan mandiri"]
 ---
 
-**My Profile** is the one settings screen every signed-in user can open, whatever their role. It only ever changes your own account.
+**Profil Saya** adalah satu-satunya layar pengaturan yang dapat dibuka setiap pengguna yang sudah masuk, apa pun perannya. Layar ini hanya mengubah akun Anda sendiri.
 
-## Before you start
+## Sebelum mulai
 
-- No menu permission is needed. The screen has no menu key, so cashier, inventory and custom roles can use it too.
-- Open it from your name at the top right of the app: click it and choose **Profile**.
-- To change another person's photo, name, role or password, an owner or admin uses [Users](/settings/users) instead.
+- Tidak ada izin menu yang diperlukan. Layar ini tidak punya kunci menu, sehingga peran kasir, inventory, dan peran kustom juga dapat memakainya.
+- Buka dari nama Anda di kanan atas aplikasi: klik nama itu lalu pilih **Profil**.
+- Untuk mengubah foto, nama, peran, atau password orang lain, owner atau admin memakai [Pengguna](/settings/users).
 
-## What the screen shows
+## Isi layar
 
-| Item | Notes |
+| Item | Catatan |
 | --- | --- |
-| **Profile photo** | Your current photo, or your initial if you have none. |
-| **Name** | Read-only. |
-| **Username** | Read-only. This is what you type to sign in. |
-| **Role** | Read-only. |
+| **Foto profil** | Foto Anda saat ini, atau inisial Anda bila belum punya foto. |
+| **Nama** | Hanya baca. |
+| **Username** | Hanya baca. Ini yang Anda ketik untuk masuk. |
+| **Peran** | Hanya baca. |
 
-You cannot edit your name, username or role here. Ask an owner or admin.
+Anda tidak dapat mengubah nama, username, atau peran di sini. Minta owner atau admin.
 
-## Change your photo
+## Mengganti foto
 
 <Steps>
-  <Step title="Click Change photo">
-    A file picker opens.
+  <Step title="Klik Ganti foto">
+    Pemilih berkas terbuka.
   </Step>
-  <Step title="Choose an image">
-    JPEG or PNG, at most 5 MB.
+  <Step title="Pilih gambar">
+    JPEG atau PNG, maksimal 5 MB.
   </Step>
-  <Step title="Done">
-    The upload starts at once. You see **Profile photo updated successfully.** and the new photo replaces the old one.
+  <Step title="Selesai">
+    Pengunggahan dimulai seketika. Anda melihat **Foto profil berhasil diubah.** dan foto baru menggantikan yang lama.
   </Step>
 </Steps>
 
-If the server rejects the file (wrong type or too large), the reason appears under the photo and your old photo stays.
+Bila server menolak berkas (tipe salah atau terlalu besar), alasannya muncul di bawah foto dan foto lama Anda tetap.
 
-## Change your password
+## Mengganti password
 
 <Steps>
-  <Step title="Enter your current password">
-    Type it in **Current password**.
+  <Step title="Masukkan password Anda saat ini">
+    Ketik di **Password saat ini**.
   </Step>
-  <Step title="Enter the new password twice">
-    Type the new password in **New password** and again in **Confirm new password**.
+  <Step title="Masukkan password baru dua kali">
+    Ketik password baru di **Password baru** dan sekali lagi di **Konfirmasi password baru**.
   </Step>
-  <Step title="Save">
-    Click **Save password**. You see **Password updated successfully.** and the three fields are cleared.
+  <Step title="Simpan">
+    Klik **Simpan password**. Anda melihat **Password berhasil diubah.** dan ketiga kolom dikosongkan.
   </Step>
 </Steps>
 
-Rules enforced by the server (422, shown under the field):
+Aturan yang ditegakkan server (422, ditampilkan di bawah kolom):
 
-| Field | Rule |
+| Kolom | Aturan |
 | --- | --- |
-| **Current password** | Required. If it is wrong: **Current password is incorrect.** and nothing changes. |
-| **New password** | Required, and must meet Laravel's default password rule. The code sets no custom rule, so this is a minimum length of 8 characters (an administrator-created account has the same 8-character minimum). |
-| **Confirm new password** | Must match **New password**. |
+| **Password saat ini** | Wajib. Bila salah: **Password saat ini salah.** dan tidak ada yang berubah. |
+| **Password baru** | Wajib, dan harus memenuhi aturan password bawaan Laravel. Kode tidak menetapkan aturan kustom, sehingga artinya panjang minimal 8 karakter (akun yang dibuat administrator punya minimum 8 karakter yang sama). |
+| **Konfirmasi password baru** | Harus sama dengan **Password baru**. |
 
-Changing your password does not sign you out of the session you are using. An administrator resetting your password from [Users](/settings/users) is a different action.
+Mengganti password tidak mengeluarkan Anda dari sesi yang sedang Anda pakai. Administrator yang mereset password Anda dari [Pengguna](/settings/users) adalah tindakan yang berbeda.
 
 <Note>
-  This screen changes your sign-in password only. The tablet sign-in PIN is set by an owner or admin from [Users](/settings/users); there is no PIN field on your profile.
+  Layar ini hanya mengubah password masuk Anda. PIN masuk tablet diatur oleh owner atau admin dari [Pengguna](/settings/users); tidak ada kolom PIN di profil Anda.
 </Note>
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message or symptom | Cause | Fix |
+| Pesan atau gejala | Penyebab | Solusi |
 | --- | --- | --- |
-| **Current password is incorrect.** | The current password was mistyped. | Retype it. If you have forgotten it, ask an owner or admin to reset your password in [Users](/settings/users). |
-| A message about the new password confirmation | The two new passwords differ. | Retype both. |
-| A message about the new password length | Fewer than 8 characters. | Use a longer password. |
-| Photo is rejected | Not JPEG or PNG, or over 5 MB. | Choose another file. |
+| **Password saat ini salah.** | Password saat ini salah ketik. | Ketik ulang. Bila Anda lupa, minta owner atau admin mereset password Anda di [Pengguna](/settings/users). |
+| Pesan tentang konfirmasi password baru | Kedua password baru berbeda. | Ketik ulang keduanya. |
+| Pesan tentang panjang password baru | Kurang dari 8 karakter. | Pakai password yang lebih panjang. |
+| Foto ditolak | Bukan JPEG atau PNG, atau lebih dari 5 MB. | Pilih berkas lain. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Sign in" href="/getting-started/sign-in">Username and password sign-in.</Card>
-  <Card title="Users" href="/settings/users">Admins manage other accounts.</Card>
+  <Card title="Masuk" href="/getting-started/sign-in">Masuk dengan username dan password.</Card>
+  <Card title="Pengguna" href="/settings/users">Admin mengelola akun lain.</Card>
 </Columns>

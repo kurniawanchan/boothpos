@@ -1,121 +1,121 @@
 ---
-title: "Roles and permissions"
-description: "How menu access and action-level permissions decide what each user can see and do."
-keywords: ["roles", "permissions", "menu keys", "owner", "admin", "cashier", "inventory", "approval"]
+title: "Peran dan izin"
+description: "Bagaimana akses menu dan izin tingkat aksi menentukan apa yang dapat dilihat dan dilakukan setiap pengguna."
+keywords: ["peran", "izin", "kunci menu", "owner", "admin", "kasir", "inventory", "persetujuan"]
 ---
 
-BoothPOS controls access in two layers. Both are enforced by the server. The web app only hides what you cannot use.
+BoothPOS mengatur akses dalam dua lapis. Keduanya ditegakkan oleh server. Aplikasi web hanya menyembunyikan apa yang tidak dapat Anda pakai.
 
 <Columns cols={2}>
-  <Card title="Menu access" icon="list">
-    Decides **which screens** you can open. Stored on the role as a list of menu keys.
+  <Card title="Akses menu" icon="list">
+    Menentukan **layar mana** yang dapat Anda buka. Disimpan pada peran sebagai daftar kunci menu.
   </Card>
-  <Card title="Action permissions" icon="key">
-    Decides **which actions** you can take inside a screen, such as marking an item sold out or approving a discount.
+  <Card title="Izin aksi" icon="key">
+    Menentukan **aksi mana** yang dapat Anda lakukan di dalam sebuah layar, seperti menandai item habis atau menyetujui diskon.
   </Card>
 </Columns>
 
-## Built-in roles
+## Peran bawaan
 
-Every installation starts with four roles. Owners and admins can edit roles, and can create custom ones, in [Roles](/settings/roles).
+Setiap instalasi dimulai dengan empat peran. Owner dan admin dapat mengubah peran, dan membuat peran khusus, di [Peran](/settings/roles).
 
-| Role | Menu access at install | Action permissions | Outlet scope |
+| Peran | Akses menu saat instalasi | Izin aksi | Cakupan outlet |
 | --- | --- | --- | --- |
-| Owner | Every menu | Every action permission | All outlets |
-| Admin | Every menu | Every action permission | All outlets |
-| Kasir (cashier) | Dashboard, POS, Cashier Session, Customers, Sales, Floor & Tabs, Kitchen & Bar | None by default | Only assigned outlets |
-| Inventory | Dashboard, POS, Cashier Session, Products, Outlets, Categories, Stock, Vendors, Materials, Customers, Sales, Restaurant Setup | Manage items, mark items 86, edit recipes, dispatch and receive stock transfers, mark sold out | Only assigned outlets |
+| Owner | Semua menu | Semua izin aksi | Semua outlet |
+| Admin | Semua menu | Semua izin aksi | Semua outlet |
+| Kasir | Beranda, Kasir, Sesi Kasir, Pelanggan, Penjualan, Lantai & Tab, Dapur & Bar | Tidak ada secara bawaan | Hanya outlet yang ditugaskan |
+| Inventory | Beranda, Kasir, Sesi Kasir, Produk, Outlet, Kategori, Stok, Vendor, Bahan Baku, Pelanggan, Penjualan, Pengaturan Restoran | Mengelola item, menandai item 86, mengubah resep, mengirim dan menerima transfer stok, menandai habis (sold out) | Hanya outlet yang ditugaskan |
 
 <Note>
-  ASSUMPTION: the menu lists above are the defaults created by the install migrations. Roles can be edited afterwards, so the role in front of you may differ. The Roles screen is the source of truth for a given store.
+  ASUMSI: daftar menu di atas adalah bawaan yang dibuat oleh migrasi instalasi. Peran dapat diubah setelahnya, sehingga peran yang ada di hadapan Anda mungkin berbeda. Layar Peran adalah sumber kebenaran untuk sebuah toko.
 </Note>
 
-Owner and admin are matched by role name (case-insensitive) for the built-in action permissions. A role you create yourself gets exactly the permissions you tick.
+Owner dan admin dikenali dari nama peran (tanpa membedakan huruf besar-kecil) untuk izin aksi bawaan. Peran yang Anda buat sendiri hanya mendapat izin yang Anda centang.
 
-## Menu keys
+## Kunci menu
 
-A menu key opens a screen. Several navigation items can share one key.
+Kunci menu membuka sebuah layar. Beberapa item navigasi dapat berbagi satu kunci.
 
-| Menu key | Opens |
+| Kunci menu | Membuka |
 | --- | --- |
-| `dashboard` | Dashboard |
-| `pos` | POS |
-| `session` | Cashier Session |
-| `sales` | Sales |
-| `floor` | Floor & Tabs |
-| `kitchen` | Kitchen & Bar |
-| `dining_setup` | Restaurant Setup |
-| `categories` | Categories |
-| `products` | Products and product detail |
-| `stock` | Stock and stock transfers |
-| `vendors` | Vendors |
-| `materials` | Materials |
-| `purchase_orders` | Purchase Orders |
-| `customers` | Customers |
-| `outlets` | Outlets |
-| `reports` | Reports and Activity Log |
-| `settings` | General settings and Payment settings |
-| `users` | Users |
-| `roles` | Roles |
-| `companies`, `licenses`, `invoices` | Provider-side Admin group (not covered here) |
+| `dashboard` | Beranda (Dashboard) |
+| `pos` | Kasir (POS) |
+| `session` | Sesi Kasir |
+| `sales` | Penjualan |
+| `floor` | Lantai & Tab |
+| `kitchen` | Dapur & Bar |
+| `dining_setup` | Pengaturan Restoran |
+| `categories` | Kategori |
+| `products` | Produk dan detail produk |
+| `stock` | Stok dan transfer stok |
+| `vendors` | Vendor |
+| `materials` | Bahan Baku |
+| `purchase_orders` | Purchase Order |
+| `customers` | Pelanggan |
+| `outlets` | Outlet |
+| `reports` | Laporan dan Log Aktivitas |
+| `settings` | Pengaturan General dan Pembayaran |
+| `users` | Pengguna |
+| `roles` | Peran |
+| `companies`, `licenses`, `invoices` | Grup Admin sisi penyedia (tidak dibahas di sini) |
 
 <Warning>
-  The keys `users` and `roles` are protected. The store must always keep at least one role that includes both, so no installation can lock itself out of user and role management.
+  Kunci `users` dan `roles` dilindungi. Toko harus selalu memiliki setidaknya satu peran yang mencakup keduanya, sehingga tidak ada instalasi yang dapat mengunci dirinya sendiri dari pengelolaan pengguna dan peran.
 </Warning>
 
-## Action permissions
+## Izin aksi
 
-These are checked in addition to menu access.
+Izin ini diperiksa selain akses menu.
 
-| Permission | What it allows |
+| Izin | Yang diizinkan |
 | --- | --- |
-| Manage items | Discontinue and reactivate items. |
-| Mark items sold out (86) | Mark an item unavailable. |
-| Mark sold out without approval | Mark an item sold out without needing someone else to approve. |
-| Bulk price change | Change prices in bulk. |
-| Approve price changes | Approve a pending price change. |
-| Publish menu releases | Publish a menu release. |
-| Edit recipes | Change an item's recipe (bill of materials). |
-| Dispatch stock transfers | Send stock to another outlet. |
-| Receive stock transfers | Receive stock sent from another outlet. |
-| Cancel stock transfers | Cancel a transfer that has not been received. |
-| Void sent lines | Void a line already sent to the kitchen. |
-| Cancel open tabs | Cancel a whole open tab. |
-| Approve cash out above limit | Approve a cash-out larger than the limit. |
-| Approve receipt reprints | Approve reprinting a receipt. |
-| Verify QRIS payments | Verify, or mark not found, a QRIS payment. |
-| Refund paid orders | Fully refund a paid order. |
-| Approve shift variance | Approve a closing cash difference above tolerance. |
-| Approve discounts above role limit | Approve a discount over the role's own discount limit. |
+| Mengelola item (diskontinu, aktifkan kembali) | Mendiskontinu dan mengaktifkan kembali item. |
+| Menandai item habis (86) | Menandai item tidak tersedia. |
+| Menandai item habis (sold out) tanpa persetujuan | Menandai item habis tanpa perlu disetujui orang lain. |
+| Mengubah harga massal | Mengubah harga secara massal. |
+| Menyetujui perubahan harga | Menyetujui perubahan harga yang tertunda. |
+| Menerbitkan rilis menu | Menerbitkan rilis menu. |
+| Mengubah resep | Mengubah resep item (bill of materials). |
+| Mengirim transfer stok antar outlet | Mengirim stok ke outlet lain. |
+| Menerima transfer stok antar outlet | Menerima stok yang dikirim dari outlet lain. |
+| Membatalkan transfer stok yang belum diterima | Membatalkan transfer yang belum diterima. |
+| Membatalkan (void) baris yang sudah dikirim ke dapur | Mem-void baris yang sudah dikirim ke dapur. |
+| Membatalkan seluruh tab terbuka | Membatalkan satu tab terbuka secara utuh. |
+| Menyetujui kas keluar di atas batas | Menyetujui kas keluar yang lebih besar dari batas. |
+| Menyetujui cetak ulang struk | Menyetujui cetak ulang struk. |
+| Memverifikasi atau menandai tidak ditemukan pembayaran QRIS | Memverifikasi, atau menandai tidak ditemukan, sebuah pembayaran QRIS. |
+| Refund penuh order lunas | Me-refund penuh order yang sudah dibayar. |
+| Menyetujui selisih kas tutup shift di atas toleransi | Menyetujui selisih kas saat penutupan yang melebihi toleransi. |
+| Menyetujui diskon di atas batas peran | Menyetujui diskon yang melebihi batas diskon peran itu sendiri. |
 
-### Approvals at the point of action
+### Persetujuan di titik aksi
 
-Some actions, such as a void, a large discount, or a reprint, need someone with the matching permission. If you hold that permission, the action goes through. If you do not, the server asks for an approver's confirmation using an approval PIN. The approver's PIN is never shown anywhere. See [Users](/settings/users) for how PINs are set.
+Beberapa aksi, seperti void, diskon besar, atau cetak ulang, memerlukan seseorang dengan izin yang sesuai. Jika Anda memegang izin itu, aksi langsung berjalan. Jika tidak, server meminta konfirmasi dari seorang penyetuju menggunakan PIN persetujuan. PIN penyetuju tidak pernah ditampilkan di mana pun. Lihat [Pengguna](/settings/users) untuk cara PIN diatur.
 
 <Warning>
-  The web app has no approval-PIN prompt. Approval flows are built for the Android POS. On the web, an action that needs approval you do not hold can fail instead of asking, for example cancelling an item already sent to the kitchen. The pages for each module say where this applies.
+  Aplikasi web tidak memiliki prompt PIN persetujuan. Alur persetujuan dibuat untuk Android POS. Di web, aksi yang memerlukan persetujuan yang tidak Anda miliki dapat gagal alih-alih meminta persetujuan, misalnya saat membatalkan item yang sudah dikirim ke dapur. Halaman setiap modul menyebutkan di mana hal ini berlaku.
 </Warning>
 
-## Outlet scope
+## Cakupan outlet
 
-Roles can be flagged to see **all outlets** (owner and admin). Every other user sees only the outlets assigned to them. See [Outlets](/concepts/outlets).
+Peran dapat ditandai agar **melihat semua outlet** (owner dan admin). Setiap pengguna lain hanya melihat outlet yang ditugaskan kepadanya. Lihat [Outlet](/concepts/outlets).
 
-## When access is denied
+## Saat akses ditolak
 
-| What you see | Meaning |
+| Yang Anda lihat | Artinya |
 | --- | --- |
-| A screen is missing from the rail | Your role has no menu access to it. Ask an owner or admin. |
-| Redirected to the Dashboard after typing an address | Same cause. |
-| A permission error (HTTP 403) when you click an action | The screen is open to you but the action needs a permission you lack. |
-| An approval prompt | The action needs an approver. |
+| Sebuah layar tidak ada di rail | Peran Anda tidak memiliki akses menu ke layar itu. Tanyakan kepada owner atau admin. |
+| Diarahkan ke Dashboard setelah mengetik alamat | Penyebabnya sama. |
+| Galat izin (HTTP 403) saat Anda mengklik sebuah aksi | Layar terbuka untuk Anda, tetapi aksi itu memerlukan izin yang tidak Anda miliki. |
+| Prompt persetujuan | Aksi itu memerlukan penyetuju. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Edit roles" icon="user-gear" href="/settings/roles">
-    Choose menus and action permissions for a role.
+  <Card title="Ubah peran" icon="user-gear" href="/settings/roles">
+    Pilih menu dan izin aksi untuk sebuah peran.
   </Card>
-  <Card title="Manage users" icon="users" href="/settings/users">
-    Assign roles and outlets, and set PINs.
+  <Card title="Kelola pengguna" icon="users" href="/settings/users">
+    Tugaskan peran dan outlet, serta atur PIN.
   </Card>
 </Columns>

@@ -1,12 +1,12 @@
-Classification: INTERNAL
+Klasifikasi: INTERNAL
 
-# BoothPOS web app documentation (Mintlify)
+# Dokumentasi aplikasi web BoothPOS (Mintlify)
 
-Source for the user guide of the BoothPOS web app. 43 MDX pages (32 web app, 11 Android app), navigation in `docs.json`.
+Sumber panduan pengguna aplikasi web BoothPOS. 43 halaman MDX (32 aplikasi web, 11 aplikasi Android), navigasi di `docs.json`.
 
-## Preview
+## Pratinjau
 
-Mintlify needs Node 20.17 or newer.
+Mintlify memerlukan Node 20.17 atau lebih baru.
 
 ```bash
 npm i -g mint
@@ -18,11 +18,11 @@ mint broken-links
 
 ## Status
 
-- Written from code, locales and specs. No page has been rendered by Mintlify or checked in a browser.
-- `mint validate` has not been run (the CLI was not installed and Node was v18 when these pages were written).
-- A scripted check confirmed: every page is in `docs.json`, internal links resolve, frontmatter is complete, and prose braces are escaped for MDX.
-- Pages note unverified points as `ASSUMPTION:`. Search for it before publishing.
+- Ditulis dari kode, locale, dan spesifikasi. Belum ada halaman yang dirender oleh Mintlify atau diperiksa di browser.
+- `mint validate` belum dijalankan (CLI belum terpasang dan Node masih v18 saat halaman-halaman ini ditulis).
+- Pemeriksaan lewat skrip mengonfirmasi: setiap halaman ada di `docs.json`, tautan internal terselesaikan, frontmatter lengkap, dan kurung kurawal di prosa sudah di-escape untuk MDX.
+- Halaman menandai poin yang belum terverifikasi sebagai `ASUMSI:`. Cari kata itu sebelum dipublikasikan.
 
-## Scope
+## Cakupan
 
-Covers the store-facing modules of the web app and the Android POS tablet app (UI labels on the tablet are Indonesian and are quoted as shown). Excluded: provider-side administration (Companies, Business Types, Licenses, Invoices), and removed modules (Events, Pre-orders).
+Mencakup modul aplikasi web yang dipakai toko dan aplikasi tablet Android POS (label UI di tablet berbahasa Indonesia dan dikutip apa adanya). Tidak dicakup: administrasi sisi penyedia (Company, Jenis Bisnis, Lisensi, Invoice), dan modul yang sudah dihapus (Event, Pre-order).

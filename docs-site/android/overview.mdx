@@ -1,90 +1,90 @@
 ---
-title: "Android POS app overview"
-description: "What the BoothPOS Android tablet app is, what device it needs, how its screens are laid out, and how it relates to the server and the web app."
-keywords: ["android", "tablet", "pos app", "navigation rail", "bottom navigation", "connection chip", "dark mode", "requirements"]
+title: "Ikhtisar aplikasi Android POS"
+description: "Apa itu aplikasi tablet Android BoothPOS, perangkat yang dibutuhkan, tata letak layarnya, dan hubungannya dengan server serta aplikasi web."
+keywords: ["android", "tablet", "aplikasi pos", "navigation rail", "bottom navigation", "chip koneksi", "mode gelap", "persyaratan"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-The BoothPOS Android app is the touch-first till for cashiers and waiters. It takes orders, collects payment, prints receipts and kitchen tickets, and runs the cashier shift. The screens are in Indonesian, so this guide gives each on-screen label in bold with an English gloss on first mention.
+Aplikasi Android BoothPOS adalah kasir layar sentuh untuk kasir dan pelayan. Aplikasi ini mencatat pesanan, menerima pembayaran, mencetak struk dan tiket dapur, serta menjalankan shift kasir.
 
-The app has no data of its own. Every order, price, stock level and shift lives on your BoothPOS server, and the app reads and writes it through the same API as the web app. It is **online-first**: it keeps no local queue of orders, so the tablet must reach the server to sell. See [Offline and sync](/android/offline-and-sync).
+Aplikasi tidak menyimpan data sendiri. Semua pesanan, harga, stok, dan shift berada di server BoothPOS Anda, dan aplikasi membaca serta menulisnya lewat API yang sama dengan aplikasi web. Aplikasi ini **mengutamakan koneksi online** (online-first): tidak ada antrean pesanan lokal, sehingga tablet harus terhubung ke server untuk berjualan. Lihat [Offline dan sinkronisasi](/android/offline-and-sync).
 
-## Before you start
+## Sebelum mulai
 
-- A tablet or phone running **Android 8.0 or later** (API level 26).
-- A BoothPOS server the tablet can reach, on the outlet network or online. See [Set up a terminal](/android/setup).
-- An active staff account with a 6-digit PIN. An owner or admin sets the PIN on the web. See [Sign in with a PIN](/android/pin-sign-in).
-- Optional: a Bluetooth receipt printer, paired in Android settings first. See [Printing](/android/printing).
+- Tablet atau ponsel dengan **Android 8.0 atau lebih baru** (API level 26).
+- Server BoothPOS yang dapat dijangkau tablet, lewat jaringan outlet atau online. Lihat [Siapkan terminal](/android/setup).
+- Akun staf aktif dengan PIN 6 digit. Pemilik atau admin mengatur PIN di web. Lihat [Masuk dengan PIN](/android/pin-sign-in).
+- Opsional: printer struk Bluetooth, yang dipasangkan lebih dulu di pengaturan Android. Lihat [Pencetakan](/android/printing).
 
 <Note>
-  The app is distributed as an APK built for your installation. The build carries the default server addresses used during setup. If setup says the app was built without a default address, you need a different build from your administrator.
+  Aplikasi dibagikan sebagai APK yang dibuat untuk instalasi Anda. Build tersebut membawa alamat server bawaan yang dipakai saat penyiapan. Jika penyiapan menyatakan aplikasi dibuat tanpa alamat bawaan, Anda memerlukan build lain dari administrator.
 </Note>
 
-## How the app relates to the server and the web app
+## Hubungan aplikasi dengan server dan aplikasi web
 
-| Question | Answer |
+| Pertanyaan | Jawaban |
 | --- | --- |
-| Where is the data? | On the server. The tablet stores only its terminal choice (outlet, terminal name, server address) and its session token. |
-| Who sets prices, menu, staff and roles? | Back office users on the web. See [Products](/inventory/products), [Users](/settings/users) and [Roles](/settings/roles). |
-| Do web and app shifts clash? | No. The app and the web each have their own open shift per user. See [Shifts on the web](/operations/shifts). |
-| Which outlet do I sell in? | The outlet chosen at setup. See [Outlets](/concepts/outlets). |
+| Di mana datanya? | Di server. Tablet hanya menyimpan pilihan terminalnya (outlet, nama terminal, alamat server) dan token sesinya. |
+| Siapa yang mengatur harga, menu, staf, dan peran? | Pengguna back office di web. Lihat [Produk](/inventory/products), [Pengguna](/settings/users), dan [Peran](/settings/roles). |
+| Apakah shift web dan aplikasi bentrok? | Tidak. Aplikasi dan web masing-masing punya satu shift terbuka per pengguna. Lihat [Shift di web](/operations/shifts). |
+| Di outlet mana saya berjualan? | Di outlet yang dipilih saat penyiapan. Lihat [Outlet](/concepts/outlets). |
 
-## Screen layout
+## Tata letak layar
 
-The layout follows the width of the screen.
+Tata letak mengikuti lebar layar.
 
-| Width | Layout |
+| Lebar | Tata letak |
 | --- | --- |
-| Under 600 dp (phone) | Compact. A bottom navigation bar, a smaller title, and a short subtitle with your name and shift state. Menu grid shows 2 columns. |
-| 600 dp and wider (tablet) | A navigation rail on the left. The subtitle also shows your role and when the shift opened. Menu grid shows 3 to 5 columns as the screen widens. |
+| Di bawah 600 dp (ponsel) | Ringkas. Bilah navigasi bawah, judul lebih kecil, dan subjudul pendek berisi nama Anda dan status shift. Grid menu menampilkan 2 kolom. |
+| 600 dp ke atas (tablet) | Navigation rail di kiri. Subjudul juga menampilkan peran Anda dan jam shift dibuka. Grid menu menampilkan 3 sampai 5 kolom sesuai lebar layar. |
 
-The sign-in screen, the open-shift screen, the order editor and the payment screens use the whole screen and have no rail or bottom bar.
+Layar masuk, layar buka shift, editor pesanan, dan layar pembayaran memakai seluruh layar dan tidak punya rail atau bilah bawah.
 
-### Navigation items
+### Item navigasi
 
-| Item | What it opens |
+| Item | Membuka apa |
 | --- | --- |
-| **Meja** (tables) | The floor plan for dine-in tabs. See [Tables](/android/tables). |
-| **Counter** | A counter order. If you already have a counter order open, it returns to it; otherwise it starts a new one. See [Counter](/android/counter). |
-| **Order** | Your open and completed orders. A badge shows how many are open. See [Orders](/android/orders). |
-| **Shift** | The shift hub: totals, cash in and out, close. See [Shifts](/android/shifts). |
-| **Perangkat** (device) | Connection, clock and printer status. Rail only, at the bottom. Compact screens open it from elsewhere in the app. |
+| **Meja** | Denah meja untuk tab makan di tempat. Lihat [Meja](/android/tables). |
+| **Counter** | Pesanan counter. Jika Anda sudah punya pesanan counter yang terbuka, aplikasi kembali ke pesanan itu; jika belum, aplikasi memulai pesanan baru. Lihat [Counter](/android/counter). |
+| **Order** | Pesanan Anda yang terbuka dan yang selesai. Lencana menunjukkan jumlah yang masih terbuka. Lihat [Pesanan](/android/orders). |
+| **Shift** | Pusat shift: total, kas masuk dan keluar, tutup shift. Lihat [Shift](/android/shifts). |
+| **Perangkat** | Status koneksi, jam, dan printer. Hanya di rail, di bagian bawah. Layar ringkas membukanya dari tempat lain di aplikasi. |
 
-On the rail, the round **+** button above the items starts a new counter order (**Order baru**, new order).
+Di rail, tombol bulat **+** di atas item memulai pesanan counter baru (**Order baru**).
 
 <Note>
-  ASSUMPTION: on a compact screen the bottom bar lists only Meja, Counter, Order and Shift, and the code shows no other way to reach **Perangkat**. Check on a phone before you tell staff to use it there.
+  ASUMSI: pada layar ringkas, bilah bawah hanya memuat Meja, Counter, Order, dan Shift, dan kode tidak menunjukkan jalan lain untuk membuka **Perangkat**. Periksa di ponsel sebelum Anda menyuruh staf memakainya di sana.
 </Note>
 
 ## Header
 
-The header shows the screen title and, below it, the signed-in user and shift state: **Belum ada shift** (no shift yet) or **Shift terbuka** (shift open). On the right are two controls:
+Header menampilkan judul layar dan, di bawahnya, pengguna yang masuk beserta status shift: **Belum ada shift** atau **Shift terbuka**. Di kanan ada dua kontrol:
 
-- **Connection chip.** Shows **Online**, **Offline**, **Offline terbatas** (offline, limited) or **Memeriksa koneksi…** (checking connection). A warning colour and a crossed Wi-Fi icon mean offline.
-- **Initials button.** The round button with your two initials locks the app and returns to the PIN screen. See [Switch user](/android/pin-sign-in).
+- **Chip koneksi.** Menampilkan **Online**, **Offline**, **Offline terbatas**, atau **Memeriksa koneksi…**. Warna peringatan dan ikon Wi-Fi tercoret berarti offline.
+- **Tombol inisial.** Tombol bulat berisi dua inisial Anda mengunci aplikasi dan kembali ke layar PIN. Lihat [Ganti pengguna](/android/pin-sign-in).
 
-## Dark mode
+## Mode gelap
 
-The app switches to dark mode by itself from 18:00 to 05:59 by the tablet clock. During the day it follows the Android system setting. There is no switch for it inside the app.
+Aplikasi beralih ke mode gelap sendiri dari pukul 18:00 sampai 05:59 menurut jam tablet. Pada siang hari aplikasi mengikuti pengaturan sistem Android. Tidak ada tombol untuk mengubahnya di dalam aplikasi.
 
-## Pull to refresh
+## Tarik untuk menyegarkan
 
-On Meja, Order, Shift, the shift report screens and **Perangkat**, pull the screen down to reload from the server. The counter menu has its own pull-to-refresh, which also reloads product photos.
+Di Meja, Order, Shift, layar laporan shift, dan **Perangkat**, tarik layar ke bawah untuk memuat ulang dari server. Menu counter punya tarik-untuk-segarkan sendiri, yang juga memuat ulang foto produk.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| **Memeriksa koneksi…** stays | The first server check has not finished. | Wait a few seconds, then open **Perangkat** and press **Periksa koneksi**. |
-| The chip says **Offline** | The last request failed on the network. | Check Wi-Fi and the server. See [Offline and sync](/android/offline-and-sync). |
-| No **Perangkat** item on a phone | Compact layout has four bottom items. | ASSUMPTION: use a tablet or the rail layout for device status. |
+| **Memeriksa koneksi…** tidak hilang | Pemeriksaan server pertama belum selesai. | Tunggu beberapa detik, lalu buka **Perangkat** dan tekan **Periksa koneksi**. |
+| Chip menampilkan **Offline** | Permintaan terakhir gagal di jaringan. | Periksa Wi-Fi dan server. Lihat [Offline dan sinkronisasi](/android/offline-and-sync). |
+| Tidak ada item **Perangkat** di ponsel | Tata letak ringkas hanya punya empat item bawah. | ASUMSI: gunakan tablet atau tata letak rail untuk melihat status perangkat. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Set up a terminal" href="/android/setup" />
-  <Card title="Sign in with a PIN" href="/android/pin-sign-in" />
-  <Card title="Offline and sync" href="/android/offline-and-sync" />
-  <Card title="Roles and permissions" href="/concepts/roles-and-permissions" />
+  <Card title="Siapkan terminal" href="/android/setup" />
+  <Card title="Masuk dengan PIN" href="/android/pin-sign-in" />
+  <Card title="Offline dan sinkronisasi" href="/android/offline-and-sync" />
+  <Card title="Peran dan izin" href="/concepts/roles-and-permissions" />
 </Columns>

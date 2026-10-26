@@ -1,65 +1,65 @@
 ---
-title: "Outlets"
-description: "How one organisation runs one or more outlets, who sees which outlet, and how the outlet selector narrows your data."
-keywords: ["outlet", "multi-outlet", "outlet selector", "scope", "home outlet", "assignment"]
+title: "Outlet"
+description: "Bagaimana satu organisasi menjalankan satu outlet atau lebih, siapa melihat outlet mana, dan bagaimana pemilih outlet mempersempit data Anda."
+keywords: ["outlet", "multi-outlet", "pemilih outlet", "cakupan", "outlet asal", "penugasan"]
 ---
 
-An **outlet** is a place where your organisation sells or operates, for example a counter, a stall, or a branch. One BoothPOS installation serves one organisation with one or more outlets. A single-outlet store never sees any outlet controls.
+**Outlet** adalah tempat organisasi Anda berjualan atau beroperasi, misalnya counter, lapak, atau cabang. Satu instalasi BoothPOS melayani satu organisasi dengan satu outlet atau lebih. Toko dengan satu outlet tidak pernah melihat kontrol outlet apa pun.
 
 <Info>
-  Earlier versions called outlets "artists" or "sellers". The screen is now **Outlets**, and the old `/artists` address redirects to it.
+  Versi sebelumnya menyebut outlet sebagai "artist" atau "seller". Layarnya kini bernama **Outlet**, dan alamat lama `/artists` dialihkan ke sana.
 </Info>
 
-## Who sees which outlets
+## Siapa melihat outlet mana
 
-| User | Outlets visible |
+| Pengguna | Outlet yang terlihat |
 | --- | --- |
-| Owner and admin (roles flagged **all outlets**) | Every active outlet. |
-| Everyone else | Only the outlets assigned to that user on the [Users](/settings/users) screen. |
+| Owner dan admin (peran yang ditandai **Melihat semua outlet**) | Semua outlet aktif. |
+| Pengguna lain | Hanya outlet yang ditugaskan kepada pengguna itu di layar [Pengguna](/settings/users). |
 
-The server applies this on every request. Choosing an outlet in the selector can only **narrow** what you see. It can never widen your access, and an outlet you are not assigned to is refused.
+Server menerapkan ini pada setiap permintaan. Memilih outlet di pemilih hanya dapat **mempersempit** apa yang Anda lihat. Pilihan itu tidak pernah memperluas akses Anda, dan outlet yang tidak ditugaskan kepada Anda akan ditolak.
 
-## Outlet selector
+## Pemilih outlet
 
-When you can see more than one outlet, an outlet selector appears in the top bar. When you can see exactly one, it is hidden.
+Jika Anda dapat melihat lebih dari satu outlet, pemilih outlet muncul di bilah atas. Jika Anda hanya dapat melihat satu, pemilih itu disembunyikan.
 
-- Choose **All outlets** to see data across every outlet you may access. The count of outlets is shown next to the label.
-- Choose a single outlet to limit lists, figures, and reports to that outlet.
-- Your last choice is remembered for your user. If that outlet is later removed from your assignments, the selection resets to **All outlets** automatically.
+- Pilih **Semua outlet** untuk melihat data di semua outlet yang boleh Anda akses. Jumlah outlet ditampilkan di samping label.
+- Pilih satu outlet untuk membatasi daftar, angka, dan laporan ke outlet itu.
+- Pilihan terakhir Anda diingat untuk pengguna Anda. Jika outlet itu kemudian dicabut dari penugasan Anda, pilihan otomatis kembali ke **Semua outlet**.
 
 <Note>
-  Some pages manage their own outlet filter instead of using the top-bar selector. Products and Restaurant Setup have an **Outlet** filter on the page itself that can pick several outlets at once. See [Products](/inventory/products) and [Restaurant setup](/operations/restaurant-setup).
+  Beberapa halaman mengelola filter outlet sendiri alih-alih memakai pemilih di bilah atas. Produk dan Pengaturan Restoran memiliki filter **Outlet** di halamannya sendiri yang dapat memilih beberapa outlet sekaligus. Lihat [Produk](/inventory/products) dan [Pengaturan restoran](/operations/restaurant-setup).
 </Note>
 
-## Where sales and stock are recorded
+## Tempat penjualan dan stok dicatat
 
-Every sale, shift, table, and stock balance belongs to one outlet.
+Setiap penjualan, shift, meja, dan saldo stok dimiliki satu outlet.
 
-- **POS and tabs use the outlet of your open shift.** Prices, availability, and 86 marks come from that outlet, and orders are stamped with it by the server. The client never chooses it. See [Cashier shifts](/operations/shifts).
-- **Stock is kept per outlet.** Movements and balances are tracked per outlet, and stock moves between outlets through [stock transfers](/inventory/stock-transfers).
-- **An item has a home outlet and can be sold at other outlets.** The home outlet is the item's owner. The outlets where it is sold decide where it appears on the POS. See [Products](/inventory/products).
+- **POS dan tab memakai outlet dari shift Anda yang terbuka.** Harga, ketersediaan, dan tanda 86 berasal dari outlet itu, dan order diberi cap outlet oleh server. Klien tidak pernah memilihnya. Lihat [Shift kasir](/operations/shifts).
+- **Stok disimpan per outlet.** Pergerakan dan saldo dilacak per outlet, dan stok berpindah antar outlet lewat [transfer stok](/inventory/stock-transfers).
+- **Sebuah item memiliki outlet asal dan dapat dijual di outlet lain.** Outlet asal adalah pemilik item. Outlet tempat item dijual menentukan di mana item muncul di POS. Lihat [Produk](/inventory/products).
 
-## Things to watch
+## Hal yang perlu diperhatikan
 
 <AccordionGroup>
-  <Accordion title="I cannot see an outlet I expected">
-    Your user is probably not assigned to it, or the outlet is inactive. Ask an owner or admin to check your assignments in [Users](/settings/users).
+  <Accordion title="Saya tidak melihat outlet yang saya harapkan">
+    Kemungkinan pengguna Anda tidak ditugaskan ke outlet itu, atau outlet itu tidak aktif. Minta owner atau admin memeriksa penugasan Anda di [Pengguna](/settings/users).
   </Accordion>
-  <Accordion title="Numbers differ between two screens">
-    Check each screen's outlet filter. One may be on **All outlets** and another on a single outlet. Reports also use a business-date range. See [Business day](/concepts/business-day).
+  <Accordion title="Angka berbeda antara dua layar">
+    Periksa filter outlet tiap layar. Satu layar mungkin di **Semua outlet** dan yang lain di satu outlet. Laporan juga memakai rentang tanggal bisnis. Lihat [Hari bisnis](/concepts/business-day).
   </Accordion>
-  <Accordion title="A transfer I am owed does not show up">
-    Transfers in transit stay visible to users entitled to the outlet even if the outlet was deactivated meanwhile, so they can still be received or cancelled. Check your assignment and the transfer's destination. See [Stock transfers](/inventory/stock-transfers).
+  <Accordion title="Transfer yang seharusnya saya terima tidak muncul">
+    Transfer yang sedang dalam perjalanan tetap terlihat oleh pengguna yang berhak atas outlet itu meskipun outlet dinonaktifkan di sela-sela, sehingga masih dapat diterima atau dibatalkan. Periksa penugasan Anda dan tujuan transfer. Lihat [Transfer stok](/inventory/stock-transfers).
   </Accordion>
 </AccordionGroup>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Manage outlets" icon="map-pin" href="/people/outlets">
-    Create and maintain outlets.
+  <Card title="Kelola outlet" icon="map-pin" href="/people/outlets">
+    Buat dan pelihara outlet.
   </Card>
-  <Card title="Assign users to outlets" icon="users" href="/settings/users">
-    Control which outlets each user can see.
+  <Card title="Tugaskan pengguna ke outlet" icon="users" href="/settings/users">
+    Atur outlet mana yang dapat dilihat setiap pengguna.
   </Card>
 </Columns>

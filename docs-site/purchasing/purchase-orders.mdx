@@ -1,149 +1,153 @@
 ---
-title: "Purchase orders"
-description: "Record what you buy from vendors, receive materials into stock, track payments and print the invoice."
-keywords: ["pos", "purchase order", "po", "receiving", "vendor", "material stock", "bom", "invoice"]
+title: "Purchase order"
+description: "Catat apa yang Anda beli dari vendor, terima bahan ke stok, lacak pembayaran, dan cetak faktur."
+keywords: ["pos", "purchase order", "po", "penerimaan", "vendor", "stok bahan", "bom", "faktur"]
 ---
 
-A purchase order (PO) records a purchase of materials and services from one vendor for one outlet. Receiving a PO adds its materials to that outlet's stock. A PO's lines can also be used as the cost source for an item's BOM.
+Purchase order (PO) mencatat pembelian bahan dan jasa dari satu vendor untuk satu outlet. Menerima PO menambahkan bahannya ke stok outlet itu. Baris PO juga dapat dipakai sebagai sumber biaya untuk BOM sebuah item.
 
 <Info>
-Purchase orders were cut from the original MVP and added back later at the product owner's request (feature 006). They are not the same as the removed Pre-order feature. Pre-orders no longer exist.
+Purchase order dikeluarkan dari MVP awal dan ditambahkan kembali kemudian atas permintaan pemilik produk (fitur 006). Fitur ini tidak sama dengan fitur Pre-order yang sudah dihapus. Pre-order tidak ada lagi.
 </Info>
 
-## Before you start
+## Sebelum mulai
 
-- Your role needs the **Purchase Orders** menu (`purchase_orders`). Unlike vendors and materials, this menu also gates reading: without it you cannot even list POs, because lines carry actual buying prices. The default Owner, Admin and Inventory roles have it. The default Cashier role does not.
-- Create the [vendor](/purchasing/vendors) and the [materials](/purchasing/materials) first.
-- You need at least one outlet. The outlet on a PO is the outlet the purchase is for (labelled **Outlet** on the form). It is required, and only that outlet's BOMs can use the PO's lines.
+- Peran Anda memerlukan menu **Purchase Order** (`purchase_orders`). Berbeda dengan vendor dan bahan baku, menu ini juga membatasi pembacaan: tanpa menu ini Anda bahkan tidak dapat menampilkan daftar PO, karena baris PO memuat harga beli yang sebenarnya. Peran bawaan Owner, Admin, dan Inventory memilikinya. Peran bawaan Kasir tidak.
+- Buat [vendor](/purchasing/vendors) dan [bahan baku](/purchasing/materials) terlebih dahulu.
+- Anda memerlukan setidaknya satu outlet. Outlet pada PO adalah outlet yang menjadi tujuan pembelian (berlabel **Outlet** di formulir). Kolom ini wajib diisi, dan hanya BOM milik outlet itu yang dapat memakai baris PO tersebut.
 
 <Note>
-The PO list is narrowed only by the **Outlet** filter on this page. The code for the list does not apply the top-bar outlet selector (ASSUMPTION: this matches the intended design, where a PO's outlet is the outlet the goods are bought for, not the outlet you are working in).
+Daftar PO hanya dipersempit oleh filter **Outlet** di halaman ini. Kode untuk daftar tidak menerapkan pemilih outlet di bilah atas (ASUMSI: ini sesuai rancangan yang dimaksud, karena outlet pada PO adalah outlet tujuan pembelian barang, bukan outlet tempat Anda bekerja).
 </Note>
 
-## Statuses
+## Status
 
-| Status | Meaning | Next actions on the row |
+| Status | Arti | Tindakan berikutnya pada baris |
 | --- | --- | --- |
-| Draft | Being prepared. Lines can still be edited or the PO deleted. | **Mark Ordered**, **Cancel** |
-| Ordered | Sent to the vendor. Lines are locked. | **Mark Received**, **Cancel** |
-| Received | Goods arrived. Material stock has been added. | **Mark Paid** |
-| Paid | Fully paid. Final. | none |
-| Cancelled | Called off. Final. | none |
+| Draft | Sedang disiapkan. Baris masih dapat diubah atau PO dihapus. | **Tandai Dipesan**, **Batalkan** |
+| Dipesan | Sudah dikirim ke vendor. Baris terkunci. | **Tandai Diterima**, **Batalkan** |
+| Diterima | Barang sudah tiba. Stok bahan sudah ditambahkan. | **Tandai Dibayar** |
+| Dibayar | Lunas. Final. | tidak ada |
+| Dibatalkan | Dibatalkan. Final. | tidak ada |
 
-Only these moves are allowed: Draft to Ordered or Cancelled, Ordered to Received or Cancelled, Received to Paid. Anything else is rejected with a 409: "Cannot change status from \{from\} to \{to\}."
+Hanya perpindahan ini yang diizinkan: Draft ke Dipesan atau Dibatalkan, Dipesan ke Diterima atau Dibatalkan, Diterima ke Dibayar. Selain itu ditolak dengan 409: "Tidak bisa mengubah status dari \{from\} ke \{to\}."
 
 <Warning>
-You cannot cancel a PO after it is received, and there is no "unreceive". If you received a PO by mistake, correct the stock with **Adjust stock** on the [Materials](/purchasing/materials) page.
+Anda tidak dapat membatalkan PO setelah diterima, dan tidak ada "batal terima". Bila Anda keliru menerima PO, perbaiki stoknya dengan **Koreksi stok** di halaman [Bahan Baku](/purchasing/materials).
 </Warning>
 
-## Find purchase orders
+## Mencari purchase order
 
-The page has a tab per status (**All**, Draft, Ordered, Received, Paid, Cancelled) and an **Outlet** filter. The active tab shows the number of matches, but only when no outlet filter is set. **Reset filters** clears the outlet filter.
+Halaman ini punya satu tab per status (**Semua**, Draft, Dipesan, Diterima, Dibayar, Dibatalkan) dan filter **Outlet**. Tab yang aktif menampilkan jumlah hasil yang cocok, tetapi hanya bila filter outlet tidak diatur. **Atur ulang filter** mengosongkan filter outlet.
 
-Columns: **PO Number**, **Vendor**, **Outlet** (italic "No outlet assigned" for old POs without one), **Status**, **Total**. The list is sorted newest first.
+Kolom: **No. PO**, **Vendor**, **Outlet** (huruf miring "Belum ada outlet" untuk PO lama tanpa outlet), **Status**, **Total**. Daftar diurutkan dari yang terbaru.
 
-## Create a purchase order
+## Membuat purchase order
 
 <Steps>
-  <Step title="Open the form">
-    Select **New PO**. A side panel opens.
+  <Step title="Buka formulir">
+    Pilih **PO Baru**. Panel samping terbuka.
   </Step>
-  <Step title="Choose vendor and outlet">
-    Pick the **Vendor** and the **Outlet**. Hint: "The outlet this purchase is for. Only this outlet's BOMs can use these lines."
+  <Step title="Pilih vendor dan outlet">
+    Pilih **Vendor** dan **Outlet**. Petunjuk: "Outlet yang dibelikan. Hanya BOM milik outlet ini yang boleh memakai baris-baris ini."
   </Step>
-  <Step title="Add lines">
-    Each line is either **Material** or **Service**. For a material line pick the **Material**. For a service line type a **Description** (up to 255 characters). Enter **Qty** (at least 0.001) and **Unit Price** (zero or more). Use **Add Line** for more lines. The trash button removes a line, and the last line cannot be removed.
+  <Step title="Tambah baris">
+    Setiap baris berjenis **Bahan Baku** atau **Jasa**. Untuk baris bahan, pilih **Bahan Baku**. Untuk baris jasa, ketik **Deskripsi** (maksimal 255 karakter). Masukkan **Jumlah** (minimal 0,001) dan **Harga Satuan** (nol atau lebih). Gunakan **Tambah Baris** untuk baris lain. Tombol tempat sampah menghapus baris, dan baris terakhir tidak dapat dihapus.
   </Step>
-  <Step title="Save">
-    Add optional **Notes**, check the **Total** at the bottom and select **Save**. You see "Purchase order created successfully." The PO starts as Draft and gets a number like `PO-20261026-0001`.
+  <Step title="Simpan">
+    Tambahkan **Catatan** opsional, periksa **Total** di bagian bawah, lalu pilih **Simpan**. Anda melihat "Purchase order berhasil dibuat." PO dimulai sebagai Draft dan mendapat nomor seperti `PO-20261026-0001`.
   </Step>
 </Steps>
 
-The total is the sum of qty times unit price over all lines and is computed again on the server. Service lines never affect stock.
+Total adalah jumlah dari jumlah dikali harga satuan pada semua baris, dan dihitung ulang di server. Baris jasa tidak pernah memengaruhi stok.
 
-## Edit a purchase order
+## Mengubah purchase order
 
-Select **Edit** in the row actions. The panel loads the full PO first.
+Pilih **Edit** pada tindakan baris. Panel memuat PO selengkapnya terlebih dahulu.
 
-- **Draft:** you can change vendor, outlet, notes and all lines.
-- **Other statuses:** lines are locked ("Items can only be changed while the status is Draft.") but vendor, outlet and notes can still be changed.
-- Changing the outlet of a PO whose lines are already used in a BOM is refused with a 409 under **Outlet**: "This purchase order's outlet cannot be changed because its lines are already used by a BOM."
+- **Draft:** Anda dapat mengubah vendor, outlet, catatan, dan semua baris.
+- **Status lain:** baris terkunci ("Item hanya bisa diubah selama status masih Draft.") tetapi vendor, outlet, dan catatan masih dapat diubah.
+- Mengubah outlet PO yang barisnya sudah dipakai di BOM ditolak dengan 409 di bawah **Outlet**: "This purchase order's outlet cannot be changed because its lines are already used by a BOM." (pesan ini hanya tersedia dalam bahasa Inggris; artinya: outlet PO tidak dapat diubah karena barisnya sudah dipakai oleh BOM).
 
-Changing vendor or lines is written to the [Activity log](/insight/activity-log). Notes-only changes are not.
+Perubahan vendor atau baris ditulis ke [Log Aktivitas](/insight/activity-log). Perubahan yang hanya pada catatan tidak.
 
-## Receive a purchase order
+## Menerima purchase order
 
 <Steps>
-  <Step title="Mark it ordered">
-    On a Draft row select **Mark Ordered**. No stock changes.
+  <Step title="Tandai dipesan">
+    Pada baris Draft pilih **Tandai Dipesan**. Stok tidak berubah.
   </Step>
-  <Step title="Mark it received">
-    When the goods arrive select **Mark Received** on the Ordered row. You see "Status updated successfully."
+  <Step title="Tandai diterima">
+    Saat barang tiba, pilih **Tandai Diterima** pada baris Dipesan. Anda melihat "Status berhasil diperbarui."
   </Step>
 </Steps>
 
-What happens at **Mark Received**, in one transaction:
+Yang terjadi pada **Tandai Diterima**, dalam satu transaksi:
 
-- Every **Material** line adds its quantity to that material's stock at the PO's outlet, as a stock movement of type purchase.
-- **Service** lines are skipped.
-- A PO from before outlets were required, with no outlet, adds stock to the first outlet.
+- Setiap baris **Bahan Baku** menambahkan jumlahnya ke stok bahan itu di outlet PO, sebagai pergerakan stok bertipe purchase.
+- Baris **Jasa** dilewati.
+- PO dari sebelum outlet diwajibkan, yang tidak punya outlet, menambahkan stok ke outlet pertama.
 
-Stock changes only at this step. Draft and Ordered POs do not touch stock.
+Stok hanya berubah pada langkah ini. PO berstatus Draft dan Dipesan tidak menyentuh stok.
 
-## Cancel a purchase order
+## Membatalkan purchase order
 
-Select **Cancel** on a Draft or Ordered row. The browser asks "Cancellation reason (optional):". Choose OK to cancel (an empty reason is fine) or Cancel in that prompt to stop. The reason is stored on the PO (up to 255 characters).
+Pilih **Batalkan** pada baris Draft atau Dipesan. Browser bertanya "Alasan pembatalan (opsional):". Pilih OK untuk membatalkan (alasan kosong tidak masalah) atau Batal pada prompt itu untuk menghentikan. Alasan disimpan pada PO (maksimal 255 karakter).
 
-## Detail, invoice and payments
+## Detail, faktur, dan pembayaran
 
-Select the PO number or **Detail**. The dialog shows the status, the outlet, the lines with quantities and totals, the total and the paid amount.
+Pilih nomor PO atau **Detail**. Dialog menampilkan status, outlet, baris beserta jumlah dan totalnya, total, dan jumlah yang sudah dibayar.
 
-- **Print Invoice** downloads a PDF built in your browser. The outlet line is not printed on it. A failure shows "Failed to download invoice."
-- **Used in \{count\} BOM row(s)** appears under a line that an item's BOM uses. The BOM itself is edited from [Product detail](/inventory/product-detail), which lists only Ordered, Received or Paid POs of the item's outlet.
-- **Linked Product** appears on lines that still carry an old product link. You cannot set it from the form.
-- A PO with **No outlet assigned** (and not cancelled) shows an outlet picker and **Assign outlet**. Assigning the first outlet is always allowed. It is logged.
+- **Cetak Faktur** mengunduh PDF yang dibuat di browser Anda. Baris outlet tidak dicetak di dalamnya. Kegagalan menampilkan "Gagal mengunduh faktur."
+- **Dipakai di \{count\} baris BOM** muncul di bawah baris yang dipakai BOM sebuah item. BOM itu sendiri diubah dari [Detail produk](/inventory/product-detail), yang hanya mencantumkan PO berstatus Dipesan, Diterima, atau Dibayar milik outlet item itu.
+- **Produk Terkait** muncul pada baris yang masih membawa tautan produk lama. Anda tidak dapat mengaturnya dari formulir.
+- PO **Belum ada outlet** (dan tidak dibatalkan) menampilkan pemilih outlet dan **Tetapkan outlet**. Menetapkan outlet pertama selalu diizinkan. Tindakan ini dicatat di log.
 
-### Record a payment
+### Mencatat pembayaran
 
-On Received and Paid POs, **Record Payment** opens a small form: payment method, **Amount** (at least 0.01), and optional **Notes**. After saving, the history lists each payment.
+Pada PO Diterima dan Dibayar, **Catat Pembayaran** membuka formulir kecil: metode pembayaran, **Nominal** (minimal 0,01), dan **Catatan (opsional)**. Setelah disimpan, **Riwayat Pembayaran** mencantumkan setiap pembayaran.
 
-- When the total of payments reaches the PO total on a Received PO, the status becomes Paid automatically.
-- You can also select **Mark Paid** on a Received row without recording payments.
-- The server does not compare a payment with the remaining balance, so a payment above the total is accepted.
-- Recording a payment on a Draft, Ordered or Cancelled PO is rejected: "A payment can only be recorded after the purchase order has been received."
+- Ketika total pembayaran mencapai total PO pada PO Diterima, statusnya otomatis menjadi Dibayar.
+- Anda juga dapat memilih **Tandai Dibayar** pada baris Diterima tanpa mencatat pembayaran.
+- Server tidak membandingkan pembayaran dengan sisa tagihan, sehingga pembayaran di atas total diterima.
+- Mencatat pembayaran pada PO Draft, Dipesan, atau Dibatalkan ditolak: "Pembayaran hanya bisa dicatat setelah purchase order diterima."
 
 <Warning>
-The form offers Cash, Transfer and QRIS, but only **Cash** can be saved from this screen. For Transfer and QRIS the server needs a payment channel and a proof of payment, and the form sends neither. You see "A payment channel is required for non-cash methods." Non-cash payments cannot be recorded from this screen today.
+Formulir menawarkan Tunai, Transfer, dan QRIS, tetapi hanya **Tunai** yang dapat disimpan dari layar ini. Untuk Transfer dan QRIS server memerlukan kanal pembayaran dan bukti pembayaran, dan formulir tidak mengirim keduanya. Anda melihat "Kanal pembayaran wajib untuk metode non-tunai." Pembayaran non-tunai saat ini tidak dapat dicatat dari layar ini.
 </Warning>
 
-## Delete a purchase order
+<Note>
+ASUMSI: label metode pembayaran di formulir ini (Tunai, Transfer, QRIS) belum diverifikasi di id.json untuk layar PO; label yang dipakai diambil dari layar kasir.
+</Note>
 
-Only Draft POs. **Delete** is greyed out on other rows with the tooltip "Only draft purchase orders can be deleted. Cancel it instead." The server also refuses (409) when the PO has payments ("This purchase order has recorded payments and cannot be deleted.") or its lines are used by a BOM ("This purchase order is used by a BOM and cannot be deleted."). After a refused delete the list reloads so you see the current state.
+## Menghapus purchase order
 
-## Troubleshooting
+Hanya PO Draft. **Hapus** berwarna abu-abu pada baris lain dengan tooltip "Hanya purchase order draft yang bisa dihapus. Batalkan saja." Server juga menolak (409) bila PO punya pembayaran ("Purchase order ini sudah punya pembayaran tercatat dan tidak bisa dihapus.") atau barisnya dipakai BOM ("Purchase order ini dipakai BOM dan tidak bisa dihapus."). Setelah penghapusan ditolak, daftar dimuat ulang sehingga Anda melihat keadaan terkini.
 
-| What you see | Cause | What to do |
+## Pemecahan masalah
+
+| Yang Anda lihat | Penyebab | Yang harus dilakukan |
 | --- | --- | --- |
-| Whole page missing | No Purchase Orders menu. | Ask an owner to add it in [Roles](/settings/roles). |
-| 422 under **Material** or **Description** | A material line has no material, or a service line has no description. | Fill the field: "A material must be selected for a material-type line." or "A description is required for a service-type line." |
-| 422 under **Outlet** | No outlet chosen. | Choose the outlet. |
-| Edit panel shows no lines | The PO could not be loaded. | Close and retry. An error toast shows the cause. |
-| Stock did not change | The PO is not Received yet, or the lines are services. | Check the status and line types. |
-| Cannot cancel a Received PO | Received is not cancellable. | Adjust stock on the material instead. |
+| Seluruh halaman tidak ada | Tidak ada menu Purchase Order. | Minta owner menambahkannya di [Peran](/settings/roles). |
+| 422 di bawah **Bahan Baku** atau **Deskripsi** | Baris bahan tidak punya bahan, atau baris jasa tidak punya deskripsi. | Isi kolomnya: "Bahan baku wajib dipilih untuk baris bertipe bahan." atau "Deskripsi wajib diisi untuk baris bertipe jasa." |
+| 422 di bawah **Outlet** | Outlet belum dipilih. | Pilih outlet. |
+| Panel edit tidak menampilkan baris | PO tidak dapat dimuat. | Tutup dan coba lagi. Toast galat menampilkan penyebabnya. |
+| Stok tidak berubah | PO belum Diterima, atau barisnya jasa. | Periksa status dan jenis baris. |
+| Tidak bisa membatalkan PO Diterima | Diterima tidak dapat dibatalkan. | Koreksi stok pada bahannya. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Materials" href="/purchasing/materials">
-    Stock per outlet and vendor prices.
+  <Card title="Bahan Baku" href="/purchasing/materials">
+    Stok per outlet dan harga vendor.
   </Card>
-  <Card title="Vendors" href="/purchasing/vendors">
-    Who you buy from.
+  <Card title="Vendor" href="/purchasing/vendors">
+    Tempat Anda membeli.
   </Card>
-  <Card title="Product detail" href="/inventory/product-detail">
-    Use PO lines in an item's BOM.
+  <Card title="Detail produk" href="/inventory/product-detail">
+    Pakai baris PO di BOM sebuah item.
   </Card>
-  <Card title="Outlets" href="/people/outlets">
-    What the outlet on a PO means.
+  <Card title="Outlet" href="/people/outlets">
+    Arti outlet pada sebuah PO.
   </Card>
 </Columns>

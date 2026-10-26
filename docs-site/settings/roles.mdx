@@ -1,184 +1,184 @@
 ---
-title: "Roles"
-description: "Create roles and choose which screens and sensitive actions each role can use."
-keywords: ["roles", "permissions", "menu access", "action permissions", "discount limit", "all outlets", "owner", "admin", "cashier", "inventory"]
+title: "Peran"
+description: "Buat peran dan pilih layar serta tindakan sensitif apa yang dapat dipakai setiap peran."
+keywords: ["peran", "izin", "akses menu", "izin aksi", "batas diskon", "semua outlet", "owner", "admin", "kasir", "inventory"]
 ---
 
-A **role** decides what a user can open and do. BoothPOS has two layers, and a role holds both.
+**Peran** menentukan apa yang dapat dibuka dan dilakukan seorang pengguna. BoothPOS punya dua lapisan, dan sebuah peran memegang keduanya.
 
-| Layer | Question it answers | Set in the form as |
+| Lapisan | Pertanyaan yang dijawabnya | Diatur di formulir sebagai |
 | --- | --- | --- |
-| **Menu access** (menu keys) | Which screens can this role open, and read or change the data behind them? | **Menu access** checkboxes |
-| **Action permissions** | Which sensitive actions inside a screen can this role do (mark 86, publish a menu release, approve a price, and so on)? | **Action permissions** checkboxes |
+| **Akses menu** (kunci menu) | Layar mana yang dapat dibuka peran ini, dan membaca atau mengubah data di baliknya? | Kotak centang **Akses menu** |
+| **Izin aksi** | Tindakan sensitif apa di dalam sebuah layar yang dapat dilakukan peran ini (menandai 86, menerbitkan rilis menu, menyetujui harga, dan seterusnya)? | Kotak centang **Izin aksi** |
 
-Menu access is the main gate. A role without a menu cannot reach that screen, and the server refuses its requests with 403. Action permissions are an extra layer on top, enforced by the server; the screen only hides the controls.
+Akses menu adalah gerbang utama. Peran tanpa sebuah menu tidak dapat menjangkau layar itu, dan server menolak permintaannya dengan 403. Izin aksi adalah lapisan tambahan di atasnya, ditegakkan oleh server; layar hanya menyembunyikan kontrolnya.
 
-## Before you start
+## Sebelum mulai
 
-- You need the **Roles** menu (menu key `roles`) to open this screen and to create, edit or delete roles.
-- Users get a role in [Users](/settings/users). A role with no users does nothing yet.
-- For a broader explanation, see [Roles and permissions](/concepts/roles-and-permissions).
+- Anda memerlukan menu **Peran** (kunci menu `roles`) untuk membuka layar ini dan untuk membuat, mengubah, atau menghapus peran.
+- Pengguna mendapat peran di [Pengguna](/settings/users). Peran tanpa pengguna belum berbuat apa-apa.
+- Untuk penjelasan yang lebih luas, lihat [Peran dan izin](/concepts/roles-and-permissions).
 
-## The role list
+## Daftar peran
 
-| Column | Meaning |
+| Kolom | Arti |
 | --- | --- |
-| **Role Name** | The role's name. |
-| **Menu Access** | How many menus it includes, for example **12 menus**. |
-| **Users** | How many active users have this role. |
-| **Type** | **Default** (a system role) or **Custom**. |
+| **Nama Peran** | Nama peran. |
+| **Akses Menu** | Berapa menu yang dimuatnya, misalnya **12 menu**. |
+| **Pengguna** | Berapa pengguna aktif yang memiliki peran ini. |
+| **Tipe** | **Bawaan** (peran sistem) atau **Kustom**. |
 
-Search with **Search role name…**. Roles are sorted by name, 25 per page.
+Cari dengan **Cari nama peran…**. Peran diurutkan menurut nama, 25 per halaman.
 
-## Create or edit a role
+## Membuat atau mengubah peran
 
 <Steps>
-  <Step title="Add role">
-    Click **Add role**, or **Edit** on a row.
+  <Step title="Tambah peran">
+    Klik **Tambah peran**, atau **Edit** pada sebuah baris.
   </Step>
-  <Step title="Name the role">
-    **Role name** is required, up to 50 characters, and must be unique among existing roles.
+  <Step title="Beri nama peran">
+    **Nama peran** wajib diisi, maksimal 50 karakter, dan harus unik di antara peran yang ada.
   </Step>
-  <Step title="Tick the menus">
-    Under **Menu access**, tick the screens the role can open (see the table below).
+  <Step title="Centang menu">
+    Di bawah **Akses menu**, centang layar yang dapat dibuka peran (lihat tabel di bawah).
   </Step>
-  <Step title="Tick the action permissions">
-    Under **Action permissions**, tick the sensitive actions the role may do. The hint reads: "Controls actions inside a screen (e.g. marking 86). Screen access is still set by the menus above."
+  <Step title="Centang izin aksi">
+    Di bawah **Izin aksi**, centang tindakan sensitif yang boleh dilakukan peran. Petunjuknya berbunyi: "Menentukan tindakan di dalam layar (mis. menandai 86). Akses layar tetap diatur lewat menu di atas."
   </Step>
-  <Step title="Choose outlet scope (multi-outlet only)">
-    If you see **Sees all outlets**, tick it to let users of this role see every outlet without per-user assignment.
+  <Step title="Pilih cakupan outlet (hanya multi-outlet)">
+    Bila Anda melihat **Melihat semua outlet**, centang untuk membiarkan pengguna peran ini melihat setiap outlet tanpa penugasan per pengguna.
   </Step>
-  <Step title="Save">
-    Click **Save**. You see **Role created.** or **Role updated.**
+  <Step title="Simpan">
+    Klik **Simpan**. Anda melihat **Peran dibuat.** atau **Peran diperbarui.**
   </Step>
 </Steps>
 
-### Menu keys
+### Kunci menu
 
-The checkbox labels come from the server and are shown in Indonesian (they are the same list the sidebar uses).
+Label kotak centang berasal dari server dan ditampilkan dalam bahasa Indonesia (daftarnya sama dengan yang dipakai sidebar).
 
-| Checkbox label | Menu key | Screen |
+| Label kotak centang | Kunci menu | Layar |
 | --- | --- | --- |
 | Beranda | `dashboard` | [Dashboard](/insight/dashboard) |
-| Kasir | `pos` | [POS](/operations/pos) |
-| Sesi Kasir | `session` | [Shifts](/operations/shifts) |
-| Produk | `products` | [Products](/inventory/products) |
-| Outlet | `outlets` | [Outlets](/people/outlets) |
-| Kategori | `categories` | [Categories](/inventory/categories) |
-| Stok | `stock` | [Stock](/inventory/stock) |
-| Vendor | `vendors` | [Vendors](/purchasing/vendors) |
-| Bahan Baku | `materials` | [Materials](/purchasing/materials) |
-| Purchase Order | `purchase_orders` | [Purchase orders](/purchasing/purchase-orders) |
-| Pelanggan | `customers` | [Customers](/people/customers) |
-| Perusahaan, Lisensi, Invoice | `companies`, `licenses`, `invoices` | Admin onboarding screens (not covered in these docs) |
-| Penjualan | `sales` | [Sales](/operations/sales) |
-| Laporan | `reports` | [Reports](/insight/reports) and [Activity log](/insight/activity-log) |
-| Pengguna | `users` | [Users](/settings/users) |
-| Peran | `roles` | This screen |
-| Pengaturan | `settings` | [General settings](/settings/general) and [Payment channels](/settings/payment-channels) |
-| Lantai & Tab | `floor` | [Restaurant floor](/operations/restaurant-floor) |
-| Dapur & Bar | `kitchen` | [Kitchen](/operations/kitchen) |
-| Pengaturan Restoran | `dining_setup` | [Restaurant setup](/operations/restaurant-setup) |
+| Kasir | `pos` | [Kasir](/operations/pos) |
+| Sesi Kasir | `session` | [Shift](/operations/shifts) |
+| Produk | `products` | [Produk](/inventory/products) |
+| Outlet | `outlets` | [Outlet](/people/outlets) |
+| Kategori | `categories` | [Kategori](/inventory/categories) |
+| Stok | `stock` | [Stok](/inventory/stock) |
+| Vendor | `vendors` | [Vendor](/purchasing/vendors) |
+| Bahan Baku | `materials` | [Bahan baku](/purchasing/materials) |
+| Purchase Order | `purchase_orders` | [Purchase order](/purchasing/purchase-orders) |
+| Pelanggan | `customers` | [Pelanggan](/people/customers) |
+| Perusahaan, Lisensi, Invoice | `companies`, `licenses`, `invoices` | Layar admin onboarding (tidak dibahas dalam dokumentasi ini) |
+| Penjualan | `sales` | [Penjualan](/operations/sales) |
+| Laporan | `reports` | [Laporan](/insight/reports) dan [Log aktivitas](/insight/activity-log) |
+| Pengguna | `users` | [Pengguna](/settings/users) |
+| Peran | `roles` | Layar ini |
+| Pengaturan | `settings` | [Pengaturan umum](/settings/general) dan [Kanal pembayaran](/settings/payment-channels) |
+| Lantai & Tab | `floor` | [Lantai restoran](/operations/restaurant-floor) |
+| Dapur & Bar | `kitchen` | [Dapur](/operations/kitchen) |
+| Pengaturan Restoran | `dining_setup` | [Pengaturan restoran](/operations/restaurant-setup) |
 
-Some stock-transfer screens use the `stock` key. **My Profile** has no menu key; every user can open it.
+Beberapa layar transfer stok memakai kunci `stock`. **Profil Saya** tidak punya kunci menu; setiap pengguna dapat membukanya.
 
 <Info>
-  The **Settings** menu is also what the server treats as "owner or admin" for actions such as backup and restore, payment-channel changes, and setting PINs. Give it only to people you would trust with those.
+  Menu **Pengaturan** juga yang diperlakukan server sebagai "owner atau admin" untuk tindakan seperti cadangan dan pemulihan, perubahan kanal pembayaran, dan pengaturan PIN. Berikan hanya kepada orang yang Anda percayai untuk hal-hal itu.
 </Info>
 
-### Action permissions
+### Izin aksi
 
-Labels come from the server in Indonesian. In English they mean:
+Label berasal dari server dalam bahasa Indonesia, persis seperti ini:
 
-| Permission (English meaning) | Key |
+| Izin (label di layar) | Kunci |
 | --- | --- |
-| Manage items (discontinue, reactivate) | `menu.item.manage` |
-| Mark item sold out (86) | `menu.item.86` |
-| Change prices in bulk | `menu.price.bulk` |
-| Approve price changes | `menu.price.approve` |
-| Publish a menu release | `menu.release.publish` |
-| Edit recipes | `menu.recipe.edit` |
-| Dispatch a stock transfer between outlets | `stock.transfer.dispatch` |
-| Receive a stock transfer between outlets | `stock.transfer.receive` |
-| Cancel a stock transfer not yet received | `stock.transfer.cancel` |
-| Void a line already sent to the kitchen | `order.void` |
-| Cancel a whole open tab | `order.cancel` |
-| Approve cash out above the limit | `cash.out.approve` |
-| Approve a receipt reprint | `order.reprint.approve` |
-| Verify, or mark not found, a QRIS payment | `payment.qris.verify` |
-| Fully refund a paid order | `order.refund` |
-| Mark an item sold out without approval | `menu.availability.set` |
-| Approve a shift cash difference above tolerance | `shift.variance.approve` |
-| Approve a discount above the role's limit | `order.discount.approve` |
+| Mengelola item (diskontinu, aktifkan kembali) | `menu.item.manage` |
+| Menandai item habis (86) | `menu.item.86` |
+| Mengubah harga massal | `menu.price.bulk` |
+| Menyetujui perubahan harga | `menu.price.approve` |
+| Menerbitkan rilis menu | `menu.release.publish` |
+| Mengubah resep | `menu.recipe.edit` |
+| Mengirim transfer stok antar outlet | `stock.transfer.dispatch` |
+| Menerima transfer stok antar outlet | `stock.transfer.receive` |
+| Membatalkan transfer stok yang belum diterima | `stock.transfer.cancel` |
+| Membatalkan (void) baris yang sudah dikirim ke dapur | `order.void` |
+| Membatalkan seluruh tab terbuka | `order.cancel` |
+| Menyetujui kas keluar di atas batas | `cash.out.approve` |
+| Menyetujui cetak ulang struk | `order.reprint.approve` |
+| Memverifikasi atau menandai tidak ditemukan pembayaran QRIS | `payment.qris.verify` |
+| Refund penuh order lunas | `order.refund` |
+| Menandai item habis (sold out) tanpa persetujuan | `menu.availability.set` |
+| Menyetujui selisih kas tutup shift di atas toleransi | `shift.variance.approve` |
+| Menyetujui diskon di atas batas peran | `order.discount.approve` |
 
-A user who holds an approver permission does not need someone else's approval at that action point.
+Pengguna yang memegang izin penyetuju tidak memerlukan persetujuan orang lain pada titik tindakan itu.
 
-## System default roles and "default" permissions
+## Peran bawaan sistem dan izin "bawaan"
 
-Four roles are created as system roles: **Owner**, **Admin**, **Kasir** (cashier) and **Inventory**. They show **Default** in the **Type** column. The role list and the checkboxes work the same on them as on custom roles.
+Empat peran dibuat sebagai peran sistem: **Owner**, **Admin**, **Kasir**, dan **Inventory**. Peran-peran ini menampilkan **Bawaan** di kolom **Tipe**. Daftar peran dan kotak centangnya bekerja sama seperti pada peran kustom.
 
-Action permissions have a built-in default by role **name** (case-insensitive) when the role has never had its permissions saved:
+Izin aksi punya bawaan menurut **nama** peran (tidak peka huruf besar-kecil) bila peran itu belum pernah menyimpan izinnya:
 
-| Role name | Default action permissions |
+| Nama peran | Izin aksi bawaan |
 | --- | --- |
-| Owner, Admin | All of them |
-| Inventory | Manage items, mark 86, edit recipes, dispatch and receive stock transfers, mark sold out without approval |
-| Anything else (including Kasir and custom roles) | None |
+| Owner, Admin | Semuanya |
+| Inventory | Mengelola item, menandai 86, mengubah resep, mengirim dan menerima transfer stok, menandai habis (sold out) tanpa persetujuan |
+| Lainnya (termasuk Kasir dan peran kustom) | Tidak ada |
 
-When you open **Edit**, the checkboxes show the permissions in effect. Saving the form stores that list explicitly from then on, so later changes to the built-in default no longer apply to that role.
+Saat Anda membuka **Edit**, kotak centang menampilkan izin yang berlaku. Menyimpan formulir menyimpan daftar itu secara eksplisit sejak saat itu, sehingga perubahan pada izin bawaan di kemudian hari tidak lagi berlaku untuk peran itu.
 
 <Note>
-  ASSUMPTION: the menu keys of the four system roles reflect the migration that created them and any later migrations that added keys (for example `dashboard` and `sales` for cashiers). Open **Edit** on each to see what it holds on your installation.
+  ASUMSI: kunci menu keempat peran sistem mencerminkan migrasi yang membuatnya dan migrasi berikutnya yang menambah kunci (misalnya `dashboard` dan `sales` untuk kasir). Buka **Edit** pada masing-masing untuk melihat isinya di instalasi Anda.
 </Note>
 
-## Discount limit
+## Batas diskon
 
-Each role has a discount limit, in percent, that its users may give without approval. Above the limit, someone with the **Approve a discount above the role's limit** permission must approve. If no limit is stored: Owner and Admin default to 100 percent, every other role to 0 percent (every discount needs approval).
+Setiap peran punya batas diskon, dalam persen, yang boleh diberikan penggunanya tanpa persetujuan. Di atas batas, seseorang dengan izin **Menyetujui diskon di atas batas peran** harus menyetujui. Bila tidak ada batas tersimpan: Owner dan Admin bawaannya 100 persen, setiap peran lain 0 persen (setiap diskon memerlukan persetujuan).
 
 <Warning>
-  The role form on the web has no field for the discount limit, and the create and update requests do not accept it. ASSUMPTION: it is set outside this screen (for example by seeding or directly in the database). Check with your installer before relying on a non-zero limit for a custom role.
+  Formulir peran di web tidak punya kolom untuk batas diskon, dan permintaan buat dan ubah tidak menerimanya. ASUMSI: batas ini diatur di luar layar ini (misalnya lewat seeding atau langsung di database). Tanyakan kepada pemasang Anda sebelum mengandalkan batas bukan nol untuk peran kustom.
 </Warning>
 
-## Sees all outlets
+## Melihat semua outlet
 
-Shown only when the organisation has more than one outlet and **you** can see all outlets. Owner and Admin default roles always have it on, so the checkbox is hidden for them. Rules:
+Hanya tampil bila organisasi punya lebih dari satu outlet dan **Anda** dapat melihat semua outlet. Peran bawaan Owner dan Admin selalu mengaktifkannya, sehingga kotak centangnya disembunyikan untuk mereka. Aturan:
 
-- A user who does not see all outlets cannot turn this on or off (403, **This outlet is not one you are allowed to access.**).
-- It cannot be turned off for Owner or Admin (409, **Owners and admins always see every outlet, so they are not assigned to particular outlets.**).
-- A change is written to the [Activity log](/insight/activity-log) as `role_outlet_scope_changed`.
+- Pengguna yang tidak melihat semua outlet tidak dapat mengaktifkan atau menonaktifkan ini (403, **Outlet ini tidak termasuk outlet yang boleh Anda akses.**).
+- Tidak dapat dimatikan untuk Owner atau Admin (409, **Owner dan Admin selalu melihat semua outlet, jadi tidak perlu ditugaskan ke outlet tertentu.**).
+- Perubahan ditulis ke [Log Aktivitas](/insight/activity-log) sebagai `role_outlet_scope_changed`.
 
-## Protected access: the last management role
+## Akses terlindungi: peran pengelola terakhir
 
-The store must always keep at least one role that has **both** the `users` and `roles` menus, so it cannot lose control of its own accounts and roles. The server refuses (409) any change that would leave none:
+Toko harus selalu memiliki setidaknya satu peran yang memegang **kedua** menu `users` dan `roles`, agar tidak kehilangan kendali atas akun dan perannya sendiri. Server menolak (409) setiap perubahan yang akan menyisakan nol:
 
-| Action | Message |
+| Tindakan | Pesan |
 | --- | --- |
-| Save a role so it no longer has both menus, when it is the last one | **Cannot save — this is the last role able to manage users & roles. The store would lose its own management access.** |
-| Delete the last such role | **Cannot delete — this is the last role able to manage users & roles. The store would lose its own management access.** |
+| Menyimpan peran sehingga tidak lagi punya kedua menu, bila itu yang terakhir | **Tidak bisa disimpan — ini peran terakhir yang bisa mengelola pengguna & peran. Toko akan kehilangan akses mengelola dirinya sendiri.** |
+| Menghapus peran terakhir seperti itu | **Tidak bisa dihapus — ini peran terakhir yang bisa mengelola pengguna & peran. Toko akan kehilangan akses mengelola dirinya sendiri.** |
 
-## Delete a role
+## Menghapus peran
 
-Click **Delete** and confirm **The role '\{name\}' will be deleted. This action cannot be undone.** You see **Role deleted.**
+Klik **Hapus** dan konfirmasi **Peran '\{name\}' akan dihapus. Tindakan ini tidak bisa dibatalkan.** Anda melihat **Peran dihapus.**
 
-A role cannot be deleted while active users hold it (409, **Cannot delete — still used by \{count\} user(s).**). Move those users to another role first in [Users](/settings/users). Inactive users do not block the deletion. The protected-access rule above is checked after this one.
+Peran tidak dapat dihapus selama pengguna aktif memegangnya (409, **Tidak bisa dihapus — masih dipakai oleh \{count\} pengguna.**). Pindahkan dulu pengguna itu ke peran lain di [Pengguna](/settings/users). Pengguna nonaktif tidak menghalangi penghapusan. Aturan akses terlindungi di atas diperiksa setelah aturan ini.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message or symptom | Cause | Fix |
+| Pesan atau gejala | Penyebab | Solusi |
 | --- | --- | --- |
-| Field error under **Role name** | Empty, over 50 characters, or already used (422). | Choose a unique name. |
-| Error under **Menu access** | An unknown menu key was sent (422). | Reload the page and try again. |
-| **Cannot save — this is the last role able to manage users & roles.** | Removing `users` or `roles` from the only role that has both. | Keep both menus, or give another role both first. |
-| **Cannot delete — still used by N user(s).** | Active users hold the role. | Reassign them, then delete. |
-| **Could not load the permission list.** | The permission catalog request failed. | Use the retry link. You can still save, but the action permissions would be sent as shown. |
-| A user cannot open a screen | The role lacks the menu key (403). | Tick the menu on the role. |
-| A user sees the screen but a button is missing | The role lacks the action permission. | Tick the permission on the role. |
+| Galat kolom di bawah **Nama peran** | Kosong, lebih dari 50 karakter, atau sudah dipakai (422). | Pilih nama yang unik. |
+| Galat di bawah **Akses menu** | Kunci menu yang tidak dikenal terkirim (422): **Kunci menu tidak dikenal.** | Muat ulang halaman dan coba lagi. |
+| **Tidak bisa disimpan — ini peran terakhir yang bisa mengelola pengguna & peran.** | Mencabut `users` atau `roles` dari satu-satunya peran yang memiliki keduanya. | Pertahankan kedua menu, atau berikan keduanya dulu kepada peran lain. |
+| **Tidak bisa dihapus — masih dipakai oleh N pengguna.** | Pengguna aktif memegang peran ini. | Pindahkan mereka, lalu hapus. |
+| **Gagal memuat daftar izin.** | Permintaan katalog izin gagal. | Gunakan tautan coba lagi. Anda tetap dapat menyimpan, tetapi izin aksi akan dikirim seperti yang ditampilkan. |
+| Pengguna tidak dapat membuka sebuah layar | Peran tidak punya kunci menunya (403). | Centang menu itu pada peran. |
+| Pengguna melihat layar tetapi sebuah tombol tidak ada | Peran tidak punya izin aksinya. | Centang izin itu pada peran. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Roles and permissions" href="/concepts/roles-and-permissions">How menus and permissions work together.</Card>
-  <Card title="Users" href="/settings/users">Assign roles to people.</Card>
-  <Card title="Outlets" href="/concepts/outlets">Outlet scope for roles and users.</Card>
-  <Card title="Activity log" href="/insight/activity-log">Role changes are recorded here.</Card>
+  <Card title="Peran dan izin" href="/concepts/roles-and-permissions">Cara menu dan izin bekerja bersama.</Card>
+  <Card title="Pengguna" href="/settings/users">Tetapkan peran kepada orang.</Card>
+  <Card title="Outlet" href="/concepts/outlets">Cakupan outlet untuk peran dan pengguna.</Card>
+  <Card title="Log aktivitas" href="/insight/activity-log">Perubahan peran dicatat di sini.</Card>
 </Columns>

@@ -1,53 +1,53 @@
 ---
-title: "Business day"
-description: "How BoothPOS assigns a business date to each sale, shift, and payment, and how to set the time zone and cut-off."
-keywords: ["business day", "business date", "cut-off", "timezone", "WIB", "reports"]
+title: "Hari bisnis"
+description: "Bagaimana BoothPOS menetapkan tanggal bisnis pada setiap penjualan, shift, dan pembayaran, serta cara mengatur zona waktu dan jam pergantian hari."
+keywords: ["hari bisnis", "tanggal bisnis", "jam pergantian", "zona waktu", "WIB", "laporan"]
 ---
 
-Reports, the Dashboard, and the Sales page group money by **business date**, not by the raw clock time of the record. This keeps a sale rung up at 02:00 on the night shift on the right trading day.
+Laporan, Dashboard, dan halaman Penjualan mengelompokkan uang menurut **tanggal bisnis**, bukan jam mentah pada catatan. Ini menjaga penjualan pukul 02:00 pada shift malam tetap berada di hari dagang yang benar.
 
-## How the business date is decided
+## Bagaimana tanggal bisnis ditentukan
 
-1. The sale's time is converted to the **store time zone**. The default is `Asia/Jakarta` (WIB).
-2. The **business-day cut-off** is subtracted. The default is `00:00`, so the business day matches the calendar day.
-3. The resulting calendar date is the business date.
+1. Waktu penjualan dikonversi ke **zona waktu toko**. Bawaannya `Asia/Jakarta` (WIB).
+2. **Jam pergantian hari bisnis** dikurangkan. Bawaannya `00:00`, sehingga hari bisnis sama dengan hari kalender.
+3. Tanggal kalender yang dihasilkan adalah tanggal bisnis.
 
-With a cut-off of `04:00`, a sale at 02:00 on 12 March counts toward 11 March. A sale at 04:00 counts toward 12 March.
+Dengan jam pergantian `04:00`, penjualan pukul 02:00 pada 12 Maret dihitung untuk 11 Maret. Penjualan pukul 04:00 dihitung untuk 12 Maret.
 
 <Info>
-  The business date is **stored on the record when it is created or completed**. Changing the time zone or cut-off later does not move past sales to different days.
+  Tanggal bisnis **disimpan pada catatan saat catatan itu dibuat atau diselesaikan**. Mengubah zona waktu atau jam pergantian di kemudian hari tidak memindahkan penjualan lama ke hari lain.
 </Info>
 
-## Set the time zone and cut-off
+## Mengatur zona waktu dan jam pergantian
 
-Owners and admins set these on **Settings → General → Business day**.
+Owner dan admin mengaturnya di **Pengaturan → General → Hari bisnis**.
 
-| Setting | Default | Rules |
+| Pengaturan | Bawaan | Aturan |
 | --- | --- | --- |
-| Store time zone | `Asia/Jakarta` | Pick from the list. A zone already saved but not in the common list is kept in the dropdown. |
-| Business-day cut-off | `00:00` | 24-hour `HH:MM`, from `00:00` to `23:59`. |
-| Cash difference tolerance | `5000` | Zero or more. Used when a shift closes. See [Cashier shifts](/operations/shifts). |
-| Device offline after (minutes) | `5` | Whole number from 1 to 1440. |
+| Zona waktu toko | `Asia/Jakarta` | Pilih dari daftar. Zona yang sudah tersimpan tetapi tidak ada di daftar umum tetap dipertahankan di dropdown. |
+| Jam pergantian hari bisnis | `00:00` | Format 24 jam `HH:MM`, dari `00:00` sampai `23:59`. |
+| Toleransi selisih kas (Rp) | `5000` | Nol atau lebih. Dipakai saat shift ditutup. Lihat [Shift kasir](/operations/shifts). |
+| Batas perangkat dianggap offline (menit) | `5` | Bilangan bulat dari 1 sampai 1440. |
 
-An invalid value shows an error under the field and nothing is saved. See [General settings](/settings/general) for the full screen.
+Nilai yang tidak valid menampilkan galat di bawah kolom dan tidak ada yang disimpan. Lihat [Pengaturan umum](/settings/general) untuk layar lengkapnya.
 
-## Where it matters
+## Di mana hal ini berpengaruh
 
-- **Reports and Dashboard** filter by a business-date **range**. A range includes the whole of each business day from its cut-off to the next cut-off. See [Reports](/insight/reports).
-- **Sales** lists transactions by business date. See [Sales](/operations/sales).
-- **Shifts** record the business date they opened on. See [Cashier shifts](/operations/shifts).
+- **Laporan dan Dashboard** menyaring menurut **rentang** tanggal bisnis. Rentang mencakup seluruh hari bisnis dari jam pergantiannya sampai jam pergantian berikutnya. Lihat [Laporan](/insight/reports).
+- **Penjualan** mencantumkan transaksi menurut tanggal bisnis. Lihat [Penjualan](/operations/sales).
+- **Shift** mencatat tanggal bisnis saat shift dibuka. Lihat [Shift kasir](/operations/shifts).
 
 <Tip>
-  If a late-night sale appears on an unexpected day, check the cut-off first. A cut-off of `00:00` splits the day at midnight local time.
+  Jika penjualan larut malam muncul di hari yang tidak terduga, periksa jam pergantian terlebih dahulu. Jam pergantian `00:00` membagi hari pada tengah malam waktu setempat.
 </Tip>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="General settings" icon="gear" href="/settings/general">
-    Change the time zone and cut-off.
+  <Card title="Pengaturan umum" icon="gear" href="/settings/general">
+    Ubah zona waktu dan jam pergantian.
   </Card>
-  <Card title="Reports" icon="chart-bar" href="/insight/reports">
-    Filter by business-date range.
+  <Card title="Laporan" icon="chart-bar" href="/insight/reports">
+    Saring menurut rentang tanggal bisnis.
   </Card>
 </Columns>

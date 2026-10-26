@@ -1,86 +1,86 @@
 ---
-title: "BoothPOS web app guide"
-description: "User documentation for the BoothPOS web app: point of sale, restaurant, inventory, purchasing, reports, and settings."
-keywords: ["boothpos", "pos", "documentation", "web app", "user guide"]
+title: "Panduan aplikasi web BoothPOS"
+description: "Dokumentasi pengguna aplikasi web BoothPOS: kasir (POS), restoran, inventori, pembelian, laporan, dan pengaturan."
+keywords: ["boothpos", "pos", "dokumentasi", "aplikasi web", "panduan pengguna", "user guide"]
 ---
 
-**Classification: INTERNAL**
+**Klasifikasi: INTERNAL**
 
-BoothPOS is a point-of-sale system installed locally for each store. The web app is the screen your team uses at the counter and in the back office. It runs in a browser on the same machine or shared server as the BoothPOS API, so it keeps working at an event venue with poor internet.
+BoothPOS adalah sistem kasir (point of sale) yang dipasang secara lokal di setiap toko. Aplikasi web adalah layar yang dipakai tim Anda di meja kasir dan di bagian belakang. Aplikasi ini berjalan di browser pada mesin atau server bersama yang sama dengan API BoothPOS, sehingga tetap berfungsi di lokasi acara dengan internet yang buruk.
 
-This guide covers every module of the web app that your store uses day to day. It is written for shopkeepers, cashiers, inventory staff, owners, and admins.
+Panduan ini membahas setiap modul aplikasi web yang dipakai toko Anda sehari-hari. Panduan ini ditulis untuk pemilik toko, kasir, staf inventori, owner, dan admin.
 
 <Info>
-  What you see depends on your role. Modules your role cannot use are hidden, not greyed out. See [Roles and permissions](/concepts/roles-and-permissions).
+  Apa yang Anda lihat bergantung pada peran Anda. Modul yang tidak dapat dipakai peran Anda disembunyikan, bukan diredupkan. Lihat [Peran dan izin](/concepts/roles-and-permissions).
 </Info>
 
-## Start here
+## Mulai dari sini
 
 <Columns cols={2}>
-  <Card title="Sign in and activate" icon="right-to-bracket" href="/getting-started/sign-in">
-    Activate a new installation and sign in with your username.
+  <Card title="Masuk dan aktivasi" icon="right-to-bracket" href="/getting-started/sign-in">
+    Aktifkan instalasi baru dan masuk dengan username Anda.
   </Card>
-  <Card title="Ring up your first sale" icon="cash-register" href="/getting-started/first-sale">
-    Open a shift, build a cart, and take payment.
+  <Card title="Catat penjualan pertama Anda" icon="cash-register" href="/getting-started/first-sale">
+    Buka shift, susun keranjang, dan terima pembayaran.
   </Card>
-  <Card title="Navigation and layout" icon="compass" href="/concepts/navigation">
-    The rail, top bar, search, and notifications.
+  <Card title="Navigasi dan tata letak" icon="compass" href="/concepts/navigation">
+    Rail navigasi, bilah atas, pencarian, dan notifikasi.
   </Card>
-  <Card title="Roles and permissions" icon="shield-check" href="/concepts/roles-and-permissions">
-    Why you see the modules you see.
+  <Card title="Peran dan izin" icon="shield-check" href="/concepts/roles-and-permissions">
+    Mengapa Anda melihat modul yang Anda lihat.
   </Card>
 </Columns>
 
-## Modules
+## Modul
 
 <Columns cols={2}>
-  <Card title="Operations" icon="receipt" href="/operations/pos">
-    POS, cashier shifts, sales history, and the restaurant floor, kitchen, and setup.
+  <Card title="Operasional" icon="receipt" href="/operations/pos">
+    Kasir (POS), shift kasir, riwayat penjualan, serta lantai, dapur, dan pengaturan restoran.
   </Card>
-  <Card title="Inventory" icon="cube" href="/inventory/products">
-    Categories, products, stock, and transfers between outlets.
+  <Card title="Inventori" icon="cube" href="/inventory/products">
+    Kategori, produk, stok, dan transfer antar outlet.
   </Card>
-  <Card title="Purchasing" icon="bag-shopping" href="/purchasing/purchase-orders">
-    Vendors, materials, and purchase orders.
+  <Card title="Pembelian" icon="bag-shopping" href="/purchasing/purchase-orders">
+    Vendor, bahan baku, dan purchase order.
   </Card>
-  <Card title="Customers and outlets" icon="address-book" href="/people/customers">
-    Customer records and the outlets of your organisation.
+  <Card title="Pelanggan dan outlet" icon="address-book" href="/people/customers">
+    Data pelanggan dan outlet organisasi Anda.
   </Card>
-  <Card title="Insight" icon="chart-bar" href="/insight/reports">
-    Dashboard, reports, and the activity log.
+  <Card title="Wawasan" icon="chart-bar" href="/insight/reports">
+    Dashboard, laporan, dan log aktivitas.
   </Card>
-  <Card title="Settings" icon="gear" href="/settings/general">
-    Store settings, payment channels, users, roles, and your profile.
+  <Card title="Pengaturan" icon="gear" href="/settings/general">
+    Pengaturan toko, kanal pembayaran, pengguna, peran, dan profil Anda.
   </Card>
 </Columns>
 
-## Android app
+## Aplikasi Android
 
 <Columns cols={2}>
-  <Card title="Android POS overview" icon="tablet" href="/android/overview">
-    The tablet app for counter, table, and payment work. Its screens are in Indonesian.
+  <Card title="Ikhtisar Android POS" icon="tablet" href="/android/overview">
+    Aplikasi tablet untuk kerja di counter, meja, dan pembayaran. Layarnya berbahasa Indonesia.
   </Card>
-  <Card title="Set up a tablet" icon="gear" href="/android/setup">
-    Connect a tablet to your server and register it as a terminal.
+  <Card title="Menyiapkan tablet" icon="gear" href="/android/setup">
+    Hubungkan tablet ke server Anda dan daftarkan sebagai terminal.
   </Card>
 </Columns>
 
-## Key ideas
+## Gagasan utama
 
 <AccordionGroup>
-  <Accordion title="Outlets">
-    One organisation can run one or more outlets. Each sale, shift, table, and stock balance belongs to one outlet. See [Outlets](/concepts/outlets).
+  <Accordion title="Outlet">
+    Satu organisasi dapat menjalankan satu outlet atau lebih. Setiap penjualan, shift, meja, dan saldo stok dimiliki satu outlet. Lihat [Outlet](/concepts/outlets).
   </Accordion>
-  <Accordion title="DEMO and LIVE">
-    Two separate data sets share one installation. The top bar badge always shows the active one. See [DEMO and LIVE mode](/concepts/demo-and-live-mode).
+  <Accordion title="DEMO dan LIVE">
+    Dua set data terpisah berbagi satu instalasi. Lencana di bilah atas selalu menunjukkan set yang aktif. Lihat [Mode DEMO dan LIVE](/concepts/demo-and-live-mode).
   </Accordion>
-  <Accordion title="Business day">
-    Reports group by business date, set by your store time zone and cut-off. See [Business day](/concepts/business-day).
+  <Accordion title="Hari bisnis">
+    Laporan dikelompokkan menurut tanggal bisnis, yang ditentukan oleh zona waktu toko dan jam pergantian hari. Lihat [Hari bisnis](/concepts/business-day).
   </Accordion>
 </AccordionGroup>
 
-## What this guide does not cover
+## Yang tidak dibahas panduan ini
 
-- Provider-side administration (Companies, Business Types, Licenses, Invoices).
-- Events and pre-orders. These modules were removed and old addresses redirect to the Dashboard.
-- Developer topics such as installation, Docker, and the API. See the repository `docs/RUNBOOK.md` and `docs/openapi-pos-mvp.yaml`.
+- Administrasi sisi penyedia (Company, Jenis Bisnis, Lisensi, Invoice).
+- Event dan pre-order. Modul ini sudah dihapus dan alamat lamanya dialihkan ke Dashboard.
+- Topik pengembang seperti instalasi, Docker, dan API. Lihat `docs/RUNBOOK.md` dan `docs/openapi-pos-mvp.yaml` di repositori.

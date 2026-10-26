@@ -1,172 +1,172 @@
 ---
-title: "Stock transfers"
-description: "Move items and materials between outlets: dispatch a transfer, receive it with any shortfall, cancel it while in transit, and review discrepancies."
-keywords: ["pos", "stock transfer", "transfer", "dispatch", "receive", "in transit", "discrepancy", "outlet"]
+title: "Transfer stok"
+description: "Pindahkan item dan bahan antar outlet: kirim transfer, terima dengan selisih bila ada, batalkan selagi dalam perjalanan, dan tinjau selisih."
+keywords: ["pos", "transfer stok", "stock transfer", "transfer", "kirim", "dispatch", "terima", "receive", "dalam perjalanan", "in transit", "selisih", "discrepancy", "outlet"]
 ---
 
-**Classification: INTERNAL**
+**Klasifikasi: INTERNAL**
 
-A stock transfer moves goods from one outlet to another in two steps. The source outlet **dispatches** the transfer, and the goods leave its stock immediately and stay **in transit**. The destination outlet then **receives** it, and the received quantity is added to its stock. A transfer that has not been received can be **cancelled**, which returns the goods to the source outlet.
+Transfer stok memindahkan barang dari satu outlet ke outlet lain dalam dua langkah. Outlet asal **mengirim** transfer, dan barang langsung keluar dari stoknya serta berstatus **dalam perjalanan**. Outlet tujuan kemudian **menerimanya**, dan jumlah yang diterima ditambahkan ke stoknya. Transfer yang belum diterima dapat **dibatalkan**, yang mengembalikan barang ke outlet asal.
 
-Transfers exist only when your installation has more than one outlet. With a single outlet the page shows "Transfers are available when there is more than one outlet."
+Transfer hanya ada bila instalasi Anda memiliki lebih dari satu outlet. Dengan satu outlet halaman menampilkan "Transfer tersedia bila ada lebih dari satu outlet."
 
-## Before you start
+## Sebelum mulai
 
-- You need the **Stock** menu (menu key `stock`) to open the page. Open it from **Stock transfers** in the Stock page header, which appears only with more than one outlet.
-- Each action needs its own permission, set per role under [Roles](/settings/roles). The server checks them again.
+- Anda memerlukan menu **Stok** (kunci menu `stock`) untuk membuka halaman. Buka dari **Transfer stok** di header halaman Stok, yang muncul hanya bila ada lebih dari satu outlet.
+- Setiap aksi memerlukan izinnya sendiri, diatur per peran di [Peran](/settings/roles). Server memeriksanya lagi.
 
-| Action | Permission | Also needs |
+| Aksi | Izin | Juga memerlukan |
 | --- | --- | --- |
-| Create and dispatch a transfer | `stock.transfer.dispatch` | The source outlet must be one you may access. |
-| Receive a transfer | `stock.transfer.receive` | You must be assigned to the **destination** outlet. |
-| Cancel a transfer | `stock.transfer.cancel` | You must be assigned to the **source** outlet. |
+| Membuat dan mengirim transfer | `stock.transfer.dispatch` | Outlet asal harus outlet yang boleh Anda akses. |
+| Menerima transfer | `stock.transfer.receive` | Anda harus ditugaskan ke outlet **tujuan**. |
+| Membatalkan transfer | `stock.transfer.cancel` | Anda harus ditugaskan ke outlet **asal**. |
 
-- Owner and Admin have all three permissions. The built-in Inventory role can dispatch and receive, but cannot cancel.
-- Users with access to all outlets can act on any outlet. Other users see and act only on transfers where the source or the destination is an outlet assigned to them. The outlet selected in the top bar narrows the list further. See [Outlets](/concepts/outlets).
-- Buttons are hidden when you lack the right. **New transfer** needs the dispatch permission. **Receive** and **Cancel** appear in a transfer's detail only when the server says you may use them, and only while the transfer is in transit.
+- Owner dan Admin memiliki ketiga izin. Peran Inventory bawaan dapat mengirim dan menerima, tetapi tidak dapat membatalkan.
+- Pengguna dengan akses ke semua outlet dapat bertindak pada outlet mana pun. Pengguna lain hanya melihat dan bertindak pada transfer yang outlet asal atau tujuannya adalah outlet yang ditugaskan kepada mereka. Outlet yang dipilih di bilah atas mempersempit daftar lebih jauh. Lihat [Outlet](/concepts/outlets).
+- Tombol disembunyikan bila Anda tidak memiliki haknya. **Transfer baru** memerlukan izin kirim. **Terima** dan **Batalkan** muncul di detail transfer hanya bila server menyatakan Anda boleh memakainya, dan hanya selagi transfer dalam perjalanan.
 
-## The transfer list
+## Daftar transfer
 
-The page has two tabs.
+Halaman memiliki dua tab.
 
-**All transfers** lists transfers 25 per page, newest dispatch first.
+**Semua transfer** mencantumkan transfer 25 per halaman, pengiriman terbaru lebih dulu.
 
-| Column | What it shows |
+| Kolom | Isinya |
 | --- | --- |
-| Number | The transfer number, in the form `TRF-YYYYMMDD-0001`. Select it to open the detail. |
-| Route | Source outlet code, an arrow, then the destination outlet code. |
-| Status | **In transit**, **Received** or **Cancelled**. A red **Discrepancy** label is added when the received quantity was lower than the sent quantity. |
-| Lines | How many item or material lines the transfer has. |
-| Dispatched | Date and time of dispatch. |
+| Nomor | Nomor transfer, berbentuk `TRF-YYYYMMDD-0001`. Pilih untuk membuka detail. |
+| Rute | Kode outlet asal, tanda panah, lalu kode outlet tujuan. |
+| Status | **Dalam perjalanan**, **Diterima**, atau **Dibatalkan**. Label merah **Ada selisih** ditambahkan bila jumlah yang diterima lebih rendah daripada yang dikirim. |
+| Baris | Berapa banyak baris item atau bahan dalam transfer. |
+| Dikirim | Tanggal dan jam pengiriman. |
 
-Filters: **Status** (All statuses, In transit, Received, Cancelled) and **Outlet** (matches transfers where that outlet is the source or the destination).
+Filter: **Status** (Semua status, Dalam perjalanan, Diterima, Dibatalkan) dan **Outlet** (mencocokkan transfer yang outlet tersebut adalah asal atau tujuannya).
 
-**Discrepancies** lists each line that was received short: Number, Item, Shortfall (shown as "shortfall / sent quantity") and Note (the reason entered at receiving). If there are none you see "No discrepancies."
+**Selisih** mencantumkan setiap baris yang diterima kurang: Nomor, Item, Selisih (ditampilkan sebagai "selisih / jumlah dikirim"), dan Keterangan (alasan yang dimasukkan saat penerimaan). Bila tidak ada, Anda melihat "Tidak ada selisih."
 
-## Create and dispatch a transfer
+## Membuat dan mengirim transfer
 
 <Steps>
-  <Step title="Open the drawer">
-    Select **New transfer** (permission `stock.transfer.dispatch`).
+  <Step title="Buka panel">
+    Pilih **Transfer baru** (izin `stock.transfer.dispatch`).
   </Step>
-  <Step title="Choose the route">
-    Pick **From outlet**. It defaults to the outlet selected in the top bar. Then pick **To outlet**. The destination list excludes the source. The two must differ, and both must be active outlets. Add an optional **Note** of up to 255 characters.
+  <Step title="Pilih rute">
+    Pilih **Dari outlet**. Bawaannya adalah outlet yang dipilih di bilah atas. Lalu pilih **Ke outlet**. Daftar tujuan tidak menyertakan outlet asal. Keduanya harus berbeda, dan keduanya harus outlet aktif. Tambahkan **Catatan** opsional hingga 255 karakter.
   </Step>
-  <Step title="Add lines">
-    Choose **Kind**: **Item** (a variant) or **Material**. Type in **Search item / material**. Search is disabled until a source outlet is chosen. Results show "\{n\} available", which is the quantity at the **source outlet**. Pick a result to add a line.
+  <Step title="Tambah baris">
+    Pilih **Jenis**: **Item** (sebuah varian) atau **Bahan**. Ketik di **Cari item / bahan**. Pencarian nonaktif sampai outlet asal dipilih. Hasil menampilkan "tersedia \{n\}", yaitu jumlah di **outlet asal**. Pilih sebuah hasil untuk menambah baris.
   </Step>
-  <Step title="Enter quantities">
-    Type the quantity for each line. A quantity must be above zero and cannot exceed the available quantity. Items must be whole numbers. Materials can have decimals (up to 3 places). Remove a line with **Delete**.
+  <Step title="Masukkan jumlah">
+    Ketik jumlah untuk setiap baris. Jumlah harus di atas nol dan tidak boleh melebihi jumlah yang tersedia. Item harus bilangan bulat. Bahan dapat berdesimal (hingga 3 angka di belakang koma). Hapus baris dengan **Hapus**.
   </Step>
-  <Step title="Dispatch">
-    Select **Dispatch transfer**. The button works only when the route, at least one line and valid quantities are set. You see "Transfer \{number\} dispatched".
+  <Step title="Kirim">
+    Pilih **Kirim transfer**. Tombol hanya berfungsi bila rute, setidaknya satu baris, dan jumlah yang valid sudah diatur. Anda melihat "Transfer \{number\} dikirim".
   </Step>
 </Steps>
 
-If you change **From outlet**, the lines are cleared, because availability belongs to the source outlet.
+Bila Anda mengganti **Dari outlet**, baris dikosongkan, karena ketersediaan milik outlet asal.
 
-When you dispatch, the stock of each line is taken from the source outlet at once, with a ledger entry that references the transfer number. The goods are then in neither outlet's stock until the transfer is received or cancelled.
+Saat Anda mengirim, stok setiap baris langsung diambil dari outlet asal, dengan entri buku besar yang merujuk nomor transfer. Barang kemudian tidak berada di stok outlet mana pun sampai transfer diterima atau dibatalkan.
 
-The drawer sends a unique reference when it opens. If your connection drops and the same request is sent again, the server returns the transfer that already exists instead of creating a second one.
+Panel mengirim referensi unik saat dibuka. Bila koneksi Anda terputus dan permintaan yang sama dikirim lagi, server mengembalikan transfer yang sudah ada alih-alih membuat yang kedua.
 
-### Dispatch rules and errors
+### Aturan dan galat pengiriman
 
-| Message | Status | Cause |
+| Pesan | Status | Penyebab |
 | --- | --- | --- |
-| The source and destination outlets must be different. | 422 | Same outlet on both sides. |
-| Transfers to or from an inactive outlet are not allowed. | 422 | An outlet is inactive. |
-| Add at least one line. | 422 | No lines. |
-| Each line needs a kind (variant or material), an item and a quantity above zero. | 422 | A line is incomplete. |
-| The same item appears twice in this transfer. | 422 | Duplicate line. |
-| Item not found. | 422 | The item or material no longer exists. |
-| Item \{sku\} does not track stock, so it cannot be transferred. | 422 | The variant has **Track stock** turned off. |
-| Items are transferred in whole units. | 422 | A decimal quantity for an item. |
-| Insufficient stock for variant \{sku\}. Available: \{n\}. (\{outlet\}) | 422 | The source balance is lower than the quantity. |
-| This outlet is not one you are allowed to access. | 403 | You may not dispatch from that outlet. |
-| This client reference was already used for a different transfer. | 409 | A repeated request does not match the earlier transfer. |
+| Outlet asal dan tujuan harus berbeda. | 422 | Outlet yang sama di kedua sisi. |
+| Transfer dari atau ke outlet nonaktif tidak diizinkan. | 422 | Sebuah outlet nonaktif. |
+| Tambahkan minimal satu baris. | 422 | Tidak ada baris. |
+| Setiap baris butuh jenis (varian atau bahan), item, dan jumlah di atas nol. | 422 | Sebuah baris belum lengkap. |
+| Item yang sama muncul dua kali dalam transfer ini. | 422 | Baris ganda. |
+| Item tidak ditemukan. | 422 | Item atau bahan sudah tidak ada. |
+| Item \{sku\} tidak melacak stok, jadi tidak bisa ditransfer. | 422 | Varian memiliki **Lacak stok** yang dimatikan. |
+| Item ditransfer dalam jumlah bulat. | 422 | Jumlah desimal untuk sebuah item. |
+| Stok tidak mencukupi untuk varian \{sku\}. Tersedia: \{n\}. (\{outlet\}) | 422 | Saldo asal lebih rendah daripada jumlah. |
+| Outlet ini tidak termasuk outlet yang boleh Anda akses. | 403 | Anda tidak boleh mengirim dari outlet itu. |
+| Referensi klien ini sudah dipakai untuk transfer lain. | 409 | Permintaan berulang tidak cocok dengan transfer sebelumnya. |
 
-## Review a transfer
+## Meninjau transfer
 
-Select a number to open the detail. It shows the status, the route with outlet names, the note, and a table of lines with **Item**, **Sent**, **Received** and **Note**.
+Pilih sebuah nomor untuk membuka detail. Detail menampilkan status, rute dengan nama outlet, catatan, dan tabel baris dengan **Item**, **Dikirim**, **Diterima**, dan **Keterangan**.
 
-- A line shows "Not sold at the destination — add it to the menu there to sell it." when the destination outlet does not carry that item. The stock still arrives. Set the item up for that outlet on [Product detail](/inventory/product-detail) to sell it.
-- The steps list who dispatched, received or cancelled the transfer, and when.
-- **Stock ledger trail** (expandable) lists the stock movements the transfer caused: outlet code, movement type, quantity and balance before and after. The same movements appear in the [Stock](/inventory/stock) ledger with the transfer number in the Reference column.
+- Sebuah baris menampilkan "Tidak dijual di outlet tujuan — tambahkan ke menu di sana agar bisa dijual." bila outlet tujuan tidak membawa item itu. Stok tetap tiba. Atur item untuk outlet itu di [Detail produk](/inventory/product-detail) agar dapat dijual.
+- Daftar langkah menunjukkan siapa yang mengirim, menerima, atau membatalkan transfer, dan kapan.
+- **Jejak buku besar stok** (dapat dibuka) mencantumkan pergerakan stok yang disebabkan transfer: kode outlet, tipe pergerakan, jumlah, dan saldo sebelum dan sesudah. Pergerakan yang sama muncul di buku besar [Stok](/inventory/stock) dengan nomor transfer di kolom Referensi.
 
-## Receive a transfer
+## Menerima transfer
 
 <Steps>
-  <Step title="Open the transfer">
-    Open a transfer that is **In transit**. Select **Receive** (permission `stock.transfer.receive`, and you must be assigned to the destination outlet).
+  <Step title="Buka transfer">
+    Buka transfer yang **Dalam perjalanan**. Pilih **Terima** (izin `stock.transfer.receive`, dan Anda harus ditugaskan ke outlet tujuan).
   </Step>
-  <Step title="Enter what arrived">
-    Each line starts with the sent quantity. Change **Quantity received** to what actually arrived. You cannot enter more than was sent. If you enter less, **Reason for the shortfall** appears and is required (up to 255 characters).
+  <Step title="Masukkan yang tiba">
+    Setiap baris dimulai dengan jumlah yang dikirim. Ubah **Jumlah diterima** menjadi yang benar-benar tiba. Anda tidak dapat memasukkan lebih dari yang dikirim. Bila Anda memasukkan lebih sedikit, **Alasan selisih** muncul dan wajib diisi (hingga 255 karakter).
   </Step>
-  <Step title="Confirm">
-    Select **Receive**. You see "Transfer \{number\} received".
+  <Step title="Konfirmasi">
+    Pilih **Terima**. Anda melihat "Transfer \{number\} diterima".
   </Step>
 </Steps>
 
-What happens:
+Yang terjadi:
 
-- The received quantity of each line is added to the destination outlet's stock. A line received as 0 adds nothing.
-- The shortfall is **not** returned to the source and is not added anywhere. It stays recorded on the line as a discrepancy with your reason, and the transfer gets the **Discrepancy** label.
-- The transfer becomes **Received**. Quantities are final after that.
+- Jumlah yang diterima setiap baris ditambahkan ke stok outlet tujuan. Baris yang diterima 0 tidak menambahkan apa pun.
+- Selisihnya **tidak** dikembalikan ke asal dan tidak ditambahkan ke mana pun. Selisih tetap tercatat pada baris sebagai selisih dengan alasan Anda, dan transfer mendapat label **Ada selisih**.
+- Transfer menjadi **Diterima**. Setelah itu jumlahnya final.
 
-| Message | Status | Cause |
+| Pesan | Status | Penyebab |
 | --- | --- | --- |
-| You cannot receive more than was sent. | 422 | A quantity above the sent quantity. |
-| A reason is required when less than was sent is received. | 422 | A short line has no reason. |
-| This transfer has already been received. | 409 | Someone received it first. |
-| This transfer is no longer in transit. | 409 | It was cancelled. |
-| This outlet is not one you are allowed to access. | 403 | You are not assigned to the destination outlet. |
+| Tidak bisa menerima lebih dari yang dikirim. | 422 | Jumlah di atas jumlah yang dikirim. |
+| Alasan wajib bila yang diterima kurang dari yang dikirim. | 422 | Baris yang kurang tidak punya alasan. |
+| Transfer ini sudah diterima. | 409 | Orang lain menerimanya lebih dulu. |
+| Transfer ini tidak lagi dalam perjalanan. | 409 | Transfer dibatalkan. |
+| Outlet ini tidak termasuk outlet yang boleh Anda akses. | 403 | Anda tidak ditugaskan ke outlet tujuan. |
 
-## Cancel a transfer
+## Membatalkan transfer
 
 <Steps>
-  <Step title="Open the transfer">
-    Open a transfer that is **In transit** and select **Cancel** (permission `stock.transfer.cancel`, and you must be assigned to the source outlet).
+  <Step title="Buka transfer">
+    Buka transfer yang **Dalam perjalanan** dan pilih **Batalkan** (izin `stock.transfer.cancel`, dan Anda harus ditugaskan ke outlet asal).
   </Step>
-  <Step title="Confirm">
-    The dialog "Cancel the transfer?" says "The goods of transfer \{number\} return to the source outlet." Select **Cancel** to confirm. You see "Transfer \{number\} cancelled".
+  <Step title="Konfirmasi">
+    Dialog "Batalkan transfer?" menyatakan "Barang transfer \{number\} kembali ke outlet asal." Pilih **Batalkan** untuk mengonfirmasi. Anda melihat "Transfer \{number\} dibatalkan".
   </Step>
 </Steps>
 
-The full sent quantity goes back to the source outlet's stock, with a ledger entry. Only an in-transit transfer can be cancelled. A received or already cancelled transfer returns 409 ("This transfer is no longer in transit." or "This transfer has already been received."), and the list reloads.
+Seluruh jumlah yang dikirim kembali ke stok outlet asal, dengan entri buku besar. Hanya transfer yang dalam perjalanan yang dapat dibatalkan. Transfer yang sudah diterima atau sudah dibatalkan mengembalikan 409 ("Transfer ini tidak lagi dalam perjalanan." atau "Transfer ini sudah diterima."), dan daftar dimuat ulang.
 
-## Troubleshooting
+## Pemecahan masalah
 
 <AccordionGroup>
-  <Accordion title="I do not see the Stock transfers button or the page says transfers are unavailable">
-    Your installation has a single outlet, or only one outlet is visible to your user.
+  <Accordion title="Saya tidak melihat tombol Transfer stok atau halaman menyatakan transfer tidak tersedia">
+    Instalasi Anda memiliki satu outlet, atau hanya satu outlet yang terlihat oleh pengguna Anda.
   </Accordion>
-  <Accordion title="New transfer is missing">
-    Your role lacks `stock.transfer.dispatch`. Ask an owner or admin to grant it.
+  <Accordion title="Transfer baru tidak ada">
+    Peran Anda tidak memiliki `stock.transfer.dispatch`. Minta owner atau admin memberikannya.
   </Accordion>
-  <Accordion title="Receive or Cancel is missing on an in-transit transfer">
-    You lack the permission, or you are not assigned to the destination outlet (receive) or the source outlet (cancel).
+  <Accordion title="Terima atau Batalkan tidak ada pada transfer yang dalam perjalanan">
+    Anda tidak memiliki izinnya, atau Anda tidak ditugaskan ke outlet tujuan (terima) atau outlet asal (batalkan).
   </Accordion>
-  <Accordion title="I cannot find the item I want to move">
-    Search uses the source outlet. The item must track stock, and materials are listed under the **Material** kind.
+  <Accordion title="Saya tidak dapat menemukan item yang ingin dipindahkan">
+    Pencarian memakai outlet asal. Item harus melacak stok, dan bahan dicantumkan di bawah jenis **Bahan**.
   </Accordion>
-  <Accordion title="The transfer list looks short">
-    The outlet selected in the top bar narrows the list. Choose all outlets, or use the Outlet filter on the page.
+  <Accordion title="Daftar transfer tampak pendek">
+    Outlet yang dipilih di bilah atas mempersempit daftar. Pilih semua outlet, atau gunakan filter Outlet di halaman.
   </Accordion>
 </AccordionGroup>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Stock" href="/inventory/stock">
-    The ledger shows every transfer movement.
+  <Card title="Stok" href="/inventory/stock">
+    Buku besar menampilkan setiap pergerakan transfer.
   </Card>
-  <Card title="Outlets" href="/concepts/outlets">
-    How outlet assignment limits what you can see and do.
+  <Card title="Outlet" href="/concepts/outlets">
+    Cara penugasan outlet membatasi apa yang dapat Anda lihat dan lakukan.
   </Card>
-  <Card title="Roles" href="/settings/roles">
-    Grant the dispatch, receive and cancel permissions.
+  <Card title="Peran" href="/settings/roles">
+    Berikan izin kirim, terima, dan batalkan.
   </Card>
-  <Card title="Materials" href="/purchasing/materials">
-    Materials can be transferred too.
+  <Card title="Bahan Baku" href="/purchasing/materials">
+    Bahan juga dapat ditransfer.
   </Card>
 </Columns>

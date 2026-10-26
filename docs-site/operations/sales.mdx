@@ -1,130 +1,130 @@
 ---
-title: "Sales"
-description: "Search and filter completed sales, open a transaction, settle or correct its payments, void it, reprint the receipt and export to Excel."
-keywords: ["sales", "transactions", "receipt", "void", "payment verification", "export", "filters", "table board"]
+title: "Penjualan"
+description: "Cari dan saring penjualan yang sudah selesai, buka transaksi, lunasi atau koreksi pembayarannya, void, cetak ulang struk, dan ekspor ke Excel."
+keywords: ["penjualan", "transaksi", "struk", "void", "verifikasi pembayaran", "ekspor", "filter", "papan meja"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-The **Sales** page (menu key `sales`) lists completed sales from the POS and from paid restaurant tabs. Use it to answer "what did we sell, to whom, paid how", to finish a part-paid sale, to verify transfer and QRIS payments, and to export. Pre-orders no longer exist and are not listed.
+Halaman **Penjualan** (menu key `sales`) mendaftar penjualan selesai dari POS dan dari tab restoran yang sudah dibayar. Gunakan untuk menjawab "apa yang kita jual, kepada siapa, dibayar bagaimana", untuk menyelesaikan penjualan yang baru dibayar sebagian, untuk memverifikasi pembayaran transfer dan QRIS, dan untuk ekspor. Pre-order sudah tidak ada dan tidak didaftar.
 
-## Before you start
+## Sebelum mulai
 
-- Your role needs the `sales` menu. A second view, **Tables**, also needs the `floor` menu.
-- Everyone with `sales` sees every transaction, not only their own.
-- Cost and margin appear only for users who also have the `reports` menu.
-- Dates are business dates (WIB), see [Business day](/concepts/business-day). The page opens on **today**.
-- In DEMO mode you see only DEMO sales, in LIVE only LIVE sales, see [DEMO and LIVE mode](/concepts/demo-and-live-mode).
+- Peran Anda harus memiliki menu `sales`. Tampilan kedua, **Meja**, juga membutuhkan menu `floor`.
+- Semua orang dengan `sales` melihat setiap transaksi, bukan hanya milik mereka sendiri.
+- Modal dan margin hanya muncul bagi pengguna yang juga memiliki menu `reports`.
+- Tanggal adalah tanggal bisnis (WIB), lihat [Hari bisnis](/concepts/business-day). Halaman terbuka pada **hari ini**.
+- Pada mode DEMO Anda hanya melihat penjualan DEMO, pada LIVE hanya penjualan LIVE, lihat [Mode DEMO dan LIVE](/concepts/demo-and-live-mode).
 
-## What the list shows
+## Yang ditampilkan daftar
 
-At the top, four tiles: **Transactions**, **Units sold**, **Gross sales**, **Net sales**, followed by a revenue breakdown (net, order-level discount, tax and gross). Figures come from the server for the date range you picked, not from the filters below.
+Di bagian atas ada empat ubin: **Transaksi**, **Unit terjual**, **Penjualan kotor**, **Penjualan bersih**, diikuti rincian pendapatan (net, diskon tingkat order, pajak, dan bruto). Angkanya berasal dari server untuk rentang tanggal yang Anda pilih, bukan dari filter di bawahnya.
 
-The **Transaction list** has one row per sale.
+**Daftar transaksi** memiliki satu baris per penjualan.
 
-| Column | Meaning |
+| Kolom | Arti |
 | --- | --- |
-| Select | Tick to include the row in an export or bulk verification. |
-| Transaction # | Opens the transaction detail. Struck through with a **Voided** pill, or a **Refunded** pill, when applicable. |
-| Customer | Customer name (click for a quick card) or **Walk-in**. |
-| Outlet | The home outlet(s) of the items sold. Click a name to search by it. |
-| Time | When the sale was made. |
-| Cashier | Who took the sale. |
-| Terminal | Tablet terminal name. Shown only when terminals exist. |
-| Sold at | Outlet where it was sold. Shown only with more than one outlet. |
-| Item | Number of item lines with the top two items. |
-| Payment | Payment methods, plus **Partially Paid** (with the balance), **Unpaid**, **Not verified** or **Rejected** pills. |
-| Margin | Margin amount and percent. Only with the `reports` menu. |
-| Total | Order total. |
+| Pilih | Centang untuk menyertakan baris dalam ekspor atau verifikasi massal. |
+| No. transaksi | Membuka detail transaksi. Dicoret dengan pil **Dibatalkan**, atau pil **Dikembalikan**, bila berlaku. |
+| Pelanggan | Nama pelanggan (klik untuk kartu singkat) atau **Walk-in**. |
+| Outlet | Outlet asal item yang dijual. Klik sebuah nama untuk mencari berdasarkan nama itu. |
+| Waktu | Kapan penjualan dibuat. |
+| Kasir | Siapa yang menerima penjualan. |
+| Terminal | Nama terminal tablet. Hanya tampil bila ada terminal. |
+| Dijual di | Outlet tempat penjualan terjadi. Hanya tampil bila ada lebih dari satu outlet. |
+| Item | Jumlah baris item beserta dua item teratas. |
+| Pembayaran | Metode pembayaran, ditambah pil **Dibayar sebagian** (beserta sisa tagihan), **Belum dibayar**, **Belum diverifikasi**, atau **Ditolak**. |
+| Margin | Nominal dan persen margin. Hanya dengan menu `reports`. |
+| Total | Total order. |
 
-Click a column header to sort. A summary line under the title shows how many rows are shown, units, amount, cash, non-cash, outstanding balance, margin and voided count, for the rows that match your filters. Voided rows are not counted.
+Klik judul kolom untuk mengurutkan. Satu baris ringkasan di bawah judul menampilkan jumlah baris yang tampil, unit, nominal, tunai, non-tunai, sisa tagihan, margin, dan jumlah transaksi batal, untuk baris yang cocok dengan filter Anda. Baris yang dibatalkan tidak dihitung.
 
-## Filters
+## Filter
 
-Filters apply instantly and are kept in the address bar, so a filtered view can be bookmarked or shared. **Reset** clears them.
+Filter berlaku seketika dan disimpan di bilah alamat, sehingga tampilan yang difilter bisa di-bookmark atau dibagikan. **Atur ulang filter** menghapusnya.
 
-| Filter | Options |
+| Filter | Pilihan |
 | --- | --- |
-| Search | Transaction number, customer, outlet or cashier. |
-| Date | **Today**, **Yesterday**, and **From date** / **To date**. Changing the dates reloads data from the server. |
-| Cashiers, Terminals, Shifts, Outlets, Payments | Multi-select. The shift list is built from the transactions in range. |
-| Payment status | Needs verification, Rejected, Verified. |
-| Settlement | Partially Paid, Unpaid, Fully Paid. |
-| Customer | Named customers, Walk-in only. |
-| Minimum / Maximum total | Amount range. |
-| Show voided transactions | Includes voided sales (shown dimmed). This also reloads from the server. |
+| Pencarian | Nomor transaksi, pelanggan, outlet, atau kasir. |
+| Tanggal | **Hari ini**, **Kemarin**, serta **Dari tanggal** / **Sampai tanggal**. Mengubah tanggal memuat ulang data dari server. |
+| Kasir, Terminal, Shift, Outlet, Pembayaran | Pilihan ganda. Daftar shift disusun dari transaksi dalam rentang. |
+| Status pembayaran | Perlu verifikasi, Ditolak, Terverifikasi. |
+| Pelunasan | Dibayar sebagian, Belum dibayar, Lunas. |
+| Pelanggan | Pelanggan terdaftar, Hanya walk-in. |
+| Total minimum / maksimum | Rentang nominal. |
+| Tampilkan transaksi batal | Menyertakan penjualan yang di-void (tampil redup). Ini juga memuat ulang dari server. |
 
-When exactly one shift is selected, a **Shift summary** strip shows opening cash, cash sales, expected cash, and counted cash and difference if it is closed.
+Bila tepat satu shift dipilih, bilah **Ringkasan shift** menampilkan kas awal, penjualan tunai, kas seharusnya (dengan label "Perkiraan kas di laci"), serta kas yang dihitung dan selisihnya bila shift sudah ditutup.
 
-## Open a transaction
+## Membuka transaksi
 
-Click the transaction number or **View details**. The dialog shows the time, customer, cashier, notes, every item (photo, name, variant, SKU, outlet, category, quantity, price, line discount), the totals and the payments. A voided sale shows a red banner with the reason.
+Klik nomor transaksi atau **Lihat detail**. Dialog menampilkan waktu, pelanggan, kasir, catatan, setiap item (foto, nama, varian, SKU, outlet, kategori, jumlah, harga, diskon baris), total, dan pembayaran. Penjualan yang di-void menampilkan banner merah beserta alasannya.
 
 <Steps>
-  <Step title="Add a payment to a part-paid sale">
-    When a balance remains and the sale is not voided, **Add Payment** (or **Add another payment**) is available to everyone. Choose the method, amount (not above the balance), optional channel, reference and proof, then **Save payment**.
+  <Step title="Tambah pembayaran pada penjualan yang dibayar sebagian">
+    Bila masih ada sisa tagihan dan penjualan belum di-void, **Tambah pembayaran** (atau **Tambah pembayaran lagi**) tersedia untuk semua orang. Pilih metode, nominal (tidak melebihi sisa tagihan), kanal opsional, referensi, dan bukti, lalu **Simpan pembayaran**.
   </Step>
-  <Step title="Verify a transfer or QRIS payment">
-    A non-cash payment starts as **Not verified**. Another person, not the one who recorded it, clicks **Mark verified** and confirms. This is final: there is no way to undo it. Owners and admins can verify any payment.
+  <Step title="Verifikasi pembayaran transfer atau QRIS">
+    Pembayaran non-tunai dimulai sebagai **Belum terverifikasi**. Orang lain, bukan yang mencatatnya, mengklik **Tandai terverifikasi** dan mengonfirmasi. Ini final: tidak ada cara untuk membatalkannya. Owner dan admin bisa memverifikasi pembayaran mana pun.
   </Step>
-  <Step title="Attach or edit proof, reference and notes">
-    **Add confirmation** or **Edit confirmation** is available to owners, admins and the person who recorded the payment. At least one of proof, reference or notes is required. A new photo replaces the proof; the old file stays on record.
+  <Step title="Lampirkan atau ubah bukti, referensi, dan catatan">
+    **Tambah konfirmasi** atau **Ubah konfirmasi** tersedia untuk owner, admin, dan orang yang mencatat pembayaran. Minimal satu dari bukti, referensi, atau catatan wajib diisi. Foto baru menggantikan bukti; file lama tetap tersimpan sebagai arsip.
   </Step>
-  <Step title="Delete a payment (owner and admin)">
-    **Delete payment** removes a payment record; paid and balance are recalculated. It is blocked for voided sales and for cash payments that belong to an already closed shift.
+  <Step title="Hapus pembayaran (owner dan admin)">
+    **Hapus pembayaran** menghapus catatan pembayaran; jumlah terbayar dan sisa tagihan dihitung ulang. Penghapusan diblokir untuk penjualan yang di-void dan untuk pembayaran tunai milik shift yang sudah ditutup.
   </Step>
 </Steps>
 
-### Void a transaction
+### Void transaksi
 
-**Void transaction** (red button, bottom left) appears for completed sales to users whose role has the `settings` menu (owner and admin by default). Enter a **Reason for voiding** (required, up to 255 characters) and confirm. Items go back into stock, and the sale stops counting in reports. This cannot be undone.
+**Batalkan transaksi** (tombol merah, kiri bawah) muncul untuk penjualan selesai bagi pengguna yang perannya memiliki menu `settings` (owner dan admin secara bawaan). Isi **Alasan pembatalan** (wajib, maksimal 255 karakter) dan konfirmasi. Barang kembali ke stok, dan penjualan tidak lagi dihitung di laporan. Tindakan ini tidak bisa dibatalkan.
 
 <Warning>
-The server answers "Only owner/admin can void a transaction." (403) to users who are not allowed, and 409 if the sale was already voided, or is an open tab (use **Void tab** on the floor instead).
+Server menjawab "Hanya owner/admin yang dapat membatalkan transaksi." (403) kepada pengguna yang tidak diizinkan, dan 409 bila penjualan sudah di-void, atau berupa tab terbuka (gunakan **Batalkan tab** di lantai).
 </Warning>
 
-### Receipt
+### Struk
 
-**View receipt** opens the same receipt as after checkout, with image and PDF download. See [POS](/operations/pos). It is always in Indonesian.
+**Lihat struk** membuka struk yang sama seperti setelah checkout, dengan unduhan gambar dan PDF. Lihat [POS](/operations/pos). Struk selalu berbahasa Indonesia.
 
 <Note>
-Refunds and receipt reprints with approval exist on the server but have no button on the web Sales page. The **Refunded** pill only reflects a refund made elsewhere.
+Refund dan cetak ulang struk dengan persetujuan ada di server tetapi tidak memiliki tombol di halaman Penjualan web. Pil **Dikembalikan** hanya mencerminkan refund yang dilakukan di tempat lain.
 </Note>
 
-## Bulk verification and export
+## Verifikasi massal dan ekspor
 
-- Tick rows, then **Mark verified (N)** to verify the pending non-cash payments of all ticked transactions. The result lists how many were verified and how many were skipped and why: recorded by you, already verified, voided, or rejected.
-- **Export this view (N)** exports every row currently shown. When rows are ticked it becomes **Export selected (N)**. The file is `transaksi-penjualan.xlsx` and uses the date range and **Show voided** setting, with margin columns only for users with the `reports` menu.
-- **Select all** ticks every row in the current view.
+- Centang baris, lalu **Tandai terverifikasi (N)** untuk memverifikasi pembayaran non-tunai yang tertunda dari semua transaksi yang dicentang. Hasilnya mendaftar berapa yang terverifikasi dan berapa yang dilewati beserta alasannya: dicatat oleh Anda, sudah terverifikasi, di-void, atau ditolak.
+- **Ekspor tampilan ini (N)** mengekspor setiap baris yang sedang tampil. Bila ada baris yang dicentang, tombol menjadi **Ekspor terpilih (N)**. Berkasnya bernama `transaksi-penjualan.xlsx` dan memakai rentang tanggal serta pengaturan **Tampilkan transaksi batal**, dengan kolom margin hanya untuk pengguna dengan menu `reports`.
+- **Pilih semua** mencentang setiap baris pada tampilan saat ini.
 
-## Tables view
+## Tampilan Meja
 
-If you have the `floor` menu, the **Tables** toggle shows a live board of the restaurant floor instead of the list. It refreshes automatically (and pauses while the browser tab is hidden) and ignores the list filters.
+Bila Anda memiliki menu `floor`, tombol **Meja** menampilkan papan langsung lantai restoran sebagai pengganti daftar. Papan menyegarkan diri otomatis (dan berhenti sementara saat tab peramban tersembunyi) dan mengabaikan filter daftar.
 
-- Four tiles: open orders, occupied tables with occupancy percent, tables open for more than 45 minutes, and open order value.
-- Tiles are coloured: empty, occupied, partially paid, over 45 minutes, inactive. Click an occupied tile for the order detail panel, which shows the items with their kitchen status, the totals and payments. From there you can **Open in cashier screen**, or **View transaction** once the order is paid.
-- With no tables, the board links to [Restaurant setup](/operations/restaurant-setup) if you can open it.
+- Empat ubin: order terbuka, meja terisi beserta persen okupansi, meja yang terbuka lebih dari 45 menit, dan nilai order terbuka.
+- Ubin diberi warna: kosong, terisi, sebagian dibayar, lebih dari 45 menit, nonaktif. Klik ubin terisi untuk panel detail order, yang menampilkan item beserta status dapurnya, total, dan pembayaran. Dari sana Anda bisa **Buka di layar kasir**, atau **Lihat transaksi** setelah order dibayar.
+- Bila belum ada meja, papan menautkan ke [Pengaturan restoran](/operations/restaurant-setup) jika Anda bisa membukanya.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message or symptom | Cause | Fix |
+| Pesan atau gejala | Penyebab | Solusi |
 | --- | --- | --- |
-| No transactions match the filters. | Filters exclude everything. | **Reset**, or widen the dates. |
-| Failed to load. | The report request failed. | Use the retry link. |
-| The amount is higher than the remaining balance. You can pay at most X. (409) | Added payment exceeds the balance. | Lower the amount. |
-| This transaction is already fully paid. | Nothing left to pay. | None. |
-| Cash payments need an open cashier session. | You added a cash payment without an open shift. | Open a shift, see [Cashier session](/operations/shifts). |
-| This transaction is closed (handed over, cancelled or voided)... | Payments cannot be added or removed. | None. |
-| You recorded this payment, so someone else must verify it. (403) | Same person tried to verify. | Ask a colleague, owner or admin. |
-| Cash payments are verified when they are recorded. | You tried to verify cash. | None needed. |
-| This cash payment belongs to a cashier shift that is already closed... | Deleting a reconciled cash payment. | Not allowed. |
-| We could not confirm the payment was saved (connection problem). | Network or server error during Add Payment. | Check the payment history before trying again, to avoid a duplicate. |
+| Tidak ada transaksi yang cocok dengan filter. | Filter menyisihkan semuanya. | **Atur ulang filter**, atau perlebar tanggal. |
+| Gagal memuat. | Permintaan laporan gagal. | Gunakan tautan coba lagi. |
+| Jumlah melebihi sisa tagihan. Maksimal yang bisa dibayar X. (409) | Pembayaran yang ditambahkan melebihi sisa tagihan. | Kurangi nominal. |
+| Transaksi ini sudah lunas. | Tidak ada lagi yang harus dibayar. | Tidak ada. |
+| Pembayaran tunai membutuhkan sesi kasir yang terbuka. Buka sesi kasir dulu, lalu catat pembayarannya. | Anda menambah pembayaran tunai tanpa shift terbuka. | Buka shift, lihat [Sesi kasir](/operations/shifts). |
+| Transaksi ini sudah ditutup (diserahkan, dibatalkan, atau dibatalkan/void)... | Pembayaran tidak bisa ditambah atau dihapus. | Tidak ada. |
+| Anda yang mencatat pembayaran ini, jadi orang lain yang harus memverifikasinya. (403) | Orang yang sama mencoba memverifikasi. | Minta rekan, owner, atau admin. |
+| Pembayaran tunai sudah terverifikasi saat dicatat. | Anda mencoba memverifikasi pembayaran tunai. | Tidak perlu tindakan. |
+| Pembayaran tunai ini milik shift kasir yang sudah ditutup dan direkonsiliasi... | Menghapus pembayaran tunai yang sudah direkonsiliasi. | Tidak diizinkan. |
+| Hasil penyimpanan belum pasti (koneksi bermasalah). | Galat jaringan atau server saat Tambah pembayaran. | Periksa riwayat pembayaran sebelum mencoba lagi, agar tidak terjadi duplikat. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="POS" href="/operations/pos" icon="cart-shopping">Where these sales come from.</Card>
-  <Card title="Cashier session" href="/operations/shifts" icon="clock">Shift totals and cash differences.</Card>
-  <Card title="Reports" href="/insight/reports" icon="chart-line">Margin, profit and settlement reports.</Card>
-  <Card title="Customers" href="/people/customers" icon="users">Customer details and history.</Card>
+  <Card title="POS" href="/operations/pos" icon="cart-shopping">Asal penjualan ini.</Card>
+  <Card title="Sesi kasir" href="/operations/shifts" icon="clock">Total shift dan selisih kas.</Card>
+  <Card title="Laporan" href="/insight/reports" icon="chart-line">Laporan margin, laba, dan rekap.</Card>
+  <Card title="Pelanggan" href="/people/customers" icon="users">Detail dan riwayat pelanggan.</Card>
 </Columns>

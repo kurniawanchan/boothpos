@@ -1,101 +1,101 @@
 ---
-title: "Sign in with a PIN"
-description: "Choose your name on the tablet, enter your 6-digit PIN, understand lockouts, and switch user; admins set PINs on the web."
-keywords: ["android", "pin", "sign in", "roster", "lockout", "switch user", "initials", "set pin"]
+title: "Masuk dengan PIN"
+description: "Pilih nama Anda di tablet, masukkan PIN 6 digit, pahami penguncian, dan ganti pengguna; admin mengatur PIN di web."
+keywords: ["android", "pin", "masuk", "daftar staf", "penguncian", "ganti pengguna", "inisial", "atur pin"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-Staff sign in on the tablet with a **6-digit PIN**, not a username and password. The sign-in screen is **Siapa yang bertugas?** (who is on duty?). It lists the staff of the tablet's outlet, and you tap your name and enter your PIN.
+Staf masuk di tablet dengan **PIN 6 digit**, bukan username dan kata sandi. Layar masuknya bernama **Siapa yang bertugas?**. Layar ini menampilkan staf outlet tablet tersebut, lalu Anda mengetuk nama Anda dan memasukkan PIN.
 
-## Before you start
+## Sebelum mulai
 
-- The tablet has a saved outlet and terminal. See [Set up a terminal](/android/setup).
-- Your account is active, assigned to this outlet and has a PIN. A person without a PIN appears dimmed and cannot be chosen.
-- Owner and admin accounts do not appear in the list. They cannot sign in on the tablet, but they can approve actions with their PIN. See [Approvals](/android/approvals).
+- Tablet sudah menyimpan outlet dan terminal. Lihat [Siapkan terminal](/android/setup).
+- Akun Anda aktif, ditugaskan ke outlet ini, dan memiliki PIN. Orang tanpa PIN tampil redup dan tidak dapat dipilih.
+- Akun pemilik dan admin tidak muncul di daftar. Mereka tidak dapat masuk di tablet, tetapi dapat menyetujui aksi dengan PIN mereka. Lihat [Persetujuan](/android/approvals).
 
-## Sign in
+## Masuk
 
 <Steps>
-  <Step title="Choose your name">
-    Tap your name in the row of staff chips. Each chip shows your initials, name and role. The first person who can sign in is selected for you, so check that it is you.
+  <Step title="Pilih nama Anda">
+    Ketuk nama Anda pada deretan chip staf. Setiap chip menampilkan inisial, nama, dan peran Anda. Orang pertama yang dapat masuk dipilihkan otomatis, jadi pastikan itu Anda.
   </Step>
-  <Step title="Enter the PIN">
-    The prompt reads **PIN** followed by your name. Press the digits on the keypad. Six dots fill as you type. The backspace key removes the last digit.
+  <Step title="Masukkan PIN">
+    Pesan di layar berbunyi **PIN** diikuti nama Anda. Tekan angka di keypad. Enam titik terisi saat Anda mengetik. Tombol hapus (backspace) menghapus digit terakhir.
   </Step>
-  <Step title="Wait for the check">
-    The PIN is sent on the sixth digit. There is no confirm button. A correct PIN opens your first screen.
+  <Step title="Tunggu pemeriksaan">
+    PIN dikirim pada digit keenam. Tidak ada tombol konfirmasi. PIN yang benar membuka layar pertama Anda.
   </Step>
 </Steps>
 
-### Where you land
+### Layar tujuan
 
-| Role on the server | First screen |
+| Peran di server | Layar pertama |
 | --- | --- |
-| **Kasir** (cashier) with no open shift | **Buka shift**, to open a shift. See [Shifts](/android/shifts). |
-| **Kasir** with an open shift | **Meja** |
+| **Kasir** tanpa shift terbuka | **Buka shift**, untuk membuka shift. Lihat [Shift](/android/shifts). |
+| **Kasir** dengan shift terbuka | **Meja** |
 | **Waiter** | **Meja** |
-| Any other role (for example supervisor, manager) | **Order** |
+| Peran lain (misalnya supervisor, manajer) | **Order** |
 
 <Note>
-  Any role name the app does not recognise is treated as a cashier. ASSUMPTION: a custom role therefore lands on **Buka shift** or **Meja**, not **Order**.
+  Nama peran yang tidak dikenali aplikasi diperlakukan sebagai kasir. ASUMSI: peran kustom karenanya masuk ke **Buka shift** atau **Meja**, bukan **Order**.
 </Note>
 
-The app opens no order by itself on sign-in. An empty open tab would block closing the shift.
+Aplikasi tidak membuka pesanan apa pun sendiri saat masuk. Tab terbuka yang kosong akan menghalangi penutupan shift.
 
-## Screen controls
+## Kontrol di layar
 
-| Control | What it does |
+| Kontrol | Fungsi |
 | --- | --- |
-| Staff chip | Selects that person and clears any typed PIN and error. Dimmed chips are inert. |
-| Keypad | Enters digits, up to 6. Disabled while a check is running or when nobody has a PIN. |
-| **Ganti outlet / terminal** | Opens terminal setup. On tablet layout the gear icon in the left panel does the same. |
-| Connection chip | **Online**, **Offline** and so on, refreshed about every 10 seconds while this screen is shown. |
-| Left panel (tablet) | Outlet name, terminal name, clock and date. |
+| Chip staf | Memilih orang itu dan menghapus PIN serta galat yang sudah diketik. Chip yang redup tidak bereaksi. |
+| Keypad | Memasukkan digit, maksimal 6. Nonaktif saat pemeriksaan berjalan atau saat tidak ada yang punya PIN. |
+| **Ganti outlet / terminal** | Membuka penyiapan terminal. Pada tata letak tablet, ikon roda gigi di panel kiri melakukan hal yang sama. |
+| Chip koneksi | **Online**, **Offline**, dan seterusnya, disegarkan sekitar setiap 10 detik selama layar ini tampil. |
+| Panel kiri (tablet) | Nama outlet, nama terminal, jam, dan tanggal. |
 
-## Wrong PIN and lockout
+## PIN salah dan penguncian
 
-| What you see | Meaning |
+| Yang Anda lihat | Artinya |
 | --- | --- |
-| "PIN salah. Sisa \{n\} percobaan." | Wrong PIN, \{n\} tries left before the lock. |
-| "PIN terkunci karena salah 5 kali. Coba lagi dalam \{n\} menit." | Five wrong PINs in a row locked your PIN. The minutes come from the server and are rounded up. |
-| "PIN terkunci karena salah 5 kali. Coba lagi sebentar lagi." | Locked, but the server gave no end time. |
-| "Pilih nama Anda terlebih dahulu." | No name was selected when the sixth digit was entered. |
+| "PIN salah. Sisa \{n\} percobaan." | PIN salah, tersisa \{n\} percobaan sebelum terkunci. |
+| "PIN terkunci karena salah 5 kali. Coba lagi dalam \{n\} menit." | Lima kali PIN salah berturut-turut mengunci PIN Anda. Jumlah menit berasal dari server dan dibulatkan ke atas. |
+| "PIN terkunci karena salah 5 kali. Coba lagi sebentar lagi." | Terkunci, tetapi server tidak memberi waktu berakhir. |
+| "Pilih nama Anda terlebih dahulu." | Tidak ada nama terpilih saat digit keenam dimasukkan. |
 
-The dots clear after every failure. The lock is 5 minutes. It is per person and shared with approver PINs, so wrong approver PINs also count toward the same five. An admin can clear the lock early by resetting the PIN on the web.
+Titik-titik dikosongkan setiap kali gagal. Kuncinya berlaku 5 menit. Kunci ini per orang dan dipakai bersama dengan PIN penyetuju, sehingga PIN penyetuju yang salah juga dihitung ke dalam lima kali yang sama. Admin dapat membuka kunci lebih awal dengan mereset PIN di web.
 
-## Switch user
+## Ganti pengguna
 
-Tap the round **initials button** at the top right of any screen with the header. The app signs you out and returns to the PIN screen so the next person can sign in. The tablet does not close your shift when you do this.
+Ketuk **tombol inisial** bulat di kanan atas layar mana pun yang punya header. Aplikasi mengeluarkan Anda dan kembali ke layar PIN agar orang berikutnya dapat masuk. Tablet tidak menutup shift Anda saat ini dilakukan.
 
 <Warning>
-  Signing out does not cancel open tabs or close the shift. Open tabs stay on the server. Close the shift before you leave for the day.
+  Keluar tidak membatalkan tab yang terbuka dan tidak menutup shift. Tab terbuka tetap ada di server. Tutup shift sebelum Anda pulang.
 </Warning>
 
-Switching never needs a PIN, so any person at the tablet can press the button. Press it before you step away.
+Berganti pengguna tidak pernah meminta PIN, jadi siapa pun di tablet dapat menekan tombolnya. Tekan sebelum Anda meninggalkan tablet.
 
-## How admins set PINs
+## Cara admin mengatur PIN
 
-PINs are set on the web, never on the tablet. An owner or admin with access to the **Settings** menu opens [Users](/settings/users), then uses **Set PIN** or **Reset PIN** for the person. That screen can also suggest a random PIN. Setting a PIN clears a lock and signs the person out of any tablet session. The PIN is never shown again afterwards. See [Roles and permissions](/concepts/roles-and-permissions) for who holds the **Settings** menu.
+PIN diatur di web, tidak pernah di tablet. Pemilik atau admin yang punya akses ke menu **Pengaturan** membuka [Pengguna](/settings/users), lalu memakai **Atur PIN** atau **Reset PIN** untuk orang yang bersangkutan. Layar itu juga dapat menyarankan PIN acak. Mengatur PIN membuka kunci dan mengeluarkan orang tersebut dari sesi tablet mana pun. PIN tidak pernah ditampilkan lagi setelahnya. Lihat [Peran dan izin](/concepts/roles-and-permissions) untuk mengetahui siapa yang memegang menu **Pengaturan**.
 
-The empty-list message points the same way: "Belum ada staf dengan PIN di outlet ini. Atur PIN dari akun masing-masing atau minta admin."
+Pesan saat daftar kosong mengarah ke hal yang sama: "Belum ada staf dengan PIN di outlet ini. Atur PIN dari akun masing-masing atau minta admin."
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| "Belum ada staf dengan PIN di outlet ini…" | Nobody at the outlet has a PIN. | An admin sets PINs on [Users](/settings/users). |
-| My name is missing | The account is inactive, not assigned to this outlet, or is owner/admin. | Check the assignment on Users. Owner and admin never appear. |
-| My name is dimmed, **Belum ada PIN** | The account has no PIN. | Ask an admin to set one. |
-| Error card with **Coba lagi** instead of names | The staff list could not be loaded. | Check the connection and tap **Coba lagi**. |
-| "Terminal ini tidak berlaku lagi…" | The terminal was revoked. | Choose the outlet and terminal again. See [Set up a terminal](/android/setup). |
-| Error message with a network failure | The server cannot be reached. | See [Offline and sync](/android/offline-and-sync). |
+| "Belum ada staf dengan PIN di outlet ini…" | Tidak ada orang di outlet yang punya PIN. | Admin mengatur PIN di [Pengguna](/settings/users). |
+| Nama saya tidak ada | Akun nonaktif, tidak ditugaskan ke outlet ini, atau pemilik/admin. | Periksa penugasan di Pengguna. Pemilik dan admin tidak pernah muncul. |
+| Nama saya redup, **Belum ada PIN** | Akun belum punya PIN. | Minta admin mengaturnya. |
+| Kartu galat dengan **Coba lagi** menggantikan daftar nama | Daftar staf tidak dapat dimuat. | Periksa koneksi dan ketuk **Coba lagi**. |
+| "Terminal ini tidak berlaku lagi…" | Terminal telah dicabut. | Pilih outlet dan terminal lagi. Lihat [Siapkan terminal](/android/setup). |
+| Pesan galat berisi kegagalan jaringan | Server tidak dapat dijangkau. | Lihat [Offline dan sinkronisasi](/android/offline-and-sync). |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Set up a terminal" href="/android/setup" />
-  <Card title="Approvals" href="/android/approvals" />
-  <Card title="Users and PINs on the web" href="/settings/users" />
-  <Card title="Shifts" href="/android/shifts" />
+  <Card title="Siapkan terminal" href="/android/setup" />
+  <Card title="Persetujuan" href="/android/approvals" />
+  <Card title="Pengguna dan PIN di web" href="/settings/users" />
+  <Card title="Shift" href="/android/shifts" />
 </Columns>

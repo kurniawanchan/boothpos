@@ -1,156 +1,158 @@
 ---
-title: "Customers"
-description: "Keep a customer list, look up a customer's sales, and import or export customers with Excel."
-keywords: ["pos", "customers", "contacts", "import", "export", "xlsx", "transaction history"]
+title: "Pelanggan"
+description: "Simpan daftar pelanggan, lihat penjualan seorang pelanggan, dan impor atau ekspor pelanggan dengan Excel."
+keywords: ["pos", "pelanggan", "customers", "kontak", "contacts", "impor", "import", "ekspor", "export", "xlsx", "riwayat transaksi"]
 ---
 
-The **Customers** page holds the people you sell to: name, contact details and notes. You can attach a customer to a sale at the register, look up what a customer bought, and move the whole list in and out with an Excel file.
+Halaman **Pelanggan** menyimpan orang-orang tempat Anda menjual: nama, detail kontak, dan catatan. Anda dapat melampirkan pelanggan ke sebuah penjualan di kasir, melihat apa yang dibeli pelanggan, dan memindahkan seluruh daftar masuk dan keluar dengan berkas Excel.
 
-Customer records contain personal data (phone, email, address, social media handle). Share the export file only with people who need it, and delete it when you are done.
+Catatan pelanggan berisi data pribadi (telepon, email, alamat, akun media sosial). Bagikan berkas ekspor hanya kepada orang yang membutuhkannya, dan hapus setelah selesai.
 
-## Before you start
+## Sebelum mulai
 
-- Your role needs the **Customers** menu (`customers`). The default Cashier role has it, so cashiers can look up and add customers.
-- Any signed-in role can view, add and edit customers. Only **owner** and **admin** can delete.
-- The **Export .xlsx** and **Import** buttons show only for the owner, admin and inventory roles. See [Import and export](#import-and-export).
-- Customers belong to the current data mode. Customers you create in DEMO mode are not visible in LIVE mode, and the other way around. See [Demo and live mode](/concepts/demo-and-live-mode).
+- Peran Anda memerlukan menu **Pelanggan** (`customers`). Peran Cashier bawaan memilikinya, sehingga kasir dapat mencari dan menambah pelanggan.
+- Peran mana pun yang sedang masuk dapat melihat, menambah, dan mengubah pelanggan. Hanya **owner** dan **admin** yang dapat menghapus.
+- Tombol **Ekspor .xlsx** dan **Impor** tampil hanya untuk peran owner, admin, dan inventory. Lihat [Impor dan ekspor](#import-and-export).
+- Pelanggan termasuk dalam mode data saat ini. Pelanggan yang Anda buat di mode DEMO tidak terlihat di mode LIVE, dan sebaliknya. Lihat [Mode demo dan live](/concepts/demo-and-live-mode).
 
-## Find a customer
+## Mencari pelanggan
 
-The table shows **Name**, **Phone**, **Email**, **Social media** and row actions. Empty values show a dash. The list is sorted by name.
+Tabel menampilkan **Nama**, **Telepon**, **Email**, **Media sosial**, dan aksi baris. Nilai kosong ditampilkan sebagai tanda strip. Daftar diurutkan menurut nama.
 
-The search box matches **name, phone or social media handle** (not email), about 300 ms after you stop typing. It is a server-side search and returns to page 1. The counter shows the number of matches. **Reset filters** reloads the full list at once.
+Kotak pencarian mencocokkan **nama, telepon, atau akun media sosial** (bukan email), sekitar 300 ms setelah Anda berhenti mengetik. Pencarian dilakukan di server dan kembali ke halaman 1. Penghitung menampilkan jumlah yang cocok. **Atur ulang filter** langsung memuat ulang daftar penuh.
 
-## Add a customer
+## Menambah pelanggan
 
 <Steps>
-  <Step title="Open the form">
-    Select **New customer**.
+  <Step title="Buka formulir">
+    Pilih **Pelanggan baru**.
   </Step>
-  <Step title="Fill in the fields">
-    Only **Name** is required.
+  <Step title="Isi kolom">
+    Hanya **Nama** yang wajib diisi.
   </Step>
-  <Step title="Save">
-    Select **Save**. You see "Customer created."
+  <Step title="Simpan">
+    Pilih **Simpan**. Anda melihat "Pelanggan dibuat."
   </Step>
 </Steps>
 
-| Field | Required | Rules |
+| Kolom | Wajib | Aturan |
 | --- | --- | --- |
-| Name | Yes | Up to 100 characters. |
-| Phone | No | Up to 30 characters. |
-| Address | No | Free text. |
-| Email | No | Valid email address, up to 100 characters. |
-| Social media | No | Up to 100 characters. |
-| Notes | No | Free text. |
+| Nama | Ya | Maksimal 100 karakter. |
+| Telepon | Tidak | Maksimal 30 karakter. |
+| Alamat | Tidak | Teks bebas. |
+| Email | Tidak | Alamat email yang valid, maksimal 100 karakter. |
+| Media sosial | Tidak | Maksimal 100 karakter. |
+| Catatan | Tidak | Teks bebas. |
 
-Validation errors from the server (422) show under the field. Blank optional fields are saved as empty.
+Galat validasi dari server (422) tampil di bawah kolom. Kolom opsional yang kosong disimpan sebagai kosong.
 
-## Edit a customer
+## Mengubah pelanggan
 
-Select **Edit**, change the fields and select **Save**. You see "Customer updated." All roles with access to the page can edit.
+Pilih **Edit**, ubah kolomnya, lalu pilih **Simpan**. Anda melihat "Pelanggan diperbarui." Semua peran yang memiliki akses ke halaman dapat mengubah.
 
-## View a customer's transactions
+## Melihat transaksi pelanggan
 
-Select **Transaction history**. The dialog lists the customer's sales, newest first, with **Transaction No.**, **Status**, **Total** and **Date**.
+Pilih **Riwayat transaksi**. Dialog mencantumkan penjualan pelanggan, terbaru lebih dulu, dengan **No. Transaksi**, **Status**, **Total**, dan **Tanggal**.
 
-- Only sales are listed. Tabs that are still open do not count as transactions yet.
-- A cancelled sale shows a **Cancelled** badge. Other sales show a dash.
-- Select a transaction number to open its details. If the details allow it, you can act on the transaction there (for example cancel it) and the list refreshes afterwards.
-- An empty list reads "This customer has no transactions yet."
+- Hanya penjualan yang dicantumkan. Tab yang masih terbuka belum dihitung sebagai transaksi.
+- Penjualan yang dibatalkan menampilkan lencana **Dibatalkan**. Penjualan lain menampilkan tanda strip.
+- Pilih nomor transaksi untuk membuka detailnya. Bila detail mengizinkan, Anda dapat bertindak pada transaksi di sana (misalnya membatalkannya) dan daftar dimuat ulang setelahnya.
+- Daftar kosong berbunyi "Belum ada transaksi untuk pelanggan ini."
 
-Pre-orders no longer exist, so they never appear here.
+Pre-order sudah tidak ada, sehingga tidak pernah muncul di sini.
 
-## Delete a customer
+## Menghapus pelanggan
 
 <Steps>
-  <Step title="Select Delete">
-    The button shows only for owner and admin. The dialog asks "Delete \{name\}? Rejected if this customer still has sales."
+  <Step title="Pilih Hapus">
+    Tombol tampil hanya untuk owner dan admin. Dialog bertanya "Hapus \{name\}? Ditolak bila pelanggan ini masih punya transaksi penjualan."
   </Step>
-  <Step title="Confirm">
-    Select **Delete**. You see "Customer deleted."
+  <Step title="Konfirmasi">
+    Pilih **Hapus**. Anda melihat "Pelanggan dihapus."
   </Step>
 </Steps>
 
-A customer who has any sale, whatever its status, cannot be deleted. The server answers 409: "This customer still has transactions (orders) and cannot be deleted." The deletion is written to the [Activity log](/insight/activity-log), and that entry keeps a copy of the customer's contact fields. Treat the log as sensitive.
+Pelanggan yang memiliki penjualan apa pun, apa pun statusnya, tidak dapat dihapus. Server menjawab 409: "Pelanggan masih memiliki transaksi (order) dan tidak dapat dihapus." Penghapusan ditulis ke [Log Aktivitas](/insight/activity-log), dan entri itu menyimpan salinan kolom kontak pelanggan. Perlakukan log sebagai data sensitif.
 
-## Import and export
+<a id="import-and-export"></a>
 
-### Who can use it
+## Impor dan ekspor
 
-Export and import are for the owner, admin and inventory roles. The buttons are shown by role name. The server checks something wider: the user must hold at least one of the master-data menus (Outlets, Categories, Products, Stock, Vendors, Materials, Roles, Users). The Customers menu alone does not count, so a cashier gets a 403: "Only owner/admin/inventory can access this feature."
+### Siapa yang dapat memakainya
+
+Ekspor dan impor untuk peran owner, admin, dan inventory. Tombol ditampilkan berdasarkan nama peran. Server memeriksa sesuatu yang lebih luas: pengguna harus memegang setidaknya satu menu data master (Outlet, Kategori, Produk, Stok, Vendor, Bahan Baku, Peran, Pengguna). Menu Pelanggan saja tidak cukup, sehingga kasir mendapat 403: "Hanya owner/admin/inventory yang dapat mengakses fitur ini."
 
 <Note>
-ASSUMPTION: a custom role that has master-data menus but a name other than owner, admin or inventory passes the server check, yet the buttons stay hidden because the page checks the role name.
+ASUMSI: peran kustom yang memiliki menu data master tetapi bernama selain owner, admin, atau inventory lolos pemeriksaan server, namun tombolnya tetap tersembunyi karena halaman memeriksa nama peran.
 </Note>
 
-### Export
+### Ekspor
 
-Select **Export .xlsx**. The browser downloads `customers.xlsx` with every customer of the current data mode, sorted by name. Columns: `name`, `phone`, `address`, `email`, `social_handle`, `notes`. If the download fails you see "Failed to export customer data."
+Pilih **Ekspor .xlsx**. Peramban mengunduh `customers.xlsx` berisi semua pelanggan di mode data saat ini, diurutkan menurut nama. Kolom: `name`, `phone`, `address`, `email`, `social_handle`, `notes`. Jika unduhan gagal Anda melihat "Gagal mengekspor data pelanggan."
 
-### Import
+### Impor
 
 <Steps>
-  <Step title="Get the template">
-    Select **Import**, then **Download template**. You get `template-customers.xlsx` with the six column headings above.
+  <Step title="Ambil template">
+    Pilih **Impor**, lalu **Unduh template**. Anda mendapat `template-customers.xlsx` dengan enam judul kolom di atas.
   </Step>
-  <Step title="Fill and choose the file">
-    Fill the sheet and choose it under **.xlsx file**. The file must be `.xlsx` and at most 10 MB. Only the first sheet is read.
+  <Step title="Isi dan pilih berkas">
+    Isi sheet dan pilih di bawah **Berkas .xlsx**. Berkas harus `.xlsx` dan maksimal 10 MB. Hanya sheet pertama yang dibaca.
   </Step>
-  <Step title="Preview">
-    Select **Preview**. Nothing is saved. The dialog shows "\{created\} new customer(s) will be created, \{updated\} will be updated."
+  <Step title="Pratinjau">
+    Pilih **Pratinjau**. Belum ada yang disimpan. Dialog menampilkan "\{created\} pelanggan baru akan dibuat, \{updated\} pelanggan akan diperbarui."
   </Step>
-  <Step title="Confirm">
-    If there are no errors, select **Confirm import**. You see "Import successful — \{created\} new, \{updated\} updated." Select **Import another file** to start over.
+  <Step title="Konfirmasi">
+    Bila tidak ada galat, pilih **Konfirmasi impor**. Anda melihat "Impor berhasil — \{created\} pelanggan baru, \{updated\} pelanggan diperbarui." Pilih **Impor berkas lain** untuk memulai dari awal.
   </Step>
 </Steps>
 
-Rules the import follows:
+Aturan yang diikuti impor:
 
-- **Name** is required in every row (up to 100 characters).
-- A row whose **email** matches an existing customer (not case sensitive, within the current data mode) **updates** that customer. It does not create a duplicate.
-- A **blank cell on an update row leaves the existing value unchanged.** It does not clear it.
-- A row **without an email always creates** a new customer, even when the name or phone matches someone already there.
-- Two rows in the same file with the same email update the same customer in order. The last row wins for the fields it fills.
-- Validation checks every row first. If any row has a problem, nothing is saved. The dialog lists the **Row** number (the Excel row, where row 1 is the heading) and the **Problem**, with "Errors found — nothing will be saved:". Fix the file and preview again.
-- Applying is all-or-nothing in one transaction, and one entry "Impor massal data pelanggan." goes to the activity log.
+- **Nama** wajib di setiap baris (maksimal 100 karakter).
+- Baris yang **email**-nya cocok dengan pelanggan yang sudah ada (tidak peka huruf besar-kecil, dalam mode data saat ini) **memperbarui** pelanggan itu. Tidak membuat duplikat.
+- **Sel kosong pada baris pembaruan membiarkan nilai yang ada tidak berubah.** Tidak mengosongkannya.
+- Baris **tanpa email selalu membuat** pelanggan baru, bahkan bila nama atau teleponnya cocok dengan seseorang yang sudah ada.
+- Dua baris dalam berkas yang sama dengan email yang sama memperbarui pelanggan yang sama secara berurutan. Baris terakhir menang untuk kolom yang diisinya.
+- Validasi memeriksa setiap baris lebih dulu. Bila ada baris yang bermasalah, tidak ada yang disimpan. Dialog mencantumkan nomor **Baris** (baris Excel, dengan baris 1 adalah judul) dan **Masalah**, dengan "Ditemukan kesalahan — tidak ada yang akan disimpan:". Perbaiki berkas dan pratinjau lagi.
+- Penerapan bersifat semua atau tidak sama sekali dalam satu transaksi, dan satu entri "Impor massal data pelanggan." masuk ke log aktivitas.
 
-Row problems you can see:
+Masalah baris yang dapat Anda lihat:
 
-| Message | Fix |
+| Pesan | Solusi |
 | --- | --- |
-| Customer name is required. | Fill the `name` cell. |
-| Customer name is at most 100 characters. | Shorten it. |
-| Email address '\{email\}' is not valid. | Correct the address. |
-| Email address is at most 100 characters. | Shorten it. |
-| Phone number is at most 30 characters. | Shorten it. |
-| Social media handle is at most 100 characters. | Shorten it. |
+| Nama pelanggan wajib diisi. | Isi sel `name`. |
+| Nama pelanggan maksimal 100 karakter. | Persingkat. |
+| Alamat email '\{email\}' tidak valid. | Perbaiki alamatnya. |
+| Alamat email maksimal 100 karakter. | Persingkat. |
+| Nomor telepon maksimal 30 karakter. | Persingkat. |
+| Social media maksimal 100 karakter. | Persingkat. |
 
-If the apply step itself fails with errors, you see "Nothing was saved because errors were found." and the same row table.
+Bila langkah terapkan itu sendiri gagal dengan galat, Anda melihat "Tidak ada data yang disimpan karena ditemukan kesalahan." dan tabel baris yang sama.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| What you see | Cause | What to do |
+| Yang Anda lihat | Penyebab | Yang perlu dilakukan |
 | --- | --- | --- |
-| No **Delete** button | Only owner and admin can delete. | Ask an owner or admin. |
-| No **Export** or **Import** buttons | Your role is not owner, admin or inventory. | Ask an owner. |
-| 409 on delete | The customer has sales. | Keep the customer. Edit the details instead. |
-| Preview says "0 new, 0 updated" | The sheet has no data rows, or the first sheet is empty. | Check that data is on the first sheet under the right headings. |
-| A customer from DEMO mode is missing | Data modes are separate. | Switch mode. See [Demo and live mode](/concepts/demo-and-live-mode). |
+| Tidak ada tombol **Hapus** | Hanya owner dan admin yang dapat menghapus. | Minta owner atau admin. |
+| Tidak ada tombol **Ekspor** atau **Impor** | Peran Anda bukan owner, admin, atau inventory. | Minta owner. |
+| 409 saat menghapus | Pelanggan memiliki penjualan. | Pertahankan pelanggan. Ubah detailnya saja. |
+| Pratinjau menyatakan "0 pelanggan baru akan dibuat, 0 pelanggan akan diperbarui." | Sheet tidak memiliki baris data, atau sheet pertama kosong. | Pastikan data ada di sheet pertama di bawah judul yang benar. |
+| Pelanggan dari mode DEMO hilang | Mode data terpisah. | Ganti mode. Lihat [Mode demo dan live](/concepts/demo-and-live-mode). |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Sales" href="/operations/sales">
-    See the sales behind a customer's history.
+  <Card title="Penjualan" href="/operations/sales">
+    Lihat penjualan di balik riwayat pelanggan.
   </Card>
-  <Card title="Point of sale" href="/operations/pos">
-    Attach a customer to a sale.
+  <Card title="Kasir" href="/operations/pos">
+    Lampirkan pelanggan ke sebuah penjualan.
   </Card>
-  <Card title="Roles and permissions" href="/concepts/roles-and-permissions">
-    Which role sees which menu.
+  <Card title="Peran dan izin" href="/concepts/roles-and-permissions">
+    Peran mana yang melihat menu mana.
   </Card>
-  <Card title="Activity log" href="/insight/activity-log">
-    Deletions and imports are recorded here.
+  <Card title="Log Aktivitas" href="/insight/activity-log">
+    Penghapusan dan impor dicatat di sini.
   </Card>
 </Columns>

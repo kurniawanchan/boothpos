@@ -1,77 +1,77 @@
 ---
-title: "Sign in and activate"
-description: "Activate a new BoothPOS installation, sign in with your username, and sign out."
-keywords: ["login", "sign in", "activation", "license key", "username"]
+title: "Masuk dan aktivasi"
+description: "Aktifkan instalasi BoothPOS baru, masuk dengan username Anda, dan keluar."
+keywords: ["login", "masuk", "aktivasi", "kunci lisensi", "username"]
 ---
 
-BoothPOS runs in your browser at the address of the machine that hosts it (for example `localhost` on a single-store laptop). Before anyone can sign in, the installation must be activated once with a license key.
+BoothPOS berjalan di browser Anda pada alamat mesin yang menjadi host-nya (misalnya `localhost` pada laptop toko tunggal). Sebelum ada yang bisa masuk, instalasi harus diaktifkan satu kali dengan kunci lisensi.
 
-## Activate a new installation
+## Mengaktifkan instalasi baru
 
-An installation that has not been activated locks every screen, including the sign-in page. You are sent to **Aktivasi instalasi** (installation activation) automatically.
+Instalasi yang belum diaktifkan mengunci semua layar, termasuk halaman masuk. Anda otomatis diarahkan ke **Aktivasi instalasi**.
 
 <Steps>
-  <Step title="Open BoothPOS">
-    Browse to the BoothPOS address. If the installation is not activated yet, the activation screen opens.
+  <Step title="Buka BoothPOS">
+    Buka alamat BoothPOS di browser. Jika instalasi belum diaktifkan, layar aktivasi terbuka.
   </Step>
-  <Step title="Paste the license key">
-    Paste the key you received after payment into **Kunci lisensi** (license key).
+  <Step title="Tempel kunci lisensi">
+    Tempel kunci yang Anda terima setelah pembayaran ke kolom **Kunci lisensi**.
   </Step>
-  <Step title="Submit">
-    Click **Aktivasi**. On success, a confirmation appears and you continue to the app.
+  <Step title="Kirim">
+    Klik **Aktivasi**. Jika berhasil, konfirmasi muncul dan Anda melanjutkan ke aplikasi.
   </Step>
 </Steps>
 
 <Info>
-  One license activates one installation. The activation screen is shown only while the installation is not activated; once activated, opening `/activate` sends you to the dashboard.
+  Satu lisensi mengaktifkan satu instalasi. Layar aktivasi hanya tampil selama instalasi belum diaktifkan; setelah aktif, membuka `/activate` akan mengarahkan Anda ke dashboard.
 </Info>
 
-If the key is rejected, the field shows the validation message from the server and nothing is activated. Check the key for copy errors, then contact your provider.
+Jika kunci ditolak, kolom menampilkan pesan validasi dari server dan tidak ada yang diaktifkan. Periksa kunci dari kesalahan salin, lalu hubungi penyedia Anda.
 
-## Sign in
+## Masuk
 
 <Steps>
-  <Step title="Enter your username">
-    Sign in with a **Username**, not an email address.
+  <Step title="Masukkan username Anda">
+    Masuk dengan **Username**, bukan alamat email.
   </Step>
-  <Step title="Enter your password">
-    Type your password in **Kata sandi** (password) and click **Masuk** (sign in).
+  <Step title="Masukkan kata sandi Anda">
+    Ketik kata sandi Anda di **Kata sandi** lalu klik **Masuk**.
   </Step>
-  <Step title="Land on the dashboard">
-    After signing in you open the Dashboard. The menu you see depends on your role. See [Roles and permissions](/concepts/roles-and-permissions).
+  <Step title="Tiba di dashboard">
+    Setelah masuk, Anda membuka Dashboard. Menu yang Anda lihat bergantung pada peran Anda. Lihat [Peran dan izin](/concepts/roles-and-permissions).
   </Step>
 </Steps>
 
-The sign-in page is always shown in Bahasa Indonesia, because the app does not know your language preference before you sign in. After you sign in, you can change the interface language from the user menu.
+Halaman masuk selalu tampil dalam Bahasa Indonesia, karena aplikasi belum mengetahui preferensi bahasa Anda sebelum Anda masuk. Setelah masuk, Anda dapat mengganti bahasa antarmuka dari menu pengguna.
 
-### Sign-in problems
+### Masalah saat masuk
 
-| What you see | Cause | What to do |
+| Yang Anda lihat | Penyebab | Yang harus dilakukan |
 | --- | --- | --- |
-| "Username atau kata sandi salah." | The username or password does not match an account. | Retype both. Ask an owner or admin to reset your password if you forgot it. |
-| A message under a field | The field was empty or invalid. | Fill in the field and submit again. |
-| Redirected to the activation screen | The installation is not activated. | Activate it with a license key. |
-| Redirected back to the sign-in page after a refresh | Your session expired or was cleared. | Sign in again. |
+| "Username atau kata sandi salah." | Username atau kata sandi tidak cocok dengan akun mana pun. | Ketik ulang keduanya. Minta owner atau admin mereset kata sandi Anda jika lupa. |
+| Pesan di bawah kolom | Kolom kosong atau tidak valid. | Isi kolom lalu kirim lagi. |
+| Diarahkan ke layar aktivasi | Instalasi belum diaktifkan. | Aktifkan dengan kunci lisensi. |
+| Diarahkan kembali ke halaman masuk setelah menyegarkan halaman | Sesi Anda kedaluwarsa atau terhapus. | Masuk lagi. |
 
 <Note>
-  If you open a screen your role cannot use, for example by typing its address, BoothPOS sends you to the Dashboard instead of showing an error. The server enforces the same permissions on every request.
+  Jika Anda membuka layar yang tidak dapat dipakai peran Anda, misalnya dengan mengetik alamatnya, BoothPOS mengarahkan Anda ke Dashboard alih-alih menampilkan galat. Server menerapkan izin yang sama pada setiap permintaan.
 </Note>
 
-## Sign out and personal settings
+## Keluar dan pengaturan pribadi
 
-Click your name at the top right to open the user menu. From there you can open your profile, change the language, and sign out. See [Profile](/settings/profile).
+Klik nama Anda di kanan atas untuk membuka menu pengguna. Dari sana Anda dapat membuka profil, mengganti bahasa, dan keluar. Lihat [Profil](/settings/profile).
 
 <Warning>
-  Close your open cashier shift before you leave the counter and sign out. See [Cashier shifts](/operations/shifts).
+  Tutup shift kasir Anda yang masih terbuka sebelum meninggalkan meja kasir dan keluar. Lihat [Shift kasir](/operations/shifts).
 </Warning>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Find your way around" icon="compass" href="/concepts/navigation">
-    The navigation rail, top bar, search, and notifications.
+  <Card title="Mengenal tata letak" icon="compass" href="/concepts/navigation">
+    Rail navigasi, bilah atas, pencarian, dan notifikasi.
   </Card>
-  <Card title="Ring up your first sale" icon="cash-register" href="/getting-started/first-sale">
-    Open a shift, add items, and take payment.
+  <Card title="Catat penjualan pertama Anda" icon="cash-register" href="/getting-started/first-sale">
+    Buka shift, tambahkan item, dan terima pembayaran.
   </Card>
 </Columns>

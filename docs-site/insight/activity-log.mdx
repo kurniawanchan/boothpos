@@ -1,84 +1,84 @@
 ---
-title: "Activity log"
-description: "Review who did what and when for sensitive actions such as deletions, price changes, stock adjustments and voids."
-keywords: ["activity log", "audit", "history", "who did what", "void after fire", "filters"]
+title: "Log aktivitas"
+description: "Tinjau siapa melakukan apa dan kapan untuk tindakan sensitif seperti penghapusan, perubahan harga, koreksi stok, dan void."
+keywords: ["log aktivitas", "audit", "riwayat", "siapa melakukan apa", "void setelah fire", "filter"]
 ---
 
-The **Activity Log** is a read-only history of sensitive actions in BoothPOS: who did what, to which record, and when. You cannot add, edit or delete entries from this screen.
+**Log Aktivitas** adalah riwayat baca-saja untuk tindakan sensitif di BoothPOS: siapa melakukan apa, pada record mana, dan kapan. Anda tidak dapat menambah, mengubah, atau menghapus entri dari layar ini.
 
-## Before you start
+## Sebelum mulai
 
-- You need the **Reports** menu (menu key `reports`). The activity log has no menu of its own; it is gated by the same key as [Reports](/insight/reports). Without it, the server answers 403 with **You do not have access to the activity log.**
-- Entries are written by the system at the moment the action happens, inside the same database transaction as the change. If an action is rolled back, its log line is not kept, so the log never claims something that did not happen.
-- Open it from **Reports**-gated links, from a Dashboard "Needs attention" item, or by its address `/activity-log`.
+- Anda memerlukan menu **Laporan** (kunci menu `reports`). Log aktivitas tidak punya menu sendiri; aksesnya dibatasi oleh kunci yang sama dengan [Laporan](/insight/reports). Tanpa menu itu, server menjawab 403 dengan **Tidak berhak mengakses log aktivitas.**
+- Entri ditulis oleh sistem saat tindakan terjadi, di dalam transaksi database yang sama dengan perubahannya. Bila sebuah tindakan dibatalkan (rollback), baris lognya tidak disimpan, sehingga log tidak pernah menyatakan sesuatu yang tidak terjadi.
+- Buka dari tautan yang dibatasi menu **Laporan**, dari item "Perlu tindakan" di Dashboard, atau lewat alamatnya `/activity-log`.
 
-## Read the list
+## Membaca daftar
 
-Newest entries first, 25 per page.
+Entri terbaru di atas, 25 per halaman.
 
-| Column | What it shows |
+| Kolom | Yang ditampilkan |
 | --- | --- |
-| **Time** | Date and time the action happened. |
-| **User** | The name of the user who did it, or a dash if there is none (for example a system action). |
-| **Action** | A machine-readable action name in monospace, such as `deleted` or `item_cancelled`. |
-| **Entity** | The kind of record, followed by its number, for example `order #12`. |
-| **Description** | A human-readable sentence about what changed. |
+| **Waktu** | Tanggal dan jam tindakan terjadi. |
+| **Pengguna** | Nama pengguna yang melakukannya, atau tanda hubung bila tidak ada (misalnya tindakan sistem). |
+| **Aksi** | Nama aksi yang terbaca mesin dalam huruf monospace, seperti `deleted` atau `item_cancelled`. |
+| **Entitas** | Jenis record, diikuti nomornya, misalnya `order #12`. |
+| **Deskripsi** | Kalimat yang dapat dibaca manusia tentang apa yang berubah. |
 
-Old and new values are stored with each entry, but this screen does not display them.
+Nilai lama dan baru disimpan bersama setiap entri, tetapi layar ini tidak menampilkannya.
 
-### Common actions
+### Aksi yang umum
 
-The log records many kinds of action. These names appear in the code; the list is not exhaustive and new ones can be added by new features.
+Log mencatat banyak jenis aksi. Nama-nama ini muncul di kode; daftarnya tidak lengkap dan fitur baru dapat menambahkan yang lain.
 
-| Area | Example actions |
+| Area | Contoh aksi |
 | --- | --- |
-| Records | `created`, `updated`, `deleted`, `imported`, `moved`, `merged`, `activated`, `deactivated` |
-| Pricing and menu | `price_changed`, `outlet_price_changed`, `item_published`, `item_discontinued`, `item_reactivated`, `item_sold_out`, `item_sold_out_cleared`, `menu_release_created`, `menu_release_published`, `menu_release_cancelled`, `menu_change_requested`, `menu_change_cancelled` |
-| Stock | `stock_adjusted`, `material_stock_adjusted`, `stock_transfer_dispatched`, `stock_transfer_received`, `stock_transfer_cancelled` |
-| Orders and payments | `item_cancelled`, `tab_voided`, `payment_recorded`, `payment_verified`, `payment_rejected`, `payment_deleted`, `payment_confirmation_updated` |
-| Approvals | `approval_requested`, `approval_approved`, `approval_rejected` |
-| Shifts | `session_closed` |
-| Users and roles | `user_outlets_updated`, `role_outlet_scope_changed` |
+| Record | `created`, `updated`, `deleted`, `imported`, `moved`, `merged`, `activated`, `deactivated` |
+| Harga dan menu | `price_changed`, `outlet_price_changed`, `item_published`, `item_discontinued`, `item_reactivated`, `item_sold_out`, `item_sold_out_cleared`, `menu_release_created`, `menu_release_published`, `menu_release_cancelled`, `menu_change_requested`, `menu_change_cancelled` |
+| Stok | `stock_adjusted`, `material_stock_adjusted`, `stock_transfer_dispatched`, `stock_transfer_received`, `stock_transfer_cancelled` |
+| Order dan pembayaran | `item_cancelled`, `tab_voided`, `payment_recorded`, `payment_verified`, `payment_rejected`, `payment_deleted`, `payment_confirmation_updated` |
+| Persetujuan | `approval_requested`, `approval_approved`, `approval_rejected` |
+| Shift | `session_closed` |
+| Pengguna dan peran | `user_outlets_updated`, `role_outlet_scope_changed` |
 | Bill of materials | `bom_item_added`, `bom_item_removed`, `bom_qty_changed`, `bom_completed`, `bom_reopened`, `cost_price_synced` |
-| Settings | `reason_code_created`, `reason_code_updated` |
+| Pengaturan | `reason_code_created`, `reason_code_updated` |
 
-PIN changes made from the Users screen are logged as `pin_set` (first PIN) and `pin_replaced` (existing PIN changed), with the entity `user`. The log says whether the PIN was typed or generated, but never contains the PIN.
+Perubahan PIN yang dilakukan dari layar Pengguna dicatat sebagai `pin_set` (PIN pertama) dan `pin_replaced` (PIN yang sudah ada diganti), dengan entitas `user`. Log menyebutkan apakah PIN diketik atau dibuat otomatis, tetapi tidak pernah berisi PIN-nya.
 
-## Filter the list
+## Memfilter daftar
 
-Filters apply when you leave a field or pick a date, not on every keystroke. The count next to the filters is the total number of matching entries.
+Filter berlaku saat Anda meninggalkan sebuah kolom atau memilih tanggal, bukan pada setiap ketukan tombol. Angka di samping filter adalah jumlah total entri yang cocok.
 
-| Filter | How it works |
+| Filter | Cara kerja |
 | --- | --- |
-| **Action** (search box) | Exact match on the action name, for example `item_cancelled`. It is not a partial or free-text search. |
-| **Entity type** | Exact match on the entity type name, as shown in the **Entity** column. |
-| **From date** / **To date** | Entries created on or after / on or before that date. |
-| Reset | Clears all filters. |
+| **Aksi** (kotak pencarian) | Cocok persis dengan nama aksi, misalnya `item_cancelled`. Ini bukan pencarian sebagian atau teks bebas. |
+| **Jenis entitas** | Cocok persis dengan nama jenis entitas, seperti yang tampil di kolom **Entitas**. |
+| **Dari tanggal** / **Sampai tanggal** | Entri yang dibuat pada atau setelah / pada atau sebelum tanggal itu. |
+| Atur ulang | Mengosongkan semua filter. |
 
 <Warning>
-  Because **Action** and **Entity type** are exact matches, a typo or different capitalisation returns **No activity recorded yet.** Copy the value from the **Action** column when in doubt.
+  Karena **Aksi** dan **Jenis entitas** dicocokkan persis, salah ketik atau huruf besar-kecil yang berbeda menghasilkan **Belum ada aktivitas tercatat.** Salin nilainya dari kolom **Aksi** bila ragu.
 </Warning>
 
-### Business-date chip
+### Chip tanggal bisnis
 
-A link from the Dashboard "Void after fire" item opens this screen with `action = item_cancelled` and a **Business date: YYYY-MM-DD** chip. That chip filters by one **business day** in the store time zone (not UTC), so the list matches the count on the Dashboard exactly. Click the chip to remove it. Invalid dates in the link are ignored.
+Tautan dari item "Void setelah fire" di Dashboard membuka layar ini dengan `action = item_cancelled` dan chip **Tanggal bisnis: YYYY-MM-DD**. Chip itu memfilter menurut satu **hari bisnis** di zona waktu toko (bukan UTC), sehingga daftarnya persis sama dengan angka di Dashboard. Klik chip untuk menghapusnya. Tanggal yang tidak valid pada tautan diabaikan.
 
-Note that items that were cancelled because a whole tab was voided have no per-item entry; only a `tab_voided` entry exists.
+Perhatikan bahwa item yang dibatalkan karena seluruh tab di-void tidak punya entri per item; hanya ada entri `tab_voided`.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message or symptom | Cause | What to do |
+| Pesan atau gejala | Penyebab | Yang harus dilakukan |
 | --- | --- | --- |
-| **You do not have access to the activity log.** (403) | Your role lacks the `reports` menu. | Ask an owner or admin to add **Reports** to your role, see [Roles](/settings/roles). |
-| **No activity recorded yet.** | No entries, or the filters match nothing. | Reset filters; check exact spelling of action and entity type. |
-| **Could not load data** | Request failed. | Use the retry button. |
-| A change you made is missing | Only sensitive actions are logged, and rolled-back actions are not kept. | Check whether the action is one of the logged kinds. |
+| **Tidak berhak mengakses log aktivitas.** atau **Anda tidak memiliki akses ke log aktivitas.** (403) | Peran Anda tidak punya menu `reports`. | Minta owner atau admin menambahkan **Laporan** ke peran Anda, lihat [Peran](/settings/roles). |
+| **Belum ada aktivitas tercatat.** | Tidak ada entri, atau filter tidak cocok dengan apa pun. | Atur ulang filter; periksa ejaan aksi dan jenis entitas dengan teliti. |
+| **Gagal memuat data** | Permintaan gagal. | Gunakan tombol coba lagi. |
+| Perubahan yang Anda buat tidak ada | Hanya tindakan sensitif yang dicatat, dan tindakan yang di-rollback tidak disimpan. | Periksa apakah tindakan itu termasuk jenis yang dicatat. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Dashboard" href="/insight/dashboard">The "Void after fire" check links here.</Card>
-  <Card title="Reports" href="/insight/reports">Shares the same menu permission.</Card>
-  <Card title="Roles" href="/settings/roles">Control who can open the log.</Card>
-  <Card title="Business day" href="/concepts/business-day">How a business date is bounded.</Card>
+  <Card title="Dashboard" href="/insight/dashboard">Pemeriksaan "Void setelah fire" menaut ke sini.</Card>
+  <Card title="Laporan" href="/insight/reports">Memakai izin menu yang sama.</Card>
+  <Card title="Peran" href="/settings/roles">Atur siapa yang dapat membuka log.</Card>
+  <Card title="Hari bisnis" href="/concepts/business-day">Cara batas tanggal bisnis ditentukan.</Card>
 </Columns>

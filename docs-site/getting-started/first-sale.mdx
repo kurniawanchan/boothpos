@@ -1,65 +1,65 @@
 ---
-title: "Ring up your first sale"
-description: "Open a cashier shift, build a cart on the POS screen, take payment, and close the shift."
-keywords: ["first sale", "tutorial", "pos", "shift", "payment", "receipt"]
+title: "Catat penjualan pertama Anda"
+description: "Buka shift kasir, susun keranjang di layar POS, terima pembayaran, dan tutup shift."
+keywords: ["penjualan pertama", "tutorial", "pos", "shift", "pembayaran", "struk"]
 ---
 
-This walk-through takes about five minutes. You need a role with the **POS** and **Cashier Session** menus, and at least one active product with stock.
+Panduan langkah demi langkah ini memakan waktu sekitar lima menit. Anda memerlukan peran dengan menu **Kasir** (POS) dan **Sesi Kasir**, serta setidaknya satu produk aktif yang memiliki stok.
 
 <Warning>
-  Check the badge in the top bar first. In **DEMO** mode the sale is practice data and will not appear in LIVE reports. See [DEMO and LIVE mode](/concepts/demo-and-live-mode).
+  Periksa dulu lencana di bilah atas. Pada mode **DEMO**, penjualan hanyalah data latihan dan tidak akan muncul di laporan LIVE. Lihat [Mode DEMO dan LIVE](/concepts/demo-and-live-mode).
 </Warning>
 
 <Steps>
-  <Step title="Open a cashier shift">
-    Go to **Cashier Session**. Pick the **Outlet** if you have more than one, type **Opening cash (Rp)**, and click **Open session**. Every sale is tied to an open shift, and **Pay** is blocked without one. See [Cashier shifts](/operations/shifts).
+  <Step title="Buka shift kasir">
+    Buka **Sesi Kasir**. Pilih **Outlet** jika Anda memiliki lebih dari satu, ketik **Kas awal (Rp)**, lalu klik **Buka sesi**. Setiap penjualan terikat pada shift yang terbuka, dan **Bayar** diblokir tanpa shift. Lihat [Shift kasir](/operations/shifts).
   </Step>
-  <Step title="Open the POS">
-    Go to **POS**. The product grid follows the outlet of your open shift.
+  <Step title="Buka POS">
+    Buka **Kasir**. Grid produk mengikuti outlet dari shift Anda yang terbuka.
   </Step>
-  <Step title="Add products">
-    Click a product card. A product with several variants opens **Pick a variant**. Click the variant you want. Use the plus and minus buttons on the cart line to change the quantity.
+  <Step title="Tambahkan produk">
+    Klik kartu produk. Produk dengan beberapa varian membuka **Pilih varian**. Klik varian yang Anda inginkan. Gunakan tombol plus dan minus pada baris keranjang untuk mengubah jumlah.
   </Step>
-  <Step title="Pay">
-    Click **Pay**, choose **Cash**, **Transfer** or **QRIS**, and click **Confirm & save transaction**. For cash, enter the amount received and check the **Change**. For Transfer and QRIS, pick a payment channel. See [Payment channels](/settings/payment-channels).
+  <Step title="Bayar">
+    Klik **Bayar**, pilih **Tunai**, **Transfer** atau **QRIS**, lalu klik **Konfirmasi & simpan transaksi**. Untuk tunai, masukkan jumlah yang diterima dan periksa **Kembalian**. Untuk Transfer dan QRIS, pilih kanal pembayaran. Lihat [Kanal pembayaran](/settings/payment-channels).
   </Step>
-  <Step title="Hand over the receipt">
-    The receipt opens when the sale is saved. Download it as an image or PDF if the customer asks, then click **Transaksi berikutnya** for the next customer.
+  <Step title="Serahkan struk">
+    Struk terbuka saat penjualan tersimpan. Unduh sebagai gambar atau PDF jika pelanggan meminta, lalu klik **Transaksi berikutnya** untuk pelanggan selanjutnya.
   </Step>
-  <Step title="Close the shift at the end of the day">
-    Go back to **Cashier Session**, count the drawer, type **Physical cash counted (Rp)**, and click **Close session**. If the counted cash differs from the expected cash, a note is required.
+  <Step title="Tutup shift di akhir hari">
+    Kembali ke **Sesi Kasir**, hitung isi laci, ketik **Kas fisik dihitung (Rp)**, lalu klik **Tutup sesi**. Jika kas yang dihitung berbeda dari kas yang diharapkan, catatan wajib diisi.
   </Step>
 </Steps>
 
-## Check your work
+## Periksa hasil kerja Anda
 
 <Check>
-  The sale appears in **Sales** with its order number, and the shift's **Transactions** and **Total sales** tiles went up.
+  Penjualan muncul di **Penjualan** beserta nomor ordernya, dan tile **Transaksi** serta **Total penjualan** pada shift bertambah.
 </Check>
 
-## If something goes wrong
+## Jika ada yang salah
 
-| Message | Fix |
+| Pesan | Perbaikan |
 | --- | --- |
-| Open a cashier session first in the Cashier Session screen. | Open a shift (step 1). |
-| Insufficient stock for variant ... | Lower the quantity or add stock. See [Stock](/inventory/stock). |
-| Item cannot be ordered: sold out (86), discontinued, or not sold at this outlet | Remove it from the cart. |
+| Buka sesi kasir terlebih dahulu di layar Sesi Kasir. | Buka shift (langkah 1). |
+| Stok tidak mencukupi untuk varian ... | Kurangi jumlah atau tambahkan stok. Lihat [Stok](/inventory/stock). |
+| Item ... tidak bisa dipesan: item sedang habis (86), item sudah didiskontinu atau belum diterbitkan, atau tidak dijual di outlet ini | Hapus dari keranjang. |
 
-The full list is on [POS](/operations/pos).
+Daftar lengkap ada di [POS](/operations/pos).
 
-## Next steps
+## Langkah berikutnya
 
 <Columns cols={2}>
-  <Card title="Sales history" icon="receipt" href="/operations/sales">
-    Find, review, and settle past sales.
+  <Card title="Riwayat penjualan" icon="receipt" href="/operations/sales">
+    Cari, tinjau, dan selesaikan penjualan lama.
   </Card>
-  <Card title="Restaurant tabs" icon="fork-knife" href="/operations/restaurant-floor">
-    Take dine-in orders that are paid later.
+  <Card title="Tab restoran" icon="fork-knife" href="/operations/restaurant-floor">
+    Terima pesanan makan di tempat yang dibayar belakangan.
   </Card>
-  <Card title="Add products" icon="cube" href="/inventory/products">
-    Build your menu and set prices.
+  <Card title="Tambahkan produk" icon="cube" href="/inventory/products">
+    Susun menu Anda dan atur harga.
   </Card>
-  <Card title="Add users" icon="users" href="/settings/users">
-    Give each cashier their own login.
+  <Card title="Tambahkan pengguna" icon="users" href="/settings/users">
+    Beri setiap kasir login masing-masing.
   </Card>
 </Columns>

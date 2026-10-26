@@ -1,207 +1,207 @@
 ---
-title: "General settings"
-description: "Set up store identity, receipts, theme, business day, DEMO or LIVE mode, license tier, reason codes, menu release, the tablet server address, and database backups."
-keywords: ["settings", "store identity", "logo", "receipt", "theme", "business day", "demo", "live", "license tier", "reason codes", "menu release", "backup", "restore"]
+title: "Pengaturan umum"
+description: "Atur identitas toko, struk, tema, hari bisnis, mode DEMO atau LIVE, tingkat lisensi, kode alasan, rilis menu, alamat server tablet, dan cadangan database."
+keywords: ["pengaturan", "identitas toko", "logo", "struk", "tema", "hari bisnis", "demo", "live", "tingkat lisensi", "kode alasan", "rilis menu", "cadangan", "pemulihan"]
 ---
 
-**Settings > General** groups every store-wide setting into twelve sections in three groups. The list of sections is on the left and one section is shown on the right. The open section is kept in the address bar (`?section=`), so you can link to it and it survives a refresh. An unknown value opens **Store identity**.
+**Pengaturan > General** mengelompokkan setiap pengaturan seluruh toko ke dalam dua belas bagian dalam tiga kelompok. Daftar bagian ada di kiri dan satu bagian ditampilkan di kanan. Bagian yang terbuka disimpan di bilah alamat (`?section=`), sehingga Anda dapat menautkannya dan bertahan setelah penyegaran. Nilai yang tidak dikenal membuka **Identitas toko**.
 
-## Before you start
+## Sebelum mulai
 
-- You need the **Settings** menu (menu key `settings`). The server checks it on every read and write. Owner and admin have it by default; the project treats "owner or admin" as "has the Settings menu".
-- Every setting here applies to the whole installation, not to one outlet.
-- Changes apply to later activity. Nothing on this page rewrites past transactions.
-- Payment account details have their own page, see [Payment channels](/settings/payment-channels).
+- Anda memerlukan menu **Pengaturan** (kunci menu `settings`). Server memeriksanya pada setiap pembacaan dan penulisan. Owner dan admin memilikinya secara bawaan; proyek ini memperlakukan "owner atau admin" sebagai "memiliki menu Pengaturan".
+- Setiap pengaturan di sini berlaku untuk seluruh instalasi, bukan satu outlet.
+- Perubahan berlaku untuk aktivitas berikutnya. Tidak ada yang di halaman ini menulis ulang transaksi lama.
+- Rincian akun pembayaran punya halamannya sendiri, lihat [Kanal pembayaran](/settings/payment-channels).
 
-## Sections at a glance
+## Bagian sekilas
 
-| Group | Section | What it controls |
+| Kelompok | Bagian | Yang dikendalikan |
 | --- | --- | --- |
-| **Store** | **Store identity** | Logo, store name, address and contact details. |
-| | **Receipt Display** | Footer text and whether the logo prints on receipts. |
-| | **Payment channels** | Bank and QRIS accounts shown at payment. See [Payment channels](/settings/payment-channels). |
-| **Appearance** | **Application name** | The product name in the sidebar and "Powered by" lines. |
-| | **Theme** | The accent colour. |
-| **System** | **System mode** | DEMO or LIVE data. |
-| | **Server address** | Which server the cashier tablets connect to. |
-| | **License tier** | Pro (one outlet) or Master (unlimited outlets). |
-| | **Business day** | Time zone, cut-off, cash tolerance, offline threshold. |
-| | **Reason codes** | Reasons offered for sold out (86), discontinue and approval rejection. |
-| | **Menu release** | Whether price and status changes wait for a release. |
-| | **Backup & restore** | Database backups and restore. |
+| **Toko** | **Identitas toko** | Logo, nama toko, alamat, dan data kontak. |
+| | **Tampilan Struk** | Teks footer dan apakah logo dicetak di struk. |
+| | **Kanal pembayaran** | Rekening bank dan QRIS yang ditampilkan saat pembayaran. Lihat [Kanal pembayaran](/settings/payment-channels). |
+| **Tampilan** | **Nama aplikasi** | Nama produk di sidebar dan baris "Powered by". |
+| | **Tema** | Warna aksen. |
+| **Sistem** | **Mode sistem** | Data DEMO atau LIVE. |
+| | **Alamat server** | Server mana yang dihubungi tablet kasir. |
+| | **Tingkat lisensi** | Pro (satu outlet) atau Master (outlet tanpa batas). |
+| | **Hari bisnis** | Zona waktu, batas pergantian hari, toleransi kas, batas offline. |
+| | **Kode alasan** | Alasan yang ditawarkan untuk habis (86), diskontinu, dan penolakan persetujuan. |
+| | **Rilis menu** | Apakah perubahan harga dan status menunggu rilis. |
+| | **Cadangan & pemulihan** | Cadangan dan pemulihan database. |
 
-## Store identity
+## Identitas toko
 
 <Steps>
-  <Step title="Upload a logo (optional)">
-    Under **Store logo**, choose an image file. When a file is chosen, an **Upload logo** button appears; click it. The logo is saved on its own, separately from the text fields, and the sidebar and the browser tab icon update without a reload.
+  <Step title="Unggah logo (opsional)">
+    Di bawah **Logo toko**, pilih berkas gambar. Setelah berkas dipilih, tombol **Unggah logo** muncul; klik tombol itu. Logo disimpan sendiri, terpisah dari kolom teks, dan sidebar serta ikon tab browser diperbarui tanpa memuat ulang.
   </Step>
-  <Step title="Fill in the text fields">
-    **Store name (printed on receipts)**, **Full address**, **Store contact**, **Contact person name**, **Phone**, **Email**.
+  <Step title="Isi kolom teks">
+    **Nama toko (tercetak di struk)**, **Alamat lengkap**, **Kontak toko**, **Nama kontak person**, **Telepon**, **Email**.
   </Step>
-  <Step title="Save">
-    Click **Save**. You see **Store identity saved.** The browser tab title and sidebar name refresh at once.
+  <Step title="Simpan">
+    Klik **Simpan**. Anda melihat **Identitas toko disimpan.** Judul tab browser dan nama di sidebar langsung diperbarui.
   </Step>
 </Steps>
 
-Rules:
+Aturan:
 
-- The logo must be a JPEG or PNG image of at most 5 MB. The browser only checks that the file is an image under 5 MB (**The file must be an image.** or **Maximum image size is 5 MB.**); the server then accepts only JPEG and PNG, so a GIF or WebP is rejected with the server's message under the field.
-- **Email** must be a valid email format, otherwise the field shows the server's message.
-- The store name is stored **separately for each mode**. In LIVE mode you edit the LIVE name; in DEMO mode you edit the DEMO name. Editing one never overwrites the other. Address and contact fields are shared by both modes.
+- Logo harus berupa gambar JPEG atau PNG maksimal 5 MB. Browser hanya memeriksa bahwa berkas adalah gambar di bawah 5 MB (**Berkas harus berupa gambar.** atau **Ukuran gambar maksimal 5 MB.**); server kemudian hanya menerima JPEG dan PNG, sehingga GIF atau WebP ditolak dengan pesan server di bawah kolom.
+- **Email** harus berformat email yang valid, bila tidak kolom menampilkan pesan server.
+- Nama toko disimpan **terpisah untuk setiap mode**. Pada mode LIVE Anda mengubah nama LIVE; pada mode DEMO Anda mengubah nama DEMO. Mengubah yang satu tidak pernah menimpa yang lain. Alamat dan kolom kontak dipakai bersama oleh kedua mode.
 
-## Receipt Display
+## Tampilan Struk
 
-| Control | Effect |
+| Kontrol | Efek |
 | --- | --- |
-| **Receipt footer text** | Free text printed at the bottom of receipts, for example "Thank you for shopping with us!". Leave empty for no footer. |
-| **Show logo on receipts** | When ticked, the store logo is included on receipts. |
+| **Teks footer struk** | Teks bebas yang dicetak di bagian bawah struk, misalnya "Terima kasih sudah berbelanja!". Kosongkan bila tidak ingin footer. |
+| **Tampilkan logo pada struk** | Bila dicentang, logo toko disertakan di struk. |
 
-Click **Save receipt display**. You see **Receipt display saved successfully.**
+Klik **Simpan tampilan struk**. Anda melihat **Tampilan struk berhasil disimpan.**
 
-## Application name
+## Nama aplikasi
 
-**Application name** is the product name shown in the sidebar and as "Powered by …" on invoices and receipts. It is not your store name. Up to 50 characters. Leave it empty and save to go back to the default (BoothPOS). Saved message: **Application name saved.**
+**Nama aplikasi** adalah nama produk yang tampil di sidebar dan sebagai "Powered by …" pada invoice dan struk. Ini bukan nama toko Anda. Maksimal 50 karakter. Kosongkan lalu simpan untuk kembali ke bawaan (BoothPOS). Pesan tersimpan: **Nama aplikasi disimpan.**
 
-## Theme
+## Tema
 
-Pick the **Accent color** with the colour picker; the hex code is shown next to it. A colour that is too light shows **This color is too light and may be hard to read.** You can still save it. Click **Save color**. The new colour is applied at once, with no reload, and is saved as a six-digit hex code (for example `#2f9e6e`); anything else is rejected by the server. Saved message: **Theme color saved successfully.**
+Pilih **Warna aksen** dengan pemilih warna; kode hex ditampilkan di sampingnya. Warna yang terlalu terang menampilkan **Warna ini terlalu terang dan mungkin sulit dibaca.** Anda tetap dapat menyimpannya. Klik **Simpan warna**. Warna baru langsung diterapkan, tanpa memuat ulang, dan disimpan sebagai kode hex enam digit (misalnya `#2f9e6e`); selain itu ditolak oleh server. Pesan tersimpan: **Warna tema berhasil disimpan.**
 
-## System mode
+## Mode sistem
 
-Two choices: **LIVE** and **DEMO**.
+Dua pilihan: **LIVE** dan **DEMO**.
 
-- **DEMO** shows sample data for exploring the app.
-- **LIVE** shows only data your store actually created.
-- Switching never deletes data from either mode.
+- **DEMO** menampilkan data contoh untuk menjelajahi aplikasi.
+- **LIVE** hanya menampilkan data yang benar-benar dibuat toko Anda.
+- Berpindah tidak pernah menghapus data di kedua mode.
 
-Click the mode you want. A confirmation asks **Switch to \{mode\} mode? The lists and reports you see will change to match.** Click **Continue**. You see **Switched to \{mode\} mode.** Clicking the mode that is already active does nothing. See [DEMO and LIVE mode](/concepts/demo-and-live-mode).
+Klik mode yang Anda inginkan. Sebuah konfirmasi bertanya **Pindah ke mode \{mode\}? Daftar dan laporan yang tampil akan berubah mengikuti mode ini.** Klik **Ya, lanjutkan**. Anda melihat **Berpindah ke mode \{mode\}.** Mengklik mode yang sudah aktif tidak melakukan apa pun. Lihat [Mode DEMO dan LIVE](/concepts/demo-and-live-mode).
 
 <Warning>
-  Switching mode changes what every screen, report and the Dashboard shows, for every user, at once. Do it when no shift is in progress.
+  Berpindah mode mengubah apa yang ditampilkan setiap layar, laporan, dan Dashboard, untuk semua pengguna, sekaligus. Lakukan saat tidak ada shift yang sedang berjalan.
 </Warning>
 
-## Server address
+## Alamat server
 
-Chooses which server the cashier tablets use. The change applies on each tablet's next connection check. This section is the only place the web app touches the Android setup. See the Android documentation for tablet steps.
+Memilih server mana yang dipakai tablet kasir. Perubahan berlaku pada pengecekan koneksi berikutnya di setiap tablet. Bagian ini adalah satu-satunya tempat aplikasi web menyentuh pengaturan Android. Lihat dokumentasi Android untuk langkah di tablet.
 
-| Field | Meaning |
+| Kolom | Arti |
 | --- | --- |
-| **Local server address** | Address on the outlet network, for example `http://192.168.1.10:8010`. |
-| **Online server address** | Address of the live server, for example `https://pos.example.com`. If empty, tablets use the app's built-in address, shown in the hint; a value entered here always wins. |
-| **Choice used by tablets** | **Local (outlet network)** or **Online (live server)**. |
+| **Alamat server lokal** | Alamat di jaringan outlet, misalnya `http://192.168.1.10:8010`. |
+| **Alamat server online** | Alamat server live, misalnya `https://pos.example.com`. Bila kosong, tablet memakai alamat bawaan aplikasi, yang ditampilkan di petunjuk; nilai yang diisi di sini selalu didahulukan. |
+| **Pilihan yang dipakai tablet** | **Lokal (jaringan outlet)** atau **Online (server live)**. |
 
-Click **Save server address**. You see **Server address saved.** Rules enforced by the server: each address must be a valid `http` or `https` URL of at most 255 characters, and you can choose **Online** only if an online address is filled in or the app has a built-in one (otherwise **Pilih online hanya jika alamat online sudah diisi.**). Errors appear under the field they belong to.
+Klik **Simpan alamat server**. Anda melihat **Alamat server disimpan.** Aturan yang ditegakkan server: setiap alamat harus berupa URL `http` atau `https` yang valid, maksimal 255 karakter, dan Anda dapat memilih **Online** hanya bila alamat online diisi atau aplikasi punya alamat bawaan (bila tidak: **Pilih online hanya jika alamat online sudah diisi.**). Galat muncul di bawah kolom yang bersangkutan.
 
-## License tier
+## Tingkat lisensi
 
-Two choices: **Pro** (one active outlet, representing the store itself) and **Master** (unlimited outlets). Clicking a tier saves it immediately and shows **Switched to \{tier\}.**
+Dua pilihan: **Pro** (satu outlet aktif, mewakili toko itu sendiri) dan **Master** (outlet tanpa batas). Mengklik sebuah tingkat langsung menyimpannya dan menampilkan **Beralih ke \{tier\}.**
 
-Switching **Master → Pro** does not delete or merge existing outlet data. It only blocks creating new outlets: on Pro, creating an outlet while one is already active fails with **This installation uses a Pro license (one outlet). Upgrade to Master to add more outlets.** See [Outlets](/people/outlets).
+Beralih **Master → Pro** tidak menghapus atau menggabungkan data outlet yang ada. Peralihan ini hanya memblokir pembuatan outlet baru: pada Pro, membuat outlet saat sudah ada satu yang aktif gagal dengan **Instalasi ini memakai lisensi Pro (satu outlet). Upgrade ke Master untuk menambah outlet lain.** Lihat [Outlet](/people/outlets).
 
 <Note>
-  ASSUMPTION: this section is a plain setting that anyone with the **Settings** menu can change from this screen; I found no separate license check behind the switch itself. The limit is enforced only when an outlet is created.
+  ASUMSI: bagian ini adalah pengaturan biasa yang dapat diubah siapa pun yang memiliki menu **Pengaturan** dari layar ini; saya tidak menemukan pemeriksaan lisensi terpisah di balik peralihannya. Batasnya hanya ditegakkan saat outlet dibuat.
 </Note>
 
-## Business day
+## Hari bisnis
 
-Decides which business day a sale belongs to, and the thresholds used on the Dashboard. Changes apply to later transactions; past ones are not recalculated.
+Menentukan hari bisnis sebuah penjualan, dan ambang yang dipakai di Dashboard. Perubahan berlaku untuk transaksi berikutnya; transaksi lama tidak dihitung ulang.
 
-| Field | Meaning | Rule |
+| Kolom | Arti | Aturan |
 | --- | --- | --- |
-| **Store timezone** | Used for dates and times on the Dashboard. | Pick from the list: Asia/Jakarta (default), Asia/Makassar, Asia/Jayapura, Asia/Singapore, Asia/Kuala_Lumpur, Asia/Bangkok, Asia/Tokyo, Australia/Perth, UTC. A different zone already stored stays visible. |
-| **Business-day cut-off time** | Sales before this time count toward the previous business day. `00:00` means midnight. | `HH:MM`, 00:00 to 23:59. |
-| **Cash difference tolerance (Rp)** | A shift cash difference up to this amount needs no action. Above it, the Dashboard flags the shift as Critical. | A number, 0 or more. Default 5000. |
-| **Device offline threshold (minutes)** | A device that has not reported for longer than this is flagged as behind. | Whole number, 1 to 1440. Default 5. |
+| **Zona waktu toko** | Dipakai untuk menentukan tanggal dan jam di Dashboard. | Pilih dari daftar: Asia/Jakarta (bawaan), Asia/Makassar, Asia/Jayapura, Asia/Singapore, Asia/Kuala_Lumpur, Asia/Bangkok, Asia/Tokyo, Australia/Perth, UTC. Zona lain yang sudah tersimpan tetap terlihat. |
+| **Jam pergantian hari bisnis** | Penjualan sebelum jam ini dihitung ke hari bisnis sebelumnya. `00:00` berarti tengah malam. | `JJ:MM`, 00:00 sampai 23:59. |
+| **Toleransi selisih kas (Rp)** | Selisih kas shift sampai nilai ini tidak dianggap perlu tindakan. Di atasnya, Dashboard menandai shift sebagai Kritis. | Angka, 0 atau lebih. Bawaan 5000. |
+| **Batas perangkat dianggap offline (menit)** | Perangkat yang tak melapor lebih lama dari ini ditandai belum sinkron. | Bilangan bulat, 1 sampai 1440. Bawaan 5. |
 
-Click **Save**. All four values are saved together; if one is invalid, none is saved, and the message appears under that field. You see **Business-day settings saved.** Client messages: **Choose a timezone.**, **Enter the time as HH:MM.**, **Tolerance must be a number, 0 or more.**, **Enter a whole number from 1 to 1440 minutes.** See [Business day](/concepts/business-day).
+Klik **Simpan**. Keempat nilai disimpan bersama; bila satu tidak valid, tidak ada yang disimpan, dan pesan muncul di bawah kolom itu. Anda melihat **Pengaturan hari bisnis disimpan.** Pesan dari sisi klien: **Pilih zona waktu.**, **Isi jam dengan format JJ:MM.**, **Toleransi harus berupa angka 0 atau lebih.**, **Isi bilangan bulat 1 sampai 1440 menit.** Lihat [Hari bisnis](/concepts/business-day).
 
-## Reason codes
+## Kode alasan
 
-The list of reasons users pick when they mark an item sold out (86), discontinue an item, or reject a price approval. Three tabs: **Sold out (86)**, **Discontinue**, **Approval rejection**.
+Daftar alasan yang dipilih pengguna saat menandai item habis (86), mendiskontinu item, atau menolak persetujuan harga. Tiga tab: **Habis (86)**, **Diskontinu**, **Tolak persetujuan**.
 
-Table columns: **Reason (Indonesian)**, **Reason (English)**, **Order**, **Status**, plus an edit action and an activate switch.
+Kolom tabel: **Alasan (Indonesia)**, **Alasan (Inggris)**, **Urutan**, **Status**, ditambah aksi ubah dan sakelar aktifkan.
 
 <Steps>
-  <Step title="Add a reason">
-    On the tab you want, click **Add reason**. Fill **Code**, **Label (Indonesian)**, **Label (English)** and **Order**.
+  <Step title="Tambah alasan">
+    Pada tab yang Anda inginkan, klik **Tambah alasan**. Isi **Kode**, **Label (Indonesia)**, **Label (Inggris)**, dan **Urutan**.
   </Step>
-  <Step title="Save">
-    Click Save. You see **Reason added.** (or **Reason updated.** when editing).
+  <Step title="Simpan">
+    Klik Simpan. Anda melihat **Alasan ditambahkan.** (atau **Alasan diperbarui.** saat mengubah).
   </Step>
 </Steps>
 
-Rules:
+Aturan:
 
-- **Code**: lowercase letters, digits and underscores only, up to 40 characters, unique within its tab. It cannot be changed after creation, and neither can the category. Error: **The code may only contain lowercase letters, digits and underscores.**
-- Both labels are required (**Required.**), up to 120 characters each.
-- **Order** is a whole number, 0 or more; lower numbers appear first. A new reason starts 10 after the highest existing order.
-- Reasons are **never deleted**, because history refers to them. Switch a reason off with its activate switch; inactive reasons are hidden from the reason dialogs elsewhere but still listed here so you can switch them back on.
-- Creating and editing a reason is written to the [Activity log](/insight/activity-log) (`reason_code_created`, `reason_code_updated`).
+- **Kode**: hanya huruf kecil, angka, dan garis bawah, maksimal 40 karakter, unik di dalam tabnya. Tidak dapat diubah setelah dibuat, begitu juga kategorinya. Galat: **Kode hanya boleh huruf kecil, angka, dan garis bawah.**
+- Kedua label wajib diisi (**Wajib diisi.**), maksimal 120 karakter masing-masing.
+- **Urutan** adalah bilangan bulat, 0 atau lebih; angka kecil tampil lebih dulu. Alasan baru dimulai 10 setelah urutan tertinggi yang ada.
+- Alasan **tidak pernah dihapus**, karena riwayat merujuknya. Matikan alasan dengan sakelar aktifkannya; alasan nonaktif disembunyikan dari dialog alasan di tempat lain tetapi tetap dicantumkan di sini agar Anda dapat menyalakannya lagi.
+- Membuat dan mengubah alasan ditulis ke [Log Aktivitas](/insight/activity-log) (`reason_code_created`, `reason_code_updated`).
 
-## Menu release
+## Rilis menu
 
-Chooses whether price and item-status changes apply immediately or wait for a menu release.
+Memilih apakah perubahan harga dan status item langsung berlaku atau menunggu rilis menu.
 
-| Field | Meaning | Rule |
+| Kolom | Arti | Aturan |
 | --- | --- | --- |
-| **Enable menu release** | When on, changes wait for a release and large price differences wait for approval. When off (the default), changes apply immediately. | On or off. |
-| **Price approval threshold (%)** | Price differences above this need approval. Shown only while release is on. Default 15. | 0 to 100. Error: **Enter a number from 0 to 100.** |
-| **Default rounding for bulk price changes** | **No rounding** or **Nearest Rp 500**. Default is Nearest Rp 500. | One of the two. |
+| **Aktifkan rilis menu** | Bila aktif, perubahan menunggu rilis dan selisih harga besar menunggu persetujuan. Bila mati (bawaan), perubahan berlaku seketika. | Aktif atau mati. |
+| **Ambang persetujuan harga (%)** | Selisih harga di atas ini memerlukan persetujuan. Hanya tampil saat rilis aktif. Bawaan 15. | 0 sampai 100. Galat: **Isi angka 0 sampai 100.** |
+| **Pembulatan bawaan ubah harga massal** | **Tanpa pembulatan** atau **Terdekat Rp 500**. Bawaannya Terdekat Rp 500. | Salah satu dari keduanya. |
 
-Click **Save settings**. You see **Menu release settings saved.** All three are saved together. See [Products](/inventory/products) for how releases and approvals work.
+Klik **Simpan pengaturan**. Anda melihat **Pengaturan rilis menu disimpan.** Ketiganya disimpan bersama. Lihat [Produk](/inventory/products) untuk cara rilis dan persetujuan bekerja.
 
-## Backup & restore
+## Cadangan & pemulihan
 
-Keeps a copy of all store data (products, transactions, users, settings). Also keep a copy away from this laptop: download the file or copy it to a flash drive.
+Menyimpan salinan seluruh data toko (produk, transaksi, pengguna, pengaturan). Simpan juga salinannya di luar laptop ini: unduh berkasnya atau salin ke flashdisk.
 
-**Back up now** creates a backup and adds it to the list (**Backup created.**). Each row shows the backup, whether it **Includes payment proofs**, and three actions: **Download** (a `.sql` file named `boothpos-backup-{id}.sql`), **Restore**, and **Delete**.
+**Buat cadangan sekarang** membuat cadangan dan menambahkannya ke daftar (**Cadangan berhasil dibuat.**). Setiap baris menampilkan cadangan itu, apakah **Termasuk bukti pembayaran**, dan tiga tindakan: **Unduh** (berkas `.sql` bernama `boothpos-backup-{id}.sql`), **Pulihkan**, dan **Hapus**.
 
-**Delete** removes only the copy on this machine, after a normal confirmation. A copy on external storage is not touched.
+**Hapus** hanya menghapus salinan di mesin ini, setelah konfirmasi biasa. Salinan di penyimpanan eksternal tidak tersentuh.
 
-### Restore
+### Pemulihan
 
 <Steps>
-  <Step title="Choose the source">
-    Click **Restore** on a listed backup, or under **Restore from a file** click **Choose .sql file**, pick a `.sql` backup made by this app (at most 50 MB), then click **Restore from file**.
+  <Step title="Pilih sumber">
+    Klik **Pulihkan** pada cadangan yang tercantum, atau di bawah **Pulihkan dari berkas** klik **Pilih berkas .sql**, pilih cadangan `.sql` buatan aplikasi ini (maksimal 50 MB), lalu klik **Pulihkan dari berkas**.
   </Step>
-  <Step title="Read the warnings">
-    The dialog **Restore the database?** states that the restore OVERWRITES ALL current data and cannot be undone, and that an automatic backup of the current state is taken first.
+  <Step title="Baca peringatannya">
+    Dialog **Pulihkan database?** menyatakan bahwa pemulihan MENIMPA SELURUH data saat ini dan tidak bisa dibatalkan, dan bahwa cadangan otomatis dari kondisi saat ini dibuat lebih dulu.
   </Step>
-  <Step title="Type the confirmation word">
-    Type `RESTORE` in the field. The **Restore now** button stays disabled until the word matches exactly.
+  <Step title="Ketik kata konfirmasi">
+    Ketik `RESTORE` di kolom. Tombol **Pulihkan sekarang** tetap nonaktif sampai kata itu cocok persis.
   </Step>
-  <Step title="Restore">
-    Click **Restore now**. On success you see **Database restored. Safety backup: \{id\}. The page will reload.** and the page reloads. Your session may end, so sign in again.
+  <Step title="Pulihkan">
+    Klik **Pulihkan sekarang**. Bila berhasil Anda melihat **Database berhasil dipulihkan. Cadangan pengaman: \{id\}. Halaman akan dimuat ulang.** dan halaman dimuat ulang. Sesi Anda dapat berakhir, jadi masuk lagi.
   </Step>
 </Steps>
 
 <Danger>
-  A restore replaces every table. The license activation is restored too. If the backup comes from another device, or was made before this app was activated, the app locks after the restore and must be activated again with a license key. Have one ready.
+  Pemulihan mengganti setiap tabel. Aktivasi lisensi ikut dipulihkan. Bila cadangan berasal dari perangkat lain, atau dibuat sebelum aplikasi ini diaktivasi, aplikasi terkunci setelah pemulihan dan harus diaktivasi ulang dengan kunci lisensi. Siapkan satu kunci.
 </Danger>
 
 <Warning>
-  Payment proof files are backed up but this screen does not restore them.
+  Berkas bukti pembayaran ikut dicadangkan tetapi layar ini tidak memulihkannya.
 </Warning>
 
-Server rules: only users with the Settings menu can back up or restore (403 **Only owner/admin can back up or restore the database.**); the server itself requires the word `RESTORE`; an uploaded file must be a `.sql` file of at most 50 MB that looks like a dump from this app, otherwise **This file does not look like a database backup from this app (the settings and users tables are missing).**; if the safety backup cannot be taken, the restore is cancelled and nothing changes.
+Aturan server: hanya pengguna dengan menu Pengaturan yang dapat mencadangkan atau memulihkan (403 **Hanya owner/admin yang dapat mencadangkan atau memulihkan database.**); server sendiri mewajibkan kata `RESTORE`; berkas yang diunggah harus berkas `.sql` maksimal 50 MB yang tampak seperti dump dari aplikasi ini, bila tidak **Berkas ini tidak tampak seperti cadangan database aplikasi ini (tabel settings dan users tidak ditemukan).**; bila cadangan pengaman tidak dapat dibuat, pemulihan dibatalkan dan tidak ada yang berubah.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| **The file must be an image.** / **Maximum image size is 5 MB.** | Wrong file type or too large. | Use a JPEG or PNG under 5 MB. |
-| A field shows a server message after Save | 422 validation, for example a bad email or time. | Fix the field and save again. |
-| **This installation uses a Pro license (one outlet)...** | Creating a second outlet on Pro. | Switch to Master in **License tier**. |
-| **Could not take a safety backup ... the restore was cancelled** | The pre-restore backup failed. The server answers with a 500 error and nothing is changed. | Free disk space or fix the reported reason, then retry. |
-| **Backup not found.** | The backup was deleted. | Refresh the list. |
-| The Settings page is not in the menu | Your role lacks `settings`. | Ask an owner or admin, see [Roles](/settings/roles). |
+| **Berkas harus berupa gambar.** / **Ukuran gambar maksimal 5 MB.** | Tipe berkas salah atau terlalu besar. | Pakai JPEG atau PNG di bawah 5 MB. |
+| Sebuah kolom menampilkan pesan server setelah Simpan | Validasi 422, misalnya email atau jam yang salah. | Perbaiki kolom lalu simpan lagi. |
+| **Instalasi ini memakai lisensi Pro (satu outlet)...** | Membuat outlet kedua pada Pro. | Beralih ke Master di **Tingkat lisensi**. |
+| **Cadangan pengaman data saat ini gagal dibuat, sehingga pemulihan dibatalkan dan tidak ada yang diubah** | Cadangan sebelum pemulihan gagal. Server menjawab galat 500 dan tidak ada yang diubah. | Kosongkan ruang disk atau perbaiki alasan yang dilaporkan, lalu coba lagi. |
+| **Cadangan tidak ditemukan.** | Cadangan sudah dihapus. | Segarkan daftar. |
+| Halaman Pengaturan tidak ada di menu | Peran Anda tidak punya `settings`. | Minta owner atau admin, lihat [Peran](/settings/roles). |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Payment channels" href="/settings/payment-channels">Bank and QRIS accounts.</Card>
-  <Card title="DEMO and LIVE mode" href="/concepts/demo-and-live-mode">What the mode switch changes.</Card>
-  <Card title="Business day" href="/concepts/business-day">Cut-off and business date.</Card>
-  <Card title="Users" href="/settings/users">Accounts, roles and PINs.</Card>
+  <Card title="Kanal pembayaran" href="/settings/payment-channels">Rekening bank dan QRIS.</Card>
+  <Card title="Mode DEMO dan LIVE" href="/concepts/demo-and-live-mode">Yang diubah oleh peralihan mode.</Card>
+  <Card title="Hari bisnis" href="/concepts/business-day">Batas pergantian hari dan tanggal bisnis.</Card>
+  <Card title="Pengguna" href="/settings/users">Akun, peran, dan PIN.</Card>
 </Columns>

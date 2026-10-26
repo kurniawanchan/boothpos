@@ -1,160 +1,160 @@
 ---
-title: "Users"
-description: "Create and manage staff accounts, assign roles and outlets, and set or reset tablet PINs."
-keywords: ["users", "accounts", "role", "pin", "outlet assignment", "password", "deactivate"]
+title: "Pengguna"
+description: "Buat dan kelola akun staf, tetapkan peran dan outlet, serta atur atau reset PIN tablet."
+keywords: ["pengguna", "akun", "peran", "pin", "penugasan outlet", "password", "nonaktifkan"]
 ---
 
-The **Users** screen lists the accounts that can sign in to BoothPOS. From it you create accounts, change roles, switch accounts on or off, assign outlets, upload photos, and set the PIN staff use on the tablet.
+Layar **Pengguna** mencantumkan akun yang dapat masuk ke BoothPOS. Dari sini Anda membuat akun, mengganti peran, mengaktifkan atau menonaktifkan akun, menugaskan outlet, mengunggah foto, dan mengatur PIN yang dipakai staf di tablet.
 
-## Before you start
+## Sebelum mulai
 
-- You need the **Users** menu (menu key `users`) to open the screen and to create, edit or delete users.
-- **Set PIN / Reset PIN** needs the **Settings** menu (`settings`), not just **Users**. The button is hidden without it, and the server answers 403 if it is called anyway.
-- Only accounts of the **current data mode** are listed: DEMO and LIVE have separate user lists. See [DEMO and LIVE mode](/concepts/demo-and-live-mode).
-- A role must exist before you can give it to a user. See [Roles](/settings/roles).
+- Anda memerlukan menu **Pengguna** (kunci menu `users`) untuk membuka layar dan untuk membuat, mengubah, atau menghapus pengguna.
+- **Atur PIN / Reset PIN** memerlukan menu **Pengaturan** (`settings`), bukan hanya **Pengguna**. Tombolnya disembunyikan tanpa menu itu, dan server menjawab 403 bila tetap dipanggil.
+- Hanya akun dari **mode data saat ini** yang dicantumkan: DEMO dan LIVE punya daftar pengguna yang terpisah. Lihat [Mode DEMO dan LIVE](/concepts/demo-and-live-mode).
+- Sebuah peran harus ada sebelum Anda dapat memberikannya kepada pengguna. Lihat [Peran](/settings/roles).
 
-## The user list
+## Daftar pengguna
 
-| Column | Meaning |
+| Kolom | Arti |
 | --- | --- |
-| **Name** | Name, with photo or initial. |
-| **Username** | The sign-in name. |
-| **Role** | The user's role. |
-| **Outlets** | Only shown when the organisation has more than one outlet. **All outlets** for roles that see everything, **Not assigned** (in red) if none, otherwise the outlet codes. |
-| **PIN** | **Has PIN**, **No PIN**, or **Locked** (too many wrong PIN attempts). |
-| **Last Access** | Last sign-in time, or **Never**. |
-| **Status** | **Active** or **Inactive**. |
+| **Nama** | Nama, dengan foto atau inisial. |
+| **Username** | Nama untuk masuk. |
+| **Peran** | Peran pengguna. |
+| **Outlet** | Hanya tampil bila organisasi punya lebih dari satu outlet. **Semua outlet** untuk peran yang melihat semuanya, **Belum ditugaskan** (merah) bila tidak ada, selain itu kode outlet. |
+| **PIN** | **Ada PIN**, **Belum ada PIN**, atau **Terkunci** (terlalu banyak percobaan PIN yang salah). |
+| **Terakhir Akses** | Waktu masuk terakhir, atau **Belum pernah**. |
+| **Status** | **Aktif** atau **Nonaktif**. |
 
-Users are sorted by name, 25 per page.
+Pengguna diurutkan menurut nama, 25 per halaman.
 
-### Search and filters
+### Pencarian dan filter
 
-| Control | Effect |
+| Kontrol | Efek |
 | --- | --- |
-| Search box (**Search name or username…**) | Matches part of the name or the username. |
-| **All roles** | Filter by one role. |
-| **All statuses** | **Active** or **Inactive**. |
-| **All PIN statuses** | **Has PIN** or **No PIN**. |
+| Kotak pencarian (**Cari nama atau username…**) | Mencocokkan sebagian nama atau username. |
+| **Semua peran** | Filter menurut satu peran. |
+| **Semua status** | **Aktif** atau **Nonaktif**. |
+| **Semua status PIN** | **Ada PIN** atau **Belum ada PIN**. |
 
-The reset control clears all of them. The counter shows the total of the filtered result.
+Kontrol atur ulang mengosongkan semuanya. Penghitung menampilkan total hasil yang terfilter.
 
-## Create a user
+## Membuat pengguna
 
 <Steps>
-  <Step title="Add user">
-    Click **Add user**. The **New user** dialog opens.
+  <Step title="Tambah pengguna">
+    Klik **Tambah pengguna**. Dialog **Pengguna baru** terbuka.
   </Step>
-  <Step title="Fill the form">
-    Enter **Name**, **Username**, **Password**, and choose a **Role**. Optionally pick a **Photo** (JPEG or PNG). **Active** is ticked by default.
+  <Step title="Isi formulir">
+    Masukkan **Nama**, **Username**, **Password**, dan pilih **Peran**. Secara opsional pilih **Foto** (JPEG atau PNG). **Aktif** dicentang secara bawaan.
   </Step>
-  <Step title="Assign outlets (more than one outlet only)">
-    If the organisation has more than one outlet and the chosen role does not see all outlets, a list of outlet checkboxes appears. Tick the outlets this user works in.
+  <Step title="Tetapkan outlet (hanya bila lebih dari satu outlet)">
+    Bila organisasi punya lebih dari satu outlet dan peran yang dipilih tidak melihat semua outlet, daftar kotak centang outlet muncul. Centang outlet tempat pengguna ini bekerja.
   </Step>
-  <Step title="Save">
-    Click **Save**. You see **User created.**
+  <Step title="Simpan">
+    Klik **Simpan**. Anda melihat **Pengguna dibuat.**
   </Step>
 </Steps>
 
-### Field rules
+### Aturan kolom
 
-| Field | Rule |
+| Kolom | Aturan |
 | --- | --- |
-| **Name** | Required, up to 100 characters. |
-| **Username** | Required, up to 50 characters, unique among existing users (deleted users do not count). Sign-in uses the username, not an email. |
-| **Password** | Required when creating, at least 8 characters. When editing, leave blank to keep the current password. |
-| **Role** | Required, must be an existing role. |
-| **Photo** | JPEG or PNG, up to 5 MB. |
+| **Nama** | Wajib, maksimal 100 karakter. |
+| **Username** | Wajib, maksimal 50 karakter, unik di antara pengguna yang ada (pengguna yang dihapus tidak dihitung). Masuk memakai username, bukan email. |
+| **Password** | Wajib saat membuat, minimal 8 karakter. Saat mengubah, kosongkan untuk mempertahankan password saat ini. |
+| **Peran** | Wajib, harus peran yang ada. |
+| **Foto** | JPEG atau PNG, maksimal 5 MB. |
 
-Saving is done in separate steps: the account first, then the photo, then the outlets. If the photo or the outlet assignment fails, the account is already saved and you get a separate error toast instead of the dialog staying stuck. Check the row afterwards.
+Penyimpanan dilakukan dalam langkah terpisah: akun lebih dulu, lalu foto, lalu outlet. Bila foto atau penugasan outlet gagal, akun sudah tersimpan dan Anda mendapat toast galat terpisah, bukan dialog yang macet. Periksa barisnya sesudahnya.
 
 <Note>
-  On a single-outlet installation, a new user whose role does not see all outlets is assigned automatically to the only active outlet, so they can open a shift. With several outlets you must assign outlets yourself, or the user sees **This account is not assigned to any outlet. Ask an administrator to assign it.**
+  Pada instalasi satu outlet, pengguna baru yang perannya tidak melihat semua outlet otomatis ditugaskan ke satu-satunya outlet aktif, sehingga ia dapat membuka shift. Dengan beberapa outlet Anda harus menugaskan outlet sendiri, atau pengguna melihat **Akun ini belum ditugaskan ke outlet. Minta administrator menugaskannya.**
 </Note>
 
-## Edit a user
+## Mengubah pengguna
 
-Click **Edit** on a row. The same form opens with the current values. You can change the name, username, role, password, photo, active status and outlets. Saved message: **User updated.**
+Klik **Edit** pada sebuah baris. Formulir yang sama terbuka dengan nilai saat ini. Anda dapat mengubah nama, username, peran, password, foto, status aktif, dan outlet. Pesan tersimpan: **Pengguna diperbarui.**
 
-## Assign outlets
+## Menugaskan outlet
 
-The outlet list appears in the form only when there is more than one outlet and the selected role is not marked **Sees all outlets**. Owner and Admin always see every outlet and are never assigned (the server answers 409: **Owners and admins always see every outlet, so they are not assigned to particular outlets.**).
+Daftar outlet muncul di formulir hanya bila ada lebih dari satu outlet dan peran yang dipilih tidak ditandai **Melihat semua outlet**. Owner dan Admin selalu melihat semua outlet dan tidak pernah ditugaskan (server menjawab 409: **Owner dan Admin selalu melihat semua outlet, jadi tidak perlu ditugaskan ke outlet tertentu.**).
 
-Rules enforced by the server on outlet assignment:
+Aturan yang ditegakkan server pada penugasan outlet:
 
-- You cannot change your own outlet assignment (403, **This outlet is not one you are allowed to access.**). Widening your own outlets would be a privilege escalation.
-- If your own role does not see all outlets, you can only add or remove outlets you can see yourself (403 otherwise).
-- Only active outlets of the current mode can be assigned (**The outlet was not found or is inactive.**).
-- Every assignment change is recorded in the [Activity log](/insight/activity-log) as `user_outlets_updated`.
+- Anda tidak dapat mengubah penugasan outlet Anda sendiri (403, **Outlet ini tidak termasuk outlet yang boleh Anda akses.**). Memperluas outlet Anda sendiri akan menjadi eskalasi hak akses.
+- Bila peran Anda sendiri tidak melihat semua outlet, Anda hanya dapat menambah atau mencabut outlet yang dapat Anda lihat sendiri (selain itu 403).
+- Hanya outlet aktif pada mode saat ini yang dapat ditugaskan (**Outlet tidak ditemukan atau nonaktif.**).
+- Setiap perubahan penugasan dicatat di [Log Aktivitas](/insight/activity-log) sebagai `user_outlets_updated`.
 
-See [Outlets](/concepts/outlets) for how outlet scope affects what a user sees.
+Lihat [Outlet](/concepts/outlets) untuk pengaruh cakupan outlet pada apa yang dilihat pengguna.
 
-## Set or reset a PIN
+## Mengatur atau mereset PIN
 
-Staff sign in on the tablet with a 6-digit PIN. Owner and admin set it here; the PIN is never shown in the user list.
+Staf masuk di tablet dengan PIN 6 digit. Owner dan admin mengaturnya di sini; PIN tidak pernah ditampilkan di daftar pengguna.
 
 <Steps>
-  <Step title="Open the PIN dialog">
-    Click **Set PIN** on a user without a PIN, or **Reset PIN** on one who has a PIN. The title reads **Set PIN — \{name\}** or **Reset PIN — \{name\}**.
+  <Step title="Buka dialog PIN">
+    Klik **Atur PIN** pada pengguna tanpa PIN, atau **Reset PIN** pada pengguna yang punya PIN. Judulnya berbunyi **Atur PIN — \{name\}** atau **Reset PIN — \{name\}**.
   </Step>
-  <Step title="Type a PIN or generate one">
-    Type exactly 6 digits in **PIN (6 digits)**, or click **Generate random PIN**. Use **Show PIN** / **Hide PIN** to reveal or hide what is in the field.
+  <Step title="Ketik PIN atau buat otomatis">
+    Ketik tepat 6 digit di **PIN (6 digit)**, atau klik **Buat PIN acak**. Gunakan **Tampilkan PIN** / **Sembunyikan PIN** untuk menampilkan atau menyembunyikan isi kolom.
   </Step>
-  <Step title="Save">
-    Click **Save PIN**. You see **PIN for \{name\} saved.**
+  <Step title="Simpan">
+    Klik **Simpan PIN**. Anda melihat **PIN \{name\} berhasil disimpan.**
   </Step>
-  <Step title="Pass the PIN on">
-    For a generated PIN, note it now: the dialog says **Note the PIN below now. Once the dialog is closed it can't be shown again.** A PIN you typed yourself is not shown again at all.
+  <Step title="Sampaikan PIN">
+    Untuk PIN yang dibuat otomatis, catat sekarang: dialog berkata **Catat PIN di bawah sekarang. Setelah dialog ditutup, PIN tidak bisa ditampilkan lagi.** PIN yang Anda ketik sendiri tidak ditampilkan lagi sama sekali.
   </Step>
 </Steps>
 
-What to know:
+Yang perlu diketahui:
 
-- The PIN must be exactly 6 digits and not too easy to guess. All-same digits (for example six identical digits) and straight runs up or down are refused with **PIN is too easy to guess (repeated or sequential digits).** Generated PINs always pass this rule.
-- The generated PIN is requested from the server and only stored when you click **Save PIN**. Nothing is kept in the browser after the dialog closes.
-- When you reset an existing PIN, the old PIN stops working, any lock is cleared, and the user must sign in again on the tablet.
-- Five wrong PIN attempts lock the user's PIN for 5 minutes; the list then shows **Locked**. Resetting the PIN clears the lock.
-- Each set or reset is written to the [Activity log](/insight/activity-log) as `pin_set` or `pin_replaced`. The log never contains the PIN.
+- PIN harus tepat 6 digit dan tidak terlalu mudah ditebak. Semua digit sama (misalnya enam digit identik) dan deretan naik atau turun ditolak dengan **PIN terlalu mudah ditebak (angka sama atau berurutan).** PIN yang dibuat otomatis selalu lolos aturan ini.
+- PIN yang dibuat otomatis diminta dari server dan hanya disimpan saat Anda mengklik **Simpan PIN**. Tidak ada yang disimpan di browser setelah dialog ditutup.
+- Saat Anda mereset PIN yang sudah ada, PIN lama berhenti berlaku, kunci apa pun dibuka, dan pengguna harus masuk ulang di tablet.
+- Lima kali salah memasukkan PIN mengunci PIN pengguna selama 5 menit; daftar lalu menampilkan **Terkunci**. Mereset PIN membuka kunci.
+- Setiap pengaturan atau reset dicatat di [Log Aktivitas](/insight/activity-log) sebagai `pin_set` atau `pin_replaced`. Log tidak pernah berisi PIN.
 
 <Warning>
-  Treat a PIN like a password. Do not write it in chat, a ticket or a shared document.
+  Perlakukan PIN seperti password. Jangan menuliskannya di chat, tiket, atau dokumen bersama.
 </Warning>
 
-Tablet terminals are registered from the tablet itself; this web screen has no terminal list. Open shifts show the terminal name in [Shifts](/operations/shifts).
+Terminal tablet didaftarkan dari tablet itu sendiri; layar web ini tidak punya daftar terminal. Shift yang terbuka menampilkan nama terminal di [Shift](/operations/shifts).
 
-## Deactivate or delete a user
+## Menonaktifkan atau menghapus pengguna
 
-Untick **Active** in the edit form to stop an account from being used without deleting it. To remove it, click **Delete** and confirm **Delete \{name\}?** You see **User deleted.** Deleting is a soft delete: the username becomes available again, and the action is written to the activity log.
+Hapus centang **Aktif** di formulir edit untuk menghentikan penggunaan akun tanpa menghapusnya. Untuk menghapusnya, klik **Hapus** dan konfirmasi **Hapus \{name\}?** Anda melihat **Pengguna dihapus.** Penghapusan bersifat soft delete: username menjadi tersedia lagi, dan tindakan ditulis ke log aktivitas.
 
-### Protections on your own account
+### Perlindungan pada akun Anda sendiri
 
-You cannot lock yourself out. These answer 409:
+Anda tidak dapat mengunci diri sendiri. Hal-hal ini dijawab 409:
 
-| Action | Message |
+| Tindakan | Pesan |
 | --- | --- |
-| Deactivate your own account, or change your own role | **You cannot deactivate or change the role of the account you are currently using.** |
-| Delete your own account | **You cannot delete the account you are currently using.** |
+| Menonaktifkan akun Anda sendiri, atau mengganti peran Anda sendiri | **Tidak dapat menonaktifkan atau mengganti peran akun yang sedang Anda gunakan sendiri.** |
+| Menghapus akun Anda sendiri | **Tidak dapat menghapus akun yang sedang Anda gunakan sendiri.** |
 
-The screen already hides **Delete** on your own row and disables **Role** and **Active** in your own edit form. The server enforces it even if the screen is bypassed.
+Layar sudah menyembunyikan **Hapus** pada baris Anda sendiri dan menonaktifkan **Peran** dan **Aktif** di formulir edit Anda sendiri. Server tetap menegakkannya meskipun layar dilewati.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message or symptom | Cause | Fix |
+| Pesan atau gejala | Penyebab | Solusi |
 | --- | --- | --- |
-| Field error under **Username** | Already used (422). | Choose another username. |
-| Field error under **Password** | Fewer than 8 characters. | Use a longer password. |
-| **Set PIN** button is missing | You have **Users** but not **Settings**. | Ask an owner or admin, or give the role the **Settings** menu in [Roles](/settings/roles). |
-| **PIN is too easy to guess (repeated or sequential digits).** | Weak PIN (422). | Pick another or use **Generate random PIN**. |
-| **Could not save the PIN.** / **Could not generate a PIN.** | Request failed. | Try again. |
-| **Not assigned** in the Outlets column | No outlet assigned. | Edit the user and tick at least one outlet. |
-| User cannot open a shift: **This account is not assigned to any outlet.** | Same as above. | Assign an outlet. |
-| **Failed to upload the user's photo.** | Wrong type or too large. | Use JPEG or PNG under 5 MB. |
-| The role list is empty in the form | The roles list failed to load, or your role cannot read roles. | The roles list is read through the **Roles** menu on the server, so a user who has **Users** but not **Roles** gets an empty role drop-down (the screen swallows the 403). Give them both menus, or reload if it was a temporary failure. |
+| Galat kolom di bawah **Username** | Sudah dipakai (422). | Pilih username lain. |
+| Galat kolom di bawah **Password** | Kurang dari 8 karakter. | Pakai password yang lebih panjang. |
+| Tombol **Atur PIN** tidak ada | Anda punya **Pengguna** tetapi tidak **Pengaturan**. | Minta owner atau admin, atau berikan menu **Pengaturan** pada peran di [Peran](/settings/roles). |
+| **PIN terlalu mudah ditebak (angka sama atau berurutan).** | PIN lemah (422). | Pilih yang lain atau pakai **Buat PIN acak**. |
+| **Gagal menyimpan PIN.** / **Gagal membuat PIN acak.** | Permintaan gagal. | Coba lagi. |
+| **Belum ditugaskan** di kolom Outlet | Belum ada outlet yang ditugaskan. | Edit pengguna dan centang setidaknya satu outlet. |
+| Pengguna tidak dapat membuka shift: **Akun ini belum ditugaskan ke outlet.** | Sama seperti di atas. | Tetapkan outlet. |
+| **Gagal mengunggah foto pengguna.** | Tipe salah atau terlalu besar. | Pakai JPEG atau PNG di bawah 5 MB. |
+| Daftar peran kosong di formulir | Daftar peran gagal dimuat, atau peran Anda tidak dapat membaca peran. | Daftar peran dibaca lewat menu **Peran** di server, sehingga pengguna yang punya **Pengguna** tetapi tidak **Peran** mendapat drop-down peran kosong (layar menelan 403-nya). Berikan kedua menu, atau muat ulang bila hanya gangguan sementara. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Roles" href="/settings/roles">Define menu access and action permissions.</Card>
-  <Card title="Outlets" href="/concepts/outlets">How outlet scope works.</Card>
-  <Card title="Activity log" href="/insight/activity-log">Audit of PIN and outlet changes.</Card>
-  <Card title="My profile" href="/settings/profile">Users change their own password and photo.</Card>
+  <Card title="Peran" href="/settings/roles">Tentukan akses menu dan izin aksi.</Card>
+  <Card title="Outlet" href="/concepts/outlets">Cara kerja cakupan outlet.</Card>
+  <Card title="Log aktivitas" href="/insight/activity-log">Audit perubahan PIN dan outlet.</Card>
+  <Card title="Profil saya" href="/settings/profile">Pengguna mengganti password dan foto sendiri.</Card>
 </Columns>

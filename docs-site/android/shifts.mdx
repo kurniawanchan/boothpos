@@ -1,177 +1,177 @@
 ---
-title: "Shifts on the tablet"
-description: "Open a cashier shift with a denomination count, watch its totals, record cash in and out, and close it with a count and an approval when the drawer is off."
-keywords: ["android", "tablet", "shift", "open shift", "close shift", "X-report", "cash in", "cash out", "denomination", "variance", "approval", "QRIS pending"]
+title: "Shift di tablet"
+description: "Buka shift kasir dengan hitungan per pecahan, pantau angkanya, catat kas masuk dan keluar, lalu tutup shift dengan hitungan dan persetujuan bila uang di laci tidak sesuai."
+keywords: ["android", "tablet", "shift", "buka shift", "tutup shift", "X-report", "kas masuk", "kas keluar", "pecahan", "selisih", "persetujuan", "QRIS tertunda"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-A **shift** is the period in which one person takes payments on the tablet. Every cash payment, cash in and cash out is attached to the shift that was open when it happened. The tablet shows the shift screens under **Shift** in the navigation. Cashiers open and close their own shift; the numbers always come from the server.
+**Shift** adalah periode saat satu orang menerima pembayaran di tablet. Setiap pembayaran tunai, kas masuk, dan kas keluar melekat pada shift yang terbuka saat kejadian itu. Tablet menampilkan layar shift di bawah **Shift** pada navigasi. Kasir membuka dan menutup shift miliknya sendiri; angkanya selalu berasal dari server.
 
-## Before you start
+## Sebelum mulai
 
-- The tablet must be set up and you must be signed in with your PIN, see [Sign in with a PIN](/android/pin-sign-in).
-- You need a connection to the server for every step on this page. Opening a shift, recording cash and closing a shift are not queued offline, see [Offline and sync](/android/offline-and-sync).
-- Each person has **one open shift on the tablet** and, separately, one on the web. They do not see each other: payments, refunds and cash out go to the shift of the device you used. See [Cashier session (shifts)](/operations/shifts) for the web side.
-- The shift belongs to the outlet of the terminal. You do not choose the outlet on the tablet, see [Outlets](/concepts/outlets).
+- Tablet harus sudah disiapkan dan Anda harus sudah masuk dengan PIN, lihat [Masuk dengan PIN](/android/pin-sign-in).
+- Setiap langkah di halaman ini membutuhkan koneksi ke server. Membuka shift, mencatat kas, dan menutup shift tidak diantrekan saat offline, lihat [Offline dan sinkronisasi](/android/offline-and-sync).
+- Setiap orang punya **satu shift terbuka di tablet** dan, terpisah, satu di web. Keduanya tidak saling terlihat: pembayaran, refund, dan kas keluar masuk ke shift pada perangkat yang Anda pakai. Untuk sisi web, lihat [Sesi kasir (shift)](/operations/shifts).
+- Shift milik outlet dari terminal. Anda tidak memilih outlet di tablet, lihat [Outlet](/concepts/outlets).
 
 <Info>
-The web page takes one typed closing amount. The tablet counts by denomination (or a typed total) and adds two checks the web does not apply: unverified QRIS payments block the close, and a large difference needs an approver.
+Halaman web menerima satu nominal penutupan yang diketik. Tablet menghitung per pecahan (atau total yang diketik) dan menambah dua pemeriksaan yang tidak diterapkan web: pembayaran QRIS yang belum diverifikasi memblokir penutupan, dan selisih yang besar membutuhkan penyetuju.
 </Info>
 
-## Who can do what
+## Siapa boleh melakukan apa
 
-| Action | Who | If you lack it |
+| Tindakan | Siapa | Jika Anda tidak berhak |
 | --- | --- | --- |
-| Open and close your own shift | Any signed-in staff member | Only the person who opened a shift (or an owner or admin) can close it: "Anda tidak berhak menutup sesi ini." |
-| Record cash in | Owner of the shift only | "Kas hanya bisa dicatat di shift Anda sendiri." |
-| Record cash out up to the limit | Owner of the shift only | Same message |
-| Record cash out above the limit | Needs a holder of the cash-out approval permission, or that person's PIN | The approval sheet opens, see [Approvals](/android/approvals) |
-| Close with a difference above tolerance | Needs a holder of the variance approval permission, or that person's PIN | The approval sheet opens |
+| Membuka dan menutup shift sendiri | Staf mana pun yang sudah masuk | Hanya orang yang membuka shift (atau owner atau admin) yang dapat menutupnya: "Anda tidak berhak menutup sesi ini." |
+| Mencatat kas masuk | Hanya pemilik shift | "Kas hanya bisa dicatat di shift Anda sendiri." |
+| Mencatat kas keluar sampai batas | Hanya pemilik shift | Pesan yang sama |
+| Mencatat kas keluar di atas batas | Perlu pemegang izin persetujuan kas keluar, atau PIN orang tersebut | Lembar persetujuan terbuka, lihat [Persetujuan](/android/approvals) |
+| Menutup dengan selisih di atas toleransi | Perlu pemegang izin persetujuan selisih, atau PIN orang tersebut | Lembar persetujuan terbuka |
 
-By default owners and admins hold every approval permission. Other roles hold them only when an administrator granted them, see [Roles](/settings/roles).
+Secara bawaan owner dan admin memegang semua izin persetujuan. Peran lain memegangnya hanya bila administrator memberikannya, lihat [Peran](/settings/roles).
 
-## Open a shift
+## Buka shift
 
-After you sign in as a cashier with no open shift, the tablet shows **Buka shift** (open shift) automatically. Other roles reach it from **Shift** in the navigation, where the empty state reads **Belum ada shift** (no shift yet) with a **Buka shift** button.
+Setelah Anda masuk sebagai kasir tanpa shift terbuka, tablet otomatis menampilkan **Buka shift**. Peran lain menjangkaunya dari **Shift** di navigasi; keadaan kosongnya bertuliskan **Belum ada shift** dengan tombol **Buka shift**.
 
 <Steps>
-  <Step title="Count the starting cash">
-    Under **Hitung modal per pecahan** (count starting cash by denomination), tap the plus and minus buttons for each denomination: Rp 100.000, Rp 50.000, Rp 20.000, Rp 10.000, Rp 5.000, Rp 2.000, Rp 1.000 and **Koin Rp 500** (coin Rp 500). The big **Total modal** (total starting cash) updates as you count.
+  <Step title="Hitung modal awal">
+    Di bawah **Hitung modal per pecahan**, ketuk tombol plus dan minus untuk setiap pecahan: Rp 100.000, Rp 50.000, Rp 20.000, Rp 10.000, Rp 5.000, Rp 2.000, Rp 1.000, dan **Koin Rp 500**. **Total modal** yang besar diperbarui saat Anda menghitung.
   </Step>
-  <Step title="Or type the total">
-    Type the amount in **Atau ketik total modal** (or type the starting total). The field takes digits only, shows dots as thousand separators and stops at 9 digits.
+  <Step title="Atau ketik totalnya">
+    Ketik nominal di **Atau ketik total modal**. Kolom ini hanya menerima angka, menampilkan titik sebagai pemisah ribuan, dan berhenti di 9 digit.
   </Step>
-  <Step title="Tap Buka shift">
-    The shift opens and the tablet goes to **Meja** (tables). A message reads "Shift dibuka dengan modal Rp 150.000." with your amount.
+  <Step title="Ketuk Buka shift">
+    Shift terbuka dan tablet menuju **Meja**. Muncul pesan "Shift dibuka dengan modal Rp 150.000." dengan nominal Anda.
   </Step>
 </Steps>
 
 <Note>
-The last thing you touch wins. Tapping a denomination button clears the typed total; typing clears the denomination counts. Only one total is ever sent.
+Yang terakhir Anda sentuh yang berlaku. Mengetuk tombol pecahan menghapus total yang diketik; mengetik menghapus hitungan pecahan. Hanya satu total yang dikirim.
 </Note>
 
-- With a total of Rp 0 the tablet asks **Buka shift dengan modal Rp 0?** and says "Pastikan memang tidak ada uang kembalian di kasir." Tap **Buka shift** to confirm or **Batal** to go back.
-- The screen says "Pembayaran hanya bisa diterima setelah shift terbuka di server." You can take orders without a shift only up to the payment step.
-- **Keluar** (sign out) at the top right locks the tablet again without opening a shift.
-- If the connection drops after you tapped **Buka shift**, the tablet asks the server whether the shift exists. If it does you see "Shift sudah terbuka di server." and no second shift is created.
+- Dengan total Rp 0, tablet bertanya **Buka shift dengan modal Rp 0?** dan menyatakan "Pastikan memang tidak ada uang kembalian di kasir." Ketuk **Buka shift** untuk mengonfirmasi atau **Batal** untuk kembali.
+- Layar menyatakan "Pembayaran hanya bisa diterima setelah shift terbuka di server." Tanpa shift, Anda hanya dapat mengambil pesanan sampai langkah pembayaran.
+- **Keluar** di kanan atas mengunci tablet lagi tanpa membuka shift.
+- Jika koneksi putus setelah Anda mengetuk **Buka shift**, tablet menanyakan ke server apakah shift sudah ada. Jika sudah, Anda melihat "Shift sudah terbuka di server." dan shift kedua tidak dibuat.
 
-## The shift screen
+## Layar shift
 
-**Shift** shows who opened the shift and when ("Dibuka 08:00 · modal Rp 150.000"), then the figures for the shift:
+**Shift** menampilkan siapa yang membuka shift dan kapan ("Dibuka 08:00 · modal Rp 150.000"), lalu angka-angka shift:
 
-| Tile | Meaning |
+| Ubin | Arti |
 | --- | --- |
-| **Penjualan** (sales) | Total sales and the number of receipts ("N struk"). |
-| **Tunai bersih** (net cash) | Cash received minus change given. |
-| **Transfer** | Bank transfer and EDC payments, labelled "Non-tunai". |
-| **QRIS** | QRIS payments. The note always reads "Sudah terverifikasi" (already verified). |
-| **Kas masuk / keluar** (cash in / out) | The two totals and the number of entries ("N catatan"). |
-| **Void / batal** (void / cancelled) | Count and value of voided items and cancelled orders. |
+| **Penjualan** | Total penjualan dan jumlah struk ("N struk"). |
+| **Tunai bersih** | Tunai yang diterima dikurangi kembalian yang diberikan. |
+| **Transfer** | Pembayaran transfer bank dan EDC, berlabel "Non-tunai". |
+| **QRIS** | Pembayaran QRIS. Keterangannya selalu berbunyi "Sudah terverifikasi". |
+| **Kas masuk / keluar** | Kedua total dan jumlah entri ("N catatan"). |
+| **Void / batal** | Jumlah dan nilai item yang di-void serta order yang dibatalkan. |
 
-Below them are **Penjualan per jam** (sales per hour, one bar per hour, the current hour highlighted) and **Komposisi pembayaran** (payment mix: net cash, transfer and QRIS as percentages). Pull down to refresh. While the figures load you see a spinner; if loading fails you see the error with a retry button. The tablet never shows old numbers as current ones.
+Di bawahnya ada **Penjualan per jam** (satu batang per jam, jam saat ini disorot) dan **Komposisi pembayaran** (tunai bersih, transfer, dan QRIS dalam persen). Tarik ke bawah untuk menyegarkan. Saat angka dimuat Anda melihat indikator pemuatan; jika gagal, Anda melihat galatnya dengan tombol coba lagi. Tablet tidak pernah menampilkan angka lama sebagai angka terkini.
 
-The four buttons at the bottom are **Kas masuk**, **Kas keluar**, **X-report** and **Tutup shift** (close shift).
+Empat tombol di bagian bawah adalah **Kas masuk**, **Kas keluar**, **X-report**, dan **Tutup shift**.
 
-## Record cash in or out
+## Catat kas masuk atau keluar
 
 <Steps>
-  <Step title="Open the sheet">
-    Tap **Kas masuk** or **Kas keluar**. The sheet is titled **Kas masuk** or **Kas keluar** with "Dicatat ke shift" and your name. The two chips at the top switch direction and clear the reason you picked.
+  <Step title="Buka lembar">
+    Ketuk **Kas masuk** atau **Kas keluar**. Lembar berjudul **Kas masuk** atau **Kas keluar** dengan "Dicatat ke shift" dan nama Anda. Dua chip di atas mengganti arah dan menghapus alasan yang sudah Anda pilih.
   </Step>
-  <Step title="Pick a reason">
-    Cash in: **Tambah modal** (top up float), **Kembalian dari supplier** (change from supplier), **Lainnya** (other). Cash out: **Belanja bahan** (buy ingredients), **Setor ke brankas** (deposit to safe), **Bayar ojek / kurir** (pay courier), **Lainnya**.
+  <Step title="Pilih alasan">
+    Kas masuk: **Tambah modal**, **Kembalian dari supplier**, **Lainnya**. Kas keluar: **Belanja bahan**, **Setor ke brankas**, **Bayar ojek / kurir**, **Lainnya**.
   </Step>
-  <Step title="Add a note if needed">
-    **Lainnya** requires **Catatan (wajib)** (note, required), up to 200 characters.
+  <Step title="Tambahkan catatan bila perlu">
+    **Lainnya** mewajibkan **Catatan (wajib)**, maksimal 200 karakter.
   </Step>
-  <Step title="Type the amount and tap Simpan">
-    Use the keypad (it has a **000** key; up to 9 digits). **Simpan** (save) stays disabled until you picked a reason, entered an amount above zero and, for **Lainnya**, a note. A message reads "Kas keluar Rp 50.000 dicatat." and the tiles refresh.
+  <Step title="Ketik nominal dan ketuk Simpan">
+    Gunakan keypad (ada tombol **000**; maksimal 9 digit). **Simpan** tetap nonaktif sampai Anda memilih alasan, memasukkan nominal di atas nol, dan, untuk **Lainnya**, mengisi catatan. Muncul pesan "Kas keluar Rp 50.000 dicatat." dan ubin diperbarui.
   </Step>
 </Steps>
 
-### Cash out above the limit
+### Kas keluar di atas batas
 
-The server has a cash-out approval limit (a setting; the server default is Rp 200.000). Above it:
+Server memiliki batas persetujuan kas keluar (sebuah pengaturan; bawaan server Rp 200.000). Di atas batas itu:
 
-- The sheet shows a red line "Di atas Rp 200.000: perlu persetujuan." If the tablet could not read the limit it shows "Kas keluar di atas batas server perlu persetujuan." instead.
-- **Simpan** still works. The server answers that approval is needed and the **Perlu persetujuan** sheet opens with the summary ("Kas keluar Rp 250.000 · Belanja bahan"). An approver picks their name and types their 6-digit PIN, then the tablet saves the entry once. See [Approvals](/android/approvals).
-- A holder of the cash-out approval permission records it without a second person.
+- Lembar menampilkan baris merah "Di atas Rp 200.000: perlu persetujuan." Jika tablet tidak dapat membaca batasnya, yang tampil adalah "Kas keluar di atas batas server perlu persetujuan."
+- **Simpan** tetap berfungsi. Server menjawab bahwa persetujuan diperlukan dan lembar **Perlu persetujuan** terbuka dengan ringkasannya ("Kas keluar Rp 250.000 · Belanja bahan"). Seorang penyetuju memilih namanya dan mengetik PIN 6 digitnya, lalu tablet menyimpan entri itu satu kali. Lihat [Persetujuan](/android/approvals).
+- Pemegang izin persetujuan kas keluar mencatatnya tanpa orang kedua.
 
 <Warning>
-The red line also says "Persetujuan belum tersedia di aplikasi ini" (approval is not available in this app). That sentence is outdated: the approval sheet does open and works.
+Baris merah itu juga menyebut "Persetujuan belum tersedia di aplikasi ini". Kalimat itu sudah usang: lembar persetujuan memang terbuka dan berfungsi.
 </Warning>
 
 ## X-report
 
-**X-report** shows the running figures of the shift without closing it. A pill reads **Shift tetap terbuka** (shift stays open). Rows: outlet and terminal, cashier and opening time, **Modal awal**, **Jumlah struk**, **Penjualan**, **Kembalian diberikan**, **Tunai diterima**, **Transfer**, **QRIS**, **Kas masuk**, **Kas keluar** and **Void / batal**.
+**X-report** menampilkan angka berjalan shift tanpa menutupnya. Sebuah pil bertuliskan **Shift tetap terbuka**. Baris: outlet dan terminal, kasir dan waktu buka, **Modal awal**, **Jumlah struk**, **Penjualan**, **Kembalian diberikan**, **Tunai diterima**, **Transfer**, **QRIS**, **Kas masuk**, **Kas keluar**, dan **Void / batal**.
 
-It deliberately has no expected-cash row. Offline, the footer warns "Offline: angka terakhir dari server, mungkin sudah berubah." Use the back arrow to return.
+Layar ini sengaja tidak memiliki baris kas yang diharapkan. Saat offline, footer memperingatkan "Offline: angka terakhir dari server, mungkin sudah berubah." Gunakan panah kembali untuk kembali.
 
 <Note>
-**Cetak X-report** (print X-report) does not print. It only shows "Cetak belum tersedia: printer belum tersambung." whether or not a printer is connected.
+**Cetak X-report** tidak mencetak. Tombol ini hanya menampilkan "Cetak belum tersedia: printer belum tersambung." baik printer tersambung maupun tidak.
 </Note>
 
-## Close a shift
+## Tutup shift
 
-Tap **Tutup shift** on the shift screen.
+Ketuk **Tutup shift** di layar shift.
 
 <Steps>
-  <Step title="Check the two gates">
-    The top shows **Online** ("Server terjangkau") and **Tidak ada pembayaran tertunda** (no pending payments, "Siap"). If either is red the count area is dimmed and **Kirim hitungan** is disabled. Offline says "Tutup shift perlu koneksi ke server"; a pending QRIS payment says "Verifikasi dulu sebelum menutup shift".
+  <Step title="Periksa dua syarat">
+    Bagian atas menampilkan **Online** ("Server terjangkau") dan **Tidak ada pembayaran tertunda** ("Siap"). Jika salah satunya merah, area hitungan diredupkan dan **Kirim hitungan** dinonaktifkan. Saat offline tertulis "Tutup shift perlu koneksi ke server"; pembayaran QRIS yang tertunda menampilkan "Verifikasi dulu sebelum menutup shift".
   </Step>
-  <Step title="Read the shift summary">
-    **Penjualan shift** repeats the six tiles. When the server provides it, **Kas seharusnya di laci** (expected cash in the drawer, "Modal + tunai bersih + kas masuk − kas keluar") appears in a highlighted bar.
+  <Step title="Baca ringkasan shift">
+    **Penjualan shift** mengulang enam ubin. Bila server menyediakannya, **Kas seharusnya di laci** ("Modal + tunai bersih + kas masuk − kas keluar") muncul di bilah yang disorot.
   </Step>
-  <Step title="Count the drawer">
-    Count by denomination, or type the total in **Atau ketik total uang di laci**. **Total hitungan Anda** (your count) shows the sum.
+  <Step title="Hitung laci">
+    Hitung per pecahan, atau ketik total di **Atau ketik total uang di laci**. **Total hitungan Anda** menampilkan jumlahnya.
   </Step>
-  <Step title="Tap Kirim hitungan">
-    Confirm **Kirim hitungan Rp 1.200.000?** ("Hitungan tidak dapat diubah setelah dikirim.") with **Kirim**. The server sums the count and judges the difference.
+  <Step title="Ketuk Kirim hitungan">
+    Konfirmasi **Kirim hitungan Rp 1.200.000?** ("Hitungan tidak dapat diubah setelah dikirim.") dengan **Kirim**. Server menjumlahkan hitungan dan menilai selisihnya.
   </Step>
 </Steps>
 
-### What the server can refuse
+### Yang dapat ditolak server
 
-| Situation | What happens |
+| Situasi | Yang terjadi |
 | --- | --- |
-| Open tabs still in this shift | 409. The tablet shows the server text: "Shift hanya bisa ditutup setelah semua tab terbuka dibayar, dibatalkan, atau diserahkan." Pay or void each tab first, see [Tables and dine-in orders](/android/tables). |
-| QRIS payments not yet checked | 409 with the count: "Ada 2 pembayaran QRIS yang belum dicek. Cek dulu sebelum menutup shift." Verify or reject them from the payment screen, see [Payment](/android/payment). |
-| Difference above tolerance | The **Perlu persetujuan** sheet opens ("Selisih kas di atas toleransi"). After an approver types their PIN, the same count is sent again with the approval. The approval lasts 2 minutes and works for this count only. |
-| Connection lost while sending | "Koneksi terputus. Kirim hitungan lagi; server tidak akan menutup dua kali." Tap **Kirim hitungan** again. |
-| Shift already closed on the server | You return to **Shift** with "Shift sudah tertutup di server. Angka penutupan ada di back office." |
+| Masih ada tab terbuka di shift ini | 409. Tablet menampilkan teks server: "Shift hanya bisa ditutup setelah semua tab terbuka dibayar, dibatalkan, atau diserahkan." Bayar atau void setiap tab terlebih dahulu, lihat [Meja dan order dine-in](/android/tables). |
+| Pembayaran QRIS belum dicek | 409 dengan jumlahnya: "Ada 2 pembayaran QRIS yang belum dicek. Cek dulu sebelum menutup shift." Verifikasi atau tolak dari layar pembayaran, lihat [Pembayaran](/android/payment). |
+| Selisih di atas toleransi | Lembar **Perlu persetujuan** terbuka ("Selisih kas di atas toleransi"). Setelah penyetuju mengetik PIN, hitungan yang sama dikirim lagi beserta persetujuannya. Persetujuan berlaku 2 menit dan hanya untuk hitungan ini. |
+| Koneksi putus saat mengirim | "Koneksi terputus. Kirim hitungan lagi; server tidak akan menutup dua kali." Ketuk **Kirim hitungan** lagi. |
+| Shift sudah tertutup di server | Anda kembali ke **Shift** dengan "Shift sudah tertutup di server. Angka penutupan ada di back office." |
 
-The tolerance is a server setting (default Rp 5.000 in the server code). A difference within it, up or down, closes without approval.
+Toleransi adalah pengaturan server (bawaan Rp 5.000 di kode server). Selisih dalam batas itu, lebih atau kurang, ditutup tanpa persetujuan.
 
-### Close result
+### Hasil penutupan
 
-**Shift ditutup** (shift closed) shows **Seharusnya** (expected), **Dihitung** (counted) and **Selisih** (difference: "Rp 0 · sesuai", "Lebih Rp 2.000" for over or "Kurang Rp 2.000" for short), with "Toleransi server" below. The difference is green inside tolerance and red outside it. The Z-report is stored on the server. Tap **Selesai** (done); the tablet locks and returns to the PIN screen.
+**Shift ditutup** menampilkan **Seharusnya**, **Dihitung**, dan **Selisih** ("Rp 0 · sesuai", "Lebih Rp 2.000" untuk lebih atau "Kurang Rp 2.000" untuk kurang), dengan "Toleransi server" di bawahnya. Selisih berwarna hijau di dalam toleransi dan merah di luarnya. Laporan Z disimpan di server. Ketuk **Selesai**; tablet terkunci dan kembali ke layar PIN.
 
 <Warning>
-If the difference was above tolerance, this screen adds "Selisih melewati toleransi — perlu persetujuan. Persetujuan belum tersedia di aplikasi ini." The shift is already closed at that point and was approved; the sentence is outdated.
+Jika selisihnya di atas toleransi, layar ini menambahkan "Selisih melewati toleransi — perlu persetujuan. Persetujuan belum tersedia di aplikasi ini." Pada titik itu shift sudah tertutup dan sudah disetujui; kalimat tersebut sudah usang.
 </Warning>
 
 <Note>
-ASSUMPTION: The approval limit and tolerance values you see depend on the settings of your installation. The figures in this page are the server defaults and may differ for you.
+ASUMSI: Batas persetujuan dan nilai toleransi yang Anda lihat bergantung pada pengaturan instalasi Anda. Angka di halaman ini adalah bawaan server dan mungkin berbeda bagi Anda.
 </Note>
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| "Anda masih memiliki sesi kasir yang terbuka. Tutup sesi tersebut terlebih dahulu." | You already have an open shift on a tablet. | Sign in again on that tablet, or close the shift there. |
-| "Pembayaran ditolak: shift sudah ditutup. Buka shift untuk menerima pembayaran." | The shift was closed (for example by an admin) while you worked. | Open a shift, then retry the payment. |
-| "Kas hanya bisa dicatat di shift Anda sendiri." | Someone else's shift. | Sign in as the shift owner. |
-| "Tulis catatan untuk alasan \"Lainnya\"." | **Lainnya** without a note. | Fill **Catatan (wajib)**. |
-| "Tidak ada penyetuju yang memenuhi syarat untuk aksi ini." | No other active person with a PIN holds the permission in this outlet. | Ask an administrator to grant it or set the PIN, see [Users](/settings/users). |
-| **Kirim hitungan** is disabled | Offline, or a QRIS payment is pending. | Restore the connection, or verify the QRIS payment. |
-| "Terminal ini dicabut..." | The terminal was revoked on the server. | Set the tablet up again, see [Tablet setup](/android/setup). |
+| "Anda masih memiliki sesi kasir yang terbuka. Tutup sesi tersebut terlebih dahulu." | Anda sudah memiliki shift terbuka di sebuah tablet. | Masuk lagi di tablet itu, atau tutup shift di sana. |
+| "Pembayaran ditolak: shift sudah ditutup. Buka shift untuk menerima pembayaran." | Shift ditutup (misalnya oleh admin) saat Anda bekerja. | Buka shift, lalu ulangi pembayaran. |
+| "Kas hanya bisa dicatat di shift Anda sendiri." | Shift milik orang lain. | Masuk sebagai pemilik shift. |
+| "Tulis catatan untuk alasan \"Lainnya\"." | **Lainnya** tanpa catatan. | Isi **Catatan (wajib)**. |
+| "Tidak ada penyetuju yang memenuhi syarat untuk aksi ini." | Tidak ada orang aktif lain dengan PIN yang memegang izin itu di outlet ini. | Minta administrator memberikan izinnya atau mengatur PIN, lihat [Pengguna](/settings/users). |
+| **Kirim hitungan** nonaktif | Offline, atau ada pembayaran QRIS yang tertunda. | Pulihkan koneksi, atau verifikasi pembayaran QRIS. |
+| "Terminal ini dicabut..." | Terminal dicabut di server. | Siapkan tablet lagi, lihat [Penyiapan tablet](/android/setup). |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Approvals" href="/android/approvals" />
-  <Card title="Payment" href="/android/payment" />
-  <Card title="Cashier session (shifts) on the web" href="/operations/shifts" />
-  <Card title="Business day" href="/concepts/business-day" />
+  <Card title="Persetujuan" href="/android/approvals" />
+  <Card title="Pembayaran" href="/android/payment" />
+  <Card title="Sesi kasir (shift) di web" href="/operations/shifts" />
+  <Card title="Hari bisnis" href="/concepts/business-day" />
 </Columns>

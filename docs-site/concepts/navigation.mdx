@@ -1,87 +1,87 @@
 ---
-title: "Navigation and layout"
-description: "How the navigation rail, top bar, search, and notifications work, and which modules appear for your role."
-keywords: ["navigation", "menu", "sidebar", "search", "notifications", "layout"]
+title: "Navigasi dan tata letak"
+description: "Cara kerja rail navigasi, bilah atas, pencarian, dan notifikasi, serta modul mana yang muncul untuk peran Anda."
+keywords: ["navigasi", "menu", "sidebar", "pencarian", "notifikasi", "tata letak"]
 ---
 
-Every screen after sign-in shares one frame: a dark **navigation rail** on the left, a **top bar** across the top, and the working area in the middle.
+Setiap layar setelah masuk berbagi satu kerangka: **rail navigasi** gelap di kiri, **bilah atas** di sepanjang bagian atas, dan area kerja di tengah.
 
-## Navigation rail
+## Rail navigasi
 
-The rail lists the modules you can use, grouped into sections. You only see modules your role may open. Hidden modules are not greyed out, they are absent. A group such as **Restaurant** appears only when at least one module inside it is allowed for you.
+Rail mencantumkan modul yang dapat Anda pakai, dikelompokkan dalam beberapa bagian. Anda hanya melihat modul yang boleh dibuka peran Anda. Modul yang tersembunyi tidak diredupkan, melainkan tidak ada. Grup seperti **Restoran** hanya muncul jika setidaknya satu modul di dalamnya diizinkan untuk Anda.
 
-| Section | Module | Menu key | Page |
+| Bagian | Modul | Kunci menu | Halaman |
 | --- | --- | --- | --- |
-| Overview | Dashboard | `dashboard` | [Dashboard](/insight/dashboard) |
-| Operations | POS | `pos` | [POS](/operations/pos) |
-| Operations | Cashier Session | `session` | [Cashier shifts](/operations/shifts) |
-| Operations | Sales | `sales` | [Sales](/operations/sales) |
-| Operations → Restaurant | Floor & Tabs | `floor` | [Floor and tabs](/operations/restaurant-floor) |
-| Operations → Restaurant | Kitchen & Bar | `kitchen` | [Kitchen and bar](/operations/kitchen) |
-| Operations → Restaurant | Restaurant Setup | `dining_setup` | [Restaurant setup](/operations/restaurant-setup) |
-| Inventory & purchasing → Inventory | Categories | `categories` | [Categories](/inventory/categories) |
-| Inventory & purchasing → Inventory | Products | `products` | [Products](/inventory/products) |
-| Inventory & purchasing → Inventory | Stock | `stock` | [Stock](/inventory/stock) |
-| Inventory & purchasing → Purchase | Vendors | `vendors` | [Vendors](/purchasing/vendors) |
-| Inventory & purchasing → Purchase | Materials | `materials` | [Materials](/purchasing/materials) |
-| Inventory & purchasing → Purchase | Purchase Orders | `purchase_orders` | [Purchase orders](/purchasing/purchase-orders) |
-| Customers & outlets | Customers | `customers` | [Customers](/people/customers) |
-| Customers & outlets | Outlets | `outlets` | [Outlets](/people/outlets) |
-| Reports | Reports | `reports` | [Reports](/insight/reports) |
-| Reports | Activity Log | `reports` | [Activity log](/insight/activity-log) |
-| Configuration → Settings | General, Payment | `settings` | [General settings](/settings/general), [Payment channels](/settings/payment-channels) |
-| Configuration → Settings | Users | `users` | [Users](/settings/users) |
-| Configuration → Settings | Roles | `roles` | [Roles](/settings/roles) |
+| Ringkasan | Beranda | `dashboard` | [Dashboard](/insight/dashboard) |
+| Operasional | Kasir | `pos` | [POS](/operations/pos) |
+| Operasional | Sesi Kasir | `session` | [Shift kasir](/operations/shifts) |
+| Operasional | Penjualan | `sales` | [Penjualan](/operations/sales) |
+| Operasional → Restoran | Lantai & Tab | `floor` | [Lantai dan tab](/operations/restaurant-floor) |
+| Operasional → Restoran | Dapur & Bar | `kitchen` | [Dapur dan bar](/operations/kitchen) |
+| Operasional → Restoran | Pengaturan Restoran | `dining_setup` | [Pengaturan restoran](/operations/restaurant-setup) |
+| Inventori & pembelian → Inventaris | Kategori | `categories` | [Kategori](/inventory/categories) |
+| Inventori & pembelian → Inventaris | Produk | `products` | [Produk](/inventory/products) |
+| Inventori & pembelian → Inventaris | Stok | `stock` | [Stok](/inventory/stock) |
+| Inventori & pembelian → Pembelian | Vendor | `vendors` | [Vendor](/purchasing/vendors) |
+| Inventori & pembelian → Pembelian | Bahan Baku | `materials` | [Bahan baku](/purchasing/materials) |
+| Inventori & pembelian → Pembelian | Purchase Order | `purchase_orders` | [Purchase order](/purchasing/purchase-orders) |
+| Pelanggan & outlet | Pelanggan | `customers` | [Pelanggan](/people/customers) |
+| Pelanggan & outlet | Outlet | `outlets` | [Outlet](/people/outlets) |
+| Laporan | Laporan | `reports` | [Laporan](/insight/reports) |
+| Laporan | Log Aktivitas | `reports` | [Log aktivitas](/insight/activity-log) |
+| Konfigurasi → Pengaturan | General, Pembayaran | `settings` | [Pengaturan umum](/settings/general), [Kanal pembayaran](/settings/payment-channels) |
+| Konfigurasi → Pengaturan | Pengguna | `users` | [Pengguna](/settings/users) |
+| Konfigurasi → Pengaturan | Peran | `roles` | [Peran](/settings/roles) |
 
 <Note>
-  Stock transfers between outlets live under **Stock** and use the same `stock` menu key. See [Stock transfers](/inventory/stock-transfers). The Activity Log shares the `reports` key, so anyone who can open Reports can open it.
+  Transfer stok antar outlet berada di bawah **Stok** dan memakai kunci menu `stock` yang sama. Lihat [Transfer stok](/inventory/stock-transfers). Log Aktivitas memakai kunci `reports`, sehingga siapa pun yang dapat membuka Laporan dapat membukanya.
 </Note>
 
 <Info>
-  The Configuration section also contains an **Admin** group (Companies, Business Types, Licenses, Invoices). Those screens are provider-side administration for the license and billing relationship, not store operations, so this documentation does not cover them.
+  Bagian Konfigurasi juga berisi grup **Admin** (Company, Jenis Bisnis, Lisensi, Invoice). Layar-layar itu adalah administrasi sisi penyedia untuk hubungan lisensi dan penagihan, bukan operasional toko, sehingga dokumentasi ini tidak membahasnya.
 </Info>
 
-### Collapse the rail
+### Ciutkan rail
 
-Use the collapse control on the rail to shrink it to icons only. In collapsed mode:
+Gunakan kontrol **Ciutkan navigasi** pada rail untuk memperkecilnya menjadi ikon saja (kontrolnya berganti menjadi **Perluas navigasi**). Pada mode ciut:
 
-- Hover or focus an icon to see the module name.
-- Click or press Enter on a group icon to open its modules in a flyout. Press Escape or click outside to close it.
+- Arahkan kursor atau fokuskan ikon untuk melihat nama modul.
+- Klik atau tekan Enter pada ikon grup untuk membuka modulnya dalam menu melayang. Tekan Escape atau klik di luar untuk menutup.
 
-The **POS** item shows a badge with the number of items currently in your cart.
+Item **Kasir** menampilkan lencana berisi jumlah item yang saat ini ada di keranjang Anda.
 
-## Top bar
+## Bilah atas
 
-From left to right the top bar shows:
+Dari kiri ke kanan, bilah atas menampilkan:
 
-| Control | What it does |
+| Kontrol | Fungsinya |
 | --- | --- |
-| Breadcrumb | Shows where you are and links back up. |
-| Search | Opens global search. Press `Ctrl+K` (or `Cmd+K` on Mac). Type at least 2 letters. Results are filtered on the server by your permissions and outlets. |
-| Outlet selector | Narrows what you see to one outlet. Shown only when you can access more than one outlet. See [Outlets](/concepts/outlets). |
-| Mode badge | Always shows **DEMO** or **LIVE**. See [DEMO and LIVE mode](/concepts/demo-and-live-mode). |
-| Notifications | Lists items waiting for your action, with a count. It shows "Nothing needs your attention" when the list is empty. |
-| User menu | Your name and role. Opens profile, language, and sign out. |
+| Jejak halaman | Menunjukkan di mana Anda berada dan menautkan kembali ke atas. |
+| Cari | Membuka pencarian global. Tekan `Ctrl+K` (atau `Cmd+K` di Mac). Ketik minimal 2 huruf. Hasil disaring di server menurut izin dan outlet Anda. |
+| Pemilih outlet | Mempersempit apa yang Anda lihat ke satu outlet. Hanya tampil jika Anda dapat mengakses lebih dari satu outlet. Lihat [Outlet](/concepts/outlets). |
+| Lencana mode | Selalu menampilkan **DEMO** atau **LIVE**. Lihat [Mode DEMO dan LIVE](/concepts/demo-and-live-mode). |
+| Notifikasi | Mencantumkan hal yang menunggu tindakan Anda, beserta jumlahnya. Menampilkan "Tidak ada yang perlu ditindaklanjuti" jika daftar kosong. |
+| Menu pengguna | Nama dan peran Anda. Membuka profil, bahasa, dan keluar. |
 
 <Tip>
-  Search matches things like order numbers, tables, and customers. If search shows "Search is not available yet", the server did not provide a search source for this installation.
+  Pencarian mencocokkan hal-hal seperti nomor order, meja, dan pelanggan. Jika pencarian menampilkan "Pencarian belum tersedia", server tidak menyediakan sumber pencarian untuk instalasi ini.
 </Tip>
 
-## Page behavior to know
+## Perilaku halaman yang perlu diketahui
 
-- **Focus moves to the page heading** every time you change screen, so screen readers announce the new page.
-- **The POS screen fills the window.** Its product grid scrolls on its own so the cart stays in view.
-- **The browser tab title** shows the store name and app name, and the tab icon is the store logo when one is set. See [General settings](/settings/general).
-- **Typed-in addresses are guarded.** Opening a screen you have no permission for sends you to the Dashboard.
-- **Old addresses still work.** `/artists` redirects to `/outlets`. Addresses under `/events` and `/preorders` redirect to the Dashboard because those modules were removed.
+- **Fokus berpindah ke judul halaman** setiap kali Anda berganti layar, sehingga pembaca layar mengumumkan halaman baru.
+- **Layar POS memenuhi jendela.** Grid produknya menggulir sendiri sehingga keranjang tetap terlihat.
+- **Judul tab browser** menampilkan nama toko dan nama aplikasi, dan ikon tab adalah logo toko jika sudah diatur. Lihat [Pengaturan umum](/settings/general).
+- **Alamat yang diketik dijaga.** Membuka layar yang tidak Anda miliki izinnya mengarahkan Anda ke Dashboard.
+- **Alamat lama masih berfungsi.** `/artists` dialihkan ke `/outlets`. Alamat di bawah `/events` dan `/preorders` dialihkan ke Dashboard karena modul tersebut sudah dihapus.
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Roles and permissions" icon="shield-check" href="/concepts/roles-and-permissions">
-    Why you see the modules you see.
+  <Card title="Peran dan izin" icon="shield-check" href="/concepts/roles-and-permissions">
+    Mengapa Anda melihat modul yang Anda lihat.
   </Card>
-  <Card title="Outlets" icon="map-pin" href="/concepts/outlets">
-    How the outlet selector narrows your data.
+  <Card title="Outlet" icon="map-pin" href="/concepts/outlets">
+    Cara pemilih outlet mempersempit data Anda.
   </Card>
 </Columns>

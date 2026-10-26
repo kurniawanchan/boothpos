@@ -1,153 +1,153 @@
 ---
-title: "Printer setup and printing on the tablet"
-description: "Pair a Bluetooth thermal printer with the tablet, run a test print, understand what each slip contains, and retry or close failed print jobs."
-keywords: ["android", "tablet", "printer", "bluetooth", "thermal", "58 mm", "struk", "KOT", "pre-bill", "print queue", "reprint", "test print"]
+title: "Penyiapan printer dan pencetakan di tablet"
+description: "Pasangkan printer thermal Bluetooth dengan tablet, jalankan tes cetak, pahami isi setiap slip, dan coba ulang atau tutup pekerjaan cetak yang gagal."
+keywords: ["android", "tablet", "printer", "bluetooth", "thermal", "58 mm", "struk", "KOT", "pre-bill", "antrean cetak", "cetak ulang", "tes cetak"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-The tablet prints the customer struk (receipt), the kitchen ticket (KOT), the pre-bill and the cancellation slip (BATAL) on one Bluetooth thermal printer. Printing never blocks a sale: every document goes into a print queue first, and a background worker prints it. This page covers setup on the **Perangkat & sinkron** screen, the slip layouts, and what to do when a print fails.
+Tablet mencetak struk pelanggan, tiket dapur (KOT), pre-bill, dan slip pembatalan (BATAL) pada satu printer thermal Bluetooth. Pencetakan tidak pernah menghalangi penjualan: setiap dokumen masuk ke antrean cetak lebih dulu, lalu pekerja di latar belakang mencetaknya. Halaman ini membahas penyiapan di layar **Perangkat & sinkron**, tata letak slip, dan yang harus dilakukan saat pencetakan gagal.
 
-## Before you start
+## Sebelum mulai
 
-- **Connection type.** Only **classic Bluetooth** is supported. The app connects over the standard serial profile (SPP). The Android permissions in the app are Bluetooth only. USB and network (LAN or Wi-Fi) printers are not supported.
-- **Paper.** The printer is fixed to **58 mm** paper, 32 characters per line. You cannot change the width in the app. The hint on screen names the **VSC TM-58V**.
-- **One printer per tablet.** The app remembers a single printer. Choosing another replaces it.
-- **Pair first in Android.** The printer must already be paired in the tablet's Bluetooth settings. The app only lists paired devices.
-- **Android 12 or newer** asks for the Bluetooth permission the first time you press **Pilih printer**. Older versions do not ask.
-- Anyone who can open **Perangkat** can reach the printer panel. ASSUMPTION: no role check applies to this screen, none was found in the code.
+- **Jenis koneksi.** Hanya **Bluetooth klasik** yang didukung. Aplikasi terhubung lewat profil serial standar (SPP). Izin Android di aplikasi hanya Bluetooth. Printer USB dan jaringan (LAN atau Wi-Fi) tidak didukung.
+- **Kertas.** Printer dikunci pada kertas **58 mm**, 32 karakter per baris. Anda tidak dapat mengubah lebarnya di aplikasi. Petunjuk di layar menyebut **VSC TM-58V**.
+- **Satu printer per tablet.** Aplikasi mengingat satu printer. Memilih yang lain menggantikannya.
+- **Pasangkan dulu di Android.** Printer harus sudah dipasangkan di pengaturan Bluetooth tablet. Aplikasi hanya mendaftar perangkat yang sudah dipasangkan.
+- **Android 12 atau lebih baru** meminta izin Bluetooth saat pertama kali Anda menekan **Pilih printer**. Versi lebih lama tidak meminta.
+- Siapa pun yang dapat membuka **Perangkat** dapat menjangkau panel printer. ASUMSI: tidak ada pemeriksaan peran pada layar ini, tidak ditemukan di kode.
 
-## Connect a printer
+## Hubungkan printer
 
 <Steps>
-  <Step title="Switch on the printer and pair it">
-    Turn on the printer and Bluetooth on the tablet. Pair the printer in the Android Bluetooth settings.
+  <Step title="Nyalakan printer dan pasangkan">
+    Nyalakan printer dan Bluetooth di tablet. Pasangkan printer di pengaturan Bluetooth Android.
   </Step>
-  <Step title="Open Perangkat">
-    Tap **Perangkat** in the side menu. The **Printer Bluetooth** section is below the connection cells.
+  <Step title="Buka Perangkat">
+    Ketuk **Perangkat** di menu samping. Bagian **Printer Bluetooth** berada di bawah sel koneksi.
   </Step>
-  <Step title="Press Pilih printer">
-    Allow the Bluetooth permission if Android asks. A list of paired devices appears with name and address.
+  <Step title="Tekan Pilih printer">
+    Izinkan izin Bluetooth bila Android memintanya. Daftar perangkat yang sudah dipasangkan muncul dengan nama dan alamat.
   </Step>
-  <Step title="Tap your printer">
-    The choice is saved and the status becomes **Tidak terhubung** until the first successful print.
+  <Step title="Ketuk printer Anda">
+    Pilihan disimpan dan statusnya menjadi **Tidak terhubung** sampai pencetakan pertama yang berhasil.
   </Step>
-  <Step title="Press Tes cetak">
-    A test slip is queued. When it prints, the status becomes **Terhubung**.
+  <Step title="Tekan Tes cetak">
+    Slip uji diantrekan. Setelah tercetak, statusnya menjadi **Terhubung**.
   </Step>
 </Steps>
 
-If the list is empty it says "Belum ada printer yang dipasangkan. Pasangkan dulu lewat pengaturan Bluetooth Android."
+Jika daftar kosong, tertulis "Belum ada printer yang dipasangkan. Pasangkan dulu lewat pengaturan Bluetooth Android."
 
-### Controls
+### Kontrol
 
-| Control | Behavior |
+| Kontrol | Perilaku |
 | --- | --- |
-| **Pilih printer** (choose printer) | Lists paired Bluetooth devices. |
-| **Tes cetak** (test print) | Queues a test slip. Disabled until a printer is chosen. Afterwards the text "Tes cetak masuk antrean." shows. |
-| **Lupakan printer** (forget printer) | Removes the saved printer. Shown only when one is set. Queued jobs stay in the queue. |
+| **Pilih printer** | Mendaftar perangkat Bluetooth yang sudah dipasangkan. |
+| **Tes cetak** | Mengantrekan slip uji. Nonaktif sampai printer dipilih. Setelahnya teks "Tes cetak masuk antrean." tampil. |
+| **Lupakan printer** | Menghapus printer yang tersimpan. Hanya tampil bila ada printer yang diatur. Pekerjaan yang diantrekan tetap di antrean. |
 
-### Status messages
+### Pesan status
 
-| Status | Note shown under it |
+| Status | Catatan di bawahnya |
 | --- | --- |
-| **Belum dipasang** | Pick a printer that is already paired in Bluetooth. |
-| **Tidak terhubung** | A printer is chosen but not connected. Prints still go to the queue. |
-| **Terhubung** | The printer is ready. Struk and KOT print automatically. |
-| An error name (see Troubleshooting) | Failed prints stay in the queue and can be retried. |
+| **Belum dipasang** | Pilih printer yang sudah dipasangkan di Bluetooth. |
+| **Tidak terhubung** | Printer dipilih tetapi tidak terhubung. Pencetakan tetap masuk ke antrean. |
+| **Terhubung** | Printer siap. Struk dan KOT tercetak otomatis. |
+| Nama galat (lihat Pemecahan masalah) | Pencetakan yang gagal tetap di antrean dan dapat dicoba lagi. |
 
-The app checks the connection once when it starts. It prints nothing during that check. The status afterwards follows the last print attempt.
+Aplikasi memeriksa koneksi satu kali saat dimulai. Pemeriksaan itu tidak mencetak apa pun. Setelahnya, status mengikuti percobaan cetak terakhir.
 
-## Test slip
+## Slip uji
 
-The test slip shows **Tes cetak**, the name "Warkop POS", the date and time, a line of 32 sample characters and **Printer siap dipakai**. If the sample line wraps or is cut, the paper width is wrong.
+Slip uji menampilkan **Tes cetak**, nama "Warkop POS", tanggal dan waktu, satu baris 32 karakter contoh, dan **Printer siap dipakai**. Jika baris contoh terpotong atau turun ke baris berikutnya, lebar kertas salah.
 
-## What each slip contains
+## Isi setiap slip
 
-### Struk (customer receipt)
+### Struk (bukti pembayaran pelanggan)
 
-Printed automatically when an order closes, including a QRIS order that is still waiting for verification. The data is fetched from the server at print time. From top to bottom:
+Dicetak otomatis saat order ditutup, termasuk order QRIS yang masih menunggu verifikasi. Datanya diambil dari server saat mencetak. Dari atas ke bawah:
 
-1. The store logo, when the store identity setting shows the logo and the image loads. It is scaled to at most 384 by 96 dots and printed in black and white. If it cannot load, the struk prints without it.
-2. Store name and address, then the contact person, phone and email of the store. Empty lines are skipped. These are store contacts, not customer contacts. Customer phone and email never print.
-3. **No. struk**, **Tanggal**, **Kasir**, **Antrean** and **Terminal** (the terminal name), each only when known.
-4. Each item as "qty x name" with the line total, and a **Catatan** line for item notes.
-5. **Subtotal**, **Diskon** (only when above zero), the tax line with its label and rate, and **TOTAL**.
-6. One line per payment method, **Bayar**, and **Kembali** (only when change is above zero).
-7. **SALINAN n** for copy 2 and later.
+1. Logo toko, bila pengaturan identitas toko menampilkan logo dan gambarnya berhasil dimuat. Ukurannya diperkecil hingga paling besar 384 kali 96 titik dan dicetak hitam putih. Jika tidak dapat dimuat, struk dicetak tanpa logo.
+2. Nama dan alamat toko, lalu narahubung, telepon, dan email toko. Baris kosong dilewati. Ini adalah kontak toko, bukan kontak pelanggan. Telepon dan email pelanggan tidak pernah dicetak.
+3. **No. struk**, **Tanggal**, **Kasir**, **Antrean**, dan **Terminal** (nama terminal), masing-masing hanya bila diketahui.
+4. Setiap item sebagai "qty x nama" dengan total baris, dan baris **Catatan** untuk catatan item.
+5. **Subtotal**, **Diskon** (hanya bila di atas nol), baris pajak dengan label dan tarifnya, dan **TOTAL**.
+6. Satu baris per metode pembayaran, **Bayar**, dan **Kembali** (hanya bila kembalian di atas nol).
+7. **SALINAN n** untuk salinan 2 dan seterusnya.
 
-Amounts come from the server as-is. The tablet does not recalculate. Characters outside plain ASCII (for example accented letters) print as `?`.
+Nominal berasal dari server apa adanya. Tablet tidak menghitung ulang. Karakter di luar ASCII biasa (misalnya huruf beraksen) tercetak sebagai `?`.
 
-### KOT (kitchen ticket)
+### KOT (tiket dapur)
 
-Printed when you press the send-to-kitchen action, one ticket per station. It shows a large **KOT** title, the station name (or **Tanpa stasiun**), the table or order label with the order number, the round number and time, **Dibuat oleh** and the items with modifiers and notes. It has no prices.
+Dicetak saat Anda menekan aksi kirim ke dapur, satu tiket per stasiun. Isinya judul **KOT** yang besar, nama stasiun (atau **Tanpa stasiun**), label meja atau order beserta nomor order, nomor putaran dan waktu, **Dibuat oleh**, dan item beserta modifier dan catatannya. Tidak ada harga.
 
 ### Pre-bill
 
-Printed from the order actions (**Cetak pre-bill**) or when a waiter presses the pay button. It shows **PRA-BILL**, **BELUM LUNAS**, the table or **Counter** with the queue number, the active lines, **TOTAL** and **Sisa tagihan**. It has no payment lines. Cancelled lines are left out. The order then shows a **Bill** badge. The toast reads "Pra-bill masuk antrean cetak · BELUM LUNAS." Each press makes a new copy.
+Dicetak dari aksi order (**Cetak pre-bill**) atau saat waiter menekan tombol bayar. Isinya **PRA-BILL**, **BELUM LUNAS**, meja atau **Counter** dengan nomor antrean, baris aktif, **TOTAL**, dan **Sisa tagihan**. Tidak ada baris pembayaran. Baris yang dibatalkan tidak disertakan. Order lalu menampilkan lencana **Bill**. Toast berbunyi "Pra-bill masuk antrean cetak · BELUM LUNAS." Setiap penekanan membuat salinan baru.
 
-### BATAL (cancellation slip)
+### BATAL (slip pembatalan)
 
-Printed after a successful void of an item that was already sent to the kitchen. It shows a large **BATAL** title, the table or label, "BATAL \{qty\} x \{item\}" and the reason. It has no prices. Each line can be voided once, so there is one slip per void.
+Dicetak setelah void berhasil atas item yang sudah dikirim ke dapur. Isinya judul **BATAL** yang besar, meja atau label, "BATAL \{qty\} x \{item\}", dan alasannya. Tidak ada harga. Setiap baris hanya dapat di-void satu kali, jadi ada satu slip per void.
 
-### Reprint KOT
+### Cetak ulang KOT
 
-**Cetak ulang KOT** in the order actions queues the tickets of that order again. It uses the ticket data saved on this tablet, not the server. The toast reads "\{n\} KOT masuk antrean cetak ulang." or "Belum ada KOT untuk tab ini." when nothing was sent from this tablet.
+**Cetak ulang KOT** di aksi order mengantrekan lagi tiket order itu. Aksi ini memakai data tiket yang tersimpan di tablet ini, bukan dari server. Toast berbunyi "\{n\} KOT masuk antrean cetak ulang." atau "Belum ada KOT untuk tab ini." bila tidak ada yang dikirim dari tablet ini.
 
-## The print queue
+## Antrean cetak
 
-The **Antrean cetak** (print queue) section on **Perangkat** lists only unfinished jobs, or **Antrean kosong** when none.
+Bagian **Antrean cetak** di **Perangkat** hanya mendaftar pekerjaan yang belum selesai, atau **Antrean kosong** bila tidak ada.
 
-| Item | Meaning |
+| Butir | Arti |
 | --- | --- |
-| Kind | **Struk**, **KOT**, **Pra-bill** or **BATAL**. |
-| **Belum tercetak** | Waiting to print. |
-| **Gagal** | The last attempt failed. The reason shows in red. |
-| **Coba lagi** (retry) | Tries that job again now. |
-| **Tutup** (close) | Dismisses the job. A KOT needs a written reason. |
+| Jenis | **Struk**, **KOT**, **Pra-bill**, atau **BATAL**. |
+| **Belum tercetak** | Menunggu dicetak. |
+| **Gagal** | Percobaan terakhir gagal. Alasannya tampil dengan warna merah. |
+| **Coba lagi** | Mencoba pekerjaan itu lagi sekarang. |
+| **Tutup** | Menutup pekerjaan. KOT membutuhkan alasan tertulis. |
 
-Closing a KOT opens **Tutup KOT yang belum tercetak**. Write a reason, for example that the kitchen was told in person. **Tutup KOT** stays disabled while the reason is empty. Other documents close at once.
+Menutup KOT membuka **Tutup KOT yang belum tercetak**. Tulis alasan, misalnya dapur diberi tahu langsung. **Tutup KOT** tetap nonaktif selama alasan kosong. Dokumen lain langsung ditutup.
 
-How the queue behaves:
+Cara kerja antrean:
 
-- The queue is saved to the tablet, so jobs survive an app restart or a power loss.
-- A printed or closed job is never accepted again. This prevents double prints, including after a network retry or a double tap.
-- Jobs print one at a time, oldest first. The worker stops at the first failure so order is kept. Later jobs wait.
-- A new print request, or **Coba lagi**, wakes the worker and it works through all unfinished jobs. The code has no timer that retries by itself when the printer comes back.
-- Each connection attempt times out after 5 seconds.
-- If the app cannot fetch the struk data from the server when printing, the job fails with **Gagal mencetak, coba lagi** and stays queued.
+- Antrean disimpan di tablet, sehingga pekerjaan bertahan saat aplikasi dimulai ulang atau listrik padam.
+- Pekerjaan yang sudah tercetak atau ditutup tidak pernah diterima lagi. Ini mencegah cetak ganda, termasuk setelah percobaan ulang jaringan atau ketukan ganda.
+- Pekerjaan dicetak satu per satu, yang paling lama lebih dulu. Pekerja berhenti pada kegagalan pertama agar urutan terjaga. Pekerjaan berikutnya menunggu.
+- Permintaan cetak baru, atau **Coba lagi**, membangunkan pekerja dan ia menyelesaikan semua pekerjaan yang belum selesai. Kode tidak memiliki pewaktu yang mencoba sendiri saat printer kembali.
+- Setiap percobaan koneksi kedaluwarsa setelah 5 detik.
+- Jika aplikasi tidak dapat mengambil data struk dari server saat mencetak, pekerjaan gagal dengan **Gagal mencetak, coba lagi** dan tetap di antrean.
 
-## Print the struk again
+## Cetak struk lagi
 
-| Where | What happens |
+| Di mana | Yang terjadi |
 | --- | --- |
-| Done screen, **Lihat struk** then **Cetak struk** | Retries copy 1 if it has not printed. Otherwise registers a reprint. |
-| **Order > Selesai > Cetak ulang** | Registers a reprint on the server and queues it. |
+| Layar selesai, **Lihat struk** lalu **Cetak struk** | Mengulang salinan 1 bila belum tercetak. Jika tidak, mendaftarkan cetak ulang. |
+| **Order > Selesai > Cetak ulang** | Mendaftarkan cetak ulang di server dan mengantrekannya. |
 
-The first reprint is free and later ones need a supervisor PIN. See [Orders](/android/orders) and [Approvals](/android/approvals). Reprints show the same store identity as the original. The store name, address, contact and logo are set by an admin in [General settings](/settings/general).
+Cetak ulang pertama gratis dan yang berikutnya membutuhkan PIN supervisor. Lihat [Order](/android/orders) dan [Persetujuan](/android/approvals). Cetak ulang menampilkan identitas toko yang sama dengan yang asli. Nama toko, alamat, kontak, dan logo diatur oleh admin di [Pengaturan umum](/settings/general).
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| Printer belum dipasang | No printer chosen. | Choose one under **Pilih printer**. |
-| Izin Bluetooth diperlukan | Permission not granted (Android 12+). | Allow Bluetooth for the app in Android settings, then **Coba lagi**. |
-| Izin Bluetooth diperlukan untuk memilih printer. | You denied the prompt while choosing. | Press **Pilih printer** again and allow it. |
-| Bluetooth mati | Bluetooth is off on the tablet. | Switch it on, then **Coba lagi**. |
-| Printer di luar jangkauan | The connection failed or timed out. | Switch the printer on, move closer, check it is paired, then **Coba lagi**. |
-| Kertas habis | The printer reports no paper. | Load paper, then **Coba lagi**. |
-| Gagal mencetak, coba lagi | Write error, or the struk could not be fetched. | Check the printer and the server connection, then **Coba lagi**. |
-| Struk belum dicetak | No struk job exists for the order. | Open **Lihat struk** and press **Cetak struk**. |
+| Printer belum dipasang | Belum ada printer yang dipilih. | Pilih satu di **Pilih printer**. |
+| Izin Bluetooth diperlukan | Izin belum diberikan (Android 12+). | Izinkan Bluetooth untuk aplikasi di pengaturan Android, lalu **Coba lagi**. |
+| Izin Bluetooth diperlukan untuk memilih printer. | Anda menolak permintaan izin saat memilih. | Tekan **Pilih printer** lagi dan izinkan. |
+| Bluetooth mati | Bluetooth mati di tablet. | Nyalakan, lalu **Coba lagi**. |
+| Printer di luar jangkauan | Koneksi gagal atau kedaluwarsa. | Nyalakan printer, dekatkan, pastikan sudah dipasangkan, lalu **Coba lagi**. |
+| Kertas habis | Printer melaporkan tidak ada kertas. | Isi kertas, lalu **Coba lagi**. |
+| Gagal mencetak, coba lagi | Galat penulisan, atau struk tidak dapat diambil. | Periksa printer dan koneksi server, lalu **Coba lagi**. |
+| Struk belum dicetak | Tidak ada pekerjaan struk untuk order. | Buka **Lihat struk** dan tekan **Cetak struk**. |
 
 <Note>
-ASSUMPTION: The paper-out check and the 32-column width are marked "UNVERIFIED" in the code for this printer model. If the paper-out message never appears, the failure shows as **Gagal mencetak, coba lagi** instead. Chunk size and pauses for the logo are also starting values. Verify on your own device with **Tes cetak**.
+ASUMSI: Pemeriksaan kertas habis dan lebar 32 kolom ditandai "UNVERIFIED" di kode untuk model printer ini. Jika pesan kertas habis tidak pernah muncul, kegagalannya tampil sebagai **Gagal mencetak, coba lagi**. Ukuran potongan dan jeda untuk logo juga masih nilai awal. Verifikasi di perangkat Anda sendiri dengan **Tes cetak**.
 </Note>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Take payment" href="/android/payment" icon="credit-card">The done screen and struk status.</Card>
-  <Card title="Orders" href="/android/orders" icon="receipt">Reprint and refund.</Card>
-  <Card title="Offline and sync" href="/android/offline-and-sync" icon="wifi">What works without the server.</Card>
-  <Card title="General settings" href="/settings/general" icon="gear">Store identity printed on the struk.</Card>
+  <Card title="Terima pembayaran" href="/android/payment" icon="credit-card">Layar selesai dan status struk.</Card>
+  <Card title="Order" href="/android/orders" icon="receipt">Cetak ulang dan refund.</Card>
+  <Card title="Offline dan sinkronisasi" href="/android/offline-and-sync" icon="wifi">Yang berfungsi tanpa server.</Card>
+  <Card title="Pengaturan umum" href="/settings/general" icon="gear">Identitas toko yang dicetak di struk.</Card>
 </Columns>

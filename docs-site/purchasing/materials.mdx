@@ -1,150 +1,150 @@
 ---
-title: "Materials"
-description: "Manage raw materials, semi-finished materials and packaging, their stock per outlet, and each vendor's price."
-keywords: ["pos", "materials", "ingredients", "packaging", "vendor price", "bom", "stock adjustment"]
+title: "Bahan baku"
+description: "Kelola bahan baku, bahan setengah jadi, dan kemasan, stoknya per outlet, serta harga dari tiap vendor."
+keywords: ["pos", "bahan baku", "bahan", "kemasan", "harga vendor", "bom", "koreksi stok"]
 ---
 
-The **Materials** page is the master list of everything you buy to make or pack your items: raw materials, semi-finished materials and packaging. For each material you can set the unit, correct its stock at an outlet, and record which vendors sell it and at what price.
+Halaman **Bahan Baku** adalah daftar induk semua yang Anda beli untuk membuat atau mengemas item Anda: bahan baku, bahan setengah jadi, dan kemasan. Untuk setiap bahan, Anda dapat mengatur satuan, mengoreksi stoknya di sebuah outlet, dan mencatat vendor mana yang menjualnya dengan harga berapa.
 
-Materials connect to the rest of the system in three places:
+Bahan terhubung ke bagian lain sistem di tiga tempat:
 
-- **Purchase orders** buy materials from vendors. Receiving a purchase order adds the quantity to the material's stock. See [Purchase orders](/purchasing/purchase-orders).
-- **Recipes and BOM** (the list of materials and services used to make one finished item) take their material cost from vendor prices. See [Product detail](/inventory/product-detail).
-- The same list also appears as tabs on the Products page (Raw material, Semi-finished, Packaging), with the same form and actions.
+- **Purchase order** membeli bahan dari vendor. Menerima purchase order menambah jumlahnya ke stok bahan. Lihat [Purchase order](/purchasing/purchase-orders).
+- **Resep dan BOM** (daftar bahan dan jasa yang dipakai untuk membuat satu item jadi) mengambil biaya bahannya dari harga vendor. Lihat [Detail produk](/inventory/product-detail).
+- Daftar yang sama juga muncul sebagai tab di halaman Produk (Bahan baku, Setengah jadi, Kemasan), dengan formulir dan tindakan yang sama.
 
-## Before you start
+## Sebelum mulai
 
-- Your role needs the **Materials** menu (`materials`). The default Owner, Admin and Inventory roles have it. The default Cashier role does not.
-- Create at least one vendor on the [Vendors](/purchasing/vendors) page before you add vendor prices.
-- Stock adjustment and vendor prices are gated by the same Materials menu.
+- Peran Anda memerlukan menu **Bahan Baku** (`materials`). Peran bawaan Owner, Admin, dan Inventory memilikinya. Peran bawaan Kasir tidak.
+- Buat setidaknya satu vendor di halaman [Vendor](/purchasing/vendors) sebelum Anda menambahkan harga vendor.
+- Koreksi stok dan harga vendor dibatasi oleh menu Bahan Baku yang sama.
 
-## The materials table
+## Tabel bahan
 
-| Column | What it shows |
+| Kolom | Yang ditampilkan |
 | --- | --- |
-| Code | Material code. |
-| Name | Material name. |
-| Kind | Raw material, Semi-finished or Packaging. Hidden when the table is limited to one kind (on the Products tabs). |
-| Unit | Free-text unit, for example pcs, meter, gram. |
-| Stock | Current stock. With more than one outlet visible, one value per outlet in the form `CODE amount`, separated by dots. With one outlet, a single number. |
-| Vendors | Number of vendors that have a price for this material. |
-| Status | Active or Inactive. |
+| Kode | Kode bahan. |
+| Nama | Nama bahan. |
+| Jenis | Bahan baku, Setengah jadi, atau Kemasan. Disembunyikan bila tabel dibatasi pada satu jenis (pada tab di halaman Produk). |
+| Satuan | Satuan berupa teks bebas, misalnya pcs, meter, gram. |
+| Stok | Stok saat ini. Bila lebih dari satu outlet terlihat, satu nilai per outlet dalam bentuk `KODE jumlah`, dipisahkan titik. Bila satu outlet, satu angka saja. |
+| Vendor | Jumlah vendor yang punya harga untuk bahan ini. |
+| Status | Aktif atau Nonaktif. |
 
-Search filters by material name (about 300 ms after you stop typing). **Reset filters** clears it. The list is sorted by name.
+Pencarian memfilter menurut nama bahan (sekitar 300 ms setelah Anda berhenti mengetik). **Atur ulang filter** mengosongkannya. Daftar diurutkan menurut nama.
 
-## Add a material
+## Menambah bahan
 
 <Steps>
-  <Step title="Open the form">
-    Select **Add material**.
+  <Step title="Buka formulir">
+    Pilih **Tambah bahan**.
   </Step>
-  <Step title="Fill in the fields">
-    **Material code**, **Material name**, **Material kind** and **Unit** are required.
+  <Step title="Isi kolom">
+    **Kode bahan**, **Nama bahan**, **Jenis bahan**, dan **Satuan** wajib diisi.
   </Step>
-  <Step title="Save">
-    Select **Save**. You see "Material created."
+  <Step title="Simpan">
+    Pilih **Simpan**. Anda melihat "Bahan dibuat."
   </Step>
 </Steps>
 
-| Field | Required | Rules |
+| Kolom | Wajib | Aturan |
 | --- | --- | --- |
-| Material code | Yes | Up to 20 characters, letters, numbers, dashes and underscores. Saved in uppercase. Unique among materials that are not deleted. Permanent after creation. |
-| Material name | Yes | Up to 150 characters. |
-| Material kind | Yes | **Raw material**, **Semi-finished** or **Packaging**. New materials default to Raw material. |
-| Unit (e.g. pcs, meter, gram) | Yes | Up to 20 characters. |
-| Standard cost per unit | No | Shown only for **Semi-finished**. Zero or more. Recipes use it when a semi-finished material has no vendor price. |
-| Notes | No | Free text. |
-| Active | No | Checked by default. |
+| Kode bahan | Ya | Maksimal 20 karakter, huruf, angka, tanda hubung, dan garis bawah. Disimpan dalam huruf kapital. Unik di antara bahan yang belum dihapus. Permanen setelah dibuat. |
+| Nama bahan | Ya | Maksimal 150 karakter. |
+| Jenis bahan | Ya | **Bahan baku**, **Setengah jadi**, atau **Kemasan**. Bahan baru secara bawaan berjenis Bahan baku. |
+| Satuan (mis. pcs, meter, gram) | Ya | Maksimal 20 karakter. |
+| Biaya standar per satuan | Tidak | Hanya tampil untuk **Setengah jadi**. Nol atau lebih. Resep memakainya bila bahan setengah jadi tidak punya harga vendor. |
+| Catatan | Tidak | Teks bebas. |
+| Aktif | Tidak | Dicentang secara bawaan. |
 
-When you edit a material, the code is locked. The standard cost is only sent when the kind is Semi-finished, so changing the kind to something else does not overwrite a saved standard cost.
+Saat Anda mengubah bahan, kodenya terkunci. Biaya standar hanya dikirim bila jenisnya Setengah jadi, sehingga mengubah jenis ke yang lain tidak menimpa biaya standar yang sudah tersimpan.
 
-## Adjust stock
+## Mengoreksi stok
 
-Material stock is a balance per outlet. Use **Adjust stock** to correct it, for example after a stock count.
+Stok bahan adalah saldo per outlet. Gunakan **Koreksi stok** untuk memperbaikinya, misalnya setelah penghitungan stok.
 
 <Steps>
-  <Step title="Open the dialog">
-    Select **Adjust stock** on the row. The title reads "Adjust stock of \{name\}".
+  <Step title="Buka dialog">
+    Pilih **Koreksi stok** pada baris. Judulnya berbunyi "Koreksi stok \{name\}".
   </Step>
-  <Step title="Choose the outlet">
-    This field only shows when you can see more than one outlet. It defaults to the outlet chosen in the top bar. With one outlet, the server uses that outlet.
+  <Step title="Pilih outlet">
+    Kolom ini hanya tampil bila Anda dapat melihat lebih dari satu outlet. Nilai bawaannya adalah outlet yang dipilih di bilah atas. Dengan satu outlet, server memakai outlet itu.
   </Step>
-  <Step title="Enter the change">
-    Enter **Change (+/−)**: a positive number adds stock, a negative number removes it. This is the difference, not the final quantity. Zero is not allowed.
+  <Step title="Masukkan perubahan">
+    Masukkan **Selisih (+/−)**: angka positif menambah stok, angka negatif mengurangi stok. Ini adalah selisihnya, bukan jumlah akhir. Nol tidak diizinkan.
   </Step>
-  <Step title="Enter a reason and save">
-    Enter a **Reason** (up to 255 characters). **Save** stays disabled until the change is not zero, the reason is filled and, with several outlets, an outlet is chosen. You see "Material stock adjusted".
+  <Step title="Masukkan alasan lalu simpan">
+    Masukkan **Alasan** (maksimal 255 karakter). **Simpan** tetap nonaktif sampai selisih bukan nol, alasan terisi, dan, bila ada beberapa outlet, sebuah outlet dipilih. Anda melihat "Stok bahan dikoreksi".
   </Step>
 </Steps>
 
-Every adjustment is written as a stock movement and to the [Activity log](/insight/activity-log) with the reason.
+Setiap koreksi ditulis sebagai pergerakan stok dan ke [Log Aktivitas](/insight/activity-log) beserta alasannya.
 
 <Warning>
-An adjustment cannot make an outlet's balance negative. The server rejects it with a 422 error under **Change (+/−)**: "Insufficient stock for material \{name\} (available: \{number\})", followed by the outlet name.
+Koreksi tidak boleh membuat saldo sebuah outlet menjadi negatif. Server menolaknya dengan galat 422 di bawah **Selisih (+/−)**: "Stok bahan \{name\} tidak cukup (tersedia: \{number\})", diikuti nama outlet.
 </Warning>
 
-## Vendor prices
+## Harga vendor
 
-Select **Vendor prices** on a row. The dialog is titled "Vendor prices — \{material\}" and lists every vendor with a price for this material, with a **Preferred** badge on one of them.
+Pilih **Harga vendor** pada baris. Dialog berjudul "Harga vendor — \{material\}" dan mencantumkan setiap vendor yang punya harga untuk bahan ini, dengan lencana **Preferred** pada salah satunya.
 
-The note in the dialog explains the rule: the vendor marked **Preferred** is the cost reference for this material. If none is preferred, the cheapest price is used as the estimate.
+Catatan di dalam dialog menjelaskan aturannya: vendor yang ditandai **Preferred** menjadi acuan modal bahan ini. Bila tidak ada yang preferred, harga termurah dipakai sebagai estimasi.
 
 <Steps>
-  <Step title="Add a price">
-    Select **Add vendor price**, choose the **Vendor**, enter **Price per unit** (zero or more) and optional **Notes**.
+  <Step title="Tambah harga">
+    Pilih **Tambah harga vendor**, pilih **Vendor**, masukkan **Harga per unit** (nol atau lebih) dan **Catatan** opsional.
   </Step>
-  <Step title="Mark the preferred vendor (optional)">
-    Check **Make this vendor preferred for this material**. Only one vendor can be preferred per material. Marking one clears the flag on the others.
+  <Step title="Tandai vendor preferred (opsional)">
+    Centang **Jadikan vendor preferred untuk bahan ini**. Hanya satu vendor yang bisa preferred untuk setiap bahan. Menandai satu vendor menghapus tanda pada yang lain.
   </Step>
-  <Step title="Save">
-    Select **Save**. You see "Vendor price added."
+  <Step title="Simpan">
+    Pilih **Simpan**. Anda melihat "Harga vendor ditambahkan."
   </Step>
 </Steps>
 
-To change a price, use **Edit** on its row. The vendor cannot be changed there. Delete the price and add it again for another vendor. **Delete** asks "Delete the price from \{vendor\}?" and removes only that price.
+Untuk mengubah harga, gunakan **Edit** pada barisnya. Vendor tidak dapat diganti di sana. Hapus harga itu lalu tambahkan lagi untuk vendor lain. **Hapus** bertanya "Hapus harga dari \{vendor\}?" dan hanya menghapus harga tersebut.
 
-The vendor picker lists active vendors only (up to 100). A vendor can have only one price per material. Adding a second one fails with "This vendor already has a price for this material. Update it via the update endpoint instead."
+Pemilih vendor hanya mencantumkan vendor aktif (maksimal 100). Sebuah vendor hanya boleh punya satu harga per bahan. Menambahkan harga kedua gagal dengan "Vendor ini sudah punya harga untuk bahan ini. Ubah harganya lewat endpoint update."
 
 <Note>
-ASSUMPTION: the quoted message for a duplicate vendor price mentions an "update endpoint". That text is shown as is. Use **Edit** on the existing price in the screen.
+ASUMSI: pesan kutipan untuk harga vendor ganda menyebut "endpoint update". Teks itu ditampilkan apa adanya. Gunakan **Edit** pada harga yang sudah ada di layar.
 </Note>
 
-## Delete a material
+## Menghapus bahan
 
-Select **Delete**, then **Yes, delete**. The dialog says "Delete \{name\}? Rejected if it still has vendor prices or BOM lines."
+Pilih **Hapus**, lalu **Ya, hapus**. Dialog berbunyi "Hapus \{name\}? Ditolak bila masih memiliki harga vendor atau baris BOM."
 
-| Message (409) | Cause |
+| Pesan (409) | Penyebab |
 | --- | --- |
-| This material still has registered vendor prices and cannot be deleted. | At least one vendor price exists. Delete the prices first. |
-| This material is still used in a product variant's BOM and cannot be deleted. | A BOM line uses it. Remove it from the BOM first. |
+| Bahan masih memiliki harga vendor yang terdaftar dan tidak dapat dihapus. | Setidaknya satu harga vendor masih ada. Hapus dulu harganya. |
+| Bahan masih dipakai pada BOM salah satu varian produk dan tidak dapat dihapus. | Sebuah baris BOM memakainya. Keluarkan dulu dari BOM. |
 
-## Import and export
+## Impor dan ekspor
 
-**Export .xlsx** and **Bulk import** work the same way as on the Vendors page: the shared master-data workbook, preview first, all-or-nothing. See [Vendors](/purchasing/vendors#import-and-export). The buttons show only for users with the Materials menu.
+**Ekspor .xlsx** dan **Impor massal** bekerja sama seperti di halaman Vendor: workbook data master bersama, pratinjau terlebih dahulu, semua-atau-tidak-sama-sekali. Lihat [Vendor](/purchasing/vendors#impor-dan-ekspor). Tombolnya hanya tampil bagi pengguna yang memiliki menu Bahan Baku.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| What you see | Cause | What to do |
+| Yang Anda lihat | Penyebab | Yang harus dilakukan |
 | --- | --- | --- |
-| Stock shows one number although you have several outlets | Your account is assigned to one outlet only. | Ask an owner to assign more outlets. See [Outlets](/people/outlets). |
-| 403 on **Adjust stock** with "This outlet is not one you are allowed to access." | You picked an outlet outside your assignment. | Choose one of your outlets. |
-| 409 when adjusting: "This account is not assigned to any outlet." | Your user has no outlet assigned. | Ask an administrator to assign an outlet. |
-| 422 "Choose the outlet whose stock this changes." | You can see several outlets and sent none. | Pick an outlet in the dialog. |
-| Vendor missing from the price form | The vendor is inactive, or there are more than 100 vendors. | Activate it on [Vendors](/purchasing/vendors). |
+| Stok menampilkan satu angka padahal Anda punya beberapa outlet | Akun Anda hanya ditugaskan ke satu outlet. | Minta owner menugaskan lebih banyak outlet. Lihat [Outlet](/people/outlets). |
+| 403 pada **Koreksi stok** dengan "Outlet ini tidak termasuk outlet yang boleh Anda akses." | Anda memilih outlet di luar penugasan Anda. | Pilih salah satu outlet Anda. |
+| 409 saat mengoreksi: "Akun ini belum ditugaskan ke outlet. Minta administrator menugaskannya." | Pengguna Anda belum punya outlet. | Minta administrator menugaskan sebuah outlet. |
+| 422 "Pilih outlet yang stoknya diubah." | Anda dapat melihat beberapa outlet dan tidak mengirim satu pun. | Pilih outlet di dialog. |
+| Vendor tidak ada di formulir harga | Vendor nonaktif, atau ada lebih dari 100 vendor. | Aktifkan di [Vendor](/purchasing/vendors). |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Vendors" href="/purchasing/vendors">
-    Suppliers and their contact details.
+  <Card title="Vendor" href="/purchasing/vendors">
+    Pemasok dan data kontaknya.
   </Card>
-  <Card title="Purchase orders" href="/purchasing/purchase-orders">
-    Buy materials and add them to stock by receiving.
+  <Card title="Purchase order" href="/purchasing/purchase-orders">
+    Beli bahan dan tambahkan ke stok dengan menerimanya.
   </Card>
-  <Card title="Product detail" href="/inventory/product-detail">
-    Build the BOM of an item from purchase order lines.
+  <Card title="Detail produk" href="/inventory/product-detail">
+    Susun BOM sebuah item dari baris purchase order.
   </Card>
-  <Card title="Outlets" href="/people/outlets">
-    How outlet scope affects stock.
+  <Card title="Outlet" href="/people/outlets">
+    Pengaruh cakupan outlet pada stok.
   </Card>
 </Columns>

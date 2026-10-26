@@ -1,239 +1,239 @@
 ---
-title: "Product detail"
-description: "Manage one item: edit its details, variants and prices, mark it sold out (86), discontinue it, and maintain its modifiers, recipe, BOM and price history."
-keywords: ["pos", "product", "variants", "price", "86", "sold out", "discontinue", "recipe", "bom", "modifiers", "price history"]
+title: "Detail produk"
+description: "Kelola satu item: ubah detail, varian, dan harganya, tandai habis (86), diskontinu, serta kelola modifier, resep, BOM, dan riwayat harganya."
+keywords: ["pos", "produk", "product", "varian", "variants", "harga", "price", "86", "sold out", "discontinue", "resep", "recipe", "bom", "modifier", "riwayat harga", "price history"]
 ---
 
-**Classification: INTERNAL**
+**Klasifikasi: INTERNAL**
 
-Each item has its own page at `/products/<id>`. Open it by selecting an item name, a card, or **Edit** on the [Products](/inventory/products) list. The page shows the item's facts, variants and prices, modifier groups, availability per outlet, recipe and price history, and holds every action for that one item.
+Setiap item memiliki halamannya sendiri di `/products/<id>`. Buka dengan memilih nama item, kartu, atau **Edit** di daftar [Produk](/inventory/products). Halaman menampilkan fakta item, varian dan harga, grup modifier, ketersediaan per outlet, resep, dan riwayat harga, serta memuat setiap aksi untuk satu item itu.
 
-## Before you start
+## Sebelum mulai
 
-- You need the **Products** menu (menu key `products`). The page is part of the Products screen.
-- The buttons you see depend on what the server says you may do for this item. They are hidden, not greyed out.
+- Anda memerlukan menu **Produk** (kunci menu `products`). Halaman ini bagian dari layar Produk.
+- Tombol yang Anda lihat bergantung pada apa yang dinyatakan server boleh Anda lakukan untuk item ini. Tombol disembunyikan, bukan dinonaktifkan.
 
-| Control | Needs |
+| Kontrol | Memerlukan |
 | --- | --- |
-| Edit item, Manage variants, Manage modifiers, outlet price cells | Products menu |
-| Mark 86 / Undo 86 | Permission `menu.item.86` (and not discontinued) |
-| Discontinue / Reactivate | Permission `menu.item.manage` |
-| Create recipe / Edit recipe / Recalculate cost | Permission `menu.recipe.edit` |
-| View or change a variant's BOM | Products menu to view. Products **and** Purchase Orders menus to change. |
+| Edit item, Kelola varian, Kelola modifier, sel harga outlet | Menu Produk |
+| Tandai 86 / Batalkan 86 | Izin `menu.item.86` (dan item tidak didiskontinu) |
+| Discontinue / Aktifkan lagi | Izin `menu.item.manage` |
+| Buat resep / Edit resep / Hitung ulang biaya | Izin `menu.recipe.edit` |
+| Melihat atau mengubah BOM varian | Menu Produk untuk melihat. Menu Produk **dan** Purchase Order untuk mengubah. |
 
-- Cost prices and BOM details are returned only to users with the Products or Reports menu.
-- Built-in roles: Owner and Admin have every permission. Inventory has `menu.item.manage`, `menu.item.86` and `menu.recipe.edit`, but not the price, approval or release permissions.
-- Dates and "until end of day" use the [business day](/concepts/business-day). Prices are in rupiah and exclude tax.
+- Harga modal dan detail BOM hanya dikembalikan kepada pengguna dengan menu Produk atau Laporan.
+- Peran bawaan: Owner dan Admin memiliki semua izin. Inventory memiliki `menu.item.manage`, `menu.item.86`, dan `menu.recipe.edit`, tetapi tidak memiliki izin harga, persetujuan, atau rilis.
+- Tanggal dan "sampai akhir hari" memakai [hari bisnis](/concepts/business-day). Harga dalam rupiah dan belum termasuk pajak.
 
 <Note>
-When **menu release** is on in settings, price, discontinue, reactivate and modifier changes do not apply immediately. They become pending changes that wait for a release. The page then shows "The change is waiting for the next menu release." See [Products](/inventory/products#menu-release-and-price-approvals).
+Bila **rilis menu** aktif di pengaturan, perubahan harga, discontinue, aktifkan kembali, dan modifier tidak langsung berlaku. Perubahan itu menjadi perubahan tertunda yang menunggu rilis. Halaman kemudian menampilkan "Perubahan menunggu rilis menu berikutnya." Lihat [Produk](/inventory/products#menu-release-and-price-approvals).
 </Note>
 
-## What the page shows
+## Yang ditampilkan halaman
 
-| Area | Content |
+| Area | Isi |
 | --- | --- |
-| Header | "Menu item · \{code\}", the item name, and badges: status (Active, Draft, Discontinued), **86** when sold out, and the category. A "Back to Products" link returns to the list with the same tab, filters, page and sort when you came from it. |
-| Facts | Short name, tax category, station ("follows category" when it comes from the category), prep time, base price, and menu release version when release is on. |
-| Variants & price | Table of Variant, SKU, Base price, one price column per outlet (only with more than one outlet) and Status. |
-| Modifier groups | The groups that apply to the item. |
-| Availability per outlet | One row per outlet, or a single row for the whole installation. |
-| Recipe (BOM) | The active recipe or the BOM summary. |
-| Price history | A timeline of price changes. |
+| Header | "Menu item · \{code\}", nama item, dan lencana: status (Aktif, Draft, Discontinued), **86** bila habis, dan kategori. Tautan "Kembali ke Produk" mengembalikan Anda ke daftar dengan tab, filter, halaman, dan urutan yang sama bila Anda datang dari sana. |
+| Fakta | Nama pendek, kategori pajak, station ("mengikuti kategori" bila berasal dari kategori), estimasi persiapan, harga dasar, dan versi rilis menu bila rilis aktif. |
+| Varian & harga | Tabel Varian, SKU, Harga dasar, satu kolom harga per outlet (hanya bila ada lebih dari satu outlet), dan Status. |
+| Grup modifier | Grup yang berlaku untuk item. |
+| Ketersediaan per outlet | Satu baris per outlet, atau satu baris untuk seluruh instalasi. |
+| Resep (BOM) | Resep aktif atau ringkasan BOM. |
+| Riwayat harga | Lini masa perubahan harga. |
 
-If the page cannot load, you see "Could not load this item." with a retry button. If only the price history fails, only that section shows an error.
+Bila halaman tidak dapat dimuat, Anda melihat "Gagal memuat item ini." dengan tombol coba lagi. Bila hanya riwayat harga yang gagal, hanya bagian itu yang menampilkan galat.
 
 ## Edit item
 
 <Steps>
-  <Step title="Open the form">
-    Select **Edit item** in the header. A drawer opens with the same form used to add an item (see [Products](/inventory/products#add-an-item)).
+  <Step title="Buka formulir">
+    Pilih **Edit item** di header. Sebuah panel terbuka dengan formulir yang sama dengan yang dipakai untuk menambah item (lihat [Produk](/inventory/products#add-an-item)).
   </Step>
-  <Step title="Change the fields">
-    Everything can change except the segment, which is locked.
+  <Step title="Ubah kolom">
+    Semuanya dapat diubah kecuali segmen, yang terkunci.
   </Step>
-  <Step title="Save">
-    Select **Save item**. You see "Product updated."
+  <Step title="Simpan">
+    Pilih **Simpan item**. Anda melihat "Produk diperbarui."
   </Step>
 </Steps>
 
-Differences from the add form:
+Perbedaan dari formulir tambah:
 
-- There is a **Status** section with a **Draft** / **Active** toggle. When menu release is on, it shows "Status changes through the menu release — use Discontinue/Reactivate on the item page." instead. Making a published item inactive turns it into a discontinued item, not a draft.
-- The variants table shows the current stock and, if you may see costs, the cost price. Each row has actions: open BOM, apply markup, duplicate. A saved variant is never deleted. Clearing its **Active** box deactivates it.
-- If you change a stock number, a **Stock adjustment reason** is required ("A reason is required when changing stock."). The change is saved as a stock adjustment and needs the **Stock** menu. See [Stock](/inventory/stock).
-- **Duplicate variant** adds an unsaved copy below the source with the name "\{name\} (copy)". It copies price, low-stock alert, status and the stock quantity. The copied stock counts as new inventory when you save, so change it if you only want the prices. If the source variant has a BOM and you may manage BOMs, the BOM is copied when you save. Images, SKU and history are not copied.
-- **Markup** (shown only if you may see costs) sets a percentage (150 by default) that the apply-markup button on a row uses to fill the sell price: cost price plus that percentage, rounded to a whole rupiah.
-- Changes to modifier links are sent only if you changed them. Links that come from the category are shown read-only.
+- Ada bagian **Status** dengan pengalih **Draft** / **Aktif**. Bila rilis menu aktif, bagian ini menampilkan "Status berubah lewat rilis menu — gunakan Hentikan/Aktifkan di halaman item." sebagai gantinya. Menonaktifkan item yang sudah terbit mengubahnya menjadi item yang didiskontinu, bukan draft.
+- Tabel varian menampilkan stok saat ini dan, bila Anda boleh melihat biaya, harga modal. Setiap baris punya aksi: buka BOM, terapkan markup, duplikat. Varian yang sudah tersimpan tidak pernah dihapus. Menghapus centang **Aktif** menonaktifkannya.
+- Bila Anda mengubah angka stok, **Alasan penyesuaian stok** wajib diisi ("Alasan wajib diisi saat mengubah stok."). Perubahan disimpan sebagai penyesuaian stok dan memerlukan menu **Stok**. Lihat [Stok](/inventory/stock).
+- **Duplikat varian** menambahkan salinan yang belum tersimpan di bawah sumbernya dengan nama "\{name\} (salinan)". Salinan membawa harga, ambang stok rendah, status, dan jumlah stok. Stok yang disalin dihitung sebagai persediaan baru saat Anda menyimpan, jadi ubah bila Anda hanya menginginkan harganya. Bila varian sumber punya BOM dan Anda boleh mengelola BOM, BOM disalin saat Anda menyimpan. Gambar, SKU, dan riwayat tidak disalin.
+- **Markup** (tampil hanya bila Anda boleh melihat biaya) menetapkan persentase (150 secara bawaan) yang dipakai tombol terapkan markup pada sebuah baris untuk mengisi harga jual: harga modal ditambah persentase itu, dibulatkan ke rupiah penuh.
+- Perubahan tautan modifier dikirim hanya bila Anda mengubahnya. Tautan yang berasal dari kategori ditampilkan hanya-baca.
 
-Variant cost price can be locked. If a variant's BOM is complete or a recipe drives its cost, a manual cost change is refused with a 409: "This variant's cost price follows its completed BOM. Reopen the BOM to change it manually." or "This variant's cost price follows its recipe. Create a new recipe version to change it."
+Harga modal varian dapat dikunci. Bila BOM varian sudah selesai atau sebuah resep menentukan biayanya, perubahan harga modal manual ditolak dengan 409: "Harga modal varian ini mengikuti BOM yang sudah selesai. Buka kembali BOM untuk mengubahnya secara manual." atau "Harga modal varian ini mengikuti resep. Buat versi resep baru untuk mengubahnya."
 
-## Manage variants and prices
+## Kelola varian dan harga
 
-A variant is a choice with its own SKU and price, for example Hot or Iced. Extras such as sugar or toppings are modifier groups, not variants.
+Varian adalah pilihan dengan SKU dan harganya sendiri, misalnya Panas atau Es. Tambahan seperti gula atau topping adalah grup modifier, bukan varian.
 
 <Steps>
-  <Step title="Open the drawer">
-    In **Variants & price**, select **Manage variants**.
+  <Step title="Buka panel">
+    Di **Varian & harga**, pilih **Kelola varian**.
   </Step>
-  <Step title="Edit rows">
-    Change the variant name, the base price or the **Active** box. Use **+ Add variant** for a new row. A new row can be discarded before saving. SKUs for new variants are generated by the server.
+  <Step title="Ubah baris">
+    Ubah nama varian, harga dasar, atau kotak **Aktif**. Gunakan **+ Tambah varian** untuk baris baru. Baris baru dapat dibuang sebelum disimpan. SKU untuk varian baru dibuat oleh server.
   </Step>
-  <Step title="Set the effective date (optional)">
-    **Effective from** applies to the whole batch. Empty means the prices apply immediately, or go into the next menu release when release is on. A future date schedules the change.
+  <Step title="Atur tanggal berlaku (opsional)">
+    **Berlaku mulai** berlaku untuk seluruh kelompok perubahan. Kosong berarti harga langsung berlaku, atau masuk ke rilis menu berikutnya bila rilis aktif. Tanggal di masa depan menjadwalkan perubahan.
   </Step>
-  <Step title="Save">
-    The button reads **Save**, or **Submit change** when menu release is on.
+  <Step title="Simpan">
+    Tombolnya bertuliskan **Simpan**, atau **Ajukan perubahan** bila rilis menu aktif.
   </Step>
 </Steps>
 
-Messages and rules:
+Pesan dan aturan:
 
-| Message | Cause |
+| Pesan | Penyebab |
 | --- | --- |
-| The variant name is required. | A row has no name. |
-| The price must be a number, 0 or more. | Empty, non-numeric or negative price. |
-| Variants saved. | All changes applied. |
-| \{n\} price change(s) are waiting for the next menu release. | Menu release is on, or the date is in the future. |
-| \{n\} price change(s) above the threshold are waiting for approval. | The change differs from the old price by more than the approval threshold. Another person with `menu.price.approve` must approve it. |
-| This variant's cost price is locked by its BOM or recipe and cannot be changed here. (409) | See above. |
+| Nama varian wajib diisi. | Ada baris tanpa nama. |
+| Harga wajib berupa angka 0 atau lebih. | Harga kosong, bukan angka, atau negatif. |
+| Varian disimpan. | Semua perubahan diterapkan. |
+| \{n\} perubahan harga menunggu rilis menu berikutnya. | Rilis menu aktif, atau tanggalnya di masa depan. |
+| \{n\} perubahan harga di atas ambang menunggu persetujuan. | Perubahan berbeda dari harga lama melebihi ambang persetujuan. Orang lain dengan `menu.price.approve` harus menyetujuinya. |
+| Harga modal varian ini dikunci oleh BOM atau resep dan tidak bisa diubah dari sini. (409) | Lihat di atas. |
 
-The drawer saves all rows together or none. At most 50 variants can be sent in one save. The effective date cannot be in the past.
+Panel menyimpan semua baris bersamaan atau tidak sama sekali. Paling banyak 50 varian dapat dikirim dalam satu penyimpanan. Tanggal berlaku tidak boleh di masa lalu.
 
-### Prices per outlet
+### Harga per outlet
 
-With more than one outlet, the table has a price column per outlet. A grey value means the outlet follows the base price. Type a number in a cell to give that outlet its own price. Clear the cell to go back to the base price. The price must be a number, 0 or more ("Outlet price must be a number, 0 or more"). You see "Outlet price saved" or, when menu release is on, "The change is waiting for the next menu release." An outlet can have its own price only for an item it carries.
+Bila ada lebih dari satu outlet, tabel memiliki kolom harga per outlet. Nilai abu-abu berarti outlet mengikuti harga dasar. Ketik angka di sebuah sel untuk memberi outlet itu harganya sendiri. Kosongkan sel untuk kembali ke harga dasar. Harga harus berupa angka, 0 atau lebih ("Harga outlet harus angka 0 atau lebih"). Anda melihat "Harga outlet disimpan" atau, bila rilis menu aktif, "Perubahan menunggu rilis menu berikutnya." Outlet dapat memiliki harga sendiri hanya untuk item yang dibawanya.
 
-## Mark an item sold out (86)
+## Tandai item habis (86)
 
-Marking 86 stops new orders for the item on this installation's ordering screens within about 5 seconds. It lasts until the business day ends. Existing orders do not change.
+Menandai 86 menghentikan pesanan baru untuk item di layar pemesanan instalasi ini dalam sekitar 5 detik. Berlaku sampai hari bisnis berakhir. Pesanan yang sudah ada tidak berubah.
 
 <Steps>
-  <Step title="Select Mark 86">
-    The button is in the header, for users with `menu.item.86`. It is hidden for discontinued items.
+  <Step title="Pilih Tandai 86">
+    Tombolnya ada di header, untuk pengguna dengan `menu.item.86`. Tombol disembunyikan untuk item yang didiskontinu.
   </Step>
-  <Step title="Choose a reason">
-    A reason from the sold-out reason list is required. A note of up to 255 characters is optional. With more than one outlet you also tick the outlets to mark. The default is the outlet selected in the top bar, or all outlets.
+  <Step title="Pilih alasan">
+    Alasan dari daftar alasan sold out wajib dipilih. Catatan hingga 255 karakter bersifat opsional. Bila ada lebih dari satu outlet, Anda juga mencentang outlet yang ditandai. Bawaannya adalah outlet yang dipilih di bilah atas, atau semua outlet.
   </Step>
-  <Step title="Confirm">
-    Select **Mark 86**. You see "\{name\} marked 86."
+  <Step title="Konfirmasi">
+    Pilih **Tandai 86**. Anda melihat "\{name\} ditandai 86."
   </Step>
 </Steps>
 
-To reverse it, select **Undo 86** and confirm. Only the marks on the outlets that are currently sold out are cleared. You see "86 for \{name\} undone."
+Untuk membatalkannya, pilih **Batalkan 86** dan konfirmasi. Hanya tanda pada outlet yang saat ini habis yang dihapus. Anda melihat "86 untuk \{name\} dibatalkan."
 
-| Message | Cause |
+| Pesan | Penyebab |
 | --- | --- |
-| There are no reason codes for this action yet. Add them in Settings. | The reason list is empty. An owner or admin adds reasons in settings. |
-| This item is already marked sold out. (409) | Another user marked it first. The page reloads. |
-| This item is not marked sold out. (409) | Someone else already undid it. |
-| A discontinued item cannot be marked sold out. (409) | Reactivate the item first. |
-| The reason is invalid or inactive. (422) | Choose another reason. |
-| This action needs approval from an authorised approver. (409) | Your role has `menu.item.86` but not `menu.availability.set`. See the warning below. |
+| Belum ada kode alasan untuk tindakan ini. Tambahkan di Pengaturan. | Daftar alasan kosong. Owner atau admin menambahkan alasan di pengaturan. |
+| Item ini sudah ditandai habis. (409) | Pengguna lain menandainya lebih dulu. Halaman dimuat ulang. |
+| Item ini tidak sedang ditandai habis. (409) | Orang lain sudah membatalkannya. |
+| Item yang didiskontinu tidak bisa ditandai habis. (409) | Aktifkan kembali item terlebih dahulu. |
+| Alasan tidak valid atau tidak aktif. (422) | Pilih alasan lain. |
+| Aksi ini butuh persetujuan dari penyetuju yang berwenang. (409) | Peran Anda memiliki `menu.item.86` tetapi tidak memiliki `menu.availability.set`. Lihat peringatan di bawah. |
 
 <Warning>
-The server decides whether you may mark 86 without approval: it requires `menu.availability.set`, or an approval token from a supervisor PIN. The web form has no approval step. A user who has `menu.item.86` but not `menu.availability.set` sees the Mark 86 button but gets the 409 above. Give those users `menu.availability.set`. Undo 86 only needs `menu.item.86`.
+Server menentukan apakah Anda boleh menandai 86 tanpa persetujuan: diperlukan `menu.availability.set`, atau token persetujuan dari PIN supervisor. Formulir web tidak punya langkah persetujuan. Pengguna yang memiliki `menu.item.86` tetapi tidak memiliki `menu.availability.set` melihat tombol Tandai 86 tetapi mendapat 409 di atas. Berikan `menu.availability.set` kepada pengguna tersebut. Batalkan 86 hanya memerlukan `menu.item.86`.
 </Warning>
 
-The **Availability per outlet** section lists each outlet with its state (Available, 86, Not sold), and for a sold-out item the reason, who marked it, until when and any note. The **Daily quota** and **Channels** columns always show a dash because those features do not exist yet.
+Bagian **Ketersediaan per outlet** mencantumkan setiap outlet dengan statusnya (Ada, 86, Tidak dijual), dan untuk item yang habis, alasannya, siapa yang menandai, sampai kapan, dan catatan apa pun. Kolom **Kuota harian** dan **Channel** selalu menampilkan tanda strip karena fitur itu belum ada.
 
-## Discontinue and reactivate
+## Discontinue dan aktifkan lagi
 
-A discontinued item can no longer be added to new orders, but it stays in history and reports. Nothing is deleted.
+Item yang didiskontinu tidak dapat lagi ditambahkan ke order baru, tetapi tetap ada di riwayat dan laporan. Tidak ada yang dihapus.
 
-- **Discontinue** asks for a reason (required) and an optional note. Any active 86 mark on the item is cleared. You see "\{name\} discontinued." If menu release is on, it takes effect after the next release and the page shows a pending notice instead.
-- **Reactivate** asks for confirmation. You see "\{name\} reactivated."
+- **Discontinue** meminta alasan (wajib) dan catatan opsional. Setiap tanda 86 aktif pada item dihapus. Anda melihat "\{name\} didiskontinu." Bila rilis menu aktif, perubahan berlaku setelah rilis berikutnya dan halaman menampilkan pemberitahuan tertunda sebagai gantinya.
+- **Aktifkan lagi** meminta konfirmasi. Anda melihat "\{name\} diaktifkan lagi."
 
-Errors: "This item is already discontinued." and "This item is not discontinued." (409) mean the page was stale. The page reloads.
+Galat: "Item ini sudah didiskontinu." dan "Item ini tidak sedang didiskontinu." (409) berarti halaman sudah usang. Halaman dimuat ulang.
 
-## Modifier groups
+## Grup modifier
 
-The section lists each group with its order, rule (Required or Optional, min, max, single choice), options and scope.
+Bagian ini mencantumkan setiap grup dengan urutannya, aturan (Wajib atau Opsional, min, maks, pilihan tunggal), opsi, dan cakupan.
 
 <Steps>
-  <Step title="Open the drawer">
-    Select **Manage modifiers**.
+  <Step title="Buka panel">
+    Pilih **Kelola modifier**.
   </Step>
-  <Step title="Link groups">
-    Use **Link a group**, then set Required, Min and Max for each group and reorder with the up and down buttons. Unlink with the remove button.
+  <Step title="Tautkan grup">
+    Gunakan **Tautkan grup**, lalu atur Wajib, Min, dan Maks untuk setiap grup dan ubah urutan dengan tombol naik dan turun. Lepas tautan dengan tombol hapus.
   </Step>
-  <Step title="Save">
-    Select **Save modifiers** (or **Submit change** with menu release on).
+  <Step title="Simpan">
+    Pilih **Simpan modifier** (atau **Ajukan perubahan** bila rilis menu aktif).
   </Step>
 </Steps>
 
-Rules: Min is a whole number, 0 or more. Max is empty (no limit) or a whole number of 1 or more, and not below Min. A single-choice group allows maximum 1 and minimum 0 or 1. The same group cannot be linked twice, and at most 30 links are allowed. Groups inherited from the category are shown as "From the category (not changed here)". The contents of a group (options and prices) are edited only on the restaurant setup screen: see [Restaurant setup](/operations/restaurant-setup). The POS asks for required groups before the item can be sent to the kitchen.
+Aturan: Min adalah bilangan bulat, 0 atau lebih. Maks kosong (tanpa batas) atau bilangan bulat 1 atau lebih, dan tidak kurang dari Min. Grup pilihan tunggal mengizinkan maksimum 1 dan minimum 0 atau 1. Grup yang sama tidak dapat ditautkan dua kali, dan paling banyak 30 tautan diizinkan. Grup yang diwarisi dari kategori ditampilkan sebagai "Dari kategori (tidak diubah di sini)". Isi grup (opsi dan harganya) hanya diubah di layar pengaturan restoran: lihat [Pengaturan Restoran](/operations/restaurant-setup). POS menanyakan grup wajib sebelum item dapat dikirim ke dapur.
 
-## Recipe
+## Resep
 
-A recipe lists the ingredients used for one portion, so the system can show portion cost, food cost percent and gross margin.
+Resep mencantumkan bahan yang dipakai untuk satu porsi, sehingga sistem dapat menampilkan biaya porsi, persen food cost, dan margin kotor.
 
 <Steps>
-  <Step title="Open the drawer">
-    Select **Create recipe** (or **Edit recipe** when one exists). It needs `menu.recipe.edit`.
+  <Step title="Buka panel">
+    Pilih **Buat resep** (atau **Edit resep** bila sudah ada). Memerlukan `menu.recipe.edit`.
   </Step>
-  <Step title="Set yield and date">
-    Enter the yield in portions (more than 0) and **Effective from** (at most 30 days in the past).
+  <Step title="Atur yield dan tanggal">
+    Masukkan yield dalam porsi (lebih dari 0) dan **Berlaku mulai** (paling lama 30 hari ke belakang).
   </Step>
-  <Step title="Choose variants">
-    Tick at least one variant that the recipe applies to. A variant whose BOM is complete cannot be chosen: it uses its BOM cost instead.
+  <Step title="Pilih varian">
+    Centang minimal satu varian yang dikenai resep. Varian yang BOM-nya sudah selesai tidak dapat dipilih: varian itu memakai biaya BOM-nya.
   </Step>
-  <Step title="Add ingredients">
-    Choose an ingredient, quantity (more than 0) and shrinkage percent (0 to 99.99). Ingredients are grouped as Ingredients, Semi-finished and Packaging. The drawer previews portion cost, food cost and margin. If some ingredient has no price, the cost is shown as partial and food cost and margin are not computed.
+  <Step title="Tambah bahan">
+    Pilih bahan, jumlah (lebih dari 0), dan persen susut (0 sampai 99,99). Bahan dikelompokkan sebagai Bahan baku, Setengah jadi, dan Kemasan. Panel menampilkan pratinjau biaya porsi, food cost, dan margin. Bila ada bahan tanpa harga, biaya ditampilkan sebagai sebagian dan food cost serta margin tidak dihitung.
   </Step>
-  <Step title="Save">
-    The button reads **Save as v\{n\}**.
+  <Step title="Simpan">
+    Tombolnya bertuliskan **Simpan sebagai v\{n\}**.
   </Step>
 </Steps>
 
-Saving always creates a **new version**. Earlier versions are kept and listed under **Recipe versions** with the one that is **Active now**. Saving a recipe does not deduct ingredient stock. **Recalculate cost** rewrites the cost price of variants that use the recipe from current ingredient prices. Recorded sales do not change. Variants with incomplete cost are skipped and reported.
+Menyimpan selalu membuat **versi baru**. Versi sebelumnya disimpan dan dicantumkan di bawah **Versi resep** dengan penanda **Berlaku sekarang**. Menyimpan resep tidak mengurangi stok bahan. **Hitung ulang biaya** menulis ulang harga modal varian yang memakai resep dari harga bahan saat ini. Penjualan yang sudah tercatat tidak berubah. Varian dengan biaya yang belum lengkap dilewati dan dilaporkan.
 
-Errors: "Variant(s) \{skus\} use a completed BOM as their cost source. Reopen the BOM before using a recipe." (409), "The yield must be greater than 0.", "Add at least one ingredient.", "Choose at least one variant." (422).
+Galat: "Varian \{skus\} memakai BOM yang sudah selesai sebagai sumber biaya. Buka kembali BOM-nya sebelum memakai resep." (409), "Hasil (yield) harus lebih dari 0.", "Tambahkan minimal satu bahan.", "Pilih minimal satu varian." (422).
 
-## BOM (purchase-order based cost)
+## BOM (biaya berdasarkan purchase order)
 
-A BOM (bill of materials) lists the materials and services, with their cost, used to make one finished unit of a variant. You open it from the **Open BOM** button on a saved variant row in the edit form.
+BOM (bill of materials) mencantumkan bahan dan jasa, beserta biayanya, yang dipakai untuk membuat satu unit jadi sebuah varian. Anda membukanya dari tombol **Buka BOM** pada baris varian yang sudah tersimpan di formulir ubah.
 
-- Items come from purchase order lines of the variant's outlet whose purchase order is ordered, received or paid. Add them with **Add BOM Item**.
-- **Qty per 1 product** must be a whole number of 1 or more.
-- The dialog shows material cost, service cost, total BOM cost and the current stock (read-only).
-- **Mark BOM complete** makes the variant's cost price follow the BOM cost automatically and locks manual edits until you select **Reopen BOM**. An empty BOM cannot be completed, and rows without a purchase order source ("Legacy") must be replaced or removed first. A BOM that becomes empty is reopened automatically.
-- **Copy BOM** copies items, quantities and costs to another variant of the same product. If the target already has rows, you confirm that they are replaced. Each variant is independent afterwards.
-- A row can show "Newer price \{price\}" when a newer purchase order has a different price. Use **Use newer price** to adopt it. A row whose purchase order was cancelled shows "Source cancelled".
+- Item berasal dari baris purchase order milik outlet varian yang purchase order-nya berstatus ordered, received, atau paid. Tambahkan dengan **Tambah Item BOM**.
+- **Jumlah per 1 produk** harus berupa bilangan bulat 1 atau lebih.
+- Dialog menampilkan biaya bahan, biaya jasa, total biaya BOM, dan stok saat ini (hanya-baca).
+- **Tandai BOM selesai** membuat harga modal varian mengikuti biaya BOM secara otomatis dan mengunci pengeditan manual sampai Anda memilih **Buka kembali BOM**. BOM yang kosong tidak dapat diselesaikan, dan baris tanpa sumber purchase order ("Lama") harus diganti atau dihapus lebih dulu. BOM yang menjadi kosong dibuka kembali secara otomatis.
+- **Salin BOM** menyalin item, jumlah, dan biaya ke varian lain pada produk yang sama. Bila varian tujuan sudah punya baris, Anda mengonfirmasi bahwa baris itu diganti. Setelah itu setiap varian berdiri sendiri.
+- Sebuah baris dapat menampilkan "Harga lebih baru \{price\}" bila purchase order yang lebih baru memiliki harga berbeda. Gunakan **Pakai harga terbaru** untuk memakainya. Baris yang purchase order-nya dibatalkan menampilkan "Sumber dibatalkan".
 
-If you lack the Purchase Orders menu you can view a BOM but not change it ("You are not allowed to manage purchase-order BOMs." 403). See [Purchase orders](/purchasing/purchase-orders).
+Bila Anda tidak memiliki menu Purchase Order, Anda dapat melihat BOM tetapi tidak mengubahnya ("Anda tidak berhak mengelola BOM dari purchase order." 403). Lihat [Purchase order](/purchasing/purchase-orders).
 
-## Price history
+## Riwayat harga
 
-The timeline lists each price change, newest first, 25 entries per page, with **Load more**. Each entry shows the new price and the previous one, who changed it, and for released changes who proposed and approved it and the release version. Item creation shows "Initial price". Outlet prices are labelled with the outlet code. If there is no history you see "No price history yet."
+Lini masa mencantumkan setiap perubahan harga, terbaru lebih dulu, 25 entri per halaman, dengan **Muat lebih banyak**. Setiap entri menampilkan harga baru dan sebelumnya, siapa yang mengubah, dan untuk perubahan yang dirilis, siapa yang mengajukan dan menyetujui serta versi rilisnya. Pembuatan item menampilkan "Harga awal". Harga outlet diberi label kode outlet. Bila tidak ada riwayat Anda melihat "Belum ada riwayat harga."
 
-## Troubleshooting
+## Pemecahan masalah
 
 <AccordionGroup>
-  <Accordion title="The page says the change is waiting for the next menu release">
-    Menu release is on. Someone with `menu.release.publish` must release it from the Products page. A price that is above the threshold also needs approval first.
+  <Accordion title="Halaman menyatakan perubahan menunggu rilis menu berikutnya">
+    Rilis menu aktif. Seseorang dengan `menu.release.publish` harus merilisnya dari halaman Produk. Harga di atas ambang juga memerlukan persetujuan lebih dulu.
   </Accordion>
-  <Accordion title="Edit item shows but saving the stock change fails">
-    Stock changes need the Stock menu and a reason. If you have several outlets and none is selected, the adjustment asks you to choose one. See [Stock](/inventory/stock).
+  <Accordion title="Edit item tampil tetapi menyimpan perubahan stok gagal">
+    Perubahan stok memerlukan menu Stok dan sebuah alasan. Bila Anda punya beberapa outlet dan tidak ada yang dipilih, penyesuaian meminta Anda memilih satu. Lihat [Stok](/inventory/stock).
   </Accordion>
-  <Accordion title="I cannot see the BOM button">
-    The BOM button appears only on saved variants in the edit form, for users with the Products menu.
+  <Accordion title="Saya tidak melihat tombol BOM">
+    Tombol BOM hanya tampil pada varian yang sudah tersimpan di formulir ubah, untuk pengguna dengan menu Produk.
   </Accordion>
 </AccordionGroup>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Products" href="/inventory/products">
-    The list, bulk price change, release and import.
+  <Card title="Produk" href="/inventory/products">
+    Daftar, ubah harga massal, rilis, dan impor.
   </Card>
-  <Card title="Stock" href="/inventory/stock">
-    Movement ledger and stock adjustments.
+  <Card title="Stok" href="/inventory/stock">
+    Buku besar pergerakan dan penyesuaian stok.
   </Card>
-  <Card title="Materials" href="/purchasing/materials">
-    The ingredients a recipe and a BOM use.
+  <Card title="Bahan Baku" href="/purchasing/materials">
+    Bahan yang dipakai resep dan BOM.
   </Card>
-  <Card title="Roles and permissions" href="/concepts/roles-and-permissions">
-    Which role can mark 86, discontinue or approve prices.
+  <Card title="Peran dan izin" href="/concepts/roles-and-permissions">
+    Peran mana yang dapat menandai 86, discontinue, atau menyetujui harga.
   </Card>
 </Columns>

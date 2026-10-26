@@ -1,100 +1,100 @@
 ---
-title: "Kitchen and bar"
-description: "Follow incoming tickets per station, move each item from new to preparing to ready, mark items served, and print a ticket."
-keywords: ["kitchen", "bar", "station", "ticket", "kitchen display", "preparing", "ready", "served"]
+title: "Dapur dan bar"
+description: "Ikuti tiket masuk per stasiun, ubah setiap item dari baru ke dimasak ke siap saji, tandai item diantar, dan cetak tiket."
+keywords: ["dapur", "bar", "stasiun", "tiket", "layar dapur", "dimasak", "siap saji", "diantar"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-**Kitchen & Bar** (menu key `kitchen`, under the **Restaurant** group) is the screen for the people who prepare food and drinks. Each **station** (for example Kitchen or Bar) has its own board of tickets. A ticket appears when a waiter clicks **Send to kitchen** on a tab, see [Floor and tabs](/operations/restaurant-floor).
+**Dapur & Bar** (menu key `kitchen`, di bawah grup **Restoran**) adalah layar bagi orang yang menyiapkan makanan dan minuman. Setiap **stasiun** (misalnya Dapur atau Bar) memiliki papan tiketnya sendiri. Tiket muncul ketika pelayan mengklik **Kirim ke dapur** pada sebuah tab, lihat [Lantai dan tab](/operations/restaurant-floor).
 
-## Before you start
+## Sebelum mulai
 
-- Your role needs the `kitchen` menu. The ticket list itself is refused without it (403).
-- You need at least one active station. With none, the page says "No stations yet. Add some in Restaurant Setup." Stations are created in [Restaurant setup](/operations/restaurant-setup), and each category or product is assigned to a station on the category and product screens.
-- You see the stations and tickets of the outlet you have selected. See [Outlets](/concepts/outlets).
+- Peran Anda harus memiliki menu `kitchen`. Daftar tiket sendiri ditolak tanpanya (403).
+- Anda membutuhkan setidaknya satu stasiun aktif. Bila tidak ada, halaman menampilkan "Belum ada stasiun. Tambahkan di Pengaturan Restoran." Stasiun dibuat di [Pengaturan restoran](/operations/restaurant-setup), dan setiap kategori atau produk ditetapkan ke stasiun di layar kategori dan produk.
+- Anda melihat stasiun dan tiket dari outlet yang Anda pilih. Lihat [Outlet](/concepts/outlets).
 
-## How a ticket reaches a station
+## Bagaimana tiket sampai ke stasiun
 
-Sending a tab creates one ticket per station for that **round**. A tab can have several rounds ("Round 1", "Round 2") if the waiter sends more items later.
+Mengirim tab membuat satu tiket per stasiun untuk **ronde** itu. Sebuah tab bisa memiliki beberapa ronde ("Ronde 1", "Ronde 2") bila pelayan mengirim item tambahan kemudian.
 
-- Items go to the station of the product, falling back to the station of its category. The first station that is active wins.
-- Items with **no active station** are not shown on any board. They are marked ready the moment they are sent, so the waiter can serve them directly.
+- Item diarahkan ke stasiun milik produk, lalu ke stasiun milik kategorinya bila produk tidak memilikinya. Stasiun aktif pertama yang menang.
+- Item **tanpa stasiun aktif** tidak ditampilkan di papan mana pun. Item itu ditandai siap saat dikirim, sehingga pelayan bisa langsung mengantarnya.
 
-## Use the board
+## Memakai papan
 
 <Steps>
-  <Step title="Pick a station">
-    Click a station tab at the top. The first active station is selected automatically. Switching clears the board and reloads it for that station.
+  <Step title="Pilih stasiun">
+    Klik tab stasiun di bagian atas. Stasiun aktif pertama dipilih otomatis. Berpindah akan mengosongkan papan dan memuatnya ulang untuk stasiun itu.
   </Step>
-  <Step title="Read the ticket">
-    Each ticket card shows the place (**Table X**, the takeaway label, or **Takeaway**), the order number, the **Round** number, and the minutes waiting since it was sent. Each item shows quantity, name, chosen modifiers, and the guest's note in italics.
+  <Step title="Baca tiket">
+    Setiap kartu tiket menampilkan tempat (**Meja X**, label takeaway, atau **Takeaway**), nomor order, nomor **Ronde**, dan menit menunggu sejak dikirim. Setiap item menampilkan jumlah, nama, modifier yang dipilih, dan catatan tamu dengan huruf miring.
   </Step>
-  <Step title="Start an item">
-    Click **Start** on an item. Its pill changes from **New** to **Preparing**.
+  <Step title="Mulai item">
+    Klik **Mulai** pada sebuah item. Pilnya berubah dari **Baru** menjadi **Dimasak**.
   </Step>
-  <Step title="Finish an item">
-    Click **Ready** when it is done. The pill changes to **Ready**, and the waiter sees it on the tab and on the table card.
+  <Step title="Selesaikan item">
+    Klik **Siap** saat selesai. Pilnya berubah menjadi **Siap saji**, dan pelayan melihatnya di tab dan di kartu meja.
   </Step>
-  <Step title="Mark served">
-    **Mark served** closes the item. Waiters can also do this from the tab. Served items stay visible for 30 minutes.
+  <Step title="Tandai diantar">
+    **Sudah diantar** menutup item. Pelayan juga bisa melakukannya dari tab. Item yang sudah diantar tetap terlihat selama 30 menit.
   </Step>
 </Steps>
 
-You advance items one by one. Moves must go in order, New to Preparing to Ready to Served; skipping or going backwards is refused by the server ("An item that is "new" cannot be moved to "ready"." and so on).
+Anda memajukan item satu per satu. Perpindahan harus berurutan, Baru ke Dimasak ke Siap saji ke Diantar; melompat atau mundur ditolak oleh server ("Item berstatus "new" tidak bisa dipindah ke "ready"." dan seterusnya).
 
-### Item states
+### Status item
 
-| Pill | Meaning | Button shown |
+| Pil | Arti | Tombol yang tampil |
 | --- | --- | --- |
-| New | Waiting to be started. | **Start** |
-| Preparing | Being made. | **Ready** |
-| Ready | Waiting to be served. | **Mark served** |
-| Served | Delivered. | None |
-| Cancelled | Cancelled by the waiter or manager. Shown struck through in red with "Cancelled — reason". | None |
+| Baru | Menunggu dimulai. | **Mulai** |
+| Dimasak | Sedang dibuat. | **Siap** |
+| Siap saji | Menunggu diantar. | **Sudah diantar** |
+| Diantar | Sudah diantar. | Tidak ada |
+| Dibatalkan | Dibatalkan oleh pelayan atau manajer. Tampil dicoret dengan warna merah beserta "Dibatalkan — alasan". | Tidak ada |
 
-### Sections of the board
+### Bagian papan
 
-- **In progress**: tickets that still have an item that is New, Preparing or Ready. With none, the page shows "No tickets in progress."
-- **Recently finished**: tickets whose items are all served or cancelled within the last 30 minutes. These cards are dimmed and have no action buttons.
+- **Sedang berjalan**: tiket yang masih memiliki item Baru, Dimasak, atau Siap saji. Bila tidak ada, halaman menampilkan "Tidak ada tiket yang sedang berjalan."
+- **Baru selesai**: tiket yang semua itemnya sudah diantar atau dibatalkan dalam 30 menit terakhir. Kartu ini diredupkan dan tidak memiliki tombol aksi.
 
-### Late tickets
+### Tiket terlambat
 
-A ticket with items still New or Preparing for 15 minutes or more gets a highlighted border and a highlighted waiting-time pill. This is only a visual cue.
+Tiket dengan item yang masih Baru atau Dimasak selama 15 menit atau lebih mendapat border yang disorot dan pil waktu tunggu yang disorot. Ini hanya isyarat visual.
 
-## Print a ticket
+## Mencetak tiket
 
-Click the printer button on a ticket, then **Print** in the dialog. The dialog shows the station, place, round, and the items with modifiers and notes in a plain monospaced layout. Printing uses your browser's print dialog, so it works with any printer the computer can use.
+Klik tombol printer pada tiket, lalu **Cetak** di dialog. Dialog menampilkan stasiun, tempat, ronde, dan item beserta modifier dan catatannya dalam tata letak monospace polos. Pencetakan memakai dialog cetak peramban Anda, sehingga bisa dipakai dengan printer apa pun yang dapat digunakan komputer.
 
-## Who can do what
+## Siapa bisa melakukan apa
 
-| Action | Needed |
+| Aksi | Dibutuhkan |
 | --- | --- |
-| View the board, **Start**, **Ready** | `kitchen` menu |
-| **Mark served** | `kitchen` or `floor` menu |
-| View or print a single ticket | `kitchen` or `floor` menu |
+| Melihat papan, **Mulai**, **Siap** | menu `kitchen` |
+| **Sudah diantar** | menu `kitchen` atau `floor` |
+| Melihat atau mencetak satu tiket | menu `kitchen` atau `floor` |
 
-## Live updates
+## Pembaruan langsung
 
-The board polls the server about every 3 seconds, and only downloads new data when something changed. It pauses while the browser tab is hidden and slows down after errors. A banner reads "Could not load tickets. Retrying automatically…" if the connection drops. If an action fails, the board reloads so you see the true state.
+Papan meminta data ke server sekitar setiap 3 detik, dan hanya mengunduh data baru bila ada yang berubah. Papan berhenti sementara saat tab peramban tersembunyi dan melambat setelah galat. Banner bertuliskan "Tidak dapat memuat tiket. Mencoba lagi otomatis…" bila koneksi terputus. Jika sebuah aksi gagal, papan dimuat ulang sehingga Anda melihat kondisi sebenarnya.
 
 <Note>
-There is no sound or push alert. Keep the page visible on the kitchen screen so it keeps refreshing.
+Tidak ada suara atau notifikasi push. Biarkan halaman tetap terlihat di layar dapur agar terus menyegarkan diri.
 </Note>
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Symptom or message | Cause | Fix |
+| Gejala atau pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| No stations yet. | No active station for this outlet. | Add one in [Restaurant setup](/operations/restaurant-setup), or check the outlet selector. |
-| A ticket you expected is missing | The item has no station, or belongs to another station, or the other outlet. | Check the station on the product or category, and your outlet. |
-| An item that is "X" cannot be moved to "Y". | Another person already moved it. | The board reloads; carry on from the new state. |
-| You are not allowed to do this. (403) | Your role lacks the needed menu. | Ask an owner or admin, see [Roles and permissions](/concepts/roles-and-permissions). |
-| Could not load tickets. Retrying automatically… | Network or server problem. | Wait; it recovers by itself. |
+| Belum ada stasiun. | Tidak ada stasiun aktif untuk outlet ini. | Tambahkan di [Pengaturan restoran](/operations/restaurant-setup), atau periksa pemilih outlet. |
+| Tiket yang Anda harapkan tidak ada | Item tidak memiliki stasiun, atau milik stasiun lain, atau outlet lain. | Periksa stasiun pada produk atau kategori, dan outlet Anda. |
+| Item berstatus "X" tidak bisa dipindah ke "Y". | Orang lain sudah memindahkannya. | Papan dimuat ulang; lanjutkan dari status yang baru. |
+| Anda tidak diizinkan melakukan ini. (403) | Peran Anda tidak memiliki menu yang dibutuhkan. | Hubungi owner atau admin, lihat [Peran dan izin](/concepts/roles-and-permissions). |
+| Tidak dapat memuat tiket. Mencoba lagi otomatis… | Masalah jaringan atau server. | Tunggu; akan pulih dengan sendirinya. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Floor and tabs" href="/operations/restaurant-floor" icon="utensils">Where tickets are sent from.</Card>
-  <Card title="Restaurant setup" href="/operations/restaurant-setup" icon="gear">Create stations.</Card>
+  <Card title="Lantai dan tab" href="/operations/restaurant-floor" icon="utensils">Tempat tiket dikirim.</Card>
+  <Card title="Pengaturan restoran" href="/operations/restaurant-setup" icon="gear">Buat stasiun.</Card>
 </Columns>

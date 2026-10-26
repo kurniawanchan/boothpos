@@ -1,193 +1,193 @@
 ---
-title: "Take payment on the tablet"
-description: "Pay an order with cash, EDC or QRIS on the tablet, handle split payments, change and QRIS verification, and finish on the done screen."
-keywords: ["android", "tablet", "payment", "tender", "cash", "EDC", "QRIS", "change", "split payment", "receipt", "queue number"]
+title: "Terima pembayaran di tablet"
+description: "Bayar order dengan tunai, EDC, atau QRIS di tablet, tangani pembayaran terpisah, kembalian, dan verifikasi QRIS, lalu selesai di layar selesai."
+keywords: ["android", "tablet", "pembayaran", "metode bayar", "tunai", "EDC", "QRIS", "kembalian", "pembayaran terpisah", "struk", "nomor antrean"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-The **Pembayaran** (payment) screen settles an order on the tablet. You can pay with **Tunai** (cash), **EDC** (card machine) or **QRIS**, and you can combine them on one order. When the order is fully paid, the **Pembayaran selesai** (payment complete) screen shows the change, the struk status and, for counter orders, the queue number.
+Layar **Pembayaran** menyelesaikan order di tablet. Anda dapat membayar dengan **Tunai**, **EDC** (mesin kartu), atau **QRIS**, dan Anda dapat menggabungkannya pada satu order. Saat order lunas, layar **Pembayaran selesai** menampilkan kembalian, status struk, dan, untuk order counter, nomor antrean.
 
-## Before you start
+## Sebelum mulai
 
-- Open an order that has at least one active line, then press the pay button on the order screen. If every line is cancelled, nothing happens.
-- Your shift must be open. Without one, a dialog **Belum ada shift terbuka** (no open shift) says "Pembayaran hanya bisa diterima setelah shift terbuka. Order tetap tersimpan." Its **Buka shift** button takes you to shift opening. See [Shifts](/android/shifts).
-- **Waiters cannot take payment.** For a waiter, the pay button prints a pre-bill instead (its label is **Cetak pre-bill**), and the order stays open for a cashier. The pre-bill is marked **BELUM LUNAS** (not yet paid). See [Printing](/android/printing).
-- Payments always go to the server. Cash, EDC and QRIS are recorded only while the tablet can reach the server. See [Offline and sync](/android/offline-and-sync).
-- For EDC and QRIS, an owner or admin must first set up the channels. See [Payment channels](/settings/payment-channels).
+- Buka order yang memiliki setidaknya satu baris aktif, lalu tekan tombol bayar di layar order. Jika semua baris dibatalkan, tidak terjadi apa pun.
+- Shift Anda harus terbuka. Tanpa shift, dialog **Belum ada shift terbuka** menyatakan "Pembayaran hanya bisa diterima setelah shift terbuka. Order tetap tersimpan." Tombol **Buka shift** membawa Anda ke pembukaan shift. Lihat [Shift](/android/shifts).
+- **Waiter tidak dapat menerima pembayaran.** Untuk waiter, tombol bayar mencetak pre-bill (labelnya **Cetak pre-bill**), dan order tetap terbuka untuk kasir. Pre-bill bertanda **BELUM LUNAS**. Lihat [Pencetakan](/android/printing).
+- Pembayaran selalu dikirim ke server. Tunai, EDC, dan QRIS hanya tercatat selama tablet dapat menjangkau server. Lihat [Offline dan sinkronisasi](/android/offline-and-sync).
+- Untuk EDC dan QRIS, owner atau admin harus menyiapkan kanalnya terlebih dahulu. Lihat [Kanal pembayaran](/settings/payment-channels).
 
-## Pay with cash
+## Bayar dengan tunai
 
 <Steps>
-  <Step title="Check the amount due">
-    The left card shows **Sisa** (remaining) in large type, **Terbayar** (paid so far), and one row per payment already recorded.
+  <Step title="Periksa jumlah yang harus dibayar">
+    Kartu kiri menampilkan **Sisa** dengan huruf besar, **Terbayar**, dan satu baris untuk setiap pembayaran yang sudah tercatat.
   </Step>
-  <Step title="Choose the amount">
-    **Tunai** is selected by default. Tap a quick button, or type an amount on the keypad and press **Terima tunai** (receive cash).
+  <Step title="Pilih nominal">
+    **Tunai** terpilih secara bawaan. Ketuk tombol cepat, atau ketik nominal di keypad lalu tekan **Terima tunai**.
   </Step>
-  <Step title="Hand over change">
-    If you took more than the remaining amount, the done screen shows **Kembalian** (change). The server calculates it, not the tablet.
+  <Step title="Serahkan kembalian">
+    Jika Anda menerima lebih dari sisa, layar selesai menampilkan **Kembalian**. Server yang menghitungnya, bukan tablet.
   </Step>
 </Steps>
 
-### Quick cash buttons
+### Tombol tunai cepat
 
-The first button is **Uang pas** (exact amount) and always equals the remaining amount. The others are labelled **Tunai** and round the remaining amount up to the next Rp 10.000, Rp 50.000 and Rp 100.000. Duplicates are dropped and at most four buttons show. For a remaining amount of Rp 13.200 you get Rp 13.200, Rp 20.000, Rp 50.000 and Rp 100.000. Tapping a quick button records the payment immediately, with no confirmation.
+Tombol pertama adalah **Uang pas** dan selalu sama dengan sisa. Yang lain berlabel **Tunai** dan membulatkan sisa ke atas ke Rp 10.000, Rp 50.000, dan Rp 100.000 berikutnya. Duplikat dibuang dan paling banyak empat tombol yang tampil. Untuk sisa Rp 13.200 Anda mendapat Rp 13.200, Rp 20.000, Rp 50.000, dan Rp 100.000. Mengetuk tombol cepat langsung mencatat pembayaran, tanpa konfirmasi.
 
 ### Keypad
 
-| Control | Behavior |
+| Kontrol | Perilaku |
 | --- | --- |
-| Digit keys and **000** | Add digits. The amount is limited to 9 digits. Leading zeros are removed. |
-| Backspace | Removes the last digit. |
-| **Nominal lain** (other amount) | Shows what you typed. |
-| **Terima tunai** | Disabled while the amount is 0. Sends the typed amount as cash received, then clears the field. |
+| Tombol angka dan **000** | Menambah digit. Nominal dibatasi 9 digit. Nol di depan dibuang. |
+| Backspace | Menghapus digit terakhir. |
+| **Nominal lain** | Menampilkan yang Anda ketik. |
+| **Terima tunai** | Nonaktif selama nominal 0. Mengirim nominal yang diketik sebagai tunai yang diterima, lalu mengosongkan kolom. |
 
-## Pay with EDC
+## Bayar dengan EDC
 
 <Steps>
-  <Step title="Tap EDC">
-    The **EDC** tile opens the EDC sheet. It is disabled while the tablet is offline or while a QRIS payment is waiting for verification.
+  <Step title="Ketuk EDC">
+    Ubin **EDC** membuka lembar EDC. Ubin ini nonaktif saat tablet offline atau saat pembayaran QRIS menunggu verifikasi.
   </Step>
-  <Step title="Enter the amount on the machine">
-    The sheet shows **Masukkan nominal ini di mesin EDC** and the remaining amount. The EDC amount is always the full remaining amount. You cannot change it here.
+  <Step title="Masukkan nominal di mesin">
+    Lembar menampilkan **Masukkan nominal ini di mesin EDC** dan sisa tagihan. Nominal EDC selalu sebesar seluruh sisa. Anda tidak dapat mengubahnya di sini.
   </Step>
-  <Step title="Choose the bank">
-    The sheet loads the bank channels from the server. With one bank it is chosen for you. With several, choose one under **Bank mesin EDC** first.
+  <Step title="Pilih bank">
+    Lembar memuat kanal bank dari server. Dengan satu bank, bank itu dipilih untuk Anda. Dengan beberapa bank, pilih satu di bawah **Bank mesin EDC** terlebih dahulu.
   </Step>
-  <Step title="Type the approval code">
-    Under **Kode approval dari slip EDC**, type the code printed on the EDC slip. Letters are made uppercase, other characters are dropped, and the field stops at 12 characters. The card number is never recorded.
+  <Step title="Ketik kode approval">
+    Di bawah **Kode approval dari slip EDC**, ketik kode yang tercetak di slip EDC. Huruf diubah menjadi kapital, karakter lain dibuang, dan kolom berhenti di 12 karakter. Nomor kartu tidak pernah dicatat.
   </Step>
-  <Step title="Press Simpan pembayaran">
-    The payment is saved. If it covers the remaining amount, the done screen opens.
+  <Step title="Tekan Simpan pembayaran">
+    Pembayaran disimpan. Jika mencakup sisa tagihan, layar selesai terbuka.
   </Step>
 </Steps>
 
-### EDC rules
+### Aturan EDC
 
-- The approval code must be 6 to 12 letters or digits. Otherwise the field shows "Kode approval 6-12 huruf atau angka."
-- If the same code was used in the last 2 minutes, a dialog **Kode approval sudah dipakai?** asks you to continue only if this is a different transaction. **Lanjutkan** (continue) sends it again with your confirmation. The 2-minute window is the server default and can be changed in POS settings.
-- With no bank channel on the server, the sheet says "Server belum punya kanal bank (bank_transfer). Pembayaran EDC tidak bisa dicatat dari sini." and nothing is recorded.
+- Kode approval harus 6 sampai 12 huruf atau angka. Jika tidak, kolom menampilkan "Kode approval 6-12 huruf atau angka."
+- Jika kode yang sama dipakai dalam 2 menit terakhir, dialog **Kode approval sudah dipakai?** meminta Anda melanjutkan hanya bila ini transaksi yang berbeda. **Lanjutkan** mengirimnya lagi dengan konfirmasi Anda. Jendela 2 menit adalah bawaan server dan dapat diubah di pengaturan POS.
+- Tanpa kanal bank di server, lembar menyatakan "Server belum punya kanal bank (bank_transfer). Pembayaran EDC tidak bisa dicatat dari sini." dan tidak ada yang dicatat.
 
 <Info>
-There is no **Transfer bank** button on the payment screen. Only **Tunai**, **EDC** and **QRIS** can be started on the tablet. A bank transfer recorded elsewhere, for example on the web, still appears in the payment list and on the struk as **Transfer bank**.
+Tidak ada tombol **Transfer bank** di layar pembayaran. Hanya **Tunai**, **EDC**, dan **QRIS** yang dapat dimulai di tablet. Transfer bank yang dicatat di tempat lain, misalnya di web, tetap muncul di daftar pembayaran dan di struk sebagai **Transfer bank**.
 </Info>
 
 <Note>
-In the payment list, an EDC payment is always labelled **EDC BCA**, whichever bank you picked. The bank you chose is stored on the payment, but the row label is fixed. On the printed struk the same payment reads **EDC**.
+Di daftar pembayaran, pembayaran EDC selalu berlabel **EDC BCA**, bank apa pun yang Anda pilih. Bank yang Anda pilih disimpan pada pembayaran, tetapi label barisnya tetap. Di struk cetak, pembayaran yang sama berbunyi **EDC**.
 </Note>
 
-## Pay with QRIS
+## Bayar dengan QRIS
 
-QRIS on the tablet is a static QR code. The customer pays from their own app, and you record the payment as waiting for verification.
+QRIS di tablet adalah kode QR statis. Pelanggan membayar dari aplikasinya sendiri, dan Anda mencatat pembayaran sebagai menunggu verifikasi.
 
 <Steps>
-  <Step title="Tap the QRIS tile">
-    The tile shows the provider name from the server (for example the name of your QRIS provider), or **QRIS** if none is set. The sheet title is the provider followed by the account owner's name.
+  <Step title="Ketuk ubin QRIS">
+    Ubin menampilkan nama penyedia dari server (misalnya nama penyedia QRIS Anda), atau **QRIS** bila tidak ada. Judul lembar adalah penyedia diikuti nama pemilik akun.
   </Step>
-  <Step title="Show the QR code">
-    The left side shows the QR image with the provider and account name. The right side shows the amount due and the instruction **Cek bukti transaksi di aplikasi QRIS, lalu catat kode verifikasi di menu Order**.
+  <Step title="Tampilkan kode QR">
+    Sisi kiri menampilkan gambar QR dengan nama penyedia dan akun. Sisi kanan menampilkan nominal yang harus dibayar dan petunjuk **Cek bukti transaksi di aplikasi QRIS, lalu catat kode verifikasi di menu Order**.
   </Step>
-  <Step title="Press Bayar">
-    **Bayar** records the full remaining amount as a QRIS payment with the status **Menunggu verifikasi** (waiting for verification). The struk is queued for printing automatically.
+  <Step title="Tekan Bayar">
+    **Bayar** mencatat seluruh sisa sebagai pembayaran QRIS dengan status **Menunggu verifikasi**. Struk diantrekan untuk dicetak secara otomatis.
   </Step>
-  <Step title="Verify later">
-    Check the transaction in your QRIS app, then verify it. See the next section.
+  <Step title="Verifikasi nanti">
+    Periksa transaksi di aplikasi QRIS Anda, lalu verifikasi. Lihat bagian berikutnya.
   </Step>
 </Steps>
 
-### QR image states
+### Keadaan gambar QR
 
-| What you see | Meaning | What to do |
+| Yang Anda lihat | Arti | Yang dilakukan |
 | --- | --- | --- |
-| Spinner | The image is downloading. | Wait. |
-| **QR belum diatur** | The channel has no QR image. | Ask an admin to upload one in payment channels, or use **Ganti gambar QR** if you see it. |
-| **QR tidak dapat dimuat** with **Muat ulang** | The image exists but the download failed. | Press **Muat ulang** (reload). |
+| Indikator pemuatan | Gambar sedang diunduh. | Tunggu. |
+| **QR belum diatur** | Kanal tidak memiliki gambar QR. | Minta admin mengunggah satu di kanal pembayaran, atau gunakan **Ganti gambar QR** bila Anda melihatnya. |
+| **QR tidak dapat dimuat** dengan **Muat ulang** | Gambar ada tetapi unduhan gagal. | Tekan **Muat ulang**. |
 
-**Ganti gambar QR** (replace QR image) appears only when the server says your user may manage the QR. It opens the photo picker. Only JPG and PNG are accepted. A wrong type shows "Gambar QR harus berformat JPG atau PNG." An unreadable file shows "Gambar tidak dapat dibaca." On success the toast reads "Gambar QR disimpan."
+**Ganti gambar QR** hanya muncul bila server menyatakan pengguna Anda boleh mengelola QR. Tombol ini membuka pemilih foto. Hanya JPG dan PNG yang diterima. Jenis yang salah menampilkan "Gambar QR harus berformat JPG atau PNG." File yang tidak terbaca menampilkan "Gambar tidak dapat dibaca." Bila berhasil, toast berbunyi "Gambar QR disimpan."
 
-The QRIS channel is reloaded each time the sheet opens, so a QR uploaded on the web shows up without restarting the app.
+Kanal QRIS dimuat ulang setiap kali lembar dibuka, sehingga QR yang diunggah di web tampil tanpa memulai ulang aplikasi.
 
-### Verify a QRIS payment
+### Verifikasi pembayaran QRIS
 
-Open the order from **Order > Terbuka**. An order with a waiting QRIS payment opens on the payment screen. The QRIS row shows **Menunggu verifikasi** and a **Verifikasi** button (visible only while online).
+Buka order dari **Order > Terbuka**. Order dengan pembayaran QRIS yang menunggu langsung terbuka di layar pembayaran. Baris QRIS menampilkan **Menunggu verifikasi** dan tombol **Verifikasi** (terlihat hanya saat online).
 
-| Step or control | Behavior |
+| Langkah atau kontrol | Perilaku |
 | --- | --- |
-| **Verifikasi** on the row | Opens **Verifikasi QRIS** with "Cek transaksi \{amount\} di aplikasi \{provider\}, lalu masukkan referensinya." |
-| **Referensi transaksi** | Type the reference from your QRIS app. The **Verifikasi** button needs at least 4 characters. |
-| **Verifikasi** | Marks the payment verified. The toast reads "QRIS terverifikasi." |
-| **Tidak ditemukan** (not found) | Marks the payment as not found. The row shows **Gagal** and the toast reads "Pembayaran QRIS ditandai tidak ditemukan." |
-| **Tutup** | Closes the sheet. |
+| **Verifikasi** pada baris | Membuka **Verifikasi QRIS** dengan "Cek transaksi \{amount\} di aplikasi \{provider\}, lalu masukkan referensinya." |
+| **Referensi transaksi** | Ketik referensi dari aplikasi QRIS Anda. Tombol **Verifikasi** membutuhkan setidaknya 4 karakter. |
+| **Verifikasi** | Menandai pembayaran terverifikasi. Toast berbunyi "QRIS terverifikasi." |
+| **Tidak ditemukan** | Menandai pembayaran tidak ditemukan. Baris menampilkan **Gagal** dan toast berbunyi "Pembayaran QRIS ditandai tidak ditemukan." |
+| **Tutup** | Menutup lembar. |
 
-Verifying or rejecting needs the QRIS verify permission. If you do not have it, a lock icon shows on **Verifikasi** and the **Perlu persetujuan** (approval needed) dialog asks a supervisor or outlet manager to enter their PIN. See [Approvals](/android/approvals).
+Memverifikasi atau menolak membutuhkan izin verifikasi QRIS. Jika Anda tidak memilikinya, ikon gembok tampil pada **Verifikasi** dan dialog **Perlu persetujuan** meminta supervisor atau outlet manager memasukkan PIN-nya. Lihat [Persetujuan](/android/approvals).
 
 <Warning>
-A QRIS payment that is still waiting for verification blocks any other EDC or QRIS payment on the same order, and blocks closing the shift. The payment screen shows "QRIS menunggu verifikasi memblokir pembayaran non-tunai lain pada tab ini, dan penutupan shift." Cash is still allowed. An order with a waiting QRIS payment also cannot be refunded until it is verified.
+Pembayaran QRIS yang masih menunggu verifikasi memblokir pembayaran EDC atau QRIS lain pada order yang sama, dan memblokir penutupan shift. Layar pembayaran menampilkan "QRIS menunggu verifikasi memblokir pembayaran non-tunai lain pada tab ini, dan penutupan shift." Tunai tetap diizinkan. Order dengan pembayaran QRIS yang menunggu juga tidak dapat di-refund sampai diverifikasi.
 </Warning>
 
-## Split payments and overpayment
+## Pembayaran terpisah dan kelebihan bayar
 
-You can pay an order in several steps, with any mix of methods. Each step adds a row on the left card, and **Sisa** goes down. A toast reads "Sisa \{amount\}." until the order is fully paid.
+Anda dapat membayar order dalam beberapa langkah, dengan campuran metode apa pun. Setiap langkah menambah satu baris di kartu kiri, dan **Sisa** turun. Toast berbunyi "Sisa \{amount\}." sampai order lunas.
 
-| Method | Can exceed the remaining amount? | Result |
+| Metode | Boleh melebihi sisa? | Hasil |
 | --- | --- | --- |
-| **Tunai** | Yes. | The extra is change. The order closes and the done screen shows **Kembalian**. |
-| **EDC** | No. The amount is the remaining amount. | The server refuses a non-cash total above the remaining amount ("Pembayaran non-tunai melebihi sisa tagihan."). |
-| **QRIS** | No. The amount is the remaining amount. | Same rule. |
+| **Tunai** | Ya. | Kelebihannya menjadi kembalian. Order ditutup dan layar selesai menampilkan **Kembalian**. |
+| **EDC** | Tidak. Nominalnya sebesar sisa. | Server menolak total non-tunai di atas sisa ("Pembayaran non-tunai melebihi sisa tagihan."). |
+| **QRIS** | Tidak. Nominalnya sebesar sisa. | Aturan yang sama. |
 
-The note on the left card reads "Tunai memberi kembalian. EDC dan QRIS tidak boleh melebihi sisa tagihan." The server also checks that change never exceeds the cash handed over.
+Catatan di kartu kiri berbunyi "Tunai memberi kembalian. EDC dan QRIS tidak boleh melebihi sisa tagihan." Server juga memeriksa bahwa kembalian tidak pernah melebihi tunai yang diserahkan.
 
-## Done screen
+## Layar selesai
 
-| Element | Meaning |
+| Elemen | Arti |
 | --- | --- |
-| **Lunas** and the receipt number | The order is paid and has a struk number. |
-| **Kembalian** or **Total dibayar** | Change when above zero, otherwise the total paid. |
-| **Diterima** line | The amount received. For all-cash orders it ends with "tunai". |
-| Struk status | **Struk tercetak**, **Struk belum tercetak**, **Struk belum dicetak** or **Struk gagal dicetak** with the reason, followed by the receipt number. |
-| Sync status | **Tersinkron ke server** when online, otherwise "Tersimpan di perangkat · dikirim saat online". |
-| **Order counter baru** or **Kembali ke meja** | Starts a new counter order, or returns to the tables. |
-| **Lihat struk** | Opens the receipt sheet. |
+| **Lunas** dan nomor struk | Order sudah dibayar dan memiliki nomor struk. |
+| **Kembalian** atau **Total dibayar** | Kembalian bila di atas nol, jika tidak total yang dibayar. |
+| Baris **Diterima** | Nominal yang diterima. Untuk order yang seluruhnya tunai, diakhiri "tunai". |
+| Status struk | **Struk tercetak**, **Struk belum tercetak**, **Struk belum dicetak**, atau **Struk gagal dicetak** beserta alasannya, diikuti nomor struk. |
+| Status sinkronisasi | **Tersinkron ke server** saat online, jika tidak "Tersimpan di perangkat · dikirim saat online". |
+| **Order counter baru** atau **Kembali ke meja** | Memulai order counter baru, atau kembali ke meja. |
+| **Lihat struk** | Membuka lembar struk. |
 
-### Queue number
+### Nomor antrean
 
-Counter (takeaway) orders get a queue number such as `A-012`. It restarts from `A-001` each business day for the outlet. The done screen shows it in a large card. Table orders have no queue number.
+Order counter (bawa pulang) mendapat nomor antrean seperti `A-012`. Nomor dimulai lagi dari `A-001` setiap hari bisnis untuk outlet. Layar selesai menampilkannya di kartu besar. Order meja tidak memiliki nomor antrean.
 
-**Panggil pelanggan** (call customer) speaks the number aloud through the tablet's text-to-speech. Letters are read as letters and digits one by one in Indonesian, so `A-012` is spoken as "A, nol, satu, dua". The toast "Dipanggil \{number\}" always appears. A second tap while it is still speaking is ignored, and if the tablet has no speech voice installed it stays silent. The number is also printed on the struk and the kitchen ticket.
+**Panggil pelanggan** mengucapkan nomor itu dengan suara melalui text-to-speech tablet. Huruf dibaca sebagai huruf dan angka satu per satu dalam bahasa Indonesia, sehingga `A-012` diucapkan "A, nol, satu, dua". Toast "Dipanggil \{number\}" selalu muncul. Ketukan kedua saat masih berbicara diabaikan, dan jika tablet tidak memiliki suara bicara terpasang, tablet tetap diam. Nomor juga dicetak di struk dan tiket dapur.
 
-### Receipt sheet
+### Lembar struk
 
-**Lihat struk** loads the receipt from the server and shows it on a paper-style card with the store name, address, receipt number, time, cashier, queue number, terminal name, lines, subtotal, discount, tax, **TOTAL**, each payment and **Kembali**. A reprinted copy shows **SALINAN n**. **Cetak struk** prints it. Printing rules are in [Printing](/android/printing).
+**Lihat struk** memuat struk dari server dan menampilkannya di kartu bergaya kertas dengan nama toko, alamat, nomor struk, waktu, kasir, nomor antrean, nama terminal, baris, subtotal, diskon, pajak, **TOTAL**, setiap pembayaran, dan **Kembali**. Salinan cetak ulang menampilkan **SALINAN n**. **Cetak struk** mencetaknya. Aturan pencetakan ada di [Pencetakan](/android/printing).
 
-## Who can do what
+## Siapa boleh melakukan apa
 
-| Action | Needs |
+| Tindakan | Membutuhkan |
 | --- | --- |
-| Take cash, EDC or QRIS payments | A cashier-type user with an open shift. Waiters only print pre-bills. |
-| Verify or reject QRIS | QRIS verify permission, or a supervisor PIN approval. |
-| Replace the QR image | Server-side permission to manage the QR. |
+| Menerima pembayaran tunai, EDC, atau QRIS | Pengguna tipe kasir dengan shift terbuka. Waiter hanya mencetak pre-bill. |
+| Memverifikasi atau menolak QRIS | Izin verifikasi QRIS, atau persetujuan PIN supervisor. |
+| Mengganti gambar QR | Izin di sisi server untuk mengelola QR. |
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| Koneksi ke server terputus. | The tablet cannot reach the server. | Press retry on the banner. EDC and QRIS are disabled until it reconnects. |
-| EDC dan QRIS butuh server. Pembayaran tunai tetap bisa dicatat. | Offline banner on the payment screen. | See the note below. |
-| Pembayaran ditolak: shift sudah ditutup. Buka shift untuk menerima pembayaran. | The shift was closed, for example from the web. | Open a shift, then pay again. |
-| Ada pembayaran QRIS yang belum dicek. Selesaikan dulu sebelum menerima non-tunai lain. | A QRIS payment is waiting. | Verify or reject it first, or pay the rest in cash. |
-| Kanal QRIS belum diatur di server. | No QRIS channel exists. | Add one in [Payment channels](/settings/payment-channels). |
-| Pembayaran non-tunai melebihi sisa tagihan. | EDC or QRIS above the remaining amount. | Refresh the order and retry. |
+| Koneksi ke server terputus. | Tablet tidak dapat menjangkau server. | Tekan coba lagi pada banner. EDC dan QRIS nonaktif sampai tersambung kembali. |
+| EDC dan QRIS butuh server. Pembayaran tunai tetap bisa dicatat. | Banner offline di layar pembayaran. | Lihat catatan di bawah. |
+| Pembayaran ditolak: shift sudah ditutup. Buka shift untuk menerima pembayaran. | Shift ditutup, misalnya dari web. | Buka shift, lalu bayar lagi. |
+| Ada pembayaran QRIS yang belum dicek. Selesaikan dulu sebelum menerima non-tunai lain. | Ada pembayaran QRIS yang menunggu. | Verifikasi atau tolak dulu, atau bayar sisanya dengan tunai. |
+| Kanal QRIS belum diatur di server. | Belum ada kanal QRIS. | Tambahkan satu di [Kanal pembayaran](/settings/payment-channels). |
+| Pembayaran non-tunai melebihi sisa tagihan. | EDC atau QRIS di atas sisa. | Segarkan order dan coba lagi. |
 
 <Note>
-ASSUMPTION: The payment screen says cash "tetap bisa dicatat" while offline, but the app sends cash to the server like every other method and has no offline payment queue in the code I read. While offline a cash payment fails with the network error toast. Confirm the intended behavior with the product owner.
+ASUMSI: Layar pembayaran menyatakan tunai "tetap bisa dicatat" saat offline, tetapi aplikasi mengirim tunai ke server seperti metode lain dan, pada kode yang saya baca, tidak memiliki antrean pembayaran offline. Saat offline, pembayaran tunai gagal dengan toast galat jaringan. Konfirmasikan perilaku yang dimaksud dengan pemilik produk.
 </Note>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Orders" href="/android/orders" icon="receipt">Find open and paid orders, reprint and refund.</Card>
-  <Card title="Printing" href="/android/printing" icon="print">Printer setup, struk layout and the print queue.</Card>
-  <Card title="Approvals" href="/android/approvals" icon="shield">Supervisor PIN approvals.</Card>
-  <Card title="Payment channels" href="/settings/payment-channels" icon="credit-card">Set up bank accounts and the QRIS code.</Card>
+  <Card title="Order" href="/android/orders" icon="receipt">Cari order terbuka dan terbayar, cetak ulang, dan refund.</Card>
+  <Card title="Pencetakan" href="/android/printing" icon="print">Penyiapan printer, tata letak struk, dan antrean cetak.</Card>
+  <Card title="Persetujuan" href="/android/approvals" icon="shield">Persetujuan PIN supervisor.</Card>
+  <Card title="Kanal pembayaran" href="/settings/payment-channels" icon="credit-card">Atur rekening bank dan kode QRIS.</Card>
 </Columns>

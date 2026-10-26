@@ -1,163 +1,165 @@
 ---
-title: "Outlets"
-description: "Create and manage the outlets of your organisation, and understand how outlet scope, assignments and the outlet selector work."
-keywords: ["pos", "outlets", "multi-outlet", "license", "pro", "master", "outlet selector", "assignment", "home outlet"]
+title: "Outlet"
+description: "Buat dan kelola outlet organisasi Anda, serta pahami cara kerja lingkup outlet, penugasan, dan pemilih outlet."
+keywords: ["pos", "outlet", "outlets", "multi-outlet", "lisensi", "license", "pro", "master", "pemilih outlet", "outlet selector", "penugasan", "assignment", "outlet asal", "home outlet"]
 ---
 
-An outlet is one place where you sell: a shop, a counter or a kitchen. One organisation can run one or more outlets on one machine or one shared server, with one database for the whole organisation. The **Outlets** page is where you create them, edit their details and deactivate them.
+Outlet adalah satu tempat Anda berjualan: toko, konter, atau dapur. Satu organisasi dapat menjalankan satu outlet atau lebih pada satu mesin atau satu server bersama, dengan satu database untuk seluruh organisasi. Halaman **Outlet** adalah tempat Anda membuatnya, mengubah detailnya, dan menonaktifkannya.
 
-The older address `/artists` redirects to this page.
+Alamat lama `/artists` dialihkan ke halaman ini.
 
-## Before you start
+## Sebelum mulai
 
-- Your role needs the **Outlets** menu (`outlets`) to create, edit or delete. Every signed-in role can read the outlet list through the API.
-- The number of active outlets depends on your license. See [License limit](#license-limit).
-- The page lists every outlet of the current data mode. The top-bar outlet selector does not narrow this page.
+- Peran Anda memerlukan menu **Outlet** (`outlets`) untuk membuat, mengubah, atau menghapus. Setiap peran yang sedang masuk dapat membaca daftar outlet melalui API.
+- Jumlah outlet aktif bergantung pada lisensi Anda. Lihat [Batas lisensi](#license-limit).
+- Halaman mencantumkan setiap outlet di mode data saat ini. Pemilih outlet di bilah atas tidak mempersempit halaman ini.
 
-## The outlet table
+## Tabel outlet
 
-| Column | What it shows |
+| Kolom | Isinya |
 | --- | --- |
-| Code | Three-letter code. |
-| Name | Outlet name. |
-| Contact | Phone, with email underneath. |
-| Products | Number of products whose **home outlet** is this outlet. |
-| Status | Active or Inactive. |
+| Kode | Kode tiga huruf. |
+| Nama | Nama outlet. |
+| Kontak | Telepon, dengan email di bawahnya. |
+| Produk | Jumlah produk yang **outlet asal**-nya adalah outlet ini. |
+| Status | Aktif atau Nonaktif. |
 
-Search filters by outlet name (about 300 ms after you stop typing). **Reset filters** clears it.
+Pencarian menyaring menurut nama outlet (sekitar 300 ms setelah Anda berhenti mengetik). **Atur ulang filter** mengosongkannya.
 
-## Add an outlet
+## Menambah outlet
 
 <Steps>
-  <Step title="Open the form">
-    Select **Add outlet**. The button is disabled when your license limit is reached.
+  <Step title="Buka formulir">
+    Pilih **Tambah outlet**. Tombol dinonaktifkan bila batas lisensi Anda tercapai.
   </Step>
-  <Step title="Fill in the fields">
-    **Code (3 letters)** and **Outlet name** are required.
+  <Step title="Isi kolom">
+    **Kode (3 huruf)** dan **Nama outlet** wajib diisi.
   </Step>
-  <Step title="Save">
-    Select **Save**. You see "Outlet created."
+  <Step title="Simpan">
+    Pilih **Simpan**. Anda melihat "Outlet dibuat."
   </Step>
 </Steps>
 
-| Field | Required | Rules |
+| Kolom | Wajib | Aturan |
 | --- | --- | --- |
-| Code (3 letters) | Yes | Exactly 3 letters, no digits. Saved in uppercase. Unique among outlets that are not deleted. |
-| Outlet name | Yes | Up to 100 characters. |
-| Phone | No | Up to 30 characters. |
-| Email | No | Valid email address, up to 100 characters. |
-| Notes | No | Free text. |
-| Active | No | Checked by default. |
+| Kode (3 huruf) | Ya | Tepat 3 huruf, tanpa angka. Disimpan dalam huruf kapital. Unik di antara outlet yang belum dihapus. |
+| Nama outlet | Ya | Maksimal 100 karakter. |
+| Telepon | Tidak | Maksimal 30 karakter. |
+| Email | Tidak | Alamat email yang valid, maksimal 100 karakter. |
+| Catatan | Tidak | Teks bebas. |
+| Aktif | Tidak | Dicentang secara bawaan. |
 
 <Warning>
-The outlet code is permanent. "Permanent once created — becomes part of the SKU." The field is locked when you edit, and the server rejects a changed code with "The outlet code is permanent and cannot be changed after creation."
+Kode outlet bersifat permanen. "Permanen setelah dibuat — jadi bagian dari SKU." Kolomnya terkunci saat Anda mengubah, dan server menolak kode yang diubah dengan "Kode outlet bersifat permanen dan tidak dapat diubah setelah dibuat."
 </Warning>
 
-## Edit or deactivate an outlet
+## Mengubah atau menonaktifkan outlet
 
-Select **Edit**, change the name, contact details, notes or the **Active** checkbox, and select **Save**. You see "Outlet updated." Unchecking **Active** takes the outlet out of the lists people can pick from. Inactive outlets are also left out of what a user is allowed to see.
+Pilih **Edit**, ubah nama, detail kontak, catatan, atau kotak **Aktif**, lalu pilih **Simpan**. Anda melihat "Outlet diperbarui." Menghapus centang **Aktif** mengeluarkan outlet dari daftar yang dapat dipilih orang. Outlet nonaktif juga tidak termasuk dalam apa yang boleh dilihat pengguna.
 
-### Delete (deactivate)
+### Hapus (nonaktifkan)
 
-Select **Delete**. The dialog is titled **Deactivate outlet** and asks "Deactivate \{name\}? Rejected if it still has active products." Confirm with **Yes, deactivate**. You see "Outlet deactivated."
+Pilih **Hapus**. Dialog berjudul **Nonaktifkan outlet** dan bertanya "Nonaktifkan \{name\}? Ditolak bila masih ada produk aktif miliknya." Konfirmasi dengan **Ya, nonaktifkan**. Anda melihat "Outlet dinonaktifkan."
 
-The outlet is removed from the list (the record is soft-deleted and the action is written to the [Activity log](/insight/activity-log)). If any active product still has this outlet as its home outlet, the server answers 409: "This outlet still has active products and cannot be deleted." Deactivate or move those products first.
+Outlet dihapus dari daftar (catatan di-soft-delete dan aksinya ditulis ke [Log Aktivitas](/insight/activity-log)). Bila ada produk aktif yang masih memiliki outlet ini sebagai outlet asalnya, server menjawab 409: "Outlet masih memiliki produk aktif dan tidak dapat dihapus." Nonaktifkan atau pindahkan produk tersebut terlebih dahulu.
 
 <Note>
-The button says Delete but the dialog and message say deactivate. The effect is a soft delete, not the same as clearing the **Active** checkbox. ASSUMPTION: a deleted outlet cannot be brought back from this screen.
+Tombolnya bertuliskan Hapus tetapi dialog dan pesannya menyebut nonaktifkan. Efeknya adalah soft delete, tidak sama dengan menghapus centang **Aktif**. ASUMSI: outlet yang dihapus tidak dapat dikembalikan dari layar ini.
 </Note>
 
-## License limit
+<a id="license-limit"></a>
 
-Your installation has either a Pro or a Master license. This is one setting, `multi_outlet_enabled`.
+## Batas lisensi
 
-| License | Active outlets allowed |
+Instalasi Anda memiliki lisensi Pro atau Master. Ini satu pengaturan, `multi_outlet_enabled`.
+
+| Lisensi | Outlet aktif yang diizinkan |
 | --- | --- |
-| Pro | One. A fresh install with no active outlet can still create its first. |
-| Master | Any number. |
+| Pro | Satu. Instalasi baru tanpa outlet aktif tetap dapat membuat yang pertama. |
+| Master | Berapa pun. |
 
-When a Pro install already has its one active outlet, a banner reads "Pro license — one outlet" with an **Upgrade to Master** link to [General settings](/settings/general), and **Add outlet** is disabled. The check also runs on the server: **POST /outlets** is refused with 403 "This installation uses a Pro license (one outlet). Upgrade to Master to add more outlets." The disabled button is only a hint. The count includes only active outlets, and the import re-checks the quota too.
+Bila instalasi Pro sudah memiliki satu outlet aktifnya, banner berbunyi "Lisensi Pro — satu outlet" dengan tautan **Upgrade ke Master** ke [General](/settings/general), dan **Tambah outlet** dinonaktifkan. Pemeriksaan juga berjalan di server: **POST /outlets** ditolak dengan 403 "Instalasi ini memakai lisensi Pro (satu outlet). Upgrade ke Master untuk menambah outlet lain." Tombol yang dinonaktifkan hanya petunjuk. Hitungannya hanya menyertakan outlet aktif, dan impor memeriksa kuota lagi.
 
-## Import and export
+## Impor dan ekspor
 
-**Export .xlsx** and **Bulk import** use the shared master-data workbook (outlets sheet, among others). The import previews first and is all-or-nothing. See [Vendors](/purchasing/vendors#import-and-export) for how the dialog behaves. The buttons show only for users with the Outlets menu.
+**Ekspor .xlsx** dan **Impor massal** memakai workbook data master yang dipakai bersama (sheet outlet, di antara yang lain). Impor menampilkan pratinjau lebih dulu dan bersifat semua atau tidak sama sekali. Lihat [Vendor](/purchasing/vendors#impor-dan-ekspor) untuk cara kerja dialognya. Tombol tampil hanya untuk pengguna dengan menu Outlet.
 
-## How outlets work across the app
+## Cara kerja outlet di seluruh aplikasi
 
-### Home outlet and where an item is sold
+### Outlet asal dan tempat item dijual
 
-Two ideas are easy to mix up:
+Dua gagasan yang mudah tertukar:
 
-- **Home outlet** is the item's owner. It is required, it is part of the item code, and it decides which purchase orders and BOM lines the item may use.
-- **Sold at** is a separate relation between the item and every outlet: carried or not, an optional price per variant, and sold-out state. An item can have one home outlet and be sold at several.
+- **Outlet asal** adalah pemilik item. Wajib diisi, menjadi bagian dari kode item, dan menentukan purchase order serta baris BOM mana yang boleh dipakai item.
+- **Dijual di** adalah relasi terpisah antara item dan setiap outlet: dibawa atau tidak, harga opsional per varian, dan status habis. Sebuah item dapat memiliki satu outlet asal dan dijual di beberapa outlet.
 
-When someone orders, the order's outlet decides what is allowed. An item not carried at that outlet, or sold out there, is refused with a 409. The line price is the outlet price if one is set, otherwise the base price. Marking an item sold out at one outlet does not change other outlets. Details are on [Products](/inventory/products) and [Product detail](/inventory/product-detail).
+Saat seseorang memesan, outlet order menentukan apa yang diizinkan. Item yang tidak dibawa di outlet itu, atau habis di sana, ditolak dengan 409. Harga baris adalah harga outlet bila ada, jika tidak harga dasar. Menandai item habis di satu outlet tidak mengubah outlet lain. Rinciannya ada di [Produk](/inventory/products) dan [Detail produk](/inventory/product-detail).
 
-### Assign users to outlets
+### Menugaskan pengguna ke outlet
 
-Users see only the outlets they are assigned to, unless their role is flagged **Sees all outlets** (owner and admin do this by default).
+Pengguna hanya melihat outlet yang ditugaskan kepada mereka, kecuali peran mereka bertanda **Melihat semua outlet** (owner dan admin memilikinya secara bawaan).
 
 <Steps>
-  <Step title="Open the user">
-    Go to [Users](/settings/users) and edit the user. This needs the Users menu.
+  <Step title="Buka pengguna">
+    Buka [Pengguna](/settings/users) dan ubah pengguna. Ini memerlukan menu Pengguna.
   </Step>
-  <Step title="Tick outlets">
-    The **Outlet** checkboxes appear only when you can see more than one outlet and the user's role does not see all outlets. The **Outlets** column on the table shows codes, "All outlets", or red "Not assigned".
+  <Step title="Centang outlet">
+    Kotak centang **Outlet** muncul hanya bila Anda dapat melihat lebih dari satu outlet dan peran pengguna tidak melihat semua outlet. Kolom **Outlet** pada tabel menampilkan kode, "Semua outlet", atau "Belum ditugaskan" berwarna merah.
   </Step>
-  <Step title="Save">
-    Outlet assignments are saved in a second request after the user itself. If that fails you get an error toast but the user is still saved.
+  <Step title="Simpan">
+    Penugasan outlet disimpan dalam permintaan kedua setelah pengguna itu sendiri. Bila gagal, Anda mendapat toast galat tetapi pengguna tetap tersimpan.
   </Step>
 </Steps>
 
-Rules enforced by the server:
+Aturan yang ditegakkan server:
 
-- You cannot change your own outlet assignments (403).
-- Users whose role sees all outlets cannot be assigned: 409 "Owners and admins always see every outlet, so they are not assigned to particular outlets."
-- Without the "sees all outlets" flag you can only grant or revoke outlets you can see yourself (403 otherwise).
-- Only active outlets can be assigned: "The outlet was not found or is inactive."
-- Each change is logged in the Activity log with the old and new outlet ids.
-- A user without any outlet gets "This account is not assigned to any outlet. Ask an administrator to assign it." when a feature needs an outlet.
+- Anda tidak dapat mengubah penugasan outlet Anda sendiri (403).
+- Pengguna yang perannya melihat semua outlet tidak dapat ditugaskan: 409 "Owner dan Admin selalu melihat semua outlet, jadi tidak perlu ditugaskan ke outlet tertentu."
+- Tanpa tanda "melihat semua outlet", Anda hanya dapat memberi atau mencabut outlet yang dapat Anda lihat sendiri (selain itu 403).
+- Hanya outlet aktif yang dapat ditugaskan: "Outlet tidak ditemukan atau nonaktif."
+- Setiap perubahan dicatat di Log Aktivitas dengan id outlet lama dan baru.
+- Pengguna tanpa outlet mana pun mendapat "Akun ini belum ditugaskan ke outlet. Minta administrator menugaskannya." saat sebuah fitur memerlukan outlet.
 
-### The outlet selector
+### Pemilih outlet
 
-The top bar has an outlet dropdown. It appears **only when you can see more than one outlet**. With one outlet it is hidden, not disabled.
+Bilah atas memiliki dropdown outlet. Dropdown muncul **hanya bila Anda dapat melihat lebih dari satu outlet**. Dengan satu outlet, dropdown disembunyikan, bukan dinonaktifkan.
 
-- The first option is **All outlets (N)**. The others are your outlets by name.
-- The choice is remembered per user in your browser and restored at next sign-in if you still have access. If your access to the remembered outlet was removed, the selection is cleared.
-- The web app sends the choice as the `X-Outlet-Id` header. It can only narrow what you see within your assigned outlets. An outlet you are not allowed to use gets a 403 "This outlet is not one you are allowed to access." A header that is not a number gets a 422.
-- Some screens have their own outlet filter and ignore the selector. Examples: the Products page, the Restaurant Setup lists and the purchase order list.
-- The material stock adjustment dialog starts with the selected outlet.
+- Pilihan pertama adalah **Semua outlet (N)**. Yang lain adalah outlet Anda menurut nama.
+- Pilihan diingat per pengguna di peramban Anda dan dipulihkan saat masuk berikutnya bila Anda masih memiliki akses. Bila akses Anda ke outlet yang diingat dicabut, pilihan dikosongkan.
+- Aplikasi web mengirim pilihan sebagai header `X-Outlet-Id`. Header hanya dapat mempersempit apa yang Anda lihat di dalam outlet yang ditugaskan kepada Anda. Outlet yang tidak boleh Anda pakai mendapat 403 "Outlet ini tidak termasuk outlet yang boleh Anda akses." Header yang bukan angka mendapat 422 ("Header X-Outlet-Id harus berupa angka.").
+- Beberapa layar memiliki filter outlet sendiri dan mengabaikan pemilih. Contohnya: halaman Produk, daftar Pengaturan Restoran, dan daftar Purchase Order.
+- Dialog koreksi stok bahan dimulai dengan outlet yang dipilih.
 
-Sales, shifts, tables and reports follow the outlet scope. See [Outlets and scope](/concepts/outlets) for the full picture.
+Penjualan, shift, meja, dan laporan mengikuti lingkup outlet. Lihat [Outlet dan lingkup](/concepts/outlets) untuk gambaran lengkapnya.
 
 <Info>
-Terminals (tablets running the Android POS) are registered per outlet. That is covered in the Android app documentation, not here.
+Terminal (tablet yang menjalankan POS Android) didaftarkan per outlet. Hal itu dibahas di dokumentasi aplikasi Android, bukan di sini.
 </Info>
 
-## Troubleshooting
+## Pemecahan masalah
 
-| What you see | Cause | What to do |
+| Yang Anda lihat | Penyebab | Yang perlu dilakukan |
 | --- | --- | --- |
-| **Add outlet** is greyed out | Pro license with one active outlet already. | Upgrade to Master, or deactivate the existing outlet. |
-| 403 "This installation uses a Pro license..." | Same limit, hit on the server. | Same. |
-| 409 "This outlet still has active products..." | Products still have this outlet as home. | Deactivate or move the products. |
-| No outlet dropdown in the top bar | You can see only one outlet. | Ask an administrator to assign more. |
-| User shows "Not assigned" in red | No outlets ticked. | Edit the user and tick outlets. |
-| Code field locked | Codes are permanent. | Create a new outlet if needed. |
+| **Tambah outlet** berwarna abu-abu | Lisensi Pro dengan satu outlet aktif sudah ada. | Upgrade ke Master, atau nonaktifkan outlet yang ada. |
+| 403 "Instalasi ini memakai lisensi Pro..." | Batas yang sama, terkena di server. | Sama. |
+| 409 "Outlet masih memiliki produk aktif..." | Produk masih memiliki outlet ini sebagai asalnya. | Nonaktifkan atau pindahkan produk. |
+| Tidak ada dropdown outlet di bilah atas | Anda hanya dapat melihat satu outlet. | Minta administrator menugaskan lebih banyak. |
+| Pengguna menampilkan "Belum ditugaskan" berwarna merah | Tidak ada outlet yang dicentang. | Ubah pengguna dan centang outlet. |
+| Kolom kode terkunci | Kode bersifat permanen. | Buat outlet baru bila perlu. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Outlets and scope" href="/concepts/outlets">
-    How scope, home outlet and sold-at outlet work.
+  <Card title="Outlet dan lingkup" href="/concepts/outlets">
+    Cara kerja lingkup, outlet asal, dan outlet tempat dijual.
   </Card>
-  <Card title="Users" href="/settings/users">
-    Assign outlets to staff.
+  <Card title="Pengguna" href="/settings/users">
+    Tugaskan outlet kepada staf.
   </Card>
-  <Card title="Roles" href="/settings/roles">
-    The "Sees all outlets" flag.
+  <Card title="Peran" href="/settings/roles">
+    Tanda "Melihat semua outlet".
   </Card>
-  <Card title="Products" href="/inventory/products">
-    Carried, price and sold-out per outlet.
+  <Card title="Produk" href="/inventory/products">
+    Dibawa, harga, dan habis per outlet.
   </Card>
 </Columns>

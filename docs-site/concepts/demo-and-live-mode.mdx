@@ -1,64 +1,64 @@
 ---
-title: "DEMO and LIVE mode"
-description: "What the DEMO and LIVE system modes mean, what switching does, and why no data is deleted."
-keywords: ["demo", "live", "system mode", "sample data", "training"]
+title: "Mode DEMO dan LIVE"
+description: "Arti mode sistem DEMO dan LIVE, apa yang terjadi saat berpindah mode, dan mengapa tidak ada data yang dihapus."
+keywords: ["demo", "live", "mode sistem", "data contoh", "pelatihan"]
 ---
 
-BoothPOS keeps two separate sets of business data in the same database: **DEMO** and **LIVE**. A badge in the top bar always shows which one is active, for every role.
+BoothPOS menyimpan dua set data bisnis yang terpisah dalam database yang sama: **DEMO** dan **LIVE**. Lencana di bilah atas selalu menunjukkan mode yang aktif, untuk semua peran.
 
-| Mode | Shows | Use it for |
+| Mode | Menampilkan | Gunakan untuk |
 | --- | --- | --- |
-| DEMO | Sample data for exploring the app | Training and trying features |
-| LIVE | Only data your store actually created | Real trading |
+| DEMO | Data contoh untuk menjelajahi aplikasi | Pelatihan dan mencoba fitur |
+| LIVE | Hanya data yang benar-benar dibuat toko Anda | Perdagangan sungguhan |
 
-A fresh installation starts in **LIVE**. It never starts in DEMO silently.
+Instalasi baru dimulai dalam **LIVE**. Instalasi tidak pernah diam-diam dimulai dalam DEMO.
 
-## How it works
+## Cara kerjanya
 
-- Business and transactional records (products, stock, orders, sessions, customers, and similar) are stamped with the mode that was active **when they were created**.
-- Every list and report shows only records of the active mode.
-- Switching mode **never deletes** data from either mode. Switch back and the records are there.
-- Users, roles, settings, activity log entries, and payment channels are shared. They do not change with the mode.
+- Catatan bisnis dan transaksi (produk, stok, order, sesi, pelanggan, dan sejenisnya) diberi cap mode yang aktif **saat catatan itu dibuat**.
+- Setiap daftar dan laporan hanya menampilkan catatan dari mode yang aktif.
+- Berpindah mode **tidak pernah menghapus** data di kedua mode. Pindah kembali dan catatannya ada.
+- Pengguna, peran, pengaturan, entri log aktivitas, dan kanal pembayaran bersifat bersama. Semuanya tidak berubah mengikuti mode.
 
 <Warning>
-  Sales rung up in DEMO mode do not appear in LIVE reports, and the other way round. Before opening for real trade, confirm the badge says **LIVE**.
+  Penjualan yang dicatat dalam mode DEMO tidak muncul di laporan LIVE, dan sebaliknya. Sebelum membuka toko untuk perdagangan sungguhan, pastikan lencana bertuliskan **LIVE**.
 </Warning>
 
-## Switch mode
+## Berpindah mode
 
-Owners and admins (anyone with the `settings` menu) switch mode from **Settings → General → System mode**.
+Owner dan admin (siapa pun dengan menu `settings`) berpindah mode dari **Pengaturan → General → Mode sistem**.
 
 <Steps>
-  <Step title="Open General settings">
-    Go to **Settings → General** and find **System mode**. See [General settings](/settings/general).
+  <Step title="Buka pengaturan General">
+    Buka **Pengaturan → General** dan temukan **Mode sistem**. Lihat [Pengaturan umum](/settings/general).
   </Step>
-  <Step title="Choose the mode">
-    Pick DEMO or LIVE.
+  <Step title="Pilih mode">
+    Pilih DEMO atau LIVE.
   </Step>
-  <Step title="Confirm">
-    Confirm the prompt: "Switch to \{mode\} mode? The lists and reports you see will change to match." A toast confirms the switch.
+  <Step title="Konfirmasi">
+    Konfirmasikan prompt: "Pindah ke mode \{mode\}? Daftar dan laporan yang tampil akan berubah mengikuti mode ini." Sebuah toast mengonfirmasi perpindahan.
   </Step>
 </Steps>
 
 <Note>
-  The badge only appears after settings finish loading, so you never see a guessed mode while the page loads.
+  Lencana baru muncul setelah pengaturan selesai dimuat, sehingga Anda tidak pernah melihat mode tebakan saat halaman dimuat.
 </Note>
 
-## A unique value must be unique across both modes
+## Nilai unik harus unik di kedua mode
 
-Some values, such as a product code, must be unique across the whole database. The server checks both modes, so a code used by a DEMO record cannot be reused in LIVE. If you get a "already taken" validation error for a code you cannot find, check the other mode.
+Beberapa nilai, seperti kode produk, harus unik di seluruh database. Server memeriksa kedua mode, sehingga kode yang dipakai catatan DEMO tidak dapat dipakai ulang di LIVE. Jika Anda mendapat galat validasi "sudah dipakai" untuk kode yang tidak dapat Anda temukan, periksa mode yang lain.
 
 <Note>
-  ASSUMPTION: this affects only values defined as database-wide unique. Which fields those are is decided per screen. The page for each module notes it where it matters.
+  ASUMSI: ini hanya memengaruhi nilai yang didefinisikan unik di seluruh database. Kolom mana saja yang termasuk ditentukan per layar. Halaman setiap modul mencatatnya di bagian yang relevan.
 </Note>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="General settings" icon="gear" href="/settings/general">
-    Where the system mode is changed.
+  <Card title="Pengaturan umum" icon="gear" href="/settings/general">
+    Tempat mode sistem diubah.
   </Card>
-  <Card title="Business day" icon="calendar" href="/concepts/business-day">
-    How dates are assigned to sales.
+  <Card title="Hari bisnis" icon="calendar" href="/concepts/business-day">
+    Cara tanggal ditetapkan pada penjualan.
   </Card>
 </Columns>

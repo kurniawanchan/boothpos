@@ -1,150 +1,150 @@
 ---
-title: "Stock"
-description: "Read the stock movement ledger, find low-stock items, adjust stock per outlet, and import or export stock quantities."
-keywords: ["pos", "stock", "inventory", "stock movement", "adjustment", "low stock", "opname", "outlet", "import"]
+title: "Stok"
+description: "Baca buku besar pergerakan stok, temukan item yang stoknya menipis, sesuaikan stok per outlet, dan impor atau ekspor jumlah stok."
+keywords: ["pos", "stok", "stock", "inventori", "inventory", "pergerakan stok", "stock movement", "penyesuaian", "adjustment", "stok menipis", "low stock", "opname", "outlet", "impor", "import"]
 ---
 
-**Classification: INTERNAL**
+**Klasifikasi: INTERNAL**
 
-The Stock page (**Stock Movements**) is a ledger: every change to an item's stock is recorded as a row with the quantity change, the balance before and after, the reason and who did it. You also use this page to correct stock with an adjustment, and to export or import stock quantities.
+Halaman Stok (**Pergerakan Stok**) adalah buku besar: setiap perubahan stok sebuah item dicatat sebagai satu baris berisi perubahan jumlah, saldo sebelum dan sesudah, alasan, dan siapa yang melakukannya. Anda juga memakai halaman ini untuk mengoreksi stok dengan penyesuaian, serta mengekspor atau mengimpor jumlah stok.
 
-Stock is held **per outlet**. With one outlet there is one balance per variant. With several outlets each outlet has its own balance, and the page shows an Outlet column and filter.
+Stok dipegang **per outlet**. Dengan satu outlet, ada satu saldo per varian. Dengan beberapa outlet, setiap outlet memiliki saldonya sendiri, dan halaman menampilkan kolom serta filter Outlet.
 
-## Before you start
+## Sebelum mulai
 
-- You need the **Stock** menu (menu key `stock`). The page and its header buttons need it. The transfers page needs it too.
-- Adjustments are checked again on the server against the same menu.
-- The ledger endpoint is also open to users with the Products menu, which is how the per-item history on the product screens works.
-- Adjustments can only be made for outlets you are assigned to. See [Outlets](/concepts/outlets).
-- Stock figures in the summary of an item (for example on [Product detail](/inventory/product-detail)) come from the same balances.
+- Anda memerlukan menu **Stok** (kunci menu `stock`). Halaman dan tombol di headernya memerlukannya. Halaman transfer juga memerlukannya.
+- Penyesuaian diperiksa lagi di server terhadap menu yang sama.
+- Endpoint buku besar juga terbuka bagi pengguna dengan menu Produk, dan itulah cara kerja riwayat per item di layar produk.
+- Angka stok dalam ringkasan sebuah item (misalnya di [Detail produk](/inventory/product-detail)) berasal dari saldo yang sama.
+- Penyesuaian hanya dapat dilakukan untuk outlet yang ditugaskan kepada Anda. Lihat [Outlet](/concepts/outlets).
 
-## The ledger
+## Buku besar
 
-The table shows 25 movements per page, newest first. Use the filter bar to narrow it. **Reset filters** clears everything.
+Tabel menampilkan 25 pergerakan per halaman, terbaru lebih dulu. Gunakan bilah filter untuk mempersempit. **Atur ulang filter** mengosongkan semuanya.
 
-| Filter | Behaviour |
+| Filter | Perilaku |
 | --- | --- |
-| Type | All types, Purchase, Sale, Adjustment, Return, Initial stock. |
-| Outlet | Shown only with more than one outlet. "All outlets" by default. |
-| From date, To date | Inclusive, compared on the movement's date. |
+| Tipe | Semua tipe, Pembelian, Penjualan, Penyesuaian, Retur, Stok awal. |
+| Outlet | Tampil hanya bila ada lebih dari satu outlet. "Semua outlet" secara bawaan. |
+| Dari tanggal, Sampai tanggal | Inklusif, dibandingkan pada tanggal pergerakan. |
 
-| Column | What it shows |
+| Kolom | Isinya |
 | --- | --- |
-| SKU | The variant SKU. With the Products menu it is a link that opens that product's detail dialog with the variant highlighted. Without it, plain text. |
-| Outlet | The outlet of the movement (several outlets only). |
-| Type | A coloured label for the movement type. |
-| Change | The quantity change. Positive in green with a plus sign, negative in red. |
-| Before → After | The outlet balance before and after the movement. |
-| Reference / reason | An order or transfer number (for example a sale or a transfer) and the reason text. A dash if neither exists. |
-| By | The user who made the change. |
-| Time | Date and time of the movement. |
+| SKU | SKU varian. Dengan menu Produk, SKU berupa tautan yang membuka dialog detail produk dengan varian disorot. Tanpa menu itu, berupa teks biasa. |
+| Outlet | Outlet pergerakan (hanya bila ada beberapa outlet). |
+| Tipe | Label berwarna untuk tipe pergerakan. |
+| Perubahan | Perubahan jumlah. Positif berwarna hijau dengan tanda plus, negatif berwarna merah. |
+| Sebelum → Sesudah | Saldo outlet sebelum dan sesudah pergerakan. |
+| Referensi / alasan | Nomor order atau transfer (misalnya sebuah penjualan atau transfer) dan teks alasan. Tanda strip bila keduanya tidak ada. |
+| Oleh | Pengguna yang melakukan perubahan. |
+| Waktu | Tanggal dan jam pergerakan. |
 
-### Movement types
+### Tipe pergerakan
 
-| Type | Meaning |
+| Tipe | Artinya |
 | --- | --- |
-| Purchase | Stock in. |
-| Sale | Stock out for a sold item. The Reference column shows the order number. |
-| Adjustment | A manual correction (this page, the item edit form, or an import). |
-| Return | Stock back in, for example from a returned order line. The Reference shows the order number. |
-| Initial stock | Opening stock. |
-| Stock out (legacy) | Old pre-order hand-over rows that remain in the ledger. They cannot be filtered. |
-| Transfer out, transfer in, transfer cancel | Created by [Stock transfers](/inventory/stock-transfers). The Reference shows the transfer number. These types are not in the Type filter. |
+| Pembelian | Stok masuk. |
+| Penjualan | Stok keluar untuk item yang terjual. Kolom Referensi menampilkan nomor order. |
+| Penyesuaian | Koreksi manual (halaman ini, formulir ubah item, atau impor). |
+| Retur | Stok kembali masuk, misalnya dari baris order yang dikembalikan. Referensi menampilkan nomor order. |
+| Stok awal | Stok pembukaan. |
+| Stok keluar (lama) | Baris serah-terima pre-order lama yang masih ada di buku besar. Tidak dapat disaring. |
+| Transfer keluar, transfer masuk, transfer dibatalkan | Dibuat oleh [Transfer stok](/inventory/stock-transfers). Referensi menampilkan nomor transfer. Tipe-tipe ini tidak ada di filter Tipe. |
 
 <Note>
-ASSUMPTION: the English interface has no label text for the three transfer types, so those rows may show a raw label key instead of a name. The Reference column still shows the transfer number.
+ASUMSI: antarmuka tidak memiliki teks label untuk tiga tipe transfer (tidak ditemukan di en.json maupun id.json), sehingga baris itu dapat menampilkan kunci label mentah alih-alih nama. Kolom Referensi tetap menampilkan nomor transfer.
 </Note>
 
-Stock history is append-only. Rows are never edited or deleted, and the balance is only changed through the stock service. That is why the page is described as "Every stock change is recorded and auditable".
+Riwayat stok bersifat hanya-tambah. Baris tidak pernah disunting atau dihapus, dan saldo hanya diubah melalui layanan stok. Itulah sebabnya halaman ini dijelaskan sebagai "Seluruh perubahan stok tercatat dan dapat diaudit".
 
-### Low-stock view
+### Tampilan stok menipis
 
-The Dashboard's low-stock item opens this page with a **Low stock only** chip. The page then lists variants instead of the ledger, with columns Product, SKU, Outlet (several outlets only), Stock and Low-stock limit. A row appears when the variant is active, has a low-stock alert threshold, and the outlet balance is at or below it. Select the chip to remove the filter and return to the ledger. The threshold is set per variant in the item form (**Low-stock alert**). See [Product detail](/inventory/product-detail).
+Butir stok menipis di Beranda membuka halaman ini dengan chip **Hanya stok menipis**. Halaman kemudian mencantumkan varian alih-alih buku besar, dengan kolom Produk, SKU, Outlet (hanya bila ada beberapa outlet), Stok, dan Batas menipis. Sebuah baris muncul bila varian aktif, memiliki ambang peringatan stok rendah, dan saldo outlet sama dengan atau di bawahnya. Pilih chip untuk melepas filter dan kembali ke buku besar. Ambang diatur per varian di formulir item (**Peringatan stok rendah**). Lihat [Detail produk](/inventory/product-detail).
 
-## Adjust stock
+## Menyesuaikan stok
 
-Use an adjustment to correct a quantity, for example after a stock count or for damaged goods.
+Gunakan penyesuaian untuk mengoreksi jumlah, misalnya setelah penghitungan stok atau untuk barang rusak.
 
 <Steps>
-  <Step title="Open the dialog">
-    Select **Stock adjustment**.
+  <Step title="Buka dialog">
+    Pilih **Penyesuaian stok**.
   </Step>
-  <Step title="Choose the outlet">
-    With more than one outlet, choose the outlet whose stock changes. It defaults to the outlet selected in the top bar. If you change the outlet, the rows you added are cleared.
+  <Step title="Pilih outlet">
+    Bila ada lebih dari satu outlet, pilih outlet yang stoknya berubah. Bawaannya adalah outlet yang dipilih di bilah atas. Bila Anda mengganti outlet, baris yang sudah Anda tambahkan dikosongkan.
   </Step>
-  <Step title="Find the variants">
-    Type a product name or SKU in **Search variant**. Pick a result to add a row. The result shows the SKU and the stock at the chosen outlet. A variant can be added only once.
+  <Step title="Cari varian">
+    Ketik nama produk atau SKU di **Cari varian**. Pilih hasilnya untuk menambah baris. Hasil menampilkan SKU dan stok di outlet yang dipilih. Sebuah varian hanya dapat ditambahkan sekali.
   </Step>
-  <Step title="Set the change">
-    Use the minus and plus buttons to set the change for each row. Each press changes it by 1. The row shows "stock → new stock". Use the trash button to remove a row.
+  <Step title="Atur perubahan">
+    Gunakan tombol kurang dan tambah untuk mengatur perubahan setiap baris. Setiap tekanan mengubahnya sebesar 1. Baris menampilkan "stok → stok baru". Gunakan tombol tempat sampah untuk menghapus baris.
   </Step>
-  <Step title="Enter a reason">
-    **Adjustment reason** is required, for example "stock opname Oct 25, one damaged-packaging unit". The same reason is saved on every row of the batch.
+  <Step title="Masukkan alasan">
+    **Alasan penyesuaian** wajib diisi, misalnya "stok opname 25 Okt, satu unit cacat kemasan". Alasan yang sama disimpan pada setiap baris dalam satu kelompok.
   </Step>
-  <Step title="Save">
-    Select **Save adjustment**. It stays disabled until there is a reason, at least one row with a non-zero change, and (with several outlets) an outlet. You see "Stock adjustment saved."
+  <Step title="Simpan">
+    Pilih **Simpan penyesuaian**. Tombol tetap nonaktif sampai ada alasan, setidaknya satu baris dengan perubahan bukan nol, dan (dengan beberapa outlet) sebuah outlet. Anda melihat "Penyesuaian stok tersimpan."
   </Step>
 </Steps>
 
-Each row writes one movement of type Adjustment, and also an entry in the [activity log](/insight/activity-log). There is no way to type a new stock figure directly. You can set the quantity you want from the item edit form, which works out the difference for you, or from an import (see below).
+Setiap baris menulis satu pergerakan bertipe Penyesuaian, dan juga satu entri di [log aktivitas](/insight/activity-log). Tidak ada cara untuk mengetik angka stok baru secara langsung. Anda dapat menetapkan jumlah yang diinginkan dari formulir ubah item, yang menghitung selisihnya untuk Anda, atau dari impor (lihat di bawah).
 
-### Rules and errors
+### Aturan dan galat
 
-| Message | Status | Cause |
+| Pesan | Status | Penyebab |
 | --- | --- | --- |
-| Insufficient stock for variant \{sku\}. Available: \{n\}. (\{outlet\}) | 422 | The adjustment would take the outlet balance below zero. Stock can never go negative. |
-| Choose the outlet whose stock this changes. | 422 | Several outlets are visible and no outlet was chosen. |
-| Standard field validation message | 422 | The reason is missing or longer than 255 characters, or a row has a zero or non-whole change. |
-| This outlet is not one you are allowed to access. | 403 | You are not assigned to that outlet. |
-| This account is not assigned to any outlet. Ask an administrator to assign it. | 409 | Your user has no outlet access. |
-| You do not have access to stock movements. | 403 | Your role has neither the Stock nor the Products menu. |
+| Stok tidak mencukupi untuk varian \{sku\}. Tersedia: \{n\}. (\{outlet\}) | 422 | Penyesuaian akan membuat saldo outlet di bawah nol. Stok tidak pernah boleh negatif. |
+| Pilih outlet yang stoknya diubah. | 422 | Beberapa outlet terlihat dan tidak ada outlet yang dipilih. |
+| Pesan validasi kolom standar | 422 | Alasan kosong atau lebih dari 255 karakter, atau sebuah baris memiliki perubahan nol atau bukan bilangan bulat. |
+| Outlet ini tidak termasuk outlet yang boleh Anda akses. | 403 | Anda tidak ditugaskan ke outlet itu. |
+| Akun ini belum ditugaskan ke outlet. Minta administrator menugaskannya. | 409 | Pengguna Anda tidak punya akses outlet. |
+| Anda tidak memiliki akses ke pergerakan stok. | 403 | Peran Anda tidak memiliki menu Stok maupun Produk. |
 
 <Note>
-When an adjustment fails validation, the dialog stays open and shows the first error as a notice. For other failures it shows the standard error notice and stays open.
+Bila penyesuaian gagal validasi, dialog tetap terbuka dan menampilkan galat pertama sebagai pemberitahuan. Untuk kegagalan lain, dialog menampilkan pemberitahuan galat standar dan tetap terbuka.
 </Note>
 
-## Export and import stock
+## Ekspor dan impor stok
 
-- **Export .xlsx** downloads the stock sheet. If it fails you see "Failed to export stock data."
-- **Bulk import** opens the shared master-data import dialog. The upload, preview, apply, size limits and error table are described on [Products](/inventory/products#import-and-export-master-data).
+- **Ekspor .xlsx** mengunduh sheet stok. Jika gagal Anda melihat "Gagal mengekspor data stok."
+- **Impor massal** membuka dialog impor data master yang dipakai bersama. Unggah, pratinjau, terapkan, batas ukuran, dan tabel galat dijelaskan di [Produk](/inventory/products#import-and-export-master-data).
 
-The `stock` sheet has the columns `sku`, `current_stock`, `reason` and `outlet_code`.
+Sheet `stock` memiliki kolom `sku`, `current_stock`, `reason`, dan `outlet_code`.
 
-- `current_stock` is the **final quantity you want**, not a difference. The system works out the adjustment itself, using the same stock service as the Stock adjustment dialog, so the import also writes ledger rows.
-- With more than one outlet, `outlet_code` is required: "Kode outlet wajib diisi karena ada beberapa outlet (stok dihitung per outlet)." (this row message is in Indonesian).
-- An unknown SKU is rejected. To give a **new** variant stock, fill `initial_stock` in the `products` sheet instead.
-- The import is all or nothing. If one row is invalid nothing changes.
+- `current_stock` adalah **jumlah akhir yang Anda inginkan**, bukan selisih. Sistem menghitung penyesuaiannya sendiri, memakai layanan stok yang sama dengan dialog Penyesuaian stok, sehingga impor juga menulis baris buku besar.
+- Dengan lebih dari satu outlet, `outlet_code` wajib: "Kode outlet wajib diisi karena ada beberapa outlet (stok dihitung per outlet)." (pesan baris ini berasal dari server).
+- SKU yang tidak dikenal ditolak. Untuk memberi stok pada varian **baru**, isi `initial_stock` di sheet `products`.
+- Impor bersifat semua atau tidak sama sekali. Jika satu baris tidak valid, tidak ada yang berubah.
 
-## Troubleshooting
+## Pemecahan masalah
 
 <AccordionGroup>
-  <Accordion title="Stock adjustment is greyed out">
-    Add a reason and at least one row with a non-zero change. With several outlets, choose the outlet too.
+  <Accordion title="Penyesuaian stok berwarna abu-abu">
+    Tambahkan alasan dan setidaknya satu baris dengan perubahan bukan nol. Dengan beberapa outlet, pilih juga outletnya.
   </Accordion>
-  <Accordion title="I do not see the Outlet filter or column">
-    They appear only when more than one outlet is visible to you.
+  <Accordion title="Saya tidak melihat filter atau kolom Outlet">
+    Keduanya muncul hanya bila lebih dari satu outlet terlihat oleh Anda.
   </Accordion>
-  <Accordion title="The SKU is not a link">
-    The link needs the Products menu. Without it the SKU is plain text.
+  <Accordion title="SKU bukan tautan">
+    Tautan memerlukan menu Produk. Tanpa menu itu, SKU berupa teks biasa.
   </Accordion>
-  <Accordion title="The dashboard shows low stock but the list is empty">
-    The low-stock view only counts active variants that have a low-stock alert set, and only outlets you can see.
+  <Accordion title="Beranda menampilkan stok menipis tetapi daftarnya kosong">
+    Tampilan stok menipis hanya menghitung varian aktif yang memiliki peringatan stok rendah, dan hanya outlet yang dapat Anda lihat.
   </Accordion>
 </AccordionGroup>
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Stock transfers" href="/inventory/stock-transfers">
-    Move stock between outlets.
+  <Card title="Transfer stok" href="/inventory/stock-transfers">
+    Pindahkan stok antar outlet.
   </Card>
-  <Card title="Products" href="/inventory/products">
-    Import and export master data, and set opening stock for new items.
+  <Card title="Produk" href="/inventory/products">
+    Impor dan ekspor data master, dan atur stok awal untuk item baru.
   </Card>
-  <Card title="Product detail" href="/inventory/product-detail">
-    Low-stock alert and track-stock settings per variant.
+  <Card title="Detail produk" href="/inventory/product-detail">
+    Peringatan stok rendah dan pengaturan lacak stok per varian.
   </Card>
-  <Card title="Outlets" href="/concepts/outlets">
-    How outlet assignment limits what you can adjust.
+  <Card title="Outlet" href="/concepts/outlets">
+    Cara penugasan outlet membatasi apa yang dapat Anda sesuaikan.
   </Card>
 </Columns>

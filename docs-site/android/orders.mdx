@@ -1,157 +1,157 @@
 ---
-title: "Orders, reprint and refund on the tablet"
-description: "Find open and paid orders on the tablet, view or reprint a struk, refund a paid order, and understand queue numbers."
-keywords: ["android", "tablet", "orders", "open orders", "paid orders", "refund", "reprint", "struk", "queue number", "approval"]
+title: "Order, cetak ulang, dan refund di tablet"
+description: "Cari order terbuka dan terbayar di tablet, lihat atau cetak ulang struk, refund order yang sudah dibayar, dan pahami nomor antrean."
+keywords: ["android", "tablet", "order", "order terbuka", "order terbayar", "refund", "cetak ulang", "struk", "nomor antrean", "persetujuan"]
 ---
 
-{/* Classification: INTERNAL */}
+{/* Klasifikasi: INTERNAL */}
 
-The **Order** screen lists the orders of your outlet in two tabs: **Terbuka** (open) and **Selesai** (completed). From it you can resume an open order, view or reprint the struk of a paid order, and refund a paid order.
+Layar **Order** mendaftar order outlet Anda dalam dua tab: **Terbuka** dan **Selesai**. Dari sini Anda dapat melanjutkan order terbuka, melihat atau mencetak ulang struk order yang sudah dibayar, dan me-refund order yang sudah dibayar.
 
-## Before you start
+## Sebelum mulai
 
-- The list is loaded from the server. While the server is unreachable you see an error card with a retry button instead of an empty list.
-- A small badge on the **Order** menu item shows how many orders are open.
-- Reprint and refund are done from the **Selesai** tab. On a phone-sized screen the detail panel with these buttons is not shown (see the note below).
-- Refund needs an open shift on this tablet and an approval. See [Approvals](/android/approvals).
+- Daftar dimuat dari server. Saat server tidak terjangkau, Anda melihat kartu galat dengan tombol coba lagi sebagai ganti daftar kosong.
+- Lencana kecil pada item menu **Order** menunjukkan berapa order yang terbuka.
+- Cetak ulang dan refund dilakukan dari tab **Selesai**. Pada layar seukuran ponsel, panel detail dengan tombol-tombol ini tidak ditampilkan (lihat catatan di bawah).
+- Refund membutuhkan shift terbuka di tablet ini dan persetujuan. Lihat [Persetujuan](/android/approvals).
 
-## The two tabs
+## Dua tab
 
-### Terbuka (open orders)
+### Terbuka
 
-The tab title shows the count, for example **Terbuka · 3**. Each row shows the order label, then the opened time and who opened it. Dine-in orders also show the number of guests (**\{n\} tamu**). The terminal name is added when known.
+Judul tab menampilkan jumlahnya, misalnya **Terbuka · 3**. Setiap baris menampilkan label order, lalu waktu dibuka dan siapa yang membukanya. Order dine-in juga menampilkan jumlah tamu (**\{n\} tamu**). Nama terminal ditambahkan bila diketahui.
 
-Tap a row to resume the order. The app loads the latest version from the server. If the order has a QRIS payment waiting for verification it opens on the payment screen, otherwise on the order editor.
+Ketuk baris untuk melanjutkan order. Aplikasi memuat versi terbaru dari server. Jika order memiliki pembayaran QRIS yang menunggu verifikasi, order terbuka di layar pembayaran; jika tidak, di editor order.
 
-| Badge | Meaning |
+| Lencana | Arti |
 | --- | --- |
-| **QRIS** | A QRIS payment on this order is waiting for verification. |
-| **Bill** | A pre-bill was printed for this order. |
-| A terminal name | The order was opened on another terminal. You can still open it from here. |
+| **QRIS** | Pembayaran QRIS pada order ini menunggu verifikasi. |
+| **Bill** | Pre-bill sudah dicetak untuk order ini. |
+| Nama terminal | Order dibuka di terminal lain. Anda tetap dapat membukanya dari sini. |
 
-The right edge shows the order total.
+Tepi kanan menampilkan total order.
 
-### Selesai (completed orders)
+### Selesai
 
-Each row shows the receipt number (or **Dibatalkan** for a cancelled order), then the order label and the closed time. A cancelled order shows its reason ("Dibatalkan: \{reason\}") and **Batal** instead of a total. Badges:
+Setiap baris menampilkan nomor struk (atau **Dibatalkan** untuk order yang dibatalkan), lalu label order dan waktu ditutup. Order yang dibatalkan menampilkan alasannya ("Dibatalkan: \{reason\}") dan **Batal** sebagai ganti total. Lencana:
 
-| Badge | Meaning |
+| Lencana | Arti |
 | --- | --- |
-| **Direfund** | The order was fully refunded. |
-| **QRIS** | A QRIS payment is still waiting for verification. |
+| **Direfund** | Order di-refund penuh. |
+| **QRIS** | Pembayaran QRIS masih menunggu verifikasi. |
 
-The list is refreshed each time you open the tab, and what is already shown stays on screen if a refresh fails.
+Daftar disegarkan setiap kali Anda membuka tab, dan yang sudah tampil tetap di layar bila penyegaran gagal.
 
-## Order detail panel
+## Panel detail order
 
-On a wide screen, tapping a completed row (or the first row by default) fills the detail panel on the right. It shows:
+Pada layar lebar, mengetuk baris selesai (atau baris pertama secara bawaan) mengisi panel detail di kanan. Isinya:
 
-- The receipt number and a summary line with the order label, closed time and **cetak ulang \{n\}×** (how many reprints were made).
-- Each line with quantity, name and net amount.
-- **Total**, then one row per verified payment (for example **Tunai**, **EDC BCA**, **QRIS**).
-- For a refunded order: "Direfund · total \{amount\} · kembali tunai \{amount\}".
+- Nomor struk dan baris ringkasan dengan label order, waktu ditutup, dan **cetak ulang \{n\}×** (berapa kali dicetak ulang).
+- Setiap baris dengan jumlah, nama, dan nominal bersih.
+- **Total**, lalu satu baris per pembayaran terverifikasi (misalnya **Tunai**, **EDC BCA**, **QRIS**).
+- Untuk order yang di-refund: "Direfund · total \{amount\} · kembali tunai \{amount\}".
 
-Cancelled orders have no buttons. For other orders:
+Order yang dibatalkan tidak memiliki tombol. Untuk order lain:
 
-| Button | What it does |
+| Tombol | Fungsi |
 | --- | --- |
-| **Lihat struk** | Opens the receipt sheet loaded from the server. |
-| **Cetak ulang** | Queues a new copy of the struk on the printer. |
-| **Refund** | Opens the refund dialog. It reads **Sudah direfund** and is disabled once refunded. |
+| **Lihat struk** | Membuka lembar struk yang dimuat dari server. |
+| **Cetak ulang** | Mengantrekan salinan baru struk ke printer. |
+| **Refund** | Membuka dialog refund. Tombol ini berbunyi **Sudah direfund** dan nonaktif setelah di-refund. |
 
 <Note>
-The detail panel is hidden on compact (phone-sized) screens, so on those screens **Lihat struk**, **Cetak ulang** and **Refund** are not reachable from this list. Tablets in landscape or portrait with a medium or wide window show it.
+Panel detail disembunyikan pada layar kompak (seukuran ponsel), sehingga pada layar itu **Lihat struk**, **Cetak ulang**, dan **Refund** tidak dapat dijangkau dari daftar ini. Tablet dalam lanskap atau potret dengan jendela sedang atau lebar menampilkannya.
 </Note>
 
-## Reprint a struk
+## Cetak ulang struk
 
 <Steps>
-  <Step title="Select the order">
-    Open **Selesai** and tap the order.
+  <Step title="Pilih order">
+    Buka **Selesai** dan ketuk order.
   </Step>
-  <Step title="Press Cetak ulang">
-    The app asks the server to register the next copy number. The first reprint is free by default. The server setting for free copies is 1.
+  <Step title="Tekan Cetak ulang">
+    Aplikasi meminta server mencatat nomor salinan berikutnya. Cetak ulang pertama gratis secara bawaan. Pengaturan server untuk salinan gratis adalah 1.
   </Step>
-  <Step title="Collect the copy">
-    The toast reads "Salinan ke-\{n\} masuk antrean cetak." The struk prints with the label **SALINAN n**. See [Printing](/android/printing).
+  <Step title="Ambil salinannya">
+    Toast berbunyi "Salinan ke-\{n\} masuk antrean cetak." Struk dicetak dengan label **SALINAN n**. Lihat [Pencetakan](/android/printing).
   </Step>
 </Steps>
 
-Rules:
+Aturan:
 
-- Copy 1 is the original struk printed after payment. The next reprint is copy 2, and so on. The number comes from the server count, not from a counter on the tablet.
-- Reprints beyond the free copies need approval. The **Perlu persetujuan** dialog opens with "Cetak ulang struk · salinan \{n\}". A supervisor or outlet manager with the reprint permission enters their PIN. The approver cannot be the person asking. The approval is valid for that one copy only.
-- If another device reprinted the same order in the meantime, the server answers that the copy number changed. The app reloads the list once and retries automatically.
-- Only completed orders can be reprinted. The server refuses others ("Hanya struk order yang sudah selesai (lunas) yang bisa dicetak ulang.").
-- Offline, the toast shows the network error and nothing is registered.
+- Salinan 1 adalah struk asli yang dicetak setelah pembayaran. Cetak ulang berikutnya adalah salinan 2, dan seterusnya. Nomornya berasal dari hitungan server, bukan dari penghitung di tablet.
+- Cetak ulang melebihi salinan gratis membutuhkan persetujuan. Dialog **Perlu persetujuan** terbuka dengan "Cetak ulang struk · salinan \{n\}". Supervisor atau outlet manager dengan izin cetak ulang memasukkan PIN-nya. Penyetuju tidak boleh orang yang meminta. Persetujuan hanya berlaku untuk satu salinan itu.
+- Jika perangkat lain mencetak ulang order yang sama sementara itu, server menjawab bahwa nomor salinan berubah. Aplikasi memuat ulang daftar satu kali dan mencoba lagi secara otomatis.
+- Hanya order yang sudah selesai yang dapat dicetak ulang. Server menolak yang lain ("Hanya struk order yang sudah selesai (lunas) yang bisa dicetak ulang.").
+- Saat offline, toast menampilkan galat jaringan dan tidak ada yang dicatat.
 
 <Info>
-**Lihat struk** then **Cetak struk** behaves slightly differently. If the original copy 1 has not printed yet, it retries that job instead of creating copy 2. Otherwise it is an ordinary reprint with the same rules as above.
+**Lihat struk** lalu **Cetak struk** berperilaku sedikit berbeda. Jika salinan 1 asli belum tercetak, tombol ini mengulang pekerjaan itu, bukan membuat salinan 2. Jika tidak, ini adalah cetak ulang biasa dengan aturan yang sama seperti di atas.
 </Info>
 
-## Refund an order
+## Refund order
 
-A refund is always a full refund of a paid order. There are no partial refunds on the tablet.
+Refund selalu berupa refund penuh atas order yang sudah dibayar. Tidak ada refund sebagian di tablet.
 
 <Steps>
-  <Step title="Open the refund dialog">
-    Select the completed order and press **Refund**. The dialog is titled **Refund order penuh?** and says "Stok dikembalikan dan kas tunai shift dibalik. Hanya untuk order yang sudah lunas."
+  <Step title="Buka dialog refund">
+    Pilih order yang selesai dan tekan **Refund**. Dialog berjudul **Refund order penuh?** dan menyatakan "Stok dikembalikan dan kas tunai shift dibalik. Hanya untuk order yang sudah lunas."
   </Step>
-  <Step title="Choose a reason">
-    The reasons come from the server (reason category refund). **Refund** stays disabled until you choose one. Optionally add a **Catatan (opsional)** of up to 200 characters.
+  <Step title="Pilih alasan">
+    Alasan berasal dari server (kategori alasan refund). **Refund** tetap nonaktif sampai Anda memilih satu. Anda dapat menambahkan **Catatan (opsional)** hingga 200 karakter.
   </Step>
-  <Step title="Press Refund">
-    The server asks for approval. The **Perlu persetujuan** dialog opens with "Refund order · \{reason\}". Choose an approver, enter their 6-digit PIN and press **Setujui**.
+  <Step title="Tekan Refund">
+    Server meminta persetujuan. Dialog **Perlu persetujuan** terbuka dengan "Refund order · \{reason\}". Pilih penyetuju, masukkan PIN 6 digitnya, dan tekan **Setujui**.
   </Step>
-  <Step title="Confirm the result">
-    The toast reads "Order direfund penuh." The row gets a **Direfund** badge and the button changes to **Sudah direfund**.
+  <Step title="Konfirmasi hasilnya">
+    Toast berbunyi "Order direfund penuh." Baris mendapat lencana **Direfund** dan tombol berubah menjadi **Sudah direfund**.
   </Step>
 </Steps>
 
-What the server does on a refund:
+Yang dilakukan server saat refund:
 
-- Stock for the order is returned.
-- The cash that came back is recorded as a cash-out in your **current** shift, not in the original shift. The original shift and old reports do not change. Only the cash part is counted. EDC, QRIS and transfer amounts are refunded outside the drawer and are not recorded as cash.
-- It is logged in the activity log.
+- Stok untuk order dikembalikan.
+- Tunai yang dikembalikan dicatat sebagai kas keluar di shift Anda yang **sekarang**, bukan di shift asal. Shift asal dan laporan lama tidak berubah. Hanya bagian tunai yang dihitung. Nominal EDC, QRIS, dan transfer di-refund di luar laci dan tidak dicatat sebagai tunai.
+- Refund dicatat di log aktivitas.
 
-Rules and limits:
+Aturan dan batasan:
 
-| Rule | Detail |
+| Aturan | Rincian |
 | --- | --- |
-| Approval is mandatory | Even a user who holds the refund permission needs a second approver. In the default staff roles only **Outlet Manager** holds the refund permission. |
-| Open shift required | You need an open shift on this tablet. Otherwise the server answers that a shift is required. |
-| One refund per order | A refunded order cannot be refunded again. |
-| Fully paid only | Orders not fully paid, not completed or cancelled are refused. |
-| No QRIS waiting | An order with a QRIS payment waiting for verification must be verified first. |
-| Online only | Offline you see the network error and nothing is refunded. |
+| Persetujuan wajib | Bahkan pengguna yang memegang izin refund membutuhkan penyetuju kedua. Pada peran staf bawaan, hanya **Outlet Manager** yang memegang izin refund. |
+| Shift terbuka wajib | Anda membutuhkan shift terbuka di tablet ini. Jika tidak, server menjawab bahwa shift diperlukan. |
+| Satu refund per order | Order yang sudah di-refund tidak dapat di-refund lagi. |
+| Hanya yang lunas | Order yang belum lunas, belum selesai, atau dibatalkan ditolak. |
+| Tanpa QRIS yang menunggu | Order dengan pembayaran QRIS yang menunggu verifikasi harus diverifikasi lebih dulu. |
+| Hanya online | Saat offline Anda melihat galat jaringan dan tidak ada yang di-refund. |
 
 <Note>
-ASSUMPTION: The approver must hold the refund permission. The default seeded roles put it only on Outlet Manager. Custom roles may differ, check [Roles](/settings/roles).
+ASUMSI: Penyetuju harus memegang izin refund. Peran bawaan yang di-seed hanya memberikannya kepada Outlet Manager. Peran kustom mungkin berbeda, periksa [Peran](/settings/roles).
 </Note>
 
-## Queue numbers
+## Nomor antrean
 
-Counter orders opened on a terminal get a queue number `A-001`, `A-002` and so on, per outlet and per business day. Table orders do not. The queue number shows on the done screen, on the struk and on the kitchen ticket. The **Panggil pelanggan** button on the done screen speaks it. See [Take payment on the tablet](/android/payment).
+Order counter yang dibuka di terminal mendapat nomor antrean `A-001`, `A-002`, dan seterusnya, per outlet dan per hari bisnis. Order meja tidak. Nomor antrean tampil di layar selesai, di struk, dan di tiket dapur. Tombol **Panggil pelanggan** di layar selesai mengucapkannya. Lihat [Terima pembayaran di tablet](/android/payment).
 
-The completed-orders panel does not show the queue number or a call button.
+Panel order selesai tidak menampilkan nomor antrean atau tombol panggil.
 
-## Troubleshooting
+## Pemecahan masalah
 
-| Message | Cause | Fix |
+| Pesan | Penyebab | Solusi |
 | --- | --- | --- |
-| Error card with a retry button on the list | The server cannot be reached or returned an error. | Check the connection on **Perangkat**, then retry. |
-| Server belum punya alasan refund aktif (kategori refund). Refund belum bisa diproses dari sini. | No refund reasons exist on the server. | Ask an admin to add reasons in the reason codes setup. |
-| Tidak ada penyetuju yang memenuhi syarat untuk aksi ini. | Nobody with the permission is eligible. | Ask the manager to give the permission to a role, or sign in as the manager. |
-| Penyetuju tidak boleh orang yang sama dengan peminta. | You tried to approve your own request. | Ask another approver. |
-| Order ini sudah pernah direfund. | A second refund attempt. | Nothing to do. |
-| Ada pembayaran QRIS yang belum dicek pada order ini. Cek dulu sebelum refund. | QRIS payment waiting. | Verify it from the payment screen first. |
-| Nomor salinan sudah berubah (ada cetak lain). | A parallel reprint. | The app retries once. If it persists, reload the list. |
+| Kartu galat dengan tombol coba lagi pada daftar | Server tidak dapat dijangkau atau mengembalikan galat. | Periksa koneksi di **Perangkat**, lalu coba lagi. |
+| Server belum punya alasan refund aktif (kategori refund). Refund belum bisa diproses dari sini. | Tidak ada alasan refund di server. | Minta admin menambahkan alasan di pengaturan kode alasan. |
+| Tidak ada penyetuju yang memenuhi syarat untuk aksi ini. | Tidak ada yang memenuhi syarat memegang izin. | Minta manajer memberikan izin kepada sebuah peran, atau masuk sebagai manajer. |
+| Penyetuju tidak boleh orang yang sama dengan peminta. | Anda mencoba menyetujui permintaan Anda sendiri. | Minta penyetuju lain. |
+| Order ini sudah pernah direfund. | Percobaan refund kedua. | Tidak ada yang perlu dilakukan. |
+| Ada pembayaran QRIS yang belum dicek pada order ini. Cek dulu sebelum refund. | Pembayaran QRIS menunggu. | Verifikasi dulu dari layar pembayaran. |
+| Nomor salinan sudah berubah (ada cetak lain). | Cetak ulang paralel. | Aplikasi mencoba sekali lagi. Jika tetap terjadi, muat ulang daftar. |
 
-## Related
+## Terkait
 
 <Columns cols={2}>
-  <Card title="Take payment" href="/android/payment" icon="credit-card">Cash, EDC, QRIS and the done screen.</Card>
-  <Card title="Printing" href="/android/printing" icon="print">The print queue and struk layout.</Card>
-  <Card title="Approvals" href="/android/approvals" icon="shield">PIN approvals for reprint and refund.</Card>
-  <Card title="Sales on the web" href="/operations/sales" icon="receipt">The same completed orders in the web app.</Card>
+  <Card title="Terima pembayaran" href="/android/payment" icon="credit-card">Tunai, EDC, QRIS, dan layar selesai.</Card>
+  <Card title="Pencetakan" href="/android/printing" icon="print">Antrean cetak dan tata letak struk.</Card>
+  <Card title="Persetujuan" href="/android/approvals" icon="shield">Persetujuan PIN untuk cetak ulang dan refund.</Card>
+  <Card title="Penjualan di web" href="/operations/sales" icon="receipt">Order selesai yang sama di aplikasi web.</Card>
 </Columns>
