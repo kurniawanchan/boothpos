@@ -121,6 +121,10 @@ paths:
     post:
       tags: [Auth]
       summary: Login dan dapatkan token
+      description: |
+        078 — percobaan GAGAL dihitung per akun (username + alamat IP): 5 per menit, lalu 429 `throttled` dengan lama tunggu
+        (login yang benar tidak bisa lolos sampai jendela habis). Login berhasil menghapus hitungan. Username yang tidak ada
+        dihitung dan dijawab sama persis (401) — tidak membocorkan akun mana yang ada. Batas banjir per IP (60/menit) terpisah.
       security: []
       requestBody:
         required: true
@@ -144,6 +148,7 @@ paths:
                   user: { $ref: '#/components/schemas/AuthenticatedUser' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /staff/roster:
     get:
@@ -178,7 +183,7 @@ paths:
                         locked: { type: boolean, description: Login PIN sedang terkunci }
         '404': { description: Outlet tidak ada atau tidak aktif }
         '422': { $ref: '#/components/responses/ValidationError' }
-        '429': { description: Terlalu sering (throttle) }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/pin-sessions:
     post:
@@ -303,7 +308,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { description: Pengguna tidak ada }
         '422': { description: "PIN bukan 6 digit / `source` salah (galat per kolom), atau PIN lemah (`code: pin_too_weak`)" }
-        '429': { description: Terlalu sering (throttle) }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /pin-suggestions:
     post:
@@ -323,7 +328,7 @@ paths:
                 properties:
                   pin: { type: string, pattern: '^[0-9]{6}$' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '429': { description: Terlalu sering (throttle) }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /devices:
     get:
@@ -364,7 +369,7 @@ paths:
                   store_name: { type: string, nullable: true, description: Kunci per mode (store_name_demo pada DEMO) }
                   store_logo_url: { type: string, nullable: true }
         '423': { description: Instalasi belum diaktivasi }
-        '429': { description: Terlalu sering (throttle) }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /pos-setup/outlets:
     get:
@@ -390,7 +395,7 @@ paths:
                       properties:
                         id: { type: integer }
                         name: { type: string }
-        '429': { description: Terlalu sering (throttle) }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /pos-setup/outlets/{outlet}/terminals:
     get:
@@ -418,7 +423,7 @@ paths:
                         id: { type: integer }
                         name: { type: string }
         '404': { description: Outlet tidak ada atau tidak aktif }
-        '429': { description: Terlalu sering (throttle) }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
     post:
       tags: [Devices]
       summary: Pilih atau daftarkan terminal berdasarkan nama, tanpa login (073)
@@ -454,7 +459,7 @@ paths:
               schema: { $ref: '#/components/schemas/SetupTerminal' }
         '404': { description: Outlet tidak ada atau tidak aktif }
         '422': { $ref: '#/components/responses/ValidationError' }
-        '429': { description: Terlalu sering (throttle) }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /devices/pairings:
     post:
@@ -2161,7 +2166,7 @@ paths:
       tags: [Override]
       summary: Daftar penyetuju yang memenuhi syarat untuk aksi (048 / S3)
       description: |
-        Respons berupa **larik polos** `[{id, name, role}]` (bukan dibungkus `data`). Hanya penyetuju aktif yang punya
+        Respons berupa **larik polos** `[{id, name, role, photo_url}]` (bukan dibungkus `data`; 078 — `photo_url` untuk avatar pemilih). Hanya penyetuju aktif yang punya
         PIN, di outlet aktif (header `X-Outlet-Id`), memegang izin aksi, dan bukan peminta.
       parameters:
         - { name: action, in: query, required: true, schema: { type: string, enum: [void_line, cancel_order, cash_out, variance, availability, qris_verify, qris_fail, discount, reprint, refund] } }
@@ -2179,6 +2184,7 @@ paths:
                     id: { type: integer }
                     name: { type: string }
                     role: { type: string, nullable: true }
+                    photo_url: { type: string, nullable: true, description: "078 — foto pengguna (URL publik); null = tampilkan inisial." }
 
   /tabs/{id}/cancel:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -4061,8 +4067,8 @@ paths:
         dari layar. Kunci yang tak ada atau di luar filter tanggal DIABAIKAN. Tanpa `keys`
         = seluruh transaksi sesuai filter. Maks. 5000 kunci.
 
-        Kolom: `transaction_no, status, time, customer, sellers, cashier, items` (SEMUA baris
-        item, "Nama ×qty; …"), `units, discount, payment_methods, payment_status, cash, non_cash, total`;
+        Kolom: `transaction_no, status, time, customer, sellers, cashier, terminal, items` (SEMUA baris
+        item, "Nama ×qty; …"), `order_note` (078 — catatan kasir untuk seluruh order; kosong bila tidak ada), `units, discount, payment_methods, payment_status, cash, non_cash, total`;
         pengguna yang boleh melihat laporan juga mendapat `cost, margin`. Kontak pelanggan
         (telepon/email) SENGAJA tidak ikut. Nominal berupa angka agar bisa dijumlah di Excel.
 
@@ -6975,6 +6981,21 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
+    TooManyRequests:
+      description: |
+        078 — penolakan throttle, selalu dalam bahasa Indonesia dengan lama tunggu (header `Retry-After` ikut dikirim).
+        Setiap pembatas punya hitungan SENDIRI (pembatas bernama): lalu lintas tablet (roster, branding, penyiapan) tidak
+        mengurangi jatah login siapa pun. `pin_locked` (kunci PIN per pengguna) adalah 429 lain dengan kodenya sendiri.
+      headers:
+        Retry-After: { schema: { type: integer }, description: Detik sampai boleh mencoba lagi }
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string, example: "Terlalu banyak percobaan. Coba lagi dalam 42 detik." }
+              code: { type: string, enum: [throttled] }
+              retry_after: { type: integer, example: 42 }
     Forbidden:
       description: Peran tidak memiliki izin
       content:
@@ -8261,6 +8282,7 @@ components:
         store_contact_phone: { type: string, nullable: true }
         store_contact_email: { type: string, nullable: true }
         order_number: { type: string }
+        notes: { type: string, nullable: true, description: "078 — catatan kasir untuk SELURUH order (dicetak di struk di bawah item, `Catatan order:`); null bila tidak ada. Catatan per baris ada di `items[].note`." }
         cashier_name: { type: string }
         terminal_name: { type: string, nullable: true, description: "064 — nama terminal yang mengambil order; null bila tanpa terminal." }
         created_at: { type: string, format: date-time }
@@ -8414,6 +8436,7 @@ components:
               key: { type: string, description: "Kunci baris `order:{id}` — dipakai untuk memilih baris dan mengekspornya." }
               status: { type: string, enum: [completed, voided] }
               void_reason: { type: string, nullable: true }
+              notes: { type: string, nullable: true, description: "078 — catatan kasir untuk seluruh order; kolom `order_note` pada ekspor." }
               payment_state: { type: string, enum: [verified, pending, rejected, none], description: "Verifikasi TERBURUK di antara pembayaran (rejected > pending > verified); `none` bila belum ada pembayaran." }
               cash_amount: { $ref: '#/components/schemas/Money', description: "Tunai BERSIH: tunai diterima dikurangi kembalian (pembayaran rejected tidak dihitung)." }
               noncash_amount: { $ref: '#/components/schemas/Money' }
@@ -8865,6 +8888,7 @@ components:
         order: { type: object, properties: { id: { type: integer }, order_number: { type: string } } }
         table: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string } } }
         tab_label: { type: string, nullable: true }
+        order_note: { type: string, nullable: true, description: "078 — catatan kasir untuk seluruh order, dibaca LANGSUNG dari order (tanpa salinan di tiket); dicetak di KOT di atas item (`CATATAN ORDER:`). Catatan per item ada di `items[].note`." }
         waiting_seconds: { type: integer }
         items: { type: array, items: { $ref: '#/components/schemas/TicketItem' } }
 

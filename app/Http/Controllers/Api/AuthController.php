@@ -10,16 +10,31 @@ use App\Models\User;
 use App\Services\ImageUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
+    /** 078 — percobaan login gagal yang diizinkan per akun+IP dalam satu jendela. */
+    private const LOGIN_MAX_ATTEMPTS = 5;
+
+    private const LOGIN_DECAY_SECONDS = 60;
+
     public function __construct(private ImageUploadService $imageUploadService) {}
 
     public function login(LoginRequest $request): JsonResponse
     {
         $credentials = $request->validated();
+
+        // 078 — jatah percobaan GAGAL per akun (username + IP): 5 per menit. Kunci memakai username yang DIKIRIM, ada atau tidak,
+        // jadi akun yang tidak ada tidak bisa dibedakan dari yang ada (tanpa enumerasi). Lalu lintas lain dari IP yang sama
+        // (mis. polling tablet) tidak ikut terhitung — dulu satu hitungan per IP dipakai bersama semua rute.
+        $key = 'login|'.mb_strtolower($credentials['username']).'|'.$request->ip();
+        if (RateLimiter::tooManyAttempts($key, self::LOGIN_MAX_ATTEMPTS)) {
+            throw new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => RateLimiter::availableIn($key)]);
+        }
 
         $user = User::where('username', $credentials['username'])->first();
 
@@ -27,16 +42,22 @@ class AuthController extends Controller
         // agar tidak membocorkan username mana yang valid (OWASP —
         // Improper Error Handling / user enumeration).
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+            RateLimiter::hit($key, self::LOGIN_DECAY_SECONDS);
+
             return response()->json([
                 'message' => __('auth.invalid_credentials'),
             ], 401);
         }
 
         if (! $user->is_active) {
+            RateLimiter::hit($key, self::LOGIN_DECAY_SECONDS);
+
             return response()->json([
                 'message' => __('auth.inactive_account'),
             ], 401);
         }
+
+        RateLimiter::clear($key);
 
         $user->forceFill(['last_login_at' => now()])->save();
 

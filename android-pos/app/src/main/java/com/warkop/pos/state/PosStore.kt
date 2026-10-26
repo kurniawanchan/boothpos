@@ -81,6 +81,11 @@ enum class Conn(val label: String) { UNKNOWN("Memeriksa koneksi…"), ONLINE("On
 
 private const val PIN_PROBE_INTERVAL_MS = 10_000L
 
+/** 078 — branding/mode dibaca tiap putaran ke-N probe PIN (putaran 0 selalu), roster tiap putaran. */
+const val BRANDING_EVERY_N_TICKS = 3
+
+internal fun brandingDueOnTick(tick: Int): Boolean = tick % BRANDING_EVERY_N_TICKS == 0
+
 /** 077 — batas catatan order; sama dengan server (UpdateTabNoteRequest). */
 const val ORDER_NOTE_MAX = 1000
 
@@ -157,7 +162,7 @@ class PosStore(
         refreshing = true
         // 075 — tarik-untuk-segarkan sengaja (bukan polling diam-diam): foto yang ditimpa di back office ikut diambil ulang.
         com.warkop.pos.data.MenuImageLoader.clear()
-        viewModelScope.launch { try { if (!sessionModeChanged()) loadMenu(silent = true).join() } finally { refreshing = false } }
+        viewModelScope.launch { try { if (!sessionModeChanged()) { refreshUser(); loadMenu(silent = true).join() } } finally { refreshing = false } }
     }
 
     /**
@@ -173,7 +178,18 @@ class PosStore(
             else -> Job().apply { complete() }
         }
         refreshing = true
-        viewModelScope.launch { try { job.join() } finally { refreshing = false } }
+        viewModelScope.launch { try { refreshUser(); job.join() } finally { refreshing = false } }
+    }
+
+    /**
+     * 078 — baca ulang pengguna yang masuk supaya foto/nama yang diubah di web ikut tampil pada penyegaran berikutnya (bukan hanya saat masuk
+     * lagi). Hanya nama dan foto yang diperbarui — peran, izin, dan sesi tetap; id yang berbeda diabaikan; gagal baca = tetap yang lama.
+     */
+    private suspend fun refreshUser() {
+        val b = backend ?: return
+        val current = user ?: return
+        val fresh = try { b.me() } catch (_: ApiError) { return }
+        if (fresh.id == current.id) user = current.copy(name = fresh.name, photoUrl = fresh.photoUrl)
     }
 
     /** Satu tarikan denah sekarang; polling 3 dtk tetap jalan dan galat sesaat tidak menghapus denah terakhir. */
@@ -429,10 +445,14 @@ class PosStore(
     fun startPinProbe() {
         if (pinProbe?.isActive == true) return
         pinProbe = viewModelScope.launch {
+            var tick = 0
             while (true) {
                 // Tunggu hasil roster dulu: status koneksi dan roster baru terisi setelah panggilan selesai.
                 // 077 — owner bisa mengganti mode saat tablet berada di layar PIN: baca mode dulu, baru roster (outlet milik mode lama 404).
-                if (pullBranding() != BrandingStep.SWITCHED) loadRoster(silent = true).join()
+                // 078 — mode/branding cukup tiap [BRANDING_EVERY_N_TICKS] putaran (±30 dtk): polling 12 permintaan/menit per tablet dulu
+                // menghabiskan jatah login; sekarang ±8, dan pembatas tablet punya hitungan sendiri.
+                val switched = brandingDueOnTick(tick++) && pullBranding() == BrandingStep.SWITCHED
+                if (!switched) loadRoster(silent = true).join()
                 delay(PIN_PROBE_INTERVAL_MS)
             }
         }

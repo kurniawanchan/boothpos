@@ -217,6 +217,8 @@ class ReportController extends Controller
                     // 064 — terminal yang mengambil order (kosong bila tanpa terminal).
                     'terminal' => $r['terminal_name'],
                     'items' => $r['items_text'],
+                    // 078 — catatan kasir untuk seluruh order; kosong bila tidak ada.
+                    'order_note' => $r['notes'],
                     'units' => $r['unit_count'],
                     // Angka (bukan string) supaya bisa dijumlah langsung di Excel.
                     'discount' => (float) $r['discount_amount'],

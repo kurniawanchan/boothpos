@@ -12,7 +12,9 @@ import com.warkop.pos.model.SystemMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -191,5 +193,28 @@ class PosStoreModeTest {
         backend.sessionBrandingResult = { throw ApiError.Network("offline") }
         store.refreshCounter(); advanceUntilIdle()
         assertEquals("Warkop Baru", store.branding?.storeName)
+    }
+
+    /** 078 / US1 — polling layar PIN: roster tiap putaran, mode/branding hanya tiap putaran ke-3 (dulu keduanya tiap 10 dtk). */
+    @Test fun `probe PIN membaca branding sepertiga kali dari roster`() = runTest(dispatcher) {
+        backend.configs[SystemMode.LIVE] = live
+        backend.brandingResult = { branding(SystemMode.LIVE) }
+        val store = PosStore(backend = backend)
+        store.bootstrap(); advanceUntilIdle()
+        val rosterBefore = backend.rosterCalls
+        val brandingBefore = backend.brandingCalls
+
+        store.startPinProbe()
+        // Putaran 0..5 berlangsung pada 0, 10, 20, 30, 40, 50 dtk.
+        advanceTimeBy(55_000)
+        runCurrent()
+        store.stopPinProbe()
+
+        assertEquals(6, backend.rosterCalls - rosterBefore)
+        assertEquals(2, backend.brandingCalls - brandingBefore)
+    }
+
+    @Test fun `aturan putaran branding`() {
+        assertEquals(listOf(true, false, false, true, false, false, true), (0..6).map { brandingDueOnTick(it) })
     }
 }

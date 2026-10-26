@@ -1,0 +1,37 @@
+# Specification Quality Checklist: Android POS — Three-Column PIN Screen, User Photos Everywhere, Order Note on Documents, Login Lockout Fix
+
+**Purpose**: Validate specification completeness and quality before proceeding to planning
+**Created**: 2026-10-27
+**Feature**: [spec.md](../spec.md)
+
+## Content Quality
+
+- [x] No implementation details (languages, frameworks, APIs)
+- [x] Focused on user value and business needs
+- [x] Written for non-technical stakeholders
+- [x] All mandatory sections completed
+
+## Requirement Completeness
+
+- [x] No [NEEDS CLARIFICATION] markers remain
+- [x] Requirements are testable and unambiguous
+- [x] Success criteria are measurable
+- [x] Success criteria are technology-agnostic (no implementation details)
+- [x] All acceptance scenarios are defined
+- [x] Edge cases are identified
+- [x] Scope is clearly bounded
+- [x] Dependencies and assumptions identified
+
+## Feature Readiness
+
+- [x] All functional requirements have clear acceptance criteria
+- [x] User scenarios cover primary flows
+- [x] Feature meets measurable outcomes defined in Success Criteria
+- [x] No implementation details leak into specification
+
+## Notes
+
+- Validation passed on iteration 1.
+- The "Findings" section names the throttle mechanism to explain the cause; it is evidence, not a requirement. Requirements stay behavioural.
+- Open items carried into `/speckit-plan` (assumptions, not blocking): reproduce the lockout and confirm the shared-counter cause; find why photos still show as initials for users who have one; confirm exact attempt limits; confirm what the receipt template currently prints.
+- Spec builds on uncommitted 077 work; commit or merge 077 before implementing.

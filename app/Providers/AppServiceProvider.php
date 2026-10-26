@@ -32,6 +32,19 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // 078 — pembatas BERNAMA, masing-masing dengan hitungan sendiri. Pembatas numerik (`throttle:N,1`) memakai kunci
+        // `domain|ip` TANPA rute dan tanpa batas, sehingga semua rute tanpa token dari satu IP berbagi satu hitungan: polling
+        // layar PIN tablet (±12 permintaan/menit) menghabiskan jatah 5/menit login web. Pembatas bernama diberi kunci
+        // `md5(nama . kunci)`, jadi bucket-nya terpisah dengan sendirinya.
+        // Login password dihitung per akun hanya untuk percobaan GAGAL (AuthController::login); ini hanya batas banjir per IP.
+        \Illuminate\Support\Facades\RateLimiter::for('login-flood', fn (\Illuminate\Http\Request $r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(60)->by((string) $r->ip()));
+        // Pembacaan latar tablet (roster, branding, outlet, terminal, alamat server): hanya penahan banjir, BUKAN kontrol akses.
+        // ±10 tablet × 8–12 permintaan/menit di balik satu IP tetap jauh di bawah 300.
+        \Illuminate\Support\Facades\RateLimiter::for('tablet-read', fn (\Illuminate\Http\Request $r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(300)->by((string) $r->ip()));
+        \Illuminate\Support\Facades\RateLimiter::for('tablet-write', fn (\Illuminate\Http\Request $r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by((string) $r->ip()));
+        // Login PIN: penahan banjir per orang per tempat. Rem sebenarnya tetap kunci 5-salah di PinAuthService.
+        \Illuminate\Support\Facades\RateLimiter::for('pin-login', fn (\Illuminate\Http\Request $r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(20)->by($r->ip().'|'.$r->input('outlet_id').'|'.$r->input('user_id')));
+
         // 045 Stage 3 — relasi outlet × produk dibuat otomatis untuk SETIAP jalur pembuatan produk/outlet.
         \App\Models\Product::created(fn ($product) => app(\App\Services\OutletMenuService::class)->materializeForProduct($product));
         \App\Models\Outlet::created(fn ($outlet) => app(\App\Services\OutletMenuService::class)->materializeForOutlet($outlet));

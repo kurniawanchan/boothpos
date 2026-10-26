@@ -16,6 +16,8 @@ import kotlinx.serialization.Serializable
     val order: TicketOrderDto? = null,
     val table: TicketRefDto? = null,
     @SerialName("tab_label") val tabLabel: String? = null,
+    /** 078 — catatan kasir untuk seluruh order, dibaca langsung dari order (bukan salinan di tiket). */
+    @SerialName("order_note") val orderNote: String? = null,
     val items: List<TicketItemDto> = emptyList(),
 )
 
