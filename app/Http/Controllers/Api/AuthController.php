@@ -20,6 +20,9 @@ class AuthController extends Controller
     /** 078 — percobaan login gagal yang diizinkan per akun+IP dalam satu jendela. */
     private const LOGIN_MAX_ATTEMPTS = 5;
 
+    /** 078 — batas per username dari semua IP (sengaja jauh di atas 5: lihat komentar di login()). */
+    private const LOGIN_MAX_ATTEMPTS_PER_ACCOUNT = 30;
+
     private const LOGIN_DECAY_SECONDS = 60;
 
     public function __construct(private ImageUploadService $imageUploadService) {}
@@ -28,12 +31,23 @@ class AuthController extends Controller
     {
         $credentials = $request->validated();
 
-        // 078 — jatah percobaan GAGAL per akun (username + IP): 5 per menit. Kunci memakai username yang DIKIRIM, ada atau tidak,
-        // jadi akun yang tidak ada tidak bisa dibedakan dari yang ada (tanpa enumerasi). Lalu lintas lain dari IP yang sama
-        // (mis. polling tablet) tidak ikut terhitung — dulu satu hitungan per IP dipakai bersama semua rute.
-        $key = 'login|'.mb_strtolower($credentials['username']).'|'.$request->ip();
-        if (RateLimiter::tooManyAttempts($key, self::LOGIN_MAX_ATTEMPTS)) {
-            throw new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => RateLimiter::availableIn($key)]);
+        // 078 — jatah percobaan login per akun. Dua hitungan: (1) username + IP, 5 per menit; (2) username saja, 30 per menit dari SEMUA IP,
+        // supaya tebakan yang disebar lintas alamat tetap dibatasi — sengaja lebih longgar dari (1) agar penyerang tidak bisa mengunci
+        // owner dari luar. Kunci memakai username yang DIKIRIM, ada atau tidak, jadi akun yang tidak ada tidak bisa dibedakan dari
+        // yang ada (tanpa enumerasi). Lalu lintas lain dari IP yang sama (mis. polling tablet) tidak ikut terhitung.
+        // `hit` DULU lalu bandingkan (increment atomik di cache): urutan "cek lalu hit" membiarkan permintaan paralel lolos melewati batas
+        // sebelum kegagalan pertama tercatat. Login yang berhasil menghapus hitungan username+IP.
+        $username = mb_strtolower($credentials['username']);
+        $key = 'login|'.$username.'|'.$request->ip();
+        $userKey = 'login-user|'.$username;
+        $byAddress = RateLimiter::hit($key, self::LOGIN_DECAY_SECONDS);
+        $byAccount = RateLimiter::hit($userKey, self::LOGIN_DECAY_SECONDS);
+        if ($byAddress > self::LOGIN_MAX_ATTEMPTS || $byAccount > self::LOGIN_MAX_ATTEMPTS_PER_ACCOUNT) {
+            $wait = max(
+                $byAddress > self::LOGIN_MAX_ATTEMPTS ? RateLimiter::availableIn($key) : 0,
+                $byAccount > self::LOGIN_MAX_ATTEMPTS_PER_ACCOUNT ? RateLimiter::availableIn($userKey) : 0,
+            );
+            throw new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => max(1, $wait)]);
         }
 
         $user = User::where('username', $credentials['username'])->first();
@@ -42,16 +56,12 @@ class AuthController extends Controller
         // agar tidak membocorkan username mana yang valid (OWASP —
         // Improper Error Handling / user enumeration).
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            RateLimiter::hit($key, self::LOGIN_DECAY_SECONDS);
-
             return response()->json([
                 'message' => __('auth.invalid_credentials'),
             ], 401);
         }
 
         if (! $user->is_active) {
-            RateLimiter::hit($key, self::LOGIN_DECAY_SECONDS);
-
             return response()->json([
                 'message' => __('auth.inactive_account'),
             ], 401);

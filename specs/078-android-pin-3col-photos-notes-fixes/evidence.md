@@ -31,6 +31,12 @@ All Compose UI (three/two/one column PIN layouts, expanded row, no clipping, pho
 - `PosStore.refreshUser()` is called from `refreshCounter`/`refreshCurrent` (not from the PIN roster refresh — no session there; the roster already carries `photo_url`).
 - Mode check in `refreshCounter` now runs before `refreshUser()`; unchanged otherwise.
 
+## Follow-up (automated security review of the 078 commit, 2026-10-27)
+- Login counter now increments BEFORE verifying the password (atomic) and adds a per-username cap of 30/min across all IPs (kept far above 5 so an attacker cannot lock the owner out). Tests: `LoginThrottleTest` (+2).
+- `pin-login` gained a per-IP total of 30/min besides the per-person 20/min (regression from the old shared per-IP counter). Tests: `PinLoginFloodTest` (3).
+- Report exports store strings as literal text via `SafeStringExport` (spreadsheet formula injection from cashier-typed notes/names). Customer/invoice exports stay on `GenericArrayExport` because they are re-imported. Tests: `SafeStringExportTest` (4, incl. a control proving the default binder creates formulas).
+- Verified: 94 affected tests pass; one `PosSetupTest` failure during the run was residue from killing the full suite and passed on rerun (12/12). The full backend suite still has to be re-run (T034).
+
 ## Security recheck (T036) — against specs/073-.../security-findings.md
 - **Brute force**: still bounded — 5 failed passwords / account(+IP) / minute, 60 requests / IP / minute flood cap (web login); PIN: 20 / minute / person+outlet+IP flood cap plus the unchanged 5-wrong-PIN lock. Stronger against targeted guessing than before; the old shared per-IP counter is gone.
 - **Enumeration**: the response is identical for unknown vs wrong password and both consume the same counter. **Pre-existing timing difference (not changed here)**: for an unknown username `AuthController::login` skips `Hash::check`, so it returns faster than a known username with a wrong password. Suggested small hardening (separate decision): hash a dummy value for unknown users.

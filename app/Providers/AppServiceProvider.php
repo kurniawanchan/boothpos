@@ -42,8 +42,12 @@ class AppServiceProvider extends ServiceProvider
         // ±10 tablet × 8–12 permintaan/menit di balik satu IP tetap jauh di bawah 300.
         \Illuminate\Support\Facades\RateLimiter::for('tablet-read', fn (\Illuminate\Http\Request $r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(300)->by((string) $r->ip()));
         \Illuminate\Support\Facades\RateLimiter::for('tablet-write', fn (\Illuminate\Http\Request $r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by((string) $r->ip()));
-        // Login PIN: penahan banjir per orang per tempat. Rem sebenarnya tetap kunci 5-salah di PinAuthService.
-        \Illuminate\Support\Facades\RateLimiter::for('pin-login', fn (\Illuminate\Http\Request $r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(20)->by($r->ip().'|'.$r->input('outlet_id').'|'.$r->input('user_id')));
+        // Login PIN: dua penahan banjir — per orang per tempat (20/mnt) DAN total per IP (30/mnt), supaya satu IP tidak bisa mencoba banyak
+        // `user_id` bergantian tanpa batas. Rem sebenarnya tetap kunci 5-salah per pengguna di PinAuthService.
+        \Illuminate\Support\Facades\RateLimiter::for('pin-login', fn (\Illuminate\Http\Request $r) => [
+            \Illuminate\Cache\RateLimiting\Limit::perMinute(20)->by($r->ip().'|'.$r->input('outlet_id').'|'.$r->input('user_id')),
+            \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by('ip:'.$r->ip()),
+        ]);
 
         // 045 Stage 3 — relasi outlet × produk dibuat otomatis untuk SETIAP jalur pembuatan produk/outlet.
         \App\Models\Product::created(fn ($product) => app(\App\Services\OutletMenuService::class)->materializeForProduct($product));

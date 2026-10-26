@@ -239,7 +239,7 @@ class ReportController extends Controller
                 return $row;
             })->all();
 
-        return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\GenericArrayExport($rows), 'transaksi-penjualan.xlsx');
+        return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\SafeStringExport($rows), 'transaksi-penjualan.xlsx');
     }
 
     public function profit(Request $request): JsonResponse
@@ -697,7 +697,7 @@ class ReportController extends Controller
         $rows = $dataKey === null ? [$payload] : $payload[$dataKey];
 
         return \Maatwebsite\Excel\Facades\Excel::download(
-            new \App\Exports\GenericArrayExport($rows),
+            new \App\Exports\SafeStringExport($rows),
             $filename
         );
     }

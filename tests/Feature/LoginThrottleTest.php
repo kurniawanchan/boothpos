@@ -121,4 +121,26 @@ class LoginThrottleTest extends TestCase
 
         $this->login('u99', 'x')->assertStatus(429)->assertJsonPath('code', 'throttled');
     }
+
+    /** 078 (tinjauan keamanan) — tebakan yang disebar lintas IP tetap dibatasi per akun (30/mnt dari semua IP), walau tiap IP baru mencoba sekali. */
+    public function test_guesses_spread_across_addresses_are_capped_per_account(): void
+    {
+        for ($i = 1; $i <= 30; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => "10.1.0.$i"])->postJson('/api/v1/auth/login', ['username' => 'owner-tes', 'password' => 'salah'])->assertStatus(401);
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '10.1.0.200'])->postJson('/api/v1/auth/login', ['username' => 'owner-tes', 'password' => 'salah'])
+            ->assertStatus(429)->assertJsonPath('code', 'throttled');
+        // Batas per akun sengaja lebih longgar dari per IP, dan tidak menyentuh akun lain.
+        $this->withServerVariables(['REMOTE_ADDR' => '10.1.0.201'])->postJson('/api/v1/auth/login', ['username' => 'admin-tes', 'password' => 'benar-456'])->assertOk();
+    }
+
+    /** 078 (tinjauan keamanan) — percobaan dihitung SEBELUM verifikasi password (increment atomik), jadi tak ada celah "cek lalu hit" untuk permintaan paralel. */
+    public function test_the_attempt_is_counted_before_the_password_is_verified(): void
+    {
+        $this->login('owner-tes', 'salah')->assertStatus(401);
+
+        $this->assertSame(1, \Illuminate\Support\Facades\RateLimiter::attempts('login|owner-tes|127.0.0.1'));
+        $this->assertSame(1, \Illuminate\Support\Facades\RateLimiter::attempts('login-user|owner-tes'));
+    }
 }
