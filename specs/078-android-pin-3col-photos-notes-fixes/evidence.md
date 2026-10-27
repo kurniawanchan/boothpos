@@ -42,6 +42,10 @@ All Compose UI (three/two/one column PIN layouts, expanded row, no clipping, pho
 - Throttle tests that fire hundreds of requests now freeze time (they failed once in a slow full run because the 60 s window expired).
 - **Full backend run (2026-10-27, 3054 s):** 2129 passed, 1 skipped, 29 failed. 27 failures were `Deadlock found` (two suites overlapped on the same test database after an earlier kill did not stop the first run); the 21 affected classes pass alone (208 tests). 1 was the speed-dependent throttle test (fixed above). 1 is the pre-existing `ShiftReportParityTest`. A clean uncontended full run is still pending.
 
+## Follow-up 3 (third automated review, 2026-10-27)
+- The account counter is now reserved atomically (`hit` then compare) after the per-address check passes, and cleared on success, replacing check-then-hit-after-failure. Requests already rejected per-address still never touch it.
+- **Accepted residual risk:** the limiter key is `id:N` for existing accounts and a normalised name (trim, lower-case, accent-stripped) for unknown ones. A name variant that the database collation treats as equal but the normalisation does not shares the real account's counter, so throttling onset can reveal that such a variant resolves to an account. Making both identical would reintroduce the bypass where each variant gets its own counter.
+
 ## Security recheck (T036) — against specs/073-.../security-findings.md
 - **Brute force**: still bounded — 5 failed passwords / account(+IP) / minute, 60 requests / IP / minute flood cap (web login); PIN: 20 / minute / person+outlet+IP flood cap plus the unchanged 5-wrong-PIN lock. Stronger against targeted guessing than before; the old shared per-IP counter is gone.
 - **Enumeration**: the response is identical for unknown vs wrong password and both consume the same counter. **Pre-existing timing difference (not changed here)**: for an unknown username `AuthController::login` skips `Hash::check`, so it returns faster than a known username with a wrong password. Suggested small hardening (separate decision): hash a dummy value for unknown users.

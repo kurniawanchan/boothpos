@@ -37,8 +37,8 @@ class AuthController extends Controller
         // (dulu tiap varian punya hitungan sendiri dan melewati batas). Nama yang tidak ada dinormalkan (trim, huruf kecil, tanpa
         // aksen) supaya variannya juga menyatu, dan tetap dihitung seperti akun nyata (tanpa enumerasi).
         //  (1) akun+IP: 5 per menit. `hit` DULU lalu bandingkan (increment atomik; "cek lalu hit" membiarkan permintaan paralel lolos).
-        //  (2) username dari SEMUA IP: 30 KEGAGALAN per menit, untuk tebakan yang disebar lintas alamat. Hanya kegagalan yang
-        //      terkonfirmasi dihitung, dan permintaan yang sudah ditolak oleh (1) tidak menyentuhnya — satu sumber tidak bisa
+        //  (2) username dari SEMUA IP: 30 per menit, untuk tebakan yang disebar lintas alamat. Slot dipesan atomik setelah lolos (1) dan
+        //      dihapus bila login berhasil (jadi yang terhitung = kegagalan); permintaan yang sudah ditolak oleh (1) tidak menyentuhnya — satu sumber tidak bisa
         //      mengisi hitungan akun dan mengunci pemiliknya dari mana pun. (Botnet lintas banyak IP tetap bisa mencapai 30; itu
         //      kompromi yang diterima, dicatat di specs/078-.../evidence.md.)
         // Login yang berhasil menghapus kedua hitungan.
@@ -49,7 +49,9 @@ class AuthController extends Controller
         if (RateLimiter::hit($key, self::LOGIN_DECAY_SECONDS) > self::LOGIN_MAX_ATTEMPTS) {
             throw new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => max(1, RateLimiter::availableIn($key))]);
         }
-        if (RateLimiter::tooManyAttempts($userKey, self::LOGIN_MAX_FAILURES_PER_ACCOUNT)) {
+        // Slot akun dipesan secara ATOMIK (`hit` lalu bandingkan) hanya oleh permintaan yang lolos batas per-IP di atas — permintaan yang
+        // sudah ditolak tidak menyentuhnya. Login yang berhasil menghapusnya, jadi yang tersisa hanyalah kegagalan.
+        if (RateLimiter::hit($userKey, self::LOGIN_DECAY_SECONDS) > self::LOGIN_MAX_FAILURES_PER_ACCOUNT) {
             throw new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => max(1, RateLimiter::availableIn($userKey))]);
         }
 
@@ -57,16 +59,12 @@ class AuthController extends Controller
         // agar tidak membocorkan username mana yang valid (OWASP —
         // Improper Error Handling / user enumeration).
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
-            RateLimiter::hit($userKey, self::LOGIN_DECAY_SECONDS);
-
             return response()->json([
                 'message' => __('auth.invalid_credentials'),
             ], 401);
         }
 
         if (! $user->is_active) {
-            RateLimiter::hit($userKey, self::LOGIN_DECAY_SECONDS);
-
             return response()->json([
                 'message' => __('auth.inactive_account'),
             ], 401);
