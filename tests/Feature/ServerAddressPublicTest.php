@@ -48,6 +48,7 @@ class ServerAddressPublicTest extends TestCase
     /** 078 — pembatas bernama `tablet-read` (300/menit, hitungan sendiri); tetap ada sebagai penahan banjir. */
     public function test_it_is_throttled(): void
     {
+        $this->freezeTime(); // 078 — ratusan permintaan tidak boleh melewati jendela 60 dtk bila suite lambat.
         foreach (range(1, 300) as $i) {
             $this->getJson('/api/v1/server-address')->assertOk();
         }

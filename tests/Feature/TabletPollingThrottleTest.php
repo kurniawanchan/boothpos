@@ -59,6 +59,7 @@ class TabletPollingThrottleTest extends TestCase
 
     public function test_the_tablet_read_flood_cap_is_300_a_minute_and_answers_in_indonesian(): void
     {
+        $this->freezeTime(); // 078 — ratusan permintaan tidak boleh melewati jendela 60 dtk bila suite lambat.
         for ($i = 0; $i < 300; $i++) {
             $this->getJson('/api/v1/pos-setup/branding')->assertOk();
         }
@@ -73,6 +74,7 @@ class TabletPollingThrottleTest extends TestCase
 
     public function test_reads_of_different_tablet_routes_share_the_tablet_bucket_but_not_the_login_bucket(): void
     {
+        $this->freezeTime(); // 078 — ratusan permintaan tidak boleh melewati jendela 60 dtk bila suite lambat.
         $this->owner();
         $outlet = Outlet::first() ?? Outlet::factory()->create();
         for ($i = 0; $i < 150; $i++) {

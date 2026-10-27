@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
@@ -20,8 +21,8 @@ class AuthController extends Controller
     /** 078 — percobaan login gagal yang diizinkan per akun+IP dalam satu jendela. */
     private const LOGIN_MAX_ATTEMPTS = 5;
 
-    /** 078 — batas per username dari semua IP (sengaja jauh di atas 5: lihat komentar di login()). */
-    private const LOGIN_MAX_ATTEMPTS_PER_ACCOUNT = 30;
+    /** 078 — kegagalan per akun dari semua IP (sengaja jauh di atas 5: lihat komentar di login()). */
+    private const LOGIN_MAX_FAILURES_PER_ACCOUNT = 30;
 
     private const LOGIN_DECAY_SECONDS = 60;
 
@@ -31,43 +32,48 @@ class AuthController extends Controller
     {
         $credentials = $request->validated();
 
-        // 078 — jatah percobaan login per akun. Dua hitungan: (1) username + IP, 5 per menit; (2) username saja, 30 per menit dari SEMUA IP,
-        // supaya tebakan yang disebar lintas alamat tetap dibatasi — sengaja lebih longgar dari (1) agar penyerang tidak bisa mengunci
-        // owner dari luar. Kunci memakai username yang DIKIRIM, ada atau tidak, jadi akun yang tidak ada tidak bisa dibedakan dari
-        // yang ada (tanpa enumerasi). Lalu lintas lain dari IP yang sama (mis. polling tablet) tidak ikut terhitung.
-        // `hit` DULU lalu bandingkan (increment atomik di cache): urutan "cek lalu hit" membiarkan permintaan paralel lolos melewati batas
-        // sebelum kegagalan pertama tercatat. Login yang berhasil menghapus hitungan username+IP.
-        $username = mb_strtolower($credentials['username']);
-        $key = 'login|'.$username.'|'.$request->ip();
-        $userKey = 'login-user|'.$username;
-        $byAddress = RateLimiter::hit($key, self::LOGIN_DECAY_SECONDS);
-        $byAccount = RateLimiter::hit($userKey, self::LOGIN_DECAY_SECONDS);
-        if ($byAddress > self::LOGIN_MAX_ATTEMPTS || $byAccount > self::LOGIN_MAX_ATTEMPTS_PER_ACCOUNT) {
-            $wait = max(
-                $byAddress > self::LOGIN_MAX_ATTEMPTS ? RateLimiter::availableIn($key) : 0,
-                $byAccount > self::LOGIN_MAX_ATTEMPTS_PER_ACCOUNT ? RateLimiter::availableIn($userKey) : 0,
-            );
-            throw new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => max(1, $wait)]);
-        }
-
+        // 078 — jatah percobaan login. Kunci memakai IDENTITAS yang benar-benar dikenali DB, bukan string yang dikirim: pengguna dicari
+        // dulu dan kuncinya `id:N`, sehingga varian huruf/aksen/spasi yang dicocokkan collation DB jatuh ke hitungan yang sama
+        // (dulu tiap varian punya hitungan sendiri dan melewati batas). Nama yang tidak ada dinormalkan (trim, huruf kecil, tanpa
+        // aksen) supaya variannya juga menyatu, dan tetap dihitung seperti akun nyata (tanpa enumerasi).
+        //  (1) akun+IP: 5 per menit. `hit` DULU lalu bandingkan (increment atomik; "cek lalu hit" membiarkan permintaan paralel lolos).
+        //  (2) username dari SEMUA IP: 30 KEGAGALAN per menit, untuk tebakan yang disebar lintas alamat. Hanya kegagalan yang
+        //      terkonfirmasi dihitung, dan permintaan yang sudah ditolak oleh (1) tidak menyentuhnya — satu sumber tidak bisa
+        //      mengisi hitungan akun dan mengunci pemiliknya dari mana pun. (Botnet lintas banyak IP tetap bisa mencapai 30; itu
+        //      kompromi yang diterima, dicatat di specs/078-.../evidence.md.)
+        // Login yang berhasil menghapus kedua hitungan.
         $user = User::where('username', $credentials['username'])->first();
+        $identity = $user ? 'id:'.$user->id : 'name:'.Str::of($credentials['username'])->trim()->lower()->ascii();
+        $key = 'login|'.$identity.'|'.$request->ip();
+        $userKey = 'login-user|'.$identity;
+        if (RateLimiter::hit($key, self::LOGIN_DECAY_SECONDS) > self::LOGIN_MAX_ATTEMPTS) {
+            throw new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => max(1, RateLimiter::availableIn($key))]);
+        }
+        if (RateLimiter::tooManyAttempts($userKey, self::LOGIN_MAX_FAILURES_PER_ACCOUNT)) {
+            throw new ThrottleRequestsException('Too Many Attempts.', null, ['Retry-After' => max(1, RateLimiter::availableIn($userKey))]);
+        }
 
         // Pesan error disamakan untuk "user tidak ada" dan "password salah"
         // agar tidak membocorkan username mana yang valid (OWASP —
         // Improper Error Handling / user enumeration).
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+            RateLimiter::hit($userKey, self::LOGIN_DECAY_SECONDS);
+
             return response()->json([
                 'message' => __('auth.invalid_credentials'),
             ], 401);
         }
 
         if (! $user->is_active) {
+            RateLimiter::hit($userKey, self::LOGIN_DECAY_SECONDS);
+
             return response()->json([
                 'message' => __('auth.inactive_account'),
             ], 401);
         }
 
         RateLimiter::clear($key);
+        RateLimiter::clear($userKey);
 
         $user->forceFill(['last_login_at' => now()])->save();
 

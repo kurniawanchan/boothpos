@@ -29,6 +29,7 @@ class PinLoginFloodTest extends TestCase
 
     public function test_one_address_cannot_try_many_users_without_a_total_cap(): void
     {
+        $this->freezeTime(); // 078 — ratusan permintaan tidak boleh melewati jendela 60 dtk bila suite lambat.
         for ($i = 1; $i <= 30; $i++) {
             $this->assertNotSame(429, $this->attempt(1000 + $i)->status(), "percobaan $i tidak boleh terkena throttle");
         }

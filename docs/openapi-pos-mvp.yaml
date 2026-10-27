@@ -122,9 +122,9 @@ paths:
       tags: [Auth]
       summary: Login dan dapatkan token
       description: |
-        078 — percobaan dihitung SEBELUM password diverifikasi: per akun+IP 5 per menit, dan per username dari semua IP 30 per menit
-        (tebakan lintas alamat tetap dibatasi); lewat itu 429 `throttled` dengan lama tunggu (login yang benar tidak bisa lolos sampai
-        jendela habis). Login berhasil menghapus hitungan akun+IP. Username yang tidak ada
+        078 — percobaan dibatasi per AKUN (dikenali dari id pengguna, jadi varian huruf/aksen nama menyatu): akun+IP 5 per menit, dan
+        30 kegagalan per menit dari semua IP; lewat itu 429 `throttled` dengan lama tunggu (login yang benar tidak bisa lolos sampai
+        jendela habis). Login berhasil menghapus kedua hitungan. Username yang tidak ada
         dihitung dan dijawab sama persis (401) — tidak membocorkan akun mana yang ada. Batas banjir per IP (60/menit) terpisah.
       security: []
       requestBody:

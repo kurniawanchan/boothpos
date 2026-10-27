@@ -115,6 +115,7 @@ class LoginThrottleTest extends TestCase
 
     public function test_the_per_address_flood_cap_stops_many_usernames(): void
     {
+        $this->freezeTime(); // 078 — ratusan permintaan tidak boleh melewati jendela 60 dtk bila suite lambat.
         for ($i = 0; $i < 60; $i++) {
             $this->login("u{$i}", 'x')->assertStatus(401);
         }
@@ -135,12 +136,55 @@ class LoginThrottleTest extends TestCase
         $this->withServerVariables(['REMOTE_ADDR' => '10.1.0.201'])->postJson('/api/v1/auth/login', ['username' => 'admin-tes', 'password' => 'benar-456'])->assertOk();
     }
 
-    /** 078 (tinjauan keamanan) — percobaan dihitung SEBELUM verifikasi password (increment atomik), jadi tak ada celah "cek lalu hit" untuk permintaan paralel. */
-    public function test_the_attempt_is_counted_before_the_password_is_verified(): void
+    /** 078 (tinjauan keamanan) — hitungan akun+IP naik SEBELUM password diverifikasi (atomik); hitungan lintas-IP hanya untuk kegagalan terkonfirmasi. */
+    public function test_the_address_attempt_is_counted_up_front_and_the_account_counts_confirmed_failures(): void
     {
+        $id = User::where('username', 'owner-tes')->value('id');
+
         $this->login('owner-tes', 'salah')->assertStatus(401);
 
-        $this->assertSame(1, \Illuminate\Support\Facades\RateLimiter::attempts('login|owner-tes|127.0.0.1'));
-        $this->assertSame(1, \Illuminate\Support\Facades\RateLimiter::attempts('login-user|owner-tes'));
+        $this->assertSame(1, \Illuminate\Support\Facades\RateLimiter::attempts("login|id:$id|127.0.0.1"));
+        $this->assertSame(1, \Illuminate\Support\Facades\RateLimiter::attempts("login-user|id:$id"));
+    }
+
+    /** 078 (tinjauan keamanan) — satu IP yang membanjiri tidak bisa mengisi hitungan akun dan mengunci pemiliknya dari IP lain. */
+    public function test_one_source_cannot_lock_the_owner_out_everywhere(): void
+    {
+        for ($i = 0; $i < 40; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => '10.3.0.1'])->postJson('/api/v1/auth/login', ['username' => 'owner-tes', 'password' => 'salah']);
+        }
+
+        $this->withServerVariables(['REMOTE_ADDR' => '10.3.0.2'])->postJson('/api/v1/auth/login', ['username' => 'owner-tes', 'password' => 'benar-123'])->assertOk();
+    }
+
+    /** 078 (tinjauan keamanan) — varian huruf besar/kecil nama yang dicocokkan DB jatuh ke hitungan yang sama. */
+    public function test_case_variants_of_a_real_username_share_one_counter(): void
+    {
+        foreach (['OWNER-TES', 'Owner-Tes', 'owner-TES', 'OWNER-tes', 'owner-tes'] as $variant) {
+            $this->login($variant, 'salah')->assertStatus(401);
+        }
+
+        $this->login('owner-tes', 'benar-123')->assertStatus(429);
+    }
+
+    /** 078 (tinjauan keamanan) — varian aksen: jika collation DB mencocokkannya ke akun nyata, ia memakai hitungan akun itu. */
+    public function test_an_accent_variant_that_the_database_resolves_uses_the_real_accounts_counter(): void
+    {
+        $id = User::where('username', 'owner-tes')->value('id');
+        $resolves = User::where('username', 'owner-tés')->exists();
+
+        $this->login('owner-tés', 'salah')->assertStatus(401);
+
+        $this->assertSame($resolves ? 1 : 0, \Illuminate\Support\Facades\RateLimiter::attempts("login|id:$id|127.0.0.1"));
+    }
+
+    /** 078 (tinjauan keamanan) — nama yang tidak ada dinormalkan, jadi variannya tidak bisa menghindari batas. */
+    public function test_variants_of_an_unknown_username_share_one_counter(): void
+    {
+        foreach (['TIDAK-ADA', 'Tidak-Ada ', 'tidak-adá', 'tidak-ada', 'TIDAK-ada'] as $variant) {
+            $this->login($variant, 'x')->assertStatus(401);
+        }
+
+        $this->login('tidak-ada', 'x')->assertStatus(429);
     }
 }
