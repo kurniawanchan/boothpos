@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.warkop.pos.model.Tone
 import com.warkop.pos.state.Conn
 import com.warkop.pos.state.Dest
 import com.warkop.pos.state.PosStore
@@ -89,15 +90,17 @@ private fun Header(store: PosStore, title: String, subtitle: String?, compact: B
     val u = store.user
     val shift = store.shift
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        // 077 — logo + nama toko di setiap layar setelah login; di layar sempit logo mengecil dan nama dipersempit.
+        StoreMark(store, logoSize = if (compact) 32.dp else 40.dp, maxTextWidth = if (compact) 96.dp else 200.dp)
+        Spacer(Modifier.width(if (compact) 10.dp else 16.dp))
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = if (compact) 20.sp else 28.sp, fontWeight = FontWeight.Normal, maxLines = 1)
             Text(subtitle ?: (if (compact) "${u?.name} · ${shift?.let { "Shift terbuka" } ?: "Belum ada shift"}" else "${u?.name} (${u?.role}) · ${shift?.let { "Shift dibuka ${it.openedAt}" } ?: "Belum ada shift"}"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
         }
         ConnChip(store)
         Spacer(Modifier.width(10.dp))
-        Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.tertiaryContainer).clickable { store.lock() }, contentAlignment = Alignment.Center) {
-            Text(u?.initials ?: "", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
-        }
+        // 077 / US7 — foto pengguna dari server; inisial bila tidak ada. Mengetuknya tetap mengunci layar.
+        UserAvatar(u, 48.dp, Modifier.clickable { store.lock() }, tone = Tone.ACCENT)
     }
 }
 

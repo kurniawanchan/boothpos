@@ -25,7 +25,7 @@ fun PosApp(store: PosStore, preset: String? = null) {
                 when (store.dest) {
                     Dest.SETUP -> store.backendForSetup?.let {
                         // 073 — "Batal" hanya bila tablet sudah punya outlet + terminal: pilihan lama berlaku sampai yang baru dibuat.
-                        TerminalSetupScreen(it, notice = store.setupNotice, onCancel = if (store.config != null) ({ store.go(Dest.PIN) }) else null) { cfg -> store.setConfig(cfg) }
+                        TerminalSetupScreen(it, notice = store.setupNotice, header = { StoreMark(store, logoSize = 48.dp) }, onCancel = if (store.config != null) ({ store.go(Dest.PIN) }) else null) { cfg -> store.setConfig(cfg) }
                     }
                     Dest.PIN -> PinScreen(store)
                     Dest.OPEN_SHIFT -> OpenShiftScreen(store)
@@ -43,6 +43,7 @@ fun PosApp(store: PosStore, preset: String? = null) {
                 }
                 }
                 SheetHost(store)
+                ModeChangedDialog(store)
                 store.toast?.let { msg ->
                     LaunchedEffect(msg) { delay(3200); store.clearToast() }
                     Surface(Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp).widthIn(max = 560.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.inverseSurface, contentColor = MaterialTheme.colorScheme.inverseOnSurface) {
@@ -52,4 +53,19 @@ fun PosApp(store: PosStore, preset: String? = null) {
             }
         }
     }
+}
+
+/**
+ * 077 / FR-004 — mode data berganti di web saat sesi berjalan. Dialog tidak bisa ditutup: satu-satunya jalan keluar adalah
+ * Keluar, supaya order tidak diteruskan terhadap data mode lain. Order terbuka tetap aman di server dan muncul lagi saat mode kembali.
+ */
+@Composable
+private fun ModeChangedDialog(store: PosStore) {
+    val new = store.modeChanged ?: return
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Mode berubah ke ${new.name}") },
+        text = { Text("Mode berubah ke ${new.name}. Keluar lalu masuk lagi untuk melanjutkan. Order yang sedang terbuka tetap tersimpan.") },
+        confirmButton = { TextButton({ store.leaveForNewMode() }) { Text("Keluar") } },
+    )
 }

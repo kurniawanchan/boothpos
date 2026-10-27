@@ -13,6 +13,7 @@ use App\Support\BusinessDay;
 use App\Support\LicenseGate;
 use App\Support\ModeGate;
 use App\Support\SchemaStatus;
+use App\Support\StoreBranding;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,10 +58,10 @@ class SettingsController extends Controller
             // mode ('store_name_demo' vs 'store_name') supaya tidak saling
             // menimpa. Disurfacekan di sini (bukan hanya GET /settings)
             // supaya tersedia app-wide tanpa endpoint owner/admin-only.
-            'store_name' => Setting::get(ModeGate::current() === 'demo' ? 'store_name_demo' : 'store_name'),
+            'store_name' => StoreBranding::storeName(),
             // 072 — logo toko untuk sidebar dan favicon. Di sini (bukan hanya GET /settings) karena GET /settings
             // hanya owner/admin, sedangkan kasir juga melihat sidebar. URL diselesaikan server seperti gambar lain.
-            'store_logo_url' => $this->imageUploadService->url(Setting::get('store_logo_path')),
+            'store_logo_url' => StoreBranding::logoUrl(),
             // 042-dashboard-revamp — dibaca SPA untuk memformat "tanggal bisnis"; terbuka untuk semua
             // peran (bukan rahasia), sama seperti system_mode.
             // 043 — dibaca SPA untuk menampilkan/menyembunyikan banner rilis, dialog rilis, dan kontrol persetujuan.

@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -19,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -27,6 +30,8 @@ import androidx.compose.ui.unit.sp
 import com.warkop.pos.data.TaxDisplay
 import com.warkop.pos.model.*
 import com.warkop.pos.state.Load
+import com.warkop.pos.state.ORDER_NOTE_MAX
+import com.warkop.pos.state.clampSplit
 import com.warkop.pos.state.PosStore
 import com.warkop.pos.state.Sheet
 import com.warkop.pos.ui.*
@@ -104,9 +109,19 @@ fun EditorScreen(store: PosStore) {
                 menu(Modifier.weight(1f).fillMaxWidth().padding(bottom = 8.dp))
                 pane(Modifier.fillMaxWidth().height(340.dp))
             }
-            else -> Row(Modifier.fillMaxSize()) {
-                menu(Modifier.weight(0.6f).fillMaxHeight().padding(end = 12.dp))
-                pane(Modifier.weight(0.4f).fillMaxHeight())
+            // 077 / US5 — lebar produk vs order bisa digeser kiri-kanan (pembatas di tengah); dibatasi supaya keduanya tetap terpakai,
+            // dan pilihan disimpan per perangkat. Hanya tata letak berdampingan: MEDIUM menumpuk, COMPACT satu panel.
+            else -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                val totalDp = maxWidth.value
+                val totalPx = with(androidx.compose.ui.platform.LocalDensity.current) { maxWidth.toPx() }
+                val f = clampSplit(store.splitFraction, totalDp)
+                Row(Modifier.fillMaxSize()) {
+                    menu(Modifier.weight(f).fillMaxHeight())
+                    SplitDivider(
+                        onDrag = { dx -> store.dragSplit(dx, totalPx, totalDp) }, onDragEnd = store::commitSplit, onReset = store::resetSplit,
+                    )
+                    pane(Modifier.weight(1f - f).fillMaxHeight())
+                }
             }
         }
         }
@@ -157,7 +172,8 @@ private fun ProductCard(
             Spacer(Modifier.height(8.dp))
             Text(name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = 4.dp))
             if (categoryName.isNotBlank()) Text(categoryName, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(priceText, fontSize = 15.sp, maxLines = 1, softWrap = false, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onSurface)
+            // 077 — membungkus hanya sebelum tanda strip rentang (spasi tak-putus di priceLabel); dulu satu baris memotong "Rp 7.000-Rp".
+            Text(priceText, fontSize = 15.sp, minLines = priceLines(priceText), maxLines = 2, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onSurface)
             if (stockText != null) Text(stockText, fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(horizontal = 4.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -200,6 +216,8 @@ fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null)
                 if (o.sent.isNotEmpty()) item { SectionLabel("Sudah dikirim ke dapur", Modifier.padding(top = 10.dp, bottom = 2.dp), MaterialTheme.colorScheme.onSurfaceVariant) }
                 items(o.sent, key = { it.id }) { l -> LineRow(l, store) }
             }
+            // 077 / US4 — catatan kasir untuk seluruh order; tersimpan di server, bukan hanya di layar.
+            OrderNoteRow(store, o)
             // 055 / T038 — area total bisa disembunyikan; satu kontrol membukanya lagi (FR-006, FR-007).
             if (store.totalsVisible) {
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -247,5 +265,64 @@ private fun LineRow(l: OrderLine, store: PosStore) {
             if (l.fired) Text("Terkirim ${l.firedAt}", fontSize = 10.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(end = 10.dp))
             Text(num(l.net), fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
         }
+    }
+}
+
+/**
+ * 077 / US4 — baris "Catatan order": tertutup menampilkan catatan tersimpan (atau ajakan menambah), terbuka berupa kolom teks dengan
+ * hitungan karakter. Teks ketikan TIDAK dibuang bila simpan gagal: baris tetap terbuka sampai server menerima. Order tertutup: baca-saja.
+ */
+@Composable
+private fun OrderNoteRow(store: PosStore, o: Order) {
+    var expanded by remember(o.id) { mutableStateOf(false) }
+    var text by remember(o.id) { mutableStateOf(o.note) }
+    if (!expanded) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest,
+            onClick = { if (!o.closed) { text = o.note; expanded = true } },
+        ) {
+            Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.EditNote, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    o.note.ifBlank { "Tambah catatan" }, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp,
+                    fontStyle = if (o.note.isBlank()) FontStyle.Normal else FontStyle.Italic,
+                    color = if (o.note.isBlank()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    } else {
+        Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            OutlinedTextField(
+                value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4,
+                label = { Text("Catatan order") }, placeholder = { Text("Catatan untuk seluruh order") },
+                isError = text.length > ORDER_NOTE_MAX,
+                supportingText = { Text(if (text.length > ORDER_NOTE_MAX) "Catatan maksimal $ORDER_NOTE_MAX karakter." else "${text.length}/$ORDER_NOTE_MAX") },
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton({ text = o.note; expanded = false }) { Text("Batal") }
+                Spacer(Modifier.width(8.dp))
+                Button({ store.saveOrderNote(text) { expanded = false } }, enabled = text.length <= ORDER_NOTE_MAX) { Text("Simpan") }
+            }
+        }
+    }
+}
+
+/**
+ * 077 / US5 — pembatas yang bisa digeser antara area produk dan panel order. Area sentuh 24 dp (jauh lebih lebar dari garis yang
+ * terlihat) supaya mudah diseret dengan jari; ketuk dua kali mengembalikan ke 60/40. Tidak ada panggilan ke server.
+ */
+@Composable
+private fun SplitDivider(onDrag: (Float) -> Unit, onDragEnd: () -> Unit, onReset: () -> Unit) {
+    val drag by rememberUpdatedState(onDrag)
+    val end by rememberUpdatedState(onDragEnd)
+    val reset by rememberUpdatedState(onReset)
+    Box(
+        Modifier.width(24.dp).fillMaxHeight()
+            .pointerInput(Unit) { detectHorizontalDragGestures(onDragEnd = { end() }, onDragCancel = { end() }) { change, dx -> change.consume(); drag(dx) } }
+            .pointerInput(Unit) { detectTapGestures(onDoubleTap = { reset() }) },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.width(4.dp).height(56.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.outline))
     }
 }

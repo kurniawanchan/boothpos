@@ -73,7 +73,10 @@ fun OpenShiftScreen(store: PosStore) {
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(horizontal = 16.dp, vertical = 12.dp)) {
         Row(Modifier.fillMaxWidth().padding(bottom = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Buka shift", Modifier.weight(1f), fontSize = 28.sp)
+            // 077 — logo + nama toko juga di layar buka shift (satu-satunya layar setelah login di luar PosShell).
+            StoreMark(store, logoSize = if (compact) 32.dp else 40.dp, maxTextWidth = if (compact) 96.dp else 200.dp)
+            Spacer(Modifier.width(if (compact) 10.dp else 16.dp))
+            Text("Buka shift", Modifier.weight(1f), fontSize = if (compact) 22.sp else 28.sp)
             TextButton({ store.lock() }) { Icon(Icons.AutoMirrored.Filled.Logout, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("Keluar", fontWeight = FontWeight.SemiBold) }
         }
         if (compact) Column(Modifier.verticalScroll(rememberScrollState())) { left(Modifier.fillMaxWidth()); Spacer(Modifier.height(12.dp)); right(Modifier.fillMaxWidth()) }

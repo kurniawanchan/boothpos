@@ -41,6 +41,8 @@ fun TerminalSetupScreen(
     /** 073 — mengapa tablet kembali ke sini (terminal dicabut / tak berlaku lagi); null = pembukaan biasa. */
     notice: String? = null,
     onCancel: (() -> Unit)? = null,
+    /** 077 — identitas toko + lencana mode di atas formulir; kosong di uji/preset yang tidak punya PosStore. */
+    header: @Composable () -> Unit = {},
     onDone: (TerminalConfig) -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -87,6 +89,8 @@ fun TerminalSetupScreen(
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
         Surface(Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(20.dp), shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
             Column(Modifier.padding(28.dp).verticalScroll(rememberScrollState())) {
+                header()
+                Spacer(Modifier.height(12.dp))
                 Text("Siapkan terminal", fontSize = 28.sp)
                 Text(
                     "Pilih outlet, lalu pilih atau ketik nama terminal ini.",

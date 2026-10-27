@@ -38,9 +38,28 @@ data class ProductEntry(
     val hasOptions: Boolean get() = variants.any { it.groups.isNotEmpty() }
 }
 
+/**
+ * 077 — mode data yang sedang berlaku di server (diatur di web: Pengaturan → Mode sistem). Tablet TIDAK PERNAH
+ * mengubahnya. Nilai tak dikenal jatuh ke LIVE: instalasi tidak boleh diam-diam dianggap DEMO (sama dengan ModeGate di server).
+ */
+enum class SystemMode {
+    LIVE, DEMO;
+
+    companion object {
+        fun parse(raw: String?): SystemMode = if (raw.equals("demo", ignoreCase = true)) DEMO else LIVE
+    }
+}
+
+/** 077 — identitas toko untuk layar PIN dan header; [outletCount] hanya terisi dari `features` (setelah login). */
+data class Branding(
+    val mode: SystemMode, val storeName: String, val logoUrl: String?, val outletCount: Int? = null,
+)
+
 data class StaffUser(
     val id: String, val name: String, val role: String, val code: String,
     val hasPin: Boolean = true, val locked: Boolean = false,
+    /** 077 — URL foto pengguna yang sudah diselesaikan ke alamat server tablet; null = tampilkan [initials]. */
+    val photoUrl: String? = null,
 ) {
     val initials: String get() = name.take(2).uppercase()
     val isSupervisor: Boolean get() = code == "SPV" || code == "OMG"
@@ -84,6 +103,8 @@ data class Order(
     // Angka dari server (null = belum ada; dihitung lokal hanya sebagai cadangan tampilan).
     val serverSubtotal: Int? = null, val serverDiscount: Int? = null, val serverTax: Int? = null,
     val serverTotal: Int? = null, val serverPaid: Int? = null, val serverChange: Int? = null,
+    /** 077 — catatan kasir untuk seluruh order (dari server; kosong = tanpa catatan). Beda dari catatan per baris. */
+    val note: String = "",
 ) {
     val label: String get() = if (kind == OrderKind.COUNTER) "Counter ${queue ?: ""}".trim() else "Meja ${table ?: ""}"
     val live: List<OrderLine> get() = lines.filter { !it.voided }

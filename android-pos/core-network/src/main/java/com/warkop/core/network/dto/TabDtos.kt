@@ -47,6 +47,8 @@ import kotlinx.serialization.Serializable
     @SerialName("service_type") val serviceType: String = "",
     val table: TableRefDto? = null,
     @SerialName("tab_label") val tabLabel: String? = null,
+    // 077 — catatan kasir untuk seluruh order (hanya pada detail tab).
+    val notes: String? = null,
     @SerialName("opened_by") val openedBy: String? = null,
     @SerialName("session_id") val sessionId: Long? = null,
     val subtotal: String = "0.00",
@@ -155,6 +157,14 @@ import kotlinx.serialization.Serializable
     // 057 / US3 & US5 — cetak ulang dan waktu tutup dari server (daftar order memakai OrderResource).
     @SerialName("reprint_count") val reprintCount: Int = 0,
     @SerialName("closed_at") val closedAt: String? = null,
+    // 077 — catatan kasir untuk seluruh order (OrderResource.notes); tampil di rincian order tertutup.
+    val notes: String? = null,
 )
 
 @Serializable data class ClosedOrdersPage(val data: List<ClosedOrderDto> = emptyList())
+
+/**
+ * 077 — PUT /tabs/{id}/note. `notes` TANPA bawaan supaya selalu terkirim: server mewajibkan kuncinya ada (`present`), dan
+ * teks kosong berarti hapus catatan. (ApiClient memakai explicitNulls = false, jadi null tidak akan pernah terkirim.)
+ */
+@Serializable data class UpdateNoteRequestDto(val notes: String)

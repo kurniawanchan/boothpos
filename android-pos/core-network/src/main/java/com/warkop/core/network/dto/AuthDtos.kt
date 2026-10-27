@@ -34,6 +34,8 @@ import kotlinx.serialization.Serializable
     val id: Long,
     val name: String,
     val role: String? = null,
+    // 077 — foto untuk avatar layar PIN (null = inisial).
+    @SerialName("photo_url") val photoUrl: String? = null,
     @SerialName("has_pin") val hasPin: Boolean = false,
     val locked: Boolean = false,
 )
