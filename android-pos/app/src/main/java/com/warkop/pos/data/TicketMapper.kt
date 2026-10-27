@@ -21,6 +21,7 @@ object TicketMapper {
         orderNumber = dto.order?.orderNumber?.takeIf { it.isNotBlank() },
         roundNo = dto.roundNo,
         sentAtText = sentAt(dto.sentAt),
+        orderNote = dto.orderNote?.trim()?.takeIf { it.isNotBlank() },
         items = dto.items.map { item ->
             PrintableItem(
                 qty = item.qty,

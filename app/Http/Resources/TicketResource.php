@@ -25,6 +25,9 @@ class TicketResource extends JsonResource
             'order' => $order ? ['id' => $order->id, 'order_number' => $order->order_number] : null,
             'table' => $order?->table ? ['id' => $order->table->id, 'name' => $order->table->name] : null,
             'tab_label' => $order?->tab_label,
+            // 078 — catatan kasir untuk seluruh order, dibaca LANGSUNG dari order (tanpa salinan di tiket): cetak ulang menampilkan catatan
+            // terbaru dan dapur melihatnya sebelum item. Catatan per item tetap di `items[].note`.
+            'order_note' => $order?->notes,
             'waiting_seconds' => max(0, (int) $this->sent_at?->diffInSeconds(now(), false)),
             'items' => $this->items->map(fn ($i) => [
                 'id' => $i->id,

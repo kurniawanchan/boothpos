@@ -17,6 +17,8 @@ import kotlinx.serialization.Serializable
     /** 059 — URL logo; null bila admin mematikan logo di struk. Dapat berupa localhost (lihat ServerUrl). */
     @SerialName("store_logo_url") val storeLogoUrl: String? = null,
     @SerialName("order_number") val orderNumber: String = "",
+    /** 078 — catatan kasir untuk SELURUH order (dicetak di struk di bawah item). Beda dari `items[].note`. */
+    val notes: String? = null,
     @SerialName("receipt_no") val receiptNo: String? = null,
     @SerialName("queue_no") val queueNo: String? = null,
     /** 064 — nama terminal yang mengambil order; null bila order tanpa terminal. */

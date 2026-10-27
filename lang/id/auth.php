@@ -11,4 +11,5 @@ return [
     'current_pin_required' => 'PIN saat ini wajib diisi.',
     'token_not_refreshable' => 'Sesi ini tidak dapat diperpanjang. Masuk kembali.',
     'pin_changed' => 'PIN berhasil diubah.',
+    'too_many_attempts' => 'Terlalu banyak percobaan. Coba lagi dalam :seconds detik.',
 ];

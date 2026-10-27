@@ -12,6 +12,8 @@ import kotlinx.serialization.json.JsonObject
     val id: Long,
     val name: String = "",
     val role: String = "",
+    // 078 — foto untuk avatar pemilih penyetuju (null = inisial).
+    @SerialName("photo_url") val photoUrl: String? = null,
 )
 
 /** POST /overrides. Kunci `pin` tidak pernah dicatat (RedactedLogInterceptor hanya mencatat metode+path+status). */

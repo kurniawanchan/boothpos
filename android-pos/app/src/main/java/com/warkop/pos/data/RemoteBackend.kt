@@ -101,6 +101,12 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
 
     override suspend fun branding(): com.warkop.pos.model.Branding = BrandingMapper.fromBranding(apiCall { api().branding() }, serverUrl)
 
+    /** 078 — pengguna yang sedang masuk, dibaca ulang dari server supaya foto/nama yang diubah di web ikut tampil tanpa masuk ulang. */
+    override suspend fun me(): StaffUser {
+        val u = apiCall { api().me() }
+        return StaffUser(u.id.toString(), u.name, u.role.orEmpty(), roleCode(u.role), photoUrl = ServerUrl.resolve(serverUrl, u.photoUrl))
+    }
+
     override suspend fun sessionBranding(): com.warkop.pos.model.Branding = BrandingMapper.fromFeatures(apiCall { api().features() }, serverUrl)
 
     private fun api(): PosApi {
@@ -277,7 +283,7 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
     }
 
     override suspend fun approvers(action: String): List<Approver> =
-        apiCall { api().approvers(action) }.map { Approver(it.id, it.name, it.role) }
+        apiCall { api().approvers(action) }.map { Approver(it.id, it.name, it.role, ServerUrl.resolve(serverUrl, it.photoUrl)) }
 
     override suspend fun issueOverride(action: String, subject: JsonObject, approverId: Long, pin: String): String =
         apiCall { api().issueOverride(OverrideRequest(action, subject, approverId, pin)) }.overrideToken

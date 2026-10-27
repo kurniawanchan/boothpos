@@ -103,7 +103,7 @@ class SalesTransactionsExportTest extends TestCase
         $row = $this->exported(['keys' => ["order:{$order->id}"]])[0];
 
         $this->assertSame(
-            ['transaction_no', 'status', 'time', 'customer', 'sellers', 'cashier', 'terminal', 'items', 'units', 'discount', 'payment_methods', 'payment_status', 'cash', 'non_cash', 'total', 'paid', 'balance'],
+            ['transaction_no', 'status', 'time', 'customer', 'sellers', 'cashier', 'terminal', 'items', 'order_note', 'units', 'discount', 'payment_methods', 'payment_status', 'cash', 'non_cash', 'total', 'paid', 'balance'],
             array_keys($row),
         );
         $this->assertSame('Budi', $row['customer']);

@@ -430,7 +430,8 @@ private fun ColumnScope.OverrideDialog(store: PosStore, s: Sheet.Override) {
                     val on = who?.id == ap.id
                     Surface(onClick = { who = ap; pin = ""; err = null }, shape = RoundedCornerShape(50), color = if (on) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)) {
                         Row(Modifier.padding(horizontal = 6.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Surface(Modifier.size(38.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) { Box(contentAlignment = Alignment.Center) { Text(ap.name.take(2).uppercase(), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onTertiaryContainer) } }
+                            // 078 — foto penyetuju dari server; inisial bila tidak ada (sama dengan avatar lain di aplikasi).
+                            UserAvatar(com.warkop.pos.model.StaffUser(ap.id.toString(), ap.name, ap.role, "", photoUrl = ap.photoUrl), 38.dp, tone = com.warkop.pos.model.Tone.ACCENT, textSize = 13f)
                             Column(Modifier.padding(start = 10.dp, end = 12.dp)) {
                                 Text(ap.name, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                                 Text(ap.role, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

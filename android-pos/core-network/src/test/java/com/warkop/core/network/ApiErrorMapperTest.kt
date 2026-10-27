@@ -14,6 +14,20 @@ class ApiErrorMapperTest {
         assertEquals("PIN salah.", e.message)
     }
 
+    /** 078 / US1 — penolakan throttle dari server sudah berbahasa Indonesia dengan lama tunggu; aplikasi menampilkannya apa adanya. */
+    @Test fun `429 throttled memakai pesan server berisi lama tunggu`() {
+        val e = ApiErrorMapper.fromHttp(429, """{"message":"Terlalu banyak percobaan. Coba lagi dalam 42 detik.","code":"throttled","retry_after":42}""")
+        assertTrue(e is ApiError.TooMany)
+        assertEquals("throttled", e.code)
+        assertEquals("Terlalu banyak percobaan. Coba lagi dalam 42 detik.", e.message)
+    }
+
+    @Test fun `429 tanpa badan JSON memakai pesan bawaan Indonesia`() {
+        val e = ApiErrorMapper.fromHttp(429, "<html>Too Many</html>")
+        assertTrue(e is ApiError.TooMany)
+        assertEquals("Terlalu banyak percobaan. Coba lagi nanti.", e.message)
+    }
+
     @Test fun `403 menjadi Forbidden`() = assertTrue(ApiErrorMapper.fromHttp(403, """{"message":"x"}""") is ApiError.Forbidden)
 
     @Test fun `409 membawa kode mesin agar alur dapat dipilih`() {
