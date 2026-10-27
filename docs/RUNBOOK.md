@@ -586,6 +586,7 @@ cd android-pos
 ./gradlew :core-network:testDebugUnitTest :app:testDebugUnitTest
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+APK untuk dipasang di toko (produksi): lihat 13.6.
 
 ### 13.4 Mencabut dan memasang ulang perangkat
 - Cabut: `DELETE /devices/{id}` (owner/admin). Server mengisi `revoked_at`; perangkat tidak dihapus dari basis data (jejak audit). Permintaan dari perangkat yang dicabut ditolak (422 pada `device_id`).
@@ -603,6 +604,61 @@ adb logcat -s AndroidRuntime:E  # galat fatal; harus kosong pada pengujian
 - APK membawa alamat online bawaan (`https://smasher-nullify-subgroup.ngrok-free.dev`). Dipakai tablet baru **hanya** bila admin memilih "Online" di Pengaturan → Umum → Server address tetapi kolom "Online server address" kosong; isian admin selalu didahulukan.
 - Ganti alamat bawaan bila ngrok berubah: (1) build APK dengan `pos.defaultOnlineUrl=<alamat baru>` di `android-pos/local.properties` atau `gradle.properties`; (2) set `SERVER_ADDRESS_DEFAULT_ONLINE=<alamat baru>` di `.env` server agar petunjuk di halaman web sama (lalu `php artisan config:clear` bila konfigurasi di-cache). Kedua nilai harus sama.
 - Tablet yang sudah menyimpan alamat tidak berubah sampai datanya dihapus (aturan 065).
+
+### 13.6 Membangun APK produksi (rilis) (2026-10-27)
+
+Klasifikasi: **INTERNAL**. Keystore dan kata sandinya bersifat rahasia dan tidak pernah masuk repo, obrolan, atau log.
+
+APK debug (13.3) ditandatangani kunci debug dan berstatus `DEBUGGABLE`; jangan dipasang di toko. APK rilis ditandatangani keystore milik kita. `app/build.gradle.kts` membaca kredensialnya dari `android-pos/local.properties` (tidak di-commit). Tanpa `pos.release.storeFile`, `assembleRelease` tetap jalan tetapi menghasilkan APK **tak bertanda tangan** yang ditolak Android; sengaja tidak memakai kunci debug sebagai jatuhan.
+
+**1. Buat keystore (sekali seumur proyek).** Simpan di luar repo.
+```bash
+mkdir -p ~/keys && chmod 700 ~/keys     # keytool TIDAK membuat direktorinya (galat FileNotFoundException)
+keytool -genkeypair -v -keystore ~/keys/boothpos-release.jks \
+  -alias boothpos -keyalg RSA -keysize 2048 -validity 10000
+```
+- Kata sandi minimal 6 karakter; simpan di pengelola kata sandi. Isian nama/organisasi masuk ke sertifikat dan tidak bisa diubah.
+- **Cadangkan** berkas `.jks` dan kata sandinya ke tempat kedua. Bila hilang, tablet yang sudah terpasang tidak bisa diperbarui (kunci berbeda ditolak Android); satu-satunya jalan adalah mencopot dan memasang ulang, yang menghapus data lokal tablet.
+
+**2. Isi `android-pos/local.properties`** (ketik sendiri nilainya di berkas, jangan ditempel ke obrolan atau commit):
+```properties
+pos.release.storeFile=/Users/<nama>/keys/boothpos-release.jks
+pos.release.storePassword=<isi sendiri>
+pos.release.keyAlias=boothpos
+pos.release.keyPassword=<isi sendiri>
+# Alamat yang ditanam di APK (lihat bagian di atas dan 065/066)
+pos.defaultLocalUrl=http://<ip-server-toko>:8010
+pos.defaultOnlineUrl=https://<domain-produksi>
+```
+`pos.defaultOnlineUrl` harus sama dengan `SERVER_ADDRESS_DEFAULT_ONLINE` di `.env` server. Bawaan di `build.gradle.kts` masih alamat ngrok pengembangan; jangan merilis dengan itu.
+
+**3. Naikkan versi** di `app/build.gradle.kts`: `versionCode` WAJIB lebih besar dari rilis sebelumnya (kalau tidak, pembaruan ditolak), `versionName` untuk label manusia.
+
+**4. Bangun.**
+```bash
+cd android-pos
+./gradlew clean assembleRelease      # APK: app/build/outputs/apk/release/app-release.apk
+./gradlew bundleRelease              # AAB (hanya bila diunggah ke Play Store)
+```
+
+**5. Periksa tanda tangan sebelum dipasang.**
+```bash
+~/Library/Android/sdk/build-tools/<versi>/apksigner verify --verbose --print-certs \
+  app/build/outputs/apk/release/app-release.apk
+```
+Harus `Verifies` dan skema v2 `true`. Sidik jari sertifikat (SHA-256) harus sama untuk setiap rilis; bila berubah, tablet menolak pembaruan.
+
+**6. Pasang ke tablet.**
+```bash
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+- **Pertama kali berpindah dari debug ke rilis:** kuncinya berbeda, jadi copot dulu build debug: `adb uninstall com.warkop.pos`. Ini menghapus data lokal tablet (pilihan outlet/terminal dan sesi masuk); penyiapan (13.1) diulang. Pembaruan rilis berikutnya cukup `adb install -r`.
+- **Xiaomi/HyperOS:** `INSTALL_FAILED_VERIFICATION_FAILURE` atau `INSTALL_FAILED_USER_RESTRICTED` berasal dari pemeriksa paket perangkat, bukan dari APK. Di Opsi pengembang aktifkan **Install via USB** (butuh akun Mi) dan matikan **Verify apps over USB**; buka kunci layar dan ketuk **Install** cepat pada dialog yang muncul. Bila masih gagal: `adb logcat -d | grep -i -E "PackageInstaller|verif"` tepat setelah percobaan.
+
+**Hal yang perlu diverifikasi sebelum rilis pertama ke toko**
+- Akses `http://` ke server lokal: build rilis lebih ketat daripada debug soal lalu lintas cleartext. Uji build rilis terhadap server toko yang sebenarnya (belum diverifikasi; ASSUMPTION bahwa manifes mengizinkannya).
+- `isMinifyEnabled = false` sengaja; aktifkan hanya setelah aturan proguard untuk kotlinx.serialization dan Compose ditulis dan diuji di perangkat.
+- Layar Android masih belum diverifikasi di perangkat (lihat `specs/077-.../evidence.md`); lakukan uji asap pada APK rilis (penyiapan terminal, masuk PIN, satu order).
 
 ## 14. Katalog WJM dari Odoo (fitur 068, 2026-10-24)
 

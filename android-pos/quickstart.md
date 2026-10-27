@@ -45,3 +45,7 @@ On the first-launch setup screen, enter the outlet server address:
 - **Physical tablet:** the host's LAN IP, e.g. `192.168.1.10:8010` (macOS: `ipconfig getifaddr en0`). The tablet
   and the host must be on the same network; if it cannot connect, first open `http://<ip>:8010` in the tablet's
   browser to rule out the network or the host firewall.
+
+## 6. Production (Release) APK
+Debug APKs are not for stores. For the signed release build (keystore, `local.properties`, versioning, verification,
+Xiaomi install issues) see `docs/RUNBOOK.md` §13.6.
