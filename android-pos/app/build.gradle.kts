@@ -36,6 +36,29 @@ android {
         resValue("string", "default_online_url", posProp("pos.defaultOnlineUrl", "https://smasher-nullify-subgroup.ngrok-free.dev"))
     }
 
+    // Penandatanganan rilis: kredensial keystore dibaca dari local.properties (tidak di-commit), tidak pernah ditulis di
+    // sini. Tanpa `pos.release.storeFile`, build debug tetap jalan dan `assembleRelease` menghasilkan APK tak bertanda
+    // tangan (tidak bisa dipasang), jadi kesalahan konfigurasi terlihat jelas, bukan diam-diam memakai kunci debug.
+    val releaseStoreFile = posProp("pos.release.storeFile", "")
+    if (releaseStoreFile.isNotEmpty()) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = posProp("pos.release.storePassword", "")
+                keyAlias = posProp("pos.release.keyAlias", "")
+                keyPassword = posProp("pos.release.keyPassword", "")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+            // Minify dimatikan sampai aturan proguard untuk kotlinx.serialization/Compose ditulis dan diuji di perangkat.
+            isMinifyEnabled = false
+        }
+    }
+
     buildFeatures {
         compose = true
     }
