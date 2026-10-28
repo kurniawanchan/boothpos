@@ -512,6 +512,8 @@ Printer thermal tidak dipakai. Struk ditampilkan di layar laptop kasir agar pela
 | F18.4 | Katalog dapat diunduh sebagai PDF | M |
 | F18.5 | Tersedia varian tata letak ringkas untuk katalog referensi cepat dan tata letak bergambar besar untuk ditunjukkan ke pembeli | S |
 
+**Catatan pasca-MVP — 2026-10-28 (katalog varian per penjual, barcode, pindai di POS).** Atas permintaan pemilik produk, kebutuhan yang semula dicoret dari MVP di 10.2 ("QR code & pemindaian", katalog cetak) dibangun kembali dalam bentuk terbatas, tanpa nomor F- baru: (1) tombol **Katalog** di layar Produk mengunduh katalog varian AKTIF yang dikelompokkan per penjual sebagai **PDF** berwarna dan **Excel** — identitas toko, gambar varian, kategori, produk, varian, kode (SKU), harga jual, dan barcode; **tidak pernah** harga modal atau stok; mengikuti filter layar Produk; (2) barcode berjenis **Code 128** yang menyandikan SKU persis, dibuat satu encoder di server dan dipakai PDF maupun Excel; (3) di layar kasir, **Enter di kotak pencarian** (yang dikirim pemindai barcode berjenis keyboard) menambahkan varian yang SKU-nya persis sama ke keranjang, setara mengetuk kartunya. **Tidak** dibangun: pemindaian lewat kamera perangkat (bagian F17.5), filter per event (F18.3), dan varian tata letak ringkas/besar (F18.5). Ini bukan kebangkitan penuh butir 10.2. Lihat `specs/049-product-variant-catalog-export/`.
+
 ### 7.19 Kode produk otomatis
 
 | ID | Kebutuhan | Prioritas |

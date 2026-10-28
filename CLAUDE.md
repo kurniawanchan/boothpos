@@ -95,6 +95,8 @@ Vue 3 SPA (`resources/js/`: `api/`, `stores/` (Pinia), `router/`, `composables/`
 
 PRD §10.2/§10.3 explicitly **cut** these from MVP — do not build them even if scaffolding hints at them: purchase management (PO to vendors), full production/manufacturing scheduling, flash sale, QR/barcode scanning, granular custom roles, artist self-service portal, printed/PDF catalog, and Excel import *of sales transactions* (PRD F15.9).
 
+**The printed/PDF catalog and (external-scanner) barcode scanning were partly un-cut on 2026-10-28** at the product owner's explicit request — see "Product variant catalog, barcodes and POS scan-to-add (feature 049)" below; PRD §7.18 carries a dated note. Camera scanning, per-event catalog filter and layout variants are still NOT built.
+
 **Excel import of master data was un-cut on 2026-09-01** at the product owner's explicit request and is now built (see "Master-data Excel export/import" below). PRD §10.2, §7.15 and README carry dated notes rather than rewritten history — don't "restore" the old scope cut when you read those.
 
 **Vendor/material/BOM tracking was added post-MVP on 2026-09-01** at the product owner's explicit request — see "Vendor, material, and BOM tracking" below. This is a genuinely new capability, not a resurrection of the PRD §10.2 "vendor management" or "materials/production" cuts: it's deliberately narrower than either (no purchase orders, no production scheduling) and doesn't map to any existing F-number. PRD §10.2 carries a dated note rather than rewritten history.
@@ -395,6 +397,16 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - `test_product_list_with_variants_does_not_run_a_query_per_product` now excludes the aggregate sub-selects (`total_stock` alias) when counting variant queries; its intent (eager-load once, not per product) is unchanged.
 - Query-count tests need one warm-up call first (settings/licence caches fill on the first request) or they report a phantom extra query.
 
+## Product variant catalog, barcodes and POS scan-to-add (feature 049, 2026-10-28)
+
+- **Products page → Catalog button** (menu `products`, gated server-side in `ProductCatalogController`): `GET /catalog` (JSON, builds the PDF) and `GET /catalog/export` (Excel). **One data source**, `ProductCatalogBuilder` — active products/variants only, sellers alphabetical, filters = `Product::scopeMatchingListFilters()`, store identity via `App\Support\BuildsInvoiceDocument` (the copy in `Controllers/Concerns/` is dead — don't use or copy it). It never reads `cost_price`, stock, BOM or preorder data; `ProductCatalogTest` greps the output for them. Capped at `config('catalog.max_variants')` (2000) → 422.
+- **Barcode = Code 128-B of the SKU, ONE encoder**: `App\Support\Code128` (in-house; `picqer/php-barcode-generator` is `require-dev` only, as a test oracle — it is LGPL and the store image installs `--no-dev`). The API returns the bar `pattern` ("1"/"0" modules); the SPA draws it (`BarcodeBars.vue`) and Excel renders the same pattern to PNG. `null` pattern (non-ASCII code) → variant still listed with its readable code. Never add a second encoder in JS.
+- **PDF = raster pages through `utils/pdfCapture.js`** (project rule), one A4 `CatalogPdfPage` per page, 8 fixed-height cards per page, one seller per page. Measured in real Chrome: 500 variants ≈ 10 s, ≈ 21 MB (see research.md). **Two html2canvas traps found in a real browser:** (1) clip boxes sit a few px above the text — `truncate` on inline spans / `line-clamp-*` cut the lower half of glyphs; use BLOCK elements with px line-heights and a clip box 6 px taller pulled back with `-mb-[6px]`; (2) barcode modules must be a WHOLE number of device pixels (`integerModulePx`, `PDF_RASTER_SCALE`), otherwise the densest (20-char) code blurs and stops decoding. Barcode bars are always dark on white, never an accent colour.
+- **Excel** (`ProductCatalogExport`): Maatwebsite drops an empty-array row (`[]`) — use `['']` for spacer rows or every row number computed after it is off by one. Pictures go through `CatalogImageThumbnail` (GD, ≤160 px, pixel-count guard) and temp files referenced by path; the controller builds with `Excel::raw()` and calls `cleanup()`. 500 variants peak ≈ 85 MB.
+- **POS scan-to-add**: `GET /variants/lookup?exact=1` (active variant, SKU equality, ≤1 row). `PosView::handleScanEnter` on Enter in `#pos-search`: exact hit → `addToCart` (same path as a tap, so no session needed — payment is still gated); miss → normal search, "not found" toast if nothing. **Race found in a real browser:** the 300 ms debounced search fires AFTER Enter and used to cancel the scan through `searchSeq`; now Enter calls `runSearch.cancel()` (new `useDebouncedFn().cancel`), clears the box BEFORE the request, always applies an exact hit, and uses a separate `scanSeq` only to decide whether partial results may be restored. Mock-based tests cannot see this — `PosScan.test.js` has slow-lookup regression tests.
+- **Known limitation:** a variant whose `image_path` file is gone is served by the SPA catch-all as `200 text/html`; the PDF card then shows an empty picture area (html2canvas logs "Error loading image") instead of the placeholder. Same for every document that embeds product images.
+- **Not verified here:** a hardware scanner on a printed page (SC-003). A software scanline decode of the PDF's pixels reads 100% of barcodes (61/61, 500/500, 27/27), which is evidence, not the hardware test.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -402,7 +414,19 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/048-stock-movements-search-variant-columns/plan.md`
+Active feature plan: `specs/049-product-variant-catalog-export/plan.md`
+(branch `080-product-variant-catalog-export`, from `develop`; spec dir number ≠ branch number) — no migration, nothing
+stored. A **Catalog** button on the Products page exports the ACTIVE variants grouped by seller as a colourful PDF and
+an Excel workbook (store identity, picture, category, product, variant, code, SELLING price, Code 128 barcode; never cost
+or stock). One data source (`ProductCatalogBuilder`, store identity via `App\Support\BuildsInvoiceDocument` — the copy in
+`Controllers/Concerns` is dead, don't use it) feeds `GET /catalog` (JSON → PDF pages rasterised through
+`utils/pdfCapture.js`) and `GET /catalog/export` (Maatwebsite, drawings); ONE barcode encoder (`App\Support\Code128`, PHP)
+whose bar pattern the SPA draws and the Excel renders to PNG. Gate: `products` menu, server-side. POS scan-to-add:
+Enter in `#pos-search` calls `GET /variants/lookup?exact=1` and adds the exact-SKU variant like a tap (no session
+required, as for taps). Revives PRD §7.18 / F6.5 / F17.5 (external scanners only) — needs dated PRD + CLAUDE.md scope
+notes. First task is a PDF size/time/sharpness spike; Excel memory at 500 variants must be tested. See research.md.
+
+Previous feature: `specs/048-stock-movements-search-variant-columns/plan.md`
 (branch `079-stock-movements-search-variant-columns`, from `develop`; spec dir number ≠ branch number) — no migration,
 three additive changes: (1) `/stock` STAYS a movement ledger (one row per movement, product-owner decision) and gains
 server-side `search` + `artist_id[]`/`category_id[]` on `GET /stock/movements` (one scope, `StockMovement::scopeMatchingListFilters()`,

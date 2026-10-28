@@ -396,9 +396,23 @@ class ProductController extends Controller
         $term = (string) $request->query('q', '');
         $limit = min((int) $request->integer('limit', 20), 50);
 
+        // 049 (US5) — `exact=1`: jalur pindai barcode POS. Hanya varian AKTIF yang SKU-nya sama persis
+        // (spasi tepi dibuang, huruf besar/kecil mengikuti collation) — satu baris atau tidak sama sekali.
+        // Sengaja bukan LIKE: pencarian biasa dibatasi 40 baris dan diurut menurut SKU, jadi mencari
+        // "yang persis sama" di dalam hasilnya bisa meleset untuk awalan pendek ("…-3" juga cocok "…-30").
+        if ($request->boolean('exact')) {
+            $code = trim($term);
+            if ($code === '') {
+                return response()->json(['data' => []]);
+            }
+            $term = '';
+            $exactCode = $code;
+        }
+
         $variants = ProductVariant::query()
             ->with(['product.artist', 'product.category'])
             ->where('is_active', true)
+            ->when(isset($exactCode), fn ($q) => $q->where('sku', $exactCode))
             ->when($term !== '', fn ($q) => $q->where(function ($q) use ($term) {
                 $q->where('sku', 'like', "%{$term}%")
                   ->orWhere('variant_name', 'like', "%{$term}%")
