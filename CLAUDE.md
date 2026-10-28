@@ -395,6 +395,12 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - `test_product_list_with_variants_does_not_run_a_query_per_product` now excludes the aggregate sub-selects (`total_stock` alias) when counting variant queries; its intent (eager-load once, not per product) is unchanged.
 - Query-count tests need one warm-up call first (settings/licence caches fill on the first request) or they report a phantom extra query.
 
+## Pre-order export: variant names (feature 050, 2026-10-29)
+
+- `GET /preorders/export` has ONE export-only column, `variant_names`, right after `products`: each item's variant name, same order as the SKUs, joined by ` | ` (not `,` — names contain commas). Blank names keep their slot. `products` is untouched because the importer parses it; the importer reads by column NAME, so `variant_names` (like `created_at`/`updated_at`) is ignored, and `template()` does not list it. `PreorderExportImportTest::EXPORT_HEADINGS` pins the layout.
+- Names come from the LIVE variant through `items.variant` (`withTrashed`, loaded once — a per-row lookup would be an N+1), NOT from `name_snapshot` (`"<product> — <variant>"`, cannot be split reliably). A variant renamed after the order shows its new name; SKUs stay the recorded snapshot.
+- `GenericArrayExport` now forces strings starting with `=` to text (formula injection). Deliberately ONLY `=`: it is the only prefix PhpSpreadsheet turns into a formula, and forcing every string to text would change number-like text in report exports and could break re-import. `SheetArrayExport`/`MultiSheetArrayExport` (master-data/invoice exports) are NOT protected yet.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -402,7 +408,16 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/048-stock-movements-search-variant-columns/plan.md`
+Active feature plan: `specs/050-preorder-export-variant-name/plan.md`
+(branch `081-preorder-export-variant-name`, from `develop`; spec dir number ≠ branch number) — no migration. The
+pre-order Excel export (`GET /preorders/export`) gains ONE export-only column, `variant_names`, right after `products`:
+the variant name of each item, same order as the SKUs, joined by ` | ` (names often contain commas). `products` is
+untouched because the importer parses it; the importer reads by column NAME, so the new column is ignored (like
+`created_at`/`updated_at`) and the import template does not list it. Names come from the live variant via
+`items.variant` (`withTrashed`, no N+1), not from `name_snapshot`. `GenericArrayExport` also forces string cells
+starting with `=` to text (formula injection); other exports are a separate follow-up. See research.md.
+
+Previous feature: `specs/048-stock-movements-search-variant-columns/plan.md`
 (branch `079-stock-movements-search-variant-columns`, from `develop`; spec dir number ≠ branch number) — no migration,
 three additive changes: (1) `/stock` STAYS a movement ledger (one row per movement, product-owner decision) and gains
 server-side `search` + `artist_id[]`/`category_id[]` on `GET /stock/movements` (one scope, `StockMovement::scopeMatchingListFilters()`,

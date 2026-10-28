@@ -2752,6 +2752,14 @@ paths:
         `invoice_sent_at`, `shipping_at`. File hasil ekspor ini bisa
         diimpor balik apa adanya (round-trip, SC-005).
 
+        050-preorder-export-variant-name: kolom **hanya-baca** `variant_names`
+        disisipkan tepat sesudah `products` — nama varian tiap item, urutannya
+        sama dengan SKU di `products` (dipisah ` | `, bukan koma, karena nama
+        varian sering berkoma; nama kosong tetap menempati posisinya). Importer
+        membaca per NAMA kolom sehingga mengabaikannya (SKU tetap satu-satunya
+        penentu barang), dan template impor tidak memuatnya. Teks berawalan `=`
+        di sel mana pun disimpan sebagai teks, bukan rumus.
+
         Penanda invoice-terkirim/pengiriman-berjalan: `dispatch_status` bernilai
         `pending`/`invoice_sent`/`shipping`; tanggalnya ISO 8601 dengan offset
         (mis. `2026-09-27T03:00:00+00:00`). Dua kolom tambahan **hanya-baca**,

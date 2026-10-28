@@ -74,7 +74,9 @@ class PreorderExportImportService
         ));
 
         $query = Preorder::query()
-            ->with(['customer', 'event', 'items'])
+            // 050: `items.variant` (withTrashed — varian yang di-soft-delete tetap punya nama untuk dibaca) dimuat SEKALI di sini;
+            // memanggil relasinya di dalam map() tanpa ini akan menjadi satu query per pre-order.
+            ->with(['customer', 'event', 'items.variant' => fn ($q) => $q->withTrashed()])
             ->when($listOf('status') !== [], fn ($q) => $q->whereIn('status', $listOf('status')))
             ->when(! empty($filters['event_id']), fn ($q) => $q->where('event_id', $filters['event_id']))
             ->when(! empty($filters['customer_id']), fn ($q) => $q->where('customer_id', $filters['customer_id']))
@@ -94,6 +96,10 @@ class PreorderExportImportService
             'fulfillment' => $p->fulfillment === 'courier' ? 'mail order' : 'pickup',
             'pickup_day' => $this->pickupDayToLabel($p),
             'products' => $p->items->pluck('sku_snapshot')->implode(','),
+            // 050 — HANYA-EKSPOR (importer membaca per NAMA kolom, jadi kolom ini diabaikan; template() tidak memuatnya).
+            // Sejajar dengan `products`; dipisah " | " karena nama varian sering berkoma. Nama kosong tetap menempati
+            // posisinya supaya jumlah bagian selalu sama dengan jumlah SKU.
+            'variant_names' => $p->items->map(fn ($i) => (string) ($i->variant?->variant_name ?? ''))->implode(' | '),
             'quantities' => $p->items->pluck('qty')->implode(','),
             'unit_prices' => $p->items->map(fn ($i) => number_format((float) $i->sell_price, 2, '.', ''))->implode(','),
             'shipping_cost' => number_format((float) $p->shipping_cost, 2, '.', ''),
