@@ -276,4 +276,156 @@ class StockMovementsTest extends TestCase
 
         $this->assertSame($small, $large, 'jumlah query harus tetap saat baris bertambah');
     }
+
+    // --- 048: pencarian, filter penjual/kategori, kolom baru ---------------------
+
+    /** Produk milik penjual/kategori lain dengan satu varian dan satu pergerakan. */
+    private function otherSellerVariant(string $productName, string $variantName, string $sku): ProductVariant
+    {
+        $product = Product::factory()->create([
+            'artist_id' => Artist::factory()->create(['name' => 'Penjual B'])->id,
+            'category_id' => Category::factory()->create(['name' => 'Stiker'])->id,
+            'name' => $productName,
+        ]);
+        $variant = $product->variants()->create(['sku' => $sku, 'variant_name' => $variantName, 'sell_price' => 5000, 'cost_price' => 100, 'current_stock' => 7]);
+        $this->movement(['variant_id' => $variant->id]);
+
+        return $variant;
+    }
+
+    private function skus(string $query): array
+    {
+        return collect($this->movements($query)->assertOk()->json('data'))->pluck('sku')->unique()->sort()->values()->all();
+    }
+
+    public function test_search_matches_variant_name_sku_and_product_name_case_insensitively(): void
+    {
+        $this->movement([]);
+        $this->movement(['variant_id' => $this->other->id]);
+
+        $this->assertSame(['SPFKCMCY0001'], $this->skus('search=slippery'));   // nama varian, huruf kecil
+        $this->assertSame(['SPFKCMCY0001'], $this->skus('search=kcmcy'));       // potongan SKU
+        $this->assertSame(['SPFKCOTH0001'], $this->skus('search=OTHER'));       // nama produk
+        $this->assertSame([], $this->skus('search=tidak-ada-ini'));
+    }
+
+    public function test_blank_search_is_ignored_and_wildcards_are_literal(): void
+    {
+        $this->movement([]);
+        $this->movement(['variant_id' => $this->other->id]);
+
+        $this->assertCount(2, $this->skus('search=%20%20%20'));  // hanya spasi = tanpa filter
+        $this->assertSame([], $this->skus('search=%25'));         // "%" literal, bukan "cocok semua"
+        $this->assertSame([], $this->skus('search=_'));           // "_" literal, bukan "satu karakter apa saja"
+    }
+
+    public function test_seller_and_category_filters_accept_one_or_many_and_combine_with_search(): void
+    {
+        $this->movement([]);
+        $b = $this->otherSellerVariant('Stiker Lucu', 'Kecil', 'SPFSTLUC0001');
+
+        $sellerA = $this->variant->product->artist_id;
+        $sellerB = $b->product->artist_id;
+        $catA = $this->variant->product->category_id;
+        $catB = $b->product->category_id;
+
+        $this->assertSame(['SPFSTLUC0001'], $this->skus("artist_id[]={$sellerB}"));
+        $this->assertSame(['SPFKCMCY0001'], $this->skus("category_id[]={$catA}"));
+        $this->assertSame(['SPFKCMCY0001', 'SPFSTLUC0001'], $this->skus("artist_id[]={$sellerA}&artist_id[]={$sellerB}"));
+        $this->assertSame(['SPFSTLUC0001'], $this->skus("artist_id[]={$sellerB}&category_id[]={$catB}&search=kecil"));
+        $this->assertSame([], $this->skus("artist_id[]={$sellerB}&category_id[]={$catA}")); // AND, bukan OR
+        $this->assertSame([], $this->skus('artist_id[]=999999'));                           // id usang = kosong, bukan error
+    }
+
+    public function test_new_filters_combine_with_type_dates_and_update_the_paging_total(): void
+    {
+        $this->movement(['type' => 'adjustment', 'created_at' => '2026-10-01 10:00:00']);
+        $this->movement(['type' => 'purchase', 'created_at' => '2026-10-20 10:00:00']);
+        $this->otherSellerVariant('Stiker Lucu', 'Kecil', 'SPFSTLUC0001');
+
+        $res = $this->movements('search=slippery&type=purchase&date_from=2026-10-10')->assertOk();
+
+        $this->assertSame(1, $res->json('meta.total'));
+        $this->assertSame(1, $res->json('meta.last_page'));
+        $this->assertSame('purchase', $res->json('data.0.type'));
+    }
+
+    public function test_movements_of_deleted_variants_and_products_stay_findable_and_keep_the_seller_name(): void
+    {
+        $this->movement([]);
+        $this->movement(['variant_id' => $this->other->id]);
+        $this->other->delete();                         // varian dihapus (soft)
+        $this->variant->product->artist->delete();      // penjual dihapus (soft)
+        $this->variant->product->delete();               // produk dihapus (soft)
+
+        $this->assertSame(['SPFKCOTH0001'], $this->skus('search=std'));
+        $this->assertSame(['SPFKCMCY0001'], $this->skus('search=MCYT'));
+
+        $row = collect($this->movements('search=MCYT')->json('data'))->first();
+        $this->assertNotNull($row['artist_name']);
+        $this->assertNull($row['product_id']); // aturan lama: produk terhapus -> null
+    }
+
+    public function test_rows_carry_picture_seller_category_and_live_available_stock(): void
+    {
+        app(StockService::class)->applyMovement($this->variant, 'adjustment', 5, reason: 'tambah', userId: $this->owner->id); // 10 -> 15
+        app(StockService::class)->applyMovement($this->variant, 'adjustment', -3, reason: 'koreksi', userId: $this->owner->id); // 15 -> 12
+
+        $rows = collect($this->movements("variant_id={$this->variant->id}")->assertOk()->json('data'));
+        $newest = $rows->first();
+        $oldest = $rows->last();
+
+        $this->assertSame(12, $newest['current_stock']);
+        $this->assertSame(12, $oldest['current_stock']);   // stok TERKINI, bukan stock_after baris itu
+        $this->assertSame(15, $oldest['stock_after']);
+        $this->assertSame($this->variant->product->artist_id, $newest['artist_id']);
+        $this->assertSame($this->variant->product->artist->name, $newest['artist_name']);
+        $this->assertSame($this->variant->product->category_id, $newest['category_id']);
+        $this->assertSame($this->variant->product->category->name, $newest['category_name']);
+        $this->assertNull($newest['image_url']); // tanpa gambar = null (SPA menampilkan placeholder)
+    }
+
+    public function test_image_url_prefers_the_variant_picture_then_the_product_picture(): void
+    {
+        $this->movement([]);
+        $this->movement(['variant_id' => $this->other->id]);
+        $this->variant->update(['image_path' => 'variants/own.jpg']);
+        $this->other->product->update(['image_path' => 'products/parent.jpg']);
+
+        $own = collect($this->movements('search=slippery')->json('data'))->first();
+        $fallback = collect($this->movements('search=OTHER')->json('data'))->first();
+
+        $this->assertStringContainsString('variants/own.jpg', $own['image_url']);
+        $this->assertStringContainsString('products/parent.jpg', $fallback['image_url']);
+    }
+
+    public function test_rows_never_expose_cost_and_demo_movements_stay_out_of_live(): void
+    {
+        $this->movement([]);
+        \App\Support\ModeGate::runAs('demo', fn () => $this->movement(['qty_change' => 99, 'stock_after' => 99]));
+
+        $res = $this->movements()->assertOk();
+
+        $this->assertCount(1, $res->json('data'));
+        $this->assertStringNotContainsString('cost', strtolower($res->getContent()));
+    }
+
+    public function test_new_fields_and_filters_keep_a_constant_query_count_across_many_sellers(): void
+    {
+        $this->movement([]);
+        $this->movements()->assertOk(); // pemanasan: cache setelan/lisensi terisi sekali, bukan N+1
+        DB::enableQueryLog();
+        $this->movements('per_page=25&search=r')->assertOk(); // "r" ada di "Slippery" dan "Varian"
+        $small = count(DB::getQueryLog());
+
+        foreach (range(1, 8) as $i) {
+            $this->otherSellerVariant("Produk {$i}", "Varian {$i}", "SPFXX{$i}0001");
+        }
+        DB::flushQueryLog();
+        $this->movements('per_page=25&search=r')->assertOk();
+        $large = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertSame($small, $large, 'penjual/kategori/gambar harus dimuat eager, bukan per baris');
+    }
 }

@@ -49,6 +49,10 @@ const columns = computed(() => [
   { key: 'created_at', label: t('master_data.col_time') },
 ]);
 
+// 048 — judul menyebut NAMA varian dan SKU-nya ("Slippery 5cm · SPF-KC-MCY-008") supaya jelas varian mana
+// yang dilihat; salah satunya kosong → tampilkan yang ada (tadinya hanya SKU, atau nama bila SKU kosong).
+const titleLabel = computed(() => [props.variantName, props.variantSku].filter(Boolean).join(' · '));
+
 // Setiap pembukaan mulai bersih: filter kosong, halaman 1, varian yang diminta.
 watch(
   () => [props.open, props.variantId],
@@ -65,7 +69,7 @@ watch(
 </script>
 
 <template>
-  <BaseModal :open="open" :title="t('master_data.history_title', { sku: variantSku || variantName })" max-width-class="max-w-[920px]" @close="emit('close')">
+  <BaseModal :open="open" :title="t('master_data.history_title', { label: titleLabel })" max-width-class="max-w-[920px]" @close="emit('close')">
     <div class="flex flex-col gap-4 px-6 py-5">
       <div class="flex flex-wrap items-end gap-2.5">
         <BaseSelect

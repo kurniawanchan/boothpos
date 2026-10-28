@@ -569,7 +569,11 @@ class ProductTest extends TestCase
         $queries = \Illuminate\Support\Facades\DB::getQueryLog();
         \Illuminate\Support\Facades\DB::disableQueryLog();
 
-        $variantQueries = collect($queries)->filter(fn ($q) => str_contains($q['query'], 'product_variants'))->count();
+        // 048: query daftar utama kini memuat subselect agregat total stok (alias total_stock*) atas product_variants;
+        // itu satu query bersama untuk semua produk, jadi tidak dihitung sebagai query eager-load varian.
+        $variantQueries = collect($queries)
+            ->filter(fn ($q) => str_contains($q['query'], 'product_variants') && ! str_contains($q['query'], 'total_stock'))
+            ->count();
 
         $this->assertSame(1, $variantQueries, 'Varian harus dimuat dalam satu query eager-load, bukan satu query per produk.');
     }
@@ -790,5 +794,141 @@ class ProductTest extends TestCase
         $this->post("/api/v1/variants/{$variant->id}/image", ['image' => \Illuminate\Http\UploadedFile::fake()->image('varian.jpg')])->assertOk();
 
         $this->assertNotSame($product->fresh()->image_path, $variant->fresh()->image_path);
+    }
+
+    /** Membuat produk dengan varian (sku, stok, harga jual, aktif) untuk uji total daftar produk (048). */
+    private function productWithVariants(array $variants, array $productAttrs = []): Product
+    {
+        // Factory tanpa kode tetap: baseline() memakai kode 'RYU' yang unik, jadi tidak bisa dipanggil berulang.
+        $product = Product::factory()->create(array_merge([
+            'artist_id' => Artist::factory()->create()->id,
+            'category_id' => Category::factory()->create()->id,
+        ], $productAttrs));
+        foreach ($variants as $i => [$stock, $price, $active]) {
+            $product->variants()->create([
+                'sku' => $product->code_prefix.'-'.($i + 1),
+                'variant_name' => "V{$i}",
+                'sell_price' => $price,
+                'cost_price' => 999,
+                'current_stock' => $stock,
+                'is_active' => $active,
+            ]);
+        }
+
+        return $product;
+    }
+
+    private function listRow(int $productId, string $query = ''): array
+    {
+        $rows = $this->getJson('/api/v1/products?per_page=100'.$query)->assertOk()->json('data');
+
+        return collect($rows)->firstWhere('id', $productId);
+    }
+
+    /** Spec 048 US3 (FR-010..FR-013): total stok dan nilai stok = stok x harga JUAL, hanya varian aktif. */
+    public function test_list_rows_carry_total_stock_and_stock_value_of_active_variants_only(): void
+    {
+        $this->actingAsRole('owner');
+        $product = $this->productWithVariants([[4, 20000, true], [10, 20000, true], [0, 20000, false], [5, 1000, false]]);
+
+        $row = $this->listRow($product->id);
+
+        $this->assertSame(14, $row['total_stock']);
+        $this->assertSame('280000.00', $row['total_stock_value']);
+    }
+
+    public function test_totals_use_selling_price_per_variant_and_never_cost(): void
+    {
+        $this->actingAsRole('owner');
+        $product = $this->productWithVariants([[3, 10000, true], [2, 2500, true]]);
+
+        $row = $this->listRow($product->id);
+
+        // 3x10000 + 2x2500 = 35000; cost_price (999) must not influence the figure.
+        $this->assertSame(5, $row['total_stock']);
+        $this->assertSame('35000.00', $row['total_stock_value']);
+    }
+
+    public function test_product_without_variants_or_stock_shows_zero_totals(): void
+    {
+        $this->actingAsRole('owner');
+        $empty = $this->productWithVariants([]);
+        $zero = $this->productWithVariants([[0, 15000, true]]);
+
+        $this->assertSame(0, $this->listRow($empty->id)['total_stock']);
+        $this->assertSame('0.00', $this->listRow($empty->id)['total_stock_value']);
+        $this->assertSame(0, $this->listRow($zero->id)['total_stock']);
+        $this->assertSame('0.00', $this->listRow($zero->id)['total_stock_value']);
+    }
+
+    public function test_soft_deleted_variants_are_excluded_from_totals(): void
+    {
+        $this->actingAsRole('owner');
+        $product = $this->productWithVariants([[4, 20000, true], [6, 20000, true]]);
+        $product->variants()->where('variant_name', 'V1')->first()->delete();
+
+        $row = $this->listRow($product->id);
+
+        $this->assertSame(4, $row['total_stock']);
+        $this->assertSame('80000.00', $row['total_stock_value']);
+    }
+
+    public function test_negative_stock_is_summed_as_is(): void
+    {
+        $this->actingAsRole('owner');
+        $product = $this->productWithVariants([[-2, 10000, true], [5, 10000, true]]);
+
+        $row = $this->listRow($product->id);
+
+        $this->assertSame(3, $row['total_stock']);
+        $this->assertSame('30000.00', $row['total_stock_value']);
+    }
+
+    /** Spec 048 edge case: DEMO dan LIVE tidak pernah dijumlahkan bersama. */
+    public function test_totals_do_not_mix_demo_and_live_variants(): void
+    {
+        $this->actingAsRole('owner');
+        $product = $this->productWithVariants([[4, 20000, true]]);
+        ModeGate::runAs('demo', fn () => $product->variants()->create([
+            'sku' => $product->code_prefix.'-9', 'variant_name' => 'Demo', 'sell_price' => 20000, 'current_stock' => 100, 'is_active' => true,
+        ]));
+
+        $row = $this->listRow($product->id);
+
+        $this->assertSame(4, $row['total_stock']);
+        $this->assertSame('80000.00', $row['total_stock_value']);
+    }
+
+    /** Total hanya dihitung query daftar: respons show/store/update tidak memuatnya (bukan nol palsu). */
+    public function test_totals_are_absent_outside_the_list_endpoint(): void
+    {
+        $this->actingAsRole('owner');
+        $product = $this->productWithVariants([[4, 20000, true]]);
+        ['artist' => $artist, 'category' => $category] = $this->baseline();
+
+        $this->getJson("/api/v1/products/{$product->id}")->assertOk()
+            ->assertJsonMissingPath('total_stock')->assertJsonMissingPath('total_stock_value');
+        $this->putJson("/api/v1/products/{$product->id}", ['name' => 'Rename'])->assertOk()
+            ->assertJsonMissingPath('total_stock')->assertJsonMissingPath('total_stock_value');
+        $this->postJson('/api/v1/products', $this->productPayload($artist->id, $category->id, ['product_segment' => 'ZZ']))->assertCreated()
+            ->assertJsonMissingPath('total_stock')->assertJsonMissingPath('total_stock_value');
+    }
+
+    public function test_list_does_not_expose_cost_and_keeps_a_constant_query_count(): void
+    {
+        $this->actingAsRole('owner');
+        foreach (range(1, 12) as $i) {
+            $this->productWithVariants([[$i, 1000, true], [1, 500, true]]);
+        }
+
+        \DB::enableQueryLog();
+        $small = $this->getJson('/api/v1/products?per_page=3')->assertOk();
+        $smallCount = count(\DB::getQueryLog());
+        \DB::flushQueryLog();
+        $large = $this->getJson('/api/v1/products?per_page=12')->assertOk();
+        $largeCount = count(\DB::getQueryLog());
+
+        $this->assertSame($smallCount, $largeCount, 'Jumlah query tidak boleh tumbuh dengan ukuran halaman.');
+        $this->assertStringNotContainsString('cost', strtolower(json_encode(collect($large->json('data'))->map(fn ($r) => array_keys($r))->all())));
     }
 }

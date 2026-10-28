@@ -867,6 +867,11 @@ paths:
         Opt-in, bukan default: layar Kelola Produk tidak memakai varian,
         sedangkan layar kasir memakainya — memuatnya selalu hanya
         memperbesar payload untuk konsumen yang tidak butuh.
+
+        048 — baris daftar membawa `total_stock` dan `total_stock_value`
+        (stok x harga JUAL, varian aktif dan tidak terhapus saja; harga modal
+        tidak dipakai). Hanya endpoint daftar ini yang menghitungnya —
+        `GET/POST/PUT /products/{id}` tidak memuatnya.
       parameters:
         - { name: search, in: query, description: "Cocokkan nama produk, atau SKU/nama varian pada salah satu variannya", schema: { type: string } }
         - name: artist_id
@@ -1126,8 +1131,28 @@ paths:
         nomor pre-order) dan `null` bila tidak bisa dibuktikan menyangkut varian
         ini (tidak pernah menampilkan nomor yang salah). Penyesuaian stok awal/manual
         dan impor tidak punya referensi (alasan ada di `reason`).
+
+        048 — layar Stok tetap buku besar (satu baris per pergerakan). `search`,
+        `artist_id[]` dan `category_id[]` disaring di server (jumlah & halaman
+        mengikuti hasil saring) dan digabung dengan filter lain secara AND.
+        Pergerakan varian/produk yang sudah dihapus tetap bisa dicari. Baris
+        membawa gambar, penjual, kategori, dan stok tersedia SAAT INI; tidak
+        ada field harga modal.
       parameters:
         - { name: variant_id, in: query, schema: { type: integer } }
+        - { name: search, in: query, description: "Cocokkan sebagian, tak peka huruf besar/kecil, pada SKU, nama varian, atau nama produk. Kosong/spasi saja = diabaikan; % dan _ dianggap karakter biasa.", schema: { type: string } }
+        - name: artist_id
+          in: query
+          description: "Array penjual (`artist_id[]=1&artist_id[]=2`); kosong = semua. Id yang tidak ada memberi daftar kosong, bukan error."
+          style: form
+          explode: true
+          schema: { type: array, items: { type: integer } }
+        - name: category_id
+          in: query
+          description: "Array kategori, sama seperti `artist_id`."
+          style: form
+          explode: true
+          schema: { type: array, items: { type: integer } }
         - { name: type, in: query, schema: { type: string, enum: [purchase, sale, preorder_handover, adjustment, return, initial] } }
         - { name: date_from, in: query, schema: { type: string, format: date } }
         - { name: date_to, in: query, schema: { type: string, format: date } }
@@ -6486,6 +6511,8 @@ components:
         is_preorder: { type: boolean }
         preorder_eta: { type: string, format: date, nullable: true }
         is_active: { type: boolean }
+        total_stock: { type: integer, readOnly: true, description: "048 — jumlah stok varian aktif; hanya pada GET /products (daftar). 0 bila tidak ada." }
+        total_stock_value: { type: string, readOnly: true, example: "280000.00", description: "048 — jumlah (stok x harga jual) varian aktif, string uang dua desimal; hanya pada GET /products (daftar)." }
         variants:
           type: array
           items: { $ref: '#/components/schemas/Variant' }
@@ -6536,6 +6563,12 @@ components:
             type: { type: string, enum: [order, preorder] }
             id: { type: integer, description: id order / pre-order }
             number: { type: string, example: "TRX-20261004-0007" }
+        image_url: { type: string, nullable: true, readOnly: true, description: "Gambar varian, jika tidak ada gambar produknya; null bila keduanya kosong (SPA menampilkan placeholder)." }
+        artist_id: { type: integer, nullable: true, readOnly: true }
+        artist_name: { type: string, nullable: true, readOnly: true, description: Penjual produk; tetap terisi walau penjualnya sudah dihapus. }
+        category_id: { type: integer, nullable: true, readOnly: true }
+        category_name: { type: string, nullable: true, readOnly: true }
+        current_stock: { type: integer, readOnly: true, description: "Stok varian SAAT respons dibuat — bukan stock_after baris ini; boleh sama di banyak baris varian yang sama." }
         created_at: { type: string, format: date-time }
 
     Event:

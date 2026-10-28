@@ -386,6 +386,15 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 
 **Testing/e2e gotchas found in this feature.** `php artisan serve` re-reads `.env`, so a second instance on another database must use `php -S` (see RUNBOOK). Two `php artisan test` runs in one container race on the shared file cache and `storage/framework/testing` fake disks — run them one at a time or give the second `-e CACHE_STORE=array` and its own database.
 
+## Stock page search/filters, variant columns, product stock totals (feature 048, 2026-10-28)
+
+- **`/stock` stays a movement LEDGER (one row per movement) — product-owner decision. Do not turn it into a per-variant list.** `GET /stock/movements` gained `search`, `artist_id[]`, `category_id[]`, all through ONE scope, `StockMovement::scopeMatchingListFilters()`. Every `whereHas` uses `withTrashed()` (history of deleted variants/products must stay findable) and user-typed `%`/`_` are escaped so they match literally. The same endpoint still feeds `VariantHistoryModal`, so every new parameter is optional.
+- **Row fields added:** `image_url` (variant → product fallback via the existing `ProductVariant::image_url` accessor), `artist_id/name`, `category_id/name` (eager-loaded `withTrashed()`, so a deleted seller still shows its name) and **`current_stock` = the variant's live stock, NOT that row's `stock_after`** — it repeats on every row of the same variant by design. No cost field is returned (the endpoint is open to the `stock` OR `products` menu).
+- **History dialog title** is `<variant name> · <SKU>` (`VariantHistoryModal::titleLabel`, locale key `master_data.history_title` now takes `{label}`); one rule for both call sites (Stock page, product detail). The Stock page's History button needs no extra gate — the whole route is `menuKey: 'stock'`.
+- **`GET /products` list rows carry `total_stock` and `total_stock_value`** = Σ stock and Σ stock × SELLING price over ACTIVE, non-deleted variants (never cost). They are `withSum` relation aggregates on purpose: an Eloquent aggregate keeps the variant model's DEMO/LIVE and soft-delete global scopes, a raw `DB::table` subquery would not (see "Hand-rolled `DB::table(...)` queries bypass the Eloquent global scope"). `ProductResource` emits them only when the aggregate attributes exist (the `relationLoaded` trap, used deliberately) — `GET/POST/PUT /products/{id}` do NOT contain them; never read them from those responses. The SPA shows "—" (not a fake 0) when a response lacks them.
+- `test_product_list_with_variants_does_not_run_a_query_per_product` now excludes the aggregate sub-selects (`total_stock` alias) when counting variant queries; its intent (eager-load once, not per product) is unchanged.
+- Query-count tests need one warm-up call first (settings/licence caches fill on the first request) or they report a phantom extra query.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -393,7 +402,17 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/047-settlement-tab-session-branding/plan.md`
+Active feature plan: `specs/048-stock-movements-search-variant-columns/plan.md`
+(branch `079-stock-movements-search-variant-columns`, from `develop`; spec dir number ≠ branch number) — no migration,
+three additive changes: (1) `/stock` STAYS a movement ledger (one row per movement, product-owner decision) and gains
+server-side `search` + `artist_id[]`/`category_id[]` on `GET /stock/movements` (one scope, `StockMovement::scopeMatchingListFilters()`,
+`withTrashed()` so deleted variants stay findable) and per-row `image_url`, seller, category, live `current_stock` and a
+History button (reuses `VariantHistoryModal`); (2) the history dialog title becomes `<variant name> · <SKU>` at both call
+sites; (3) `GET /products` list rows get `total_stock` and `total_stock_value` (Σ stock × SELLING price of ACTIVE variants,
+never cost) via relation aggregates so the DEMO/LIVE and soft-delete scopes apply — list endpoint only, absent from
+show/store/update (the `relationLoaded` trap, deliberate). OpenAPI moves in the same commit. See research.md.
+
+Previous feature: `specs/047-settlement-tab-session-branding/plan.md`
 (branch `076-settlement-tab-session-branding`, from `develop`; spec dir number ≠ branch number) — three slices:
 (1) **new-tab session** — the token lives in per-tab `sessionStorage`, so a new tab had none; a live signed-in tab now
 hands it over on a same-origin `BroadcastChannel` (`utils/tabSession.js`, via `auth.restore()`), logout propagates to all
