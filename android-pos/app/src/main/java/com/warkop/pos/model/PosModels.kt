@@ -201,6 +201,8 @@ data class ReceiptView(
     val storeLogoUrl: String? = null,
     /** 064 — nama terminal yang mengambil order; null bila tanpa terminal. */
     val terminalName: String? = null,
+    /** 079 — catatan outlet tempat penjualan terjadi (bisa beberapa baris); null bila kosong. */
+    val storeNotes: String? = null,
 )
 
 /** 048 — hasil bagi per item: [paid] = bagian yang dibayar, [remaining] = sisa bill; total dari server. */

@@ -13,6 +13,7 @@ class StrukIdentityTest {
         phone: String? = null,
         email: String? = null,
         logo: String? = null,
+        notes: String? = null,
     ) = ReceiptView(
         storeName = "Warkop WJM",
         storeAddress = "Jl. Melati 1",
@@ -36,6 +37,7 @@ class StrukIdentityTest {
         storeContactPhone = phone,
         storeContactEmail = email,
         storeLogoUrl = logo,
+        storeNotes = notes,
     )
 
     private fun texts(lines: List<PrintLine>) = lines.map { it.text }
@@ -73,5 +75,16 @@ class StrukIdentityTest {
     @Test fun `logo gagal dimuat sama dengan struk tanpa logo`() {
         // printOne memberi null bila logo gagal; hasilnya harus identik dengan struk tanpa logo.
         assertEquals(Documents.struk(receipt()), Documents.struk(receipt(), null))
+    }
+
+    @Test fun `catatan outlet tercetak per baris setelah kontak dan sebelum pemisah`() {
+        val t = texts(Documents.struk(receipt(phone = "0812", notes = "Buka 08-22\n\n  WiFi: warkop  \n")))
+        val i = t.indexOf("0812")
+        assertEquals(listOf("Buka 08-22", "WiFi: warkop"), t.subList(i + 1, i + 3))
+    }
+
+    @Test fun `tanpa catatan struk sama dengan sebelumnya`() {
+        assertEquals(Documents.struk(receipt()), Documents.struk(receipt(notes = null)))
+        assertEquals(Documents.struk(receipt()), Documents.struk(receipt(notes = "  \n ")))
     }
 }

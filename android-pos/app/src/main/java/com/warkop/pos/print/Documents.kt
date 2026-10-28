@@ -70,6 +70,8 @@ object Documents {
         r.storeContactPerson?.let { add(PrintLine(text = it, align = PrintLine.Align.CENTER)) }
         r.storeContactPhone?.let { add(PrintLine(text = it, align = PrintLine.Align.CENTER)) }
         r.storeContactEmail?.let { add(PrintLine(text = it, align = PrintLine.Align.CENTER)) }
+        // 079 — catatan outlet; tiap baris sendiri supaya pembungkus kertas 58 mm tidak memotong teks.
+        r.storeNotes?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }?.forEach { add(PrintLine(text = it, align = PrintLine.Align.CENTER)) }
         add(separator())
         add(PrintLine(text = "No. struk", right = r.receiptNo ?: r.orderNumber))
         r.paidAtText?.let { add(PrintLine(text = "Tanggal", right = it)) }

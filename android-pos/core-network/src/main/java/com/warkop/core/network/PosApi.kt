@@ -22,6 +22,8 @@ interface PosApi {
     // 073 — penyiapan terminal tanpa token (tablet belum punya akun): outlet, terminal per outlet, daftar/pilih terminal.
     /** 077 — mode data + nama/logo toko sebelum login (tanpa token). */
     @GET("pos-setup/branding") suspend fun branding(): BrandingDto
+    /** 079 — sama, tetapi `store_name` = nama OUTLET yang dipilih tablet (outlet dari path). 404 bila outlet tak ada di mode ini. */
+    @GET("pos-setup/outlets/{id}/branding") suspend fun outletBranding(@Path("id") outletId: Long): BrandingDto
     @GET("pos-setup/outlets") suspend fun setupOutlets(): SetupOutletsResponse
     @GET("pos-setup/outlets/{id}/terminals") suspend fun setupTerminals(@Path("id") outletId: Long): SetupTerminalsResponse
     @POST("pos-setup/outlets/{id}/terminals") suspend fun registerTerminal(@Path("id") outletId: Long, @Body body: RegisterTerminalRequest): RegisterTerminalResponse
