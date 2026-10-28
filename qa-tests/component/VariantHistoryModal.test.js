@@ -54,10 +54,22 @@ describe('VariantHistoryModal (036)', () => {
     expect(document.body.textContent).not.toMatch(/master_data\./i);
   });
 
-  it('shows the SKU in the title', async () => {
+  // 048 (FR-008) — judul menyebut nama varian DAN SKU; salah satu kosong → yang ada saja.
+  it('shows the variant name together with the SKU in the title', async () => {
     renderModal();
 
-    expect(await screen.findByRole('dialog', { name: /riwayat transaksi — SPF-KC-MCY-008/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Riwayat transaksi — Slippery 5cm · SPF-KC-MCY-008' })).toBeInTheDocument();
+  });
+
+  it('falls back to the SKU alone, or the name alone, when the other is missing', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const skuOnly = render(VariantHistoryModal, { props: { open: true, variantId: 42, variantSku: 'SPF-KC-MCY-008', variantName: '' }, global: { plugins: [pinia] } });
+    expect(await screen.findByRole('dialog', { name: 'Riwayat transaksi — SPF-KC-MCY-008' })).toBeInTheDocument();
+    skuOnly.unmount();
+
+    render(VariantHistoryModal, { props: { open: true, variantId: 42, variantSku: '', variantName: 'Slippery 5cm' }, global: { plugins: [pinia] } });
+    expect(await screen.findByRole('dialog', { name: 'Riwayat transaksi — Slippery 5cm' })).toBeInTheDocument();
   });
 
   it('re-queries from page 1 when the type filter changes', async () => {

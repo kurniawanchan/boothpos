@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listMovements, createAdjustment } from '../api/stock';
 import { lookupVariants } from '../api/products';
+import { listArtists } from '../api/artists';
+import { listCategories } from '../api/categories';
 import { exportMasterData } from '../api/masterData';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
@@ -14,20 +16,45 @@ import TablePagination from '../components/ui/TablePagination.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
+import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
+import VariantHistoryModal from '../components/product/VariantHistoryModal.vue';
 import { MOVEMENT_TYPES, movementTypeLabelKey, movementTypeVariant } from '../utils/stockMovements';
 
 const auth = useAuthStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
-const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listMovements);
-onMounted(load);
+const { items, meta, loading, load, setPage, setFilter, params } = usePaginatedList(listMovements);
+
+// 048 — pencarian + filter penjual/kategori dikirim ke server (GET /stock/movements), bukan disaring di
+// klien: daftar dipaginasi, jadi menyaring halaman yang termuat saja akan memberi hasil & jumlah yang salah.
+// Array kosong = "Semua" (pola yang sama dengan layar Produk).
+const search = ref('');
+const artistFilter = ref([]);
+const categoryFilter = ref([]);
+const artists = ref([]);
+const categories = ref([]);
+const artistOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+const categoryOptions = computed(() => categories.value.map((c) => ({ value: c.id, label: c.name })));
+const debouncedSearch = useDebouncedFn(() => setFilter({ search: search.value.trim() || undefined }), 300);
+
+// Pesan kosong yang jujur: "tidak cocok dengan filter" berbeda dari "belum ada pergerakan sama sekali".
+const hasActiveFilters = computed(() => ['search', 'artist_id', 'category_id', 'type', 'date_from', 'date_to'].some((k) => params[k] !== undefined && params[k] !== ''));
+const emptyMessage = computed(() => (hasActiveFilters.value ? t('master_data.no_stock_movements_filtered') : t('master_data.no_stock_movements')));
+
+onMounted(async () => {
+  await load();
+  // Opsi filter dimuat setelah daftar supaya tabel tidak menunggu; gagal memuat = dropdown kosong, bukan layar rusak.
+  const [a, c] = await Promise.allSettled([listArtists({ per_page: 100 }), listCategories({ per_page: 100 })]);
+  if (a.status === 'fulfilled') artists.value = a.value.data;
+  if (c.status === 'fulfilled') categories.value = c.value.data;
+});
 
 const exporting = ref(false);
 const showImportModal = ref(false);
@@ -79,18 +106,35 @@ function closeDetail() {
   detailVariantId.value = null;
 }
 
+// 048 — "Riwayat" membuka dialog riwayat varian yang sama dengan yang dipakai layar Produk. State-nya lokal di sini
+// (seperti dialog produk di atas), jadi daftar, filter, dan halaman tidak tersentuh saat dialog ditutup. Layar ini
+// sendiri sudah dibatasi menu `stock`, jadi tombolnya tidak butuh gerbang tambahan.
+const historyRow = ref(null);
+
 const columns = computed(() => [
   { key: 'sku', label: t('master_data.col_sku') },
+  { key: 'variant_name', label: t('master_data.col_variant') },
+  { key: 'artist_name', label: t('master_data.col_artist') },
+  { key: 'category_name', label: t('master_data.col_category') },
+  { key: 'current_stock', label: t('master_data.col_available_stock') },
   { key: 'type', label: t('master_data.col_type') },
   { key: 'qty_change', label: t('master_data.col_qty_change') },
   { key: 'range', label: t('master_data.col_range') },
   { key: 'reason', label: t('master_data.col_reason') },
   { key: 'user_name', label: t('master_data.col_by') },
   { key: 'created_at', label: t('master_data.col_time') },
+  { key: 'history', label: t('master_data.col_history') },
 ]);
 
 function applyFilters(patch) {
   setFilter(patch);
+}
+
+function applyListFilters() {
+  setFilter({
+    artist_id: artistFilter.value.length ? artistFilter.value : undefined,
+    category_id: categoryFilter.value.length ? categoryFilter.value : undefined,
+  });
 }
 
 // --- Adjustment dialog -----------------------------------------------
@@ -157,16 +201,18 @@ async function submitAdjustment() {
 <template>
   <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
     <div class="flex flex-wrap items-center gap-2.5">
-      <BaseSelect
-        v-model="typeFilter"
-        class="w-52"
-        :placeholder="t('master_data.all_types')"
-        :options="typeOptions"
-        @update:model-value="(v) => applyFilters({ type: v || undefined })"
-      />
-      <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
-      <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_to: v || undefined })" />
-      <span class="flex-1"></span>
+      <div class="relative flex min-w-[230px] flex-1 items-center">
+        <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[16px] text-muted-3" aria-hidden="true"></i>
+        <label class="sr-only" for="stock-search">{{ t('master_data.search_stock') }}</label>
+        <input
+          id="stock-search"
+          v-model="search"
+          type="search"
+          :placeholder="t('master_data.search_stock_placeholder')"
+          class="h-[42px] w-full rounded-lg border border-line bg-white pl-[38px] pr-3.5 text-[13.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
+          @input="debouncedSearch"
+        />
+      </div>
       <template v-if="auth.canAccessMenu('stock')">
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
@@ -183,8 +229,22 @@ async function submitAdjustment() {
       </template>
     </div>
 
+    <div class="flex flex-wrap items-center gap-2.5">
+      <BaseMultiSelect v-model="artistFilter" :options="artistOptions" :all-label="t('master_data.all_artists')" class="w-56" @update:model-value="applyListFilters" />
+      <BaseMultiSelect v-model="categoryFilter" :options="categoryOptions" :all-label="t('master_data.all_categories')" class="w-56" @update:model-value="applyListFilters" />
+      <BaseSelect
+        v-model="typeFilter"
+        class="w-52"
+        :placeholder="t('master_data.all_types')"
+        :options="typeOptions"
+        @update:model-value="(v) => applyFilters({ type: v || undefined })"
+      />
+      <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_from: v || undefined })" />
+      <BaseInput type="date" class="w-44" @update:model-value="(v) => applyFilters({ date_to: v || undefined })" />
+    </div>
+
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
-      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="t('master_data.no_stock_movements')">
+      <DataTable :columns="columns" :rows="items" :loading="loading" :empty-message="emptyMessage">
         <template #cell-sku="{ row }">
           <button
             v-if="canOpenProduct"
@@ -194,6 +254,23 @@ async function submitAdjustment() {
           >{{ row.sku }}</button>
           <span v-else class="font-mono text-[12px] font-semibold">{{ row.sku }}</span>
         </template>
+        <!-- 048: gambar varian (fallback gambar produk dari server) atau placeholder berukuran sama supaya baris tetap sejajar;
+             nama produk di bawah nama varian membedakan varian bernama sama ("S", "M") antar produk. -->
+        <template #cell-variant_name="{ row }">
+          <div class="flex min-w-[170px] items-center gap-2.5">
+            <img v-if="row.image_url" :src="row.image_url" :alt="row.variant_name || row.sku" class="h-11 w-11 shrink-0 rounded-md border border-line-2 object-cover" />
+            <div v-else data-testid="variant-placeholder" class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-line-2 bg-surface-subtle text-muted-3">
+              <i class="ph-duotone ph-image text-[18px]" aria-hidden="true"></i>
+            </div>
+            <div class="flex min-w-0 flex-col">
+              <span class="truncate text-[13px] font-semibold">{{ row.variant_name || '—' }}</span>
+              <span v-if="row.product_name" class="truncate text-[11.5px] text-muted-3">{{ row.product_name }}</span>
+            </div>
+          </div>
+        </template>
+        <template #cell-artist_name="{ row }">{{ row.artist_name || '—' }}</template>
+        <template #cell-category_name="{ row }">{{ row.category_name || '—' }}</template>
+        <template #cell-current_stock="{ row }"><span class="font-mono text-[13px] font-semibold">{{ row.current_stock ?? '—' }}</span></template>
         <template #cell-type="{ row }"><StatusPill :variant="movementTypeVariant(row.type)">{{ t(movementTypeLabelKey(row.type)) }}</StatusPill></template>
         <template #cell-qty_change="{ row }">
           <span class="font-mono text-[13px] font-bold" :class="row.qty_change >= 0 ? 'text-brand-active' : 'text-danger-text'">{{ row.qty_change >= 0 ? '+' : '' }}{{ row.qty_change }}</span>
@@ -206,9 +283,25 @@ async function submitAdjustment() {
         </template>
         <template #cell-user_name="{ row }">{{ row.user_name || '—' }}</template>
         <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        <template #cell-history="{ row }">
+          <button
+            type="button"
+            class="whitespace-nowrap text-[12.5px] font-semibold text-muted-4 hover:text-brand-active"
+            :aria-label="`${t('master_data.history')}: ${row.variant_name || row.sku}`"
+            @click="historyRow = row"
+          >{{ t('master_data.history') }}</button>
+        </template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
+
+    <VariantHistoryModal
+      :open="historyRow !== null"
+      :variant-id="historyRow?.variant_id"
+      :variant-sku="historyRow?.sku"
+      :variant-name="historyRow?.variant_name"
+      @close="historyRow = null"
+    />
 
     <ProductDetailModal :open="detailProductId !== null" :product-id="detailProductId" :highlight-variant-id="detailVariantId" @close="closeDetail" />
 

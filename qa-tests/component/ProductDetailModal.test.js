@@ -49,7 +49,7 @@ describe('ProductDetailModal (036)', () => {
     await user.click(within(row).getByRole('button', { name: 'Riwayat' }));
 
     await waitFor(() => expect(listMovements).toHaveBeenCalledWith(expect.objectContaining({ variant_id: 11 })));
-    expect(await screen.findByRole('dialog', { name: /riwayat transaksi — SPF-KC-MCY-002/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: /riwayat transaksi — Blue · SPF-KC-MCY-002/i })).toBeInTheDocument();
   });
 
   it('keeps the BOM button working beside History', async () => {

@@ -169,6 +169,8 @@ const columns = computed(() => [
   { key: 'name', label: t('master_data.col_product_name') },
   { key: 'artist_name', label: t('master_data.col_artist') },
   { key: 'category_name', label: t('master_data.col_category') },
+  { key: 'total_stock', label: t('master_data.col_total_stock') },
+  { key: 'total_stock_value', label: t('master_data.col_stock_value') },
   { key: 'is_preorder', label: t('master_data.col_type') },
   { key: 'is_active', label: t('master_data.col_status') },
   { key: 'actions', label: '' },
@@ -685,6 +687,16 @@ async function performDelete() {
               {{ expandedSkuRowIds.has(row.id) ? t('master_data.show_less') : t('master_data.show_more_count', { count: row.variants.length - SKU_PREVIEW_COUNT }) }}
             </button>
           </div>
+        </template>
+        <!-- 048: total dihitung server (stok x harga jual, varian aktif); layar hanya menampilkan, tanpa hitung ulang.
+             Respons lama tanpa field ini (mis. cache) tampil "—", bukan nol palsu. -->
+        <template #cell-total_stock="{ row }">
+          <span v-if="row.total_stock == null" class="text-muted-3">—</span>
+          <span v-else class="font-mono text-[12.5px] font-semibold">{{ row.total_stock }}</span>
+        </template>
+        <template #cell-total_stock_value="{ row }">
+          <span v-if="row.total_stock_value == null" class="text-muted-3">—</span>
+          <span v-else class="font-mono text-[12.5px]">{{ formatIDR(row.total_stock_value) }}</span>
         </template>
         <template #cell-is_preorder="{ row }">
           <StatusPill :variant="row.is_preorder ? 'warn' : 'neutral'">{{ row.is_preorder ? t('master_data.preorder') : t('master_data.ready_stock') }}</StatusPill>

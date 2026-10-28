@@ -32,7 +32,16 @@ class StockController extends Controller
 
         $movements = StockMovement::query()
             // Varian/produk yang sudah dihapus tetap harus tampil di riwayatnya.
-            ->with(['user:id,name', 'variant' => fn ($q) => $q->withTrashed(), 'variant.product' => fn ($q) => $q->withTrashed()])
+            // 048: penjual & kategori ikut dimuat eager (withTrashed — penjual/kategori yang sudah dihapus
+            // tetap tampil namanya di riwayat), jadi jumlah query tetap konstan berapa pun ukuran halaman.
+            ->with([
+                'user:id,name',
+                'variant' => fn ($q) => $q->withTrashed(),
+                'variant.product' => fn ($q) => $q->withTrashed(),
+                'variant.product.artist' => fn ($q) => $q->withTrashed(),
+                'variant.product.category' => fn ($q) => $q->withTrashed(),
+            ])
+            ->matchingListFilters($request->only(['search', 'artist_id', 'category_id']))
             ->when($request->filled('variant_id'), fn ($q) => $q->where('variant_id', $request->integer('variant_id')))
             ->when($request->filled('type'), fn ($q) => $q->where('type', $request->string('type')))
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
@@ -59,6 +68,14 @@ class StockController extends Controller
             'product_id' => $m->variant->product && ! $m->variant->product->trashed() ? $m->variant->product->id : null,
             'product_name' => $m->variant->product?->name,
             'reference' => $references[$m->id] ?? null,
+            // 048: kolom layar Stok. `current_stock` = stok varian SAAT INI (bukan stock_after baris ini).
+            // Tidak ada field harga modal di sini — respons ini terbuka bagi menu `stock` maupun `products`.
+            'image_url' => $m->variant->image_url,
+            'artist_id' => $m->variant->product?->artist_id,
+            'artist_name' => $m->variant->product?->artist?->name,
+            'category_id' => $m->variant->product?->category_id,
+            'category_name' => $m->variant->product?->category?->name,
+            'current_stock' => $m->variant->current_stock,
         ]);
 
         return response()->json([

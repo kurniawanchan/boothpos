@@ -778,3 +778,49 @@ describe('ProductsView — deactivated variants are hidden (045 FR-017)', () => 
     expect(numbers).toEqual(['1']);
   });
 });
+
+// 048-stock-movements-search-variant-columns (US3) — total stok & nilai stok per produk, dihitung server.
+describe('ProductsView — total stock and stock value columns (048)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+  });
+
+  it('shows the server-computed totals under their own headers', async () => {
+    listProducts.mockResolvedValue({
+      data: [
+        { id: 1, code_prefix: 'ARTKY001', name: 'Keychain A', artist_name: 'Artist A', category_name: 'Kategori A', is_preorder: false, is_active: true, image_url: null, total_stock: 14, total_stock_value: '280000.00' },
+        { id: 2, code_prefix: 'ARTKY002', name: 'Keychain B', artist_name: 'Artist A', category_name: 'Kategori A', is_preorder: false, is_active: true, image_url: null, total_stock: 0, total_stock_value: '0.00' },
+      ],
+      meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 },
+    });
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    expect(screen.getByRole('columnheader', { name: 'Total stok' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Nilai stok' })).toBeInTheDocument();
+
+    const rowA = screen.getByText('Keychain A').closest('tr');
+    expect(within(rowA).getByText('14')).toBeInTheDocument();
+    expect(within(rowA).getByText('Rp 280.000')).toBeInTheDocument();
+
+    // Total nol tetap tampil sebagai angka, bukan kosong (spec FR-012).
+    const rowB = screen.getByText('Keychain B').closest('tr');
+    expect(within(rowB).getByText('0')).toBeInTheDocument();
+    expect(within(rowB).getByText('Rp 0')).toBeInTheDocument();
+  });
+
+  it('shows a dash instead of a fake zero when the response carries no totals, and never a raw key', async () => {
+    listProducts.mockResolvedValue({
+      data: [{ id: 1, code_prefix: 'ARTKY001', name: 'Keychain A', artist_name: 'Artist A', category_name: 'Kategori A', is_preorder: false, is_active: true, image_url: null }],
+      meta: { current_page: 1, per_page: 25, total: 1, last_page: 1 },
+    });
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    const row = screen.getByText('Keychain A').closest('tr');
+    expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(2);
+    expect(document.body.textContent).not.toMatch(/master_data\.col_(total_stock|stock_value)/i);
+  });
+});

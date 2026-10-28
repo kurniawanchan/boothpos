@@ -65,6 +65,13 @@ class ProductController extends Controller
             // Filter search/artis/kategori ada di Product::scopeMatchingListFilters()
             // — juga dipakai ekspor (spec 041), supaya file ekspor selalu
             // berisi produk yang sama dengan yang tampil di layar ini.
+            // 048 — total stok & nilai stok per produk (stok x harga JUAL, varian aktif saja; harga modal
+            // tidak pernah dipakai). Sengaja relation aggregate, BUKAN subquery mentah/DB::table: agregat
+            // relasi ikut menerapkan global scope model varian (DEMO/LIVE + soft delete), sedangkan query
+            // mentah melewatinya dan menjumlahkan lintas mode. Dihitung di query daftar yang sama, jadi
+            // jumlah query tetap konstan berapa pun ukuran halaman. Hanya endpoint daftar yang membawanya.
+            ->withSum(['variants as total_stock' => fn ($q) => $q->where('is_active', true)], 'current_stock')
+            ->withSum(['variants as total_stock_value' => fn ($q) => $q->where('is_active', true)], DB::raw('current_stock * sell_price'))
             ->matchingListFilters($request->only(['search', 'artist_id', 'category_id']))
             ->when($request->has('is_preorder'), fn ($q) => $q->where('is_preorder', $request->boolean('is_preorder')))
             ->orderBy('name')

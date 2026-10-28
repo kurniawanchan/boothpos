@@ -28,6 +28,12 @@ class ProductResource extends JsonResource
             'preorder_eta' => $this->preorder_eta?->toDateString(),
             'is_active' => $this->is_active,
             'variants' => ProductVariantResource::collection($this->whenLoaded('variants')),
+            // 048 — hanya ada bila query daftar menghitungnya (jebakan relationLoaded yang SENGAJA dipakai):
+            // respons show/store/update tidak memuatnya, jadi tidak pernah menampilkan nol palsu.
+            $this->mergeWhen(array_key_exists('total_stock', $this->resource->getAttributes()), fn () => [
+                'total_stock' => (int) $this->total_stock,
+                'total_stock_value' => number_format((float) $this->total_stock_value, 2, '.', ''),
+            ]),
         ];
     }
 }
