@@ -121,6 +121,63 @@ const runSearch = useDebouncedFn(async () => {
 }, 300);
 watch(search, runSearch);
 
+// 049 (US5) — pindai barcode katalog: pemindai biasa bertindak sebagai keyboard (mengetik kode lalu Enter),
+// jadi Enter di kotak pencarian menjadi pemicunya. Kode yang SKU-nya persis sama dengan satu varian aktif
+// langsung masuk keranjang lewat jalur yang sama dengan mengetuk kartunya (addToCart) — tanpa aturan baru
+// soal harga, total, atau stok; server tetap menghitung ulang semuanya saat checkout. Teks yang bukan SKU
+// persis (potongan kode, nama) TIDAK menambah apa pun: hasil pencarian biasa ditampilkan seperti sebelumnya.
+//
+// BUG YANG DITEMUKAN & DIPERBAIKI (verifikasi browser sungguhan, 049) — versi pertama memakai `searchSeq` (penjaga
+// pencarian 030) untuk mengabaikan hasil basi. Di browser sungguhan pencarian ber-debounce 300 ms menyala SETELAH Enter
+// (jaringan lebih lambat dari jeda itu), menaikkan `searchSeq`, dan pindaian dibuang diam-diam: barang tidak masuk dan
+// pesan "tidak ditemukan" tak muncul. Tes dengan mock yang langsung selesai tidak pernah bisa melihatnya. Aturannya kini:
+//   - Enter MEMBATALKAN debounce yang menunggu (runSearch.cancel());
+//   - kotak dikosongkan SEKARANG, sebelum permintaan, supaya pindaian berikutnya tidak menempel di belakang kode ini;
+//   - hasil kecocokan persis SELALU diterapkan (pindaian adalah peristiwa terpisah; dua pindaian cepat berurutan
+//     tidak boleh saling membatalkan). Penghitung `scanSeq` hanya memutuskan apakah hasil pencarian biasa (teks
+//     parsial) boleh dipulihkan ke layar — dan hanya bila pengguna belum mengetik/memindai lagi.
+const searchInput = ref(null);
+let scanSeq = 0;
+
+async function handleScanEnter() {
+  runSearch.cancel();
+  const code = search.value.trim();
+  if (!code) return;
+  const thisScan = ++scanSeq;
+  searchSeq += 1; // membuang hasil pencarian biasa yang masih berjalan (penjaga 030)
+  search.value = '';
+  searchResults.value = null;
+  searchInput.value?.focus();
+
+  try {
+    const exact = await lookupVariants(code, 1, { exact: true });
+    const hit = exact.data?.[0];
+    if (hit) {
+      if (hit.current_stock <= 0) {
+        // Mengetuk kartu stok habis diam-diam diabaikan (tombolnya nonaktif); pada pemindaian pesannya harus jelas,
+        // karena kasir tidak melihat kartunya.
+        toast.warning(t('pos.scan_out_of_stock', { name: hit.label }));
+      } else {
+        addToCart(buildSearchCards([hit])[0]);
+      }
+      return;
+    }
+
+    const res = await lookupVariants(code, 40);
+    if (!res.data.length) {
+      toast.warning(t('pos.scan_not_found', { code })); // kode salah tidak menempel: kotak sudah kosong
+      return;
+    }
+    // Teks parsial/nama: tampilkan hasilnya, tidak menambah apa pun — kecuali pengguna sudah melanjutkan mengetik/memindai.
+    if (thisScan === scanSeq && search.value === '') {
+      search.value = code;
+      searchResults.value = res.data;
+    }
+  } catch (err) {
+    toast.error(err.message);
+  }
+}
+
 // One card per product (grouped) — picking a product with more than one
 // active variant opens the variant picker; a single-variant product is
 // added to the cart directly (see selectProductCard below).
@@ -282,7 +339,9 @@ async function resumeDraft(draftId) {
           <label class="sr-only" for="pos-search">{{ t('pos.search_product_or_sku') }}</label>
           <input
             id="pos-search"
+            ref="searchInput"
             v-model="search"
+            @keydown.enter.prevent="handleScanEnter"
             :placeholder="t('pos.search_product_or_sku_placeholder')"
             class="h-[46px] w-full rounded-lg border border-line bg-white pl-10 pr-3.5 text-[14.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           />

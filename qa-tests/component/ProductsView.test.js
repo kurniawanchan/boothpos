@@ -7,6 +7,7 @@ import { useAuthStore } from '../../resources/js/stores/auth';
 import { listProducts, getProduct, updateProduct, updateVariant, updateVariantSequences, deleteVariant, addVariant, uploadVariantImage } from '../../resources/js/api/products';
 import { listArtists } from '../../resources/js/api/artists';
 import { listCategories } from '../../resources/js/api/categories';
+import { getCatalog } from '../../resources/js/api/catalog';
 
 vi.mock('../../resources/js/api/products', () => ({
   listProducts: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('../../resources/js/api/products', () => ({
 }));
 vi.mock('../../resources/js/api/artists', () => ({ listArtists: vi.fn() }));
 vi.mock('../../resources/js/api/categories', () => ({ listCategories: vi.fn() }));
+vi.mock('../../resources/js/api/catalog', () => ({ getCatalog: vi.fn(), downloadCatalogExcel: vi.fn() }));
 vi.mock('../../resources/js/api/masterData', () => ({ exportMasterData: vi.fn(), importMasterData: vi.fn(), downloadImportTemplate: vi.fn() }));
 
 const PRODUCTS = [
@@ -822,5 +824,89 @@ describe('ProductsView — total stock and stock value columns (048)', () => {
     const row = screen.getByText('Keychain A').closest('tr');
     expect(within(row).getAllByText('—').length).toBeGreaterThanOrEqual(2);
     expect(document.body.textContent).not.toMatch(/master_data\.col_(total_stock|stock_value)/i);
+  });
+});
+
+// 049 (US1/US4) — tombol Katalog di layar Produk.
+describe('ProductsView — catalog button (049)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProducts.mockResolvedValue({ data: PRODUCTS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+  });
+
+  it('shows a Catalog button to a user with the products menu', async () => {
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    expect(screen.getByRole('button', { name: /Katalog/ })).toBeInTheDocument();
+  });
+
+  it('hides the Catalog button entirely from a user without the products menu', async () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useAuthStore().user = { id: 2, role: 'Cashier', name: 'Kasir', menu_keys: ['dashboard', 'pos'] };
+    render(ProductsView, { global: { plugins: [pinia] } });
+    await screen.findByText('Keychain A');
+
+    expect(screen.queryByRole('button', { name: /Katalog/ })).not.toBeInTheDocument();
+  });
+});
+
+// 049 (US4) — katalog mengikuti filter yang aktif di layar Produk, dibaca saat dialog dibuka.
+describe('ProductsView — catalog scope follows the active filters (049)', () => {
+  const CATALOG = { generated_at: '2026-10-28T11:20:00+07:00', store: { name: 'Toko' }, totals: { sellers: 1, variants: 4 }, sellers: [{ artist_id: 1, name: 'Artist A', variants: [] }] };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listProducts.mockResolvedValue({ data: PRODUCTS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+    listArtists.mockResolvedValue({ data: [{ id: 1, name: 'Artist A', code: 'ART' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 1, name: 'Kategori A', code: 'KA' }] });
+    getCatalog.mockResolvedValue(CATALOG);
+  });
+
+  it('opens with no filters when none are applied', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    await user.click(screen.getByRole('button', { name: /Katalog/ }));
+
+    await waitFor(() => expect(getCatalog).toHaveBeenCalledTimes(1));
+    expect(getCatalog).toHaveBeenCalledWith({ search: undefined, artist_id: undefined, category_id: undefined });
+    expect(await screen.findByText('Semua produk aktif.')).toBeInTheDocument();
+  });
+
+  it('sends the search text and selected seller/category and names them in the summary', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderProducts();
+    await screen.findByText('Keychain A');
+    await user.type(screen.getByPlaceholderText(/Cari nama produk/), 'slip');
+    await user.click(screen.getByText('Semua penjual'));
+    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+
+    await user.click(screen.getByRole('button', { name: /Katalog/ }));
+
+    await waitFor(() => expect(getCatalog).toHaveBeenCalledWith({ search: 'slip', artist_id: [1], category_id: undefined }));
+    expect(await screen.findByTestId('catalog-scope-names')).toHaveTextContent('“slip” · Artist A');
+  });
+
+  it('uses the NEW filters when reopened after they changed (no stale scope)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderProducts();
+    await screen.findByText('Keychain A');
+
+    await user.click(screen.getByRole('button', { name: /Katalog/ }));
+    await waitFor(() => expect(getCatalog).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: 'Tutup' })); // tutup dialog
+    await user.type(screen.getByPlaceholderText(/Cari nama produk/), 'baru');
+    await user.click(screen.getByRole('button', { name: /Katalog/ }));
+
+    await waitFor(() => expect(getCatalog).toHaveBeenCalledTimes(2));
+    expect(getCatalog).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'baru' }));
   });
 });

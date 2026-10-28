@@ -59,6 +59,7 @@ export function uploadVariantImage(id, file) {
  * callers like PreordersView.vue's "Add item" field can show a list on
  * open, matching CustomerSearchDropdown.vue's UX.
  */
-export function lookupVariants(q, limit = 20) {
-  return client.get('/variants/lookup', { params: { q, limit } }).then((r) => r.data);
+export function lookupVariants(q, limit = 20, { exact = false } = {}) {
+  // 049: exact=1 -> hanya varian aktif dengan SKU persis sama (jalur pindai barcode POS), bukan LIKE.
+  return client.get('/variants/lookup', { params: { q, limit, ...(exact ? { exact: 1 } : {}) } }).then((r) => r.data);
 }

@@ -61,7 +61,7 @@ async function imageToDataUrl(src) {
  * exact node the user is looking at) into a <canvas>, immune to the
  * cross-origin-image taint described above.
  */
-export async function captureElementCanvas(el) {
+export async function captureElementCanvas(el, { scale = 2 } = {}) {
   const { default: html2canvas } = await import('html2canvas');
 
   // Kunci = atribut src MENTAH (html2canvas menyalin atribut apa adanya ke klon,
@@ -77,7 +77,7 @@ export async function captureElementCanvas(el) {
 
   return html2canvas(el, {
     backgroundColor: '#ffffff',
-    scale: 2,
+    scale, // bawaan 2 (semua dokumen lama); katalog 049 boleh mengaturnya
     useCORS: true,
     onclone: (clonedDoc, clonedRoot) => {
       (clonedRoot ?? clonedDoc).querySelectorAll('img').forEach((img) => {

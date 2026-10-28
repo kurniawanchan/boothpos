@@ -20,6 +20,7 @@ import BaseTooltip from '../components/ui/BaseTooltip.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
+import CatalogExportModal from '../components/catalog/CatalogExportModal.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
@@ -66,6 +67,21 @@ function applyFilters() {
     category_id: categoryFilter.value.length ? categoryFilter.value : undefined,
   });
 }
+
+// 049 — tombol Katalog: filter yang aktif di layar ini (pencarian, penjual, kategori) ikut ke katalog,
+// jadi isi katalog persis yang sedang terlihat. Dibaca saat dialog dibuka.
+const showCatalog = ref(false);
+// Nama yang ditampilkan di ringkasan dialog: kata kunci, lalu nama penjual dan kategori terpilih.
+const catalogScopeLabels = computed(() => [
+  search.value.trim() ? `“${search.value.trim()}”` : null,
+  ...artists.value.filter((a) => artistFilter.value.includes(a.id)).map((a) => a.name),
+  ...categories.value.filter((c) => categoryFilter.value.includes(c.id)).map((c) => c.name),
+].filter(Boolean));
+const catalogFilters = computed(() => ({
+  search: search.value.trim() || undefined,
+  artist_id: artistFilter.value.length ? artistFilter.value : undefined,
+  category_id: categoryFilter.value.length ? categoryFilter.value : undefined,
+}));
 
 const exporting = ref(false);
 const showImportModal = ref(false);
@@ -595,6 +611,10 @@ async function performDelete() {
         />
       </div>
       <template v-if="auth.canAccessMenu('products')">
+        <BaseButton variant="secondary" @click="showCatalog = true">
+          <i class="ph-duotone ph-book-open-text text-[16px]" aria-hidden="true"></i>
+          {{ t('catalog.button') }}
+        </BaseButton>
         <BaseButton variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('common.export_xlsx') }}
@@ -716,6 +736,8 @@ async function performDelete() {
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
     </div>
+
+    <CatalogExportModal :open="showCatalog" :filters="catalogFilters" :scope-labels="catalogScopeLabels" @close="showCatalog = false" />
 
     <BaseDrawer
       :open="showDrawer"

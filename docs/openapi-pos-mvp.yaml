@@ -1100,6 +1100,14 @@ paths:
       parameters:
         - { name: q, in: query, required: true, description: "SKU, nama varian, atau nama produk induknya", schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 50 } }
+        - name: exact
+          in: query
+          description: |
+            049 — `1`/`true`: jalur pindai barcode POS. Abaikan pencarian LIKE dan kembalikan hanya
+            varian AKTIF yang SKU-nya sama persis dengan `q` (spasi tepi dibuang, huruf besar/kecil
+            mengikuti collation): satu baris atau `[]`. Teks parsial, nama varian, atau nama produk
+            tidak pernah cocok. `q` kosong mengembalikan `[]`. Tanpa parameter ini perilaku tidak berubah.
+          schema: { type: boolean, default: false }
       responses:
         '200':
           description: Berhasil
@@ -1111,6 +1119,66 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/VariantLookup' }
+
+  # ------------------------------------------------------------------
+  # KATALOG VARIAN PER PENJUAL (049)
+  # ------------------------------------------------------------------
+  /catalog:
+    get:
+      tags: [Master Data]
+      summary: Katalog varian aktif per penjual (JSON untuk PDF)
+      description: |
+        049 — satu sumber data katalog (juga dipakai ekspor Excel). Hanya produk dan varian AKTIF yang tidak
+        dihapus; penjual urut abjad, varian urut kategori → produk → varian. Filter sama dengan `GET /products`.
+        **Tidak pernah** memuat harga modal, stok, BOM, atau status pre-order. Setiap varian membawa pola
+        barcode Code 128 dari server (`barcode.pattern`: `1` = batang, `0` = spasi, tanpa zona hening) yang
+        menyandikan `code` (SKU) persis; `barcode` bernilai `null` bila kode tak bisa dibawa Code 128 set B
+        (varian tetap tampil dengan kode terbacanya). **Akses**: menu `products` (403 selain itu). Lebih dari
+        `catalog.max_variants` (2.000) varian → 422.
+      parameters:
+        - { name: search, in: query, description: "Sama seperti GET /products", schema: { type: string } }
+        - name: artist_id
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { type: integer } }
+        - name: category_id
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Catalog' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: Katalog melebihi batas varian; persempit dengan filter.
+  /catalog/export:
+    get:
+      tags: [Master Data]
+      summary: Katalog varian per penjual sebagai berkas Excel
+      description: |
+        049 — berkas `katalog-produk.xlsx`, satu sheet: blok identitas toko di atas, lalu per penjual satu baris
+        judul berwarna dan baris variannya. Kode, nama, kategori adalah teks sel; harga angka berformat Rupiah;
+        gambar (diperkecil ±160 px) dan barcode tertanam sebagai gambar. Header kolom mengikuti bahasa pengguna.
+        Parameter dan aturan akses sama dengan `GET /catalog`. **422** bila tidak ada varian aktif untuk filter
+        itu (tidak pernah mengirim berkas kosong) atau melebihi batas.
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: artist_id, in: query, style: form, explode: true, schema: { type: array, items: { type: integer } } }
+        - { name: category_id, in: query, style: form, explode: true, schema: { type: array, items: { type: integer } } }
+      responses:
+        '200':
+          description: Berkas Excel
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422':
+          description: Tidak ada varian aktif untuk filter ini, atau melebihi batas varian.
 
   # ------------------------------------------------------------------
   # STOK
@@ -6474,6 +6542,55 @@ components:
         is_active: { type: boolean, default: true }
         copy_bom_from_variant_id: { type: integer, nullable: true, description: "034 — hanya pada POST /products/{id}/variants." }
 
+    Catalog:
+      type: object
+      description: Katalog varian aktif per penjual (049).
+      properties:
+        generated_at: { type: string, format: date-time }
+        store:
+          type: object
+          description: Identitas toko (perakitan sama dengan struk/invoice); baris yang belum diisi bernilai null.
+          properties:
+            name: { type: string }
+            logo_url: { type: string, nullable: true }
+            address: { type: string, nullable: true }
+            contact_person: { type: string, nullable: true }
+            contact_phone: { type: string, nullable: true }
+            contact_email: { type: string, nullable: true }
+        totals:
+          type: object
+          properties:
+            sellers: { type: integer }
+            variants: { type: integer }
+        sellers:
+          type: array
+          items:
+            type: object
+            properties:
+              artist_id: { type: integer }
+              name: { type: string }
+              variants:
+                type: array
+                items: { $ref: '#/components/schemas/CatalogVariant' }
+    CatalogVariant:
+      type: object
+      properties:
+        variant_id: { type: integer }
+        category_name: { type: string, nullable: true }
+        product_name: { type: string }
+        variant_name: { type: string }
+        code: { type: string, description: SKU persis seperti yang dikenali pencarian POS. }
+        sell_price: { type: string, example: "20000.00" }
+        image_url: { type: string, nullable: true, description: Gambar varian, lalu gambar produk; null bila keduanya kosong. }
+        barcode: { $ref: '#/components/schemas/CatalogBarcode' }
+    CatalogBarcode:
+      type: object
+      nullable: true
+      description: Null bila `code` memuat karakter di luar ASCII cetak (tak bisa dibawa Code 128 set B).
+      properties:
+        type: { type: string, enum: [code128] }
+        pattern: { type: string, description: "Modul bergantian: `1` batang, `0` spasi. Start B + data + checksum + stop; zona hening (>= 10 modul) ditambahkan penggambar.", example: "1101001000010100011000100010110001100011101011" }
+        text: { type: string, description: Kode yang disandikan (dicetak di bawah barcode). }
     VariantLookup:
       type: object
       description: Bentuk ringkas untuk layar kasir

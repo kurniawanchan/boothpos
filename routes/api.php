@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymentChannelController;
 use App\Http\Controllers\Api\PaymentProofController;
 use App\Http\Controllers\Api\PreorderController;
+use App\Http\Controllers\Api\ProductCatalogController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RoleController;
@@ -117,6 +118,8 @@ Route::prefix('v1')->group(function () {
         Route::delete('/variants/{variant}', [ProductController::class, 'destroyVariant']);
         Route::post('/variants/{variant}/image', [ProductController::class, 'uploadVariantImage']);
         Route::get('/variants/lookup', [ProductController::class, 'lookupVariants']);
+        Route::get('/catalog', [ProductCatalogController::class, 'index']);
+        Route::get('/catalog/export', [ProductCatalogController::class, 'export']);
 
         Route::get('/stock/movements', [StockController::class, 'movements']);
         Route::post('/stock/adjustments', [StockController::class, 'adjust']);
