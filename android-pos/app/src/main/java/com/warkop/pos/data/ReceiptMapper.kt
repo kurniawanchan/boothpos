@@ -20,6 +20,7 @@ object ReceiptMapper {
         storeNotes = dto.storeNotes?.trim()?.takeIf { it.isNotBlank() },
         storeLogoUrl = ServerUrl.resolve(serverBase, dto.storeLogoUrl),
         orderNumber = dto.orderNumber,
+        orderNote = dto.notes?.trim()?.takeIf { it.isNotBlank() },
         receiptNo = dto.receiptNo?.takeIf { it.isNotBlank() },
         queueNo = dto.queueNo?.takeIf { it.isNotBlank() },
         terminalName = dto.terminalName?.trim()?.takeIf { it.isNotBlank() },

@@ -37,6 +37,12 @@ object Documents {
         add(PrintLine(text = "Ronde ${k.roundNo}   ${k.sentAtText}"))
         cashier?.takeIf { it.isNotBlank() }?.let { add(PrintLine(text = "Dibuat oleh $it")) }
         add(separator())
+        // 078 — catatan kasir untuk seluruh order dicetak DULU (tebal, sebelum item) supaya dapur membacanya sebelum memasak.
+        k.orderNote?.takeIf { it.isNotBlank() }?.let { note ->
+            add(PrintLine(text = "CATATAN ORDER:", bold = true))
+            add(PrintLine(text = note, bold = true))
+            add(separator())
+        }
         k.items.forEach { addItem(it) }
         add(separator())
     }
@@ -85,6 +91,11 @@ object Documents {
         r.items.forEach { line ->
             add(PrintLine(text = "${line.qty} x ${line.name}", right = rp(line.lineTotal)))
             line.note?.let { add(PrintLine(text = "   Catatan: $it")) }
+        }
+        // 078 — catatan kasir untuk SELURUH order, di bawah item dan sebelum total; tanpa catatan tidak ada label atau baris kosong.
+        r.orderNote?.takeIf { it.isNotBlank() }?.let { note ->
+            add(PrintLine(text = "Catatan order:", bold = true))
+            add(PrintLine(text = note))
         }
         add(separator())
         add(PrintLine(text = "Subtotal", right = rp(r.subtotal)))

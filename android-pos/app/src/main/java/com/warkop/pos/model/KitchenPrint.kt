@@ -13,6 +13,8 @@ data class PrintableKot(
     val roundNo: Int,
     val sentAtText: String,
     val items: List<PrintableItem>,
+    /** 078 — catatan kasir untuk seluruh order; dicetak tebal di bawah judul, sebelum item. null/kosong = tidak dicetak. */
+    val orderNote: String? = null,
 )
 
 data class PrintableItem(

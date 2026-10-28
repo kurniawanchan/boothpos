@@ -257,6 +257,8 @@ class OrderController extends Controller
             'customer_phone' => $order->customer?->phone,
             'customer_email' => $order->customer?->email,
             'order_number' => $order->order_number,
+            // 078 — catatan kasir untuk SELURUH order (`orders.notes`), dicetak di struk di bawah item. Catatan per baris tetap di `items[].note`.
+            'notes' => $order->notes,
             // 048 — nomor struk, nomor antrean counter, jumlah tamu, dan pajak eksklusif.
             // 064 — nomor struk urut polos per outlet (`000124`; nomor lama `T01-000124` tetap); terminal yang mengambil
             // order tampil lewat NAMA (null untuk order dari SPA web / terminal yang sudah dihapus).

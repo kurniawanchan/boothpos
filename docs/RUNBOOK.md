@@ -583,6 +583,7 @@ Aplikasi tablet kasir ada di `android-pos/` (Kotlin, Compose). Ia online-first d
 5. Salah outlet/terminal? Di layar PIN pilih **Ganti outlet / terminal** (alamat server dipertahankan; pilihan lama berlaku sampai yang baru dibuat, atau tekan Batal).
 
 > **Risiko yang diterima pemilik:** pendaftaran terminal dan daftar nama staf terbuka tanpa login bagi siapa pun yang dapat menjangkau server (keputusan pemilik, spec 073 Q1). Pengamannya hanya throttle, data yang hanya berupa nama, dan kunci PIN per pengguna.
+> **078 (2026-10-27):** throttle rute tanpa token kini pembatas bernama dengan hitungan masing-masing (`tablet-read` 300/mnt/IP untuk roster, branding, outlet, terminal, alamat server; `tablet-write` 10; `pin-login` 20 per orang+outlet+IP; `login-flood` 60/IP untuk login web), dan login web dihitung per akun hanya untuk percobaan gagal (5/mnt). Dulu satu hitungan per IP dipakai bersama semua rute, sehingga polling layar PIN bisa mengunci login web; penolakan kini berbahasa Indonesia dengan lama tunggu. Hitungan ada di cache: bila "Terlalu banyak percobaan" muncul tanpa sebab, tunggu jendela habis atau `php artisan cache:clear`.
 
 ### 13.2 Emulator
 - Emulator mencapai host lewat `10.0.2.2` (bukan `localhost`). Backend dev berjalan di `http://localhost:8010` pada host, sehingga alamat di aplikasi adalah `http://10.0.2.2:8010`.

@@ -203,6 +203,8 @@ data class ReceiptView(
     val terminalName: String? = null,
     /** 079 — catatan outlet tempat penjualan terjadi (bisa beberapa baris); null bila kosong. */
     val storeNotes: String? = null,
+    /** 078 — catatan kasir untuk seluruh order; null/kosong = tidak dicetak. */
+    val orderNote: String? = null,
 )
 
 /** 048 — hasil bagi per item: [paid] = bagian yang dibayar, [remaining] = sisa bill; total dari server. */
@@ -212,7 +214,7 @@ data class SplitItemsResult(val paid: Order, val remaining: Order)
 data class SplitPart(val index: Int, val amount: Int)
 
 /** 048 / S3 — penyetuju yang memenuhi syarat untuk satu aksi (tanpa peminta). */
-data class Approver(val id: Long, val name: String, val role: String)
+data class Approver(val id: Long, val name: String, val role: String, val photoUrl: String? = null)
 
 /** Batas dari pengaturan server. null = belum terbaca; layar memakai teks umum, bukan angka tebakan. */
 data class ShiftLimits(val varianceTolerance: Int?, val cashOutThreshold: Int?)

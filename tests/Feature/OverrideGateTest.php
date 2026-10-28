@@ -157,7 +157,7 @@ class OverrideGateTest extends TestCase
         $this->assertSame(0, \App\Models\Override::count());
     }
 
-    public function test_the_approvers_list_is_a_bare_array_of_id_name_and_role_without_the_requester(): void
+    public function test_the_approvers_list_is_a_bare_array_of_id_name_role_and_photo_without_the_requester(): void
     {
         $approver = $this->approver($this->outletId);
         $cashierInOutlet = User::factory()->create(['role' => 'cashier']);
@@ -171,6 +171,6 @@ class OverrideGateTest extends TestCase
         $this->assertContains($approver->id, $ids);
         $this->assertNotContains($this->cashier->id, $ids);
         $this->assertNotContains($cashierInOutlet->id, $ids);
-        $this->assertSame(['id', 'name', 'role'], array_keys(collect($res->json())->firstWhere('id', $approver->id)));
+        $this->assertSame(['id', 'name', 'role', 'photo_url'], array_keys(collect($res->json())->firstWhere('id', $approver->id)));
     }
 }

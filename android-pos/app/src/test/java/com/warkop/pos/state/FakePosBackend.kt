@@ -22,7 +22,10 @@ class FakePosBackend : PosBackend {
     /** 055 / T022 — hasil loadMenu; null = panggilan tidak diharapkan. */
     var menuResult: (() -> MenuCatalog)? = null
 
-    override suspend fun roster(): List<StaffUser> = rosterResult()
+    /** 078 — jumlah panggilan roster/branding, untuk menguji kadens polling layar PIN. */
+    var rosterCalls = 0
+    var brandingCalls = 0
+    override suspend fun roster(): List<StaffUser> { rosterCalls++; return rosterResult() }
     override fun serverUrl(): String? = serverUrlValue
     override fun setServerUrl(url: String) { serverUrlValue = url.trim().takeIf { it.isNotBlank() } }
     override suspend fun taxDisplay(): TaxDisplay? = tax
@@ -50,11 +53,14 @@ class FakePosBackend : PosBackend {
     override fun useMode(mode: SystemMode) { this.mode = mode; modesUsed += mode }
     override fun savedConfig(): TerminalConfig? = configs[mode]
     override fun currentMode(): SystemMode = mode
+    /** 078 — hasil `me()`; null = gagal jaringan. */
+    var meResult: (() -> StaffUser)? = null
+    override suspend fun me(): StaffUser = meResult?.invoke() ?: throw ApiError.Network("tidak ada koneksi")
     /** Hasil branding sebelum login; null = gagal jaringan (ApiError.Network). */
     var brandingResult: (() -> Branding)? = null
     /** Hasil branding sesudah login (features); default = sama dengan [brandingResult]. */
     var sessionBrandingResult: (() -> Branding)? = null
-    override suspend fun branding(): Branding = brandingResult?.invoke() ?: throw ApiError.Network("tidak ada koneksi")
+    override suspend fun branding(): Branding { brandingCalls++; return brandingResult?.invoke() ?: throw ApiError.Network("tidak ada koneksi") }
     override suspend fun sessionBranding(): Branding = (sessionBrandingResult ?: brandingResult)?.invoke() ?: throw ApiError.Network("tidak ada koneksi")
     /** 073 — hasil login PIN uji; null = panggilan tidak diharapkan. */
     var pinLoginResult: ((StaffUser, String) -> PosSession)? = null
