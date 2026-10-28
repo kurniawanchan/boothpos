@@ -340,6 +340,26 @@ class ProductCatalogTest extends TestCase
         $this->assertSame(5500.0, (float) $body[3][5]);
     }
 
+    public function test_user_typed_text_starting_with_a_formula_character_is_stored_as_text_never_as_a_formula(): void
+    {
+        $this->setSetting('store_name', '=HYPERLINK("http://x.test","toko")');
+        $this->product('=1+1', '@SUM(1)', '-2+3', [['variant_name' => '+cmd|calc']]);
+
+        $sheet = $this->workbook()->getActiveSheet();
+
+        $checked = 0;
+        foreach ($sheet->getRowIterator() as $row) {
+            foreach ($row->getCellIterator() as $cell) {
+                $value = $cell->getValue();
+                if (is_string($value) && preg_match('/^[=+\-@]/', $value)) {
+                    $this->assertSame('s', $cell->getDataType(), "{$cell->getCoordinate()} harus bertipe teks");
+                    $checked++;
+                }
+            }
+        }
+        $this->assertGreaterThanOrEqual(5, $checked); // nama toko + penjual, kategori, produk, varian
+    }
+
     public function test_the_price_cell_is_numeric_with_a_rupiah_number_format(): void
     {
         $this->product('Alpha Seller', 'Keychain', 'MCYT', [['sell_price' => 20000]]);

@@ -7,9 +7,13 @@ use App\Support\Code128;
 use Carbon\Carbon;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
+use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
 use Maatwebsite\Excel\Concerns\WithDrawings;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use PhpOffice\PhpSpreadsheet\Cell\Cell;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Cell\DefaultValueBinder;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
@@ -25,7 +29,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * per satu saat menulis berkas, bukan menahan ratusan resource GD sekaligus (batas 128 MB bawaan PHP sudah
  * pernah menjatuhkan ekspor lain). Pemanggil WAJIB memanggil cleanup() setelah berkas selesai dibuat.
  */
-class ProductCatalogExport implements FromArray, WithColumnWidths, WithDrawings, WithStyles, WithTitle
+class ProductCatalogExport implements FromArray, WithColumnWidths, WithCustomValueBinder, WithDrawings, WithStyles, WithTitle
 {
     /**
      * ARGB untuk isian sel. Excel tidak mengenal token CSS, jadi INI satu-satunya tempat nilai warna harus
@@ -68,6 +72,23 @@ class ProductCatalogExport implements FromArray, WithColumnWidths, WithDrawings,
     public function title(): string
     {
         return mb_substr((string) __('catalog.sheet'), 0, 31); // batas nama sheet Excel
+    }
+
+    /**
+     * Keamanan (formula injection): nama penjual/produk/varian dan identitas toko diketik pengguna. Pengikat bawaan
+     * PhpSpreadsheet mengubah teks berawalan `=` menjadi RUMUS, sehingga nama seperti `=HYPERLINK(...)` akan
+     * dieksekusi saat katalog dibuka (katalog ini dibagikan ke kasir dan pembeli). Semua teks dipaksa bertipe string;
+     * hanya angka (harga) yang tetap numerik.
+     */
+    public function bindValue(Cell $cell, $value): bool
+    {
+        if (is_string($value)) {
+            $cell->setValueExplicit($value, DataType::TYPE_STRING);
+
+            return true;
+        }
+
+        return (new DefaultValueBinder)->bindValue($cell, $value);
     }
 
     public function array(): array
