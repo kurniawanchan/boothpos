@@ -19,6 +19,7 @@ class OutletResource extends JsonResource
             'id' => $this->id,
             'code' => $this->code,
             'name' => $this->name,
+            'address' => $this->address,
             'contact_phone' => $this->contact_phone,
             'contact_email' => $this->contact_email,
             'notes' => $this->notes,

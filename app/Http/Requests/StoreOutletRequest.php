@@ -3,10 +3,10 @@
 namespace App\Http\Requests;
 
 use App\Models\Outlet;
+use App\Rules\OutletCodeRule;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
 
 class StoreOutletRequest extends FormRequest
 {
@@ -36,14 +36,10 @@ class StoreOutletRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code' => [
-                'required',
-                'string',
-                'size:3',
-                'alpha',
-                Rule::unique('outlets', 'code')->whereNull('deleted_at'),
-            ],
+            // 079 — 3–5 huruf/angka, unik tanpa beda huruf; satu definisi di OutletCodeRule.
+            'code' => ['required', 'string', new OutletCodeRule],
             'name' => ['required', 'string', 'max:100'],
+            'address' => ['nullable', 'string', 'max:500'],
             'contact_phone' => ['nullable', 'string', 'max:30'],
             'contact_email' => ['nullable', 'email', 'max:100'],
             'notes' => ['nullable', 'string'],

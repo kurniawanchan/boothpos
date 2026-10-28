@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\CashierSession;
 use App\Models\Category;
+use App\Models\Device;
 use App\Models\DiningTable;
 use App\Models\KitchenTicket;
 use App\Models\KitchenTicketItem;
@@ -31,6 +33,8 @@ class OutletMoveGuard
 
     public const OPEN_TICKETS = 'open_tickets';
 
+    public const OPEN_SHIFT = 'open_shift';
+
     public function __construct(private ActivityLogger $log) {}
 
     public function tableBlocker(DiningTable $table): ?string
@@ -38,6 +42,18 @@ class OutletMoveGuard
         $open = Order::withoutGlobalScopes()->where('table_id', $table->id)->where('status', Order::STATUS_OPEN)->exists();
 
         return $open ? self::OPEN_TAB : null;
+    }
+
+    /**
+     * 079 — terminal tidak boleh pindah outlet selama ada shift TERBUKA di terminal itu: shift mencatat outlet dan
+     * terminalnya, jadi memindahkan di bawahnya membuat laporan shift menunjuk outlet yang berbeda dari terminalnya.
+     * Dibaca tanpa global scope (outlet/mode tidak relevan bagi FK dan riwayat), sama seperti aturan meja.
+     */
+    public function deviceBlocker(Device $device): ?string
+    {
+        $open = CashierSession::withoutGlobalScopes()->where('device_id', $device->id)->where('status', 'open')->exists();
+
+        return $open ? self::OPEN_SHIFT : null;
     }
 
     public function stationBlocker(Station $station): ?string
@@ -62,6 +78,7 @@ class OutletMoveGuard
         return match ($blocker) {
             self::OPEN_TAB => __('restaurant.table_move_open_tab'),
             self::IN_USE => __('restaurant.station_move_in_use'),
+            self::OPEN_SHIFT => __('devices.move_open_shift'),
             default => __('restaurant.station_move_open_tickets'),
         };
     }

@@ -40,6 +40,8 @@ const toast = useToastStore();
 const outletStore = useOutletStore(); // 045: nama outlet di struk hanya bila ada lebih dari satu outlet
 const receipt = ref(null);
 const appName = computed(() => resolveAppName(receipt.value?.app_name));
+// 079 — telepon dan surel TOKO (outlet) saja; telepon/surel pelanggan tetap di blok pelanggan di bawah.
+const storeContactLine = computed(() => [receipt.value?.store_contact_phone, receipt.value?.store_contact_email].filter(Boolean).join(' · '));
 const loading = ref(false);
 const receiptEl = ref(null);
 const downloadingImage = ref(false);
@@ -113,7 +115,11 @@ watch(
         />
         <span class="text-[17px] font-extrabold tracking-tight">{{ receipt.store_name }}</span>
         <span v-if="receipt.store_address" class="max-w-[300px] text-[11.5px] leading-snug text-muted-3">{{ receipt.store_address }}</span>
-        <span v-if="outletStore.multi && receipt.outlet_name" class="text-[12.5px] font-semibold text-muted-4" data-testid="receipt-outlet">{{ receipt.outlet_name }}</span>
+        <!-- 079 — identitas toko mengikuti outlet transaksi (server): baris yang kosong dihilangkan, bukan diganti. -->
+        <span v-if="storeContactLine" class="max-w-[300px] text-[11.5px] leading-snug text-muted-3" data-testid="receipt-store-contact">{{ storeContactLine }}</span>
+        <span v-if="receipt.store_notes" class="max-w-[300px] whitespace-pre-line text-[11.5px] leading-snug text-muted-3" data-testid="receipt-store-notes">{{ receipt.store_notes }}</span>
+        <!-- store_name sudah nama outlet; baris ini hanya berguna bila server memakai blok bersama (outlet tanpa detail). -->
+        <span v-if="outletStore.multi && receipt.outlet_name && receipt.outlet_name !== receipt.store_name" class="text-[12.5px] font-semibold text-muted-4" data-testid="receipt-outlet">{{ receipt.outlet_name }}</span>
         <span class="mt-1.5 font-mono text-[13px] font-semibold">{{ receipt.order_number }}</span>
         <!-- 028 — penjualan dari tab: tampilkan meja atau label takeaway. -->
         <span v-if="receipt.table" class="text-[12.5px] font-semibold text-muted-4">Meja {{ receipt.table.name }}</span>

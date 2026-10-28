@@ -88,8 +88,9 @@ final class MasterDataSheets
     public static function headings(string $sheet): array
     {
         return match ($sheet) {
+            // 079 — `address` di AKHIR (berkas lama tanpa kolom ini tetap terbaca).
             self::OUTLETS => [
-                'code', 'name', 'contact_phone', 'contact_email', 'notes', 'is_active',
+                'code', 'name', 'contact_phone', 'contact_email', 'notes', 'is_active', 'address',
             ],
             self::CATEGORIES => [
                 'code', 'name', 'parent_code', 'display_order', 'is_active', 'image_filename',
@@ -177,6 +178,7 @@ final class MasterDataSheets
                 'contact_email' => '',
                 'notes' => 'Kolom kosong = tidak diubah untuk data yang sudah ada.',
                 'is_active' => 1,
+                'address' => '',
             ],
             self::CATEGORIES => [
                 'code' => 'KY',

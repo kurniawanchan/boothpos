@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Rules\OutletCodeRule;
 use App\Exceptions\MasterDataImportRowException;
 use App\Imports\MasterDataSheetsImport;
 use App\Models\Outlet;
@@ -371,8 +372,9 @@ class MasterDataImportService
 
             $code = strtoupper($code);
 
-            if (strlen($code) !== 3 || ! ctype_alpha($code)) {
-                $this->addError($sheet, $row, 'code', "Kode outlet '{$code}' harus tepat 3 huruf.");
+            // 079 — kode outlet 3–5 huruf/angka (sama dengan OutletCodeRule; keunikan dicek di bawah, lintas mode).
+            if (strlen($code) < OutletCodeRule::MIN || strlen($code) > OutletCodeRule::MAX || ! ctype_alnum($code)) {
+                $this->addError($sheet, $row, 'code', "Kode outlet '{$code}' harus 3–5 karakter, hanya huruf dan angka.");
 
                 continue;
             }
@@ -407,6 +409,16 @@ class MasterDataImportService
                 }
             } elseif ($existing === null) {
                 $this->addError($sheet, $row, 'name', 'Nama outlet wajib diisi untuk outlet baru.');
+            }
+
+            // 079 — alamat outlet; sel kosong = tidak diubah, seperti kolom lain.
+            if ($this->filled($values, 'address')) {
+                $address = $this->stringValue($values, 'address');
+                if (mb_strlen($address) > 500) {
+                    $this->addError($sheet, $row, 'address', 'Alamat outlet maksimal 500 karakter.');
+                } else {
+                    $attributes['address'] = $address;
+                }
             }
 
             if ($this->filled($values, 'contact_phone')) {

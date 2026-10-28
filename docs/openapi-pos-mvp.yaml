@@ -328,10 +328,21 @@ paths:
   /devices:
     get:
       tags: [Devices]
-      summary: Daftar terminal POS pada outlet yang berlaku (owner/admin) (048/B14)
+      summary: Daftar terminal POS pada outlet yang berlaku (owner/admin) (048/B14; 079 filter + halaman)
+      description: |
+        079 — dipakai halaman Terminal di web. `outlet_id[]` hanya MENYEMPITKAN dalam outlet yang boleh dilihat pengguna (nilai di
+        luar jangkauan tidak pernah memperluas; tak satu pun boleh → daftar kosong). Halaman Terminal meminta TANPA header
+        `X-Outlet-Id` dan mengirim filternya sendiri. `status` bawaan `all`. `q` = nama mengandung (tanpa beda huruf).
+        Tanpa `page`/`per_page` bentuk lama `{data}` tetap (tanpa `meta`).
+      parameters:
+        - { name: outlet_id, in: query, style: form, explode: true, schema: { type: array, items: { type: integer } } }
+        - { name: status, in: query, schema: { type: string, enum: [active, revoked, all], default: all } }
+        - { name: q, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
       responses:
         '200':
-          description: Daftar
+          description: Daftar (dengan `meta` bila berhalaman)
           content:
             application/json:
               schema:
@@ -340,7 +351,15 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/Device' }
+                  meta:
+                    type: object
+                    properties:
+                      current_page: { type: integer }
+                      per_page: { type: integer }
+                      total: { type: integer }
+                      last_page: { type: integer }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /pos-setup/branding:
     get:
@@ -366,6 +385,31 @@ paths:
         '423': { description: Instalasi belum diaktivasi }
         '429': { description: Terlalu sering (throttle) }
 
+  /pos-setup/outlets/{outlet}/branding:
+    get:
+      tags: [Devices]
+      summary: Nama OUTLET, logo, dan mode data untuk layar PIN tablet, tanpa login (079)
+      description: |
+        Sama dengan `GET /pos-setup/branding`, tetapi `store_name` = nama outlet pilihan tablet (outlet dari path, bukan body).
+        Hanya tiga nilai yang sama keluar; alamat/telepon/surel/catatan outlet TIDAK ikut. Lanjutan pengecualian Konstitusi IV
+        (specs/079-outlet-code-address-store-info/plan.md). Throttle 30/menit. Outlet tidak ada, nonaktif, atau bukan milik
+        mode data yang berlaku → 404 (tablet jatuh ke rute bersama).
+      security: []
+      parameters:
+        - { name: outlet, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Identitas untuk outlet itu
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  system_mode: { type: string, enum: [live, demo] }
+                  store_name: { type: string, nullable: true }
+                  store_logo_url: { type: string, nullable: true }
+        '404': { description: Outlet tidak ada atau tidak aktif }
+        '423': { description: Instalasi belum diaktivasi }
   /pos-setup/outlets:
     get:
       tags: [Devices]
@@ -462,7 +506,8 @@ paths:
       summary: Daftarkan terminal POS (owner/admin) (048/B14)
       description: |
         Outlet diturunkan server dari konteks (satu-satunya outlet, atau `X-Outlet-Id`), TIDAK dari body. Admin yang
-        melihat banyak outlet wajib memilih satu lewat header.
+        melihat banyak outlet wajib memilih satu lewat header. **079:** halaman Terminal memilih outlet terminal baru lewat
+        header ini juga; header outlet yang bukan milik pengguna (atau outlet nonaktif) → 403 `outlet_forbidden`.
 
         **064 — terminal dikenali HANYA lewat nama.** Tidak ada kode otomatis `T01`/`T02` lagi; `code` di body tidak
         diterima (diabaikan). Nama (dipangkas, wajib, ≤ 80) harus unik di antara terminal AKTIF satu outlet + mode
@@ -571,14 +616,77 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /devices/bulk:
+    post:
+      tags: [Devices]
+      summary: Aksi massal terminal — aktifkan, nonaktifkan, hapus (owner/admin) (079)
+      description: |
+        Dipakai halaman Terminal untuk beberapa terminal sekaligus. TIDAK semua-atau-tidak-sama-sekali: tiap terminal memakai
+        aturan tunggalnya sendiri (aktifkan = `POST /devices/{id}/reactivate`, nonaktifkan = `DELETE /devices/{id}`, hapus =
+        `DELETE /devices/{id}/permanent`), masing-masing dalam transaksi dan catatan aktivitasnya sendiri
+        (`device_reactivated`, `device_revoked`, `device_deleted`). Selalu 200 dengan hasil per terminal, urut seperti `ids`:
+
+        - `changed` — berubah;
+        - `skipped` — sudah dalam keadaan tujuan (aktifkan terminal aktif, nonaktifkan yang sudah nonaktif);
+        - `refused` — ditolak dengan `reason` (hapus: pernah dipakai order/shift; aktifkan: nama sudah dipakai terminal aktif);
+        - `not_found` — tidak ada atau bukan outlet yang boleh dilihat pengguna (keduanya tidak dibedakan).
+
+        Outlet tidak pernah dibaca dari tubuh; cakupan = outlet yang boleh dilihat pengguna. `ids` paling banyak 100 dan tidak
+        boleh berulang. Selain owner/admin → 403.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, ids]
+              properties:
+                action: { type: string, enum: [activate, deactivate, delete] }
+                ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items: { type: integer }
+      responses:
+        '200':
+          description: Hasil per terminal dan ringkasannya
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string, nullable: true }
+                        status: { type: string, enum: [changed, skipped, refused, not_found] }
+                        reason: { type: string, nullable: true }
+                  summary:
+                    type: object
+                    properties:
+                      changed: { type: integer }
+                      skipped: { type: integer }
+                      refused: { type: integer }
+                      not_found: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /devices/{id}:
     patch:
       tags: [Devices]
-      summary: Ganti nama terminal POS (owner/admin) (064)
+      summary: Ganti nama dan/atau pindahkan terminal POS (owner/admin) (064; 079 pindah outlet)
       description: |
         Aturan nama sama dengan pendaftaran (unik di antara terminal aktif satu outlet, tanpa membedakan huruf besar/kecil;
-        mengganti huruf besar/kecil namanya sendiri boleh). Terminal outlet lain → 404; yang sudah dicabut → 409.
+        mengganti huruf besar/kecil namanya sendiri boleh). Terminal outlet lain → 404; yang sudah dinonaktifkan → 409.
         Order yang sudah tertaut ke terminal ini menampilkan nama barunya. Dicatat sebagai `device_renamed`.
+
+        **079 — pindah outlet:** `outlet_id` harus outlet AKTIF yang boleh dilihat pengguna (403 `outlet_forbidden`). Ditolak
+        409 selama ada shift TERBUKA di terminal itu; nama dicek ulang di outlet tujuan (422 `errors.name`). Order, shift, dan
+        struk lama tetap pada outlet transaksinya; hanya outlet terminal yang berubah. Dicatat `device_moved`. Tablet terminal itu
+        ditolak di permintaan berikutnya (422 `device_id`) dan harus disiapkan ulang untuk outlet baru. Perlu `name` dan/atau `outlet_id`.
       parameters:
         - { $ref: '#/components/parameters/Id' }
       requestBody:
@@ -587,12 +695,12 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name]
               properties:
                 name: { type: string, maxLength: 80 }
+                outlet_id: { type: integer }
       responses:
         '200':
-          description: Terminal dengan nama baru
+          description: Terminal dengan nama dan/atau outlet baru
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Device' }
@@ -602,13 +710,47 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
     delete:
       tags: [Devices]
-      summary: Cabut terminal POS (jejak audit tetap ada) (048/B14)
+      summary: Cabut (nonaktifkan) terminal POS (jejak audit tetap ada) (048/B14)
       parameters:
         - { $ref: '#/components/parameters/Id' }
       responses:
         '204': { description: Dicabut (idempoten) }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /devices/{id}/reactivate:
+    post:
+      tags: [Devices]
+      summary: Aktifkan lagi terminal yang dinonaktifkan (owner/admin) (079)
+      description: |
+        Nama harus masih bebas di antara terminal AKTIF outlet-nya (422 `errors.name`). Terminal yang sudah aktif: 200 tanpa
+        perubahan dan tanpa log. Terminal milik outlet nonaktif tersembunyi (404). Dicatat `device_reactivated`.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '200':
+          description: Terminal aktif
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Device' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /devices/{id}/permanent:
+    delete:
+      tags: [Devices]
+      summary: Hapus permanen terminal yang belum pernah dipakai (owner/admin) (079)
+      description: |
+        409 bila ada order atau shift yang menunjuk terminal ini (riwayat tidak boleh terlepas); gunakan
+        `DELETE /devices/{id}` (nonaktifkan). Dicatat `device_deleted`.
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+      responses:
+        '204': { description: Dihapus }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   /auth/logout:
     post:
@@ -798,6 +940,22 @@ paths:
                       toko (`store_name`). Diubah owner/admin lewat `PUT /settings`
                       (key `app_name`, maks. 50 karakter — lebih panjang ditolak
                       422); kosong/spasi saja berarti kembali ke default.
+                  store_name:
+                    type: string
+                    nullable: true
+                    description: "079 — sama dengan `store.name` (dipertahankan untuk klien lama)."
+                  store:
+                    type: object
+                    description: |
+                      079 — identitas toko untuk outlet yang berlaku pada permintaan ini (`X-Outlet-Id` yang disempitkan, atau
+                      satu-satunya outlet pengguna). Beberapa outlet tanpa pilihan ("semua outlet") = identitas bersama.
+                      Detail outlet yang kosong jatuh ke nilai bersama per kolom. Tidak pernah di-cache lintas outlet.
+                    properties:
+                      name: { type: string, nullable: true }
+                      address: { type: string, nullable: true }
+                      phone: { type: string, nullable: true }
+                      email: { type: string, nullable: true }
+                      notes: { type: string, nullable: true }
                   store_logo_url:
                     type: string
                     nullable: true
@@ -1302,7 +1460,10 @@ paths:
     put:
       tags: [Master Data]
       summary: Perbarui artist
-      description: Kolom `code` tidak dapat diubah karena sudah menjadi bagian SKU yang beredar.
+      description: >
+        079 — `code` kini boleh diubah (3–5 huruf/angka, huruf besar, unik tanpa beda huruf; 422 bila melanggar). Kode produk dan
+        SKU yang sudah ada TIDAK ikut berubah; produk yang dibuat sesudahnya memakai kode baru. Perubahan dicatat di log aktivitas.
+        Impor yang masih memuat kode lama ditolak (kode tidak dikenal).
       requestBody:
         required: true
         content:
@@ -7044,8 +7205,18 @@ components:
         id: { type: integer }
         name: { type: string, description: "064 — satu-satunya identitas terminal yang tampil; unik di antara terminal aktif satu outlet." }
         outlet_id: { type: integer }
+        outlet:
+          type: object
+          nullable: true
+          description: "079 — outlet terminal (kode dan nama)."
+          properties:
+            id: { type: integer }
+            code: { type: string }
+            name: { type: string }
         app_version: { type: string, nullable: true }
         last_seen_at: { type: string, format: date-time, nullable: true }
+        paired_at: { type: string, format: date-time, nullable: true }
+        revoked_at: { type: string, format: date-time, nullable: true }
         revoked: { type: boolean }
 
     DashboardKpi:
@@ -7306,8 +7477,9 @@ components:
       type: object
       properties:
         id: { type: integer }
-        code: { type: string, minLength: 3, maxLength: 3, example: RYU }
+        code: { type: string, minLength: 3, maxLength: 5, example: RYU, description: "079 — 3–5 huruf/angka, huruf besar." }
         name: { type: string }
+        address: { type: string, nullable: true, maxLength: 500, description: "079 — alamat outlet; tampil di struk outlet ini." }
         contact_phone: { type: string, nullable: true }
         contact_email: { type: string, nullable: true }
         notes: { type: string, nullable: true }
@@ -7318,8 +7490,9 @@ components:
       type: object
       required: [code, name]
       properties:
-        code: { type: string, minLength: 3, maxLength: 3, description: Huruf kapital. Permanen setelah dibuat. }
+        code: { type: string, minLength: 3, maxLength: 5, pattern: '^[A-Za-z0-9]{3,5}$', description: "079 — 3–5 huruf/angka, disimpan huruf besar, unik di antara outlet yang belum dihapus. Boleh diubah lewat PUT." }
         name: { type: string, maxLength: 100 }
+        address: { type: string, nullable: true, maxLength: 500 }
         contact_phone: { type: string, nullable: true }
         contact_email: { type: string, nullable: true }
         notes: { type: string, nullable: true }
@@ -8248,8 +8421,13 @@ components:
       type: object
       properties:
         app_name: { type: string, description: "Nama aplikasi untuk teks 'Powered by …' (default BoothPOS)." }
+        # 079 — blok identitas toko di bawah ini mengikuti OUTLET TEMPAT PENJUALAN (bukan outlet yang sedang dipilih
+        # penonton): store_name, store_address, store_contact(_phone), store_contact_email, store_notes. Detail outlet yang
+        # kosong = null (klien menghilangkan barisnya); outlet tanpa alamat, telepon, surel, dan catatan sama sekali memakai
+        # blok bersama utuh (struk lama tidak berubah). Logo, footer, app_name, dan store_contact_person tetap bersama.
         store_name: { type: string }
-        store_contact: { type: string, nullable: true }
+        store_contact: { type: string, nullable: true, description: "Kunci lama = telepon (outlet) atau kontak tunggal bersama." }
+        store_notes: { type: string, nullable: true, description: "079 — catatan outlet; bisa beberapa baris." }
         # 001-user-store-settings User Story 3 / SC-004 — field ini
         # sebelumnya terlewat dari task breakdown fitur tsb, ditutup saat
         # ditemukan sebagai celah nyata. Semua nullable — profil toko

@@ -15,7 +15,7 @@ use App\Services\ImageUploadService;
 use App\Services\OrderService;
 use App\Services\PaymentService;
 use App\Support\AppName;
-use App\Support\ModeGate;
+use App\Support\StoreIdentity;
 use App\Support\PaymentSummary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -220,27 +220,20 @@ class OrderController extends Controller
             return response()->json(['message' => __('orders_payments.receipt_unavailable_for_open_tab')], 409);
         }
 
-        $order->load(['items.homeOutlet', 'payments', 'cashier', 'customer', 'table', 'splitFrom', 'outlet:id,code,name', 'device:id,name']);
+        // 079 — kolom identitas outlet ikut dimuat: struk memuat nama, alamat, telepon, surel, dan catatan OUTLET transaksi.
+        $order->load(['items.homeOutlet', 'payments', 'cashier', 'customer', 'table', 'splitFrom', 'outlet:id,code,name,address,contact_phone,contact_email,notes', 'device:id,name']);
         $summary = PaymentSummary::for($order);
+        $store = StoreIdentity::forReceipt($order->outlet);
 
         return response()->json([
-            // 003-seed-demo-live follow-up — nama toko DEMO dan LIVE
-            // disimpan sebagai baris settings terpisah (lihat catatan di
-            // SakanaFridgeDemoSeeder), supaya menjalankan seeder tidak
-            // pernah menimpa nama toko sungguhan. Struk selalu memakai
-            // nama milik MODE ORDER INI (bukan mode aktif saat ini) —
-            // tapi karena Order sendiri sudah disaring DataModeScope,
-            // ModeGate::current() saat request ini pasti sama dengan
-            // data_mode order yang berhasil dimuat.
-            'store_name' => Setting::get(ModeGate::isDemo() ? 'store_name_demo' : 'store_name', 'Toko'),
-            'store_contact' => Setting::get('store_contact'),
-            // 001-user-store-settings User Story 3 / SC-004 — struk harus
-            // menampilkan identitas toko LENGKAP sesuai yang dikonfigurasi
-            // di Pengaturan, bukan cuma nama+satu kontak seperti
-            // sebelumnya. Field ini pernah terlewat dari task breakdown
-            // awal fitur tsb — ditemukan saat implementasi profil toko,
-            // ditutup di sini.
-            'store_address' => Setting::get('store_address'),
+            // 079 — identitas toko (nama, alamat, telepon, surel, catatan) mengikuti OUTLET TEMPAT PENJUALAN, bukan
+            // outlet yang sedang dipilih penonton, dan satu-satunya penentunya StoreIdentity (aturan hilangkan-bila-kosong
+            // dan cadangan blok bersama ada di sana). Nama toko DEMO/LIVE (003) tetap dihormati di blok bersama itu.
+            // Kunci lama dipertahankan agar web dan tablet yang belum diperbarui tetap terbaca: `store_contact` = telepon.
+            'store_name' => $store['name'] ?? 'Toko',
+            'store_contact' => $store['contact'],
+            'store_address' => $store['address'],
+            'store_notes' => $store['notes'],
             // 006-purchase-order-and-ops (US7) — receipt_show_logo TIDAK
             // mengubah apakah logo ditampilkan di layar LAIN (mis. header
             // app) — hanya di STRUK, sesuai FR-017/User Story 7.
@@ -248,8 +241,8 @@ class OrderController extends Controller
                 ? $this->imageUploadService->url(Setting::get('store_logo_path'))
                 : null,
             'store_contact_person' => Setting::get('store_contact_person'),
-            'store_contact_phone' => Setting::get('store_contact_phone'),
-            'store_contact_email' => Setting::get('store_contact_email'),
+            'store_contact_phone' => $store['phone'],
+            'store_contact_email' => $store['email'],
             'receipt_footer_text' => Setting::get('receipt_footer_text'),
             'app_name' => AppName::current(),
             // 003-seed-demo-live follow-up 2 (FR-024) — BUG YANG DITEMUKAN

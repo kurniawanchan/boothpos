@@ -252,8 +252,8 @@ final class WjmCatalog
         }
         $codes = $outlet['codes'] ?? null;
         if (! is_array($codes) || ! array_is_list($codes) || $codes === [] || count($codes) > 5
-            || array_filter($codes, fn ($c) => ! is_string($c) || ! preg_match('/^[A-Z0-9]{3}$/', $c)) !== []) {
-            $this->problems[] = 'outlet.codes harus 1–5 kode outlet (3 huruf besar atau angka).';
+            || array_filter($codes, fn ($c) => ! is_string($c) || ! preg_match('/^[A-Z0-9]{3,5}$/', $c)) !== []) {
+            $this->problems[] = 'outlet.codes harus 1–5 kode outlet (3–5 huruf besar atau angka).';
         }
         if (! in_array($outlet['create_when'] ?? null, ['mode_empty', 'demo_missing'], true)) {
             $this->problems[] = 'outlet.create_when harus mode_empty atau demo_missing.';

@@ -106,6 +106,8 @@ export const NAV_SECTIONS = [
         children: [
           { name: 'settings', label: 'nav.settings', menuKey: 'settings' },
           { name: 'settings-payment', label: 'nav.settings_payment', menuKey: 'settings' },
+          // 079 — terminal POS per outlet; menu `settings` = owner/admin, sama dengan gerbang server (/devices).
+          { name: 'terminals', label: 'nav.terminals', menuKey: 'settings' },
           { name: 'users', label: 'nav.users', menuKey: 'users' },
           { name: 'roles', label: 'nav.roles', menuKey: 'roles' },
         ],

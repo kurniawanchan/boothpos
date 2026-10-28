@@ -136,6 +136,8 @@ onMounted(loadStoreIdentity);
 
 <template>
   <SettingsSection :title="t('settings.store_identity')">
+    <!-- 079 — struk dan layar kini memakai identitas OUTLET; isian di sini jadi identitas bersama (semua outlet, cadangan). -->
+    <p class="mb-3 text-[12.5px] leading-relaxed text-muted-3" data-testid="store-identity-shared-note">{{ t('settings.store_identity_shared_note') }}</p>
     <div class="flex flex-col gap-1.5">
       <label class="text-[12.5px] font-semibold text-muted-4" for="store-logo">{{ t('settings.store_logo') }}</label>
       <div class="flex items-center gap-3">

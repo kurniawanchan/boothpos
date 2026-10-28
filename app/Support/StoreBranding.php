@@ -29,13 +29,17 @@ class StoreBranding
      * Hanya tiga nilai ini yang boleh keluar dari rute tanpa token (pengecualian Konstitusi IV, 077 plan.md): semuanya
      * sudah terlihat oleh setiap peran yang login lewat `GET /settings/features`.
      *
+     * 079 — bila tablet sudah memilih outlet, `store_name` adalah nama OUTLET itu (lewat StoreIdentity, satu-satunya penentu
+     * identitas); logo tetap bersama. Tanpa outlet (penyiapan pertama) tetap nama bersama. Alamat/telepon/surel/catatan
+     * outlet TIDAK ikut keluar dari rute ini.
+     *
      * @return array{system_mode: string, store_name: ?string, store_logo_url: ?string}
      */
-    public static function forTablet(): array
+    public static function forTablet(?\App\Models\Outlet $outlet = null): array
     {
         return [
             'system_mode' => ModeGate::current(),
-            'store_name' => self::storeName(),
+            'store_name' => StoreIdentity::forScreen($outlet)['name'],
             'store_logo_url' => self::logoUrl(),
         ];
     }

@@ -1,6 +1,8 @@
 <script setup>
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useAuthStore } from '../../stores/auth';
+import { useOutletStore } from '../../stores/outlet';
 import { useSettingsStore } from '../../stores/settings';
 import { useToastStore } from '../../stores/toast';
 import ConfirmDialog from '../../components/ui/ConfirmDialog.vue';
@@ -12,6 +14,8 @@ import SettingsSection from './SettingsSection.vue';
 // ke sini — tidak perlu pengecekan tampilan tambahan (Constitution III:
 // hilang total, bukan disabled).
 const settings = useSettingsStore();
+const auth = useAuthStore();
+const outlet = useOutletStore();
 const { t } = useI18n();
 const toast = useToastStore();
 
@@ -28,6 +32,12 @@ async function confirmModeSwitch() {
   switchingMode.value = true;
   try {
     await settings.setSystemMode(mode);
+    // Outlet DEMO dan LIVE adalah baris yang berbeda (HasDataMode): tanpa memuat ulang cakupan, bilah atas dan pilihan
+    // outlet di formulir tetap menampilkan outlet mode sebelumnya, dan pilihan tersimpan bisa menjadi header yang ditolak 403.
+    // Identitas toko (nama, logo) juga bergantung pada mode.
+    outlet.select(null);
+    // Mode sudah tersimpan di server; kegagalan memuat ulang tidak boleh tampil sebagai kegagalan beralih mode.
+    await Promise.all([auth.user?.id != null ? outlet.load(auth.user.id) : null, settings.load()]).catch(() => {});
     toast.success(t('settings.system_mode_switched', { mode: t(`settings.system_mode_${mode}`) }));
     pendingMode.value = null;
   } catch (err) {

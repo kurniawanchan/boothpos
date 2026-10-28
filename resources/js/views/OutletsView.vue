@@ -78,7 +78,7 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editingOutlet = ref(null);
-const form = reactive({ code: '', name: '', contact_phone: '', contact_email: '', notes: '', is_active: true });
+const form = reactive({ code: '', name: '', address: '', contact_phone: '', contact_email: '', notes: '', is_active: true });
 const formErrors = reactive({});
 const saving = ref(false);
 
@@ -90,7 +90,7 @@ const canCreate = () => settings.multiOutletEnabled || !settings.outletLimitReac
 
 function openCreate() {
   editingOutlet.value = null;
-  Object.assign(form, { code: '', name: '', contact_phone: '', contact_email: '', notes: '', is_active: true });
+  Object.assign(form, { code: '', name: '', address: '', contact_phone: '', contact_email: '', notes: '', is_active: true });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -100,6 +100,7 @@ function openEdit(outlet) {
   Object.assign(form, {
     code: outlet.code,
     name: outlet.name,
+    address: outlet.address ?? '',
     contact_phone: outlet.contact_phone ?? '',
     contact_email: outlet.contact_email ?? '',
     notes: outlet.notes ?? '',
@@ -109,12 +110,17 @@ function openEdit(outlet) {
   showForm.value = true;
 }
 
+function onCodeInput(value) {
+  form.code = String(value ?? '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 5);
+}
+
 async function saveOutlet() {
   saving.value = true;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   const payload = {
     code: form.code.toUpperCase(),
     name: form.name,
+    address: form.address || null,
     contact_phone: form.contact_phone || null,
     contact_email: form.contact_email || null,
     notes: form.notes || null,
@@ -215,6 +221,12 @@ async function performDelete() {
         @retry="load"
       >
         <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
+        <template #cell-name="{ row }">
+          <div class="flex flex-col gap-0.5">
+            <span>{{ row.name }}</span>
+            <span v-if="row.address" class="max-w-[320px] truncate text-[12px] text-muted-3" :title="row.address" data-testid="outlet-address">{{ row.address }}</span>
+          </div>
+        </template>
         <template #cell-contact="{ row }">
           <div class="flex flex-col gap-0.5 text-[12.5px] text-muted-4">
             <span>{{ row.contact_phone || '—' }}</span>
@@ -236,19 +248,21 @@ async function performDelete() {
 
     <BaseModal :open="showForm" :title="editingOutlet ? t('master_data.edit_artist') : t('master_data.new_artist')" max-width-class="max-w-[480px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveOutlet">
+        <!-- 079 — kode 3–5 huruf/angka dan bisa disunting; huruf besar sejak diketik, simbol dibuang. -->
         <BaseInput
-          v-model="form.code"
-          :label="t('master_data.code_3_letters')"
-          maxlength="3"
+          :model-value="form.code"
+          :label="t('master_data.code_label')"
+          maxlength="5"
           required
-          :disabled="!!editingOutlet"
-          :hint="t('master_data.code_permanent_hint')"
+          :hint="t('master_data.code_hint')"
           :error="formErrors.code"
+          @update:model-value="onCodeInput"
         />
         <BaseInput v-model="form.name" :label="t('master_data.artist_name')" required maxlength="100" :error="formErrors.name" />
+        <BaseTextarea v-model="form.address" :label="t('master_data.address')" :hint="t('master_data.address_hint')" :rows="2" maxlength="500" :error="formErrors.address" />
         <BaseInput v-model="form.contact_phone" :label="t('master_data.phone')" :error="formErrors.contact_phone" />
         <BaseInput v-model="form.contact_email" :label="t('master_data.email')" type="email" :error="formErrors.contact_email" />
-        <BaseTextarea v-model="form.notes" :label="t('master_data.notes')" :rows="2" :error="formErrors.notes" />
+        <BaseTextarea v-model="form.notes" :label="t('master_data.notes')" :hint="t('master_data.notes_hint')" :rows="2" :error="formErrors.notes" />
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
           {{ t('common.active') }}

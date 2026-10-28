@@ -544,6 +544,15 @@ Peran dan akses outlet: setiap pengguna bisa dibatasi ke satu atau beberapa outl
 
 
 
+### 12.2 Mengubah kode outlet (fitur 079, 2026-10-27)
+
+- Layar Outlet → Ubah: kode 3–5 huruf/angka, otomatis huruf besar, unik tanpa beda huruf. Kode outlet yang sudah dihapus boleh dipakai lagi.
+- **Yang tidak berubah:** kode produk dan SKU yang sudah ada (mis. `WJM-MN-KOP-001` tetap, walau outlet kini `WJM2X`). Produk baru memakai kode baru (`WJM2X-MN-TEH-001`).
+- **Berkas impor lama** yang memuat kode outlet lama ditolak dengan pesan yang menyebut kodenya; ekspor ulang dulu agar kolom kode memakai nilai terbaru.
+- Menukar kode dua outlet tidak bisa langsung (bentrok): pakai kode sementara.
+- Setiap perubahan tercatat di Log Aktivitas (aksi `updated`, entitas Outlet, nilai lama → baru).
+- Migrasi `2026_12_28_000001` melebarkan kolom kode/SKU. `down()` gagal bila sudah ada kode lebih panjang dari lebar lama (disengaja, supaya tidak terpotong).
+
 ## 12. Event dan Pre-order dihapus (fitur 046, 2026-10-12)
 
 - **Yang berubah untuk pengguna:** menu *Events* dan *Pre-orders* hilang (alamat lamanya, termasuk yang membawa
@@ -604,6 +613,17 @@ adb logcat -s AndroidRuntime:E  # galat fatal; harus kosong pada pengujian
 - APK membawa alamat online bawaan (`https://smasher-nullify-subgroup.ngrok-free.dev`). Dipakai tablet baru **hanya** bila admin memilih "Online" di Pengaturan → Umum → Server address tetapi kolom "Online server address" kosong; isian admin selalu didahulukan.
 - Ganti alamat bawaan bila ngrok berubah: (1) build APK dengan `pos.defaultOnlineUrl=<alamat baru>` di `android-pos/local.properties` atau `gradle.properties`; (2) set `SERVER_ADDRESS_DEFAULT_ONLINE=<alamat baru>` di `.env` server agar petunjuk di halaman web sama (lalu `php artisan config:clear` bila konfigurasi di-cache). Kedua nilai harus sama.
 - Tablet yang sudah menyimpan alamat tidak berubah sampai datanya dihapus (aturan 065).
+
+### 13.7 Mengelola terminal dari web (fitur 079, 2026-10-27)
+
+Menu **Pengaturan → Terminal** (owner/admin). Filter: outlet (beberapa), status, nama.
+
+- **Tambah**: pilih outlet lalu nama. Nama unik di antara terminal AKTIF satu outlet (tanpa beda huruf/spasi); nama sama di outlet lain boleh.
+- **Pindah outlet** (Edit → ganti outlet): ditolak selama ada shift terbuka di terminal itu; tutup shift dulu. Order, shift, dan struk lama tetap di outlet asalnya. **Tablet terminal itu ditolak di permintaan berikutnya (422 `device_id`) dan harus melewati penyiapan lagi untuk outlet baru** — jalur yang sama dengan terminal yang dicabut.
+- **Nonaktifkan** = cabut (`DELETE /devices/{id}`, kontrak lama): tablet langsung tak bisa masuk atau mengirim order. **Aktifkan** membatalkannya bila namanya masih bebas.
+- **Hapus** permanen hanya untuk terminal yang belum pernah dipakai (tanpa order/shift); selain itu 409 dan yang tersedia hanya nonaktifkan. Hapus melepas terminal dari basis data; nonaktifkan menjaga jejak audit.
+- **Aksi massal** (centang baris; kotak kepala memilih satu halaman): **Aktifkan**, **Nonaktifkan**, **Hapus** lewat `POST /devices/bulk`. Tiap terminal diproses dengan aturan tunggalnya sendiri dan TIDAK semua-atau-tidak-sama-sekali: yang berhasil tetap berubah, yang sudah dalam keadaan tujuan dilewati, yang ditolak (hapus: pernah dipakai order/shift; aktifkan: nama sudah dipakai terminal aktif) tetap terpilih dan disebut beserta alasannya. Nonaktifkan dan Hapus meminta konfirmasi bermuatan jumlah. Pilihan dikosongkan saat filter, pencarian, atau halaman berubah. Admin berpenugasan outlet hanya mengenai terminal outletnya (id lain dilaporkan `not_found`). Batas 100 id per permintaan.
+- Setiap tindakan tercatat di Log Aktivitas: `device_paired`, `device_renamed`, `device_moved`, `device_revoked`, `device_reactivated`, `device_deleted`.
 
 ### 13.6 Membangun APK produksi (rilis) (2026-10-27)
 

@@ -60,12 +60,13 @@ class OutletTest extends TestCase
         $response->assertStatus(422)->assertJsonValidationErrors('name');
     }
 
-    public function test_code_must_be_exactly_three_letters(): void
+    public function test_code_must_be_three_to_five_letters_or_digits(): void
     {
         $this->actingAsRole('owner');
 
+        // 079 — dulu tepat 3 huruf; kini 3–5 huruf/angka. Dua karakter tetap ditolak.
         $response = $this->postJson('/api/v1/outlets', [
-            'code' => 'AB1', // angka, bukan huruf, dan tidak relevan panjangnya
+            'code' => 'AB',
             'name' => 'Test Outlet',
         ]);
 
@@ -138,18 +139,18 @@ class OutletTest extends TestCase
 
     // --- Negative: business rule ---------------------------------------
 
-    public function test_code_cannot_be_changed_on_update(): void
+    public function test_code_can_be_changed_on_update_but_must_follow_the_rule(): void
     {
         $this->actingAsRole('owner');
         $artist = Outlet::factory()->create(['code' => 'RYU']);
 
-        $response = $this->putJson("/api/v1/outlets/{$artist->id}", [
-            'code' => 'NEW',
-            'name' => 'Nama Diperbarui',
-        ]);
+        // 079 — kode kini boleh disunting (F19.4 dibalik); nilai yang melanggar aturan tetap ditolak.
+        $this->putJson("/api/v1/outlets/{$artist->id}", ['code' => 'NEW', 'name' => 'Nama Diperbarui'])
+            ->assertOk()->assertJsonPath('code', 'NEW');
 
-        $response->assertStatus(422)->assertJsonValidationErrors('code');
-        $this->assertDatabaseHas('outlets', ['id' => $artist->id, 'code' => 'RYU']);
+        $this->putJson("/api/v1/outlets/{$artist->id}", ['code' => 'N-1', 'name' => 'Nama Diperbarui'])
+            ->assertStatus(422)->assertJsonValidationErrors('code');
+        $this->assertDatabaseHas('outlets', ['id' => $artist->id, 'code' => 'NEW']);
     }
 
     public function test_updating_name_without_touching_code_succeeds(): void

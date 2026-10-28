@@ -353,6 +353,10 @@ class OrderTest extends TestCase
         Setting::updateOrCreate(['key' => 'store_contact_person'], ['value' => 'Budi Santoso', 'type' => 'string', 'group' => 'receipt']);
         Setting::updateOrCreate(['key' => 'store_contact_phone'], ['value' => '0812-3456-7890', 'type' => 'string', 'group' => 'receipt']);
         Setting::updateOrCreate(['key' => 'store_contact_email'], ['value' => 'toko@contoh.com', 'type' => 'string', 'group' => 'receipt']);
+        // 079 — struk memakai identitas OUTLET transaksi. Outlet pabrik tes punya telepon/surel acak, jadi dikosongkan di sini:
+        // outlet tanpa detail sama sekali memakai blok toko bersama utuh (SC-007). Perilaku outlet-sendiri diuji di
+        // ReceiptStoreIdentityTest.
+        \App\Models\Outlet::query()->update(['address' => null, 'contact_phone' => null, 'contact_email' => null, 'notes' => null]);
 
         $order = $this->postJson('/api/v1/orders', $this->basePayload())->json();
 
