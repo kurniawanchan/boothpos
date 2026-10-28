@@ -5,7 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * 048 — daftar terminal: hanya owner/admin. Tidak ada `outlet_id`: outlet ditentukan server.
+ * 048 — daftar terminal: hanya owner/admin. Tidak ada `outlet_id`: outlet ditentukan server (079: halaman Terminal memilihnya lewat header X-Outlet-Id).
  * 064 — hanya `name` (dipangkas). Kode terminal tidak lagi diterima; `code` di body tidak ada di rules, jadi tidak ikut `validated()`. Keunikan nama
  * dijaga DeviceService (butuh kunci dan konteks outlet), bukan rule `unique` di sini.
  */

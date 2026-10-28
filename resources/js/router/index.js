@@ -98,6 +98,14 @@ const routes = [
         // Kunci judul tetap nav.artists (nilainya sudah "Outlet"); nav.<nama rute> tidak ada untuk rute ini.
         meta: { titleKey: 'nav.artists', menuKey: 'outlets' },
       },
+      // 079 — manajemen terminal; digerbang menu `settings` (owner/admin), sama seperti rute server `/devices` yang
+      // hanya melayani owner/admin. Menu `outlets` tidak cukup: peran lain boleh memegangnya.
+      {
+        path: 'terminals',
+        name: 'terminals',
+        component: () => import('../views/TerminalsView.vue'),
+        meta: { titleKey: 'nav.terminals', subtitleKey: 'nav.terminals_subtitle', menuKey: 'settings' },
+      },
       {
         path: 'categories',
         name: 'categories',

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Rules\OutletCodeRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateOutletRequest extends FormRequest
@@ -14,24 +15,15 @@ class UpdateOutletRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // 'code' sengaja TIDAK ada di rule sebagai field yang bisa
-            // diisi. 'prohibited' membuat request eksplisit gagal (422)
-            // bila klien mencoba mengirim 'code', alih-alih diam-diam
-            // mengabaikannya — sesuai keputusan desain skema #5 (PRD):
-            // code permanen setelah dibuat.
-            'code' => ['prohibited'],
+            // 079 — kode boleh disunting (dulu `prohibited`, F19.4). Aturannya sama dengan saat membuat; outlet ini
+            // sendiri dikecualikan dari cek duplikat. Kode produk/SKU lama TIDAK ikut berubah (tertanam saat dibuat).
+            'code' => ['sometimes', 'required', 'string', new OutletCodeRule($this->route('outlet')?->id)],
             'name' => ['required', 'string', 'max:100'],
+            'address' => ['nullable', 'string', 'max:500'],
             'contact_phone' => ['nullable', 'string', 'max:30'],
             'contact_email' => ['nullable', 'email', 'max:100'],
             'notes' => ['nullable', 'string'],
             'is_active' => ['sometimes', 'boolean'],
-        ];
-    }
-
-    public function messages(): array
-    {
-        return [
-            'code.prohibited' => __('master_data.outlet_code_permanent'),
         ];
     }
 }

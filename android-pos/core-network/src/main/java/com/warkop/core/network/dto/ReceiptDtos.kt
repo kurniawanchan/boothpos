@@ -14,6 +14,8 @@ import kotlinx.serialization.Serializable
     @SerialName("store_contact_person") val storeContactPerson: String? = null,
     @SerialName("store_contact_phone") val storeContactPhone: String? = null,
     @SerialName("store_contact_email") val storeContactEmail: String? = null,
+    /** 079 — catatan outlet tempat penjualan terjadi; null bila kosong atau server lama. */
+    @SerialName("store_notes") val storeNotes: String? = null,
     /** 059 — URL logo; null bila admin mematikan logo di struk. Dapat berupa localhost (lihat ServerUrl). */
     @SerialName("store_logo_url") val storeLogoUrl: String? = null,
     @SerialName("order_number") val orderNumber: String = "",

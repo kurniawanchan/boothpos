@@ -58,6 +58,8 @@ Route::prefix('v1')->group(function () {
     // 073 — penyiapan tablet TANPA login owner/admin (spec Q1: pendaftaran terbuka). Pengecualian Konstitusi IV: belum
     // ada pengguna, jadi outlet dari path (divalidasi aktif) dan hanya nama yang keluar. Pembatasnya throttle.
     Route::get('/pos-setup/branding', [\App\Http\Controllers\Api\PosSetupController::class, 'branding'])->middleware('throttle:tablet-read');
+    // 079 — nama toko di layar PIN mengikuti outlet tablet; lanjutan pengecualian Konstitusi IV di atas (hanya nama outlet + logo + mode).
+    Route::get('/pos-setup/outlets/{outlet}/branding', [\App\Http\Controllers\Api\PosSetupController::class, 'outletBranding'])->whereNumber('outlet')->middleware('throttle:tablet-read');
     Route::get('/pos-setup/outlets', [\App\Http\Controllers\Api\PosSetupController::class, 'outlets'])->middleware('throttle:tablet-read');
     Route::get('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'terminals'])->whereNumber('outlet')->middleware('throttle:tablet-read');
     Route::post('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'registerTerminal'])->whereNumber('outlet')->middleware('throttle:tablet-write');
@@ -96,8 +98,13 @@ Route::prefix('v1')->group(function () {
         // 048 / B14 — terminal POS (owner/admin; outlet diturunkan server).
         Route::get('/devices', [\App\Http\Controllers\Api\DeviceController::class, 'index']);
         Route::post('/devices/pairings', [\App\Http\Controllers\Api\DeviceController::class, 'pair']);
-        Route::patch('/devices/{device}', [\App\Http\Controllers\Api\DeviceController::class, 'rename']);
+        // 079 — aksi massal; POST statis, tidak bentrok dengan `/devices/{device}` (PATCH/DELETE).
+        Route::post('/devices/bulk', [\App\Http\Controllers\Api\DeviceController::class, 'bulk']);
+        Route::patch('/devices/{device}', [\App\Http\Controllers\Api\DeviceController::class, 'update']);
+        // `DELETE /devices/{device}` tetap = NONAKTIFKAN (cabut; kontrak 048/064). 079: aktifkan lagi dan hapus permanen eksplisit.
         Route::delete('/devices/{device}', [\App\Http\Controllers\Api\DeviceController::class, 'destroy']);
+        Route::post('/devices/{device}/reactivate', [\App\Http\Controllers\Api\DeviceController::class, 'reactivate']);
+        Route::delete('/devices/{device}/permanent', [\App\Http\Controllers\Api\DeviceController::class, 'destroyPermanent']);
         // 048 / T064 — heartbeat terminal, sengaja di luar pembatasan owner/admin (dikirim sesi kasir juga).
         Route::post('/devices/heartbeat', [\App\Http\Controllers\Api\DeviceController::class, 'heartbeat']);
         // 054 / US3 — alamat server yang dipilih; di dalam auth:sanctum seperti roster (tablet memakai token dari penyiapan).

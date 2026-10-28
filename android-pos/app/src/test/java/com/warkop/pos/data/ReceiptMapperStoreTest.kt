@@ -47,4 +47,12 @@ class ReceiptMapperStoreTest {
         val json = """{"store_name":"Warkop","store_contact_phone":"0812","order_number":"O-7"}"""
         assertEquals(ReceiptMapper.map(dto(json)), ReceiptMapper.map(dto(json)))
     }
+
+    @Test fun `catatan outlet terpetakan, kosong atau tidak ada menjadi null`() {
+        assertEquals("Buka 08-22", ReceiptMapper.map(dto("""{"store_notes":" Buka 08-22 "}""")).storeNotes)
+        assertNull(ReceiptMapper.map(dto("""{"store_notes":"  "}""")).storeNotes)
+        assertNull(ReceiptMapper.map(dto("""{"store_notes":null}""")).storeNotes)
+        // Server lama tidak mengirim kuncinya sama sekali.
+        assertNull(ReceiptMapper.map(dto("""{"store_name":"Warkop"}""")).storeNotes)
+    }
 }

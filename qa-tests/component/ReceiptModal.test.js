@@ -112,3 +112,50 @@ describe('ReceiptModal outlet line (045)', () => {
     expect(screen.queryByTestId('receipt-outlet')).toBeNull();
   });
 });
+
+/**
+ * 079 — identitas toko di struk mengikuti outlet transaksi: nama, alamat, telepon/surel, catatan. Baris yang
+ * kosong dihilangkan; telepon/surel pelanggan tetap terpisah dari kontak toko.
+ */
+describe('ReceiptModal identitas toko per outlet (079)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('mencetak alamat, telepon, surel, dan catatan outlet', async () => {
+    renderModal({
+      store_name: 'Kedai Satu',
+      store_address: 'Jl. Melati 5',
+      store_contact_phone: '0812-111',
+      store_contact_email: 'satu@example.test',
+      store_notes: 'Buka 08–22\nWiFi: kedaisatu',
+    });
+    expect(await screen.findByText('Kedai Satu')).toBeInTheDocument();
+    expect(screen.getByText('Jl. Melati 5')).toBeInTheDocument();
+    expect(screen.getByTestId('receipt-store-contact')).toHaveTextContent('0812-111 · satu@example.test');
+    expect(screen.getByTestId('receipt-store-notes')).toHaveTextContent('Buka 08–22');
+  });
+
+  it('menghilangkan baris yang kosong tanpa label kosong', async () => {
+    renderModal({ store_name: 'Kedai Dua', store_address: null, store_contact_phone: null, store_contact_email: null, store_notes: null });
+    expect(await screen.findByText('Kedai Dua')).toBeInTheDocument();
+    expect(screen.queryByTestId('receipt-store-contact')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('receipt-store-notes')).not.toBeInTheDocument();
+  });
+
+  it('hanya telepon: tanpa pemisah menggantung', async () => {
+    renderModal({ store_name: 'Kedai Tiga', store_contact_phone: '021-555', store_contact_email: null });
+    expect(await screen.findByTestId('receipt-store-contact')).toHaveTextContent(/^021-555$/);
+  });
+
+  it('kontak pelanggan tidak tercampur dengan kontak toko', async () => {
+    renderModal({ store_name: 'Kedai Empat', store_contact_phone: null, customer_name: 'Ani', customer_phone: '0899-1', customer_email: null });
+    await screen.findByText('Kedai Empat');
+    expect(screen.queryByTestId('receipt-store-contact')).not.toBeInTheDocument();
+    expect(screen.getByText('0899-1')).toBeInTheDocument();
+  });
+
+  it('tidak menggandakan nama outlet bila sudah sama dengan nama toko', async () => {
+    renderModal({ store_name: 'Kedai Lima', outlet_name: 'Kedai Lima' }, { multiOutlet: true });
+    await screen.findByText('Kedai Lima');
+    expect(screen.queryByTestId('receipt-outlet')).not.toBeInTheDocument();
+  });
+});

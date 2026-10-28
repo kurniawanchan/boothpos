@@ -5,19 +5,22 @@ namespace App\Services;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Rules\OutletCodeRule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Menghasilkan code_prefix (10 karakter) dan SKU varian (14 karakter),
+ * Menghasilkan code_prefix (10–12 karakter) dan SKU varian (14–16 karakter),
  * format dipisah tanda hubung atas permintaan pengguna (sebelumnya
  * digabung tanpa pemisah — lihat migration
  * 2026_10_25_000001_widen_product_code_and_sku_columns_for_dashed_format
  * untuk riwayat perubahan lebar kolom):
- *   code_prefix = outlet.code(3) + "-" + category.code(2) + "-" + product_segment(3)
- *   sku         = code_prefix(10) + "-" + urutan 3 digit
+ *   code_prefix = outlet.code(3–5) + "-" + category.code(2) + "-" + product_segment(3)
+ *   sku         = code_prefix + "-" + urutan 3 digit
  *
- * Kode bersifat PERMANEN setelah dibuat (F19.4) — service ini hanya
- * dipanggil sekali saat entitas dibuat, tidak pernah untuk regenerasi.
+ * Kode produk/SKU bersifat PERMANEN setelah dibuat (F19.4) — service ini hanya
+ * dipanggil sekali saat entitas dibuat, tidak pernah untuk regenerasi. Sejak 079
+ * KODE OUTLET boleh disunting, tapi itu tidak menulis ulang kode yang sudah ada;
+ * hanya produk yang dibuat sesudahnya memakai kode outlet yang baru.
  * Kode/SKU yang sudah ada dari SEBELUM perubahan format ini tetap dalam
  * bentuk lama (tanpa tanda hubung) — tidak pernah diregenerasi ulang.
  */
@@ -142,8 +145,11 @@ class ProductCodeGenerator
     {
         $prefix = strtoupper($outletCode).'-'.strtoupper($categoryCode).'-'.strtoupper($productSegment);
 
-        if (strlen($prefix) !== 10) {
-            throw new \InvalidArgumentException('Kombinasi kode outlet, kategori, dan segmen produk harus menghasilkan 10 karakter (format ART-CA-SEG).');
+        // 079 — kode outlet 3–5 karakter, kategori 2, segmen 3: prefiks 10–12 karakter (kolom `code_prefix` CHAR(12)).
+        $valid = strlen($outletCode) >= OutletCodeRule::MIN && strlen($outletCode) <= OutletCodeRule::MAX
+            && strlen($categoryCode) === 2 && strlen($productSegment) === 3;
+        if (! $valid) {
+            throw new \InvalidArgumentException('Kombinasi kode outlet (3–5), kategori (2), dan segmen produk (3) tidak valid (format OUTLET-CA-SEG).');
         }
 
         return $prefix;

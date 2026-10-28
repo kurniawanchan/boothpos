@@ -191,6 +191,8 @@ class MasterDataExportService
             'contact_email' => $a->contact_email,
             'notes' => $a->notes,
             'is_active' => $a->is_active ? 1 : 0,
+            // 079 — di AKHIR supaya berkas ekspor lama tetap terbaca oleh impor.
+            'address' => $a->address,
         ])->all();
     }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateSettingsRequest;
 use App\Http\Resources\SettingResource;
+use App\Models\Outlet;
 use App\Models\Setting;
 use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
@@ -12,8 +13,10 @@ use App\Support\AppName;
 use App\Support\BusinessDay;
 use App\Support\LicenseGate;
 use App\Support\ModeGate;
+use App\Support\OutletContext;
 use App\Support\SchemaStatus;
 use App\Support\StoreBranding;
+use App\Support\StoreIdentity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -37,8 +40,14 @@ class SettingsController extends Controller
      * owner/admin (yang berwenang MENGUBAHNYA tetap hanya lewat
      * PUT /settings, digerbang SettingPolicy seperti biasa).
      */
-    public function features(Request $request): JsonResponse
+    public function features(Request $request, OutletContext $outlets): JsonResponse
     {
+        // 079 — identitas toko untuk outlet yang berlaku pada permintaan ini (X-Outlet-Id yang sudah disempitkan
+        // middleware, atau satu-satunya outlet pengguna); beberapa outlet tanpa pilihan = identitas bersama.
+        // Tidak di-cache lintas permintaan: nilainya bergantung pada outlet permintaan (Konstitusi V).
+        $outletId = $outlets->singleId();
+        $store = StoreIdentity::forScreen($outletId === null ? null : Outlet::query()->find($outletId));
+
         return response()->json([
             'multi_outlet_enabled' => LicenseGate::multiOutletEnabled(),
             'outlet_count' => LicenseGate::activeOutletCount(),
@@ -58,7 +67,9 @@ class SettingsController extends Controller
             // mode ('store_name_demo' vs 'store_name') supaya tidak saling
             // menimpa. Disurfacekan di sini (bukan hanya GET /settings)
             // supaya tersedia app-wide tanpa endpoint owner/admin-only.
-            'store_name' => StoreBranding::storeName(),
+            // 079 — `store_name` tetap ada untuk klien lama dan selalu sama dengan `store.name`.
+            'store_name' => $store['name'],
+            'store' => $store,
             // 072 — logo toko untuk sidebar dan favicon. Di sini (bukan hanya GET /settings) karena GET /settings
             // hanya owner/admin, sedangkan kasir juga melihat sidebar. URL diselesaikan server seperti gambar lain.
             'store_logo_url' => StoreBranding::logoUrl(),

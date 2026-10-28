@@ -273,6 +273,17 @@ Atas permintaan pemilik produk, aplikasi Android tidak lagi meminta login owner/
 
 Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/073-android-outlet-terminal-login/`.
 
+**Catatan perubahan pasca-MVP — 2026-10-27 (fitur 079, kode outlet bisa disunting; alamat dan identitas toko per outlet)**
+
+Atas permintaan pemilik produk: (1) kode outlet kini **3–5 huruf atau angka** dan **boleh disunting** setelah dibuat — ini membalik bagian "outlet" dari F19.4; (2) outlet punya **alamat**; (3) struk menampilkan nama, alamat, telepon, surel, dan catatan **outlet tempat penjualan terjadi**, dan layar (header, sidebar, layar PIN tablet) menampilkan outlet terpilih.
+
+- F19.4 tetap berlaku untuk **kode produk dan SKU**: tertanam saat dibuat dan tidak pernah ditulis ulang. Menyunting kode outlet hanya memengaruhi produk yang dibuat sesudahnya. Lebar kode produk menjadi 10–12 karakter dan SKU 14–16.
+- Impor yang masih memuat kode outlet lama ditolak sebagai kode tidak dikenal (tidak pernah dicocokkan ke outlet lain).
+- Logo, teks footer struk, dan nama merek tetap pengaturan bersama.
+- **Terminal dikelola dari web** (menu Pengaturan → Terminal, owner/admin): daftar berfilter (outlet, status, nama), tambah di outlet pilihan, ganti nama, **pindah outlet** (ditolak selama ada shift terbuka; riwayat tetap di outlet asalnya), nonaktif/aktifkan lagi, dan hapus permanen hanya bila terminal belum pernah dipakai. **Aksi massal** (dicatat 2026-10-29): pilih beberapa terminal lalu aktifkan, nonaktifkan, atau hapus sekaligus; hasilnya per terminal (bukan semua-atau-tidak-sama-sekali) dengan aturan hapus yang sama. Sebelumnya terminal hanya bisa dibuat dari penyiapan tablet. Tablet yang terminalnya dipindah atau dinonaktifkan ditolak di permintaan berikutnya dan disiapkan ulang.
+
+Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/079-outlet-code-address-store-info/`.
+
 **Catatan perubahan pasca-MVP — 2026-10-26 (fitur 074, atur PIN dari layar Pengguna)**
 
 Atas permintaan pemilik produk, owner/admin dapat mengatur PIN pengguna langsung dari layar Pengguna di web (mengetik 6 digit atau "Buat PIN acak" yang tampil sekali), tanpa memanggil API manual. Daftar pengguna menampilkan status PIN (Ada PIN / Belum ada PIN / Terkunci) dan dapat difilter "Belum ada PIN".

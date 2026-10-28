@@ -37,6 +37,15 @@ class PosSetupController extends Controller
         return response()->json(StoreBranding::forTablet());
     }
 
+    /**
+     * 079 — sama dengan [branding], tetapi `store_name` = nama outlet pilihan tablet (outlet dari path, divalidasi aktif; 404
+     * bila tidak ada di mode data yang berlaku). Tetap hanya tiga nilai.
+     */
+    public function outletBranding(int $outlet): JsonResponse
+    {
+        return response()->json(StoreBranding::forTablet($this->activeOutlet($outlet)));
+    }
+
     public function terminals(int $outlet): JsonResponse
     {
         $outlet = $this->activeOutlet($outlet);

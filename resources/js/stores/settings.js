@@ -25,6 +25,10 @@ export const useSettingsStore = defineStore('settings', {
     receiptFooterText: '',
     receiptShowLogo: true,
     storeName: '',
+    // 079 — alamat, telepon, surel, dan catatan toko untuk outlet yang sedang dipilih (server memilih; "semua outlet" =
+    // nilai bersama). `storeName` di atas adalah nama dari blok yang sama. Memilih outlet memuat ulang halaman
+    // (AppShell), jadi load() berikutnya otomatis membawa header outlet baru.
+    storeInfo: { address: null, phone: null, email: null, notes: null },
     // 072 — logo toko untuk sidebar dan favicon; null = belum diunggah.
     storeLogoUrl: null,
     appName: DEFAULT_APP_NAME,
@@ -61,7 +65,13 @@ export const useSettingsStore = defineStore('settings', {
         this.themeAccentColor = data.theme_accent_color ?? null;
         this.receiptFooterText = data.receipt_footer_text ?? '';
         this.receiptShowLogo = data.receipt_show_logo ?? true;
-        this.storeName = data.store_name ?? '';
+        this.storeName = data.store?.name ?? data.store_name ?? '';
+        this.storeInfo = {
+          address: data.store?.address ?? null,
+          phone: data.store?.phone ?? null,
+          email: data.store?.email ?? null,
+          notes: data.store?.notes ?? null,
+        };
         this.storeLogoUrl = data.store_logo_url ?? null;
         this.appName = resolveAppName(data.app_name);
         this.storeTimezone = data.store_timezone || 'Asia/Jakarta';

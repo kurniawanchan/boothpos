@@ -172,4 +172,61 @@ class OutletExcelSheetsTest extends TestCase
         $this->assertContains('outlet_prices.outlet_code', collect($response->json('errors'))->map(fn ($e) => ($e['sheet'] ?? '').'.'.($e['column'] ?? ''))->all());
         $this->assertSame(0, VariantOutletPrice::count());
     }
+
+    public function test_the_outlets_sheet_takes_a_five_character_code_and_an_address_and_the_address_heading_is_last(): void
+    {
+        $headings = MasterDataSheets::headings('outlets');
+        $this->assertSame('address', end($headings), 'kolom baru di AKHIR supaya berkas lama tetap terbaca');
+
+        // Master: dengan kuota Pro, outlet ketiga ditolak sebelum aturan kode/alamat sempat diuji.
+        Setting::updateOrCreate(['key' => 'multi_outlet_enabled'], ['value' => '1', 'type' => 'boolean', 'group' => 'licensing']);
+
+        $this->import($this->workbook(['outlets' => [['code' => 'kd001', 'name' => 'Kedai Satu', 'is_active' => 1, 'address' => 'Jl. Melati 5']]]))
+            ->assertOk()->assertJsonPath('applied', true);
+
+        $this->assertDatabaseHas('outlets', ['code' => 'KD001', 'address' => 'Jl. Melati 5']);
+    }
+
+    public function test_a_file_without_the_address_column_still_imports_and_leaves_the_address_unchanged(): void
+    {
+        $this->a->update(['address' => 'Alamat Lama']);
+
+        $spreadsheet = new Spreadsheet;
+        $ws = $spreadsheet->getActiveSheet();
+        $ws->setTitle('outlets');
+        $ws->fromArray(['code', 'name', 'contact_phone', 'contact_email', 'notes', 'is_active'], null, 'A1');
+        $ws->fromArray([[$this->a->code, 'Nama Dari Berkas Lama', null, null, null, 1]], null, 'A2');
+        $path = tempnam(sys_get_temp_dir(), 'outlet-old').'.xlsx';
+        (new XlsxWriter($spreadsheet))->save($path);
+        $this->tempFiles[] = $path;
+
+        $this->import(new UploadedFile($path, 'lama.xlsx', null, null, true))->assertOk()->assertJsonPath('applied', true);
+
+        $this->assertDatabaseHas('outlets', ['id' => $this->a->id, 'name' => 'Nama Dari Berkas Lama', 'address' => 'Alamat Lama']);
+    }
+
+    public function test_an_outlet_code_that_breaks_the_rule_is_a_row_error_on_the_code_column(): void
+    {
+        $response = $this->import($this->workbook(['outlets' => [['code' => 'AB-1', 'name' => 'X', 'is_active' => 1], ['code' => 'ABCDEF', 'name' => 'Y', 'is_active' => 1]]]))
+            ->assertStatus(422)->assertJsonPath('applied', false);
+
+        $this->assertSame(2, collect($response->json('errors'))->where('sheet', 'outlets')->where('column', 'code')->count());
+    }
+
+    public function test_after_a_code_edit_an_import_that_still_carries_the_old_code_is_refused_naming_it_and_writes_nothing(): void
+    {
+        $old = $this->b->code;
+        $this->putJson("/api/v1/outlets/{$this->b->id}", ['code' => 'NEW9X', 'name' => $this->b->name])->assertOk();
+
+        $response = $this->import($this->workbook(['outlet_items' => [['outlet_code' => $old, 'product_code' => 'KOPI-X', 'is_carried' => 0]]]))
+            ->assertStatus(422)->assertJsonPath('applied', false);
+
+        $error = collect($response->json('errors'))->firstWhere('column', 'outlet_code');
+        $this->assertNotNull($error);
+        $this->assertStringContainsString($old, $error['message']);
+        $this->assertSame(0, OutletItemSetting::where('outlet_id', $this->b->id)->where('is_carried', false)->count());
+
+        $this->import($this->workbook(['outlet_items' => [['outlet_code' => 'NEW9X', 'product_code' => 'KOPI-X', 'is_carried' => 0]]]))
+            ->assertOk()->assertJsonPath('applied', true);
+    }
 }

@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\CashierSession;
 use App\Models\Device;
+use App\Models\Order;
 use App\Models\Outlet;
 use App\Models\User;
 use App\Support\OutletContext;
@@ -14,7 +16,10 @@ use Illuminate\Validation\ValidationException;
  *
  * Outlet DITURUNKAN server dari konteks (OutletContext::singleId: satu-satunya outlet yang berlaku, atau yang dipilih
  * lewat X-Outlet-Id dan memang dimiliki pengguna) — tidak pernah dibaca dari body (Konstitusi IV). Pemilik/admin yang
- * melihat banyak outlet WAJIB memilih satu.
+ * melihat banyak outlet WAJIB memilih satu; halaman Terminal (079) memilihnya lewat header itu juga. Satu-satunya
+ * pengecualian adalah PINDAH outlet ([update]): tujuan pindah tidak bisa berupa header, jadi `outlet_id` di body
+ * diperiksa pemanggil terhadap OutletContext::permittedIds() (outlet aktif yang boleh dilihat), pola yang sama dengan
+ * pindah meja/stasiun (071).
  *
  * 064 — terminal dikenali HANYA lewat NAMA. Tidak ada lagi kode otomatis `T01`/`T02` (kolom `code` hanya riwayat).
  * Nama unik di antara terminal AKTIF satu outlet + mode data, tanpa membedakan huruf besar/kecil. Aturannya dijaga di
@@ -62,22 +67,93 @@ class DeviceService
         return $device;
     }
 
-    /** 064 — ganti nama terminal. Terminal yang sudah dicabut tidak bisa diganti (409). */
-    public function rename(Device $device, string $name, User $by): Device
+    /**
+     * 064 — ganti nama; 079 — dan/atau pindah ke outlet lain ([toOutletId] sudah diperiksa pemanggil: aktif dan boleh dilihat
+     * pengguna). Terminal yang sudah dinonaktifkan tidak bisa diubah (409): aktifkan dulu. Pindah ditolak (409) bila ada shift
+     * terbuka di terminal ini ([OutletMoveGuard]); nama dicek ulang di outlet TUJUAN. Riwayat (order, shift, struk) tetap pada
+     * outlet transaksinya — hanya `devices.outlet_id` yang berubah. Satu transaksi dengan log-nya.
+     *
+     * @param  array{name?: string}  $data
+     */
+    public function update(Device $device, array $data, User $by, ?int $toOutletId = null): Device
     {
-        return DB::transaction(function () use ($device, $name, $by) {
+        return DB::transaction(function () use ($device, $data, $by, $toOutletId) {
             if ($device->revoked_at !== null) {
-                throw ValidationException::withMessages(['device' => [__('devices.revoked_no_rename')]])->status(409);
+                throw ValidationException::withMessages(['device' => [__('devices.revoked_no_edit')]])->status(409);
             }
 
-            $new = $this->assertNameFree((int) $device->outlet_id, $name, $device->id);
+            $fromOutletId = (int) $device->outlet_id;
+            $moving = $toOutletId !== null && $toOutletId !== $fromOutletId;
+            if ($moving && ($blocker = app(OutletMoveGuard::class)->deviceBlocker($device)) !== null) {
+                throw ValidationException::withMessages(['device' => [app(OutletMoveGuard::class)->message($blocker)]])->status(409);
+            }
+
+            $targetOutletId = $moving ? $toOutletId : $fromOutletId;
             $old = $device->name;
+            $new = array_key_exists('name', $data) ? $this->assertNameFree($targetOutletId, $data['name'] ?? '', $device->id) : $old;
+            // Pindah tanpa mengganti nama: nama yang ada tetap harus bebas di outlet tujuan.
+            if ($moving && ! array_key_exists('name', $data)) {
+                $this->assertNameFree($targetOutletId, $old, $device->id);
+            }
+
             if ($new !== $old) {
                 $device->forceFill(['name' => $new])->save();
                 $this->log->log($by->id, 'device_renamed', 'Device', $device->id, "Terminal {$old} diganti namanya menjadi {$new}", ['name' => $old], ['name' => $new]);
             }
 
+            if ($moving) {
+                $codes = Outlet::query()->whereIn('id', [$fromOutletId, $targetOutletId])->pluck('code', 'id');
+                $device->setAttribute('outlet_id', $targetOutletId);
+                $device->save();
+                $this->log->log(
+                    $by->id, 'device_moved', 'Device', $device->id,
+                    "Terminal {$device->name} dipindah dari outlet ".($codes[$fromOutletId] ?? $fromOutletId).' ke '.($codes[$targetOutletId] ?? $targetOutletId),
+                    ['outlet_id' => $fromOutletId], ['outlet_id' => $targetOutletId],
+                );
+            }
+
             return $device;
+        });
+    }
+
+    /**
+     * 079 — aktifkan lagi terminal yang dinonaktifkan. Nama harus masih bebas di antara terminal AKTIF outletnya (nama dilepas
+     * saat dicabut, jadi bisa sudah dipakai terminal lain → 422 `name`). Terminal yang sudah aktif: tidak ada perubahan dan tidak
+     * ada log. Terminal milik outlet nonaktif tidak sampai ke sini: OutletScope menyembunyikannya (404).
+     */
+    public function reactivate(Device $device, User $by): Device
+    {
+        return DB::transaction(function () use ($device, $by) {
+            if ($device->revoked_at === null) {
+                return $device;
+            }
+
+            $this->assertNameFree((int) $device->outlet_id, $device->name, $device->id);
+
+            $device->forceFill(['revoked_at' => null])->save();
+            $this->log->log($by->id, 'device_reactivated', 'Device', $device->id, "Terminal {$device->name} diaktifkan lagi");
+
+            return $device;
+        });
+    }
+
+    /**
+     * 079 — hapus permanen, hanya terminal yang belum pernah dipakai. FK `orders.device_id` dan `cashier_sessions.device_id`
+     * berupa SET NULL, jadi menghapus terminal yang punya riwayat akan MELEPAS riwayat itu dari terminalnya tanpa suara —
+     * penjaganya ada di sini (409 `device`), bukan di database. Tabel `terminal_counters` ikut terhapus (CASCADE).
+     */
+    public function deleteIfUnused(Device $device, User $by): void
+    {
+        DB::transaction(function () use ($device, $by) {
+            // Tanpa global scope: riwayat di outlet/mode mana pun tetap menghalangi (FK tidak peduli scope).
+            $used = Order::withoutGlobalScopes()->where('device_id', $device->id)->exists()
+                || CashierSession::withoutGlobalScopes()->where('device_id', $device->id)->exists();
+            if ($used) {
+                throw ValidationException::withMessages(['device' => [__('devices.in_use')]])->status(409);
+            }
+
+            $this->log->log($by->id, 'device_deleted', 'Device', $device->id, "Terminal {$device->name} dihapus permanen");
+            $device->delete();
         });
     }
 
@@ -152,6 +228,48 @@ class DeviceService
             ->when($exceptId, fn ($q) => $q->where('id', '!=', $exceptId))
             ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
             ->first();
+    }
+
+    /**
+     * 079 — aksi massal (aktifkan, nonaktifkan, hapus) untuk halaman Terminal. TIDAK semua-atau-tidak-sama-sekali: tiap
+     * terminal memakai jalur tunggalnya sendiri (`reactivate`, `revoke`, `deleteIfUnused`), masing-masing dalam transaksi dan
+     * log aktivitasnya sendiri, sehingga satu terminal yang punya riwayat tidak menahan sepuluh lainnya. Aturan hapus dan
+     * aktifkan TIDAK disalin di sini. `Device::query()` ber-OutletScope: id di luar outlet yang boleh dilihat pengguna (atau
+     * tak ada) tidak pernah ditemukan dan dilaporkan `not_found`, tanpa membedakan keduanya.
+     *
+     * @param  list<int>  $ids
+     * @param  'activate'|'deactivate'|'delete'  $action
+     * @return list<array{id: int, name: ?string, status: 'changed'|'skipped'|'refused'|'not_found', reason: ?string}>
+     */
+    public function bulk(array $ids, string $action, User $by): array
+    {
+        $found = Device::query()->whereIn('id', $ids)->get()->keyBy('id');
+
+        return collect($ids)->map(function (int $id) use ($found, $action, $by) {
+            $device = $found->get($id);
+            if ($device === null) {
+                return ['id' => $id, 'name' => null, 'status' => 'not_found', 'reason' => __('devices.bulk_not_found')];
+            }
+
+            $row = fn (string $status, ?string $reason = null) => ['id' => $id, 'name' => $device->name, 'status' => $status, 'reason' => $reason];
+            $revoked = $device->revoked_at !== null;
+
+            if (($action === 'activate' && ! $revoked) || ($action === 'deactivate' && $revoked)) {
+                return $row('skipped');
+            }
+
+            try {
+                match ($action) {
+                    'activate' => $this->reactivate($device, $by),
+                    'deactivate' => $this->revoke($device, $by),
+                    'delete' => $this->deleteIfUnused($device, $by),
+                };
+            } catch (ValidationException $e) {
+                return $row('refused', collect($e->errors())->flatten()->first());
+            }
+
+            return $row('changed');
+        })->values()->all();
     }
 
     public function revoke(Device $device, User $by): Device

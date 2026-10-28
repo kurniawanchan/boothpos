@@ -99,7 +99,24 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
         sessionToken = null; outletId = null; deviceId = null; myDeviceName = ""
     }
 
-    override suspend fun branding(): com.warkop.pos.model.Branding = BrandingMapper.fromBranding(apiCall { api().branding() }, serverUrl)
+    /**
+     * 079 — nama toko di layar PIN mengikuti OUTLET tablet ini. Tanpa outlet tersimpan (penyiapan pertama) memakai
+     * identitas bersama. Outlet tersimpan yang tidak ada di mode yang sedang berlaku di server (404 — outlet DEMO dan LIVE
+     * berbeda) jatuh ke identitas bersama, sehingga mode tetap terbaca dan pergantian mode dikenali seperti sebelumnya.
+     */
+    override suspend fun branding(): com.warkop.pos.model.Branding {
+        val outlet = outletId
+        val dto = if (outlet == null) {
+            apiCall { api().branding() }
+        } else {
+            try {
+                apiCall { api().outletBranding(outlet) }
+            } catch (_: ApiError.NotFound) {
+                apiCall { api().branding() }
+            }
+        }
+        return BrandingMapper.fromBranding(dto, serverUrl)
+    }
 
     /** 078 — pengguna yang sedang masuk, dibaca ulang dari server supaya foto/nama yang diubah di web ikut tampil tanpa masuk ulang. */
     override suspend fun me(): StaffUser {

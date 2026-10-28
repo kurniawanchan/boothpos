@@ -59,7 +59,32 @@ class OutletController extends Controller
 
     public function update(UpdateOutletRequest $request, Outlet $outlet): JsonResponse
     {
-        $outlet->update($request->validated());
+        // 079 — kode kini bisa diubah, dan kode ikut tertanam di kode produk baru, jadi perubahan outlet dicatat.
+        // Log ditulis DI DALAM transaksi yang sama dengan update-nya (F13.4): rollback tidak menyisakan log palsu.
+        DB::transaction(function () use ($outlet, $request) {
+            $outlet->fill($request->validated());
+            $changes = $outlet->getDirty();
+
+            if ($changes === []) {
+                return;
+            }
+
+            $before = array_intersect_key($outlet->getOriginal(), $changes);
+            $outlet->save();
+
+            $codeNote = array_key_exists('code', $changes)
+                ? " Kode {$before['code']} menjadi {$outlet->code}; kode produk dan SKU yang sudah ada tidak berubah."
+                : '';
+            $this->activityLogger->log(
+                userId: $request->user()?->id,
+                action: 'updated',
+                entityType: 'Outlet',
+                entityId: $outlet->id,
+                description: "Mengubah outlet {$outlet->name}.{$codeNote}",
+                oldValues: $before,
+                newValues: $changes,
+            );
+        });
 
         return response()->json(new OutletResource($outlet->fresh()));
     }
