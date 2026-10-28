@@ -79,6 +79,9 @@ interface PosBackend {
     /** 077 — mode data + nama/logo toko SEBELUM login (tanpa token). */
     suspend fun branding(): com.warkop.pos.model.Branding
 
+    /** 078 — pengguna yang sedang masuk (`GET /auth/me`): nama dan foto terbaru; peran dan izin tetap dari sesi. */
+    suspend fun me(): StaffUser
+
     /** 077 — mode data + nama/logo toko SESUDAH login (dari `features`); dipakai mendeteksi pergantian mode saat sesi berjalan. */
     suspend fun sessionBranding(): com.warkop.pos.model.Branding
 

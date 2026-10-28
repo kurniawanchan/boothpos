@@ -11,4 +11,5 @@ return [
     'current_pin_required' => 'Current PIN is required.',
     'token_not_refreshable' => 'This session cannot be extended. Sign in again.',
     'pin_changed' => 'PIN updated.',
+    'too_many_attempts' => 'Too many attempts. Try again in :seconds seconds.',
 ];

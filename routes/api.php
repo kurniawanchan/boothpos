@@ -53,21 +53,22 @@ Route::prefix('v1')->group(function () {
     Route::post('/license/activate', [LicenseController::class, 'activate']);
 
     // 065 / US6 — alamat server pilihan admin untuk tablet baru: tanpa token (tablet belum punya), hanya alamat terpilih.
-    Route::get('/server-address', [\App\Http\Controllers\Api\ServerAddressController::class, 'forTablets'])->middleware('throttle:30,1');
+    Route::get('/server-address', [\App\Http\Controllers\Api\ServerAddressController::class, 'forTablets'])->middleware('throttle:tablet-read');
 
     // 073 — penyiapan tablet TANPA login owner/admin (spec Q1: pendaftaran terbuka). Pengecualian Konstitusi IV: belum
     // ada pengguna, jadi outlet dari path (divalidasi aktif) dan hanya nama yang keluar. Pembatasnya throttle.
-    Route::get('/pos-setup/branding', [\App\Http\Controllers\Api\PosSetupController::class, 'branding'])->middleware('throttle:30,1');
-    Route::get('/pos-setup/outlets', [\App\Http\Controllers\Api\PosSetupController::class, 'outlets'])->middleware('throttle:30,1');
-    Route::get('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'terminals'])->whereNumber('outlet')->middleware('throttle:30,1');
-    Route::post('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'registerTerminal'])->whereNumber('outlet')->middleware('throttle:10,1');
+    Route::get('/pos-setup/branding', [\App\Http\Controllers\Api\PosSetupController::class, 'branding'])->middleware('throttle:tablet-read');
+    Route::get('/pos-setup/outlets', [\App\Http\Controllers\Api\PosSetupController::class, 'outlets'])->middleware('throttle:tablet-read');
+    Route::get('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'terminals'])->whereNumber('outlet')->middleware('throttle:tablet-read');
+    Route::post('/pos-setup/outlets/{outlet}/terminals', [\App\Http\Controllers\Api\PosSetupController::class, 'registerTerminal'])->whereNumber('outlet')->middleware('throttle:tablet-write');
 
     // 073 — roster dan login PIN TANPA token (spec Q1/Q3). Sebelumnya butuh token owner/admin dari penyiapan. Pertahanan utama
     // tetap kunci 5-salah per pengguna di PinAuthService; throttle hanya meredam banjir. Roster tidak memuat owner/admin.
-    Route::get('/staff/roster', [\App\Http\Controllers\Api\PinAuthController::class, 'roster'])->middleware('throttle:30,1');
-    Route::post('/auth/pin-sessions', [\App\Http\Controllers\Api\PinAuthController::class, 'login'])->middleware('throttle:30,1');
+    Route::get('/staff/roster', [\App\Http\Controllers\Api\PinAuthController::class, 'roster'])->middleware('throttle:tablet-read');
+    Route::post('/auth/pin-sessions', [\App\Http\Controllers\Api\PinAuthController::class, 'login'])->middleware('throttle:pin-login');
 
-    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+    // 078 — percobaan gagal dihitung per akun di AuthController::login; ini hanya batas banjir per IP (hitungan terpisah).
+    Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login-flood');
 
     // SetLocaleFromUser HANYA di sini, bukan pada POST /auth/login di
     // atas — layar login selalu Bahasa Indonesia (FR-001), locale

@@ -5,6 +5,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -52,6 +53,24 @@ return Application::configure(basePath: dirname(__DIR__))
             }
 
             return response()->json(['message' => $e->getMessage(), 'code' => $e->reason] + $e->context, $e->status);
+        });
+
+        // 078 — SATU renderer untuk semua penolakan throttle: pesan Indonesia dengan lama tunggu, bukan "Too Many Attempts." bawaan
+        // (Inggris, tanpa waktu). `Retry-After` dari exception dipertahankan. Kunci `pin_locked` (kunci PIN per pengguna) tidak lewat
+        // sini — itu 429 buatan PinAuthService dengan kodenya sendiri.
+        $exceptions->render(function (ThrottleRequestsException $e, Request $request) {
+            if (! $request->is('api/*') && ! $request->expectsJson()) {
+                return null;
+            }
+
+            $headers = $e->getHeaders();
+            $seconds = max(1, (int) ($headers['Retry-After'] ?? 60));
+
+            return response()->json([
+                'message' => __('auth.too_many_attempts', ['seconds' => $seconds]),
+                'code' => 'throttled',
+                'retry_after' => $seconds,
+            ], 429, $headers);
         });
 
         $exceptions->render(function (QueryException $e, Request $request) {

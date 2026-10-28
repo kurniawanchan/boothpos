@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -35,9 +36,13 @@ import com.warkop.pos.ui.chooseFontSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.warkop.pos.ui.Keypad
+import com.warkop.pos.ui.NO_PIN_REASON
 import com.warkop.pos.ui.PinLayout
+import com.warkop.pos.ui.StaffRow
 import com.warkop.pos.ui.StoreMark
 import com.warkop.pos.ui.pinLayoutFor
+import com.warkop.pos.ui.selectedAfterRosterChange
+import com.warkop.pos.ui.staffRows
 import com.warkop.pos.ui.UserAvatar
 import com.warkop.pos.model.Tone
 import com.warkop.pos.ui.Size
@@ -48,14 +53,17 @@ import java.util.Locale
 
 /**
  * S02 — pilih staf lalu PIN 6 digit; submit otomatis pada digit ke-6 (desain 01-login-pin, 29 phone). Staf dan PIN dari server.
- * 077 / US3 — dua kolom di layar lebar: KIRI informasi pengguna (logo toko, outlet · terminal, pilih staf, pengguna terpilih),
- * KANAN masukan PIN (titik, galat, keypad). Layar sempit menumpuknya dalam urutan yang sama.
+ *
+ * 078 / US2 — TIGA kolom di layar lebar (≥ 960 dp): (1) panel toko seperti sebelum 077 — logo + nama, outlet · terminal, jam besar,
+ * tanggal, status koneksi, lencana DEMO; (2) daftar staf dengan detail pengguna terpilih; (3) masukan PIN. Setiap ORANG tampil
+ * tepat sekali: baris terpilih DIPERBESAR di tempatnya, tidak ada blok "pengguna terpilih" terpisah (penyebab nama ganda di 077).
+ * Judul "Siapa yang bertugas?" tetap di atas dan hanya daftar yang menggulir, jadi tidak ada judul/avatar yang terpotong.
+ * 720–959 dp: dua kolom (toko + staf | PIN); di bawahnya satu kolom bertumpuk dengan urutan sama. Galat PIN hanya di bagian PIN.
  */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun PinScreen(store: PosStore) {
     val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.toFloat()
-    val twoColumn = pinLayoutFor(widthDp) == PinLayout.TWO_COLUMN
+    val layout = pinLayoutFor(widthDp)
     val compact = windowSize() == Size.COMPACT
     // 073 / FR-011 — staf tanpa PIN tetap tampil (redup, tidak bisa dipilih) supaya jelas kenapa tidak bisa masuk, bukan hilang.
     val everyone = (store.roster as? Load.Ready)?.value.orEmpty()
@@ -65,8 +73,8 @@ fun PinScreen(store: PosStore) {
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
 
-    // Pilihan awal = staf pertama yang bisa masuk; dijaga bila daftar berubah (mis. setelah dimuat ulang).
-    LaunchedEffect(staff, store.roster) { if (store.roster is Load.Ready && (selected == null || staff.none { it.id == selected?.id })) selected = staff.firstOrNull() }
+    // Pilihan awal = staf pertama yang bisa masuk; dijaga (dengan data terbaru, mis. foto) bila daftar dimuat ulang.
+    LaunchedEffect(staff, store.roster) { if (store.roster is Load.Ready) selected = selectedAfterRosterChange(selected, staff) }
 
     // 054 / US2 — status koneksi di layar ini diperbarui hanya selama layar PIN tampil; timer berhenti saat keluar.
     DisposableEffect(Unit) {
@@ -80,32 +88,11 @@ fun PinScreen(store: PosStore) {
         store.loginPin(u, pin) { msg -> error = msg; pin = ""; busy = false }
     }
 
-    // KOLOM INFORMASI PENGGUNA: siapa yang bertugas dan siapa yang sedang dipilih.
-    val userInfo: @Composable (Modifier) -> Unit = { m ->
-        Column(m, horizontalAlignment = Alignment.Start) {
-            Text("Siapa yang bertugas?", fontSize = if (compact) 22.sp else 28.sp)
-            Spacer(Modifier.height(14.dp))
-            when (val r = store.roster) {
-                is Load.Loading, is Load.Idle -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                is Load.Failed -> ErrorState(r.error.message, onRetry = { store.loadRoster() }, modifier = Modifier.fillMaxWidth())
-                is Load.Ready -> {
-                    if (staff.isEmpty()) {
-                        Text("Belum ada staf dengan PIN di outlet ini. Atur PIN dari akun masing-masing atau minta admin.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        everyone.forEach { u -> StaffChip(u, u.id == selected?.id, compact, Modifier.widthIn(min = 84.dp, max = 112.dp)) { if (u.hasPin) { selected = u; pin = ""; error = null } } }
-                    }
-                }
-            }
-            selected?.let { u ->
-                Spacer(Modifier.height(20.dp))
-                SelectedUser(u)
-            }
-        }
-    }
+    val rows = staffRows(everyone, selected?.id)
+    val pick: (StaffUser) -> Unit = { u -> if (u.hasPin) { selected = u; pin = ""; error = null } }
+    val retry = { store.loadRoster(); Unit }
 
-    // KOLOM MASUKAN PIN: hanya yang dibutuhkan untuk mengetik PIN; galat tampil di sini, pengguna terpilih tetap terlihat di kolom lain.
+    // KOLOM PIN: hanya yang dibutuhkan untuk mengetik PIN. Galat tampil di sini; baris terpilih tetap terlihat di kolom staf.
     val pinEntry: @Composable (Modifier) -> Unit = { m ->
         Column(m, horizontalAlignment = Alignment.CenterHorizontally) {
             Text(selected?.let { "PIN ${it.name}" } ?: "Pilih nama, lalu masukkan PIN", fontSize = 18.sp)
@@ -126,50 +113,84 @@ fun PinScreen(store: PosStore) {
         }
     }
 
-    if (!twoColumn) {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(20.dp).verticalScroll(rememberScrollState())) {
-            // 077 — layar sempit tidak punya panel merek: logo toko + lencana mode tetap di atas.
+    val bg = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+    when (layout) {
+        PinLayout.THREE_COLUMN -> Row(bg.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            BrandPanel(store, Modifier.weight(0.28f).fillMaxHeight(), bigClock = true, content = null)
+            StaffColumn(store, rows, pick, retry, Modifier.weight(0.32f).fillMaxHeight().padding(top = 8.dp), lazy = true)
+            // 054 / US4 — layar lebar tidak boleh memotong keypad: kolom PIN menggulir bila tinggi layar kurang.
+            pinEntry(Modifier.weight(0.40f).fillMaxHeight().padding(horizontal = 16.dp, vertical = 16.dp).verticalScroll(rememberScrollState()))
+        }
+        PinLayout.TWO_COLUMN -> Row(bg.padding(16.dp)) {
+            BrandPanel(store, Modifier.weight(0.46f).fillMaxHeight(), bigClock = false) { m ->
+                StaffColumn(store, rows, pick, retry, m, lazy = true)
+            }
+            pinEntry(Modifier.weight(0.54f).fillMaxHeight().padding(start = 32.dp, end = 24.dp, top = 24.dp).verticalScroll(rememberScrollState()))
+        }
+        // 077 — layar sempit tidak punya panel merek: logo toko + lencana mode tetap di atas.
+        PinLayout.STACKED -> Column(bg.padding(20.dp).verticalScroll(rememberScrollState())) {
             StoreMark(store, logoSize = 40.dp)
-            Text(listOfNotNull(store.config?.outletName?.takeIf { it.isNotBlank() }, store.config?.deviceName?.takeIf { it.isNotBlank() } ?: "Terminal").joinToString(" · "), Modifier.padding(top = 4.dp, bottom = 16.dp), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            userInfo(Modifier.fillMaxWidth())
+            Text(outletLine(store), Modifier.padding(top = 4.dp, bottom = 16.dp), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            StaffColumn(store, rows, pick, retry, Modifier.fillMaxWidth(), lazy = false)
             Spacer(Modifier.height(24.dp))
             pinEntry(Modifier.fillMaxWidth())
         }
-    } else {
-        Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)) {
-            BrandPanel(store, Modifier.weight(0.46f).fillMaxHeight(), userInfo)
-            // 054 / US4 — layar lebar (tablet landscape) dulu tidak bisa digulir: keypad terdorong keluar saat banner tampil.
-            pinEntry(Modifier.weight(0.54f).fillMaxHeight().padding(start = 32.dp, end = 24.dp, top = 24.dp).verticalScroll(rememberScrollState()))
+    }
+}
+
+/** "Outlet · Terminal" dari konfigurasi tablet; "Terminal" bila nama terminal belum diketahui. */
+private fun outletLine(store: PosStore): String =
+    listOfNotNull(store.config?.outletName?.takeIf { it.isNotBlank() }, store.config?.deviceName?.takeIf { it.isNotBlank() } ?: "Terminal").joinToString(" · ")
+
+/**
+ * 078 — kolom staf: judul TETAP + satu baris per orang. [lazy] true (kolom tinggi tetap) = daftar menggulir sendiri tanpa menggeser
+ * judul; false (satu kolom bertumpuk di dalam gulir induk) = baris biasa. Keadaan memuat/galat/kosong ditangani di sini.
+ */
+@Composable
+private fun StaffColumn(store: PosStore, rows: List<StaffRow>, onPick: (StaffUser) -> Unit, onRetry: () -> Unit, modifier: Modifier, lazy: Boolean) {
+    Column(modifier) {
+        Text("Siapa yang bertugas?", fontSize = 26.sp, modifier = Modifier.padding(bottom = 14.dp))
+        when (val r = store.roster) {
+            is Load.Loading, is Load.Idle -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            is Load.Failed -> ErrorState(r.error.message, onRetry = onRetry, modifier = Modifier.fillMaxWidth())
+            is Load.Ready -> {
+                if (rows.none { it.selectable }) {
+                    Text("Belum ada staf dengan PIN di outlet ini. Atur PIN dari akun masing-masing atau minta admin.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(12.dp))
+                }
+                if (lazy) {
+                    androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(rows, key = { it.user.id }) { row -> StaffRowItem(row, onPick) }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { rows.forEach { row -> key(row.user.id) { StaffRowItem(row, onPick) } } }
+                }
+            }
         }
     }
 }
 
-/** 077 / US3 — pengguna terpilih: avatar besar, nama, peran. Tetap tampil saat PIN salah/terkunci (galat ada di kolom PIN). */
+/**
+ * 078 — satu staf. Terpilih = baris DIPERBESAR (foto 72 dp, nama 20 sp, cincin tebal); lainnya ringkas (48 dp). Tanpa PIN: redup,
+ * tidak bisa diketuk, peran diganti [NO_PIN_REASON]. Wadah memakai warna permukaan supaya terbaca di panel toko maupun di latar.
+ */
 @Composable
-private fun SelectedUser(u: StaffUser) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        UserAvatar(u, 72.dp, tone = Tone.TINT)
-        Spacer(Modifier.width(16.dp))
-        Column {
-            Text(u.name, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-            Text(u.role, fontSize = 14.sp, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f), maxLines = 1)
+private fun StaffRowItem(row: StaffRow, onPick: (StaffUser) -> Unit) {
+    val u = row.user
+    val ring = if (row.expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    Surface(
+        onClick = { onPick(u) }, enabled = row.selectable, modifier = Modifier.fillMaxWidth().alpha(if (row.selectable) 1f else 0.5f),
+        shape = RoundedCornerShape(20.dp), color = if (row.expanded) MaterialTheme.colorScheme.surfaceContainerLowest else androidx.compose.ui.graphics.Color.Transparent,
+        border = BorderStroke(if (row.expanded) 2.dp else 1.dp, ring),
+    ) {
+        Row(Modifier.padding(if (row.expanded) 16.dp else 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            UserAvatar(u, if (row.expanded) 72.dp else 48.dp, tone = if (row.expanded) Tone.TINT else Tone.NEUTRAL, textSize = if (row.expanded) 24f else 17f)
+            Spacer(Modifier.width(if (row.expanded) 16.dp else 12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(u.name, fontSize = if (row.expanded) 20.sp else 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(if (row.selectable) u.role else NO_PIN_REASON, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-    }
-}
-
-@Composable
-private fun StaffChip(u: StaffUser, selected: Boolean, compact: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    // 073 — tanpa PIN: redup, tidak bisa diklik, dan baris peran diganti alasannya.
-    val usable = u.hasPin
-    Column(modifier.alpha(if (usable) 1f else 0.5f).clip(RoundedCornerShape(16.dp)).clickable(enabled = usable, onClick = onClick).padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        // 077 / US7 — foto pengguna dari server; inisial bila tidak ada. Cincin menandai pilihan.
-        UserAvatar(
-            u, if (compact) 52.dp else 64.dp, Modifier.border(if (selected) 3.dp else 1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, CircleShape),
-            tone = if (selected) Tone.TINT else Tone.NEUTRAL, textSize = if (compact) 17f else 20f,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(u.name, fontWeight = FontWeight.SemiBold, maxLines = 1)
-        Text(if (usable) u.role else "Belum ada PIN", fontSize = if (compact) 11.sp else 12.sp, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -182,26 +203,34 @@ private fun PinDot(filled: Boolean) {
     )
 }
 
+/**
+ * Panel toko (kolom 1). [bigClock] true = jam 72 sp seperti sebelum 077 (tiga kolom, panel hanya berisi identitas); false = jam 40 sp
+ * karena panel juga memuat [content] (daftar staf pada dua kolom). Logo toko dari server (inisial bila belum ada) + lencana DEMO.
+ */
 @Composable
-private fun BrandPanel(store: PosStore, modifier: Modifier, content: @Composable (Modifier) -> Unit) {
+private fun BrandPanel(store: PosStore, modifier: Modifier, bigClock: Boolean, content: (@Composable (Modifier) -> Unit)?) {
     val time = remember { SimpleDateFormat("HH:mm", Locale.US).format(Date()) }
     Surface(modifier, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
         Column(Modifier.padding(28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // 077 — logo toko dari server (inisial bila belum ada) menggantikan huruf "W" tetap; outlet dan terminal di bawahnya.
                 Column(Modifier.weight(1f)) {
                     StoreMark(store, logoSize = 52.dp, maxTextWidth = 260.dp)
-                    Text(listOfNotNull(store.config?.outletName?.takeIf { it.isNotBlank() }, store.config?.deviceName?.takeIf { it.isNotBlank() } ?: "Terminal").joinToString(" · "), Modifier.padding(top = 6.dp), fontSize = 14.sp)
+                    Text(outletLine(store), Modifier.padding(top = 6.dp), fontSize = 14.sp)
                 }
                 IconButton(onClick = { store.goToSetup() }) {
                     Icon(imageVector = Icons.Filled.Settings, contentDescription = "Ganti outlet / terminal", tint = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
-            Spacer(Modifier.height(24.dp))
-            content(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()))
-            Spacer(Modifier.height(16.dp))
-            Text(time, fontSize = 40.sp, fontWeight = FontWeight.Light, lineHeight = 44.sp)
-            Text(java.text.SimpleDateFormat("EEEE, d MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date()), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+            if (content != null) {
+                Spacer(Modifier.height(24.dp))
+                content(Modifier.weight(1f).fillMaxWidth())
+                Spacer(Modifier.height(16.dp))
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
+            Text(time, fontSize = if (bigClock) 72.sp else 40.sp, fontWeight = FontWeight.Light, lineHeight = if (bigClock) 76.sp else 44.sp)
+            Text(java.text.SimpleDateFormat("EEEE, d MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date()), fontSize = if (bigClock) 18.sp else 15.sp, fontWeight = FontWeight.Medium)
+            if (content == null) Spacer(Modifier.weight(1f))
             Spacer(Modifier.height(12.dp))
             OutletStatusChips(store.conn, store.config?.let { c -> listOf(c.outletName, c.deviceName).filter { it.isNotBlank() }.joinToString(" · ") } ?: "Terminal")
         }

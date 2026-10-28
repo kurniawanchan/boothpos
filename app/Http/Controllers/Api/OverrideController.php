@@ -38,13 +38,13 @@ class OverrideController extends Controller
         return response()->json($result, 201);
     }
 
-    /** Respons: larik polos {id, name, role} (bukan dibungkus `data`). */
+    /** Respons: larik polos {id, name, role, photo_url} (bukan dibungkus `data`). 078 — `photo_url` untuk avatar pemilih penyetuju. */
     public function approvers(Request $request, OverrideGate $gate): JsonResponse
     {
         $data = $request->validate(['action' => ['required', 'string', Rule::in(OverrideSubject::actions())]]);
 
         $list = $gate->approvers($data['action'], $request->user(), $this->activeOutletId())
-            ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'role' => $u->role?->name])
+            ->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'role' => $u->role?->name, 'photo_url' => app(\App\Services\ImageUploadService::class)->url($u->photo_path)])
             ->values()
             ->all();
 

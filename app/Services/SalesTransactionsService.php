@@ -99,6 +99,8 @@ class SalesTransactionsService
             'order_number' => $order->order_number,
             'status' => $order->status,
             'void_reason' => $order->void_reason,
+            // 078 — catatan kasir untuk seluruh order (tablet menulisnya lewat PUT /tabs/{order}/note).
+            'notes' => $order->notes,
             'created_at' => $order->created_at?->toIso8601String(),
             'cashier_id' => $order->user_id,
             'cashier_name' => $order->cashier?->name,
