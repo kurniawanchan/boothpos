@@ -23,7 +23,9 @@ Catatan: `adb` tidak dipakai; Gradle dan JDK ada di mesin ini sehingga tes unit 
 
 ## Backend suite penuh (T037)
 
-Lihat bagian "Hasil suite penuh" di bawah (diisi setelah proses selesai).
+`php artisan test` penuh (perintah aman dengan `-e`, 4052 dtk): **2261 lulus, 1 gagal, 1 dilewati** (18810 assertion). Satu kegagalan: `ShiftReportParityTest > the summary keeps every existing key and value`. Catatan 2026-10-26 sudah mencatat tes ini gagal sebelum pekerjaan ini; saya TIDAK menjalankannya ulang di cabang bersih, jadi "sudah ada sebelumnya" bersandar pada catatan itu, belum dibuktikan di sesi ini. Tidak ada tes pajak yang gagal.
+
+Suite Android penuh (`:app:testDebugUnitTest` tanpa filter) tidak dijalankan; hanya kelas yang disentuh (lihat tabel). T037 karena itu tetap terbuka.
 
 ## BELUM terbukti (jangan dianggap selesai)
 
