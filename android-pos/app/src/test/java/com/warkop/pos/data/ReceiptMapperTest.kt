@@ -43,6 +43,18 @@ class ReceiptMapperTest {
         assertEquals("0", r.taxRatePercent)
     }
 
+    @Test fun `tax_show dibaca dari server dan server lama tanpa field dianggap tampil`() {
+        assertEquals(false, ReceiptMapper.map(dto("""{"order_number":"O-1","tax_show":false,"payment_summary":[]}""")).taxShow)
+        assertEquals(true, ReceiptMapper.map(dto("""{"order_number":"O-1","tax_show":true,"payment_summary":[]}""")).taxShow)
+        assertEquals(true, ReceiptMapper.map(dto("""{"order_number":"O-1","payment_summary":[]}""")).taxShow)
+    }
+
+    @Test fun `tax_show false tidak mengubah pajak dan total dari server`() {
+        val r = ReceiptMapper.map(dto("""{"order_number":"O-1","tax_show":false,"tax_amount":"700.00","tax_rate":"10.00","total_amount":"7700.00","payment_summary":[]}"""))
+        assertEquals(700, r.tax)
+        assertEquals(7700, r.total)
+    }
+
     @Test fun `label metode pembayaran diterjemahkan`() {
         assertEquals("EDC", ReceiptMapper.methodLabel("edc"))
         assertEquals("QRIS", ReceiptMapper.methodLabel("qr_ewallet"))

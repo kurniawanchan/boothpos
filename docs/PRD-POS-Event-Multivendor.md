@@ -284,6 +284,12 @@ Atas permintaan pemilik produk: (1) kode outlet kini **3–5 huruf atau angka** 
 
 Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/079-outlet-code-address-store-info/`.
 
+**Catatan perubahan pasca-MVP — 2026-10-29 (fitur 083, pengaturan pajak)**
+
+Atas permintaan pemilik produk, owner/admin mengatur pajak dari Pengaturan → Pajak: tarif, label, dan saklar "Tampilkan baris pajak". Saklar hanya menyembunyikan BARIS pajak; pajak tetap ditagih dan ikut total. Baris pajak kini tampil juga di detail Penjualan dan struk (sebelumnya hanya di keranjang dan pembayaran), dan aplikasi Android membaca pengaturan yang sama. Order yang sudah dibuat tidak berubah saat tarif diganti. Satu tarif per instalasi (bukan per outlet atau per item); pajak inklusif di luar lingkup.
+
+Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/083-tax-setting-sales-receipt-android/`.
+
 **Catatan perubahan pasca-MVP — 2026-10-26 (fitur 074, atur PIN dari layar Pengguna)**
 
 Atas permintaan pemilik produk, owner/admin dapat mengatur PIN pengguna langsung dari layar Pengguna di web (mengetik 6 digit atau "Buat PIN acak" yang tampil sekali), tanpa memanggil API manual. Daftar pengguna menampilkan status PIN (Ada PIN / Belum ada PIN / Terkunci) dan dapat difilter "Belum ada PIN".

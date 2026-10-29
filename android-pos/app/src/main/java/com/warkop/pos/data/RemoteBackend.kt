@@ -294,9 +294,10 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
 
     override suspend fun taxDisplay(): TaxDisplay? {
         val f = apiCall { api().features() }
-        val label = f.taxLabel?.takeIf { it.isNotBlank() } ?: return null
+        // 083 — label kosong tidak lagi membuang seluruh pengaturan (dulu null → `show` ikut hilang); jatuh ke label bawaan server.
+        val label = f.taxLabel?.takeIf { it.isNotBlank() } ?: "Pajak"
         // Tarif bisa berupa angka atau string desimal di JSON; keduanya dibaca sebagai Double.
-        return TaxDisplay(label, f.taxRate?.jsonPrimitive?.doubleOrNull)
+        return TaxDisplay(label, f.taxRate?.jsonPrimitive?.doubleOrNull, show = f.taxShow != false)
     }
 
     override suspend fun approvers(action: String): List<Approver> =

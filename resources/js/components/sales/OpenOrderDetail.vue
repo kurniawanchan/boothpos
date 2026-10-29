@@ -3,6 +3,8 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { getTab } from '../../api/tabs';
 import { useAuthStore } from '../../stores/auth';
+import { useSettingsStore } from '../../stores/settings';
+import { formatTaxLabel, shouldShowTaxLine } from '../../utils/taxDisplay';
 import { usePolling } from '../../composables/usePolling';
 import { useNow } from '../../composables/useNow';
 import { buildBoard, formatElapsed } from '../../utils/floorBoard';
@@ -32,6 +34,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'view-transaction']);
 const { t } = useI18n();
 const auth = useAuthStore();
+const settings = useSettingsStore();
 const now = useNow(15000);
 
 const PREP_VARIANT = { new: 'neutral', preparing: 'warn', ready: 'mint', served: 'neutral', cancelled: 'danger' };
@@ -146,9 +149,15 @@ const totals = computed(() => {
   const o = order.value;
   if (!o) return [];
 
+  // 083 — baris pajak dari jumlah TERSIMPAN order ini (bukan tarif saat ini); hilang bila disembunyikan atau order tanpa pajak.
+  const tax = shouldShowTaxLine({ show: settings.taxShow, amount: o.tax_amount })
+    ? [{ key: 'tax', label: formatTaxLabel(settings.taxLabel || t('sales.detail_tax'), o.tax_rate), value: o.tax_amount }]
+    : [];
+
   return [
     { key: 'subtotal', label: t('sales.detail_subtotal'), value: o.subtotal },
     { key: 'discount', label: t('sales.detail_discount'), value: o.discount_amount },
+    ...tax,
     { key: 'total', label: t('sales.detail_total'), value: o.total_amount, strong: true },
     { key: 'paid', label: t('sales.detail_paid'), value: o.paid_amount },
     { key: 'balance', label: t('sales.detail_balance'), value: o.balance, strong: true },

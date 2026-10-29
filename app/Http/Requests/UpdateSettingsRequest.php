@@ -103,6 +103,17 @@ class UpdateSettingsRequest extends FormRequest
                     if ($key === 'business_day_cutoff' && ! (is_string($value) && preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $value))) {
                         $fail('Jam batas hari harus berformat HH:MM (00:00–23:59).');
                     }
+                    // 083 — pajak: tarif 0–100 maksimal 2 desimal (nilai ngawur dulu diam-diam jatuh ke 0 di PosSettings),
+                    // label maksimal 30 karakter (dipotong tampilan, jadi ditolak di sini), tampil/sembunyi harus boolean.
+                    if ($key === 'tax_rate' && (! is_numeric($value) || (float) $value < 0 || (float) $value > 100 || round((float) $value, 2) != (float) $value)) {
+                        $fail('Tarif pajak harus berupa angka 0–100 dengan maksimal 2 desimal.');
+                    }
+                    if ($key === 'tax_label' && is_string($value) && mb_strlen(trim($value)) > 30) {
+                        $fail('Label pajak maksimal 30 karakter.');
+                    }
+                    if ($key === 'tax_show' && filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) === null) {
+                        $fail('Pengaturan tampil pajak harus berupa true atau false.');
+                    }
                     if ($key === 'cash_difference_tolerance' && (! is_numeric($value) || (float) $value < 0)) {
                         $fail('Toleransi selisih kas harus berupa angka ≥ 0.');
                     }

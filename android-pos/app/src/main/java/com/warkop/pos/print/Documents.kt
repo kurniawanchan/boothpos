@@ -100,7 +100,7 @@ object Documents {
         add(separator())
         add(PrintLine(text = "Subtotal", right = rp(r.subtotal)))
         if (r.discount > 0) add(PrintLine(text = "Diskon", right = "-" + rp(r.discount)))
-        add(PrintLine(text = "${r.taxLabel} ${r.taxRatePercent}%", right = rp(r.tax)))
+        if (r.taxShow && r.tax > 0) add(PrintLine(text = "${r.taxLabel} ${r.taxRatePercent}%", right = rp(r.tax)))
         add(PrintLine(text = "TOTAL", right = rp(r.total), bold = true))
         add(separator())
         r.payments.forEach { (method, amount) -> add(PrintLine(text = method, right = rp(amount))) }

@@ -681,6 +681,12 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 - `isMinifyEnabled = false` sengaja; aktifkan hanya setelah aturan proguard untuk kotlinx.serialization dan Compose ditulis dan diuji di perangkat.
 - Layar Android masih belum diverifikasi di perangkat (lihat `specs/077-.../evidence.md`); lakukan uji asap pada APK rilis (penyiapan terminal, masuk PIN, satu order).
 
+### 13.9 Mengatur pajak (fitur 083, 2026-10-29)
+- Pengaturan → **Pajak** (owner/admin): tarif (0–100, maksimal 2 desimal), label (maksimal 30 karakter, kosong = "Pajak"), dan "Tampilkan baris pajak". Satu nilai untuk seluruh instalasi, dipakai bersama mode DEMO dan LIVE; hanya berlaku untuk pesanan BARU.
+- Mematikan tampilan hanya menyembunyikan baris pajak (keranjang, pembayaran, detail Penjualan, struk). Pajak tetap ditagih dan ikut total. Untuk tanpa pajak sama sekali, isi tarif 0.
+- Tablet membaca pengaturan saat menyegarkan menu; tanpa jaringan memakai nilai terakhir. **APK lama** tidak mengenal pengaturan tampil dan tetap mencetak baris pajak; pasang APK baru untuk mengikuti.
+- Jejak: tiap perubahan tercatat di Log Aktivitas (entitas Setting, kunci `tax_rate`/`tax_label`/`tax_show`).
+
 ## 14. Katalog WJM dari Odoo (fitur 068, 2026-10-24)
 
 Mengisi katalog Warkop WJM 3 (10 kategori, 79 item, 111 varian, 57 foto) dari ekspor Odoo ke mode LIVE dan/atau DEMO. Hanya berjalan bila dipanggil; **tidak** ikut `db:seed` bawaan. Sumbernya `database/seeders/data/wjm-odoo/catalog.json`, dibangkitkan dari `specs/068-odoo-catalog-seeder/catalog-mapping.md`. Selama tabel itu belum disetujui pemilik (status `DRAF`), pengisian sungguhan ditolak; pratinjau tetap bisa.

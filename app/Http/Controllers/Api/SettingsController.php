@@ -82,6 +82,8 @@ class SettingsController extends Controller
             // 048 — angka tampilan terminal POS (pajak, ambang, toleransi); bukan rahasia, terbuka untuk semua peran.
             'tax_rate' => \App\Support\PosSettings::taxRate(),
             'tax_label' => \App\Support\PosSettings::taxLabel(),
+            // 083 — hanya tampilan baris pajak; total tidak berubah.
+            'tax_show' => \App\Support\PosSettings::taxShow(),
             'variance_tolerance' => \App\Support\PosSettings::varianceTolerance(),
             'cash_out_approval_threshold' => \App\Support\PosSettings::cashOutApprovalThreshold(),
             'store_timezone' => BusinessDay::timezone(),

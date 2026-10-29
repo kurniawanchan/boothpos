@@ -111,18 +111,14 @@ data class Order(
     val gross: Int get() = serverSubtotal ?: live.sumOf { it.net }
     val discount: Int get() = serverDiscount ?: (gross * discPct / 100.0).roundToInt()
     val base: Int get() = gross - discount
-    val tax: Int get() = serverTax ?: (base * TAX_RATE).roundToInt()
+    // 083 — pajak HANYA dari server (OrderMapper selalu mengisinya). Dulu cadangan 10% tertulis di kode: salah bila tarif bukan 10.
+    val tax: Int get() = serverTax ?: 0
     val total: Int get() = serverTotal ?: (base + tax)
     val paid: Int get() = serverPaid ?: tenders.filter { it.status == TenderStatus.OK }.sumOf { it.amount }
     val remaining: Int get() = (total - paid).coerceAtLeast(0)
     val unsent: List<OrderLine> get() = live.filter { !it.fired }
     val sent: List<OrderLine> get() = live.filter { it.fired }
     val hasPendingQris: Boolean get() = tenders.any { it.method == TenderMethod.QRIS && it.status == TenderStatus.PENDING }
-
-    companion object {
-        /** Cadangan tampilan saja; pajak yang tersimpan selalu dari server. */
-        const val TAX_RATE = 0.10
-    }
 }
 
 data class Shift(
@@ -205,6 +201,8 @@ data class ReceiptView(
     val storeNotes: String? = null,
     /** 078 — catatan kasir untuk seluruh order; null/kosong = tidak dicetak. */
     val orderNote: String? = null,
+    /** 083 — false = baris pajak tidak dicetak/ditampilkan; [tax] dan [total] tetap dari server. */
+    val taxShow: Boolean = true,
 )
 
 /** 048 — hasil bagi per item: [paid] = bagian yang dibayar, [remaining] = sisa bill; total dari server. */

@@ -710,7 +710,7 @@ private fun ReceiptPaper(r: com.warkop.pos.model.ReceiptView) {
             Dash()
             Line("Subtotal", rp(r.subtotal))
             if (r.discount > 0) Line("Diskon", "-" + rp(r.discount))
-            Line("${r.taxLabel} ${r.taxRatePercent}%", rp(r.tax))
+            if (r.taxShow && r.tax > 0) Line("${r.taxLabel} ${r.taxRatePercent}%", rp(r.tax))
             Line("TOTAL", rp(r.total), bold = true, size = 17)
             r.payments.forEach { (method, amount) -> Line(method, rp(amount)) }
             if (r.change > 0) Line("Kembali", rp(r.change))

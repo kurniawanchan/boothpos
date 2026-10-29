@@ -113,7 +113,7 @@ function openImageLightbox(item) {
       </label>
       <div class="flex items-center justify-between text-[13px]"><span class="text-muted">{{ t('pos.subtotal') }}</span><span class="font-semibold">{{ formatIDR(totals.subtotal) }}</span></div>
       <div class="flex items-center justify-between text-[13px]"><span class="text-muted">{{ t('pos.discount') }}</span><span class="font-semibold text-danger-text">{{ formatIDR(totals.discount) }}</span></div>
-      <div v-if="settings.taxRate > 0" class="flex items-center justify-between text-[13px]"><span class="text-muted">{{ taxName }} ({{ settings.taxRate }}%)</span><span class="font-semibold">{{ formatIDR(totals.tax) }}</span></div>
+      <div v-if="settings.showTaxLine" class="flex items-center justify-between text-[13px]"><span class="text-muted">{{ taxName }} ({{ settings.taxRate }}%)</span><span class="font-semibold">{{ formatIDR(totals.tax) }}</span></div>
       <div class="flex items-baseline justify-between border-t border-dashed border-line-2 pt-2.5">
         <span class="text-[14px] font-bold">{{ t('pos.total') }}</span>
         <span class="text-[25px] font-extrabold tracking-tight">{{ formatIDR(totals.total) }}</span>

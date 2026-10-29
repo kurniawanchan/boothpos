@@ -4,6 +4,7 @@ import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import { getReceipt } from '../../api/orders';
 import { formatIDR } from '../../utils/money';
+import { formatTaxLabel, shouldShowTaxLine } from '../../utils/taxDisplay';
 import { resolveAppName } from '../../utils/appName';
 import { formatDateTime } from '../../utils/date';
 import { downloadElementAsPdf, downloadElementAsPng } from '../../utils/pdfCapture';
@@ -147,6 +148,8 @@ watch(
       <div class="flex flex-col gap-2">
         <div class="flex justify-between text-[13.5px]"><span class="text-muted">Subtotal</span><span class="font-semibold">{{ formatIDR(receipt.subtotal) }}</span></div>
         <div class="flex justify-between text-[13.5px]"><span class="text-muted">Diskon</span><span class="font-semibold text-danger-text">{{ formatIDR(receipt.discount_amount) }}</span></div>
+        <!-- 083 — baris pajak mengikuti pengaturan; total di bawah SELALU angka tersimpan (sudah memuat pajak). -->
+        <div v-if="shouldShowTaxLine({ show: receipt.tax_show, amount: receipt.tax_amount })" class="flex justify-between text-[13.5px]" data-testid="receipt-tax"><span class="text-muted">{{ formatTaxLabel(receipt.tax_label, receipt.tax_rate) }}</span><span class="font-semibold">{{ formatIDR(receipt.tax_amount) }}</span></div>
         <div class="flex items-baseline justify-between border-t border-line-3 pt-2.5">
           <span class="text-[16px] font-bold">Total</span>
           <span class="text-[30px] font-extrabold tracking-tight">{{ formatIDR(receipt.total_amount) }}</span>

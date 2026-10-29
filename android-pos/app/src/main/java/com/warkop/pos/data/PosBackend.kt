@@ -34,8 +34,11 @@ data class OutletChoice(val id: Long, val name: String)
 /** 073 — terminal yang sudah terdaftar di sebuah outlet; hanya id dan nama (terminal dikenali lewat nama, 064). */
 data class TerminalChoice(val id: Long, val name: String)
 
-/** 055 — label dan tarif pajak dari server untuk baris "Pajak" di layar kasir; ratePercent null = tarif tidak diketahui. */
-data class TaxDisplay(val label: String, val ratePercent: Double?)
+/**
+ * 055 — label dan tarif pajak dari server untuk baris "Pajak" di layar kasir; ratePercent null = tarif tidak diketahui.
+ * 083 — [show] hanya menentukan apakah BARIS pajak ditampilkan; total selalu dari server dan sudah memuat pajak.
+ */
+data class TaxDisplay(val label: String, val ratePercent: Double?, val show: Boolean = true)
 
 /** 050 / T006 — hasil kirim ke dapur: tab terbaru dan tiket yang baru dibuat. */
 data class KitchenSend(val tab: Order, val tickets: List<PrintableKot>)

@@ -424,6 +424,7 @@ async function resumeDraft(draftId) {
       :tax-amount="totals.tax.toFixed(2)"
       :tax-rate="settings.taxRate"
       :tax-label="settings.taxLabel"
+      :tax-show="settings.taxShow"
       :total="totals.total.toFixed(2)"
       :submitting="submittingOrder"
       :customer-name="selectedCustomer?.name ?? ''"

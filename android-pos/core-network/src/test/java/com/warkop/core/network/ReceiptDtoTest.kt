@@ -23,4 +23,9 @@ class ReceiptDtoTest {
         assertNull(r.queueNo)
         assertNull(r.receiptNo)
     }
+
+    @Test fun `struk membaca tax_show, tanpa field membaca null`() {
+        assertEquals(false, json.decodeFromString(ReceiptDto.serializer(), """{"tax_show":false}""").taxShow)
+        assertNull(json.decodeFromString(ReceiptDto.serializer(), """{"receipt_no":null}""").taxShow)
+    }
 }

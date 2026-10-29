@@ -29,6 +29,7 @@ object ReceiptMapper {
         paidAtText = OrderMapper.receiptDateTime(dto.paymentSummary.map { it.paidAt }),
         taxLabel = dto.taxLabel?.takeIf { it.isNotBlank() } ?: "PPN",
         taxRatePercent = percentText(dto.taxRate),
+        taxShow = dto.taxShow != false,
         subtotal = rp(dto.subtotal),
         discount = rp(dto.discountAmount),
         tax = rp(dto.taxAmount),

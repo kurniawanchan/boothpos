@@ -21,6 +21,8 @@ import { paymentMethodLabel } from '../../utils/paymentMethods';
 import { useToastStore } from '../../stores/toast';
 import { useOutletStore } from '../../stores/outlet';
 import { useAuthStore } from '../../stores/auth';
+import { useSettingsStore } from '../../stores/settings';
+import { formatTaxLabel, shouldShowTaxLine } from '../../utils/taxDisplay';
 
 /**
  * Detail satu transaksi, dibuka dari halaman Sales (dan dari riwayat transaksi
@@ -45,6 +47,7 @@ const emit = defineEmits(['close', 'changed']);
 const toast = useToastStore();
 const outletStore = useOutletStore(); // 045: "Dijual di …" hanya bila ada lebih dari satu outlet
 const auth = useAuthStore();
+const settings = useSettingsStore();
 const { t } = useI18n();
 
 const order = ref(null);
@@ -81,6 +84,10 @@ const unitCount = computed(() => items.value.reduce((sum, i) => sum + Number(i.q
 const grossSubtotal = computed(() => items.value.reduce((sum, i) => sum + parseMoney(i.sell_price) * Number(i.qty ?? 0), 0));
 const itemDiscountTotal = computed(() => items.value.reduce((sum, i) => sum + parseMoney(i.discount_amount), 0));
 const orderDiscount = computed(() => parseMoney(order.value?.discount_amount));
+// 083 — pajak tersimpan order ini; total di bawah adalah `total_amount` tersimpan (sudah memuat pajak), jadi tanpa baris ini
+// rincian tidak menjumlah ke total. Disembunyikan bila pengaturan mati atau order tidak dikenai pajak.
+const showTax = computed(() => shouldShowTaxLine({ show: settings.taxShow, amount: order.value?.tax_amount }));
+const taxText = computed(() => formatTaxLabel(settings.taxLabel || t('reports.order_tax'), order.value?.tax_rate));
 
 const changeAmount = computed(() => parseMoney(order.value?.change_amount));
 
@@ -303,6 +310,7 @@ async function performVoid() {
           <div class="flex justify-between"><span class="text-muted-4">{{ t('reports.order_subtotal') }}</span><span class="font-semibold">{{ formatIDR(grossSubtotal) }}</span></div>
           <div v-if="itemDiscountTotal > 0" class="flex justify-between"><span class="text-muted-4">{{ t('reports.order_item_discounts') }}</span><span class="font-semibold text-danger-text">−{{ formatIDR(itemDiscountTotal) }}</span></div>
           <div v-if="orderDiscount > 0" class="flex justify-between"><span class="text-muted-4">{{ t('reports.order_discount') }}</span><span class="font-semibold text-danger-text">−{{ formatIDR(orderDiscount) }}</span></div>
+          <div v-if="showTax" class="flex justify-between" data-testid="order-tax"><span class="text-muted-4">{{ taxText }}</span><span class="font-semibold">{{ formatIDR(order.tax_amount) }}</span></div>
           <div class="flex items-baseline justify-between border-t border-dashed border-line-2 pt-2"><span class="text-[13.5px] font-bold">{{ t('reports.col_total') }}</span><span class="text-[19px] font-extrabold tracking-tight">{{ formatIDR(order.total_amount) }}</span></div>
         </div>
 
