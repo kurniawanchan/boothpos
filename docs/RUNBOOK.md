@@ -476,6 +476,14 @@ persis lewat `docker-compose.store.yml` — arahkan ke titik mount drive
 eksternal fisik yang sungguhan tercolok di laptop toko, bukan folder di
 disk yang sama (persis peringatan §9).
 
+## Katalog varian per penjual, barcode, dan pemindai (fitur 049)
+
+- **Unduh**: layar *Produk* → tombol **Katalog** → PDF atau Excel. Isinya varian aktif, mengikuti filter layar Produk (pencarian, penjual, kategori). Tidak memuat harga modal atau stok.
+- **PDF** dibuat di browser (±150 ms per halaman; 500 varian ≈ 10 detik, ≈ 21 MB) — tidak butuh konfigurasi server. **Excel** dibuat di server: PHP butuh ruang memori (500 varian bergambar ≈ 85 MB; pengontrol menaikkan batas ke 512 MB untuk permintaan itu bila batas bawaannya lebih kecil). Bila ekspor Excel gagal karena memori, naikkan `memory_limit` PHP (mis. 256M) di `docker/php/*.ini` atau php.ini.
+- **Pemindai barcode** harus diatur sebagai **keyboard (HID) dengan akhiran Enter** — itu bawaan hampir semua pemindai. Di layar kasir, pemindaian = mengetik SKU lalu Enter di kotak pencarian: varian dengan SKU persis sama masuk keranjang; kode tak dikenal menampilkan pesan "tidak ditemukan". Pemindai harus mendukung **Code 128** (hampir semuanya).
+- **Cetak**: cetak PDF di A4 pada skala **100%** (jangan "muat ke halaman"/perkecil) supaya batang barcode tidak menyempit di bawah batas baca. Katalog menyimpan kode SEKARANG; bila kode produk berubah (mis. segmen diganti), cetak ulang — tanggal pembuatan tercetak di kaki halaman.
+- **Uji pemindaian di venue**: pindai beberapa barcode dari kertas yang dicetak sebelum acara; catat bila ada yang gagal.
+
 ## Salin data LIVE ke DEMO (`app:clone-live-to-demo`)
 
 Mengganti SELURUH data mode DEMO dengan salinan persis data mode LIVE: baris
