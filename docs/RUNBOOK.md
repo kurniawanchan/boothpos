@@ -536,3 +536,25 @@ Di Docker dev: `docker compose exec app php artisan app:clone-live-to-demo ...`
   diaktivasi ulang dengan kunci lisensi (lihat catatan restore di CLAUDE.md).
 - Simulasi (tanpa `--force`) TIDAK memeriksa baris LIVE yang merujuk baris DEMO;
   pembatalan karena rujukan lintas mode itu hanya terjadi saat `--force`.
+
+## Sinkronisasi stok LIVE dengan transaksi sebelumnya (fitur 051)
+
+Dipakai bila stok riil per varian diketik (impor stok Excel / penyesuaian) SESUDAH penjualan atau serah-terima pre-order sudah ada, sehingga angka yang diketik mengabaikan transaksi itu. Hanya data LIVE.
+
+1. **Dry-run (tidak mengubah apa pun):**
+   ```bash
+   php artisan app:sync-stock-from-transactions
+   ```
+   Mencetak ringkasan per status, jalur Excel tinjauan (`storage/app/private/stock-sync/`), dan **kode rencana**. Di Docker: `docker compose exec app php artisan app:sync-stock-from-transactions`.
+2. **Tinjau Excel:** lembar `Ringkasan`, `Varian` (stok sekarang → stok seharusnya, kolom `acuan_*` = pembaruan stok yang dikoreksi), `Sumber` (nomor transaksi tiap unit yang dikurangkan). Cocokkan beberapa varian dengan layar Stok / riwayat varian.
+3. **Terapkan** hanya bila angka cocok, dengan kode dari langkah 1:
+   ```bash
+   php artisan app:sync-stock-from-transactions --apply --approve=<kode> --by=<username>
+   ```
+   Perintah meminta konfirmasi, membuat cadangan pengaman, menulis semua koreksi dalam satu transaksi (semua atau tidak sama sekali), lalu membuat Excel hasil. Bila data berubah sejak dry-run, kode tidak cocok → ditolak dan Excel baru dibuat; tinjau ulang.
+4. **Pastikan selesai:** jalankan dry-run lagi — semua varian harus `sudah_disinkronkan` atau `tidak_ada_perubahan`.
+
+Arti status: `akan_diubah` (stok dikurangi), `perlu_perhatian` (terjual melebihi stok → dibatasi ke 0, kekurangan tercatat), `tidak_ada_perubahan`, `sudah_disinkronkan` (sudah pernah dikoreksi), `dilewati` (belum ada pembaruan stok manual / varian dihapus).
+
+Batas yang diketahui: varian yang diimpor dengan nilai SAMA dengan stok saat itu tidak punya pembaruan tercatat dan dilewati; varian yang stoknya diketik lebih dari sekali hanya dikoreksi untuk jendela terakhir (diberi catatan); kedatangan pre-order tidak ditambahkan kembali. Pemulihan bila perlu: `php artisan app:restore` pada cadangan pengaman yang dicetak perintah.
+

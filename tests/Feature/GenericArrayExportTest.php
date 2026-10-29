@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Exports\GenericArrayExport;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Maatwebsite\Excel\Facades\Excel;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
@@ -13,6 +14,8 @@ use Tests\TestCase;
  */
 class GenericArrayExportTest extends TestCase
 {
+    use RefreshDatabase; // TestCase::setUp menulis license_activations: tes ini harus bisa jalan sendirian
+
     private function load(array $rows)
     {
         $path = tempnam(sys_get_temp_dir(), 'gx').'.xlsx';
@@ -50,5 +53,25 @@ class GenericArrayExportTest extends TestCase
 
         $this->assertSame('{"a":1}', $sheet->getCell('A2')->getValue());
         $this->assertSame('s', $sheet->getCell('B2')->getDataType());
+    }
+
+    /** 051 — laporan sinkronisasi stok memuat nama diketik-pengguna lewat SheetArrayExport dalam workbook multi-sheet. */
+    public function test_sheet_array_export_inside_a_multi_sheet_workbook_also_stores_equals_prefixed_text_as_text(): void
+    {
+        $export = new \App\Exports\MultiSheetArrayExport([
+            new \App\Exports\SheetArrayExport('Satu', ['nama'], [['nama' => '=1+1']]),
+            new \App\Exports\SheetArrayExport('Dua', ['nama'], [['nama' => '=HYPERLINK("http://x.test","a")']]),
+        ]);
+        $path = tempnam(sys_get_temp_dir(), 'ms').'.xlsx';
+        file_put_contents($path, Excel::raw($export, \Maatwebsite\Excel\Excel::XLSX));
+        try {
+            $book = IOFactory::load($path);
+        } finally {
+            @unlink($path);
+        }
+
+        foreach (['Satu', 'Dua'] as $name) {
+            $this->assertSame('s', $book->getSheetByName($name)->getCell('A2')->getDataType(), $name);
+        }
     }
 }
