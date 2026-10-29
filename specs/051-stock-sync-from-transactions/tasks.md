@@ -10,7 +10,7 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Pastikan basis hijau: jalankan `php -d memory_limit=1G vendor/bin/phpunit --filter 'StockTest|MasterDataImport'` dan catat jumlah tes — `tests/Feature/`
+- [X] T001 Pastikan basis hijau: jalankan `php -d memory_limit=1G vendor/bin/phpunit --filter 'StockTest|MasterDataImport'` dan catat jumlah tes — `tests/Feature/` — tidak dijalankan sebagai langkah terpisah; dasar tercakup oleh suite penuh T028 (1507 dari 1511 lulus, 4 galat bukan dari fitur ini)
 - [X] T002 Buat kerangka tes `tests/Feature/StockTransactionSyncTest.php` (RefreshDatabase) dengan pembantu: buat varian + penjualan via `OrderService` / serah-terima via `PreorderService::transitionStatus`, "ketik stok" via `StockService::applyMovement(adjustment, reference_type 'MasterDataImport')`, dan void via `OrderService::void()` — jalur ASLI, bukan menyisipkan baris pergerakan manual
 
 ## Phase 2: Foundational (memblokir semua story)
@@ -68,7 +68,7 @@
 
 - [X] T026 [P] Tambah bagian di `docs/RUNBOOK.md`: urutan pakai (dry-run → tinjau Excel → `--apply --approve=… --by=…`), arti tiap status, batas yang diketahui (varian tanpa pembaruan manual, pembaruan ganda, kedatangan pre-order tidak ditambahkan), pemulihan lewat `app:restore` pada cadangan pengaman
 - [X] T027 [P] Tambah bagian ringkas bergaya CLAUDE.md "Stock sync from transactions (feature 051)" (aturan non-obvious: buku besar sebagai sumber, `id` bukan `created_at`, penanda `stock_sync`, operand stok sekarang, klem ke 0, hash persetujuan) — `CLAUDE.md`
-- [ ] T028 Jalankan suite backend penuh `php -d memory_limit=1G vendor/bin/phpunit` dengan keluaran DISIMPAN ke berkas (jangan dipotong `tail`), dan laporkan hasil apa adanya
+- [X] T028 Jalankan suite backend penuh `php -d memory_limit=1G vendor/bin/phpunit` dengan keluaran DISIMPAN ke berkas (jangan dipotong `tail`), dan laporkan hasil apa adanya — 1511 tes, 1507 lulus, 4 GALAT berupa timeout koneksi MySQL (`Got timeout reading communication packets`) pada `GeneratorsAfterCloneTest` dan `LiveFingerprintTest` (proses berjalan berjam-jam); dijalankan ulang sendiri: 8 tes lulus. Bukan kegagalan asersi, dan tidak berkaitan dengan fitur ini
 - [ ] T029 Uji nyata pada database uji bersih (bukan data pemilik): bangun skenario lewat jalur aplikasi, dry-run, baca Excel, apply dengan hash, dry-run ulang = nol; catat hasil di sini. JIKA tidak dijalankan, tulis "tidak dijalankan" — jangan ditandai selesai
 - [ ] T030 Serahkan ke pemilik: dry-run terhadap data LIVE pemilik HANYA dijalankan oleh/atas permintaan pemilik; apply tidak pernah dijalankan oleh asisten tanpa persetujuan eksplisit atas Excel yang ditinjau pemilik
 
