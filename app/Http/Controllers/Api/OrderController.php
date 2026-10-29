@@ -269,6 +269,8 @@ class OrderController extends Controller
             'tax_amount' => number_format((float) $order->tax_amount, 2, '.', ''),
             'tax_rate' => number_format((float) $order->tax_rate_snapshot, 2, '.', ''),
             'tax_label' => \App\Support\PosSettings::taxLabel(),
+            // 083 — klien menyembunyikan BARIS pajak bila false; tax_amount dan total_amount tetap apa adanya.
+            'tax_show' => \App\Support\PosSettings::taxShow(),
             // 028 — struk penjualan dari tab menampilkan meja/label takeaway.
             'service_type' => $order->service_type,
             'table' => $order->table ? ['id' => $order->table->id, 'name' => $order->table->name, 'area' => $order->table->area] : null,

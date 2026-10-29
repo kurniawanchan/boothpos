@@ -20,6 +20,8 @@ const props = defineProps({
   taxAmount: { type: String, default: '0.00' },
   taxRate: { type: Number, default: 0 },
   taxLabel: { type: String, default: '' },
+  // 083 — hanya menyembunyikan BARIS pajak; `total` yang diterima sudah memuat pajak.
+  taxShow: { type: Boolean, default: true },
 });
 const emit = defineEmits(['close', 'submit']);
 
@@ -74,7 +76,7 @@ defineExpose({ reset: () => { pendingPartial.value = null; panelRef.value?.reset
         <div class="flex flex-col gap-2 border-t border-dashed border-line-2 pt-3.5">
           <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('pos.subtotal') }}</span><span class="font-semibold">{{ formatIDR(subtotal) }}</span></div>
           <div class="flex justify-between text-[12.5px]"><span class="text-muted">{{ t('pos.discount') }}</span><span class="font-semibold text-danger-text">{{ formatIDR(discountAmount) }}</span></div>
-          <div v-if="taxRate > 0" class="flex justify-between text-[12.5px]"><span class="text-muted">{{ taxLabel || t('pos.tax') }} ({{ taxRate }}%)</span><span class="font-semibold">{{ formatIDR(taxAmount) }}</span></div>
+          <div v-if="taxShow && taxRate > 0" class="flex justify-between text-[12.5px]"><span class="text-muted">{{ taxLabel || t('pos.tax') }} ({{ taxRate }}%)</span><span class="font-semibold">{{ formatIDR(taxAmount) }}</span></div>
           <div class="flex items-baseline justify-between border-t border-line-3 pt-2.5">
             <span class="text-[13.5px] font-bold">{{ t('pos.total') }}</span>
             <span class="text-[26px] font-extrabold tracking-tight">{{ formatIDR(total) }}</span>

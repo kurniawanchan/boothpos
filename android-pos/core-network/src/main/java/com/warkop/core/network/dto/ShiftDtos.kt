@@ -107,6 +107,8 @@ import kotlinx.serialization.json.JsonElement
     // 055 / T036 — label dan tarif pajak dari server (FR-015); tidak lagi "Pajak 10%" tertulis di layar.
     @SerialName("tax_label") val taxLabel: String? = null,
     @SerialName("tax_rate") val taxRate: JsonElement? = null,
+    // 083 — hanya tampilan baris pajak (total tetap memuat pajak). null = server lama → dianggap tampil.
+    @SerialName("tax_show") val taxShow: Boolean? = null,
     // 077 — mode data dan identitas toko setelah login (sumber yang sama dengan BrandingDto sebelum login).
     @SerialName("system_mode") val systemMode: String? = null,
     @SerialName("store_name") val storeName: String? = null,

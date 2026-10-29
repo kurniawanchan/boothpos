@@ -8,6 +8,7 @@ import SettingsLayout from '../components/page/SettingsLayout.vue';
 import BackupRestoreSection from '../components/settings/BackupRestoreSection.vue';
 import StoreIdentitySection from './settings/StoreIdentitySection.vue';
 import ReceiptDisplaySection from './settings/ReceiptDisplaySection.vue';
+import TaxSection from './settings/TaxSection.vue';
 import PaymentChannelsSection from './settings/PaymentChannelsSection.vue';
 import AppNameSection from './settings/AppNameSection.vue';
 import ThemeSection from './settings/ThemeSection.vue';
@@ -35,6 +36,7 @@ const { state, set } = useQueryState({ section: DEFAULT_SECTION });
 const SECTIONS = {
   store: StoreIdentitySection,
   receipt: ReceiptDisplaySection,
+  tax: TaxSection,
   channels: PaymentChannelsSection,
   app: AppNameSection,
   theme: ThemeSection,
@@ -54,6 +56,8 @@ const groups = computed(() => [
     items: [
       { key: 'store', label: t('settings.store_identity') },
       { key: 'receipt', label: t('settings.receipt_display_section_title') },
+      // 083 — tarif, label, tampil/sembunyi pajak.
+      { key: 'tax', label: t('settings.tax_section_title') },
       { key: 'channels', label: t('settings.payment_channels') },
     ],
   },

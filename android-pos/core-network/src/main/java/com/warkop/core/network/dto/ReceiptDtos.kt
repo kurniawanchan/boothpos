@@ -30,6 +30,8 @@ import kotlinx.serialization.Serializable
     @SerialName("tax_amount") val taxAmount: String = "0.00",
     @SerialName("tax_rate") val taxRate: String = "0.00",
     @SerialName("tax_label") val taxLabel: String? = null,
+    // 083 — false = sembunyikan baris pajak; tax_amount dan total_amount tetap apa adanya. null = server lama → tampil.
+    @SerialName("tax_show") val taxShow: Boolean? = null,
     val subtotal: String = "0.00",
     @SerialName("discount_amount") val discountAmount: String = "0.00",
     @SerialName("total_amount") val totalAmount: String = "0.00",

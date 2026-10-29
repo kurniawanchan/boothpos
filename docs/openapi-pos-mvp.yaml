@@ -984,6 +984,7 @@ paths:
                     type: number
                     description: "048 — tarif pajak eksklusif (%), 0 bawaan. Angka tampilan; server selalu menghitung ulang."
                   tax_label: { type: string, description: "048 — label pajak di layar/struk (bawaan `Pajak`)." }
+                  tax_show: { type: boolean, description: "083 — tampilkan baris pajak (bawaan true). HANYA tampilan: pajak tetap ditagih dan ikut total saat false. Diubah lewat PUT /settings (kunci `tax_show`, tipe boolean, group `pos`); `tax_rate` 0–100 maks 2 desimal dan `tax_label` maks 30 karakter divalidasi 422." }
                   variance_tolerance: { type: integer, description: "048 — toleransi selisih kas saat tutup shift (Rp, bawaan 5000)." }
                   cash_out_approval_threshold: { type: integer, description: "048 — kas keluar di atas ini butuh persetujuan atasan (Rp, bawaan 200000)." }
                   schema_update_required:
@@ -8450,6 +8451,12 @@ components:
         store_name: { type: string }
         store_contact: { type: string, nullable: true, description: "Kunci lama = telepon (outlet) atau kontak tunggal bersama." }
         store_notes: { type: string, nullable: true, description: "079 — catatan outlet; bisa beberapa baris." }
+        # 083 — pajak order ini (snapshot saat transaksi). `tax_show=false` TIDAK menghapus field dan TIDAK mengubah total_amount:
+        # klien hanya menyembunyikan barisnya. Baris tampil bila tax_show dan tax_amount > 0.
+        tax_amount: { type: string, description: "083 — pajak eksklusif order ini." }
+        tax_rate: { type: string, description: "083 — tarif (%) saat order dibuat (snapshot)." }
+        tax_label: { type: string, description: "083 — label pajak saat ini (bawaan `Pajak`)." }
+        tax_show: { type: boolean, description: "083 — pengaturan tampil baris pajak saat struk dibuka." }
         # 001-user-store-settings User Story 3 / SC-004 — field ini
         # sebelumnya terlewat dari task breakdown fitur tsb, ditutup saat
         # ditemukan sebagai celah nyata. Semua nullable — profil toko

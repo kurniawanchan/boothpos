@@ -71,6 +71,16 @@ class PosStoreRefreshTest {
         advanceUntilIdle()
     }
 
+    @Test fun `tampil pajak dari server ikut dimuat, bawaan tampil`() = runTest(dispatcher) {
+        backend.menuResult = { MenuCatalog(listOf(kopi), emptyList(), emptyMap()) }
+        backend.tax = TaxDisplay("PPN", 10.0, show = false)
+        val store = PosStore(backend = backend)
+        store.loadMenu()
+        advanceUntilIdle()
+        assertEquals(false, store.tax?.show)
+        assertEquals(true, TaxDisplay("PPN", 10.0).show)
+    }
+
     @Test fun `pajak dari server ikut dimuat dan galat pajak tidak menggagalkan katalog`() = runTest(dispatcher) {
         backend.menuResult = { MenuCatalog(listOf(kopi), emptyList(), emptyMap()) }
         backend.tax = TaxDisplay("PPN", 11.0)

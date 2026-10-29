@@ -17,6 +17,8 @@ class PosSettings
 
     public const TAX_LABEL = 'tax_label';
 
+    public const TAX_SHOW = 'tax_show';
+
     public const CASH_OUT_THRESHOLD = 'cash_out_approval_threshold';
 
     public const VARIANCE_TOLERANCE = 'variance_tolerance';
@@ -38,6 +40,16 @@ class PosSettings
         $v = trim((string) Setting::get(self::TAX_LABEL));
 
         return $v !== '' ? mb_substr($v, 0, 30) : 'Pajak';
+    }
+
+    /**
+     * 083 — HANYA mengatur apakah baris pajak ditampilkan (keranjang, pembayaran, detail Penjualan, struk). Tidak pernah
+     * memengaruhi total: pajak tetap ditagih saat disembunyikan (TaxCalculator tidak membaca ini). Bawaan aktif supaya
+     * instalasi yang sudah berpajak tidak tiba-tiba kehilangan barisnya. `filter_var`, bukan `(bool)`: `(bool)"false"` true.
+     */
+    public static function taxShow(): bool
+    {
+        return filter_var(Setting::get(self::TAX_SHOW, true), FILTER_VALIDATE_BOOLEAN);
     }
 
     public static function cashOutApprovalThreshold(): int

@@ -43,6 +43,24 @@ class DocumentsTest {
     private fun texts(lines: List<PrintLine>): List<String> = lines.map { it.text }
     private fun rights(lines: List<PrintLine>): List<String> = lines.mapNotNull { it.right }
 
+    // 083 — toggle hanya tampilan: baris pajak hilang, TOTAL tetap dari server (sudah memuat pajak).
+    @Test fun `struk mencetak baris pajak bila tampil aktif`() {
+        val lines = Documents.struk(receipt())
+        assertTrue(texts(lines).contains("PPN 10%"))
+        assertEquals("Rp 5.400", lines.first { it.text == "PPN 10%" }.right)
+    }
+
+    @Test fun `struk tanpa baris pajak saat disembunyikan dan total tidak berubah`() {
+        val shown = Documents.struk(receipt())
+        val hidden = Documents.struk(receipt().copy(taxShow = false))
+        assertFalse(texts(hidden).any { it.startsWith("PPN") })
+        assertEquals(rights(shown).first { it.contains("59.400") }, rights(hidden).first { it.contains("59.400") })
+    }
+
+    @Test fun `struk order tanpa pajak tidak mencetak baris pajak`() {
+        assertFalse(texts(Documents.struk(receipt().copy(tax = 0, total = 54000))).any { it.startsWith("PPN") })
+    }
+
     @Test fun `kot memakai judul KOT besar dan tanpa harga`() {
         val lines = Documents.kot(kot, cashier = "Rina")
         assertEquals("KOT", lines.first().text)

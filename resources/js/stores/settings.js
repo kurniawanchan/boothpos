@@ -48,11 +48,16 @@ export const useSettingsStore = defineStore('settings', {
     // server tetap menghitung pajak sebenarnya saat order dibuat. Bawaan 0 = tanpa pajak.
     taxRate: 0,
     taxLabel: '',
+    // 083 — HANYA tampilan baris pajak; total selalu memuat pajak (server). Bawaan aktif = instalasi lama tak berubah.
+    taxShow: true,
     loaded: false,
   }),
   getters: {
     tierLabel: (state) => (state.multiOutletEnabled ? 'Master' : 'Pro'),
     isDemoMode: (state) => state.systemMode === 'demo',
+    // 083 — SATU aturan tampil baris pajak untuk layar kerja (keranjang, pembayaran). Order tersimpan memakai
+    // utils/taxDisplay.js (jumlah pajak order itu sendiri, bukan tarif saat ini).
+    showTaxLine: (state) => state.taxShow && state.taxRate > 0,
   },
   actions: {
     async load() {
@@ -81,6 +86,7 @@ export const useSettingsStore = defineStore('settings', {
         this.priceRoundingDefault = data.price_rounding_default === 'none' ? 'none' : '500';
         this.taxRate = Number(data.tax_rate) || 0;
         this.taxLabel = data.tax_label ?? '';
+        this.taxShow = data.tax_show !== false;
         applyThemeAccentColor(this.themeAccentColor);
       } finally {
         this.loaded = true;
@@ -144,6 +150,18 @@ export const useSettingsStore = defineStore('settings', {
     /** 072 — dipanggil setelah unggah logo supaya sidebar dan favicon berubah tanpa muat ulang. */
     setStoreLogoUrl(url) {
       this.storeLogoUrl = url ?? null;
+    },
+
+    /** 083 — owner/admin saja (SettingPolicy). Tarif/label/tampil disimpan bersama; 422 dilempar apa adanya ke pemanggil. */
+    async setTax({ rate, label, show }) {
+      await updateSettings([
+        { key: 'tax_rate', value: String(rate), type: 'decimal', group: 'pos' },
+        { key: 'tax_label', value: label || null, type: 'string', group: 'pos' },
+        { key: 'tax_show', value: show, type: 'boolean', group: 'pos' },
+      ]);
+      this.taxRate = Number(rate) || 0;
+      this.taxLabel = label || '';
+      this.taxShow = show;
     },
 
     /** US7 */
