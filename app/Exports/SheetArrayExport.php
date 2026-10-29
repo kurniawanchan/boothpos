@@ -2,7 +2,9 @@
 
 namespace App\Exports;
 
+use App\Exports\Concerns\KeepsFormulaLookingTextAsText;
 use Maatwebsite\Excel\Concerns\FromArray;
+use Maatwebsite\Excel\Concerns\WithCustomValueBinder;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithTitle;
 
@@ -24,8 +26,10 @@ use Maatwebsite\Excel\Concerns\WithTitle;
  * kolom sensitif (mis. kontak pelanggan) adalah tanggung jawab pemanggil,
  * bukan kelas ini.
  */
-class SheetArrayExport implements FromArray, WithHeadings, WithTitle
+class SheetArrayExport implements FromArray, WithCustomValueBinder, WithHeadings, WithTitle
 {
+    use KeepsFormulaLookingTextAsText;
+
     public function __construct(
         private string $title,
         private array $headings,

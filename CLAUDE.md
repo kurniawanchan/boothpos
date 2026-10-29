@@ -412,6 +412,19 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - Names come from the LIVE variant through `items.variant` (`withTrashed`, loaded once — a per-row lookup would be an N+1), NOT from `name_snapshot` (`"<product> — <variant>"`, cannot be split reliably). A variant renamed after the order shows its new name; SKUs stay the recorded snapshot.
 - `GenericArrayExport` now forces strings starting with `=` to text (formula injection). Deliberately ONLY `=`: it is the only prefix PhpSpreadsheet turns into a formula, and forcing every string to text would change number-like text in report exports and could break re-import. `SheetArrayExport`/`MultiSheetArrayExport` (master-data/invoice exports) are NOT protected yet.
 
+## Stock sync from transactions (feature 051, 2026-10-30)
+
+`php artisan app:sync-stock-from-transactions` — one-off correction for LIVE variants whose real stock was typed AFTER sales / handed-over pre-orders already existed. DRY-RUN by default (writes a review Excel to `storage/app/private/stock-sync/`, prints a plan hash); `--apply --approve=<hash> --by=<username>` applies only when the recomputed hash still matches. Rules a future change must not break:
+
+- **The ledger is the source, not the order tables.** Units taken = `sale` + `preorder_handover` − `return` (void) in `stock_movements`. Open/cancelled pre-orders have no such movement, so they never count (product-owner decision). Everything goes through Eloquent inside `ModeGate::runAs('live')`; `DB::table` would bypass the DEMO/LIVE scope.
+- **Baseline = the variant's latest `adjustment` that is not a `stock_sync` correction; the window is by movement `id`, never `created_at`** (seconds precision). Window = between the previous manual update and the latest one. Operand = CURRENT stock (later sales stay deducted), not the typed number. A variant whose typed value equalled the then-current stock wrote no movement and has no baseline → skipped.
+- **`reference_type='stock_sync'` + `reference_id` = baseline movement id is the idempotency marker.** Without it the correction itself becomes the latest "update" and sales between the original update and the fix are subtracted twice. Mutation-tested.
+- **Below zero → clamped to 0, shortfall reported** (Excel column + movement reason), never stored negative. A variant already at 0 with a shortfall writes nothing (`applyMovement` refuses qty 0).
+- **Writes only via `StockSyncApplier` → `StockService::applyMovement()`**, one transaction, after a safety backup; the planner is read-only by construction. Approval is the plan hash, so any new transaction or stock change after review invalidates it.
+- Gate = `canAccessAnyMenu` over the master-data menu list (`canManageMasterData()` is a CONCEPT name; the method does not exist). `--by` must be owner/admin/inventory.
+- Excel carries no customer data; `SheetArrayExport` and `GenericArrayExport` share `App\Exports\Concerns\KeepsFormulaLookingTextAsText` (only `=`-prefixed text is forced to text). `MasterDataExport`/invoice exports built on `SheetArrayExport` are protected as a side effect.
+- Not verified against real owner data (no LIVE database on the dev machine); the Excel baseline columns and the `Sumber` sheet are the review instrument.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -419,7 +432,7 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - No git remote is configured; nothing is pushed.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/049-product-variant-catalog-export/plan.md`
+Previous feature: `specs/049-product-variant-catalog-export/plan.md`
 (branch `080-product-variant-catalog-export`, from `develop`; spec dir number ≠ branch number) — no migration, nothing
 stored. A **Catalog** button on the Products page exports the ACTIVE variants grouped by seller as a colourful PDF and
 an Excel workbook (store identity, picture, category, product, variant, code, SELLING price, Code 128 barcode; never cost
@@ -430,7 +443,17 @@ whose bar pattern the SPA draws and the Excel renders to PNG. Gate: `products` m
 Enter in `#pos-search` calls `GET /variants/lookup?exact=1` and adds the exact-SKU variant like a tap (no session
 required, as for taps). Revives PRD §7.18 / F6.5 / F17.5 (external scanners only) — needs dated PRD + CLAUDE.md scope
 notes. First task is a PDF size/time/sharpness spike; Excel memory at 500 variants must be tested. See research.md.
-Active feature plan: `specs/050-preorder-export-variant-name/plan.md`
+Active feature plan: `specs/051-stock-sync-from-transactions/plan.md`
+(branch `082-stock-sync-from-transactions`, from `develop`; spec dir number ≠ branch number) — no migration, no route.
+A one-off artisan correction, `app:sync-stock-from-transactions`, for LIVE variants whose "real stock" was typed AFTER
+sales / handed-over pre-orders already existed (so the typed number ignored them). DRY-RUN by default: computes per
+variant, from the `stock_movements` LEDGER (sale + preorder_handover − return, between the previous manual update and the
+latest one, by movement `id`, never `created_at`), writes a review Excel and prints a plan hash; `--apply --approve=<hash>
+--by=<user>` applies only if the recomputed hash still matches. Writes go through `StockService::applyMovement()` as
+`adjustment` with `reference_type='stock_sync'` (the idempotency marker), in one transaction, after a safety backup;
+results below zero are clamped to 0 and the shortfall is reported. See research.md.
+
+Previous feature: `specs/050-preorder-export-variant-name/plan.md`
 (branch `081-preorder-export-variant-name`, from `develop`; spec dir number ≠ branch number) — no migration. The
 pre-order Excel export (`GET /preorders/export`) gains ONE export-only column, `variant_names`, right after `products`:
 the variant name of each item, same order as the SKUs, joined by ` | ` (names often contain commas). `products` is
