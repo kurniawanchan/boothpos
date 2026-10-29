@@ -406,6 +406,11 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **POS scan-to-add**: `GET /variants/lookup?exact=1` (active variant, SKU equality, ≤1 row). `PosView::handleScanEnter` on Enter in `#pos-search`: exact hit → `addToCart` (same path as a tap, so no session needed — payment is still gated); miss → normal search, "not found" toast if nothing. **Race found in a real browser:** the 300 ms debounced search fires AFTER Enter and used to cancel the scan through `searchSeq`; now Enter calls `runSearch.cancel()` (new `useDebouncedFn().cancel`), clears the box BEFORE the request, always applies an exact hit, and uses a separate `scanSeq` only to decide whether partial results may be restored. Mock-based tests cannot see this — `PosScan.test.js` has slow-lookup regression tests.
 - **Known limitation:** a variant whose `image_path` file is gone is served by the SPA catch-all as `200 text/html`; the PDF card then shows an empty picture area (html2canvas logs "Error loading image") instead of the placeholder. Same for every document that embeds product images.
 - **Not verified here:** a hardware scanner on a printed page (SC-003). A software scanline decode of the PDF's pixels reads 100% of barcodes (61/61, 500/500, 27/27), which is evidence, not the hardware test.
+## Pre-order export: variant names (feature 050, 2026-10-29)
+
+- `GET /preorders/export` has ONE export-only column, `variant_names`, right after `products`: each item's variant name, same order as the SKUs, joined by ` | ` (not `,` — names contain commas). Blank names keep their slot. `products` is untouched because the importer parses it; the importer reads by column NAME, so `variant_names` (like `created_at`/`updated_at`) is ignored, and `template()` does not list it. `PreorderExportImportTest::EXPORT_HEADINGS` pins the layout.
+- Names come from the LIVE variant through `items.variant` (`withTrashed`, loaded once — a per-row lookup would be an N+1), NOT from `name_snapshot` (`"<product> — <variant>"`, cannot be split reliably). A variant renamed after the order shows its new name; SKUs stay the recorded snapshot.
+- `GenericArrayExport` now forces strings starting with `=` to text (formula injection). Deliberately ONLY `=`: it is the only prefix PhpSpreadsheet turns into a formula, and forcing every string to text would change number-like text in report exports and could break re-import. `SheetArrayExport`/`MultiSheetArrayExport` (master-data/invoice exports) are NOT protected yet.
 
 ## Conventions
 
@@ -425,6 +430,14 @@ whose bar pattern the SPA draws and the Excel renders to PNG. Gate: `products` m
 Enter in `#pos-search` calls `GET /variants/lookup?exact=1` and adds the exact-SKU variant like a tap (no session
 required, as for taps). Revives PRD §7.18 / F6.5 / F17.5 (external scanners only) — needs dated PRD + CLAUDE.md scope
 notes. First task is a PDF size/time/sharpness spike; Excel memory at 500 variants must be tested. See research.md.
+Active feature plan: `specs/050-preorder-export-variant-name/plan.md`
+(branch `081-preorder-export-variant-name`, from `develop`; spec dir number ≠ branch number) — no migration. The
+pre-order Excel export (`GET /preorders/export`) gains ONE export-only column, `variant_names`, right after `products`:
+the variant name of each item, same order as the SKUs, joined by ` | ` (names often contain commas). `products` is
+untouched because the importer parses it; the importer reads by column NAME, so the new column is ignored (like
+`created_at`/`updated_at`) and the import template does not list it. Names come from the live variant via
+`items.variant` (`withTrashed`, no N+1), not from `name_snapshot`. `GenericArrayExport` also forces string cells
+starting with `=` to text (formula injection); other exports are a separate follow-up. See research.md.
 
 Previous feature: `specs/048-stock-movements-search-variant-columns/plan.md`
 (branch `079-stock-movements-search-variant-columns`, from `develop`; spec dir number ≠ branch number) — no migration,
