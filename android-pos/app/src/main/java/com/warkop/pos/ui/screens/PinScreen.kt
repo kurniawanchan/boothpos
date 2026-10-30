@@ -1,16 +1,19 @@
 package com.warkop.pos.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.TabletAndroid
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
@@ -19,34 +22,35 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.warkop.pos.R
 import com.warkop.pos.model.StaffUser
-import com.warkop.pos.ui.liveClockText
+import com.warkop.pos.model.SystemMode
+import com.warkop.pos.model.Tone
 import com.warkop.pos.state.Conn
 import com.warkop.pos.state.Load
 import com.warkop.pos.state.PosStore
 import com.warkop.pos.ui.ErrorState
-import com.warkop.pos.ui.chooseFontSize
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import com.warkop.pos.ui.Keypad
 import com.warkop.pos.ui.NO_PIN_REASON
 import com.warkop.pos.ui.PinLayout
+import com.warkop.pos.ui.ProductPhoto
+import com.warkop.pos.ui.Size
 import com.warkop.pos.ui.StaffRow
-import com.warkop.pos.ui.StoreMark
+import com.warkop.pos.ui.UserAvatar
+import com.warkop.pos.ui.liveClockText
 import com.warkop.pos.ui.pinLayoutFor
 import com.warkop.pos.ui.selectedAfterRosterChange
 import com.warkop.pos.ui.staffRows
-import com.warkop.pos.ui.UserAvatar
-import com.warkop.pos.model.Tone
-import com.warkop.pos.ui.Size
+import com.warkop.pos.ui.storeTitle
 import com.warkop.pos.ui.windowSize
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -55,11 +59,11 @@ import java.util.Locale
 /**
  * S02 — pilih staf lalu PIN 6 digit; submit otomatis pada digit ke-6 (desain 01-login-pin, 29 phone). Staf dan PIN dari server.
  *
- * 078 / US2 — TIGA kolom di layar lebar (≥ 960 dp): (1) panel toko seperti sebelum 077 — logo + nama, outlet · terminal, jam besar,
- * tanggal, status koneksi, lencana DEMO; (2) daftar staf dengan detail pengguna terpilih; (3) masukan PIN. Setiap ORANG tampil
- * tepat sekali: baris terpilih DIPERBESAR di tempatnya, tidak ada blok "pengguna terpilih" terpisah (penyebab nama ganda di 077).
- * Judul "Siapa yang bertugas?" tetap di atas dan hanya daftar yang menggulir, jadi tidak ada judul/avatar yang terpotong.
- * 720–959 dp: dua kolom (toko + staf | PIN); di bawahnya satu kolom bertumpuk dengan urutan sama. Galat PIN hanya di bagian PIN.
+ * 085 / US2 — DUA kolom di layar ≥ 720 dp (tiga kolom 078 dihapus). Kolom kiri bertumpuk atas-bawah: (1) Info Outlet di atas foto
+ * latar — logo, nama outlet, mode sistem, nama terminal, tanggal, jam berdetak, status online; (2) kartu pengguna seragam (avatar
+ * di atas, nama + jabatan di bawah). Kolom kanan: PIN yang lebih besar dan tombol "Ganti outlet / terminal" (roda gigi dihapus).
+ * Layar sempit menumpuk urutan yang sama. Setiap ORANG tampil tepat sekali; terpilih = cincin tebal, ukuran kartu tidak berubah.
+ * Galat PIN hanya di bagian PIN. Alur masuk (roster tanpa token, PIN, kunci 5 menit) tidak berubah.
  */
 @Composable
 fun PinScreen(store: PosStore) {
@@ -93,64 +97,126 @@ fun PinScreen(store: PosStore) {
     val pick: (StaffUser) -> Unit = { u -> if (u.hasPin) { selected = u; pin = ""; error = null } }
     val retry = { store.loadRoster(); Unit }
 
-    // KOLOM PIN: hanya yang dibutuhkan untuk mengetik PIN. Galat tampil di sini; baris terpilih tetap terlihat di kolom staf.
+    // KOLOM PIN: hanya yang dibutuhkan untuk mengetik PIN. Galat tampil di sini; kartu terpilih tetap terlihat di kolom kiri.
+    // 085 — lebih besar dari 078 (keypad 340 → 440 dp, tombol 72 → 88 dp, titik 16 → 22 dp) supaya mudah diketuk dan menonjol.
     val pinEntry: @Composable (Modifier) -> Unit = { m ->
         Column(m, horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(selected?.let { "PIN ${it.name}" } ?: "Pilih nama, lalu masukkan PIN", fontSize = 18.sp)
-            Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(selected?.let { "PIN ${it.name}" } ?: "Pilih nama, lalu masukkan PIN", fontSize = 22.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(20.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 repeat(6) { i -> PinDot(i < pin.length) }
             }
-            Box(Modifier.height(36.dp), contentAlignment = Alignment.Center) {
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 14.sp, textAlign = TextAlign.Center) }
+            Box(Modifier.height(40.dp), contentAlignment = Alignment.Center) {
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 15.sp, textAlign = TextAlign.Center) }
             }
             Keypad(
                 onDigit = { d -> if (!busy && staff.isNotEmpty() && pin.length < 6) { pin += d; error = null; if (pin.length == 6) submit() } },
                 onBackspace = { if (!busy) pin = pin.dropLast(1) },
-                modifier = Modifier.widthIn(max = 340.dp), keyHeight = if (compact) 56.dp else 72.dp,
+                modifier = Modifier.widthIn(max = 440.dp), keyHeight = if (compact) 64.dp else 88.dp,
             )
-            // 073 — jalan keluar bila tablet salah outlet/terminal.
-            TextButton({ store.goToSetup() }, Modifier.padding(top = 8.dp)) { Text("Ganti outlet / terminal") }
+            // 073/085 — jalan keluar bila tablet salah outlet/terminal; tombol yang jelas, bukan teks atau ikon roda gigi.
+            OutlinedButton(
+                onClick = { store.goToSetup() },
+                modifier = Modifier.padding(top = 20.dp).fillMaxWidth().widthIn(max = 440.dp).height(52.dp),
+                shape = RoundedCornerShape(14.dp),
+            ) {
+                Icon(Icons.Filled.TabletAndroid, null, Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Ganti outlet / terminal", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            }
         }
     }
 
     val bg = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
     when (layout) {
-        PinLayout.THREE_COLUMN -> Row(bg.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            BrandPanel(store, Modifier.weight(0.28f).fillMaxHeight(), bigClock = true, content = null)
-            StaffColumn(store, rows, pick, retry, Modifier.weight(0.32f).fillMaxHeight().padding(top = 8.dp), lazy = true)
-            // 054 / US4 — layar lebar tidak boleh memotong keypad: kolom PIN menggulir bila tinggi layar kurang.
-            pinEntry(Modifier.weight(0.40f).fillMaxHeight().padding(horizontal = 16.dp, vertical = 16.dp).verticalScroll(rememberScrollState()))
-        }
-        PinLayout.TWO_COLUMN -> Row(bg.padding(16.dp)) {
-            BrandPanel(store, Modifier.weight(0.46f).fillMaxHeight(), bigClock = false) { m ->
-                StaffColumn(store, rows, pick, retry, m, lazy = true)
+        PinLayout.TWO_COLUMN -> Row(bg.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Column(Modifier.weight(0.56f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutletInfoPanel(store, Modifier.fillMaxWidth().weight(0.46f), clockSize = 56)
+                StaffCardGrid(store, rows, pick, retry, Modifier.fillMaxWidth().weight(0.54f), lazy = true, columns = 0)
             }
-            pinEntry(Modifier.weight(0.54f).fillMaxHeight().padding(start = 32.dp, end = 24.dp, top = 24.dp).verticalScroll(rememberScrollState()))
+            // 054 / US4 — layar lebar tidak boleh memotong keypad: kolom PIN menggulir bila tinggi layar kurang.
+            pinEntry(Modifier.weight(0.44f).fillMaxHeight().padding(vertical = 8.dp).verticalScroll(rememberScrollState()))
         }
-        // 077 — layar sempit tidak punya panel merek: logo toko + lencana mode tetap di atas.
-        PinLayout.STACKED -> Column(bg.padding(20.dp).verticalScroll(rememberScrollState())) {
-            StoreMark(store, logoSize = 40.dp)
-            Text(outletLine(store), Modifier.padding(top = 4.dp, bottom = 16.dp), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            StaffColumn(store, rows, pick, retry, Modifier.fillMaxWidth(), lazy = false)
+        // Layar sempit: urutan sama (Info Outlet, kartu, PIN) dalam satu gulir; kartu dua per baris (tanpa grid lazy di dalam gulir).
+        PinLayout.STACKED -> Column(bg.padding(16.dp).verticalScroll(rememberScrollState())) {
+            OutletInfoPanel(store, Modifier.fillMaxWidth().height(220.dp), clockSize = 40)
+            Spacer(Modifier.height(16.dp))
+            StaffCardGrid(store, rows, pick, retry, Modifier.fillMaxWidth(), lazy = false, columns = 2)
             Spacer(Modifier.height(24.dp))
             pinEntry(Modifier.fillMaxWidth())
         }
     }
 }
 
-/** "Outlet · Terminal" dari konfigurasi tablet; "Terminal" bila nama terminal belum diketahui. */
-private fun outletLine(store: PosStore): String =
-    listOfNotNull(store.config?.outletName?.takeIf { it.isNotBlank() }, store.config?.deviceName?.takeIf { it.isNotBlank() } ?: "Terminal").joinToString(" · ")
+/** Tinggi tetap kartu pengguna: semua kartu sama (FR-008) berapa pun panjang nama atau jabatan. */
+private val STAFF_CARD_HEIGHT = 128.dp
+
+/** Lebar minimum kartu pada grid lazy; `GridCells.Adaptive` membagi lebar kolom kiri sama rata. */
+private val STAFF_CARD_MIN_WIDTH = 130.dp
 
 /**
- * 078 — kolom staf: judul TETAP + satu baris per orang. [lazy] true (kolom tinggi tetap) = daftar menggulir sendiri tanpa menggeser
- * judul; false (satu kolom bertumpuk di dalam gulir induk) = baris biasa. Keadaan memuat/galat/kosong ditangani di sini.
+ * 085 — Info Outlet: foto latar (aset bawaan, bukan per outlet) + scrim gelap bergradien supaya teks putih terbaca di bagian
+ * foto mana pun. Isi: logo + nama outlet, mode sistem, nama terminal, tanggal, jam berdetak ([liveClockText]) dan status online.
+ * Mode tampil SELALU di sini (LIVE maupun DEMO), tidak seperti lencana header yang hanya menandai DEMO.
  */
 @Composable
-private fun StaffColumn(store: PosStore, rows: List<StaffRow>, onPick: (StaffUser) -> Unit, onRetry: () -> Unit, modifier: Modifier, lazy: Boolean) {
+private fun OutletInfoPanel(store: PosStore, modifier: Modifier, clockSize: Int) {
+    val time = liveClockText() // 084 — berdetak; dulu dihitung sekali dan membeku
+    val name = storeTitle(store.branding?.storeName)
+    val outletName = store.config?.outletName?.takeIf { it.isNotBlank() }
+    val terminal = store.config?.deviceName?.takeIf { it.isNotBlank() } ?: "Terminal"
+    val onPhoto = Color.White
+    Box(modifier.clip(RoundedCornerShape(28.dp))) {
+        // Dekoratif: informasi yang sama sudah tertulis di teks panel, jadi tanpa deskripsi untuk pembaca layar.
+        Image(painterResource(R.drawable.outlet_background), contentDescription = null, Modifier.matchParentSize(), contentScale = ContentScale.Crop)
+        Box(Modifier.matchParentSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.40f), Color.Black.copy(alpha = 0.78f)))))
+        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ProductPhoto(store.branding?.logoUrl, name, Tone.INK, Modifier.size(56.dp).clip(RoundedCornerShape(14.dp)), initialsSize = 24.sp)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(name, color = onPhoto, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (outletName != null && outletName != name) {
+                        Text(outletName, color = onPhoto.copy(alpha = 0.85f), fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            Column {
+                Text(time, color = onPhoto, fontSize = clockSize.sp, fontWeight = FontWeight.Light, lineHeight = (clockSize + 4).sp)
+                Text(
+                    SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID")).format(Date()),
+                    color = onPhoto, fontSize = 16.sp, fontWeight = FontWeight.Medium,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                InfoChip(null, if (store.mode == SystemMode.DEMO) "Mode DEMO" else "Mode LIVE")
+                InfoChip(null, terminal)
+                InfoChip(if (store.conn == Conn.OFFLINE || store.conn == Conn.OFFLINE_LIMITED) Icons.Filled.WifiOff else Icons.Filled.Wifi, store.conn.label)
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector?, text: String) {
+    // Permukaan terang di atas foto gelap: kontras terjaga apa pun foto dan temanya.
+    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest, contentColor = MaterialTheme.colorScheme.onSurface) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) { Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)) }
+            Text(text, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/**
+ * 085 — kartu pengguna seragam. [lazy] true (kolom tinggi tetap) = grid yang menggulir sendiri tanpa menggeser judul, jumlah kolom
+ * menyesuaikan lebar ([STAFF_CARD_MIN_WIDTH]); false (satu kolom bertumpuk di dalam gulir induk) = baris biasa sebanyak [columns]
+ * kartu, sisa sel diisi ruang kosong supaya kartu terakhir tidak melebar. Keadaan memuat/galat/kosong ditangani di sini.
+ */
+@Composable
+private fun StaffCardGrid(store: PosStore, rows: List<StaffRow>, onPick: (StaffUser) -> Unit, onRetry: () -> Unit, modifier: Modifier, lazy: Boolean, columns: Int) {
     Column(modifier) {
-        Text("Siapa yang bertugas?", fontSize = 26.sp, modifier = Modifier.padding(bottom = 14.dp))
+        Text("Siapa yang bertugas?", fontSize = 22.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(bottom = 10.dp))
         when (val r = store.roster) {
             is Load.Loading, is Load.Idle -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             is Load.Failed -> ErrorState(r.error.message, onRetry = onRetry, modifier = Modifier.fillMaxWidth())
@@ -160,11 +226,21 @@ private fun StaffColumn(store: PosStore, rows: List<StaffRow>, onPick: (StaffUse
                     Spacer(Modifier.height(12.dp))
                 }
                 if (lazy) {
-                    androidx.compose.foundation.lazy.LazyColumn(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(rows, key = { it.user.id }) { row -> StaffRowItem(row, onPick) }
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(STAFF_CARD_MIN_WIDTH), modifier = Modifier.weight(1f, fill = false),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        items(rows, key = { it.user.id }) { row -> StaffCard(row, onPick, Modifier.fillMaxWidth()) }
                     }
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { rows.forEach { row -> key(row.user.id) { StaffRowItem(row, onPick) } } }
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        rows.chunked(columns).forEach { chunk ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                chunk.forEach { row -> key(row.user.id) { StaffCard(row, onPick, Modifier.weight(1f)) } }
+                                repeat(columns - chunk.size) { Spacer(Modifier.weight(1f)) }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -172,24 +248,24 @@ private fun StaffColumn(store: PosStore, rows: List<StaffRow>, onPick: (StaffUse
 }
 
 /**
- * 078 — satu staf. Terpilih = baris DIPERBESAR (foto 72 dp, nama 20 sp, cincin tebal); lainnya ringkas (48 dp). Tanpa PIN: redup,
- * tidak bisa diketuk, peran diganti [NO_PIN_REASON]. Wadah memakai warna permukaan supaya terbaca di panel toko maupun di latar.
+ * 085 — satu kartu pengguna: baris atas avatar, baris bawah nama + jabatan (masing-masing satu baris, berelipsis). Tinggi tetap
+ * [STAFF_CARD_HEIGHT] dan avatar tetap, jadi tidak ada kartu yang berbeda ukuran. Terpilih = cincin tebal; tanpa PIN = redup, tidak
+ * bisa diketuk, jabatan diganti [NO_PIN_REASON].
  */
 @Composable
-private fun StaffRowItem(row: StaffRow, onPick: (StaffUser) -> Unit) {
+private fun StaffCard(row: StaffRow, onPick: (StaffUser) -> Unit, modifier: Modifier) {
     val u = row.user
     val ring = if (row.expanded) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     Surface(
-        onClick = { onPick(u) }, enabled = row.selectable, modifier = Modifier.fillMaxWidth().alpha(if (row.selectable) 1f else 0.5f),
-        shape = RoundedCornerShape(20.dp), color = if (row.expanded) MaterialTheme.colorScheme.surfaceContainerLowest else androidx.compose.ui.graphics.Color.Transparent,
-        border = BorderStroke(if (row.expanded) 2.dp else 1.dp, ring),
+        onClick = { onPick(u) }, enabled = row.selectable, modifier = modifier.height(STAFF_CARD_HEIGHT).alpha(if (row.selectable) 1f else 0.5f),
+        shape = RoundedCornerShape(20.dp), color = if (row.expanded) MaterialTheme.colorScheme.surfaceContainerLowest else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(if (row.expanded) 3.dp else 1.dp, ring),
     ) {
-        Row(Modifier.padding(if (row.expanded) 16.dp else 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            UserAvatar(u, if (row.expanded) 72.dp else 48.dp, tone = if (row.expanded) Tone.TINT else Tone.NEUTRAL, textSize = if (row.expanded) 24f else 17f)
-            Spacer(Modifier.width(if (row.expanded) 16.dp else 12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(u.name, fontSize = if (row.expanded) 20.sp else 16.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Text(if (row.selectable) u.role else NO_PIN_REASON, fontSize = 13.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
+            UserAvatar(u, 56.dp, tone = if (row.expanded) Tone.TINT else Tone.NEUTRAL, textSize = 20f)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(u.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                Text(if (row.selectable) u.role else NO_PIN_REASON, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -198,92 +274,8 @@ private fun StaffRowItem(row: StaffRow, onPick: (StaffUser) -> Unit) {
 @Composable
 private fun PinDot(filled: Boolean) {
     Box(
-        Modifier.size(16.dp).clip(CircleShape)
-            .background(if (filled) MaterialTheme.colorScheme.onSurface else androidx.compose.ui.graphics.Color.Transparent)
-            .then(if (filled) Modifier else Modifier.border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape)),
+        Modifier.size(22.dp).clip(CircleShape)
+            .background(if (filled) MaterialTheme.colorScheme.onSurface else Color.Transparent)
+            .then(if (filled) Modifier else Modifier.border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)),
     )
-}
-
-/**
- * Panel toko (kolom 1). [bigClock] true = jam 72 sp seperti sebelum 077 (tiga kolom, panel hanya berisi identitas); false = jam 40 sp
- * karena panel juga memuat [content] (daftar staf pada dua kolom). Logo toko dari server (inisial bila belum ada) + lencana DEMO.
- */
-@Composable
-private fun BrandPanel(store: PosStore, modifier: Modifier, bigClock: Boolean, content: (@Composable (Modifier) -> Unit)?) {
-    val time = liveClockText() // 084 — berdetak; dulu dihitung sekali dan membeku
-    Surface(modifier, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
-        Column(Modifier.padding(28.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    StoreMark(store, logoSize = 52.dp, maxTextWidth = 260.dp)
-                    Text(outletLine(store), Modifier.padding(top = 6.dp), fontSize = 14.sp)
-                }
-                IconButton(onClick = { store.goToSetup() }) {
-                    Icon(imageVector = Icons.Filled.Settings, contentDescription = "Ganti outlet / terminal", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-            }
-            if (content != null) {
-                Spacer(Modifier.height(24.dp))
-                content(Modifier.weight(1f).fillMaxWidth())
-                Spacer(Modifier.height(16.dp))
-            } else {
-                Spacer(Modifier.weight(1f))
-            }
-            Text(time, fontSize = if (bigClock) 72.sp else 40.sp, fontWeight = FontWeight.Light, lineHeight = if (bigClock) 76.sp else 44.sp)
-            Text(java.text.SimpleDateFormat("EEEE, d MMMM yyyy", java.util.Locale("id", "ID")).format(java.util.Date()), fontSize = if (bigClock) 18.sp else 15.sp, fontWeight = FontWeight.Medium)
-            if (content == null) Spacer(Modifier.weight(1f))
-            Spacer(Modifier.height(12.dp))
-            OutletStatusChips(store.conn, store.config?.let { c -> listOf(c.outletName, c.deviceName).filter { it.isNotBlank() }.joinToString(" · ") } ?: "Terminal")
-        }
-    }
-}
-
-@Composable
-private fun InfoChip(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String, fontSize: TextUnit = 14.sp) {
-    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest, contentColor = MaterialTheme.colorScheme.onSurface) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            // 054 / FR-001 — satu baris, tanpa elipsis: nama outlet dipastikan muat oleh OutletStatusChips.
-            Icon(icon, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(text, fontWeight = FontWeight.Medium, fontSize = fontSize, maxLines = 1, softWrap = false)
-        }
-    }
-}
-
-/** Lebar dalam chip di luar teks: padding 14+14, ikon 18, jarak 6 (sama dengan [InfoChip]). */
-private val CHIP_INSET = 52.dp
-private val CHIP_GAP = 10.dp
-/** Ukuran huruf nama outlet, terbesar dulu. Di bawah 12sp terlalu kecil dibaca di kasir. */
-private val OUTLET_FONT_SIZES = listOf(14f, 13f, 12f)
-
-/**
- * 054 / US1 — chip status koneksi dan chip outlet · terminal. Nama outlet dibuat muat: pertama mengecil sampai
- * [OUTLET_FONT_SIZES]; bila tetap tidak muat di samping chip koneksi, chip outlet pindah ke baris penuh di atasnya.
- * Keputusan tata letak hanya dari lebar panel (tidak dari ukuran chip), jadi tidak ada loop umpan balik.
- */
-@Composable
-private fun OutletStatusChips(conn: Conn, outletText: String) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val measurer = rememberTextMeasurer()
-        val density = LocalDensity.current
-        val panelPx = with(density) { maxWidth.roundToPx() }
-        val gapPx = with(density) { CHIP_GAP.roundToPx() }
-        val insetPx = with(density) { CHIP_INSET.roundToPx() }
-        fun textWidth(text: String, size: Float): Int =
-            measurer.measure(text, TextStyle(fontSize = size.sp, fontWeight = FontWeight.Medium)).size.width
-        fun outletSize(available: Int): Float? = chooseFontSize({ textWidth(outletText, it) }, available - insetPx, OUTLET_FONT_SIZES)
-
-        val connWidth = textWidth(conn.label, 14f) + insetPx
-        val connIcon = if (conn == Conn.OFFLINE || conn == Conn.OFFLINE_LIMITED) Icons.Filled.WifiOff else Icons.Filled.Wifi
-        val sideBySide = outletSize(panelPx - connWidth - gapPx)
-        if (sideBySide != null) {
-            Row(horizontalArrangement = Arrangement.spacedBy(CHIP_GAP)) {
-                InfoChip(connIcon, conn.label)
-                InfoChip(Icons.Filled.Schedule, outletText, fontSize = sideBySide.sp)
-            }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(CHIP_GAP)) {
-                InfoChip(Icons.Filled.Schedule, outletText, fontSize = (outletSize(panelPx) ?: OUTLET_FONT_SIZES.last()).sp)
-                InfoChip(connIcon, conn.label)
-            }
-        }
-    }
 }

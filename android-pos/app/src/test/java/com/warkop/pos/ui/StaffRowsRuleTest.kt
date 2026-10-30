@@ -7,8 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 078 / US2 — satu baris per ORANG: tiap id muncul tepat sekali (tidak ada "nama ganda" seperti blok pengguna terpilih 077), baris
- * terpilih adalah baris yang DIPERBESAR, dan staf tanpa PIN tampil redup tanpa bisa dipilih.
+ * 078/085 / US2 — satu kartu per ORANG: tiap id muncul tepat sekali (tidak ada "nama ganda" seperti blok pengguna terpilih 077), kartu
+ * terpilih adalah yang bertanda `expanded` (cincin tebal; ukuran semua kartu SERAGAM sejak 085), dan staf tanpa PIN tampil redup tanpa bisa dipilih.
  */
 class StaffRowsRuleTest {
     private val sari = StaffUser("1", "Sari", "Kasir", "CSH")
@@ -20,7 +20,7 @@ class StaffRowsRuleTest {
         assertEquals(listOf("1", "2", "3"), rows.map { it.user.id })
     }
 
-    @Test fun `hanya baris terpilih yang diperbesar`() {
+    @Test fun `hanya kartu terpilih yang bertanda`() {
         val rows = staffRows(listOf(sari, budi), selectedId = "2")
         assertEquals(listOf(false, true), rows.map { it.expanded })
     }
@@ -33,7 +33,7 @@ class StaffRowsRuleTest {
         assertEquals(listOf(true, false), rows.map { it.expanded })
     }
 
-    @Test fun `staf tanpa PIN tidak bisa dipilih dan tidak pernah diperbesar`() {
+    @Test fun `staf tanpa PIN tidak bisa dipilih dan tidak pernah bertanda terpilih`() {
         val rows = staffRows(listOf(sari, tanpaPin), selectedId = "3")
         assertFalse(rows[1].selectable)
         assertFalse(rows[1].expanded)

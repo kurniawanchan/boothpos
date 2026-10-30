@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { currentSession } from '../api/sessions';
 import { listCategories } from '../api/categories';
@@ -63,6 +63,18 @@ const lastOrderId = ref(null);
 const paymentModalRef = ref(null);
 const showVariantPicker = ref(false);
 const variantPickerCard = ref(null);
+
+// 085 — AppShell memuat pengaturan SEKALI saat shell dibuka, jadi layar POS yang dibiarkan terbuka memakai tarif pajak
+// lama untuk pratinjau setelah pemilik mengubahnya (di peramban/perangkat lain). Server tetap menghitung total sebenarnya,
+// tetapi pratinjau yang tidak sama dengan tagihan membingungkan kasir. Muat ulang saat POS dibuka dan saat tab kembali tampil.
+function refreshSettingsWhenVisible() {
+  if (document.visibilityState === 'visible') settings.load().catch(() => {});
+}
+onMounted(() => {
+  refreshSettingsWhenVisible();
+  document.addEventListener('visibilitychange', refreshSettingsWhenVisible);
+});
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', refreshSettingsWhenVisible));
 
 onMounted(async () => {
   session.value = await currentSession();
