@@ -1,0 +1,16 @@
+{
+  "formula": "tax = round_half_up(max(0, base) * rate / 100), rupiah penuh, per pesanan",
+  "cases": [
+    { "base": 17000, "rate": 100, "tax": 17000, "note": "gejala pemilik: 100%" },
+    { "base": 60000, "rate": 5, "tax": 3000, "note": "" },
+    { "base": 60000, "rate": 10, "tax": 6000, "note": "tarif lama tetap benar" },
+    { "base": 1001, "rate": 2.5, "tax": 25, "note": "25,025 dibulatkan turun" },
+    { "base": 999, "rate": 2.5, "tax": 25, "note": "24,975 dibulatkan naik" },
+    { "base": 5, "rate": 10, "tax": 1, "note": "0,5 naik (setengah ke atas)" },
+    { "base": 1000, "rate": 0.5, "tax": 5, "note": "tarif di bawah 1%" },
+    { "base": 0, "rate": 10, "tax": 0, "note": "dasar 0" },
+    { "base": -500, "rate": 10, "tax": 0, "note": "dasar negatif dijepit ke 0" },
+    { "base": 12345, "rate": 0, "tax": 0, "note": "tarif 0 = tanpa pajak" },
+    { "base": 99999, "rate": 100, "tax": 99999, "note": "batas atas tarif" }
+  ]
+}

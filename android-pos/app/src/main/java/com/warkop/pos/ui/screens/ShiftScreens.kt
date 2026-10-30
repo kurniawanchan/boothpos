@@ -321,8 +321,10 @@ fun SyncScreen(store: PosStore) {
                 Triple("Jam tablet", syncSkewLabel(hb.skewSeconds), syncSkewNote(hb.skewSeconds)),
                 Triple("Rilis menu", hb.menuRelease ?: "Belum ada rilis", if (hb.menuRelease == null) "Server belum mengirim rilis menu" else "Rilis dari server"),
                 Triple("Siap EOD (tablet ini)", if (store.shift == null) "Siap" else "Belum", "EOD dijalankan Outlet Manager di back office"),
+                // 085 — pemilik bisa memastikan tablet memakai APK terbaru (bukan build lama dengan cadangan pajak 10%).
+                com.warkop.pos.ui.appVersionCell(com.warkop.pos.state.APP_VERSION, androidx.compose.ui.platform.LocalContext.current.getString(com.warkop.pos.R.string.app_build)),
             )
-            cells.chunked(if (windowSize() == Size.COMPACT) 2 else 4).forEach { row -> Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { row.forEach { (a, b, c) -> Cell(a, b, c, Modifier.weight(1f).heightIn(min = 118.dp)) } } }
+            cells.chunked(if (windowSize() == Size.COMPACT) 2 else 5).forEach { row -> Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { row.forEach { (a, b, c) -> Cell(a, b, c, Modifier.weight(1f).heightIn(min = 118.dp)) } } }
             // 050 / T024 — printer sungguhan menggantikan baris "Belum tersedia".
             store.printer?.let { printer -> Spacer(Modifier.height(18.dp)); PrinterPanel(printer) }
         }

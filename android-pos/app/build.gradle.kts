@@ -1,3 +1,4 @@
+import java.time.LocalDate
 import java.util.Properties
 
 plugins {
@@ -20,6 +21,15 @@ val localProps = Properties().apply {
 fun posProp(key: String, default: String): String =
     ((project.findProperty(key) as String?) ?: localProps.getProperty(key) ?: default).trim()
 
+// 085 / US1 (research D5) — penanda pembangunan (sha git singkat + tanggal) yang tampil di layar Koneksi. versionCode
+// tetap 1 pada setiap pembangunan, jadi tanpa ini pemilik tidak bisa membedakan APK lama (sebelum 083, dengan cadangan
+// pajak 10%) dari yang baru. Gagal membaca git (mis. tanpa folder .git) jatuh ke "dev", tidak menggagalkan pembangunan.
+val buildStamp: String = runCatching {
+    val sha = ProcessBuilder("git", "rev-parse", "--short", "HEAD").directory(rootProject.projectDir).redirectErrorStream(true).start()
+        .inputStream.bufferedReader().readText().trim()
+    "$sha ${LocalDate.now()}".takeIf { sha.matches(Regex("[0-9a-f]{4,40}")) } ?: "dev"
+}.getOrDefault("dev")
+
 android {
     namespace = "com.warkop.pos"
     compileSdk = 34
@@ -32,6 +42,7 @@ android {
         versionName = "1.0.0"
         // Sengaja resValue, bukan BuildConfig: BuildConfig memaksa kompilasi Java, yang gagal pada JDK 24 di mesin
         // pembangun ini (transformasi JDK image AGP). String resource tidak butuh javac.
+        resValue("string", "app_build", buildStamp)
         resValue("string", "default_local_url", posProp("pos.defaultLocalUrl", "http://10.0.2.2:8010"))
         resValue("string", "default_online_url", posProp("pos.defaultOnlineUrl", "https://smasher-nullify-subgroup.ngrok-free.dev"))
     }
