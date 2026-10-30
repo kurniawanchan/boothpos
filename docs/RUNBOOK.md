@@ -596,7 +596,7 @@ cd android-pos
 ./gradlew :core-network:testDebugUnitTest :app:testDebugUnitTest
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
-APK untuk dipasang di toko (produksi): lihat 13.6.
+APK untuk dipasang di toko (produksi): lihat 13.8.
 
 ### 13.4 Mencabut dan memasang ulang perangkat
 - Cabut: `DELETE /devices/{id}` (owner/admin). Server mengisi `revoked_at`; perangkat tidak dihapus dari basis data (jejak audit). Permintaan dari perangkat yang dicabut ditolak (422 pada `device_id`).
@@ -610,7 +610,7 @@ adb logcat -s AndroidRuntime:E  # galat fatal; harus kosong pada pengujian
 - Tag `PosApi` hanya tercatat pada build debug (`debuggable`).
 - Galat `ANR` ("tidak merespons") dicatat di `/data/anr/traces.txt`; ambil dengan `adb shell cat /data/anr/traces.txt`.
 
-### 13.4 Alamat online bawaan (fitur 066, 2026-10-22)
+### 13.6 Alamat online bawaan (fitur 066, 2026-10-22)
 - APK membawa alamat online bawaan (`https://smasher-nullify-subgroup.ngrok-free.dev`). Dipakai tablet baru **hanya** bila admin memilih "Online" di Pengaturan → Umum → Server address tetapi kolom "Online server address" kosong; isian admin selalu didahulukan.
 - Ganti alamat bawaan bila ngrok berubah: (1) build APK dengan `pos.defaultOnlineUrl=<alamat baru>` di `android-pos/local.properties` atau `gradle.properties`; (2) set `SERVER_ADDRESS_DEFAULT_ONLINE=<alamat baru>` di `.env` server agar petunjuk di halaman web sama (lalu `php artisan config:clear` bila konfigurasi di-cache). Kedua nilai harus sama.
 - Tablet yang sudah menyimpan alamat tidak berubah sampai datanya dihapus (aturan 065).
@@ -626,7 +626,7 @@ Menu **Pengaturan → Terminal** (owner/admin). Filter: outlet (beberapa), statu
 - **Aksi massal** (centang baris; kotak kepala memilih satu halaman): **Aktifkan**, **Nonaktifkan**, **Hapus** lewat `POST /devices/bulk`. Tiap terminal diproses dengan aturan tunggalnya sendiri dan TIDAK semua-atau-tidak-sama-sekali: yang berhasil tetap berubah, yang sudah dalam keadaan tujuan dilewati, yang ditolak (hapus: pernah dipakai order/shift; aktifkan: nama sudah dipakai terminal aktif) tetap terpilih dan disebut beserta alasannya. Nonaktifkan dan Hapus meminta konfirmasi bermuatan jumlah. Pilihan dikosongkan saat filter, pencarian, atau halaman berubah. Admin berpenugasan outlet hanya mengenai terminal outletnya (id lain dilaporkan `not_found`). Batas 100 id per permintaan.
 - Setiap tindakan tercatat di Log Aktivitas: `device_paired`, `device_renamed`, `device_moved`, `device_revoked`, `device_reactivated`, `device_deleted`.
 
-### 13.6 Membangun APK produksi (rilis) (2026-10-27)
+### 13.8 Membangun APK produksi (rilis) (2026-10-27)
 
 Klasifikasi: **INTERNAL**. Keystore dan kata sandinya bersifat rahasia dan tidak pernah masuk repo, obrolan, atau log.
 
@@ -740,3 +740,41 @@ Setara: `php artisan db:seed --class=Wjm2CatalogSeeder`.
 - **Penarikan menu di LIVE hanya untuk item milik outlet lain.** Item yang dibuat pemilik sendiri di outlet tujuan (home outlet = outlet tujuan) tidak pernah ditarik; sebelum perbaikan 2026-10-25, jalan ulang menyembunyikannya dari POS. DEMO tetap menarik semua item di luar katalog.
 - Item yang pemilik buat atau ganti namanya langsung di LIVE sebelum jalan ulang (mis. MARIMAS) harus disamakan dulu lewat `## Nama item khusus`, karena "item sudah ada" dinilai menurut nama; jika tidak, jalan ulang membuat item kembar.
 - Pemulihan: `php artisan app:restore <berkas.sql>` dari cadangan yang diambil sebelum pengisian.
+- **Konfirmasi:** `--yes` melewati pertanyaan. Menjalankan `--force` TANPA
+  `--yes` di konteks non-interaktif (`--no-interaction`, cron, `docker exec -T`)
+  langsung gagal dengan galat sebelum ada pertanyaan, cadangan, atau penulisan.
+- **Peringatan PII:** data pelanggan disalin APA ADANYA (telepon, email, akun
+  sosial, alamat). Jangan bagikan DB, screenshot, atau cadangan yang berisi DEMO.
+- Cadangan pengaman dibuat otomatis lebih dulu (id dicetak); pulihkan dengan
+  `php artisan app:restore <path/database.sql>`. Gambar produk di disk publik
+  TIDAK ikut dicadangkan oleh `app:backup` — gambar DEMO lama yang tidak dipakai
+  siapa pun memang dihapus (DEMO dibangun ulang), gambar LIVE tidak pernah disentuh.
+- Kode artist/kategori DEMO berbeda dari LIVE (kolomnya UNIQUE lintas mode dan
+  hanya 3/2 huruf): mis. `VLC` → `ZVL`; `code_prefix`/SKU DEMO disusun ulang dari
+  kode itu. Nomor dokumen DEMO berakhiran `-DM`.
+- Tidak disalin: `companies`, `invoices`, `pos_drafts`, riwayat `activity_logs`,
+  `preorder_notifications`, `users`, `payment_channels`, `settings`.
+- Pemeriksaan sebelum penghapusan: bila ada baris LIVE yang merujuk baris DEMO,
+  perintah dibatalkan SEBELUM menghapus apa pun (data lintas mode akan diubah
+  diam-diam oleh foreign key `ON DELETE SET NULL/CASCADE`). Perbaiki rujukan itu
+  lebih dulu.
+- Hentikan pemakaian aplikasi saat menjalankan. Perintah berjalan dalam satu
+  transaksi (REPEATABLE READ), jadi tulisan dari koneksi LAIN selama proses TIDAK
+  terlihat olehnya dan TIDAK terdeteksi: pemeriksaan sidik jari LIVE hanya
+  membuktikan bahwa proses ini sendiri tidak menulis ke LIVE. Untuk itu pemakaian
+  aplikasi (kasir, impor, tab lain) harus dihentikan selama menjalankannya.
+- Bila proses mati mendadak (galat fatal / Ctrl-C) di tengah jalan, DB kembali
+  sendiri (rollback; LIVE tak terpengaruh), tetapi salinan gambar/bukti bayar yang
+  sempat dibuat dapat tertinggal di disk dengan nama UUID acak. Tidak dipakai baris
+  mana pun; aman dihapus manual, atau dibiarkan.
+- Bila pembersihan berkas DEMO lama gagal SESUDAH penggantian selesai, perintah
+  tetap berhasil dan mencetak peringatan (DEMO sudah diganti; berkas lama mungkin
+  tersisa di disk). Itu bukan rollback.
+- Laporan akhir mencetak pemetaan kode artist/kategori LIVE → DEMO (`Kode Artis: VLC → ZVL`).
+- Memulihkan cadangan pengaman mengembalikan baris DEMO, tetapi TIDAK berkas
+  gambar yang sudah dihapus dari disk publik (`app:backup` tidak mengarsipkannya).
+- `app:restore` juga memulihkan `license_activations`: bila dump berasal dari mesin
+  lain atau dibuat sebelum aktivasi, aplikasi bisa terkunci (423) sampai
+  diaktivasi ulang dengan kunci lisensi (lihat catatan restore di CLAUDE.md).
+- Simulasi (tanpa `--force`) TIDAK memeriksa baris LIVE yang merujuk baris DEMO;
+  pembatalan karena rujukan lintas mode itu hanya terjadi saat `--force`.
