@@ -102,9 +102,16 @@ export function saveVariants(id, payload) {
   return client.put(`/products/${id}/variants`, payload).then((r) => r.data);
 }
 
-/** PUT /products/{id}/modifier-links — { links: [{ group_id, is_required, min_select, max_select, display_order }] }. */
-export function saveModifierLinks(id, links) {
-  return client.put(`/products/${id}/modifier-links`, { links }).then((r) => r.data);
+/**
+ * PUT /products/{id}/modifier-links — { links: [{ group_id, is_required, min_select, max_select, display_order }],
+ * excluded_group_ids? }. 086: `excludedGroupIds` (grup kategori yang DILEPAS item ini) hanya dikirim bila bukan
+ * `undefined`: tanpa kunci server membiarkan pengecualian apa adanya, jadi pemanggil yang tidak mengubahnya tidak boleh
+ * mengirim `[]` (itu memulihkan semuanya).
+ */
+export function saveModifierLinks(id, links, excludedGroupIds) {
+  const body = excludedGroupIds === undefined ? { links } : { links, excluded_group_ids: excludedGroupIds };
+
+  return client.put(`/products/${id}/modifier-links`, body).then((r) => r.data);
 }
 
 /** 045 Stage 3 — harga varian di satu outlet; `price: null` menghapus harga khusus (kembali mengikuti dasar). */

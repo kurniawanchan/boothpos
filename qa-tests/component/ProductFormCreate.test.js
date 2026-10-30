@@ -585,6 +585,40 @@ describe('ProductFormDrawer — edit mode is the same form as create mode (043)'
     await waitFor(() => expect(saveModifierLinks).toHaveBeenCalledWith(1, []));
   });
 
+  // 086 — melepas / memulihkan grup warisan kategori di formulir Ubah item.
+  it('releases an inherited group: it moves to "dilepas" and saving sends excluded_group_ids as the third argument', async () => {
+    const { user } = await openEdit();
+    await screen.findByTestId('create-modifiers');
+    const inherited = screen.getByTestId('inherited-links');
+    expect(within(inherited).getByText('Ukuran')).toBeInTheDocument();
+
+    await user.click(within(inherited).getByRole('button', { name: P.ml_exclude_aria.replace('{name}', 'Ukuran') }));
+    expect(within(screen.getByTestId('im-excluded')).getByText('Ukuran')).toBeInTheDocument();
+    expect(screen.queryByTestId('im-inherited')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: P.f_save_item }));
+    await waitFor(() => expect(saveModifierLinks).toHaveBeenCalledTimes(1));
+    expect(saveModifierLinks).toHaveBeenCalledWith(1, [{ group_id: 7, is_required: false, min_select: 0, max_select: 3, display_order: 1 }], [8]);
+  });
+
+  it('restores a group that was already released and sends an empty exclusion list', async () => {
+    getProduct.mockResolvedValue(FULL({
+      modifier_links: [LINKS[0]],
+      modifier_excluded: [{ group_id: 8, name: 'Ukuran', source: 'category', has_rules: false, is_required: true, min_select: 1, max_select: 1, display_order: 2 }],
+    }));
+    const { user } = await openEdit();
+    await screen.findByTestId('create-modifiers');
+    expect(within(screen.getByTestId('im-excluded')).getByText('Ukuran')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: P.ml_restore_aria.replace('{name}', 'Ukuran') }));
+    expect(within(screen.getByTestId('im-inherited')).getByText('Ukuran')).toBeInTheDocument();
+    expect(screen.queryByTestId('im-excluded')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: P.f_save_item }));
+    await waitFor(() => expect(saveModifierLinks).toHaveBeenCalledTimes(1));
+    expect(saveModifierLinks).toHaveBeenCalledWith(1, [{ group_id: 7, is_required: false, min_select: 0, max_select: 3, display_order: 1 }], []);
+  });
+
   it('validates the modifier rules before saving anything (min above max)', async () => {
     const { user } = await openEdit();
     await screen.findByTestId('create-modifiers');

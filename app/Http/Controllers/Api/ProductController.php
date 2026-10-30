@@ -76,7 +76,7 @@ class ProductController extends Controller
             ->with(array_merge(
                 ['homeOutlet', 'category'],
                 $withVariants ? ['variants'] : [],
-                $withModifiers ? ['modifierGroups.options', 'category.modifierGroups.options'] : [],
+                $withModifiers ? ['modifierGroups.options', 'category.modifierGroups.options', 'excludedModifierGroups:id'] : [],
             ))
             ->when($request->filled('search'), function ($q) use ($request) {
                 $term = $request->string('search');
@@ -526,7 +526,7 @@ class ProductController extends Controller
         $variants = ProductVariant::query()
             // 084 — grup modifier efektif ikut di-eager-load (hasil pencarian POS web membuka pemilih modifier tanpa
             // permintaan tambahan per kartu; maksimal `limit` varian, jadi tetap konstan).
-            ->with(array_merge(['product.homeOutlet', 'product.category'], $withModifiers ? ['product.modifierGroups.options', 'product.category.modifierGroups.options'] : []))
+            ->with(array_merge(['product.homeOutlet', 'product.category'], $withModifiers ? ['product.modifierGroups.options', 'product.category.modifierGroups.options', 'product.excludedModifierGroups:id'] : []))
             ->where('is_active', true)
             ->when($notCarriedHere !== [], fn ($q) => $q->whereNotIn('product_id', $notCarriedHere))
             // 043 — produk yang didiskontinu tidak lagi bisa dipilih .

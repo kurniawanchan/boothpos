@@ -138,6 +138,15 @@ class Product extends Model
             ->withPivot(['has_rules', 'is_required', 'min_select', 'max_select', 'display_order']);
     }
 
+    /**
+     * 086 — grup kategori yang DILEPAS item ini. BUKAN tautan item (tabel terpisah, lihat migrasinya): hanya dibaca
+     * `ModifierResolver::inheritedGroups`; pembaca lain tidak boleh menganggapnya tautan.
+     */
+    public function excludedModifierGroups(): BelongsToMany
+    {
+        return $this->belongsToMany(ModifierGroup::class, 'modifier_group_product_exclusions');
+    }
+
     /** 043 — tanda 86 (semua, termasuk yang sudah berakhir; pakai `->active()` untuk yang berlaku). */
     public function availabilityMarks(): HasMany
     {

@@ -20,7 +20,8 @@ class ModifierLinkApplier implements ChangeApplier
             return false;
         }
 
-        $this->links->applyLinks($product, $change->payload['links'] ?? [], $by);
+        // 086 — null (kunci tak ada di payload) = pengecualian tak berubah.
+        $this->links->applyLinks($product, $change->payload['links'] ?? [], $by, $change->payload['excluded_group_ids'] ?? null);
 
         return true;
     }

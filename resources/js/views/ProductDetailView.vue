@@ -331,7 +331,7 @@ async function onConflict() {
     />
 
     <VariantsDrawer :open="showVariants" :product="product" @close="showVariants = false" @saved="afterVariantsSaved" />
-    <ModifierLinksDrawer :open="showModifiers" :product="product" :links="product?.modifier_links ?? []" @close="showModifiers = false" @saved="afterModifiersSaved" />
+    <ModifierLinksDrawer :open="showModifiers" :product="product" :links="product?.modifier_links ?? []" :excluded="product?.modifier_excluded ?? []" @close="showModifiers = false" @saved="afterModifiersSaved" />
     <ProductFormDrawer ref="drawer" :outlets="outlets" :categories="categories" @saved="reloadAll" />
   </div>
 </template>

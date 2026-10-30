@@ -7,6 +7,9 @@ import { useToastStore } from '../../resources/js/stores/toast';
 import { saveModifierLinks } from '../../resources/js/api/products';
 import { listModifierGroups } from '../../resources/js/api/modifierGroups';
 import { ApiError } from '../../resources/js/utils/errors';
+import id from '../../resources/js/locales/id.json';
+
+const P = id.products;
 
 vi.mock('../../resources/js/api/products', () => ({ saveModifierLinks: vi.fn() }));
 vi.mock('../../resources/js/api/modifierGroups', () => ({ listModifierGroups: vi.fn() }));
@@ -30,11 +33,11 @@ async function userEv() {
   return userEvent.setup();
 }
 
-function renderDrawer({ release = false, links = LINKS } = {}) {
+function renderDrawer({ release = false, links = LINKS, excluded = [] } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
   useSettingsStore().menuReleaseEnabled = release;
-  return render(ModifierLinksDrawer, { props: { open: true, product: PRODUCT, links }, global: { plugins: [pinia] } });
+  return render(ModifierLinksDrawer, { props: { open: true, product: PRODUCT, links, excluded }, global: { plugins: [pinia] } });
 }
 
 const rows = () => screen.getAllByTestId('ml-row');
@@ -191,4 +194,42 @@ describe('ModifierLinksDrawer (043)', () => {
     expect(await screen.findByRole('combobox', { name: /tautkan grup/i })).toBeInTheDocument();
     expect(screen.queryByTestId('ml-groups-error')).not.toBeInTheDocument();
   }, 30000);
+
+  // 086 — melepas / memulihkan grup warisan kategori di laci.
+  it('releases a category group: moves it to "dilepas" and saves excluded_group_ids as the third argument', async () => {
+    renderDrawer();
+    const user = await userEv();
+
+    await user.click(within(screen.getByTestId('ml-inherited')).getByRole('button', { name: P.ml_exclude_aria.replace('{name}', 'Topping') }));
+    expect(within(screen.getByTestId('im-excluded')).getByText('Topping')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: P.ml_save }));
+
+    await waitFor(() => expect(saveModifierLinks).toHaveBeenCalledTimes(1));
+    const [id, links, excluded] = saveModifierLinks.mock.calls[0];
+    expect(id).toBe(12);
+    expect(links.map((l) => l.group_id)).toEqual([5, 6]);
+    expect(excluded).toEqual([9]);
+  });
+
+  it('does NOT send the exclusion key when nothing about it changed (a plain rule edit keeps exclusions)', async () => {
+    renderDrawer({ excluded: [LINKS[2]], links: LINKS.slice(0, 2) });
+    const user = await userEv();
+    await user.click(screen.getByLabelText('Wajib: Gula'));
+    await user.click(screen.getByRole('button', { name: P.ml_save }));
+
+    await waitFor(() => expect(saveModifierLinks).toHaveBeenCalledTimes(1));
+    expect(saveModifierLinks.mock.calls[0]).toHaveLength(2);
+  });
+
+  it('restores a released group and sends an empty list so the server forgets the exclusion', async () => {
+    renderDrawer({ excluded: [LINKS[2]], links: LINKS.slice(0, 2) });
+    const user = await userEv();
+
+    await user.click(within(screen.getByTestId('im-excluded')).getByRole('button', { name: P.ml_restore_aria.replace('{name}', 'Topping') }));
+    expect(within(screen.getByTestId('im-inherited')).getByText('Topping')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: P.ml_save }));
+
+    await waitFor(() => expect(saveModifierLinks).toHaveBeenCalledTimes(1));
+    expect(saveModifierLinks.mock.calls[0][2]).toEqual([]);
+  });
 });

@@ -150,7 +150,7 @@ class ProductCatalogQuery
         return $this->filtered($f)->with([
             'category:id,name,station_id', 'category.station:id,name', 'station:id,name',
             'variants:id,product_id,sku,variant_name,sell_price,cost_price,is_active',
-            'modifierGroups:id,name', 'category.modifierGroups:id,name',
+            'modifierGroups:id,name', 'category.modifierGroups:id,name', 'excludedModifierGroups:id',
             'availabilityMarks' => fn ($m) => $m->active()->with('reason:id,code,label_id,label_en'),
             // 045 Stage 3 — hanya pasangan yang TIDAK dibawa yang perlu dimuat (tanpa baris = dibawa).
             'outletItemSettings' => fn ($s) => $s->where('is_carried', false),
@@ -294,7 +294,8 @@ class ProductCatalogQuery
             $mark = $p->availabilityMarks->first();
 
             $names = $active->pluck('variant_name')->reject(fn ($n) => $n === null || strcasecmp((string) $n, 'Standard') === 0 || strcasecmp((string) $n, 'Reguler') === 0)->values();
-            $groups = $p->modifierGroups->merge($p->category?->modifierGroups ?? collect())->unique('id')->pluck('name')->values();
+            // 086 — grup warisan dari satu pembaca (yang dilepas item ini tidak ikut); relasi sudah di-eager-load di base().
+            $groups = $p->modifierGroups->merge(app(ModifierResolver::class)->inheritedGroups($p))->unique('id')->pluck('name')->values();
 
             $flags = [];
             if ($p->station_id === null && $p->category?->station_id === null) {
