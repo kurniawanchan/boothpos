@@ -148,6 +148,10 @@ interface PosBackend {
     suspend fun removeLine(tabId: String, lineId: Int, key: String): Order
     /** 077 — catatan kasir untuk seluruh order; [notes] kosong menghapus. Server menolak bila tab sudah tidak terbuka (409). */
     suspend fun setNote(tabId: String, notes: String): Order
+    /** 084 — ubah meja pesanan (terbuka: pindah meja bebas; selesai: koreksi penempatan). */
+    suspend fun moveTab(tabId: String, tableId: Long): Order
+    /** 084 — buang tab kosong (mis. sebelum tutup shift); server menolak bila tab sudah berisi. */
+    suspend fun closeEmptyTab(tabId: String)
     /** 050 / T006 — tab setelah kirim + tiket dapur yang baru dibuat (satu per stasiun) untuk dicetak sebagai KOT. */
     suspend fun sendToKitchen(tabId: String, key: String): KitchenSend
     /** 050 / T008 — satu tiket dapur (untuk cetak ulang KOT). */
@@ -179,5 +183,6 @@ interface PosBackend {
     /** Cetak ulang: salinan pertama gratis, berikutnya wajib [overrideToken]. Mengembalikan copy_no. */
     suspend fun reprintOrder(orderId: String, copyNo: Int, overrideToken: String?, key: String): Int
     suspend fun refundOrder(orderId: String, reasonCode: String, reason: String?, overrideToken: String?, key: String): Order
-    suspend fun closedOrders(): List<Order>
+    /** 084 — [sessionId] = shift terbuka: pesanan shift yang sudah ditutup tidak ikut. */
+    suspend fun closedOrders(sessionId: Long? = null): List<Order>
 }

@@ -3,11 +3,12 @@ package com.warkop.pos.ui
 /**
  * 065 / US5 — teks dan keadaan lembar QRIS di SATU tempat, supaya bisa diuji tanpa perangkat.
  * Lembar tidak lagi memuat peringatan "Jangan terima bukti dari layar ponsel pelanggan" (dihapus atas permintaan
- * pemilik), dan instruksinya mengarahkan ke menu Order tempat kode verifikasi dicatat.
+ * pemilik). 084: QRIS langsung terverifikasi, jadi instruksinya tidak lagi menyuruh mencatat kode verifikasi di menu
+ * Pesanan; kasir cukup mengingat mengecek bukti transaksi.
  */
 object QrisTexts {
-    /** Instruksi di lembar QRIS setelah "Bayar" (spec FR-018, persis). */
-    const val INSTRUCTION = "Cek bukti transaksi di aplikasi QRIS, lalu catat kode verifikasi di menu Order"
+    /** Instruksi di lembar QRIS setelah "Bayar" (084 FR-018, persis). */
+    const val INSTRUCTION = "Jangan lupa untuk cek bukti transaksi di aplikasi QRIS"
 
     const val QR_NOT_SET = "QR belum diatur"
     const val QR_LOAD_FAILED = "QR tidak dapat dimuat"

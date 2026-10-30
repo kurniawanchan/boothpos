@@ -37,7 +37,7 @@ fun showModeBadge(mode: SystemMode): Boolean = mode == SystemMode.DEMO
  * saat gambar tiba. Dipakai di layar penyiapan, PIN, dan header semua layar setelah login.
  */
 @Composable
-fun StoreMark(store: PosStore, modifier: Modifier = Modifier, logoSize: Dp = 40.dp, maxTextWidth: Dp = 220.dp) {
+fun StoreMark(store: PosStore, modifier: Modifier = Modifier, logoSize: Dp = 40.dp, maxTextWidth: Dp = 220.dp, secondLine: String? = null) {
     val b = store.branding
     val name = storeTitle(b?.storeName)
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
@@ -45,7 +45,10 @@ fun StoreMark(store: PosStore, modifier: Modifier = Modifier, logoSize: Dp = 40.
         Spacer(Modifier.width(10.dp))
         Column(Modifier.widthIn(max = maxTextWidth)) {
             Text(name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (showOutletName(b?.outletCount)) store.config?.outletName?.takeIf { it.isNotBlank() }?.let {
+            // 084 — [secondLine] (header: "Shift dibuka …") menggantikan nama outlet, yang di toko tunggal mengulang nama toko.
+            if (secondLine != null) {
+                Text(secondLine, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else if (showOutletName(b?.outletCount)) store.config?.outletName?.takeIf { it.isNotBlank() }?.let {
                 Text(it, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

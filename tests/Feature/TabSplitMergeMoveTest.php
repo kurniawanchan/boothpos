@@ -95,9 +95,18 @@ class TabSplitMergeMoveTest extends TestCase
         $this->postJson("/api/v1/tabs/{$tab}/move", ['table_id' => $off->id])->assertStatus(409);
         $this->postJson("/api/v1/tabs/{$tab}/move", ['table_id' => $a->id])->assertOk()->assertJsonPath('table.id', $a->id); // no-op
 
+        // 084 — tab SELESAI kini boleh dipindah mejanya (koreksi catatan, lihat TabMoveClosedTest); yang tetap ditolak
+        // adalah tab yang dibatalkan.
         $line = $this->line($tab);
         $this->apiPay($tab, [['method' => 'cash', 'amount' => 10000]])->assertOk();
+        $this->apiVoidForTest($tab);
         $this->postJson("/api/v1/tabs/{$tab}/move", ['table_id' => $this->table('9')->id])->assertStatus(409);
+    }
+
+    private function apiVoidForTest(int $tab): void
+    {
+        // Pembatalan di sini hanya untuk menyiapkan keadaan: status void langsung, tanpa alur persetujuan.
+        Order::whereKey($tab)->update(['status' => Order::STATUS_VOIDED]);
     }
 
     public function test_a_takeaway_tab_can_be_seated_at_a_table(): void

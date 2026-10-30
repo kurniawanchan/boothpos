@@ -7,7 +7,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -15,6 +19,7 @@ import com.warkop.pos.model.PosCatalog
 import com.warkop.pos.model.num
 import com.warkop.pos.model.rp
 import com.warkop.pos.state.CountInput
+import com.warkop.pos.state.ThousandsOffsets
 
 /**
  * 065 — isian uang untuk buka dan tutup shift, SATU implementasi dipakai kedua layar: baris pecahan yang terbaca
@@ -56,8 +61,10 @@ fun DenominationGrid(input: CountInput, onChange: (CountInput) -> Unit, columns:
 @Composable
 fun TypedAmountField(input: CountInput, onChange: (CountInput) -> Unit, modifier: Modifier = Modifier, label: String = "Atau ketik total", enabled: Boolean = true) {
     OutlinedTextField(
-        value = input.typedDisplay,
+        // 084 — nilai = digit murni; titik ribuan hanya tampilan (ThousandsVisualTransformation), jadi kursor tidak melompat.
+        value = input.typed,
         onValueChange = { onChange(input.type(it)) },
+        visualTransformation = ThousandsVisualTransformation,
         modifier = modifier.fillMaxWidth(),
         label = { Text(label) },
         prefix = { Text("Rp ") },
@@ -66,5 +73,17 @@ fun TypedAmountField(input: CountInput, onChange: (CountInput) -> Unit, modifier
         enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         shape = RoundedCornerShape(12.dp),
+    )
+}
+
+/** 084 — pemisah ribuan sebagai tampilan; pemetaan kursor dari [ThousandsOffsets] (diuji murni). */
+private val ThousandsVisualTransformation = VisualTransformation { text ->
+    val digits = text.text
+    TransformedText(
+        AnnotatedString(ThousandsOffsets.format(digits)),
+        object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int = ThousandsOffsets.toTransformed(digits, offset)
+            override fun transformedToOriginal(offset: Int): Int = ThousandsOffsets.toOriginal(digits, offset)
+        },
     )
 }

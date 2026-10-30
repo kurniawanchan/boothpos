@@ -74,6 +74,10 @@ interface PosApi {
     suspend fun removeLine(@Path("id") id: Long, @Path("item") item: Long, @Header("Idempotency-Key") key: String): TabDto
     /** 077 — catatan kasir untuk seluruh order; teks kosong menghapus. Menetapkan keadaan, jadi aman diulang. */
     @PUT("tabs/{id}/note") suspend fun setNote(@Path("id") id: Long, @Body body: UpdateNoteRequestDto): TabDto
+    /** 084 — mengubah meja pesanan; pesanan selesai hanya dikoreksi penempatannya (server). */
+    @POST("tabs/{id}/move") suspend fun moveTab(@Path("id") id: Long, @Body body: MoveTabRequestDto): TabDto
+    /** 084 — membuang tab KOSONG (204); server menolak bila sudah berisi. */
+    @DELETE("tabs/{id}") suspend fun closeEmptyTab(@Path("id") id: Long): Response<Unit>
     @POST("tabs/{id}/send") suspend fun send(@Path("id") id: Long, @Header("Idempotency-Key") key: String): SendResponseDto
     @POST("tabs/{id}/payments") suspend fun pay(@Path("id") id: Long, @Body body: PayRequestDto): TabDto
     @POST("tabs/{id}/payments/{pay}/verify") suspend fun verifyPayment(@Path("id") id: Long, @Path("pay") pay: Long, @Body body: VerifyPaymentRequestDto): TabDto
@@ -94,7 +98,8 @@ interface PosApi {
     @POST("devices/heartbeat") suspend fun heartbeat(@Body body: HeartbeatRequestDto): HeartbeatResponseDto
     /** Struk server (T038). Order yang masih terbuka menjawab 409; layar struk hanya dibuka untuk order selesai. */
     @GET("orders/{id}/receipt") suspend fun receipt(@Path("id") id: Long): ReceiptDto
-    @GET("orders") suspend fun closedOrders(@Query("per_page") perPage: Int): ClosedOrdersPage
+    /** 084 — `session_id` membatasi daftar Selesai ke shift yang sedang terbuka; null = perilaku lama. */
+    @GET("orders") suspend fun closedOrders(@Query("per_page") perPage: Int, @Query("session_id") sessionId: Long? = null): ClosedOrdersPage
     /** 050 / T008 — satu tiket dapur untuk cetak ulang KOT. Server menjawab 403 bila pengguna tanpa akses dapur/denah. */
     @GET("tickets/{id}") suspend fun ticket(@Path("id") id: Long): TicketDto
 

@@ -102,7 +102,7 @@ class TabSettlementService
                 $input['purpose'] = $completes ? 'full' : 'down_payment';
                 // 048 — uang tab diterima di shift TEMPAT tab dibuka (satu-satunya shift yang boleh membuka tab):
                 // tanpa ini payments.session_id NULL dan tunai tab hilang dari kas shift, X-report, dan Z-report.
-                $payment = $this->paymentRecorder->record(array_merge($input, ['session_id' => $order->session_id]), $order->id);
+                $payment = $this->paymentRecorder->record(array_merge($input, ['session_id' => $order->session_id], $this->autoVerify($input)), $order->id);
                 // Kunci per-PENGIRIMAN: `client_ref` milik ledger UNIQUE per baris dan tak bisa dipakai bersama
                 // oleh beberapa baris dalam satu pengiriman (lihat migrasi 2026_10_31_000009).
                 $payment->forceFill(['submission_ref' => $ref])->save();
@@ -242,7 +242,7 @@ class TabSettlementService
 
             foreach ($data['payments'] as $input) {
                 $input['purpose'] = 'full';
-                $payment = $this->paymentRecorder->record(array_merge($input, ['session_id' => $paid->session_id]), $paid->id);
+                $payment = $this->paymentRecorder->record(array_merge($input, ['session_id' => $paid->session_id], $this->autoVerify($input)), $paid->id);
                 $payment->forceFill(['submission_ref' => $ref])->save();
             }
 
@@ -304,5 +304,16 @@ class TabSettlementService
         $outletId = $order->outlet_id ?? \App\Models\Device::withoutGlobalScopes()->whereKey($order->device_id)->value('outlet_id');
 
         return $outletId === null ? null : $this->numbering->receiptFor((int) $outletId);
+    }
+
+    /**
+     * 084 — QRIS di jalur tab langsung terverifikasi (tanpa langkah verifikasi manual). Metode lain
+     * tidak berubah. Baris QRIS lama yang masih `pending` tetap bisa diverifikasi lewat rute `verify`.
+     *
+     * @return array{verification?: string}
+     */
+    private function autoVerify(array $input): array
+    {
+        return ($input['method'] ?? null) === 'qr_ewallet' ? ['verification' => 'verified'] : [];
     }
 }

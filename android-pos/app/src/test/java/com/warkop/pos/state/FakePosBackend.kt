@@ -93,11 +93,16 @@ class FakePosBackend : PosBackend {
     override suspend fun verifyPayment(tabId: String, paymentId: Long, reference: String, overrideToken: String?): Order = unused()
     override suspend fun failPayment(tabId: String, paymentId: Long, overrideToken: String?): Order = unused()
     override suspend fun shiftLimits(): ShiftLimits = unused()
-    override suspend fun floor(version: String?): FloorSnapshot? = unused()
+    /** 084 — denah uji; null = panggilan tidak diharapkan. */
+    var floorResult: (() -> FloorSnapshot?)? = null
+    override suspend fun floor(version: String?): FloorSnapshot? = floorResult?.invoke() ?: unused()
     /** 077 — hasil buka tab uji; null = panggilan tidak diharapkan. */
     var openTabResult: (() -> Order)? = null
     override suspend fun openTab(sessionId: Long, tableId: Long?, guests: Int?, localRef: String): Order = openTabResult?.invoke() ?: unused()
-    override suspend fun tab(id: String): Order = unused()
+    /** 084 — detail lengkap pesanan selesai; null = panggilan tidak diharapkan. */
+    var tabResult: ((String) -> Order)? = null
+    val tabCalls = mutableListOf<String>()
+    override suspend fun tab(id: String): Order { tabCalls += id; return tabResult?.invoke(id) ?: unused() }
     /** 075 — varian yang dikirim ke addLine, berurutan; hasilnya diatur lewat [addLineResult]. */
     val addLineCalls = mutableListOf<String>()
     var addLineResult: ((String) -> Order)? = null
@@ -109,6 +114,12 @@ class FakePosBackend : PosBackend {
     /** 077 — catatan yang dikirim ke setNote, berurutan; hasilnya diatur lewat [setNoteResult]. */
     val noteCalls = mutableListOf<Pair<String, String>>()
     var setNoteResult: ((String) -> Order)? = null
+    /** 084 — meja yang dikirim ke moveTab, berurutan; hasil diatur lewat [moveTabResult]. */
+    val moveCalls = mutableListOf<Pair<String, Long>>()
+    var moveTabResult: ((Long) -> Order)? = null
+    override suspend fun moveTab(tabId: String, tableId: Long): Order { moveCalls += tabId to tableId; return moveTabResult?.invoke(tableId) ?: unused() }
+    val emptyClosed = mutableListOf<String>()
+    override suspend fun closeEmptyTab(tabId: String) { emptyClosed += tabId }
     override suspend fun setNote(tabId: String, notes: String): Order { noteCalls += tabId to notes; return setNoteResult?.invoke(notes) ?: unused() }
     override suspend fun removeLine(tabId: String, lineId: Int, key: String): Order = unused()
     override suspend fun sendToKitchen(tabId: String, key: String): KitchenSend = unused()
@@ -123,5 +134,8 @@ class FakePosBackend : PosBackend {
     override suspend fun splitItems(tabId: String, lines: List<Pair<Int, Int>>, cashAmount: String, key: String): SplitItemsResult = unused()
     override suspend fun reprintOrder(orderId: String, copyNo: Int, overrideToken: String?, key: String): Int = unused()
     override suspend fun refundOrder(orderId: String, reasonCode: String, reason: String?, overrideToken: String?, key: String): Order = unused()
-    override suspend fun closedOrders(): List<Order> = unused()
+    /** 084 — shift yang diminta daftar Selesai, berurutan; hasil diatur lewat [closedOrdersResult]. */
+    val closedSessionRequests = mutableListOf<Long?>()
+    var closedOrdersResult: (() -> List<Order>)? = null
+    override suspend fun closedOrders(sessionId: Long?): List<Order> { closedSessionRequests += sessionId; return closedOrdersResult?.invoke() ?: unused() }
 }

@@ -18,6 +18,8 @@ const props = defineProps({
   basePrice: { type: [String, Number], default: '0' },
   groups: { type: Array, default: () => [] }, // grup efektif aktif beserta opsi aktif
   submitting: { type: Boolean, default: false },
+  // 084 — POS ritel (POST /orders) tidak menyimpan catatan per baris; menyembunyikannya mencegah catatan yang hilang diam-diam.
+  showNote: { type: Boolean, default: true },
 });
 const emit = defineEmits(['close', 'confirm']);
 const { t } = useI18n();
@@ -99,7 +101,7 @@ function confirm() {
         </label>
       </fieldset>
 
-      <label class="flex flex-col gap-1.5 text-[12.5px] font-semibold text-muted-4">
+      <label v-if="showNote" class="flex flex-col gap-1.5 text-[12.5px] font-semibold text-muted-4">
         {{ t('floor.tab.mod_note') }}
         <textarea
           v-model="note"

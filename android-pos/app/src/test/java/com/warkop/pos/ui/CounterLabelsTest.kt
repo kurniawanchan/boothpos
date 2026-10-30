@@ -1,6 +1,10 @@
 package com.warkop.pos.ui
 
+import com.warkop.pos.model.FloorTab
+import com.warkop.pos.model.FloorTable
+import com.warkop.pos.model.OrderKind
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** 055 / T042 — Kirim menyimpan jumlah (keputusan), Bayar tanpa nominal, pelayan tetap "Cetak pre-bill". */
@@ -76,5 +80,44 @@ class DiscountRowLabelsTest {
     @Test fun `dengan potongan label dan jumlah negatif`() {
         assertEquals("Potongan 10 % · Promo", discountRowLabel(6000, 10, "Promo"))
         assertEquals("-Rp 6.000", discountRowAmount(6000))
+    }
+}
+
+/** 084 — judul/keterangan/petunjuk layar Kasir dan pilihan meja (fungsi murni di CounterLabels.kt). */
+class KasirScreenLabelsTest {
+    @Test fun `judul counter hanya nomor antrean`() {
+        assertEquals("12", kasirTitle(OrderKind.COUNTER, "12", null))
+    }
+
+    @Test fun `judul counter tanpa nomor jatuh ke Kasir dan bukan kosong`() {
+        assertEquals("Kasir", kasirTitle(OrderKind.COUNTER, null, null))
+        assertEquals("Kasir", kasirTitle(OrderKind.COUNTER, "  ", null))
+    }
+
+    @Test fun `judul pesanan meja tetap Meja dengan namanya`() {
+        assertEquals("Meja 5", kasirTitle(OrderKind.DINE_IN, null, "5"))
+    }
+
+    @Test fun `keterangan counter dihapus dan dine in tetap`() {
+        assertNull(kasirSubtitle(OrderKind.COUNTER, "Kasir 01"))
+        assertEquals("Dine-in · Budi", kasirSubtitle(OrderKind.DINE_IN, "Budi"))
+    }
+
+    @Test fun `petunjuk kosong memakai kata Pilih`() {
+        assertEquals("Pilih menu untuk menambah item", HINT_PICK_MENU)
+        assertEquals("Pilih dan tahan menu untuk menandai habis.", HINT_HOLD_SOLD_OUT)
+    }
+
+    private fun tab(id: Long) = FloorTab(id, null, null, 0, 0, 1, false, null, null, 0, 0, "10:00")
+    private fun table(id: Long, name: String, active: Boolean = true, tab: FloorTab? = null) = FloorTable(id, name, "Indoor", 4, active, tab)
+
+    @Test fun `pilihan meja hanya meja aktif dan kosong ditambah meja pesanan itu sendiri`() {
+        val tables = listOf(
+            table(1, "1"), table(2, "2", tab = tab(9)), table(3, "3", active = false),
+            table(4, "4", tab = tab(10)), table(5, "5"),
+        )
+
+        assertEquals(listOf("1", "4", "5"), selectableTables(tables, currentTable = "4").map { it.name })
+        assertEquals(listOf("1", "5"), selectableTables(tables, currentTable = null).map { it.name })
     }
 }

@@ -131,10 +131,10 @@ private fun ColumnScope.Title(text: String, sub: String? = null, onClose: (() ->
 
 @Composable
 private fun ColumnScope.PaxSheet(store: PosStore, s: Sheet.Pax) {
-    Title("Meja ${s.table}", "Ketuk jumlah tamu untuk membuka order meja.", { store.show(null) })
+    Title("Meja ${s.table}", "Ketuk jumlah tamu untuk membuka pesanan meja.", { store.show(null) })
     (1..8).chunked(4).forEach { row ->
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            row.forEach { n -> Surface(modifier = Modifier.weight(1f).height(64.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { store.openTable(s.table, n) }) { Box(contentAlignment = Alignment.Center) { Text("$n", fontSize = 22.sp, fontWeight = FontWeight.Medium) } } }
+            row.forEach { n -> Surface(modifier = Modifier.weight(1f).height(64.dp), shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceContainerHigh, onClick = { store.openTable(s.table, n) }) { Box(contentAlignment = Alignment.Center) { Text("$n", fontSize = 22.sp, fontWeight = FontWeight.Medium) } } }
         }
     }
 }
@@ -241,13 +241,13 @@ private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
 @Composable
 private fun OrderActionsSheet(store: PosStore) {
     val o = store.active ?: return
-    SheetScaffold(o.label, "Aksi order", { store.show(null) }) {
+    SheetScaffold(o.label, "Aksi pesanan", { store.show(null) }) {
         ActionRow(Icons.Filled.Receipt, "Cetak pre-bill", "Tagihan sementara dengan tanda BELUM LUNAS") { store.printPrebill() }
         // 050 / T054 — KOT tidak dicetak ulang dari server; hanya tiket yang sudah pernah dicetak untuk tab ini.
         if (o.lines.any { it.fired }) ActionRow(Icons.Filled.Receipt, "Cetak ulang KOT", "Tiket dapur yang sudah dikirim, untuk dapur") { store.reprintKot() }
-        ActionRow(Icons.Filled.Percent, "Diskon order", "Alasan dan persentase dari server") { store.show(Sheet.Discount()) }
+        ActionRow(Icons.Filled.Percent, "Diskon pesanan", "Alasan dan persentase dari server") { store.show(Sheet.Discount()) }
         ActionRow(Icons.Filled.CallSplit, "Bagi bill", "Per item atau rata per orang") { store.show(Sheet.Split) }
-        ActionRow(Icons.Filled.Cancel, "Batalkan order", "Perlu alasan", danger = true) { store.show(Sheet.Void(null)) }
+        ActionRow(Icons.Filled.Cancel, "Batalkan pesanan", "Perlu alasan", danger = true) { store.show(Sheet.Void(null)) }
     }
 }
 
@@ -258,7 +258,7 @@ private fun DiscountSheet(store: PosStore, s: Sheet.Discount) {
     var percent by remember(s) { mutableIntStateOf(10) }
     var reason by remember(s) { mutableStateOf<ReasonCode?>(null) }
     LaunchedEffect(s) { store.loadDiscountReasons() }
-    val title = if (line == null) "Diskon order" else "Diskon item"
+    val title = if (line == null) "Diskon pesanan" else "Diskon item"
     val sub = if (line == null) "${o.label} · subtotal ${rp(o.gross)}" else "${line.qty}× ${line.name} · ${rp(line.net)}"
     SheetScaffold(title, sub, { store.show(null) }, footer = {
         PrimaryPill("Terapkan diskon", { reason?.let { r -> store.applyDiscount(percent.toDouble(), r, s.lineId) } }, Modifier.fillMaxWidth(), enabled = reason != null)
@@ -277,7 +277,7 @@ private fun DiscountSheet(store: PosStore, s: Sheet.Discount) {
             is Load.Failed -> ErrorState(r.error.message, { store.loadDiscountReasons() }, Modifier.fillMaxWidth())
             else -> Text("Memuat alasan…", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (line == null && (o.serverDiscount ?: 0) > 0) TextButton({ store.clearOrderDiscount() }) { Text("Hapus diskon order") }
+        if (line == null && (o.serverDiscount ?: 0) > 0) TextButton({ store.clearOrderDiscount() }) { Text("Hapus diskon pesanan") }
         Text("Batas diskon per peran ditentukan server; di atas batas diminta persetujuan. Total yang tampil dari server.", Modifier.padding(top = 10.dp), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -336,8 +336,8 @@ private fun ColumnScope.RefundDialog(store: PosStore, s: Sheet.Refund) {
     var note by remember(s) { mutableStateOf("") }
     LaunchedEffect(s) { store.loadRefundReasons() }
     Icon(Icons.Filled.WarningAmber, null, Modifier.align(Alignment.CenterHorizontally).size(36.dp), tint = MaterialTheme.colorScheme.primary)
-    Text("Refund order penuh?", Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp, bottom = 6.dp), fontSize = 26.sp)
-    Text("Stok dikembalikan dan kas tunai shift dibalik. Hanya untuk order yang sudah lunas.", Modifier.padding(bottom = 10.dp), fontSize = 16.sp)
+    Text("Refund pesanan penuh?", Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp, bottom = 6.dp), fontSize = 26.sp)
+    Text("Stok dikembalikan dan kas tunai shift dibalik. Hanya untuk pesanan yang sudah lunas.", Modifier.padding(bottom = 10.dp), fontSize = 16.sp)
     when (val r = store.refundReasons) {
         is Load.Ready -> if (r.value.isEmpty()) {
             Text("Server belum punya alasan refund aktif (kategori refund). Refund belum bisa diproses dari sini.", color = MaterialTheme.colorScheme.error, fontSize = 15.sp)
@@ -363,7 +363,7 @@ private fun ColumnScope.VoidDialog(store: PosStore, s: Sheet.Void) {
     var reason by remember { mutableStateOf<String?>(reasons.first()) }
     var made by remember { mutableStateOf(false) }
     val line = s.lineId?.let { id -> store.active?.lines?.firstOrNull { it.id == id } }
-    Text(if (cancel) "Batalkan order?" else "Void ${line?.qty ?: 1}× ${line?.name ?: "item"}", fontSize = 26.sp, lineHeight = 32.sp)
+    Text(if (cancel) "Batalkan pesanan?" else "Void ${line?.qty ?: 1}× ${line?.name ?: "item"}", fontSize = 26.sp, lineHeight = 32.sp)
     Text(if (cancel) "Item terkirim diproses sebagai void." else "Item sudah dikirim ke dapur. Slip BATAL masuk antrean cetak dapur.", Modifier.padding(top = 14.dp, bottom = 10.dp), fontSize = 17.sp)
     reasons.forEach { r -> RadioRow(r, reason == r, { reason = r }, big = true) }
     if (!cancel) {
@@ -376,7 +376,7 @@ private fun ColumnScope.VoidDialog(store: PosStore, s: Sheet.Void) {
         Spacer(Modifier.width(12.dp))
         Button({ reason?.let { r -> if (cancel) store.cancelOrder(r) else store.voidLine(s.lineId!!, r, made) } }, Modifier.height(52.dp), enabled = reason != null) {
             if (store.user?.isSupervisor != true) { Icon(Icons.Filled.Lock, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)) }
-            Text(if (cancel) "Batalkan order" else "Void", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+            Text(if (cancel) "Batalkan pesanan" else "Void", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
         }
     }
 }
@@ -469,8 +469,12 @@ private fun ColumnScope.EdcDialog(store: PosStore) {
     val banks = (store.edcBanks as? Load.Ready)?.value.orEmpty()
     // Satu bank: dipilih otomatis. Lebih dari satu: kasir memilih dulu; kode approval baru bisa diisi setelah itu.
     val bank = if (banks.size == 1) banks.single() else picked?.takeIf { p -> banks.any { it.id == p.id } }
-    Icon(Icons.Filled.CreditCard, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
-    Text("EDC", Modifier.padding(top = 10.dp), fontSize = 30.sp)
+    // 084 — ikon dan judul "EDC" satu baris (sama dengan lembar QRIS), bukan ikon di atas judul.
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Icon(Icons.Filled.CreditCard, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(12.dp))
+        Text("EDC", fontSize = 30.sp)
+    }
     Text("Masukkan nominal ini di mesin EDC", Modifier.padding(top = 18.dp), fontSize = 17.sp)
     Text(rp(o.remaining), Modifier.padding(vertical = 6.dp), fontSize = 56.sp, fontWeight = FontWeight.Light)
     when (val loaded = store.edcBanks) {
@@ -730,7 +734,7 @@ private fun VariantPickerSheet(store: PosStore, s: Sheet.VariantPicker) {
     if (entry == null) { LaunchedEffect(s) { store.show(null) }; return }
     val tone = store.menu?.categories?.firstOrNull { it.id == entry.cat }?.tone ?: Tone.OUTLINE
     SheetScaffold(entry.name, entry.categoryName.ifBlank { null }, onClose = { store.show(null) }) {
-        Text("Pilih varian untuk ditambahkan ke order", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp))
+        Text("Pilih varian untuk ditambahkan ke pesanan", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 10.dp))
         entry.variants.forEach { v ->
             val habis = v.id in store.soldOut
             Surface(

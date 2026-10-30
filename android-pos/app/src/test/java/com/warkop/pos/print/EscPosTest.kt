@@ -64,8 +64,8 @@ class EscPosTest {
         assertEquals(listOf("A".repeat(32), "A".repeat(8)), wrapped)
     }
 
-    @Test fun `karakter non-ASCII diganti tanda tanya`() {
-        assertEquals("Kopi ?", EscPos.sanitize("Kopi é"))
+    @Test fun `huruf beraksen diganti huruf dasar bukan tanda tanya`() {
+        assertEquals("Kopi e", EscPos.sanitize("Kopi é"))
     }
 
     @Test fun `baris kanan-kiri mengisi tepat satu baris kertas`() {

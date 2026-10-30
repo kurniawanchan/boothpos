@@ -34,3 +34,31 @@ data class CountInput(val counts: Map<Int, Int> = emptyMap(), val typed: String 
         const val MAX_DIGITS = 9
     }
 }
+
+/**
+ * 084 — pemetaan posisi kursor antara digit murni ("1234567") dan tampilannya ("1.234.567"). Dulu kolom diberi String yang
+ * SUDAH berformat; tiap ketikan menulis ulang teks berbeda dari yang diketik sehingga Compose menaruh kursor di awal setelah
+ * lebih dari tiga digit. Sekarang kolom menyimpan digit murni dan pemisah ribuan hanya TAMPILAN (VisualTransformation) —
+ * fungsi murni ini jadi pemetaan kursornya, supaya bisa diuji tanpa perangkat.
+ */
+object ThousandsOffsets {
+    /** "1234567" → "1.234.567"; kosong tetap kosong. Sama dengan [CountInput.typedDisplay]. */
+    fun format(digits: String): String = digits.reversed().chunked(3).joinToString(".").reversed()
+
+    /** Posisi kursor di digit ([offset], 0..panjang) → posisi di teks berformat. */
+    fun toTransformed(digits: String, offset: Int): Int {
+        val n = digits.length
+        val o = offset.coerceIn(0, n)
+        if (o == 0) return 0
+        val i = o - 1 // digit terakhir sebelum kursor
+        val dotsBeforeDigit = (n - 1) / 3 - (n - 1 - i) / 3
+        return i + dotsBeforeDigit + 1
+    }
+
+    /** Posisi kursor di teks berformat ([offset]) → posisi di digit: titik tidak dihitung. */
+    fun toOriginal(digits: String, offset: Int): Int {
+        val shown = format(digits)
+        val t = offset.coerceIn(0, shown.length)
+        return shown.take(t).count { it != '.' }
+    }
+}

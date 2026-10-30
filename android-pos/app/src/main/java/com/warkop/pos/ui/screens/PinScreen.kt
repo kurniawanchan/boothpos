@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.warkop.pos.model.StaffUser
+import com.warkop.pos.ui.liveClockText
 import com.warkop.pos.state.Conn
 import com.warkop.pos.state.Load
 import com.warkop.pos.state.PosStore
@@ -209,7 +210,7 @@ private fun PinDot(filled: Boolean) {
  */
 @Composable
 private fun BrandPanel(store: PosStore, modifier: Modifier, bigClock: Boolean, content: (@Composable (Modifier) -> Unit)?) {
-    val time = remember { SimpleDateFormat("HH:mm", Locale.US).format(Date()) }
+    val time = liveClockText() // 084 — berdetak; dulu dihitung sekali dan membeku
     Surface(modifier, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
         Column(Modifier.padding(28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

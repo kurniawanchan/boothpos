@@ -69,7 +69,10 @@ class PaymentRecorder
             // Tunai dianggap terverifikasi seketika (kasir menghitung
             // langsung di tempat). Non-tunai menunggu verifikasi manual
             // terhadap mutasi rekening.
-            'verification' => $method === 'cash' ? 'verified' : 'pending',
+            // 084 — pemanggil jalur tab/POS tablet boleh meminta `verification = verified` untuk QRIS
+            // (keputusan pemilik 2026-10-30). Hanya nilai itu yang dihormati; masukan klien tidak
+            // pernah sampai ke sini karena kunci ini tidak ada di aturan validasi mana pun.
+            'verification' => $method === 'cash' || ($input['verification'] ?? null) === 'verified' ? 'verified' : 'pending',
             'paid_at' => now(),
             'notes' => $input['notes'] ?? null,
             // 028-partial-split-payment — jejak buku besar. Semuanya opsional supaya

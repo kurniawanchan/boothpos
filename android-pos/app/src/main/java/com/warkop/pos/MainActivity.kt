@@ -16,6 +16,7 @@ import com.warkop.pos.ui.autoDark
 /** 055 / T034 — kunci shared preferences untuk tampil/sembunyi total di counter. */
 private const val TOTALS_KEY = "counter_totals_visible"
 private const val SPLIT_KEY = "counter_split_fraction"
+private const val RAIL_KEY = "rail_visible"
 
 /** Satu activity; seluruh navigasi dipegang PosStore (lihat state/PosStore.kt) mengikuti prototipe desain. */
 class MainActivity : ComponentActivity() {
@@ -35,7 +36,12 @@ class MainActivity : ComponentActivity() {
                     read = { if (prefs.contains(SPLIT_KEY)) prefs.getFloat(SPLIT_KEY, com.warkop.pos.state.SPLIT_DEFAULT) else null },
                     write = { prefs.edit().putFloat(SPLIT_KEY, it).apply() },
                 )
-                return PosStore(container.backend, container.backend, container.printer, totalsPref = totals, splitPref = split, announcer = container.queueAnnouncer) as T
+                // 084 — tampil/sembunyi sidebar per perangkat.
+                val rail = com.warkop.pos.state.RailPreference(
+                    read = { if (prefs.contains(RAIL_KEY)) prefs.getBoolean(RAIL_KEY, true) else null },
+                    write = { prefs.edit().putBoolean(RAIL_KEY, it).apply() },
+                )
+                return PosStore(container.backend, container.backend, container.printer, totalsPref = totals, splitPref = split, announcer = container.queueAnnouncer, railPref = rail) as T
             }
         }
     }

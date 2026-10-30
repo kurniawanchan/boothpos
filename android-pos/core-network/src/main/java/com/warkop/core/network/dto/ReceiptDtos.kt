@@ -48,7 +48,11 @@ import kotlinx.serialization.Serializable
     val price: String = "0.00",
     @SerialName("line_total") val lineTotal: String = "0.00",
     val note: String? = null,
+    /** 084 — pilihan modifier baris (snapshot server); dulu tidak dibaca sehingga struk Android tak mencetaknya. */
+    val modifiers: List<ReceiptModifierDto> = emptyList(),
 )
+
+@Serializable data class ReceiptModifierDto(val group: String = "", val option: String = "")
 
 @Serializable data class ReceiptPaymentDto(
     val method: String = "",

@@ -106,7 +106,8 @@ data class Order(
     /** 077 — catatan kasir untuk seluruh order (dari server; kosong = tanpa catatan). Beda dari catatan per baris. */
     val note: String = "",
 ) {
-    val label: String get() = if (kind == OrderKind.COUNTER) "Counter ${queue ?: ""}".trim() else "Meja ${table ?: ""}"
+    // 084 — istilah baku: "Kasir" (dulu "Counter"). Judul layar Kasir memakai nomor saja (kasirTitle); daftar dan struk memakai label ini.
+    val label: String get() = if (kind == OrderKind.COUNTER) "Kasir ${queue ?: ""}".trim() else "Meja ${table ?: ""}"
     val live: List<OrderLine> get() = lines.filter { !it.voided }
     val gross: Int get() = serverSubtotal ?: live.sumOf { it.net }
     val discount: Int get() = serverDiscount ?: (gross * discPct / 100.0).roundToInt()
@@ -134,8 +135,13 @@ data class ShiftReport(
     /** 065 — kas seharusnya di laci dari server (null bila server lama belum mengirim). Ditampilkan di layar tutup shift. */
     val expectedCash: Int? = null,
 ) {
-    /** Tunai bersih di laci = tunai diterima dikurangi kembalian. */
+    /** Tunai (bersih) di laci = tunai diterima dikurangi kembalian. */
     val netCash: Int get() = cashReceived - changeGiven
+    /**
+     * 084 — EDC = metode `edc` (bukan `bank_transfer`, yang tablet tak bisa catat). CATATAN: laporan server hanya menghitung
+     * pembayaran terverifikasi dan EDC dicatat `pending`, jadi angka ini bisa 0 walau ada EDC (lihat evidence.md, temuan).
+     */
+    val edc: Int get() = amountOf("edc")
     fun amountOf(method: String): Int = byMethod.firstOrNull { it.method == method }?.amount ?: 0
 }
 
@@ -165,7 +171,8 @@ data class BankChannel(val id: Long, val name: String)
 data class QrisChannel(val id: Long, val provider: String, val accountName: String?, val qrImageUrl: String?, val canManageQr: Boolean = false)
 
 /** 048 / T038 — satu baris struk. */
-data class ReceiptLine(val name: String, val qty: Int, val lineTotal: Int, val note: String?)
+/** 084 — [mods] = nama opsi modifier yang dipilih (snapshot server), dicetak di bawah nama item. */
+data class ReceiptLine(val name: String, val qty: Int, val lineTotal: Int, val note: String?, val mods: List<String> = emptyList())
 
 /**
  * 048 / T038 — struk dari server. Semua angka rupiah berasal dari server; [taxRatePercent] hanya untuk label.

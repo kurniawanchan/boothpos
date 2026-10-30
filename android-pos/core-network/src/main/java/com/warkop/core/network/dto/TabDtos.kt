@@ -168,3 +168,6 @@ import kotlinx.serialization.Serializable
  * teks kosong berarti hapus catatan. (ApiClient memakai explicitNulls = false, jadi null tidak akan pernah terkirim.)
  */
 @Serializable data class UpdateNoteRequestDto(val notes: String)
+
+/** 084 — POST /tabs/{id}/move: pindah/ubah meja pesanan (terbuka maupun selesai). */
+@Serializable data class MoveTabRequestDto(@SerialName("table_id") val tableId: Long)

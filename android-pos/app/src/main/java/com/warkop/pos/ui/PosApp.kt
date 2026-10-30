@@ -65,7 +65,7 @@ private fun ModeChangedDialog(store: PosStore) {
     AlertDialog(
         onDismissRequest = {},
         title = { Text("Mode berubah ke ${new.name}") },
-        text = { Text("Mode berubah ke ${new.name}. Keluar lalu masuk lagi untuk melanjutkan. Order yang sedang terbuka tetap tersimpan.") },
+        text = { Text("Mode berubah ke ${new.name}. Keluar lalu masuk lagi untuk melanjutkan. Pesanan yang sedang terbuka tetap tersimpan.") },
         confirmButton = { TextButton({ store.leaveForNewMode() }) { Text("Keluar") } },
     )
 }

@@ -42,9 +42,40 @@ object EscPos {
     private const val GS = 0x1D
     private const val LF = 0x0A
 
-    /** Karakter di luar ASCII yang dapat dicetak diganti `?` (bukan byte UTF-8 yang bisa tercetak sebagai sampah). */
-    fun sanitize(s: String): String =
-        s.replace("\r\n", " ").replace('\n', ' ').map { c -> if (c.code in 0x20..0x7E) c else '?' }.joinToString("")
+    /**
+     * Teks aman untuk printer ASCII 58 mm. 084 — dulu semua karakter di luar ASCII jadi `?` (tanda kutip tipografis,
+     * "—", "·", "é" di nama menu tercetak "?"). Sekarang: (1) tabel padanan eksplisit untuk tanda baca umum, (2) huruf
+     * beraksen diuraikan (NFD) dan tanda aksennya dibuang ("é" → "e"), (3) sisanya (emoji, aksara lain) DIBUANG, bukan
+     * diganti `?`. `?` yang memang ada di masukan tetap. Printer tak diketahui code page-nya (TM-58V belum divalidasi), jadi
+     * transliterasi bebas-perangkat dipilih; lihat research.md D5.
+     */
+    fun sanitize(s: String): String {
+        val flat = java.text.Normalizer.normalize(s.replace("\r\n", " ").replace('\n', ' '), java.text.Normalizer.Form.NFD)
+        val out = StringBuilder()
+        var droppedJustNow = false
+        for (c in flat) {
+            val mapped = when {
+                c.code in 0x20..0x7E -> c.toString()
+                TRANSLIT.containsKey(c) -> TRANSLIT.getValue(c)
+                Character.getType(c) == Character.NON_SPACING_MARK.toInt() -> "" // aksen hasil NFD
+                else -> null
+            }
+            if (mapped == null) { droppedJustNow = true; continue }
+            // Membuang karakter di antara dua spasi tidak boleh meninggalkan spasi ganda ("Es 🧊 manis").
+            if (droppedJustNow && mapped == " " && out.isNotEmpty() && out.last() == ' ') { droppedJustNow = false; continue }
+            out.append(mapped)
+            if (mapped.isNotEmpty()) droppedJustNow = false
+        }
+        return out.toString()
+    }
+
+    private val TRANSLIT: Map<Char, String> = mapOf(
+        '\u2018' to "'", '\u2019' to "'", '\u201A' to "'", '\u201C' to "\"", '\u201D' to "\"", '\u201E' to "\"",
+        '\u2013' to "-", '\u2014' to "-", '\u2212' to "-", '\u2010' to "-", '\u2011' to "-",
+        '\u2026' to "...", '\u00B7' to "-", '\u2022' to "-", '\u00D7' to "x", '\u00F7' to "/",
+        '\u00A0' to " ", '\u2009' to " ", '\u202F' to " ", '\u2192' to "->", '\u00B0' to "o",
+        '\u00A9' to "(c)", '\u00AE' to "(R)", '\u20AC' to "EUR",
+    )
 
     /** Pemotongan kata sederhana; kata yang lebih panjang dari [width] dipecah keras. Selalu mengembalikan minimal satu baris. */
     fun wrap(text: String, width: Int): List<String> {

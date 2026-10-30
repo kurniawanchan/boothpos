@@ -32,6 +32,8 @@ import java.util.UUID
 sealed interface PrinterStatus {
     data object NotConfigured : PrinterStatus
     data object Disconnected : PrinterStatus
+    /** 084 — sedang membuka koneksi (hingga batas waktu 5 dtk); layar Koneksi menampilkan indikator progres. */
+    data object Connecting : PrinterStatus
     data object Connected : PrinterStatus
     data class Error(val error: PrintError) : PrinterStatus
 }
@@ -100,8 +102,10 @@ class PrinterService(
             _status.value = PrinterStatus.NotConfigured
             return
         }
+        _status.value = PrinterStatus.Connecting
         val socket = openSocket(config.address)
-        _status.value = if (socket == null) PrinterStatus.Disconnected else PrinterStatus.Connected
+        // 084 — gagal tersambung dibedakan dari "terputus": percobaan sudah dilakukan dan alasannya diketahui.
+        _status.value = if (socket == null) PrinterStatus.Error(connectFailure()) else PrinterStatus.Connected
         socket?.let { runCatching { it.close() } }
     }
 
@@ -226,6 +230,7 @@ class PrinterService(
         }
         val bytes = EscPos.render(lines)
 
+        _status.value = PrinterStatus.Connecting // 084 — indikator progres selama soket dibuka
         val socket = openSocket(config.address) ?: return PrintError.OUT_OF_RANGE
         return try {
             if (paperOut(socket)) return PrintError.PAPER_OUT
@@ -286,6 +291,13 @@ class PrinterService(
 
     private fun adapter() = context.getSystemService(BluetoothManager::class.java)?.adapter
 
+    /** Alasan gagal membuka sambungan, dari yang paling mudah diperbaiki kasir. */
+    private fun connectFailure(): PrintError = when {
+        !hasConnectPermission() -> PrintError.PERMISSION_DENIED
+        adapter()?.isEnabled != true -> PrintError.BLUETOOTH_OFF
+        else -> PrintError.OUT_OF_RANGE
+    }
+
     private fun hasConnectPermission(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
@@ -324,3 +336,35 @@ fun printErrorMessage(error: PrintError): String = when (error) {
     PrintError.PAPER_OUT -> "Kertas habis"
     PrintError.WRITE_ERROR -> "Gagal mencetak, coba lagi"
 }
+
+/**
+ * 084 — status printer untuk layar Koneksi: Menyambung, Tersambung, Terputus, Gagal tersambung. Kegagalan yang berasal
+ * dari sambungan (di luar jangkauan, Bluetooth mati, izin ditolak) disebut "Gagal tersambung"; kegagalan cetak (kertas
+ * habis, gagal menulis) memakai pesannya sendiri karena sambungannya berhasil.
+ */
+fun printerStatusLabel(status: PrinterStatus): String = when (status) {
+    PrinterStatus.NotConfigured -> "Belum dipasang"
+    PrinterStatus.Connecting -> "Menyambung"
+    PrinterStatus.Connected -> "Tersambung"
+    PrinterStatus.Disconnected -> "Terputus"
+    is PrinterStatus.Error -> when (status.error) {
+        PrintError.OUT_OF_RANGE, PrintError.BLUETOOTH_OFF, PrintError.PERMISSION_DENIED -> "Gagal tersambung"
+        else -> printErrorMessage(status.error)
+    }
+}
+
+fun printerStatusNote(status: PrinterStatus): String = when (status) {
+    PrinterStatus.NotConfigured -> "Pilih printer VSC TM-58V (kertas 58 mm) yang sudah dipasangkan di Bluetooth."
+    PrinterStatus.Connecting -> "Menyambungkan printer. Cetakan tetap masuk antrean."
+    PrinterStatus.Disconnected -> "Printer dipilih tetapi belum tersambung. Cetakan tetap masuk antrean."
+    PrinterStatus.Connected -> "Printer siap. Struk dan KOT tercetak otomatis."
+    is PrinterStatus.Error -> when (status.error) {
+        PrintError.OUT_OF_RANGE -> "Printer tidak terjangkau. Dekatkan printer dan pastikan menyala, lalu coba lagi."
+        PrintError.BLUETOOTH_OFF -> "Nyalakan Bluetooth di tablet, lalu coba lagi."
+        PrintError.PERMISSION_DENIED -> "Beri izin Bluetooth untuk aplikasi, lalu coba lagi."
+        else -> "Cetakan yang gagal tetap ada di antrean dan bisa dicoba lagi."
+    }
+}
+
+/** 084 — indikator progres tampil hanya selagi menyambung. */
+fun printerShowsProgress(status: PrinterStatus): Boolean = status == PrinterStatus.Connecting

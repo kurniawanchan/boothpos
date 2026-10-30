@@ -60,10 +60,10 @@ export function uploadVariantImage(id, file) {
  * browsable page from the backend (no longer short-circuited here), so
  * item pickers can show a list on open.
  */
-export function lookupVariants(q, limit = 20, { pos = false, stockOutlet = null } = {}) {
+export function lookupVariants(q, limit = 20, { pos = false, stockOutlet = null, withModifiers = false } = {}) {
   // 045 Stage 4: `pos` = layar pemesanan — menu/harga menurut outlet SHIFT pengguna.
   // 045 Stage 5: `stockOutlet` = layar Stok — hasil membawa `outlet_stock` (saldo di outlet itu).
-  return client.get('/variants/lookup', { params: { q, limit, ...(pos ? { pos: 1 } : {}), ...(stockOutlet ? { stock_outlet: stockOutlet } : {}) } }).then((r) => r.data);
+  return client.get('/variants/lookup', { params: { q, limit, ...(pos ? { pos: 1 } : {}), ...(stockOutlet ? { stock_outlet: stockOutlet } : {}), ...(withModifiers ? { with_modifiers: 1 } : {}) } }).then((r) => r.data);
 }
 
 // --- 043-products-page-redesign: tindakan item (kontrak api-products.md) ---------------------------------------

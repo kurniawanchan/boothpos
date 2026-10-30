@@ -2,6 +2,16 @@ import { defineStore } from 'pinia';
 import { parseMoney, toMoneyString } from '../utils/money';
 
 /**
+ * 084 — kunci baris keranjang: varian + pilihan modifier terurut. Varian yang sama dengan pilihan
+ * berbeda adalah DUA baris (harga dan struknya berbeda); tanpa modifier kuncinya tetap id varian,
+ * sehingga perilaku lama (dan tes lama yang memanggil `increment(variantId)`) tidak berubah.
+ */
+export function cartLineKey(item) {
+  const ids = [...(item.modifier_option_ids ?? [])].sort((a, b) => a - b);
+  return ids.length ? `${item.variant_id}:${ids.join(',')}` : String(item.variant_id);
+}
+
+/**
  * The POS cart is shared between the navigation rail badge (RailNav) and the
  * Kasir screen (PosView + PosCartPanel + PosPaymentModal) — three
  * components with no closer common ancestor than the app root, and it
@@ -12,34 +22,42 @@ import { parseMoney, toMoneyString } from '../utils/money';
  */
 export const usePosCartStore = defineStore('posCart', {
   state: () => ({
-    items: [], // { variant_id, sku, name, home_outlet_name, sell_price, current_stock, qty }
+    // { variant_id, sku, name, home_outlet_name, sell_price, current_stock, qty,
+    //   modifier_option_ids?, modifiers? (tampilan: [{ group, option }]) } — sell_price sudah termasuk selisih modifier
+    // HANYA untuk tampilan; server menghitung ulang dari id opsi (ModifierResolver).
+    items: [],
   }),
   getters: {
     count: (state) => state.items.reduce((sum, i) => sum + i.qty, 0),
     isEmpty: (state) => state.items.length === 0,
+    hasModifiers: (state) => state.items.some((i) => (i.modifier_option_ids ?? []).length > 0),
     subtotal: (state) => toMoneyString(state.items.reduce((sum, i) => sum + parseMoney(i.sell_price) * i.qty, 0)),
   },
   actions: {
+    findLine(key) {
+      return this.items.find((i) => cartLineKey(i) === String(key));
+    },
     add(variant) {
-      const existing = this.items.find((i) => i.variant_id === variant.variant_id);
+      const existing = this.findLine(cartLineKey(variant));
       if (existing) {
         existing.qty += 1;
         return;
       }
       this.items.push({ ...variant, qty: 1 });
     },
-    increment(variantId) {
-      const item = this.items.find((i) => i.variant_id === variantId);
+    // `key` = kunci baris (`cartLineKey`) atau id varian untuk baris tanpa modifier.
+    increment(key) {
+      const item = this.findLine(key);
       if (item) item.qty += 1;
     },
-    decrement(variantId) {
-      const item = this.items.find((i) => i.variant_id === variantId);
+    decrement(key) {
+      const item = this.findLine(key);
       if (!item) return;
       item.qty -= 1;
-      if (item.qty <= 0) this.remove(variantId);
+      if (item.qty <= 0) this.remove(key);
     },
-    remove(variantId) {
-      this.items = this.items.filter((i) => i.variant_id !== variantId);
+    remove(key) {
+      this.items = this.items.filter((i) => cartLineKey(i) !== String(key));
     },
     clear() {
       this.items = [];

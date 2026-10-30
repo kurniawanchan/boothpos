@@ -46,6 +46,20 @@ class PosStoreModeTest {
     }
     @After fun tearDown() { Dispatchers.resetMain() }
 
+    @Test fun `bootstrap kedua saat layar diputar tidak mengembalikan pengguna ke layar PIN`() = runTest(dispatcher) {
+        backend.configs[SystemMode.LIVE] = live
+        backend.brandingResult = { branding(SystemMode.LIVE) }
+        val store = PosStore(backend = backend)
+        store.bootstrap(); advanceUntilIdle()
+        // Pengguna sudah masuk dan sedang di layar Meja; memutar layar membuat komposisi baru yang memanggil bootstrap lagi.
+        store.debugInstall(StaffUser("5", "Sari", "Kasir", "CSH"), com.warkop.pos.model.Shift("S", "08:00", "", 0, "1", id = 7), emptyList(), null, Dest.TABLES, null, store.conn, null, 0, null)
+
+        store.bootstrap(); advanceUntilIdle()
+
+        assertEquals(Dest.TABLES, store.dest)
+        assertEquals("Sari", store.user?.name)
+    }
+
     @Test fun `mode server berbeda tanpa pilihan terminal mode itu membuka penyiapan dan menyimpan pilihan LIVE`() = runTest(dispatcher) {
         backend.configs[SystemMode.LIVE] = live
         backend.brandingResult = { branding(SystemMode.DEMO) }

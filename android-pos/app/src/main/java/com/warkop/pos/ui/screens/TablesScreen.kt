@@ -24,6 +24,7 @@ import com.warkop.pos.state.PosStore
 import com.warkop.pos.state.Sheet
 import com.warkop.pos.theme.pos
 import com.warkop.pos.ui.ErrorState
+import com.warkop.pos.ui.Pill
 import com.warkop.pos.ui.friendlyLoadError
 import com.warkop.pos.ui.isOfflineError
 import com.warkop.pos.ui.Size
@@ -57,11 +58,10 @@ private fun FloorBoard(store: PosStore, tables: List<FloorTable>, size: Size) {
                 )
             }
             Spacer(Modifier.weight(1f))
-            if (size != Size.COMPACT) {
-                Text(
-                    if (store.conn == Conn.ONLINE) "Denah dari server · diperbarui tiap 3 dtk" else "Denah terakhir · server tidak terjangkau",
-                    fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            // 084 — keterangan "Denah dari server · diperbarui tiap 3 dtk" dihapus; peringatan server tak terjangkau tetap
+            // tampil karena itu keadaan yang perlu diketahui kasir, bukan keterangan teknis.
+            if (size != Size.COMPACT && store.conn != Conn.ONLINE) {
+                Text("Denah terakhir · server tidak terjangkau", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         LazyVerticalGrid(
@@ -73,6 +73,7 @@ private fun FloorBoard(store: PosStore, tables: List<FloorTable>, size: Size) {
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun TableTile(store: PosStore, t: FloorTable) {
     val compact = windowSize() == Size.COMPACT
@@ -92,20 +93,32 @@ private fun TableTile(store: PosStore, t: FloorTable) {
         onClick = { if (tab == null) store.show(Sheet.Pax(t.name)) else store.openOrder(tab.id.toString()) },
     ) {
         Column(Modifier.padding(if (compact) 12.dp else 16.dp)) {
-            Text(t.name, fontSize = if (compact) 28.sp else 34.sp)
+            // 084 — status ("Terisi"/"Tersedia"/…) kini pil kecil di SAMPING nomor meja; dulu teks besar di tengah kartu yang
+            // mendorong baris terakhir (nominal) keluar dari kartu sehingga terpotong.
+            val status = when {
+                tab == null -> "Tersedia"
+                tab.billPrinted -> "Bill tercetak"
+                other -> "Terminal ${tab.otherDevice}"
+                else -> "Terisi"
+            }
+            // FlowRow: bila lebar kartu tak cukup untuk nomor + pil, pil turun ke baris bawah dan TEKSNYA UTUH ("Tersedia" dulu
+            // terpotong jadi "Tersedi" karena pil dijepit di samping nomor).
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(t.name, fontSize = if (compact) 28.sp else 34.sp)
+                Pill(status, fg.copy(alpha = 0.18f), fg, Modifier.align(Alignment.CenterVertically))
+            }
             Spacer(Modifier.weight(1f))
             if (tab != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     repeat(tab.pax.coerceIn(0, 8)) { Box(Modifier.size(9.dp).clip(CircleShape).background(fg)) }
                 }
-                Text(
-                    if (tab.billPrinted) "Bill tercetak" else if (other) "Terminal ${tab.otherDevice}" else "Terisi",
-                    fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
-                )
-                Text("${tab.pax} tamu", fontSize = 12.sp, maxLines = 1)
+                Spacer(Modifier.height(6.dp))
+                // 084 — jumlah tamu sebagai pil.
+                Pill("${tab.pax} tamu", fg.copy(alpha = 0.18f), fg)
+                Spacer(Modifier.height(4.dp))
                 Text(rp(tab.total), fontSize = if (compact) 12.sp else 13.sp, maxLines = 1, softWrap = false)
-            } else {
-                Text("Tersedia", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             }
         }
     }

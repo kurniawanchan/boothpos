@@ -138,7 +138,24 @@ class PosStore(
     private val splitPref: SplitPreference = SplitPreference({ null }, {}),
     /** 061 / T011 — suara panggilan antrean; default diam supaya uji tidak butuh mesin ucap. */
     private val announcer: QueueAnnouncer = QueueAnnouncer(SilentSpeech),
+    /** 084 — tampil/sembunyi sidebar (hamburger); penyimpanan perangkat di Android, in-memory di uji. */
+    private val railPref: RailPreference = RailPreference({ null }, {}),
 ) : ViewModel() {
+    /** 084 — sidebar navigasi tampil (layar lebar). Pilihan tersimpan per perangkat. */
+    var railVisible by mutableStateOf(railPref.visible); private set
+    fun toggleRail() { railVisible = !railVisible; railPref.visible = railVisible }
+
+    /**
+     * 084 — menu Kasir: kembali ke tab counter yang sedang dikerjakan; bila belum ada, memakai tab kosong atau membuka
+     * yang baru ([landOnKasir]). Dipakai rail DAN bilah bawah supaya keduanya tidak membuka tab baru tiap ketukan.
+     */
+    fun openKasir() {
+        // 084 — hanya tab counter yang MASIH TERBUKA yang dilanjutkan: setelah bayar, pesanan selesai masih `active` dan tidak
+        // boleh dibuka lagi di layar Kasir. Selain itu memakai tab kosong yang ada atau membuka yang baru (landOnKasir).
+        val a = active
+        if (a != null && !a.closed && a.kind == OrderKind.COUNTER) go(Dest.EDITOR) else landOnKasir()
+    }
+
     /** 055 / T037 — area total (Subtotal, pajak, Total, Kirim, Bayar) tampil atau tersembunyi. */
     var totalsVisible by mutableStateOf(totalsPref.visible); private set
     fun changeTotalsVisibility(v: Boolean) { totalsVisible = v; totalsPref.visible = v }
@@ -282,12 +299,50 @@ class PosStore(
         val others = fromFloor.filter { it.id.toString() !in known }.map { OrderMapper.stub(it) }
         return (mine + others).sortedBy { it.id.toLongOrNull() ?: 0L }
     }
+    // 084 — `orders` DULU: pesanan selesai yang sudah dimuat lengkap (GET /tabs/{id}) menang atas ringkasan daftar
+    // (GET /orders) yang tidak membawa item, meja, kasir, subtotal, dan pajak — sebab rincian Selesai dulu hanya menampilkan total.
     val closedOrders: List<Order> get() =
-        (closedCache + orders.filter { it.closed }).distinctBy { it.id }.sortedByDescending { it.id.toLongOrNull() ?: 0L }
+        (orders.filter { it.closed } + closedCache).distinctBy { it.id }.sortedByDescending { it.id.toLongOrNull() ?: 0L }
+
+    /** 084 — keadaan memuat rincian lengkap per pesanan selesai (kunci = id pesanan). */
+    var closedDetailLoad by mutableStateOf<Map<String, Load<Unit>>>(emptyMap()); private set
+
+    /** Ringkasan daftar tidak punya subtotal dari server; rincian lengkap selalu punya. */
+    fun hasFullDetail(id: String): Boolean = orders.any { it.id == id && it.serverSubtotal != null }
+
+    /**
+     * 084 — muat rincian LENGKAP satu pesanan selesai (item + modifier + catatan, meja, kasir, subtotal, diskon, pajak,
+     * pembayaran) supaya transaksi bisa ditinjau ulang. Pesanan yang dibatalkan tidak punya rincian tab (404) dan dilewati;
+     * penjualan web (bukan tab) juga 404 → keadaan gagal, dan "Lihat struk" tetap tersedia sebagai rincian.
+     */
+    fun loadClosedDetail(id: String, force: Boolean = false) {
+        val b = backend ?: return
+        if (!force && (hasFullDetail(id) || closedDetailLoad[id] is Load.Loading)) return
+        if (closedCache.firstOrNull { it.id == id }?.cancelledReason != null) return
+        closedDetailLoad = closedDetailLoad + (id to Load.Loading)
+        viewModelScope.launch {
+            val next: Load<Unit> = try {
+                upsert(retryNetwork { b.tab(id) })
+                Load.Ready(Unit)
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                Load.Failed(e)
+            }
+            closedDetailLoad = closedDetailLoad + (id to next)
+        }
+    }
 
     // ---------- awal & sesi ----------
     /** Dipanggil sekali saat aplikasi mulai: selalu langsung ke layar PIN, membaca alamat server dari vault. */
+    /**
+     * 084 — bootstrap hanya SEKALI per store. Memutar layar membuat ulang Activity; komposisi baru memanggil bootstrap lagi dan
+     * dulu mengembalikan layar ke PIN (pengguna seperti ter-logout) padahal sesi masih berjalan di ViewModel.
+     */
+    private var bootstrapped = false
+
     fun bootstrap() {
+        if (bootstrapped) return
+        bootstrapped = true
         val b = backend
         mode = b?.currentMode() ?: SystemMode.LIVE
         val saved = b?.savedConfig() ?: remote?.savedConfig()
@@ -413,7 +468,7 @@ class PosStore(
     private fun markTerminalRevoked() {
         if (terminalRevoked) return
         terminalRevoked = true
-        if (revokedStepAt(dest) == RevokedStep.FINISH_ORDER) say("Terminal ini dicabut. Selesaikan order ini; setelah itu pilih terminal lagi.")
+        if (revokedStepAt(dest) == RevokedStep.FINISH_ORDER) say("Terminal ini dicabut. Selesaikan pesanan ini; setelah itu pilih terminal lagi.")
         else returnToSetup("Terminal ini sudah dicabut. Pilih outlet dan terminal lagi.")
     }
 
@@ -508,9 +563,11 @@ class PosStore(
     }
     fun clearToast() { toast = null }
     fun lock() {
+        val empties = emptyCounterTabs().map { it.id }
         clearSessionState()
         // Daftar staf dimuat SETELAH logout selesai: sebelum itu token sesi lama masih terpasang dan server menolaknya (401).
-        viewModelScope.launch { try { backend?.logout() } catch (_: ApiError) { }; loadRoster() }
+        // 084 — tab kosong dibuang dulu (token masih berlaku), supaya login berikutnya/tutup shift tidak terhalang.
+        viewModelScope.launch { discardEmptyCounterTabs(empties); try { backend?.logout() } catch (_: ApiError) { }; loadRoster() }
     }
 
     /** Bagian lokal dari keluar: semua keadaan sesi dikosongkan; logout ke server dan muat ulang staf dilakukan pemanggil. */
@@ -535,12 +592,13 @@ class PosStore(
                 shift = try { b.currentShift() } catch (_: ApiError) { null }
                 dest = when {
                     s.user.code == "CSH" && shift == null -> Dest.OPEN_SHIFT
-                    // Tidak membuka tab otomatis saat login: tab kosong yang terbuka akan menghalangi tutup shift (409 open_tabs).
-                    // Counter dibuka hanya saat kasir menekan tombol order baru.
-                    s.user.code == "CSH" -> Dest.TABLES
+                    // 084 — kasir mendarat di Kasir. Itu membuka tab counter kosong; tab kosong menghalangi tutup shift
+                    // (409 open_tabs), jadi tab kosong dibuang saat kunci/keluar dan sebelum tutup shift (discardEmptyCounterTabs).
+                    s.user.code == "CSH" -> Dest.EDITOR // langsung Kasir (memuat); gagal membuka tab → landOnKasir() jatuh ke Meja
                     s.user.code == "WTR" -> Dest.TABLES
                     else -> Dest.ORDERS
                 }
+                if (s.user.code == "CSH" && shift != null) landOnKasir()
                 // 077 — nama/logo toko + mode sesudah login; mode sesi = mode saat masuk (pergantian sesudahnya terdeteksi di sini).
                 viewModelScope.launch { sessionModeChanged() }
                 loadMenu()
@@ -612,14 +670,14 @@ class PosStore(
                 shift = b.openShift(count)
                 report = Load.Idle; cashMovements = Load.Idle
                 say("Shift dibuka dengan modal ${rp(modal)}.")
-                go(Dest.TABLES)
+                if (user?.code == "CSH") landOnKasir() else go(Dest.TABLES)
             } catch (e: ApiError) {
                 // Koneksi putus SETELAH server menerima: periksa dulu agar tidak membuka shift kedua.
                 if (e is ApiError.Network) {
                     conn = Conn.OFFLINE
                     val opened = try { b.currentShift() } catch (_: ApiError) { null }
                     if (opened != null) {
-                        shift = opened; go(Dest.TABLES)
+                        shift = opened; if (user?.code == "CSH") landOnKasir() else go(Dest.TABLES)
                         say("Shift sudah terbuka di server.")
                         return@launch
                     }
@@ -672,7 +730,7 @@ class PosStore(
      * Satu niat tulis ke server. Gangguan jaringan dicoba ulang dengan kunci yang sama (server mengembalikan jawaban
      * tersimpan); galat server ditampilkan apa adanya. Kunci dilepas hanya bila niat terkonfirmasi.
      */
-    private fun send(intent: String, action: suspend () -> Order, retry: Boolean = true, after: (Order) -> Unit = {}) {
+    private fun send(intent: String, action: suspend () -> Order, retry: Boolean = true, onFail: () -> Unit = {}, after: (Order) -> Unit = {}) {
         if (modeBlocked()) return
         viewModelScope.launch {
             try {
@@ -682,6 +740,7 @@ class PosStore(
                 upsert(o)
                 after(o)
             } catch (e: ApiError) {
+                onFail()
                 if (e is ApiError.Network) conn = Conn.OFFLINE
                 onShiftRefused(e)
                 // 077 — mode berganti: dialog menggantikan pesan galat/"dicabut" (tulis tidak pernah masuk ke mode lain; server menolaknya).
@@ -721,18 +780,75 @@ class PosStore(
         val o = active ?: return
         val clean = text.trim()
         if (clean.length > ORDER_NOTE_MAX) { say("Catatan maksimal $ORDER_NOTE_MAX karakter."); return }
-        if (o.closed) { say("Order sudah ditutup. Catatan tidak bisa diubah."); return }
+        if (o.closed) { say("Pesanan sudah ditutup. Catatan tidak bisa diubah."); return }
         send("note:${o.id}:$clean", { b.setNote(o.id, clean) }) { onSaved() }
     }
 
-    fun newCounter() {
+    /**
+     * 084 — layar awal kasir TANPA membuat pesanan kosong: bila ada tab counter kosong milik terminal ini (sisa), dipakai
+     * ulang; selain itu Kasir terbuka dalam keadaan draf (`activeId` null, lihat [kasirDraft]) dan tab counter baru baru dibuat
+     * di server saat item pertama ditambahkan ([withActiveTab]). Tidak ada panggilan server, jadi tidak ada layar tunggu.
+     */
+    fun landOnKasir() {
+        activeId = emptyCounterTabs().firstOrNull()?.id
+        dest = Dest.EDITOR; sheet = null
+    }
+
+    /** 084 — pesanan counter kosong untuk TAMPILAN Kasir sebelum tab dibuat di server (id kosong; tidak pernah dikirim). */
+    val kasirDraft: Order get() = Order("", OrderKind.COUNTER, null, 0, null, user?.name.orEmpty(), "")
+
+    /** 084 — jalankan [onReady] dengan id tab aktif; bila Kasir masih draf, tab counter dibuat dulu (sekali, idempoten). */
+    private fun withActiveTab(onReady: (String) -> Unit) {
+        val id = activeId
+        if (id != null) { onReady(id); return }
+        newCounter(onOpened = { o -> onReady(o.id) })
+    }
+
+    /** Tab counter milik terminal ini yang belum berisi baris; server tetap memutuskan boleh-tidaknya dibuang (422 bila terisi). */
+    private fun emptyCounterTabs(): List<Order> =
+        orders.filter { !it.closed && it.kind == OrderKind.COUNTER && it.live.isEmpty() && it.otherDevice == null }
+
+    /**
+     * 084 — shift ditutup: pesanan shift itu keluar dari daftar Pesanan aktif (terbuka maupun selesai) dan cache-nya
+     * dikosongkan. Hanya tampilan klien; datanya tetap utuh di server (Penjualan, laporan).
+     */
+    private fun clearClosedShiftOrders() {
+        closedCache = emptyList(); closedLoad = Load.Idle; closedDetailLoad = emptyMap()
+        orders = emptyList()
+        activeId = null
+    }
+
+    /** 084 — membuang tab kosong supaya tidak memblokir tutup shift (409 open_tabs). Galat diabaikan: server yang berwenang. */
+    private suspend fun discardEmptyCounterTabs(ids: List<String> = emptyCounterTabs().map { it.id }) {
+        val b = backend ?: return
+        ids.forEach { id ->
+            try { b.closeEmptyTab(id); orders = orders.filter { it.id != id }; if (activeId == id) activeId = null } catch (_: ApiError) { }
+        }
+    }
+
+    /**
+     * 084 — mengubah meja pesanan (terbuka: pindah ke meja bebas; selesai: koreksi penempatan). Server menolak meja
+     * terisi/nonaktif/beda outlet dengan pesan sendiri; denah dan daftar selesai disegarkan supaya Meja, Kasir, dan Pesanan sejalan.
+     */
+    fun changeTable(orderId: String, tableId: Long) {
+        // Kasir masih draf (belum ada tab di server): buat tab counter dulu, lalu pindahkan ke meja itu.
+        if (orderId.isBlank()) { withActiveTab { id -> changeTable(id, tableId) }; return }
+        val b = backend ?: return
+        send("move:$orderId", { b.moveTab(orderId, tableId) }, retry = false) { o ->
+            fetchFloorNow()
+            if (o.closed) loadClosed()
+            say("Meja diubah.")
+        }
+    }
+
+    fun newCounter(onFail: () -> Unit = {}, onOpened: (Order) -> Unit = {}) {
         if (modeBlocked()) return
         val b = backend ?: return
-        if (terminalRevoked) { say("Terminal ini dicabut. Tidak bisa membuka order baru."); return }
-        val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka order."); return }
+        if (terminalRevoked) { say("Terminal ini dicabut. Tidak bisa membuka pesanan baru."); return }
+        val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka pesanan."); return }
         val intent = "open:counter"
         val key = keys.keyFor(intent)
-        send(intent, { b.openTab(sid, null, null, key) }) { o -> activeId = o.id; dest = Dest.EDITOR; sheet = null }
+        send(intent, { b.openTab(sid, null, null, key) }, onFail = onFail) { o -> activeId = o.id; dest = Dest.EDITOR; sheet = null; onOpened(o) }
     }
 
     /** Pilih jumlah tamu: tab terbuka di meja itu dibuka; meja kosong membuka tab baru. */
@@ -741,8 +857,8 @@ class PosStore(
         val b = backend ?: return
         val ft = tables.firstOrNull { it.name == table } ?: run { say("Meja $table tidak ditemukan."); return }
         ft.tab?.let { openOrder(it.id.toString()); sheet = null; return }
-        if (terminalRevoked) { say("Terminal ini dicabut. Tidak bisa membuka order baru."); return }
-        val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka order."); return }
+        if (terminalRevoked) { say("Terminal ini dicabut. Tidak bisa membuka pesanan baru."); return }
+        val sid = shift?.id ?: run { say("Buka shift dulu sebelum membuka pesanan."); return }
         val intent = "open:table:${ft.id}:$pax"
         val key = keys.keyFor(intent)
         send(intent, { b.openTab(sid, ft.id, pax, key) }) { o -> activeId = o.id; dest = Dest.EDITOR; sheet = null }
@@ -778,11 +894,13 @@ class PosStore(
     /** Tambah baris ke tab aktif. Server menggabungkan baris identik (belum terkirim) sesuai aturannya sendiri. */
     fun addLine(p: Product, mods: List<ModOption>, note: String, qty: Int = 1) {
         val b = backend ?: return
-        val tab = activeId ?: return
-        val intent = "line:add:$tab:${p.id}:$qty:${mods.map { it.id }}:${note.trim()}"
-        val key = keys.keyFor(intent)
         sheet = null
-        send(intent, { b.addLine(tab, p.id, qty, note.trim(), mods.map { it.id }, key) })
+        // 084 — Kasir draf: tab counter dibuat saat item pertama ditambahkan, bukan saat layar dibuka.
+        withActiveTab { tab ->
+            val intent = "line:add:$tab:${p.id}:$qty:${mods.map { it.id }}:${note.trim()}"
+            val key = keys.keyFor(intent)
+            send(intent, { b.addLine(tab, p.id, qty, note.trim(), mods.map { it.id }, key) })
+        }
     }
 
     private fun updateLine(tabId: String, line: OrderLine, qty: Int, note: String) {
@@ -867,6 +985,44 @@ class PosStore(
 
     private val prebillCopies = mutableMapOf<String, Int>()
 
+    // ---------- 084: cetak laporan shift ----------
+
+    private fun shiftOutletText(): String =
+        config?.let { c -> listOf(c.outletName, c.deviceName).filter { it.isNotBlank() }.joinToString(" · ") }.orEmpty()
+
+    private fun nowText(): String =
+        java.time.ZonedDateTime.now(OrderMapper.STORE_ZONE).format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))
+
+    /** Pesan bila printer belum bisa dipakai; null = lanjut. Cetakan tetap masuk antrean walau printer sedang terputus. */
+    private fun printerOrExplain(): PrinterService? =
+        printer ?: run { say("Printer belum tersedia. Pasang printer di menu Koneksi."); null }
+
+    /** X-report: ringkasan yang sedang tampil (angka server) dikirim ke antrean cetak. Tiap penekanan = satu cetakan baru. */
+    fun printXReport() {
+        val p = printerOrExplain() ?: return
+        val sid = shift?.id ?: run { say("Tidak ada shift terbuka."); return }
+        val r = (report as? Load.Ready)?.value ?: run { say("Laporan belum dimuat. Coba lagi sebentar."); return }
+        val lines = Documents.xReport(r, shiftOutletText(), user?.name.orEmpty(), shift?.openedAt.orEmpty(), nowText())
+        if (p.enqueueRendered(PrintKind.LAPORAN, "x:$sid:${System.currentTimeMillis()}", 1, lines)) say("X-report masuk antrean cetak.")
+    }
+
+    /** Data Z-report diambil saat shift ditutup (angka shift sebelum cache laporan dikosongkan). */
+    private var zSnapshot: ZSnapshot? = null
+    private data class ZSnapshot(val sessionId: Long, val report: ShiftReport?, val cashier: String, val openedAt: String, val outlet: String)
+
+    /** Z-report shift yang baru ditutup. Bila angka shift tak sempat termuat, diambil dari server (laporan shift tertutup tetap terbaca). */
+    fun printZReport() {
+        val p = printerOrExplain() ?: return
+        val b = backend ?: return
+        val z = zSnapshot ?: run { say("Tidak ada shift yang baru ditutup."); return }
+        val close = closeResult ?: run { say("Hasil penutupan tidak tersedia."); return }
+        viewModelScope.launch {
+            val r = z.report ?: try { retryNetwork { b.shiftReport(z.sessionId) } } catch (e: ApiError) { say("Laporan belum bisa dimuat: ${e.message}"); return@launch }
+            val lines = Documents.zReport(r, close, z.outlet, z.cashier, z.openedAt, nowText())
+            if (p.enqueueRendered(PrintKind.LAPORAN, "z:${z.sessionId}:${System.currentTimeMillis()}", 1, lines)) say("Z-report masuk antrean cetak.")
+        }
+    }
+
     /**
      * 050 / T051 — "Cetak struk" pada penjualan selesai. Salinan 1 sudah dicetak otomatis saat bayar; bila salinan itu
      * masih menunggu di antrean, tombol ini MENGULANG job tersebut (bukan membuat salinan 2 yang membingungkan).
@@ -916,7 +1072,7 @@ class PosStore(
                 conn = Conn.ONLINE
                 upsert(updated)
                 sheet = null
-                say(if (lineId == null) "Diskon order diterapkan." else "Diskon item diterapkan.")
+                say(if (lineId == null) "Diskon pesanan diterapkan." else "Diskon item diterapkan.")
             } catch (e: ApiError) {
                 if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
                 keys.settled(intent)
@@ -943,7 +1099,7 @@ class PosStore(
                 conn = Conn.ONLINE
                 upsert(updated)
                 sheet = null
-                say("Diskon order dihapus.")
+                say("Diskon pesanan dihapus.")
             } catch (e: ApiError) {
                 if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
                 keys.settled(intent)
@@ -1013,7 +1169,7 @@ class PosStore(
         if (user?.code == "WTR") { printPrebill(); return }
         if (o.live.isEmpty()) return
         if (shift == null) {
-            sheet = Sheet.Confirm("Belum ada shift terbuka", "Pembayaran hanya bisa diterima setelah shift terbuka. Order tetap tersimpan.", "Buka shift") { dest = Dest.OPEN_SHIFT; sheet = null }
+            sheet = Sheet.Confirm("Belum ada shift terbuka", "Pembayaran hanya bisa diterima setelah shift terbuka. Pesanan tetap tersimpan.", "Buka shift") { dest = Dest.OPEN_SHIFT; sheet = null }
             return
         }
         dest = Dest.TENDER
@@ -1093,12 +1249,12 @@ class PosStore(
                 upsert(b.cancelTab(o.id, code, null, overrideToken))
                 conn = Conn.ONLINE
                 sheet = null
-                say("Order dibatalkan.")
+                say("Pesanan dibatalkan.")
             } catch (e: ApiError) {
                 if (e is ApiError.Network) conn = Conn.OFFLINE
                 // has_payments tidak pernah menawarkan persetujuan: pesannya langsung ditampilkan.
                 if (e.code == "override_required") {
-                    sheet = Sheet.Override(summary = "Batalkan order · $reason", action = "cancel_order",
+                    sheet = Sheet.Override(summary = "Batalkan pesanan · $reason", action = "cancel_order",
                         subject = cancelSubject(o.id, code)) { token -> cancelOrder(reason, token) }
                 } else say(e.message)
             }
@@ -1186,7 +1342,7 @@ class PosStore(
         }
     }
 
-    /** QRIS statis: dicatat menunggu verifikasi (server menyimpan pending). Kanal QRIS dari daftar kanal server. */
+    /** QRIS statis: dicatat langsung terverifikasi (084; server lama menyimpan pending). Kanal QRIS dari daftar kanal server. */
     fun recordQris() {
         val b = backend ?: return
         val o = active ?: return
@@ -1204,7 +1360,11 @@ class PosStore(
                 sheet = null
                 when (val next = qrisAfterPayment(updated.closed, updated.remaining)) {
                     // 058 / US2 — penjualan tutup: struk masuk antrean cetak sekali (kunci antrean), lalu selesai.
-                    QrisNext.Finish -> { onSaleClosed(updated); dest = Dest.DONE; say("QRIS dicatat · menunggu verifikasi.") }
+                    QrisNext.Finish -> {
+                        onSaleClosed(updated); dest = Dest.DONE
+                        // 084 — server baru mencatat QRIS langsung terverifikasi; pesan "menunggu" hanya untuk server lama yang masih pending.
+                        say(if (updated.hasPendingQris) "QRIS dicatat · menunggu verifikasi." else "QRIS dicatat.")
+                    }
                     is QrisNext.ShowRemaining -> say("Sisa ${rp(next.remaining)}.")
                 }
             } catch (e: ApiError) {
@@ -1378,13 +1538,13 @@ class PosStore(
                 conn = Conn.ONLINE
                 upsert(updated)
                 sheet = null
-                say("Order direfund penuh.")
+                say("Pesanan direfund penuh.")
             } catch (e: ApiError) {
                 if (e is ApiError.Network) { conn = Conn.OFFLINE; say(e.message); return@launch }
                 keys.settled(intent)
                 if (e.code == "override_required") {
                     sheet = Sheet.Override(
-                        summary = "Refund order · ${reason.label}", action = "refund",
+                        summary = "Refund pesanan · ${reason.label}", action = "refund",
                         subject = refundSubject(orderId.toLong(), reason.code, note?.takeIf { it.isNotBlank() }),
                     ) { token -> refundOrder(orderId, reason, note, token) }
                 } else say(e.message)
@@ -1400,10 +1560,13 @@ class PosStore(
     /** 055 / T029 — data yang sudah tampil tetap saat menyegarkan; galat hanya mengganti keadaan bila belum ada data. */
     fun loadClosed(): Job {
         val b = backend ?: return Job().apply { complete() }
+        // 084 — daftar Selesai hanya milik shift yang sedang terbuka; tanpa shift tidak ada yang ditampilkan (pesanan shift
+        // yang sudah ditutup tetap ada di Penjualan dan laporan, bukan di daftar aktif ini).
+        val sid = shift?.id ?: run { closedCache = emptyList(); closedLoad = Load.Ready(Unit); return Job().apply { complete() } }
         if (closedLoad !is Load.Ready) closedLoad = Load.Loading
         return viewModelScope.launch {
             closedLoad = try {
-                closedCache = retryNetwork { b.closedOrders() }
+                closedCache = retryNetwork { b.closedOrders(sid) }
                 Load.Ready(Unit)
             } catch (e: ApiError) {
                 if (closedLoad is Load.Ready) closedLoad else Load.Failed(e)
@@ -1564,11 +1727,14 @@ class PosStore(
         val key = keys.keyFor(intent)
         viewModelScope.launch {
             try {
+                discardEmptyCounterTabs() // 084 — tab kosong dari layar awal Kasir tidak boleh menggagalkan tutup shift
                 val outcome = retryNetwork { b.closeShift(sid, count, key, overrideToken) }
                 keys.settled(intent)
                 conn = Conn.ONLINE
                 closeResult = outcome
+                zSnapshot = ZSnapshot(sid, (report as? Load.Ready)?.value, user?.name.orEmpty(), shift?.openedAt.orEmpty(), shiftOutletText())
                 report = Load.Idle
+                clearClosedShiftOrders()
                 sheet = null
                 dest = Dest.CLOSE_RESULT
             } catch (e: ApiError) {

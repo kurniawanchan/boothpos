@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -35,6 +36,9 @@ import com.warkop.pos.print.PrintStatus
 import com.warkop.pos.print.PrinterChoice
 import com.warkop.pos.print.PrinterService
 import com.warkop.pos.print.PrinterStatus
+import com.warkop.pos.print.printerShowsProgress
+import com.warkop.pos.print.printerStatusLabel
+import com.warkop.pos.print.printerStatusNote
 import com.warkop.pos.print.printErrorMessage
 import com.warkop.pos.ui.Pill
 import com.warkop.pos.ui.OutlinedPill
@@ -63,8 +67,10 @@ fun PrinterPanel(printer: PrinterService) {
 
     SectionLabel("Printer Bluetooth")
     Spacer(Modifier.height(6.dp))
-    Text(statusLabel(status), fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
-    Text(statusNote(status), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
+    Text(printerStatusLabel(status), fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+    // 084 — indikator progres terlihat selama printer masih menyambung.
+    if (printerShowsProgress(status)) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 6.dp))
+    Text(printerStatusNote(status), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
     Spacer(Modifier.height(12.dp))
 
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -163,22 +169,9 @@ private fun DismissKotDialog(onConfirm: (String) -> Unit, onCancel: () -> Unit) 
     )
 }
 
-private fun statusLabel(status: PrinterStatus): String = when (status) {
-    PrinterStatus.NotConfigured -> "Belum dipasang"
-    PrinterStatus.Disconnected -> "Tidak terhubung"
-    PrinterStatus.Connected -> "Terhubung"
-    is PrinterStatus.Error -> printErrorMessage(status.error)
-}
-
-private fun statusNote(status: PrinterStatus): String = when (status) {
-    PrinterStatus.NotConfigured -> "Pilih printer VSC TM-58V (kertas 58 mm) yang sudah dipasangkan di Bluetooth."
-    PrinterStatus.Disconnected -> "Printer dipilih tetapi belum tersambung. Cetakan tetap masuk antrean."
-    PrinterStatus.Connected -> "Printer siap. Struk dan KOT tercetak otomatis."
-    is PrinterStatus.Error -> "Cetakan yang gagal tetap ada di antrean dan bisa dicoba lagi."
-}
-
 private fun kindLabel(kind: PrintKind): String = when (kind) {
     PrintKind.STRUK -> "Struk"
+    PrintKind.LAPORAN -> "Laporan"
     PrintKind.KOT -> "KOT"
     PrintKind.PREBILL -> "Pra-bill"
     PrintKind.BATAL -> "BATAL"

@@ -354,6 +354,7 @@
     "resume_draft": "Resume",
     "enlarge_qr": "Enlarge QR code",
     "sold_out_86": "86",
+    "draft_no_modifiers": "Drafts do not support items with modifiers yet. Finish this order or empty the cart.",
     "item_sold_out": "Item is sold out (86).",
     "item_discontinued": "Item is no longer sold."
   },
