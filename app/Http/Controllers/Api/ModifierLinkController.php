@@ -13,7 +13,8 @@ class ModifierLinkController extends Controller
 {
     public function update(ModifierLinksRequest $request, Product $product, ModifierLinkService $service): JsonResponse
     {
-        $result = $service->replace($product, $request->validated('links'), $request->user());
+        // 086 — `validated('excluded_group_ids')` bernilai null bila klien tak mengirim kuncinya (pengecualian tak berubah).
+        $result = $service->replace($product, $request->validated('links'), $request->user(), $request->validated('excluded_group_ids'));
 
         return response()->json([
             'applied' => $result['applied'],

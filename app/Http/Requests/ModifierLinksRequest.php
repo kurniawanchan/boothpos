@@ -21,6 +21,9 @@ class ModifierLinksRequest extends FormRequest
             'links.*.min_select' => ['sometimes', 'nullable', 'integer'],
             'links.*.max_select' => ['sometimes', 'nullable', 'integer'],
             'links.*.display_order' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            // 086 — OPSIONAL: tanpa kunci, pengecualian item tidak berubah; ada (termasuk []) = penggantian penuh.
+            'excluded_group_ids' => ['sometimes', 'array', 'max:30'],
+            'excluded_group_ids.*' => ['integer'],
         ];
     }
 }

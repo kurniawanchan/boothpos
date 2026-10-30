@@ -5,7 +5,8 @@ import { saveModifierLinks } from '../../api/products';
 import { listModifierGroups } from '../../api/modifierGroups';
 import { useSettingsStore } from '../../stores/settings';
 import { useToastStore } from '../../stores/toast';
-import { modifierRuleText } from '../../utils/itemDetail';
+import { moveRow, excludedIds } from '../../utils/modifierExclusion';
+import InheritedModifierList from './InheritedModifierList.vue';
 import FormDrawer from '../page/FormDrawer.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseInput from '../ui/BaseInput.vue';
@@ -35,6 +36,7 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   product: { type: Object, default: null }, // { id, name }
   links: { type: Array, default: () => [] }, // modifier_links dari GET /products/{id}
+  excluded: { type: Array, default: () => [] }, // 086 — modifier_excluded dari GET /products/{id}: grup kategori yang dilepas item ini
 });
 const emit = defineEmits(['close', 'saved']);
 const { t } = useI18n();
@@ -54,7 +56,10 @@ const groups = ref([]);
 const groupsState = ref('idle'); // idle | loading | ready | error
 let groupsSeq = 0;
 
-const inherited = computed(() => (props.links ?? []).filter((l) => l.source === 'category'));
+// 086 — grup warisan kategori dan yang dilepas item ini; dipindah lewat utils/modifierExclusion (sama dengan formulir Ubah item).
+const inheritedRows = ref([]);
+const excludedRows = ref([]);
+const excludedBaseline = ref('[]');
 const groupById = computed(() => new Map(groups.value.map((g) => [g.id, g])));
 const isSingle = (groupId) => groupById.value.get(groupId)?.selection_type === 'single';
 
@@ -73,9 +78,24 @@ function resetForm() {
       min: String(l.min_select ?? 0),
       max: l.max_select === null || l.max_select === undefined ? '' : String(l.max_select),
     }));
+  inheritedRows.value = (props.links ?? []).filter((l) => l.source === 'category');
+  excludedRows.value = [...(props.excluded ?? [])];
+  excludedBaseline.value = JSON.stringify(excludedIds(excludedRows.value));
   Object.keys(rowErrors).forEach((k) => delete rowErrors[k]);
   alertMessage.value = '';
   addValue.value = '';
+}
+
+function excludeGroup(groupId) {
+  const moved = moveRow(inheritedRows.value, excludedRows.value, groupId);
+  inheritedRows.value = moved.from;
+  excludedRows.value = moved.to;
+}
+
+function restoreGroup(groupId) {
+  const moved = moveRow(excludedRows.value, inheritedRows.value, groupId);
+  excludedRows.value = moved.from;
+  inheritedRows.value = moved.to;
 }
 
 async function loadGroups() {
@@ -190,7 +210,10 @@ async function submit() {
 
   submitting.value = true;
   try {
-    const result = await saveModifierLinks(props.product.id, payload);
+    // 086 — pengecualian hanya dikirim bila BERUBAH: tanpa kunci server membiarkannya apa adanya.
+    const ids = excludedIds(excludedRows.value);
+    const changed = JSON.stringify(ids) !== excludedBaseline.value;
+    const result = await saveModifierLinks(props.product.id, payload, ...(changed ? [ids] : []));
     toast.success(result?.applied === false ? t('products.ml_pending') : t('products.ml_saved'));
     emit('saved', result);
   } catch (err) {
@@ -289,15 +312,7 @@ async function submit() {
         </template>
       </div>
 
-      <section v-if="inherited.length" class="flex flex-col gap-2 border-2 border-line bg-surface-subtle px-4 py-3" data-testid="ml-inherited">
-        <h3 class="text-[11.5px] font-bold uppercase tracking-wider text-muted">{{ t('products.ml_from_category') }}</h3>
-        <ul class="flex flex-col gap-1 text-[12.5px]">
-          <li v-for="l in inherited" :key="l.group_id" class="flex justify-between gap-3">
-            <span class="font-semibold">{{ l.name }}</span>
-            <span class="text-muted-4">{{ modifierRuleText(l, t) }}</span>
-          </li>
-        </ul>
-      </section>
+      <InheritedModifierList :inherited="inheritedRows" :excluded="excludedRows" editable testid="ml-inherited" @exclude="excludeGroup" @restore="restoreGroup" />
     </div>
   </FormDrawer>
 </template>

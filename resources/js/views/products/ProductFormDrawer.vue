@@ -22,7 +22,8 @@ import ProductVariantsTable from './ProductVariantsTable.vue';
 import ProductCreateModifiers from './ProductCreateModifiers.vue';
 import { controlClass, textareaClass, borderOf } from './formStyle';
 import { blankLinkRow, validateRows, toLinksPayload } from './modifierLinkRows';
-import { modifierRuleText } from '../../utils/itemDetail';
+import { moveRow, excludedIds } from '../../utils/modifierExclusion';
+import InheritedModifierList from '../../components/product/InheritedModifierList.vue';
 
 /**
  * Drawer tambah/ubah produk beserta varian-variannya — dipecah utuh dari ProductsView. Drawer memegang seluruh
@@ -127,6 +128,9 @@ const basePrice = computed({
 const modifierRows = ref([blankLinkRow()]);
 // Mode ubah: tautan dari KATEGORI (hanya tampil) dan potret payload awal untuk mendeteksi perubahan.
 const inheritedLinks = ref([]);
+// 086 — grup kategori yang dilepas item ini + keadaan awalnya (hanya dikirim bila berubah; tanpa kunci server membiarkannya).
+const excludedLinks = ref([]);
+const excludedBaseline = ref('[]');
 const modifierBaseline = ref('[]');
 const modifierGroups = ref([]);
 const modifierErrors = ref({});
@@ -211,6 +215,8 @@ function openCreate(defaults = {}) {
   variantRows.value = [createVariant()];
   modifierRows.value = [blankLinkRow()];
   inheritedLinks.value = [];
+  excludedLinks.value = [];
+  excludedBaseline.value = '[]';
   modifierBaseline.value = '[]';
   modifierErrors.value = {};
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
@@ -258,12 +264,26 @@ async function openEdit(product) {
   modifierRows.value = own.length ? own : [blankLinkRow()];
   modifierBaseline.value = JSON.stringify(toLinksPayload(modifierRows.value));
   inheritedLinks.value = links.filter((l) => l.source === 'category');
+  excludedLinks.value = [...(full.modifier_excluded ?? [])];
+  excludedBaseline.value = JSON.stringify(excludedIds(excludedLinks.value));
   modifierErrors.value = {};
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showDrawer.value = true;
   loadModifierGroups();
 }
 defineExpose({ openCreate, openEdit });
+
+// 086 — melepas/memulihkan grup warisan kategori untuk item ini; pemindahan baris sama dengan laci Grup modifier.
+function excludeInherited(groupId) {
+  const moved = moveRow(inheritedLinks.value, excludedLinks.value, groupId);
+  inheritedLinks.value = moved.from;
+  excludedLinks.value = moved.to;
+}
+function restoreInherited(groupId) {
+  const moved = moveRow(excludedLinks.value, inheritedLinks.value, groupId);
+  excludedLinks.value = moved.from;
+  inheritedLinks.value = moved.to;
+}
 
 // --- 034-seller-po-bom: BOM varian dari drawer edit ---------------------------
 // Varian yang BOM-nya SELESAI: harga modal mengikuti biaya BOM dan dikunci (server menolak edit manual
@@ -439,9 +459,12 @@ async function saveProduct() {
       // Tautan modifier: hanya bila bagian itu terbaca DAN barisnya berubah (PUT mengganti seluruh tautan produk,
       // jadi tanpa perubahan tidak ada alasan menyentuhnya). Gagal di sini tidak membatalkan simpan: item sudah berubah.
       const links = toLinksPayload(modifierRows.value);
-      if (groupsReady.value && JSON.stringify(links) !== modifierBaseline.value) {
+      const exclusionIds = excludedIds(excludedLinks.value);
+      const exclusionChanged = JSON.stringify(exclusionIds) !== excludedBaseline.value;
+      if (groupsReady.value && (JSON.stringify(links) !== modifierBaseline.value || exclusionChanged)) {
         try {
-          const result = await saveModifierLinks(productId, links);
+          // 086 — argumen pengecualian hanya ikut bila berubah (tanpa argumen = kuncinya tidak dikirim).
+          const result = await saveModifierLinks(productId, links, ...(exclusionChanged ? [exclusionIds] : []));
           if (result?.applied === false) toast.push(t('products.ml_pending'));
         } catch {
           toast.error(t('products.f_links_failed'));
@@ -659,15 +682,15 @@ async function saveProduct() {
            berisi tautan tingkat-produk; tautan dari kategori ditampilkan di bawahnya, hanya-baca dan tidak dikirim. -->
       <ProductFormBlock v-if="groupsReady" :title="t('products.f_sec_modifier')">
         <ProductCreateModifiers :rows="modifierRows" :groups="modifierGroups" :errors="modifierErrors" @add="modifierRows.push(blankLinkRow())" @remove="(i) => modifierRows.splice(i, 1)" />
-        <div v-if="!isCreate && inheritedLinks.length" class="flex flex-col gap-1" data-testid="inherited-links">
-          <p class="text-[11.5px] font-semibold text-muted-5">{{ t('products.ml_from_category') }}</p>
-          <ul class="flex flex-col gap-0.5 text-[12.5px] text-muted-4">
-            <li v-for="l in inheritedLinks" :key="l.group_id" class="flex items-center gap-2">
-              <span class="font-medium text-ink">{{ l.name }}</span>
-              <span class="text-muted-3">{{ modifierRuleText(l, t) }}</span>
-            </li>
-          </ul>
-        </div>
+        <InheritedModifierList
+          v-if="!isCreate && (inheritedLinks.length || excludedLinks.length)"
+          :inherited="inheritedLinks"
+          :excluded="excludedLinks"
+          editable
+          testid="inherited-links"
+          @exclude="excludeInherited"
+          @restore="restoreInherited"
+        />
       </ProductFormBlock>
 
       <!-- DAPUR. Stasiun hanya tampil bila peran boleh membaca daftar stasiun; kosong = ikut kategori. -->

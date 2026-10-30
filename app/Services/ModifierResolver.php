@@ -10,7 +10,7 @@ use Illuminate\Support\Collection;
 
 /**
  * 028 US3 — SATU-SATUNYA tempat aturan modifier hidup (FR-022..FR-026):
- *  - grup yang berlaku untuk sebuah produk = grup produk itu ∪ grup kategorinya,
+ *  - grup yang berlaku untuk sebuah produk = grup produk itu ∪ grup kategorinya (kecuali yang DILEPAS item itu, 086),
  *    tanpa duplikat, hanya yang aktif dan punya opsi aktif;
  *  - pilihan klien divalidasi terhadap grup itu, BUKAN dipercaya apa adanya — id
  *    opsi dari grup lain/nonaktif/tak dikenal ditolak;
@@ -20,14 +20,32 @@ use Illuminate\Support\Collection;
 class ModifierResolver
 {
     /**
+     * 086 — SATU-SATUNYA pembaca grup yang diwarisi dari kategori: grup kategori dikurangi grup yang DILEPAS item ini
+     * (`modifier_group_product_exclusions`). Dipakai resolver ini, halaman Produk (detail), dan daftar Produk, supaya tiga
+     * pembaca tidak bisa berbeda pendapat tentang grup mana yang berlaku. Tautan item sendiri TIDAK disaring di sini:
+     * tautan item menang atas pengecualian untuk grup yang sama (lihat `effectiveGroups`).
+     *
+     * @return Collection<int, ModifierGroup>
+     */
+    public function inheritedGroups(Product $product): Collection
+    {
+        // Tanpa `.options`: daftar Produk memuat `category.modifierGroups:id,name` saja dan tidak boleh memicu kueri opsi per produk.
+        // Pemanggil yang butuh opsi (effectiveGroups) memuatnya sendiri.
+        $product->loadMissing(['category.modifierGroups', 'excludedModifierGroups']);
+        $excluded = $product->excludedModifierGroups->pluck('id');
+
+        return ($product->category?->modifierGroups ?? collect())->reject(fn (ModifierGroup $g) => $excluded->contains($g->id))->values();
+    }
+
+    /**
      * @return Collection<int, ModifierGroup> grup aktif berurut (display_order, id), tiap grup membawa HANYA opsi aktif
      */
     public function effectiveGroups(Product $product): Collection
     {
-        $product->loadMissing(['modifierGroups.options', 'category.modifierGroups.options']);
+        $product->loadMissing(['modifierGroups.options', 'category.modifierGroups.options', 'excludedModifierGroups']);
 
         return $product->modifierGroups
-            ->concat($product->category?->modifierGroups ?? [])
+            ->concat($this->inheritedGroups($product))
             ->unique('id')
             ->filter(fn (ModifierGroup $g) => $g->is_active)
             ->map(function (ModifierGroup $g) {
@@ -87,7 +105,7 @@ class ModifierResolver
         // instance produk bisa basi (grup baru diubah/dinonaktifkan), dan aturan pilihan tidak
         // boleh bergantung pada apakah relasi kebetulan sudah dimuat. (Jalur daftar menu
         // sengaja memakai eager-load lewat effectiveGroups() langsung.)
-        $variant->product->load(['modifierGroups.options', 'category.modifierGroups.options']);
+        $variant->product->load(['modifierGroups.options', 'category.modifierGroups.options', 'excludedModifierGroups']);
         $groups = $this->effectiveGroups($variant->product);
 
         $valid = $groups->flatMap(fn (ModifierGroup $g) => $g->options)->keyBy('id');

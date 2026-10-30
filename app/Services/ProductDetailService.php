@@ -24,7 +24,7 @@ class ProductDetailService
     {
         $product->loadMissing([
             'category.station', 'station',
-            'modifierGroups.options', 'category.modifierGroups.options',
+            'modifierGroups.options', 'category.modifierGroups.options', 'excludedModifierGroups',
             'availabilityMarks' => fn ($m) => $m->active()->with(['reason', 'marker:id,name']),
         ]);
 
@@ -42,6 +42,7 @@ class ProductDetailService
                 ? ['version' => (int) (MenuRelease::query()->where('status', MenuRelease::PUBLISHED)->max('version') ?? 0), 'outlets_active' => 1]
                 : null,
             'modifier_links' => $this->links($product),
+            'modifier_excluded' => $this->excludedLinks($product),
             'availability' => $this->availabilityRows($product),
             'outlet_prices' => $this->outletPrices($product),
             'recipe' => $this->recipeSummary($product, $user),
@@ -154,11 +155,32 @@ class ProductDetailService
         foreach ($product->modifierGroups as $g) {
             $rows[$g->id] = $this->row($g, 'product', $g->pivot);
         }
-        foreach ($product->category?->modifierGroups ?? [] as $g) {
+        // 086 — grup warisan datang dari SATU pembaca (ModifierResolver::inheritedGroups): yang dilepas item ini tidak ikut.
+        foreach (app(ModifierResolver::class)->inheritedGroups($product) as $g) {
             $rows[$g->id] ??= $this->row($g, 'category', null);
         }
 
         return collect($rows)->sortBy([['display_order', 'asc'], ['group_id', 'asc']])->values()->all();
+    }
+
+    /**
+     * 086 — grup yang MASIH diwarisi kategori tetapi dilepas item ini, supaya UI bisa memulihkannya. Pengecualian yang
+     * grupnya sudah tidak ada di kategori tidak ditampilkan (tetap tersimpan, tanpa galat).
+     *
+     * Bentuknya SAMA dengan baris `modifier_links` (aturan grup ikut), supaya UI bisa menampilkannya lagi sebagai warisan
+     * begitu dipulihkan tanpa meminta ulang ke server.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function excludedLinks(Product $product): array
+    {
+        $excluded = $product->excludedModifierGroups->pluck('id');
+
+        return ($product->category?->modifierGroups ?? collect())
+            ->filter(fn ($g) => $excluded->contains($g->id))
+            ->map(fn ($g) => $this->row($g, 'category', null))
+            ->sortBy([['display_order', 'asc'], ['group_id', 'asc']])
+            ->values()->all();
     }
 
     private function row($g, string $source, $pivot): array

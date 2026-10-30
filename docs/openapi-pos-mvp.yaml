@@ -1729,6 +1729,11 @@ paths:
         catatan 86 per outlet) dan `outlet_prices` `{outlets:[{id,code,name}], by_variant:{variantId:{outletId:"harga"}}}`
         berisi HANYA harga khusus outlet (yang tidak ada mengikuti harga dasar); keduanya berbentuk lama / `null` bila hanya
         satu outlet terlihat.
+
+        086: `modifier_links` memuat grup modifier EFEKTIF (tautan item + grup kategori yang TIDAK dilepas item ini; baris
+        kategori bertanda `source: category`). `modifier_excluded` = baris berbentuk sama dengan `modifier_links` (aturan grup ikut) untuk grup yang masih
+        diwarisi kategori tetapi dilepas item ini (kosong bila tidak ada); pengecualian yang grupnya sudah tidak ada di
+        kategori tidak ditampilkan.
       responses:
         '200':
           description: Berhasil
@@ -3973,6 +3978,13 @@ paths:
         Aturan tautan (`is_required`, `min_select`, `max_select`, `display_order`) menimpa aturan grup saat order
         (`ModifierResolver`). `max_select` kosong = tanpa batas. Rilis aktif: diantrekan sebagai `menu_change`
         jenis `modifier_link` (`applied:false`).
+
+        086 — `excluded_group_ids` (OPSIONAL): grup yang DIWARISI dari kategori tetapi DILEPAS untuk item ini saja
+        (kategori dan item lain tidak berubah; tautan item ke grup yang sama tetap menang). Tanpa kunci = pengecualian
+        tidak berubah (klien lama aman); ada, termasuk `[]` = penggantian penuh (`[]` memulihkan semuanya). Satu
+        transaksi dengan penggantian tautan, satu entri log `modifier_links_updated` (nilai lama/baru pengecualian ikut
+        bila dikirim), dan mengikuti rilis menu yang sama (payload `menu_change` membawa `excluded_group_ids`).
+        Opsi dari grup yang dilepas ditolak 422 pada item itu di `POST /orders` dan `POST /tabs/{id}/items`.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       requestBody:
@@ -3994,10 +4006,15 @@ paths:
                       min_select: { type: integer, minimum: 0 }
                       max_select: { type: integer, nullable: true, minimum: 1 }
                       display_order: { type: integer, minimum: 0 }
+                excluded_group_ids:
+                  type: array
+                  maxItems: 30
+                  description: "086 — grup kategori yang dilepas item ini. Tanpa kunci = tidak berubah; [] = pulihkan semua."
+                  items: { type: integer }
       responses:
         '200': { description: "{applied, change:{id,kind,status}|null}" }
         '403': { description: Tanpa izin }
-        '422': { description: "Aturan tidak valid (0 ≤ min ≤ max, grup tak dikenal/ganda)" }
+        '422': { description: "Aturan tidak valid (0 ≤ min ≤ max, grup tak dikenal/ganda; `excluded_group_ids.N` untuk id pengecualian tak dikenal/ganda)" }
 
   /products/{id}/recipes:
     get:
