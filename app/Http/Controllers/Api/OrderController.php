@@ -62,6 +62,10 @@ class OrderController extends Controller
     {
         try {
             $order = $this->orderService->create($request->validated(), $request->user());
+        } catch (\App\Exceptions\InputRejectedException $e) {
+            // 084 — pilihan modifier di luar aturan adalah masukan yang ditolak (422 per-field, sama dengan tab),
+            // bukan konflik aturan bisnis; harus dilempar ulang SEBELUM catch ValidationException di bawah.
+            throw $e;
         } catch (ValidationException $e) {
             // Aturan bisnis (stok tidak cukup, pembayaran kurang) dipetakan
             // ke 409 sesuai kontrak, bukan 422 generik — 422 dipakai untuk

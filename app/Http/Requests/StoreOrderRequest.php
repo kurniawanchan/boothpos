@@ -26,6 +26,9 @@ class StoreOrderRequest extends FormRequest
             'items.*.variant_id' => ['required', 'integer', 'exists:product_variants,id'],
             'items.*.qty' => ['required', 'integer', 'min:1'],
             'items.*.discount_amount' => ['sometimes', 'numeric', 'min:0'],
+            // 084 — pilihan modifier POS web. Hanya id: nama/harga dihitung server (ModifierResolver).
+            'items.*.modifier_option_ids' => ['sometimes', 'array'],
+            'items.*.modifier_option_ids.*' => ['integer'],
 
             'payments' => ['required', 'array', 'min:1'],
             'payments.*.method' => ['required', 'in:cash,bank_transfer,qr_ewallet'],

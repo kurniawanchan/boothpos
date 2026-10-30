@@ -25,12 +25,16 @@ import java.util.Calendar
 
 private data class Nav(val dest: Dest, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
-private val NAV = listOf(
-    Nav(Dest.TABLES, "Meja", Icons.Filled.TableRestaurant),
-    Nav(Dest.EDITOR, "Counter", Icons.Filled.Storefront),
-    Nav(Dest.ORDERS, "Order", Icons.Filled.Receipt),
-    Nav(Dest.SHIFT, "Shift", Icons.Filled.PointOfSale),
-)
+// 084 — urutan dan istilah dari NAV_SPECS (Kasir, Meja, Pesanan, Shift, Koneksi); di sini hanya ikonnya.
+private val NAV = NAV_SPECS.map { Nav(it.dest, it.label, navIcon(it.dest)) }
+
+private fun navIcon(d: Dest): androidx.compose.ui.graphics.vector.ImageVector = when (d) {
+    Dest.EDITOR -> Icons.Filled.Storefront
+    Dest.TABLES -> Icons.Filled.TableRestaurant
+    Dest.ORDERS -> Icons.Filled.Receipt
+    Dest.SHIFT -> Icons.Filled.PointOfSale
+    else -> Icons.Filled.TabletAndroid // Dest.SYNC (Koneksi)
+}
 
 /** Rangka aplikasi (rail kiri di layar lebar, bottom nav di compact) — dipakai semua layar kecuali PIN dan buka shift. */
 @Composable
@@ -38,9 +42,9 @@ fun PosShell(store: PosStore, title: String, subtitle: String? = null, content: 
     val size = windowSize()
     val compact = size == Size.COMPACT
     Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (!compact) Rail(store)
+        if (!compact && store.railVisible) Rail(store)
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            Header(store, title, subtitle, compact)
+            Header(store, title, subtitle, compact, showMenuButton = !compact && !store.railVisible)
             Banner(store)
             Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = if (compact) 12.dp else 16.dp), content = content)
             if (compact) BottomNav(store)
@@ -53,16 +57,17 @@ private fun Rail(store: PosStore) {
     val openCount = store.openOrders.size
     NavigationRail(containerColor = MaterialTheme.colorScheme.background, modifier = Modifier.width(88.dp)) {
         Spacer(Modifier.height(12.dp))
-        Icon(Icons.Filled.Menu, "Menu", Modifier.padding(8.dp))
+        // 084 — hamburger menyembunyikan sidebar; saat tersembunyi tombol yang sama muncul di header.
+        IconButton({ store.toggleRail() }) { Icon(Icons.Filled.Menu, "Sembunyikan menu") }
         Spacer(Modifier.height(8.dp))
         FloatingActionButton(onClick = { store.newCounter() }, containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
-            Icon(Icons.Filled.Add, "Order baru")
+            Icon(Icons.Filled.Add, "Pesanan baru")
         }
         Spacer(Modifier.height(16.dp))
         NAV.forEach { n ->
             NavigationRailItem(
                 selected = store.dest == n.dest,
-                onClick = { if (n.dest == Dest.EDITOR) { if (store.active?.kind == com.warkop.pos.model.OrderKind.COUNTER) store.go(Dest.EDITOR) else store.newCounter() } else store.go(n.dest) },
+                onClick = { if (n.dest == Dest.EDITOR) store.openKasir() else store.go(n.dest) },
                 icon = {
                     if (n.dest == Dest.ORDERS && openCount > 0) BadgedBox({ Badge { Text(openCount.toString()) } }) { Icon(n.icon, n.label) } else Icon(n.icon, n.label)
                 },
@@ -70,8 +75,6 @@ private fun Rail(store: PosStore) {
                 alwaysShowLabel = true,
             )
         }
-        Spacer(Modifier.weight(1f))
-        NavigationRailItem(selected = store.dest == Dest.SYNC, onClick = { store.go(Dest.SYNC) }, icon = { Icon(Icons.Filled.TabletAndroid, "Perangkat") }, label = { Text("Perangkat") }, alwaysShowLabel = true)
         Spacer(Modifier.height(12.dp))
     }
 }
@@ -80,29 +83,37 @@ private fun Rail(store: PosStore) {
 private fun BottomNav(store: PosStore) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         NAV.forEach { n ->
-            NavigationBarItem(selected = store.dest == n.dest, onClick = { if (n.dest == Dest.EDITOR) store.newCounter() else store.go(n.dest) }, icon = { Icon(n.icon, n.label) }, label = { Text(n.label) })
+            NavigationBarItem(selected = store.dest == n.dest, onClick = { if (n.dest == Dest.EDITOR) store.openKasir() else store.go(n.dest) }, icon = { Icon(n.icon, n.label) }, label = { Text(n.label) })
         }
     }
 }
 
 @Composable
-private fun Header(store: PosStore, title: String, subtitle: String?, compact: Boolean) {
+private fun Header(store: PosStore, title: String, subtitle: String?, compact: Boolean, showMenuButton: Boolean = false) {
     val u = store.user
     val shift = store.shift
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        // 084 — sidebar tersembunyi: hamburger yang sama ada di sini supaya bisa ditampilkan lagi.
+        if (showMenuButton) IconButton({ store.toggleRail() }) { Icon(Icons.Filled.Menu, "Tampilkan menu") }
         // 077 — logo + nama toko di setiap layar setelah login; di layar sempit logo mengecil dan nama dipersempit.
-        StoreMark(store, logoSize = if (compact) 32.dp else 40.dp, maxTextWidth = if (compact) 96.dp else 200.dp)
+        // 084 — baris kedua di samping logo (dulu nama outlet yang mengulang nama toko) menjadi "Shift dibuka {jam}".
+        StoreMark(store, logoSize = if (compact) 32.dp else 40.dp, maxTextWidth = if (compact) 96.dp else 200.dp, secondLine = shiftOpenedLine(shift?.openedAt))
         Spacer(Modifier.width(if (compact) 10.dp else 16.dp))
         Column(Modifier.weight(1f)) {
             Text(title, fontSize = if (compact) 20.sp else 28.sp, fontWeight = FontWeight.Normal, maxLines = 1)
-            Text(subtitle ?: (if (compact) "${u?.name} · ${shift?.let { "Shift terbuka" } ?: "Belum ada shift"}" else "${u?.name} (${u?.role}) · ${shift?.let { "Shift dibuka ${it.openedAt}" } ?: "Belum ada shift"}"), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            subtitle?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1) }
         }
+        // 084 — jam berdetak (dulu tidak ada di header; jam di layar PIN membeku).
+        Text(liveClockText(), Modifier.padding(end = 12.dp), fontSize = if (compact) 15.sp else 18.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         ConnChip(store)
         Spacer(Modifier.width(10.dp))
         // 077 / US7 — foto pengguna dari server; inisial bila tidak ada. Mengetuknya tetap mengunci layar.
         UserAvatar(u, 48.dp, Modifier.clickable { store.lock() }, tone = Tone.ACCENT)
     }
 }
+
+/** 084 — "Shift dibuka 08:00", atau "Belum ada shift" bila belum dibuka. */
+fun shiftOpenedLine(openedAt: String?): String = openedAt?.takeIf { it.isNotBlank() }?.let { "Shift dibuka $it" } ?: "Belum ada shift"
 
 @Composable
 fun ConnChip(store: PosStore) {
@@ -116,7 +127,8 @@ fun ConnChip(store: PosStore) {
         Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(if (warn) Icons.Filled.WifiOff else Icons.Filled.Wifi, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text(store.conn.label, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+            // 084 — label menampilkan nama pengguna yang login (dulu "Online"); offline tetap terlihat lewat ikon dan nada peringatan.
+            Text(store.user?.name.orEmpty().ifBlank { store.conn.label }, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 160.dp))
         }
     }
 }
@@ -130,7 +142,7 @@ private fun Banner(store: PosStore) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.WarningAmber, null)
             Spacer(Modifier.width(8.dp))
-            Text("Perangkat offline lebih dari 4 jam. Order baru perlu persetujuan Outlet Manager dan tunai baru ditolak. EDC tetap bisa dipakai.", fontSize = 13.sp)
+            Text("Tablet ini offline lebih dari 4 jam. Pesanan baru perlu persetujuan Outlet Manager dan tunai baru ditolak. EDC tetap bisa dipakai.", fontSize = 13.sp)
         }
     }
 }

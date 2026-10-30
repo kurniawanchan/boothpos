@@ -17,6 +17,7 @@ class OrderService
     public function __construct(
         private StockService $stockService,
         private PaymentRecorder $paymentRecorder,
+        private ModifierResolver $modifiers,
     ) {}
 
     /**
@@ -96,7 +97,13 @@ class OrderService
 
                 $qty = (int) $itemInput['qty'];
                 $discount = (float) ($itemInput['discount_amount'] ?? 0);
-                $lineValue = (float) $variant->sell_price * $qty;
+
+                // 084 — pilihan modifier divalidasi dan di-snapshot SERVER-side oleh ModifierResolver (satu-satunya
+                // tempat aturannya). Harga per unit = harga outlet + selisih; klien tidak pernah mengirim harga.
+                // Varian tanpa grup menghasilkan snapshot kosong dan harga yang sama seperti sebelumnya.
+                $resolved = $this->modifiers->resolve($variant, $itemInput['modifier_option_ids'] ?? []);
+                $unitPrice = $resolved['unit_price'];
+                $lineValue = $unitPrice * $qty;
 
                 // BUG YANG DITEMUKAN & DIPERBAIKI (security review 2026-09-05,
                 // SEC-H2) — discount_amount per item semula hanya divalidasi
@@ -116,6 +123,8 @@ class OrderService
 
                 $lineData[] = [
                     'variant' => $variant,
+                    'unit_price' => $unitPrice,
+                    'modifiers' => $resolved['snapshot'] ?: null,
                     'qty' => $qty,
                     'discount' => $discount,
                     'line_total' => $lineTotal,
@@ -206,12 +215,13 @@ class OrderService
                     'variant_id' => $variant->id,
                     'home_outlet_id' => $variant->product->home_outlet_id,
                     'sku_snapshot' => $variant->sku,
-                    'name_snapshot' => $variant->product->name.' — '.$variant->variant_name,
+                    'name_snapshot' => $variant->lineName(), // 084: tanpa "— Standard" untuk varian tunggal bawaan
                     'qty' => $line['qty'],
                     'cost_price' => $variant->cost_price,
-                    'sell_price' => $variant->sell_price,
+                    'sell_price' => $line['unit_price'],
                     'discount_amount' => $line['discount'],
                     'line_total' => $line['line_total'],
+                    'modifiers' => $line['modifiers'],
                 ]);
 
                 $this->stockService->applyMovementIfTracked(

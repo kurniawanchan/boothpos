@@ -418,7 +418,8 @@ class ReportTest extends TestCase
 
         $detailSheet = $spreadsheet->getSheetByName('Detail Transaksi');
         $this->assertSame('item_name', $detailSheet->getCell('D1')->getValue());
-        $this->assertSame('Gantungan Kunci — Standard', $detailSheet->getCell('D2')->getValue());
+        // 084 — varian tunggal bawaan "Standard" tidak ikut di nama baris (ProductVariant::lineName()).
+        $this->assertSame('Gantungan Kunci', $detailSheet->getCell('D2')->getValue());
         $this->assertSame(2, $detailSheet->getCell('E2')->getValue());
 
         unlink($tmpPath);

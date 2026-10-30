@@ -520,8 +520,13 @@ class ProductController extends Controller
         app(\App\Support\OutletPriceBook::class)->useOrderingOutlet($orderingOutlet ?? $stockOutlet);
         $notCarriedHere = app(\App\Services\OutletMenuService::class)->notCarriedProductIds($orderingOutlet);
 
+        // 084 — opt-in (Konstitusi V): hanya POS web yang meminta grup modifier pada hasil pencarian.
+        $withModifiers = $request->boolean('with_modifiers');
+
         $variants = ProductVariant::query()
-            ->with(['product.homeOutlet', 'product.category'])
+            // 084 — grup modifier efektif ikut di-eager-load (hasil pencarian POS web membuka pemilih modifier tanpa
+            // permintaan tambahan per kartu; maksimal `limit` varian, jadi tetap konstan).
+            ->with(array_merge(['product.homeOutlet', 'product.category'], $withModifiers ? ['product.modifierGroups.options', 'product.category.modifierGroups.options'] : []))
             ->where('is_active', true)
             ->when($notCarriedHere !== [], fn ($q) => $q->whereNotIn('product_id', $notCarriedHere))
             // 043 — produk yang didiskontinu tidak lagi bisa dipilih .
@@ -537,6 +542,7 @@ class ProductController extends Controller
 
         $data = $variants->map(fn (ProductVariant $v) => [
             'variant_id' => $v->id,
+            'product_id' => $v->product_id,
             'sku' => $v->sku,
             'label' => $v->product->name.' — '.$v->variant_name,
             'home_outlet_name' => $v->product->homeOutlet->name,
@@ -552,7 +558,7 @@ class ProductController extends Controller
             // exposes to every caller (see its docblock), not duplicated
             // here anymore.
             'image_url' => $v->image_url,
-        ]);
+        ] + ($withModifiers ? ['modifier_groups' => app(\App\Services\ModifierResolver::class)->present($v->product)] : []));
 
         return response()->json(['data' => $data]);
     }

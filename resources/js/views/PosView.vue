@@ -24,6 +24,8 @@ import EmptyState from '../components/ui/EmptyState.vue';
 import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import PosDraftsPanel from '../components/pos/PosDraftsPanel.vue';
+import ModifierPickerModal from '../components/restaurant/ModifierPickerModal.vue';
+import { describeSelection, selectionDelta } from '../utils/modifierRules';
 import { savePosDraft, resumePosDraft } from '../api/posDrafts';
 
 const cart = usePosCartStore();
@@ -84,6 +86,7 @@ async function loadBrowse() {
       ...(selectedOutletIds.value.length ? { home_outlet_id: selectedOutletIds.value } : {}),
       is_active: true,
       with_variants: 1,
+      with_modifiers: 1, // 084: grup modifier efektif per produk untuk pemilih di kasir
       pos: 1, // 045: menu menurut outlet shift (item yang tidak dibawa tidak ditawarkan; harga outlet)
       per_page: 100,
     });
@@ -122,7 +125,7 @@ const runSearch = useDebouncedFn(async () => {
     // buildSearchCards passes through to the card and, via the card, to the
     // cart line, and its `category_name` shows as the same label the browse
     // cards have (030).
-    const res = await lookupVariants(term, 40, { pos: true });
+    const res = await lookupVariants(term, 40, { pos: true, withModifiers: true });
     if (seq !== searchSeq) return;
     searchResults.value = res.data;
   } finally {
@@ -150,10 +153,31 @@ function refuseUnavailable(entry) {
   toast.warning(availability.unavailableReason(entry) === 'discontinued' ? t('pos.item_discontinued') : t('pos.item_sold_out'));
 }
 
+// 084 — item yang punya grup modifier membuka pemilih dulu; item yang dipilih disimpan di sini sampai dikonfirmasi.
+// Aturan pilihan hanya kemudahan di klien; server (ModifierResolver) menolak pelanggaran dan menghitung harga.
+const modifierTarget = ref(null);
+
 function addToCart(item) {
   if (availability.isUnavailable(item)) return refuseUnavailable(item);
   if (item.current_stock <= 0) return;
+  if (item.modifier_groups?.length) {
+    modifierTarget.value = item;
+    return;
+  }
   cart.add(item);
+}
+
+function confirmModifiers({ modifier_option_ids }) {
+  const item = modifierTarget.value;
+  if (!item) return;
+  const selection = Object.fromEntries(item.modifier_groups.map((g) => [g.id, g.options.filter((o) => modifier_option_ids.includes(o.id)).map((o) => o.id)]));
+  cart.add({
+    ...item,
+    sell_price: toMoneyString(Number(item.sell_price) + selectionDelta(item.modifier_groups, selection)),
+    modifier_option_ids,
+    modifiers: describeSelection(item.modifier_groups, modifier_option_ids),
+  });
+  modifierTarget.value = null;
 }
 
 function selectProductCard(card) {
@@ -207,7 +231,7 @@ async function handlePaymentSubmit(payments) {
       customer_id: selectedCustomer.value?.id ?? null,
       local_ref: localRef.value,
       discount_amount: toMoneyString(discount.value),
-      items: cart.items.map((i) => ({ variant_id: i.variant_id, qty: i.qty })),
+      items: cart.items.map((i) => ({ variant_id: i.variant_id, qty: i.qty, ...(i.modifier_option_ids?.length ? { modifier_option_ids: i.modifier_option_ids } : {}) })),
       payments,
     });
     lastOrderId.value = order.id;
@@ -243,6 +267,11 @@ const savingDraft = ref(false);
 
 async function saveDraft() {
   if (cart.isEmpty) return;
+  // 084 — draf menyimpan varian + jumlah saja; menyimpannya akan membuang pilihan modifier tanpa kabar.
+  if (cart.hasModifiers) {
+    toast.warning(t('pos.draft_no_modifiers'));
+    return;
+  }
   savingDraft.value = true;
   try {
     await savePosDraft({
@@ -435,6 +464,15 @@ async function resumeDraft(draftId) {
     <ReceiptModal :open="showReceipt" :order-id="lastOrderId" @close="closeReceipt" />
 
     <ProductVariantPickerModal :open="showVariantPicker" :product="variantPickerCard" @close="closeVariantPicker" @select="handleVariantPick" />
+    <ModifierPickerModal
+      :open="!!modifierTarget"
+      :item-name="modifierTarget?.name ?? ''"
+      :base-price="modifierTarget?.sell_price ?? '0'"
+      :groups="modifierTarget?.modifier_groups ?? []"
+      :show-note="false"
+      @close="modifierTarget = null"
+      @confirm="confirmModifiers"
+    />
     <PosDraftsPanel :open="showDrafts" @close="showDrafts = false" @resume="resumeDraft" />
   </div>
 </template>

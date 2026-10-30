@@ -179,7 +179,13 @@ describe('buildSearchCards', () => {
       category_code: null,
       category_name: 'Pin',
       image_url: 'http://localhost/storage/variants/slippery.png',
+      modifier_groups: [], // 084 — hasil tanpa grup modifier tetap membawa daftar kosong
     });
+  });
+
+  it('carries the effective modifier groups of a hit through to the card (084)', () => {
+    const groups = [{ id: 1, name: 'Level gula', selection_type: 'single', is_required: true, options: [{ id: 5, name: 'Normal', price_delta: '0.00' }] }];
+    expect(buildSearchCards([hit({ variant_id: 3, modifier_groups: groups })])[0].modifier_groups).toEqual(groups);
   });
 
   it('returns an empty list for null/undefined/empty input', () => {

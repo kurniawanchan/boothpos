@@ -42,7 +42,11 @@ class OverrideQrisVerifyTest extends TestCase
 
         $channel = PaymentChannel::factory()->create();
         $this->apiPay($this->tab, [['method' => 'qr_ewallet', 'amount' => 5000, 'channel_id' => $channel->id]])->assertOk();
-        $this->paymentId = Payment::where('order_id', $this->tab)->where('method', 'qr_ewallet')->firstOrFail()->id;
+        $payment = Payment::where('order_id', $this->tab)->where('method', 'qr_ewallet')->firstOrFail();
+        // 084 — QRIS baru langsung terverifikasi; aturan verifikasi ini hanya berlaku untuk baris WARISAN yang
+        // masih `pending`, jadi baris uji dikembalikan ke keadaan itu.
+        $payment->update(['verification' => 'pending']);
+        $this->paymentId = $payment->id;
     }
 
     private function verify(array $body)

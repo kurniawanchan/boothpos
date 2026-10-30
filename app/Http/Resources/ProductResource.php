@@ -32,15 +32,7 @@ class ProductResource extends JsonResource
             ),
             'variants' => ProductVariantResource::collection($this->whenLoaded('variants')),
             // 028 — hanya bila diminta (?with_modifiers=1): grup EFEKTIF yang aktif beserta opsi aktifnya.
-            'modifier_groups' => $this->when($this->relationLoaded('modifierGroups'), fn () => app(\App\Services\ModifierResolver::class)
-                ->effectiveGroups($this->resource)
-                ->map(fn ($g) => [
-                    'id' => $g->id, 'name' => $g->name, 'selection_type' => $g->selection_type,
-                    'is_required' => $g->is_required, 'min_select' => $g->min_select, 'max_select' => $g->max_select,
-                    'options' => $g->options->map(fn ($o) => [
-                        'id' => $o->id, 'name' => $o->name, 'price_delta' => number_format((float) $o->price_delta, 2, '.', ''),
-                    ])->values(),
-                ])->values()),
+            'modifier_groups' => $this->when($this->relationLoaded('modifierGroups'), fn () => app(\App\Services\ModifierResolver::class)->present($this->resource)),
         ];
     }
 

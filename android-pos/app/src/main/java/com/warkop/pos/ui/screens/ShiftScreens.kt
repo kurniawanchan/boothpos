@@ -73,8 +73,8 @@ fun ShiftHubScreen(store: PosStore) {
                 val cols = if (windowSize() == Size.COMPACT) 2 else 3
                 listOf(
                     Triple("Penjualan", rp(r.totalSales), "${r.orderCount} struk"),
-                    Triple("Tunai bersih", rp(r.netCash), "Setelah kembalian ${rp(r.changeGiven)}"),
-                    Triple("Transfer", rp(r.amountOf("bank_transfer")), "Non-tunai"),
+                    Triple("Tunai", rp(r.netCash), "Setelah kembalian ${rp(r.changeGiven)}"),
+                    Triple("EDC", rp(r.edc), "Non-tunai"),
                     Triple("QRIS", rp(r.amountOf("qr_ewallet")), "Sudah terverifikasi"),
                     Triple("Kas masuk / keluar", "${rp(r.cashIn)} / ${rp(r.cashOut)}", movements),
                     Triple("Void / batal", "${r.voidCount}", rp(r.voidTotal)),
@@ -127,8 +127,8 @@ private fun HourlyCard(r: ShiftReport, modifier: Modifier) {
 @Composable
 private fun MixCard(r: ShiftReport, modifier: Modifier) {
     val parts = listOf(
-        Triple("Tunai bersih", r.netCash, MaterialTheme.colorScheme.primaryContainer),
-        Triple("Transfer", r.amountOf("bank_transfer"), MaterialTheme.colorScheme.primary),
+        Triple("Tunai", r.netCash, MaterialTheme.colorScheme.primaryContainer),
+        Triple("EDC", r.edc, MaterialTheme.colorScheme.primary),
         Triple("QRIS", r.amountOf("qr_ewallet"), MaterialTheme.colorScheme.secondaryContainer),
     )
     val total = parts.sumOf { it.second }.coerceAtLeast(1)
@@ -172,7 +172,7 @@ fun XReportScreen(store: PosStore) {
                         "Penjualan" to rp(r.totalSales),
                         "Kembalian diberikan" to rp(r.changeGiven),
                         "Tunai diterima" to rp(r.cashReceived),
-                        "Transfer" to rp(r.amountOf("bank_transfer")),
+                        "EDC" to rp(r.edc),
                         "QRIS" to rp(r.amountOf("qr_ewallet")),
                         "Kas masuk" to rp(r.cashIn),
                         "Kas keluar" to rp(r.cashOut),
@@ -184,7 +184,7 @@ fun XReportScreen(store: PosStore) {
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                PrimaryPill("Cetak X-report", { store.say("Cetak belum tersedia: printer belum tersambung.") }, icon = Icons.Filled.Print)
+                PrimaryPill("Cetak X-report", { store.printXReport() }, icon = Icons.Filled.Print)
             }
         }
     }
@@ -214,8 +214,8 @@ fun CloseShiftScreen(store: PosStore) {
             ReportGate(store.report, { store.refreshShiftReport() }) { r ->
                 val cells = listOf(
                     Triple("Penjualan", rp(r.totalSales), "${r.orderCount} struk"),
-                    Triple("Tunai bersih", rp(r.netCash), "Setelah kembalian ${rp(r.changeGiven)}"),
-                    Triple("Transfer", rp(r.amountOf("bank_transfer")), "Non-tunai"),
+                    Triple("Tunai", rp(r.netCash), "Setelah kembalian ${rp(r.changeGiven)}"),
+                    Triple("EDC", rp(r.edc), "Non-tunai"),
                     Triple("QRIS", rp(r.amountOf("qr_ewallet")), "Sudah terverifikasi"),
                     Triple("Kas masuk / keluar", "${rp(r.cashIn)} / ${rp(r.cashOut)}", "Selama shift"),
                     Triple("Void / batal", r.voidCount.toString(), rp(r.voidTotal)),
@@ -229,7 +229,7 @@ fun CloseShiftScreen(store: PosStore) {
                 r.expectedCash?.let { expected ->
                     Surface(Modifier.fillMaxWidth().padding(bottom = 8.dp), shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer) {
                         Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) { Text("Kas seharusnya di laci", fontSize = 14.sp); Text("Modal + tunai bersih + kas masuk − kas keluar", fontSize = 12.sp) }
+                            Column(Modifier.weight(1f)) { Text("Kas seharusnya di laci", fontSize = 14.sp); Text("Modal + tunai + kas masuk − kas keluar", fontSize = 12.sp) }
                             Text(rp(expected), fontSize = 28.sp, fontWeight = FontWeight.Medium)
                         }
                     }
@@ -293,8 +293,12 @@ fun CloseResultScreen(store: PosStore) {
                 }
                 r.tolerance?.let { Text("Toleransi server: ${rp(it)}.", Modifier.padding(top = 10.dp), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 if (within == false) Text("Selisih melewati toleransi — perlu persetujuan. Persetujuan belum tersedia di aplikasi ini.", Modifier.padding(top = 6.dp), color = MaterialTheme.colorScheme.error)
-                Text("Z-report tersimpan di server. Cetak belum tersedia: printer belum tersambung.", Modifier.padding(vertical = 18.dp), fontSize = 17.sp)
-                PrimaryPill("Selesai", { store.finishShift() })
+                Text("Z-report tersimpan di server.", Modifier.padding(top = 18.dp, bottom = 12.dp), fontSize = 17.sp)
+                // 084 — "Selesai" bersebelahan dengan "Cetak Z-report" (satu baris), bukan di bawahnya.
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedPill("Cetak Z-report", { store.printZReport() }, icon = Icons.Filled.Print)
+                    PrimaryPill("Selesai", { store.finishShift() })
+                }
             }
         }
     }
@@ -307,16 +311,16 @@ fun CloseResultScreen(store: PosStore) {
 @Composable
 fun SyncScreen(store: PosStore) {
     val hb = store.heartbeat
-    PosShell(store, title = "Perangkat & sinkron") {
+    PosShell(store, title = "Koneksi") {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.End) {
                 PrimaryPill("Periksa koneksi", { store.heartbeatNow() }, icon = Icons.Filled.Sync)
             }
             val cells = listOf(
                 Triple("Koneksi", syncConnectionLabel(hb), syncConnectionNote(hb)),
-                Triple("Jam perangkat", syncSkewLabel(hb.skewSeconds), syncSkewNote(hb.skewSeconds)),
+                Triple("Jam tablet", syncSkewLabel(hb.skewSeconds), syncSkewNote(hb.skewSeconds)),
                 Triple("Rilis menu", hb.menuRelease ?: "Belum ada rilis", if (hb.menuRelease == null) "Server belum mengirim rilis menu" else "Rilis dari server"),
-                Triple("Siap EOD (perangkat ini)", if (store.shift == null) "Siap" else "Belum", "EOD dijalankan Outlet Manager di back office"),
+                Triple("Siap EOD (tablet ini)", if (store.shift == null) "Siap" else "Belum", "EOD dijalankan Outlet Manager di back office"),
             )
             cells.chunked(if (windowSize() == Size.COMPACT) 2 else 4).forEach { row -> Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { row.forEach { (a, b, c) -> Cell(a, b, c, Modifier.weight(1f).heightIn(min = 118.dp)) } } }
             // 050 / T024 — printer sungguhan menggantikan baris "Belum tersedia".
@@ -341,6 +345,6 @@ private fun syncSkewLabel(skew: Int?): String = if (skew == null) "—" else "$s
 
 private fun syncSkewNote(skew: Int?): String = when {
     skew == null -> "Belum ada data dari server"
-    com.warkop.pos.state.skewWarns(skew) -> "Selisih lebih dari ${com.warkop.pos.state.SKEW_WARN_SECONDS} dtk — koreksi jam perangkat"
+    com.warkop.pos.state.skewWarns(skew) -> "Selisih lebih dari ${com.warkop.pos.state.SKEW_WARN_SECONDS} dtk — koreksi jam tablet"
     else -> "Dalam batas ±${com.warkop.pos.state.SKEW_WARN_SECONDS} dtk"
 }

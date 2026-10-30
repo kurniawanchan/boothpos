@@ -53,6 +53,24 @@ class ModifierResolver
     }
 
     /**
+     * 084 — bentuk JSON grup efektif untuk klien (daftar produk `with_modifiers` dan `GET /variants/lookup`).
+     * Satu tempat, supaya dua endpoint tidak pernah memberi bentuk yang berbeda untuk grup yang sama.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function present(Product $product): array
+    {
+        return $this->effectiveGroups($product)
+            ->map(fn (ModifierGroup $g) => [
+                'id' => $g->id, 'name' => $g->name, 'selection_type' => $g->selection_type,
+                'is_required' => $g->is_required, 'min_select' => $g->min_select, 'max_select' => $g->max_select,
+                'options' => $g->options->map(fn ($o) => [
+                    'id' => $o->id, 'name' => $o->name, 'price_delta' => number_format((float) $o->price_delta, 2, '.', ''),
+                ])->values(),
+            ])->values()->all();
+    }
+
+    /**
      * @param  array<int, int|string>  $optionIds
      * @param  float|null  $basePrice  harga dasar per unit; default harga varian SAAT INI
      *                                 (dipakai saat mengubah pilihan baris lama: dasar = harga saat baris ditambahkan)

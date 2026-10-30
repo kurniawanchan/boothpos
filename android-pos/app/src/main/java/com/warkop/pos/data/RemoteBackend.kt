@@ -11,6 +11,7 @@ import com.warkop.core.network.ApiClient
 import com.warkop.core.network.ApiErrorMapper
 import com.warkop.core.network.dto.AddLineRequestDto
 import com.warkop.core.network.dto.CashMovementRequest
+import com.warkop.core.network.dto.MoveTabRequestDto
 import com.warkop.core.network.dto.OverrideRequest
 import kotlinx.serialization.json.JsonObject
 import com.warkop.core.network.dto.CloseSessionRequest
@@ -354,6 +355,14 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
             deviceId,
         )
 
+    override suspend fun moveTab(tabId: String, tableId: Long): Order =
+        OrderMapper.tab(apiCall { api().moveTab(tabId.toLong(), MoveTabRequestDto(tableId)) }, deviceId)
+
+    override suspend fun closeEmptyTab(tabId: String) {
+        val res = apiCall { api().closeEmptyTab(tabId.toLong()) }
+        if (!res.isSuccessful) throw ApiErrorMapper.fromHttp(res.code(), runCatching { res.errorBody()?.string() }.getOrNull())
+    }
+
     override suspend fun setNote(tabId: String, notes: String): Order =
         OrderMapper.tab(apiCall { api().setNote(tabId.toLong(), UpdateNoteRequestDto(notes)) }, deviceId)
 
@@ -457,8 +466,8 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
     override suspend fun refundOrder(orderId: String, reasonCode: String, reason: String?, overrideToken: String?, key: String): Order =
         OrderMapper.tab(apiCall { api().refund(orderId.toLong(), key, RefundRequestDto(reasonCode, reason, overrideToken)) }, deviceId)
 
-    override suspend fun closedOrders(): List<Order> =
-        apiCall { api().closedOrders(25) }.data.map { OrderMapper.closed(it) }
+    override suspend fun closedOrders(sessionId: Long?): List<Order> =
+        apiCall { api().closedOrders(25, sessionId) }.data.map { OrderMapper.closed(it) }
 
     companion object {
         /** Kode peran untuk logika tampilan sementara (supervisor, batas diskon contoh). Server tetap penegak. */

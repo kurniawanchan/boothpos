@@ -43,7 +43,7 @@ fun TenderScreen(store: PosStore) {
     val left: @Composable (Modifier) -> Unit = { m ->
         Surface(m, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
             Column(Modifier.padding(20.dp).then(if (compact) Modifier else Modifier.verticalScroll(rememberScrollState()))) {
-                OutlinedPill("Kembali ke order", { store.go(Dest.EDITOR) }, icon = Icons.Filled.ArrowBack)
+                OutlinedPill("Kembali ke pesanan", { store.go(Dest.EDITOR) }, icon = Icons.Filled.ArrowBack)
                 Text("${o.label} · Total ${rp(o.total)}", Modifier.padding(top = 14.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("Sisa", Modifier.padding(top = 14.dp), fontSize = 16.sp)
                 Text(rp(o.remaining), fontSize = if (compact) 44.sp else 64.sp, fontWeight = FontWeight.Light)
@@ -66,10 +66,11 @@ fun TenderScreen(store: PosStore) {
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                Spacer(Modifier.height(if (compact) 0.dp else 260.dp))
-                Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
-                    Row(Modifier.padding(12.dp)) { Icon(Icons.Filled.Info, null, Modifier.size(20.dp)); Spacer(Modifier.width(10.dp)); Text("Tunai memberi kembalian. EDC dan QRIS tidak boleh melebihi sisa tagihan.", fontSize = 14.sp) }
+                // 084 — HANYA tombol "Terima tunai" pindah ke kolom pertama; uang cepat, nominal lain, dan keypad tetap di kolom kedua.
+                if (method == TenderMethod.CASH) {
+                    PrimaryPill("Terima tunai", { store.payCash(value); amount = "" }, Modifier.fillMaxWidth(), enabled = value > 0, icon = Icons.Filled.Payments, trailing = rp(value))
                 }
+                Spacer(Modifier.height(if (compact) 12.dp else 150.dp))
             }
         }
     }
@@ -101,8 +102,6 @@ fun TenderScreen(store: PosStore) {
                 }
                 Spacer(Modifier.height(10.dp))
                 Keypad({ d -> if (amount.length < 9) amount = (amount + d).trimStart('0') }, { amount = amount.dropLast(1) }, Modifier.fillMaxWidth(), extraKey = "000", keyHeight = if (compact) 48.dp else 60.dp, shape = RoundedCornerShape(16.dp))
-                Spacer(Modifier.height(10.dp))
-                PrimaryPill("Terima tunai", { store.payCash(value); amount = "" }, Modifier.fillMaxWidth(), enabled = value > 0, icon = Icons.Filled.Payments, trailing = rp(value))
             }
             if (pending) Surface(Modifier.fillMaxWidth().padding(top = 10.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.pos.warnContainer, contentColor = MaterialTheme.pos.onWarnContainer) {
                 Text("QRIS menunggu verifikasi memblokir pembayaran non-tunai lain pada tab ini, dan penutupan shift.", Modifier.padding(16.dp), fontSize = 16.sp, fontWeight = FontWeight.Medium)
@@ -122,7 +121,8 @@ private fun MethodTile(icon: androidx.compose.ui.graphics.vector.ImageVector, la
         color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline),
         contentColor = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.SpaceBetween) { Icon(icon, null); Text(label, fontWeight = FontWeight.SemiBold, fontSize = 16.sp) }
+        // 084 — ikon dan label sebaris (dulu bertumpuk): logo EDC dan tulisan "EDC" satu garis.
+        Row(Modifier.fillMaxSize().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) { Icon(icon, null); Text(label, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1) }
     }
 }
 
@@ -149,10 +149,12 @@ fun DoneScreen(store: PosStore) {
                     Text("Diterima ${rp(o.tenders.sumOf { it.received ?: it.amount })}${if (o.tenders.all { it.method == TenderMethod.CASH }) " tunai" else ""} · Total ${rp(o.total)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(14.dp))
                     StatusLine(Icons.Filled.Print, strukPrintLabel(printJobs, o.id) + " · " + (o.receiptNo ?: "tanpa nomor"))
-                    StatusLine(Icons.Filled.CloudDone, if (store.conn == Conn.ONLINE) "Tersinkron ke server" else "Tersimpan di perangkat · dikirim saat online")
+                    StatusLine(Icons.Filled.CloudDone, if (store.conn == Conn.ONLINE) "Tersinkron ke server" else "Tersimpan di tablet · dikirim saat online")
                     Spacer(Modifier.weight(1f, fill = !compact)); Spacer(Modifier.height(14.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        PrimaryPill(if (o.kind == OrderKind.COUNTER) "Order counter baru" else "Kembali ke meja", { if (o.kind == OrderKind.COUNTER) store.newCounter() else store.go(Dest.TABLES) }, icon = Icons.Filled.Add)
+                        // 084 — "Kembali ke Kasir" (dulu "Pesanan kasir baru" yang selalu membuka pesanan kosong baru): hanya pindah layar;
+                        // tab kosong yang sudah ada dipakai ulang (openKasir/landOnKasir), tidak menambah pesanan kosong lagi.
+                        PrimaryPill("Kembali ke Kasir", { store.openKasir() }, icon = Icons.Filled.ArrowBack)
                         OutlinedPill("Lihat struk", { store.show(Sheet.Receipt(o.id)) }, icon = Icons.Filled.Receipt)
                     }
                 }

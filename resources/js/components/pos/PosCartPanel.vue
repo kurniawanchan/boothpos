@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { usePosCartStore } from '../../stores/posCart';
+import { usePosCartStore, cartLineKey } from '../../stores/posCart';
 import { useSettingsStore } from '../../stores/settings';
 import { formatIDR, parseMoney, toMoneyString } from '../../utils/money';
 import { cartTotals } from '../../utils/posTotals';
@@ -53,7 +53,7 @@ function openImageLightbox(item) {
 
     <div class="flex-1 overflow-auto px-3 py-2">
       <EmptyState v-if="cart.isEmpty" icon="ph-shopping-cart-simple" :message="t('pos.empty_cart_message')" />
-      <div v-for="item in cart.items" :key="item.variant_id" class="flex gap-2.5 border-b border-line-6 py-2.5 last:border-b-0">
+      <div v-for="item in cart.items" :key="cartLineKey(item)" class="flex gap-2.5 border-b border-line-6 py-2.5 last:border-b-0">
         <button
           v-if="item.image_url"
           type="button"
@@ -65,6 +65,8 @@ function openImageLightbox(item) {
         </button>
         <div class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-[13.5px] font-semibold leading-tight">{{ item.name }}</span>
+          <!-- 084 — pilihan modifier di bawah nama item (struk dan detail pesanan membaca snapshot server yang sama) -->
+          <span v-if="item.modifiers?.length" class="text-[11.5px] leading-snug text-muted-4" data-testid="cart-modifiers">{{ item.modifiers.map((m) => m.option).join(', ') }}</span>
           <span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span>
           <span v-if="item.home_outlet_name" class="text-[10.5px] text-muted-3">{{ item.home_outlet_name }}</span>
           <span class="text-[12px] text-muted">{{ formatIDR(item.sell_price) }}</span>
@@ -72,7 +74,7 @@ function openImageLightbox(item) {
         <div class="flex flex-col items-end gap-1.5">
           <span class="text-[13.5px] font-bold">{{ formatIDR(parseMoney(item.sell_price) * item.qty) }}</span>
           <div class="flex items-center gap-0.5 overflow-hidden rounded-lg border border-line">
-            <button type="button" class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7" :aria-label="t('pos.decrease_item', { name: item.name })" @click="cart.decrement(item.variant_id)">
+            <button type="button" class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7" :aria-label="t('pos.decrease_item', { name: item.name })" @click="cart.decrement(cartLineKey(item))">
               <i class="ph-duotone ph-minus text-[14px]" aria-hidden="true"></i>
             </button>
             <span class="min-w-[26px] text-center text-[13.5px] font-bold">{{ item.qty }}</span>
@@ -81,7 +83,7 @@ function openImageLightbox(item) {
               class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7 disabled:opacity-30"
               :disabled="item.qty >= item.current_stock"
               :aria-label="t('pos.increase_item', { name: item.name })"
-              @click="cart.increment(item.variant_id)"
+              @click="cart.increment(cartLineKey(item))"
             >
               <i class="ph-duotone ph-plus text-[14px]" aria-hidden="true"></i>
             </button>

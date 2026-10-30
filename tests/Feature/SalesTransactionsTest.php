@@ -272,8 +272,8 @@ class SalesTransactionsTest extends TestCase
 
         $row = $this->rows()->firstWhere('key', "order:{$order->id}");
 
-        // name_snapshot = produk — varian, jadi pembacanya tahu varian yang mana.
-        $this->assertSame(['Sakura Sticker — Standard', 'Akatsuki Keychain — Standard'], collect($row['items_preview'])->pluck('name')->all());
+        // name_snapshot = produk — varian, KECUALI varian tunggal bawaan "Standard" yang memakai nama produk saja (084).
+        $this->assertSame(['Sakura Sticker', 'Akatsuki Keychain'], collect($row['items_preview'])->pluck('name')->all());
         $this->assertSame(1, $row['items_more']);
     }
 

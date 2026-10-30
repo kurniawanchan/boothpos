@@ -90,6 +90,8 @@ class PaymentEdcQrisTest extends TestCase
     {
         $tab = $this->tab();
         $this->apiPay($tab, [['method' => 'qr_ewallet', 'amount' => 5000, 'channel_id' => $this->channelId]])->assertOk()->assertJsonPath('status', 'open');
+        // 084 — QRIS baru langsung terverifikasi; aturan ini hanya berlaku untuk baris WARISAN yang masih `pending`.
+        \App\Models\Payment::where('order_id', $tab)->where('method', 'qr_ewallet')->update(['verification' => 'pending']);
 
         $this->edc($tab, 'AB12CD', 5000)->assertStatus(409)->assertJsonPath('code', 'pending_qris');
         $this->apiPay($tab, [['method' => 'cash', 'amount' => 5000]])->assertOk();

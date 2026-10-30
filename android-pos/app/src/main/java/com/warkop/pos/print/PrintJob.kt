@@ -27,7 +27,8 @@ data class PrintJob(
     val tabId: String? = null,
 )
 
-@Serializable enum class PrintKind { STRUK, KOT, PREBILL, BATAL }
+/** 084 — LAPORAN = X-report / Z-report shift (baris sudah dirender, tanpa ambil dari server saat cetak). */
+@Serializable enum class PrintKind { STRUK, KOT, PREBILL, BATAL, LAPORAN }
 
 /** PENDING = "Belum tercetak"; FAILED = "Gagal"; PRINTED = "Tercetak"; DISMISSED = ditutup pengguna. */
 @Serializable enum class PrintStatus { PENDING, FAILED, PRINTED, DISMISSED }

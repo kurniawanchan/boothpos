@@ -27,7 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.warkop.pos.data.TaxDisplay
 import com.warkop.pos.model.*
 import com.warkop.pos.state.Load
 import com.warkop.pos.state.ORDER_NOTE_MAX
@@ -39,7 +38,8 @@ import com.warkop.pos.ui.*
 /** S06 — editor order: rel kategori + grid menu + panel order (desain 04/05/27/28/35/36, 30 phone). */
 @Composable
 fun EditorScreen(store: PosStore) {
-    val order = store.active ?: return
+    // 084 — Kasir tanpa tab di server (draf): tampil sebagai pesanan kosong; tab dibuat saat item pertama ditambahkan.
+    val order = store.active ?: store.kasirDraft
     val size = windowSize()
     val catalog = store.menu
     // 055 / T018 — pilihan kategori bertahan setelah daftar dimuat ulang; kategori pertama bila pilihan sudah hilang.
@@ -99,7 +99,7 @@ fun EditorScreen(store: PosStore) {
                 menu(Modifier.fillMaxSize())
                 Surface(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(bottom = 8.dp), shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, onClick = { paneOpen = true }) {
                     Row(Modifier.padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${order.live.sumOf { it.qty }} item · Lihat order", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
+                        Text("${order.live.sumOf { it.qty }} item · Lihat pesanan", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
                         Text(rp(order.total), fontWeight = FontWeight.SemiBold)
                     }
                 }
@@ -181,17 +181,20 @@ private fun ProductCard(
 
 @Composable
 fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null) {
-    val o = store.active ?: return
+    val o = store.active ?: store.kasirDraft
     val waiter = store.user?.code == "WTR"
     Surface(modifier, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.Top) {
                 if (onBack != null) IconButton(onBack) { Icon(Icons.Filled.ArrowBack, "Kembali") }
                 Column(Modifier.weight(1f)) {
-                    Text(o.label, fontSize = 26.sp)
-                    Text(if (o.kind == OrderKind.COUNTER) "Counter · panggil dengan nomor antrean · ${o.waiter}" else "Dine-in · ${o.waiter}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(kasirTitle(o.kind, o.queue, o.table), fontSize = 26.sp)
+                    kasirSubtitle(o.kind, o.waiter)?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    // 084 — pemilih Meja: memilih/mengganti meja pesanan; server menolak meja terisi/nonaktif.
+                    TablePicker(store, o)
                 }
-                IconButton({ store.show(Sheet.OrderActions) }) { Icon(Icons.Filled.MoreVert, "Aksi order") }
+                // Draf belum punya tab di server: tidak ada aksi pesanan yang bisa dikerjakan.
+                if (o.id.isNotBlank()) IconButton({ store.show(Sheet.OrderActions) }) { Icon(Icons.Filled.MoreVert, "Aksi pesanan") }
             }
             // 050 / T046 — KOT tab ini yang belum tercetak tetap diperingatkan sampai tercetak atau ditutup dengan alasan (FR-020).
             val kotWaiting = store.printer?.jobs?.collectAsState()?.value.orEmpty().count {
@@ -207,8 +210,8 @@ fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null)
                 if (o.live.isEmpty()) item {
                     Column(Modifier.fillMaxWidth().padding(top = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Filled.ShoppingBag, null, Modifier.size(56.dp), tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.height(8.dp)); Text("Ketuk menu untuk menambah item", fontWeight = FontWeight.Medium)
-                        Text("Tahan kartu menu untuk menandai habis.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(8.dp)); Text(HINT_PICK_MENU, fontWeight = FontWeight.Medium)
+                        Text(HINT_HOLD_SOLD_OUT, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 if (o.unsent.isNotEmpty()) item { SectionLabel("Belum dikirim", Modifier.padding(top = 8.dp, bottom = 2.dp), MaterialTheme.colorScheme.error) }
@@ -217,14 +220,14 @@ fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null)
                 items(o.sent, key = { it.id }) { l -> LineRow(l, store) }
             }
             // 077 / US4 — catatan kasir untuk seluruh order; tersimpan di server, bukan hanya di layar.
-            OrderNoteRow(store, o)
+            if (o.id.isNotBlank()) OrderNoteRow(store, o)
             // 055 / T038 — area total bisa disembunyikan; satu kontrol membukanya lagi (FR-006, FR-007).
             if (store.totalsVisible) {
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 MoneyRow("Subtotal", rp(o.gross))
                 MoneyRow(discountRowLabel(o.discount, o.discPct, o.discReason), discountRowAmount(o.discount), accent = if (o.discount > 0) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified)
                 // 083 — baris pajak hanya bila pengaturan tampil aktif dan order dikenai pajak; total tetap `o.total`.
-                if (store.tax?.show != false && o.tax > 0) MoneyRow(taxLine(store.tax), rp(o.tax))
+                if (store.tax?.show != false && o.tax > 0) MoneyRow(taxLabelText(store.tax), rp(o.tax))
                 DashedDivider(Modifier.padding(vertical = 8.dp))
                 MoneyRow("Total", rp(o.total), big = true)
                 if (o.paid > 0) MoneyRow("Terbayar", rp(o.paid))
@@ -242,13 +245,6 @@ fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null)
             }
         }
     }
-}
-
-/** 055 / T039 — baris pajak dari server; tarif ditampilkan hanya bila server memberinya (tanpa angka tertulis di kode). */
-private fun taxLine(t: TaxDisplay?): String {
-    if (t == null) return "Pajak"
-    val rate = t.ratePercent ?: return t.label
-    return "${t.label} ${if (rate % 1.0 == 0.0) rate.toLong().toString() else rate.toString()}%"
 }
 
 @Composable
@@ -296,7 +292,7 @@ private fun OrderNoteRow(store: PosStore, o: Order) {
         Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
             OutlinedTextField(
                 value = text, onValueChange = { text = it }, modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4,
-                label = { Text("Catatan order") }, placeholder = { Text("Catatan untuk seluruh order") },
+                label = { Text("Catatan pesanan") }, placeholder = { Text("Catatan untuk seluruh pesanan") },
                 isError = text.length > ORDER_NOTE_MAX,
                 supportingText = { Text(if (text.length > ORDER_NOTE_MAX) "Catatan maksimal $ORDER_NOTE_MAX karakter." else "${text.length}/$ORDER_NOTE_MAX") },
             )
@@ -325,5 +321,32 @@ private fun SplitDivider(onDrag: (Float) -> Unit, onDragEnd: () -> Unit, onReset
         contentAlignment = Alignment.Center,
     ) {
         Box(Modifier.width(4.dp).height(56.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.outline))
+    }
+}
+
+/**
+ * 084 — pemilih Meja untuk pesanan aktif (Kasir) dan detail Pesanan. Menu menampilkan meja aktif yang kosong
+ * ([selectableTables]); memilih memanggil `changeTable` dan denah/daftar disegarkan oleh store.
+ */
+@Composable
+fun TablePicker(store: PosStore, o: Order, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    val choices = selectableTables(store.tables, o.table, allowOccupied = o.closed)
+    Box(modifier) {
+        OutlinedButton({ open = true }, Modifier.padding(top = 6.dp), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)) {
+            Icon(Icons.Filled.TableRestaurant, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(if (o.table.isNullOrBlank()) "Meja" else "Meja ${o.table}", fontSize = 14.sp)
+            Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp))
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (choices.isEmpty()) DropdownMenuItem(text = { Text("Tidak ada meja kosong") }, onClick = { open = false }, enabled = false)
+            choices.forEach { t ->
+                DropdownMenuItem(
+                    text = { Text(if (t.name == o.table) "Meja ${t.name} (saat ini)" else "Meja ${t.name} · ${t.area}") },
+                    onClick = { open = false; if (t.name != o.table) store.changeTable(o.id, t.id) },
+                )
+            }
+        }
     }
 }

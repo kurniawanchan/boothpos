@@ -189,7 +189,7 @@ class TabService
                     'variant_id' => $variant->id,
                     'home_outlet_id' => $variant->product->home_outlet_id,
                     'sku_snapshot' => $variant->sku,
-                    'name_snapshot' => $variant->product->name.' — '.$variant->variant_name,
+                    'name_snapshot' => $variant->lineName(), // 084: tanpa "— Standard" untuk varian tunggal bawaan
                     'qty' => $qty,
                     'cost_price' => $variant->cost_price,
                     'sell_price' => $unitPrice,
@@ -549,8 +549,15 @@ class TabService
     public function move(Order $tab, int $tableId, User $user): Order
     {
         try {
-            return DB::transaction(function () use ($tab, $tableId) {
-                $order = $this->lockOpen($tab);
+            return DB::transaction(function () use ($tab, $tableId, $user) {
+                // 084 — pesanan SELESAI juga boleh dipindah mejanya (koreksi catatan); selain open/completed
+                // (void, batal) tetap ditolak seperti sebelumnya lewat pesan "tab tidak terbuka".
+                $order = $this->lock($tab);
+                $completed = $order->status === Order::STATUS_COMPLETED;
+                if ($order->status !== Order::STATUS_OPEN && ! $completed) {
+                    throw ValidationException::withMessages(['status' => __('restaurant.tab_not_open')]);
+                }
+
                 $table = DiningTable::findOrFail($tableId);
 
                 if (! $table->is_active) {
@@ -563,8 +570,19 @@ class TabService
                 }
 
                 if ($order->table_id !== $table->id) {
-                    $this->assertTableFree($table);
-                    $order->update(['table_id' => $table->id, 'service_type' => Order::SERVICE_DINE_IN]);
+                    if ($completed) {
+                        // Pesanan selesai tidak menahan meja (indeks UNIQUE hanya untuk pesanan terbuka), jadi tak ada
+                        // cek "meja bebas" dan jenis layanannya tidak berubah; hanya penempatan yang dikoreksi.
+                        $from = $order->table?->name;
+                        $order->update(['table_id' => $table->id]);
+                        $this->activityLogger->log(
+                            $user->id, 'table_changed', 'Order', $order->id,
+                            "Meja pesanan {$order->order_number} diubah dari ".($from ?? '—')." ke {$table->name}",
+                        );
+                    } else {
+                        $this->assertTableFree($table);
+                        $order->update(['table_id' => $table->id, 'service_type' => Order::SERVICE_DINE_IN]);
+                    }
                 }
 
                 return $this->loaded($order);

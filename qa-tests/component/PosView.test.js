@@ -153,7 +153,7 @@ describe('PosView — product photo on search results (030)', () => {
     await searchFor('MCY-014');
 
     expect(await screen.findByAltText('MCYT — Slippery')).toHaveAttribute('src', PHOTO);
-    expect(lookupVariants).toHaveBeenLastCalledWith('MCY-014', 40, { pos: true });
+    expect(lookupVariants).toHaveBeenLastCalledWith('MCY-014', 40, { pos: true, withModifiers: true });
   });
 
   it('keeps the placeholder icon and no <img> for a hit that has no photo, and each card keeps its own photo', async () => {

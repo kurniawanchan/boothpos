@@ -45,3 +45,18 @@ export function selectionDelta(groups, selection) {
 export function selectedOptionIds(selection) {
   return Object.values(selection).flat();
 }
+
+/**
+ * 084 — daftar `{ group, option }` untuk opsi terpilih, dipakai keranjang dan ringkasan (hanya tampilan;
+ * snapshot sebenarnya dibuat server dari id opsi).
+ */
+export function describeSelection(groups, ids) {
+  const picked = new Set(ids);
+  const out = [];
+  for (const g of groups) {
+    for (const o of g.options) {
+      if (picked.has(o.id)) out.push({ group: g.name, option: o.name });
+    }
+  }
+  return out;
+}

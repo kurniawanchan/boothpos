@@ -78,7 +78,7 @@ class PosStoreOrderNoteTest {
         store.debugInstall(null, null, listOf(order.copy(closed = true)), "T1", Dest.EDITOR, null, store.conn, null, 0, null)
         store.saveOrderNote("terlambat"); advanceUntilIdle()
         assertTrue(backend.noteCalls.isEmpty())
-        assertEquals("Order sudah ditutup. Catatan tidak bisa diubah.", store.toast)
+        assertEquals("Pesanan sudah ditutup. Catatan tidak bisa diubah.", store.toast)
     }
 
     @Test fun `catatan tidak diblokir bila mode sama dan diblokir saat mode berubah`() = runTest(dispatcher) {

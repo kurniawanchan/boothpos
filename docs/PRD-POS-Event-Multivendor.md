@@ -4,6 +4,13 @@
 
 *Sistem POS event-based multi-artist untuk toko merchandise*
 
+> **Catatan bertanggal — 2026-10-30 (fitur 084):** pemilik meminta QRIS pada POS tablet (jalur tab) **langsung berstatus
+> terverifikasi**, tanpa langkah verifikasi manual. Ini MELEPAS kontrol verifikasi pembayaran QRIS untuk pembayaran baru
+> (risiko: QRIS yang tak benar-benar masuk tercatat lunas); kompensasinya hanya instruksi kasir "Jangan lupa untuk cek bukti
+> transaksi di aplikasi QRIS". Baris QRIS lama yang masih `pending` tetap bisa diverifikasi dan tetap menahan penutupan shift.
+> Verifikasi manual untuk non-tunai lain dan untuk penjualan web tidak berubah. Pernyataan "verifikasi dilakukan manual" di
+> F21 tetap sejarah, tidak ditulis ulang. Lihat `specs/084-ui-ux-kasir-pesanan-improvements/`.
+>
 > **Catatan bertanggal — 2026-10-12 (fitur 046):** modul **Event** dan **Pre-order** dihapus dari produk atas permintaan pemilik
 > produk (laporan per periode tanggal bisnis, penjualan saja; baris event/pre-order lama tetap di database sebagai riwayat diam).
 > Bagian PRD yang membahas event, pre-order, pengiriman kurir, dan rekap per event di bawah adalah RIWAYAT, bukan perilaku

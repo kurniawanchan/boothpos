@@ -36,7 +36,7 @@ class DocumentsOrderNoteTest {
     @Test fun `struk mencetak catatan order di bawah item dan sebelum total`() {
         val lines = Documents.struk(receipt("Ambil jam 3"))
         val t = texts(lines)
-        val label = t.indexOf("Catatan order:")
+        val label = t.indexOf("Catatan pesanan:")
         assertTrue("label ada", label >= 0)
         assertTrue("label tebal", lines[label].bold)
         assertEquals("Ambil jam 3", t[label + 1])
@@ -47,14 +47,14 @@ class DocumentsOrderNoteTest {
     @Test fun `catatan item dan catatan order tidak tertukar pada struk`() {
         val t = texts(Documents.struk(receipt("Ambil jam 3")))
         assertTrue(t.contains("   Catatan: tanpa gula"))
-        assertTrue(t.contains("Catatan order:"))
+        assertTrue(t.contains("Catatan pesanan:"))
     }
 
     @Test fun `struk tanpa catatan tidak memuat label atau baris kosong tambahan`() {
         val withNote = texts(Documents.struk(receipt("x"))).size
         for (blank in listOf<String?>(null, "", "   ")) {
             val t = texts(Documents.struk(receipt(blank)))
-            assertFalse(t.any { it.contains("Catatan order") })
+            assertFalse(t.any { it.contains("Catatan pesanan") })
             assertEquals(withNote - 2, t.size)
         }
     }
@@ -62,7 +62,7 @@ class DocumentsOrderNoteTest {
     @Test fun `kot mencetak catatan order tebal di bawah judul dan sebelum item`() {
         val lines = Documents.kot(kot("Alergi kacang"), cashier = "Rina")
         val t = texts(lines)
-        val label = t.indexOf("CATATAN ORDER:")
+        val label = t.indexOf("CATATAN PESANAN:")
         assertTrue(label >= 0)
         assertTrue(lines[label].bold)
         assertEquals("Alergi kacang", t[label + 1])
@@ -73,7 +73,7 @@ class DocumentsOrderNoteTest {
 
     @Test fun `kot tanpa catatan tidak berubah`() {
         val t = texts(Documents.kot(kot(null), cashier = "Rina"))
-        assertFalse(t.any { it.contains("CATATAN ORDER") })
+        assertFalse(t.any { it.contains("CATATAN PESANAN") })
     }
 
     @Test fun `catatan panjang dibungkus dalam lebar kertas tanpa kehilangan kata`() {
@@ -86,7 +86,7 @@ class DocumentsOrderNoteTest {
     @Test fun `karakter yang tak didukung diganti tanda tanya tanpa gagal cetak`() {
         val bytes = EscPos.render(Documents.struk(receipt("Es 🧊 manis — tanpa gula\nbaris dua")))
         assertTrue(bytes.isNotEmpty())
-        assertEquals("Es ?? manis ? tanpa gula baris dua", EscPos.sanitize("Es 🧊 manis — tanpa gula\nbaris dua"))
+        assertEquals("Es manis - tanpa gula baris dua", EscPos.sanitize("Es 🧊 manis — tanpa gula\nbaris dua"))
     }
 
     @Test fun `mapper struk mengambil notes dan menolak spasi kosong`() {
@@ -104,6 +104,6 @@ class DocumentsOrderNoteTest {
     /** 078 / T033 — jalur nyata: tiket dari server (dengan `order_note` terbaru) → mapper → KOT tercetak; cetak ulang struk memakai `fetchReceipt` (server), jadi selalu catatan terbaru. */
     @Test fun `tiket dari server dengan catatan sampai ke baris KOT tercetak`() {
         val printed = Documents.kot(TicketMapper.kot(TicketDto(id = 7, orderNote = "Alergi kacang")), cashier = null)
-        assertTrue(texts(printed).containsAll(listOf("CATATAN ORDER:", "Alergi kacang")))
+        assertTrue(texts(printed).containsAll(listOf("CATATAN PESANAN:", "Alergi kacang")))
     }
 }

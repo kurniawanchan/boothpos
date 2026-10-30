@@ -28,6 +28,23 @@ class ProductVariant extends Model
      * $product->variants() menyuntikkan foreign key lewat setAttribute()
      * langsung, di luar mekanisme $fillable sama sekali.
      */
+    /**
+     * 084 — nama baris untuk SNAPSHOT order/struk/KOT: "Produk — Varian". Produk yang hanya punya satu varian aktif bernama
+     * "Standard" (varian bawaan, bukan pilihan pelanggan) memakai nama produk saja, supaya "Standard" tidak tercetak di
+     * struk. Hanya untuk order BARU: snapshot lama tidak pernah ditulis ulang (Konstitusi IV). Satu tempat untuk
+     * OrderService dan TabService.
+     */
+    public function lineName(): string
+    {
+        $productName = $this->product->name;
+        $variantName = trim((string) $this->variant_name);
+
+        $onlyDefault = strcasecmp($variantName, 'Standard') === 0
+            && $this->product->variants()->where('is_active', true)->count() === 1;
+
+        return $onlyDefault || $variantName === '' ? $productName : $productName.' — '.$this->variant_name;
+    }
+
     /** 043 — setiap varian baru memulai riwayat harganya ("Item dibuat"); lewat PriceService, bukan menulis tabel langsung. */
     protected static function booted(): void
     {

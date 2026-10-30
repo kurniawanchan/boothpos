@@ -36,7 +36,7 @@ object ReceiptMapper {
         total = rp(dto.totalAmount),
         paid = rp(dto.paidAmount),
         change = rp(dto.changeAmount),
-        items = dto.items.map { ReceiptLine(it.name, it.qty, rp(it.lineTotal), it.note?.takeIf { n -> n.isNotBlank() }) },
+        items = dto.items.map { ReceiptLine(it.name, it.qty, rp(it.lineTotal), it.note?.takeIf { n -> n.isNotBlank() }, it.modifiers.map { m -> m.option }.filter { n -> n.isNotBlank() }) },
         payments = dto.paymentSummary.map { methodLabel(it.method) to rp(it.amount) },
     )
 

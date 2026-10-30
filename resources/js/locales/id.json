@@ -354,6 +354,7 @@
     "resume_draft": "Lanjutkan",
     "enlarge_qr": "Perbesar kode QR",
     "sold_out_86": "86",
+    "draft_no_modifiers": "Draf belum mendukung item bermodifier. Selesaikan pesanan ini atau kosongkan keranjang.",
     "item_sold_out": "Item sedang habis (86).",
     "item_discontinued": "Item sudah tidak dijual."
   },

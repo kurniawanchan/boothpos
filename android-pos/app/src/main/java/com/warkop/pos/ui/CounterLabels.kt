@@ -40,3 +40,25 @@ fun discountRowLabel(discount: Int, percent: Int, reason: String?): String =
     if (discount > 0) com.warkop.pos.model.discountHeading(percent, reason) else "Diskon"
 
 fun discountRowAmount(discount: Int): String = if (discount > 0) "-" + com.warkop.pos.model.rp(discount) else com.warkop.pos.model.rp(0)
+
+/**
+ * 084 — judul layar Kasir: pesanan counter hanya menampilkan NOMOR antrean ("12"), bukan "Counter 12"; pesanan meja tetap
+ * "Meja 5". Nomor kosong jatuh ke "Kasir" supaya judul tidak pernah kosong. Daftar Pesanan dan struk memakai `Order.label`.
+ */
+fun kasirTitle(kind: com.warkop.pos.model.OrderKind, queue: String?, table: String?): String =
+    if (kind == com.warkop.pos.model.OrderKind.COUNTER) queue?.takeIf { it.isNotBlank() } ?: "Kasir" else "Meja ${table.orEmpty()}".trim()
+
+/** 084 — baris keterangan di bawah judul: tidak ada untuk counter (teks "panggil dengan nomor antrean" dihapus). */
+fun kasirSubtitle(kind: com.warkop.pos.model.OrderKind, waiter: String): String? =
+    if (kind == com.warkop.pos.model.OrderKind.COUNTER) null else "Dine-in · $waiter"
+
+const val HINT_PICK_MENU = "Pilih menu untuk menambah item"
+const val HINT_HOLD_SOLD_OUT = "Pilih dan tahan menu untuk menandai habis."
+
+/**
+ * 084 — meja yang boleh dipilih untuk sebuah pesanan: aktif dan kosong, ditambah meja pesanan itu sendiri (supaya pilihan
+ * saat ini tetap tampil). [allowOccupied] untuk pesanan SELESAI: ia tidak menahan meja, jadi meja yang sedang dipakai pesanan lain
+ * pun boleh dipilih. Hanya kemudahan tampilan; server tetap menolak meja nonaktif/beda outlet (dan meja terisi untuk pesanan terbuka).
+ */
+fun selectableTables(tables: List<com.warkop.pos.model.FloorTable>, currentTable: String?, allowOccupied: Boolean = false): List<com.warkop.pos.model.FloorTable> =
+    tables.filter { it.active && (allowOccupied || it.tab == null || it.name == currentTable) }

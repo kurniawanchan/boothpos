@@ -1843,6 +1843,7 @@ paths:
       parameters:
         - { name: q, in: query, required: true, description: "SKU, nama varian, atau nama produk induknya", schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 20, maximum: 50 } }
+        - { name: with_modifiers, in: query, description: "084 — opt-in: tiap hasil membawa `modifier_groups` (grup modifier efektif produknya, bentuk sama dengan `GET /products?with_modifiers=1`) supaya POS web membuka pemilih modifier tanpa permintaan tambahan.", schema: { type: integer, enum: [0, 1] } }
       responses:
         '200':
           description: Berhasil
@@ -6604,6 +6605,10 @@ paths:
       summary: Bayar tab — sebagian atau penuh (menu `floor`)
       description: |
         Memakai aturan pembayaran penjualan ritel (bukti non-tunai, kembalian hanya dari tunai).
+        084 (keputusan pemilik 2026-10-30) — pembayaran `qr_ewallet` (QRIS) di jalur tab LANGSUNG `verification: verified`
+        (tanpa verifikasi manual; sebelumnya `pending`). Metode lain tidak berubah. Baris QRIS lama yang masih `pending`
+        tetap bisa diverifikasi lewat `.../payments/{payment}/verify`, dan masih menahan penutupan shift
+        (`pending_payments`) sampai diverifikasi.
         Bila total yang dibayar ≥ total tab → status `completed`, `change_amount` dihitung, meja kosong.
         Bila kurang → tab tetap `open` dengan `balance`. `client_ref` WAJIB: pengiriman ulang dengan
         `client_ref` yang sama tidak mencatat pembayaran lagi (mengembalikan keadaan terkini).
@@ -6990,8 +6995,12 @@ paths:
       - $ref: '#/components/parameters/Id'
     post:
       tags: [Restaurant]
-      summary: Pindahkan tab ke meja kosong lain (menu `floor`)
+      summary: Pindahkan tab ke meja kosong lain, atau ubah meja pesanan selesai (menu `floor`)
       description: |
+        084 — pesanan SELESAI (`completed`) juga boleh dipindah mejanya sebagai koreksi catatan: hanya `table_id` yang berubah
+        (tanpa cek "meja kosong" karena pesanan selesai tidak menahan meja, `service_type` tidak berubah), tetap satu outlet
+        dan meja aktif, dan tercatat di log aktivitas (`table_changed`). Pesanan dibatalkan (`voided`) tetap `409`.
+
         Meja lama kosong, meja baru terisi; baris, tiket dan pembayaran tidak berubah. Juga mendudukkan tab
         takeaway di sebuah meja (`service_type` menjadi `dine_in`). Meja tujuan terisi → `409` dengan
         `existing_tab_id` (sarankan menggabung); meja nonaktif → `409`; mode DEMO/LIVE lain → `404`.
@@ -7991,6 +8000,8 @@ components:
       description: Bentuk ringkas untuk layar kasir
       properties:
         variant_id: { type: integer }
+        product_id: { type: integer, description: "084 — produk induk." }
+        modifier_groups: { type: array, items: { type: object }, description: "084 — hanya bila `with_modifiers=1`: grup modifier efektif aktif beserta opsi aktifnya." }
         sku: { type: string }
         label: { type: string, example: Keychain Sakura — Varian A }
         artist_name: { type: string }
@@ -8331,6 +8342,14 @@ components:
         variant_id: { type: integer }
         qty: { type: integer, minimum: 1 }
         discount_amount: { $ref: '#/components/schemas/Money' }
+        modifier_option_ids:
+          type: array
+          items: { type: integer }
+          description: |
+            084 — pilihan modifier (POS web). Divalidasi server terhadap grup efektif produk (wajib/opsional,
+            tunggal/jamak, min/max) oleh `ModifierResolver`; pelanggaran → `422` (`modifier_option_ids`) yang menyebut grup
+            dan rentangnya. Harga TIDAK dikirim: harga per unit = harga outlet + selisih pilihan, dan pilihan di-SNAPSHOT pada
+            baris (`items[].modifiers`). Tanpa field ini perilaku sama seperti sebelumnya.
 
     OrderInput:
       type: object
@@ -8361,7 +8380,7 @@ components:
         variant_name: { type: string, nullable: true, readOnly: true, description: "Hanya di GET /orders/{id}." }
         image_url: { type: string, nullable: true, readOnly: true, description: "Foto varian (bila ada). Hanya di GET /orders/{id}." }
         sku_snapshot: { type: string }
-        name_snapshot: { type: string }
+        name_snapshot: { type: string, description: "\"Produk — Varian\"; 084 — produk yang hanya punya satu varian aktif bernama \"Standard\" memakai nama produk saja (order BARU; snapshot lama tidak berubah)." }
         qty: { type: integer }
         cost_price: { $ref: '#/components/schemas/Money', description: "TIDAK dikembalikan oleh GET /orders/{id} (terbuka untuk kasir); hanya laporan owner/admin." }
         sell_price: { $ref: '#/components/schemas/Money' }

@@ -42,6 +42,8 @@ export function buildProductCards(products, categoryCodeById = {}, categoryNameB
       // 004-sidebar-menu-reorg (FR-006) — passed through unchanged from
       // ProductResource.image_url; null when the product has no image.
       image_url: p.image_url ?? null,
+      // 084 — grup modifier efektif produk (GET /products?with_modifiers=1); kosong = tanpa pemilih.
+      modifier_groups: p.modifier_groups ?? [],
     };
   });
 }
@@ -64,6 +66,7 @@ export function toCartItem(card, variant) {
     // Falls back to the product's own image when this variant has none of
     // its own — mirrors the same fallback used by GET /variants/lookup.
     image_url: variant.image_url ?? card.image_url ?? null,
+    modifier_groups: card.modifier_groups ?? [],
   };
 }
 
@@ -97,5 +100,7 @@ export function buildSearchCards(results) {
     category_code: null,
     category_name: v.category_name ?? null,
     image_url: v.image_url ?? null,
+    // 084 — dari GET /variants/lookup?with_modifiers=1 (bentuk sama dengan daftar produk).
+    modifier_groups: v.modifier_groups ?? [],
   }));
 }
