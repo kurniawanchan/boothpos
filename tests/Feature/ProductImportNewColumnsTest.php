@@ -60,7 +60,8 @@ class ProductImportNewColumnsTest extends TestCase
         $headers = MasterDataSheets::headings(MasterDataSheets::PRODUCTS);
 
         $this->assertSame('variant_image_filename', $headers[array_search('short_name', $headers) - 1]);
-        $this->assertSame(['short_name', 'tax_category', 'prep_minutes', 'is_retail', 'status'], array_slice($headers, -5));
+        // 087 US6 menambah `stock_source` SESUDAH kolom 043 (tetap di akhir, berkas lama tetap terbaca).
+        $this->assertSame(['short_name', 'tax_category', 'prep_minutes', 'is_retail', 'status', 'stock_source'], array_slice($headers, -6));
     }
 
     public function test_import_writes_the_facts_and_ignores_the_derived_status(): void

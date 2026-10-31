@@ -14,6 +14,8 @@ class OrderItem extends Model
         'order_id', 'variant_id', 'home_outlet_id', 'sku_snapshot', 'name_snapshot',
         'qty', 'cost_price', 'sell_price', 'discount_amount', 'line_total',
         'modifiers', 'note', 'sent_at',
+        // 087 US6 — snapshot sumber stok baris (variant|modifier); NULL = baris lama. Dibaca StockService::applyLineMovementIfTracked.
+        'stock_source',
     ];
 
     protected function casts(): array

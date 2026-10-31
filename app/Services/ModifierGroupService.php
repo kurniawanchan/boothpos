@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Exceptions\InputRejectedException;
 use App\Models\Category;
+use App\Models\Material;
 use App\Models\ModifierGroup;
+use App\Models\ModifierOption;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -22,25 +24,25 @@ class ModifierGroupService
     public function __construct(private ActivityLogger $activityLogger) {}
 
     /** @param array<string, mixed> $data */
-    public function create(array $data): ModifierGroup
+    public function create(array $data, ?int $userId = null): ModifierGroup
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data, $userId) {
             $group = ModifierGroup::create($this->normalised($data, null));
-            $this->syncOptions($group, $data['options'] ?? []);
+            $this->logMaterialChanges($group, $this->syncOptions($group, $data['options'] ?? []), $userId);
 
             return $this->loaded($group);
         });
     }
 
     /** @param array<string, mixed> $data */
-    public function update(ModifierGroup $group, array $data): ModifierGroup
+    public function update(ModifierGroup $group, array $data, ?int $userId = null): ModifierGroup
     {
-        return DB::transaction(function () use ($group, $data) {
+        return DB::transaction(function () use ($group, $data, $userId) {
             $group->update($this->normalised($data, $group));
 
             // `options` hadir → penggantian PENUH menurut id; tidak hadir → opsi tak disentuh.
             if (array_key_exists('options', $data)) {
-                $this->syncOptions($group, $data['options']);
+                $this->logMaterialChanges($group, $this->syncOptions($group, $data['options']), $userId);
             }
 
             return $this->loaded($group);
@@ -105,7 +107,7 @@ class ModifierGroupService
 
     public function loaded(ModifierGroup $group): ModifierGroup
     {
-        return $group->fresh(['options', 'products:id', 'categories:id']);
+        return $group->fresh(['options.materials.material', 'products:id', 'categories:id']);
     }
 
     /** @param array<string, mixed> $data */
@@ -127,7 +129,8 @@ class ModifierGroupService
         }
 
         $out = ['selection_type' => $type, 'is_required' => $required, 'min_select' => $min, 'max_select' => $max === null ? null : (int) $max];
-        foreach (['name', 'display_order', 'is_active'] as $key) {
+        // 2026-10-31 — `portion_per_option`: tanpa kunci = tidak berubah (klien lama aman).
+        foreach (['name', 'display_order', 'is_active', 'portion_per_option'] as $key) {
             if (array_key_exists($key, $data)) {
                 $out[$key] = $data[$key];
             }
@@ -141,9 +144,12 @@ class ModifierGroupService
      * dinonaktifkan (tidak pernah dihapus — baris lama masih merujuk namanya lewat snapshot).
      *
      * @param array<int, array<string, mixed>> $options
+     * @return array<int, array{option: string, old: array<int, array{material_id:int, quantity:string}>, new: array<int, array{material_id:int, quantity:string}>}>
+     *         perubahan pemetaan bahan per id pilihan (087), kosong bila tidak ada yang berubah
      */
-    private function syncOptions(ModifierGroup $group, array $options): void
+    private function syncOptions(ModifierGroup $group, array $options): array
     {
+        $materialChanges = [];
         $existing = $group->options()->get()->keyBy('id');
         $kept = [];
 
@@ -161,13 +167,82 @@ class ModifierGroupService
                     throw InputRejectedException::withMessages(['options' => [__('restaurant.modifier_option_not_in_group')]]);
                 }
                 $option->update($attrs);
-                $kept[] = $option->id;
             } else {
-                $kept[] = $group->options()->create($attrs)->id;
+                $option = $group->options()->create($attrs);
+            }
+            $kept[] = $option->id;
+
+            if (array_key_exists('materials', $row)) {
+                $change = $this->syncOptionMaterials($option, (array) $row['materials'], $i);
+                if ($change !== null) {
+                    $materialChanges[$option->id] = ['option' => $option->name] + $change;
+                }
             }
         }
 
+        // Pemetaan bahan pilihan yang dinonaktifkan dibiarkan: pilihan nonaktif tidak bisa dipesan, jadi tak memotong.
         $group->options()->whereNotIn('id', $kept)->update(['is_active' => false]);
+
+        return $materialChanges;
+    }
+
+    /**
+     * 087 — ganti penuh bahan sebuah pilihan. Bahan diperiksa lewat model (global scope mode DEMO/LIVE dan
+     * soft delete), jadi bahan mode lain atau yang terhapus tidak ditemukan; yang nonaktif ditolak.
+     *
+     * @param  array<int, array{material_id:int, quantity:numeric}>  $rows
+     * @return array{old: array<int, array{material_id:int, quantity:string}>, new: array<int, array{material_id:int, quantity:string}>}|null
+     */
+    private function syncOptionMaterials(ModifierOption $option, array $rows, int $optionIndex): ?array
+    {
+        $rows = array_values($rows);
+        $found = Material::query()->whereIn('id', array_map(fn ($r) => (int) $r['material_id'], $rows))->get()->keyBy('id');
+
+        foreach ($rows as $j => $r) {
+            $material = $found->get((int) $r['material_id']);
+            if ($material === null || ! $material->is_active) {
+                throw InputRejectedException::withMessages([
+                    "options.{$optionIndex}.materials.{$j}.material_id" => [$material === null
+                        ? __('vendors_materials.option_material_not_found')
+                        : __('vendors_materials.option_material_inactive', ['material' => $material->name])],
+                ]);
+            }
+        }
+
+        $shape = fn ($list) => collect($list)
+            ->map(fn ($r) => ['material_id' => (int) $r['material_id'], 'quantity' => number_format((float) $r['quantity'], 4, '.', '')])
+            ->sortBy('material_id')->values()->all();
+
+        $old = $shape($option->materials()->get(['material_id', 'quantity'])->toArray());
+        $new = $shape($rows);
+        if ($old === $new) {
+            return null;
+        }
+
+        $option->materials()->delete();
+        foreach ($new as $r) {
+            $option->materials()->create($r);
+        }
+
+        return ['old' => $old, 'new' => $new];
+    }
+
+    /** 087 FR-006 — satu entri log per penyimpanan grup yang mengubah pemetaan bahan, di transaksi yang sama. */
+    private function logMaterialChanges(ModifierGroup $group, array $changes, ?int $userId): void
+    {
+        if ($changes === []) {
+            return;
+        }
+
+        $this->activityLogger->log(
+            userId: $userId,
+            action: 'modifier_materials_changed',
+            entityType: 'ModifierGroup',
+            entityId: $group->id,
+            description: "Mengubah bahan pilihan modifier di grup {$group->name}: ".implode(', ', array_column($changes, 'option')).'.',
+            oldValues: array_map(fn ($c) => $c['old'], $changes),
+            newValues: array_map(fn ($c) => $c['new'], $changes),
+        );
     }
 
     /** @param class-string<\Illuminate\Database\Eloquent\Model> $model */

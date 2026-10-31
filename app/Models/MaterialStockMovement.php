@@ -14,7 +14,7 @@ class MaterialStockMovement extends Model
 
     protected $fillable = [
         'material_id', 'outlet_id', 'type', 'qty_change', 'stock_before', 'stock_after',
-        'reference_type', 'reference_id', 'user_id', 'created_at',
+        'reference_type', 'reference_id', 'reason', 'user_id', 'created_at',
     ];
 
     protected static function booted(): void

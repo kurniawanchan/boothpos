@@ -20,15 +20,15 @@ class ModifierGroup extends Model
     public const SINGLE = 'single';
     public const MULTIPLE = 'multiple';
 
-    protected $fillable = ['name', 'selection_type', 'is_required', 'min_select', 'max_select', 'display_order', 'is_active'];
+    protected $fillable = ['name', 'selection_type', 'is_required', 'min_select', 'max_select', 'portion_per_option', 'display_order', 'is_active'];
 
     // Default DB tidak terlihat pada model hasil create().
-    protected $attributes = ['selection_type' => self::SINGLE, 'is_required' => false, 'min_select' => 0, 'max_select' => 1, 'display_order' => 0, 'is_active' => true];
+    protected $attributes = ['selection_type' => self::SINGLE, 'is_required' => false, 'min_select' => 0, 'max_select' => 1, 'portion_per_option' => false, 'display_order' => 0, 'is_active' => true];
 
     protected function casts(): array
     {
         return [
-            'is_required' => 'boolean', 'is_active' => 'boolean',
+            'is_required' => 'boolean', 'is_active' => 'boolean', 'portion_per_option' => 'boolean',
             'min_select' => 'integer', 'max_select' => 'integer', 'display_order' => 'integer',
         ];
     }

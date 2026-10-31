@@ -29,6 +29,8 @@ class StoreProductRequest extends FormRequest
             'tax_category' => ['sometimes', 'nullable', 'string', 'max:40'],
             'prep_minutes' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:600'],
             'is_retail' => ['sometimes', 'boolean'],
+            // 087 US6 — sumber stok produk; efeknya di semua modul ditentukan ProductVariant::tracksOwnStock().
+            'stock_source' => ['sometimes', 'in:variant,modifier'],
             'is_active' => ['sometimes', 'boolean'],
             'station_id' => ['sometimes', 'nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) {
                 if ($value !== null && ! \App\Models\Station::whereKey($value)->exists()) {

@@ -91,6 +91,10 @@ class StockController extends Controller
 
         foreach ($request->validated('items') as $item) {
             $variant = ProductVariant::findOrFail($item['variant_id']);
+            // 087 US6 — varian produk bersumber `modifier` tidak punya stok; koreksi ditolak (409), bukan diam-diam.
+            if ($variant->track_stock && ! $variant->tracksOwnStock()) {
+                return response()->json(['message' => __('stock.stock_source_modifier', ['sku' => $variant->sku]), 'code' => 'stock_source_modifier'], 409);
+            }
             $movements[] = $this->stockService->applyMovement(
                 variant: $variant,
                 outletId: $outletId,
@@ -146,6 +150,7 @@ class StockController extends Controller
             ->tap(fn ($q) => \App\Support\OutletFilter::apply($q, 'outlet_id'))
             ->when($request->filled('outlet_id'), fn ($q) => $q->where('outlet_id', $request->integer('outlet_id')))
             ->when($variantIds !== [], fn ($q) => $q->whereIn('variant_id', $variantIds))
+            ->whereHas('variant', fn ($v) => $v->stockFromVariant()) // 087 US6
             ->orderBy('variant_id')->orderBy('outlet_id')
             ->limit(2000)->get();
 

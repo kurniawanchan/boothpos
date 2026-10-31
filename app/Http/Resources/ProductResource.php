@@ -24,13 +24,16 @@ class ProductResource extends JsonResource
             'image_url' => $this->image_path ? Storage::disk('public')->url($this->image_path) : null,
             'is_active' => $this->is_active,
             'station_id' => $this->station_id,
+            // 087 US6 — sumber stok: `variant` | `modifier`.
+            'stock_source' => $this->stock_source ?? \App\Models\Product::STOCK_VARIANT,
             // 045 Stage 3 — outlet yang boleh dilihat pengguna dan apakah masing-masing membawa produk ini. Hanya ada bila
             // beberapa outlet terlihat DAN relasi `outletItemSettings.outlet` dimuat (show/store/update); disembunyikan di satu outlet.
             'outlets' => $this->when(
                 $this->relationLoaded('outletItemSettings') && app(\App\Support\OutletContext::class)->isMulti(),
                 fn () => $this->visibleOutletStates()
             ),
-            'variants' => ProductVariantResource::collection($this->whenLoaded('variants')),
+            // 087 US6 — relasi balik dipasang supaya tracksOwnStock() tiap varian tidak memuat ulang produknya (N+1).
+            'variants' => ProductVariantResource::collection($this->whenLoaded('variants', fn () => $this->variants->each(fn ($v) => $v->setRelation('product', $this->resource)))),
             // 028 — hanya bila diminta (?with_modifiers=1): grup EFEKTIF yang aktif beserta opsi aktifnya.
             'modifier_groups' => $this->when($this->relationLoaded('modifierGroups'), fn () => app(\App\Services\ModifierResolver::class)->present($this->resource)),
         ];

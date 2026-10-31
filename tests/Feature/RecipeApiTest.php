@@ -72,6 +72,37 @@ class RecipeApiTest extends TestCase
         $this->assertSame(2, Recipe::find($first['id'])->lines()->count());   // versi lama tak berubah
     }
 
+    /**
+     * 2026-10-31 (permintaan pemilik: "bisa hapus resep") — hapus resep = hapus SEMUA versinya. Varian berhenti
+     * digerakkan resep (harga modal boleh diubah lagi), harga modal terakhir tetap, dan `order_items.cost_price`
+     * yang sudah tercatat tidak berubah. Isi versi tersimpan di log aktivitas.
+     */
+    public function test_removing_the_recipe_deletes_every_version_and_unlocks_the_cost_price(): void
+    {
+        $this->create()->assertCreated();
+        $this->create(['yield' => 1])->assertCreated();
+        $this->assertTrue(app(RecipeService::class)->isRecipeDriven($this->variant->fresh()));
+
+        $this->deleteJson("/api/v1/products/{$this->variant->product_id}/recipes")->assertOk()->assertJsonPath('removed_versions', 2);
+
+        $this->assertSame(0, Recipe::count());
+        $this->assertFalse(app(RecipeService::class)->isRecipeDriven($this->variant->fresh()));
+        $this->putJson("/api/v1/variants/{$this->variant->id}", ['cost_price' => 1234])->assertOk();
+        $log = \App\Models\ActivityLog::where('action', 'recipe_removed')->sole();
+        $this->assertCount(2, $log->old_values['versions']);
+
+        $this->deleteJson("/api/v1/products/{$this->variant->product_id}/recipes")->assertStatus(404);
+    }
+
+    public function test_removing_a_recipe_needs_the_recipe_permission(): void
+    {
+        $this->create()->assertCreated();
+        $this->actingAs(User::factory()->create(['role' => 'cashier']), 'sanctum');
+
+        $this->deleteJson("/api/v1/products/{$this->variant->product_id}/recipes")->assertForbidden();
+        $this->assertSame(1, Recipe::count());
+    }
+
     public function test_the_cost_price_follows_the_recipe_when_it_takes_effect_and_recorded_costs_stay(): void
     {
         $this->create()->assertCreated();

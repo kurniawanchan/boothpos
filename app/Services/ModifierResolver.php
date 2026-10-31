@@ -78,14 +78,48 @@ class ModifierResolver
      */
     public function present(Product $product): array
     {
-        return $this->effectiveGroups($product)
+        $groups = $this->effectiveGroups($product);
+        // Satu eager-load untuk semua pilihan (bukan per pilihan): daftar POS memuat puluhan produk.
+        (new \Illuminate\Database\Eloquent\Collection($groups->flatMap(fn (ModifierGroup $g) => $g->options)->all()))->loadMissing('materials.material');
+        $book = app(\App\Support\OutletPriceBook::class);
+
+        return $groups
             ->map(fn (ModifierGroup $g) => [
                 'id' => $g->id, 'name' => $g->name, 'selection_type' => $g->selection_type,
                 'is_required' => $g->is_required, 'min_select' => $g->min_select, 'max_select' => $g->max_select,
+                // 2026-10-31 — tiap pilihan = 1 porsi (harga dasar per pilihan); klien memakainya untuk pratinjau harga.
+                'portion_per_option' => (bool) $g->portion_per_option,
                 'options' => $g->options->map(fn ($o) => [
                     'id' => $o->id, 'name' => $o->name, 'price_delta' => number_format((float) $o->price_delta, 2, '.', ''),
-                ])->values(),
+                ] + $this->optionStock($o, $book))->values(),
             ])->values()->all();
+    }
+
+    /**
+     * 2026-10-31 (permintaan pemilik) — stok bahan sebuah pilihan di outlet pemesanan (popup modifier dan stok produk
+     * bersumber modifier). `portions` = berapa porsi yang masih bisa dibuat (bilangan bulat ≥ 0, saldo minus = 0);
+     * null = pilihan tanpa bahan (tak terbatas) atau tidak ada outlet pemesanan (daftar pengelolaan).
+     *
+     * @return array{materials: array<int, array<string, mixed>>, portions: int|null}
+     */
+    private function optionStock(\App\Models\ModifierOption $option, \App\Support\OutletPriceBook $book): array
+    {
+        $portions = null;
+        $materials = $option->materials->map(function ($m) use ($book, &$portions) {
+            $onHand = $book->orderingMaterialStockOrNull($m->material_id);
+            if ($onHand !== null && (float) $m->quantity > 0) {
+                $can = max(0, (int) floor($onHand / (float) $m->quantity + 1e-9));
+                $portions = $portions === null ? $can : min($portions, $can);
+            }
+
+            return [
+                'material_id' => $m->material_id, 'name' => $m->material?->name, 'unit' => $m->material?->unit,
+                'quantity' => number_format((float) $m->quantity, 4, '.', ''),
+                'on_hand' => $onHand === null ? null : number_format($onHand, 3, '.', ''),
+            ];
+        })->values()->all();
+
+        return ['materials' => $materials, 'portions' => $portions];
     }
 
     /**
@@ -117,6 +151,7 @@ class ModifierResolver
 
         $snapshot = [];
         $delta = 0.0;
+        $base = $basePrice ?? (float) $variant->sell_price;
 
         foreach ($groups as $group) {
             $picked = $group->options->filter(fn ($o) => in_array($o->id, $ids, true));
@@ -129,20 +164,24 @@ class ModifierResolver
                 ]));
             }
 
-            foreach ($picked as $option) {
+            foreach ($picked->values() as $i => $option) {
+                // 2026-10-31 — grup "tiap pilihan = 1 porsi": pilihan pertama tertutup harga dasar, tiap pilihan
+                // berikutnya membawa SATU harga dasar lagi di price_delta snapshot-nya. Dengan begitu
+                // `unit_price = dasar + Σ price_delta` tetap benar bagi semua pembaca (struk, ubah baris tab).
+                $optionDelta = (float) $option->price_delta + ($group->portion_per_option && $i > 0 ? $base : 0.0);
                 $snapshot[] = [
                     'group_id' => $group->id,
                     'group' => $group->name,
                     'option_id' => $option->id,
                     'option' => $option->name,
-                    'price_delta' => number_format((float) $option->price_delta, 2, '.', ''),
+                    'price_delta' => number_format($optionDelta, 2, '.', ''),
                 ];
-                $delta += (float) $option->price_delta;
+                $delta += $optionDelta;
             }
         }
 
         $delta = round($delta, 2);
-        $unit = round(($basePrice ?? (float) $variant->sell_price) + $delta, 2);
+        $unit = round($base + $delta, 2);
 
         if ($unit < 0) {
             throw $this->reject(__('restaurant.modifier_price_negative'));

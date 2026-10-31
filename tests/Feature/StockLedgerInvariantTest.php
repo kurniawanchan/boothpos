@@ -66,7 +66,8 @@ class StockLedgerInvariantTest extends TestCase
                 continue;
             }
             $code = (string) file_get_contents($file);
-            preg_match_all('/->(applyMovement|applyMovementIfTracked)\(/', $code, $m, PREG_OFFSET_CAPTURE);
+            // 087 US6 — applyLineMovementIfTracked (pengembalian per snapshot baris) dijaga sama.
+            preg_match_all('/->(applyMovement|applyMovementIfTracked|applyLineMovementIfTracked)\(/', $code, $m, PREG_OFFSET_CAPTURE);
             foreach ($m[0] as [$hit, $offset]) {
                 $call = substr($code, $offset, 420);
                 if (! str_contains($call, 'outletId:') && ! str_contains($call, 'OutletStockSync')) {

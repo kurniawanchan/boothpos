@@ -40,10 +40,29 @@ final class OutletPriceBook
         return $this->stock[$this->ordering][$variantId] ?? 0;
     }
 
+    /** @var array<int, array<int, float>> outletId => [materialId => saldo] */
+    private array $materialStock = [];
+
+    /**
+     * 2026-10-31 — saldo BAHAN di outlet pemesanan (popup modifier POS dan stok produk bersumber modifier), atau null
+     * bila tidak ada outlet pemesanan. Satu query per permintaan, sama dengan saldo varian.
+     */
+    public function orderingMaterialStockOrNull(int $materialId): ?float
+    {
+        if ($this->ordering === null) {
+            return null;
+        }
+        $this->materialStock[$this->ordering] ??= \App\Models\MaterialOutletStock::query()->where('outlet_id', $this->ordering)->pluck('current_stock', 'material_id')
+            ->map(fn ($n) => (float) $n)->all();
+
+        return $this->materialStock[$this->ordering][$materialId] ?? 0.0;
+    }
+
     public function flush(): void
     {
         $this->loaded = [];
         $this->stock = [];
+        $this->materialStock = [];
     }
 
     /** Outlet pemesanan yang dipaksakan untuk permintaan ini (layar POS/tab, `pos=1`); null = pakai outlet tunggal yang berlaku. */

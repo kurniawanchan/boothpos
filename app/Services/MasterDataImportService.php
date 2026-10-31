@@ -924,6 +924,16 @@ class MasterDataImportService
             }
         }
 
+        // 087 US6 — sumber stok; sel kosong = tidak berubah (aturan umum impor).
+        if ($this->filled($values, 'stock_source')) {
+            $source = strtolower($this->stringValue($values, 'stock_source'));
+            if (! in_array($source, [\App\Models\Product::STOCK_VARIANT, \App\Models\Product::STOCK_MODIFIER], true)) {
+                $this->addError($sheet, $row, 'stock_source', "Sumber stok harus 'variant' atau 'modifier'.");
+            } else {
+                $attributes['stock_source'] = $source;
+            }
+        }
+
         return $attributes;
     }
 
@@ -1007,6 +1017,13 @@ class MasterDataImportService
             $skuUnknown = ProductVariant::where('sku', $sku)->doesntExist() && ! $fileCreatesVariants;
             if ($skuUnknown) {
                 $this->addError($sheet, $row, 'sku', "SKU '{$sku}' tidak ditemukan. Untuk varian baru, isi kolom initial_stock di sheet 'products' — SKU dibuat otomatis oleh sistem.");
+
+                continue;
+            }
+            // 087 US6 — varian produk bersumber stok `modifier` tidak punya stok; yang diatur adalah bahannya.
+            $stockVariant = ProductVariant::with('product')->where('sku', $sku)->first();
+            if ($stockVariant !== null && $stockVariant->track_stock && ! $stockVariant->tracksOwnStock()) {
+                $this->addError($sheet, $row, 'sku', "SKU '{$sku}' memakai stok dari modifier (bahan), jadi tidak punya stok varian. Atur stok bahannya di halaman Bahan.");
 
                 continue;
             }

@@ -211,7 +211,7 @@ class OrderService
             foreach ($lineData as $line) {
                 $variant = $line['variant'];
 
-                $order->items()->create([
+                $item = $order->items()->create([
                     'variant_id' => $variant->id,
                     'home_outlet_id' => $variant->product->home_outlet_id,
                     'sku_snapshot' => $variant->sku,
@@ -222,9 +222,11 @@ class OrderService
                     'discount_amount' => $line['discount'],
                     'line_total' => $line['line_total'],
                     'modifiers' => $line['modifiers'],
+                    'stock_source' => $this->stockService->sourceForNewLine($variant), // 087 US6
                 ]);
 
-                $this->stockService->applyMovementIfTracked(
+                $this->stockService->applyLineMovementIfTracked(
+                    line: $item,
                     variant: $variant,
                     outletId: (int) $order->outlet_id,
                     type: 'sale',
@@ -234,6 +236,10 @@ class OrderService
                     userId: $cashier->id,
                 );
             }
+
+            // 087 — penjualan ritel langsung `completed`: bahan pilihan modifier dipotong di sini, di transaksi
+            // yang sama dengan baris pesanannya (research D4). Retry `local_ref` sudah kembali lebih awal.
+            app(ModifierMaterialConsumption::class)->consumeOrder($order, $cashier);
 
             // Tiap pembayaran checkout dicatat di shift penjualan ini (di sinilah
             // uangnya diterima) oleh kasir yang bertransaksi. Order sendiri sudah
@@ -268,7 +274,9 @@ class OrderService
         return DB::transaction(function () use ($order, $reason, $user) {
             foreach ($order->items as $item) {
                 $variant = ProductVariant::lockForUpdate()->findOrFail($item->variant_id);
-                $this->stockService->applyMovementIfTracked(
+                // 087 US6 — kembali hanya bila baris ini dulu memotong stok varian (snapshot baris).
+                $this->stockService->applyLineMovementIfTracked(
+                    line: $item,
                     variant: $variant,
                     outletId: (int) $order->outlet_id,
                     type: 'return',
@@ -278,6 +286,9 @@ class OrderService
                     userId: $user->id,
                 );
             }
+
+            // 087 — bahan pilihan modifier kembali sebesar potongan bersih yang tercatat (bukan pemetaan hari ini).
+            app(ModifierMaterialConsumption::class)->restoreOrder($order, $user);
 
             $order->update(['status' => 'voided', 'void_reason' => $reason]);
 

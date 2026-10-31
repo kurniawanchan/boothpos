@@ -259,6 +259,7 @@ class MasterDataExportService
                 'prep_minutes' => $v->product->prep_minutes,
                 'is_retail' => $v->product->is_retail ? 1 : 0,
                 'status' => $v->product->status,
+                'stock_source' => $v->product->stock_source ?? 'variant', // 087 US6
             ])->all();
     }
 

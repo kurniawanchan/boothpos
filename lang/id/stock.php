@@ -17,4 +17,6 @@ return [
     'transfer_untracked' => 'Item :sku tidak melacak stok, jadi tidak bisa ditransfer.',
     'transfer_whole_qty' => 'Item ditransfer dalam jumlah bulat.',
     'transfer_client_ref_conflict' => 'Referensi klien ini sudah dipakai untuk transfer lain.',
+    // 087 US6
+    'stock_source_modifier' => 'Item :sku memakai stok dari modifier (bahan), jadi variannya tidak punya stok untuk dikoreksi. Koreksi stok bahannya di halaman Bahan.',
 ];

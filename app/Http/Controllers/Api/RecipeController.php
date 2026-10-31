@@ -43,6 +43,17 @@ class RecipeController extends Controller
         return response()->json($this->recipes->present($recipe, $this->recipes->mayCost($request->user())), 201);
     }
 
+    /** 2026-10-31 — hapus resep (semua versi). 404 bila item tidak punya resep. Izin sama dengan "Hitung ulang". */
+    public function destroy(Request $request, Product $product): JsonResponse
+    {
+        abort_unless($request->user()->canAccessMenu('products') && $request->user()->hasPermission(PermissionCatalog::RECIPE_EDIT), 403, __('reports.not_authorized_generic'));
+
+        $removed = $this->recipes->remove($product, $request->user());
+        abort_if($removed === 0, 404, __('products.recipe_none'));
+
+        return response()->json(['message' => __('products.recipe_removed'), 'removed_versions' => $removed]);
+    }
+
     public function recalculate(Request $request, Product $product): JsonResponse
     {
         abort_unless($request->user()->canAccessMenu('products') && $request->user()->hasPermission(PermissionCatalog::RECIPE_EDIT), 403, __('reports.not_authorized_generic'));

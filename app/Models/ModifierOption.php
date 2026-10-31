@@ -6,6 +6,7 @@ use App\Models\Concerns\HasDataMode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /** 028 US3 — satu pilihan dalam grup modifier; `price_delta` bertanda (boleh negatif). */
 class ModifierOption extends Model
@@ -24,5 +25,11 @@ class ModifierOption extends Model
     public function group(): BelongsTo
     {
         return $this->belongsTo(ModifierGroup::class, 'modifier_group_id');
+    }
+
+    /** 087 — bahan yang dipakai pilihan ini per porsi. */
+    public function materials(): HasMany
+    {
+        return $this->hasMany(ModifierOptionMaterial::class);
     }
 }

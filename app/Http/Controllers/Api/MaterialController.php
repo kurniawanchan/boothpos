@@ -32,6 +32,10 @@ class MaterialController extends Controller
     public function index(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Material::class);
+        // 087 — `stock_status`: negative = minus di salah satu outlet yang berlaku (penjualan boleh membuat minus);
+        // available = ada saldo > 0; out = tidak ada saldo > 0 (kosong atau minus). Semuanya per outlet yang terlihat.
+        $request->validate(['stock_status' => ['sometimes', 'nullable', 'in:negative,available,out']]);
+        $visible = fn ($b, string $op) => \App\Support\OutletFilter::apply($b, 'outlet_id')->where('current_stock', $op, 0);
 
         $perPage = min((int) $request->integer('per_page', 25), 100);
 
@@ -40,6 +44,9 @@ class MaterialController extends Controller
             ->with(['outletStock' => fn ($q) => \App\Support\OutletFilter::apply($q, 'outlet_id')->with('outlet:id,code,name')->orderBy('outlet_id')])
             ->when($request->filled('search'), fn ($q) => $q->where('name', 'like', '%'.$request->string('search').'%'))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
+            ->when($request->input('stock_status') === 'negative', fn ($q) => $q->whereHas('outletStock', fn ($b) => $visible($b, '<')))
+            ->when($request->input('stock_status') === 'available', fn ($q) => $q->whereHas('outletStock', fn ($b) => $visible($b, '>')))
+            ->when($request->input('stock_status') === 'out', fn ($q) => $q->whereDoesntHave('outletStock', fn ($b) => $visible($b, '>')))
             // 043 (Q2 = B) — tab jenis bahan di layar Produk.
             ->when($request->filled('kind') && in_array($request->string('kind')->value(), ['ingredient', 'semi_finished', 'packaging'], true), fn ($q) => $q->where('kind', $request->string('kind')->value()))
             ->orderBy('name')
@@ -78,7 +85,7 @@ class MaterialController extends Controller
     {
         $this->authorize('view', $material);
 
-        $material->loadCount('vendorPrices')->load('vendorPrices.vendor');
+        $material->loadCount('vendorPrices')->load(['vendorPrices.vendor', 'modifierUsages.option.group']);
 
         return response()->json(new MaterialResource($material));
     }
@@ -106,6 +113,16 @@ class MaterialController extends Controller
         if ($material->bomLines()->exists()) {
             return response()->json([
                 'message' => __('vendors_materials.material_delete_used_in_bom'),
+            ], 409);
+        }
+
+        // 087 — bahan memakai soft delete, jadi FK RESTRICT dari pemetaan pilihan modifier tidak pernah terpicu;
+        // tanpa penjaga ini pemetaan aktif akan diam-diam berhenti memotong bahan (research D10).
+        $usage = $material->modifierUsages()->whereHas('option', fn ($q) => $q->where('is_active', true))
+            ->with('option.group')->first();
+        if ($usage !== null) {
+            return response()->json([
+                'message' => __('vendors_materials.material_delete_used_by_modifier', ['usage' => ($usage->option->group?->name ?? '?').' → '.$usage->option->name]),
             ], 409);
         }
 
@@ -231,6 +248,90 @@ class MaterialController extends Controller
      * akhir). Outlet wajib bila pengguna melihat beberapa; tidak boleh membuat saldo outlet negatif (409/422 dari
      * MaterialStockService). Lewat jalur tunggal MaterialStockService, dengan jejak audit.
      */
+    /**
+     * 087 (US5) — buku besar bahan, terbaru dulu, dibatasi outlet yang berlaku (OutletFilter). Gerbang sama dengan
+     * koreksi stok bahan. Rujukan `order_item` diterjemahkan ke nomor pesanan dengan SATU query per halaman;
+     * baris yang sudah dihapus (batal "buang") tetap tampil dengan nomor pesanan null.
+     */
+    public function movements(Request $request, Material $material): JsonResponse
+    {
+        $this->authorize('update', $material);
+
+        return $this->ledger($request, $material);
+    }
+
+    /**
+     * 2026-10-31 (permintaan pemilik: koreksi stok bahan masuk log Inventori → Stok) — buku besar SEMUA bahan, bentuk
+     * baris sama dengan per bahan plus nama/kode/satuan bahan. Gerbang: menu Bahan, Stok, atau `pos` (2026-11-01:
+     * layar "Stok Bahan" tablet, hanya baca; baris dibatasi outlet yang berlaku dan tidak membawa angka biaya).
+     */
+    public function allMovements(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user->canAccessMenu('materials') && ! $user->canAccessMenu('stock') && ! $user->canAccessMenu('pos')) {
+            return response()->json(['message' => __('stock.not_authorized')], 403);
+        }
+
+        return $this->ledger($request, null);
+    }
+
+    private function ledger(Request $request, ?Material $material): JsonResponse
+    {
+        $types = ['purchase', 'adjustment', 'transfer_out', 'transfer_in', 'transfer_cancel', 'sale', 'return', 'waste'];
+        $data = $request->validate([
+            'type' => ['sometimes', 'array'],
+            'type.*' => ['string', 'in:'.implode(',', $types)],
+            'outlet_id' => ['sometimes', 'array'],
+            'outlet_id.*' => ['integer'],
+            'material_id' => ['sometimes', 'integer'],
+            'from' => ['sometimes', 'date'],
+            'to' => ['sometimes', 'date'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $base = $material ? $material->stockMovements()->getQuery() : \App\Models\MaterialStockMovement::query();
+        $page = \App\Support\OutletFilter::apply($base, 'outlet_id')
+            ->with(['user:id,name', 'outlet:id,code', ...($material ? [] : ['material' => fn ($q) => $q->withTrashed()->select('id', 'code', 'name', 'unit')])])
+            ->when($data['type'] ?? null, fn ($q, $t) => $q->whereIn('type', $t))
+            ->when($data['outlet_id'] ?? null, fn ($q, $o) => $q->whereIn('outlet_id', $o))
+            ->when(! $material && isset($data['material_id']), fn ($q) => $q->where('material_id', $data['material_id']))
+            // Tanggal BISNIS toko (zona + jam tutup buku), bukan tanggal UTC — sama dengan laporan lain (042).
+            ->when($data['from'] ?? null, fn ($q, $d) => $q->where('created_at', '>=', \App\Support\BusinessDay::bounds(\Carbon\Carbon::parse($d)->toDateString())[0]))
+            ->when($data['to'] ?? null, fn ($q, $d) => $q->where('created_at', '<', \App\Support\BusinessDay::bounds(\Carbon\Carbon::parse($d)->toDateString())[1]))
+            ->orderByDesc('id')
+            ->paginate((int) ($data['per_page'] ?? 25));
+
+        $lineIds = collect($page->items())->where('reference_type', 'order_item')->pluck('reference_id')->filter()->unique();
+        // Id baris berasal dari pergerakan yang SUDAH disaring outlet, jadi gabungan ini tidak membuka outlet lain.
+        $orders = $lineIds->isEmpty() ? collect() : DB::table('order_items')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->whereIn('order_items.id', $lineIds)
+            ->get(['order_items.id', 'orders.id as order_id', 'orders.order_number'])->keyBy('id');
+
+        return response()->json([
+            'data' => collect($page->items())->map(fn ($m) => [
+                'id' => $m->id,
+                ...($material ? [] : ['material_id' => $m->material_id, 'material_code' => $m->material?->code, 'material_name' => $m->material?->name, 'unit' => $m->material?->unit]),
+                'type' => $m->type,
+                'outlet_id' => $m->outlet_id,
+                'outlet_code' => $m->outlet?->code,
+                'qty_change' => number_format((float) $m->qty_change, 3, '.', ''),
+                'stock_before' => number_format((float) $m->stock_before, 3, '.', ''),
+                'stock_after' => number_format((float) $m->stock_after, 3, '.', ''),
+                'reference' => $m->reference_type === null ? null : [
+                    'type' => $m->reference_type,
+                    'id' => $m->reference_id,
+                    'order_id' => $m->reference_type === 'order_item' ? ($orders[$m->reference_id]->order_id ?? null) : null,
+                    'order_number' => $m->reference_type === 'order_item' ? ($orders[$m->reference_id]->order_number ?? null) : null,
+                ],
+                'reason' => $m->reason,
+                'user' => $m->user ? ['id' => $m->user->id, 'name' => $m->user->name] : null,
+                'created_at' => $m->created_at?->toIso8601String(),
+            ])->values(),
+            'meta' => ['current_page' => $page->currentPage(), 'per_page' => $page->perPage(), 'total' => $page->total(), 'last_page' => $page->lastPage()],
+        ]);
+    }
+
     public function adjustStock(Request $request, Material $material, \App\Services\MaterialStockService $stock): JsonResponse
     {
         $this->authorize('update', $material);
@@ -249,7 +350,7 @@ class MaterialController extends Controller
         $movement = DB::transaction(function () use ($stock, $material, $outletId, $data, $request) {
             $movement = $stock->applyMovement(
                 material: $material, outletId: $outletId, type: 'adjustment', qtyChange: (float) $data['qty_change'],
-                referenceType: 'manual_adjustment', userId: $request->user()->id,
+                referenceType: 'manual_adjustment', userId: $request->user()->id, reason: $data['reason'],
             );
             app(ActivityLogger::class)->log(
                 userId: $request->user()->id, action: 'material_stock_adjusted', entityType: 'Material', entityId: $material->id,

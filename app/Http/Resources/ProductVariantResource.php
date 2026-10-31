@@ -45,7 +45,11 @@ class ProductVariantResource extends JsonResource
                     : null,
             ]),
             // 028 — false untuk hidangan made-to-order (tanpa stok fisik).
-            'track_stock' => (bool) $this->track_stock,
+            // 087 US6 (research D19) — payload POS (`pos=1`) mengirim nilai EFEKTIF (produk bersumber modifier = false),
+            // sehingga web dan Android lama menampilkannya tanpa stok dan tidak pernah "habis" tanpa perubahan klien.
+            // Payload pengelolaan tetap mentah (formulir menyimpannya balik), ditambah `stock_tracked` efektif.
+            'track_stock' => $request->boolean('pos') ? $this->resource->tracksOwnStock() : (bool) $this->track_stock,
+            'stock_tracked' => $this->resource->tracksOwnStock(),
         ];
     }
 }

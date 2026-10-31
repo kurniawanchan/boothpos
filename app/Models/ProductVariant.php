@@ -91,6 +91,37 @@ class ProductVariant extends Model
         ];
     }
 
+    /**
+     * 087 US6 (research D17) — SATU-SATUNYA aturan "apakah stok varian ini bergerak": pelacakan varian menyala DAN
+     * produknya bersumber stok `variant`. Produk bersumber `modifier` tidak punya stok varian; yang berkurang hanya
+     * bahan pilihan modifier (ModifierMaterialConsumption). Kueri mentah memakai scopeTracksOwnStock (syarat sama).
+     */
+    public function tracksOwnStock(): bool
+    {
+        if (! $this->track_stock) {
+            return false;
+        }
+        $this->loadMissing('product');
+
+        return ($this->product?->stock_source ?? Product::STOCK_VARIANT) === Product::STOCK_VARIANT;
+    }
+
+    /**
+     * 087 US6 — hanya syarat SUMBER stok (produk `variant`), tanpa menyentuh `track_stock`: untuk laporan yang sejak
+     * dulu memuat varian tak-dilacak (stok rendah, saldo, laporan stok) supaya perilaku lama itu tidak ikut berubah.
+     */
+    public function scopeStockFromVariant(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->whereHas('product', fn ($p) => $p->withTrashed()->where('stock_source', Product::STOCK_VARIANT));
+    }
+
+    /** Syarat SQL yang sama dengan tracksOwnStock(), untuk daftar/laporan stok. */
+    public function scopeTracksOwnStock(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
+    {
+        return $query->where('product_variants.track_stock', true)
+            ->whereHas('product', fn ($p) => $p->withTrashed()->where('stock_source', Product::STOCK_VARIANT));
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
