@@ -18,6 +18,10 @@ import { computed, onBeforeUnmount, ref, useId } from 'vue';
  * (teknik yang sama dengan BaseSelect). Ditutup saat halaman digulung /
  * ukuran berubah supaya gelembung fixed tidak melayang di tempat yang salah.
  * Teks kosong tidak pernah menampilkan gelembung.
+ *
+ * 053 — gelembung `whitespace-pre-line`: `\n` di `text` menjadi baris baru (daftar
+ * Pre-order menaruh tanggal invoice dan pengiriman di baris terpisah). Teks tanpa
+ * `\n` tampil sama seperti sebelumnya.
  */
 const props = defineProps({
   text: { type: String, default: '' },
@@ -88,7 +92,7 @@ onBeforeUnmount(close);
         role="tooltip"
         :aria-hidden="!visible"
         :style="style"
-        class="z-[95] w-64 rounded-lg bg-ink px-3 py-2 text-left text-[12px] font-medium leading-snug text-white shadow-lg"
+        class="z-[95] w-64 whitespace-pre-line rounded-lg bg-ink px-3 py-2 text-left text-[12px] font-medium leading-snug text-white shadow-lg"
       >{{ text }}</span>
     </Teleport>
   </span>
