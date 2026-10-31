@@ -436,7 +436,7 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
 - Seeded dev accounts (`php artisan db:seed`): `owner`, `admin`, `kasir01`, `kasir02`, `inventory` — all `password123`, local only.
-- No git remote is configured; nothing is pushed.
+- Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
 Previous feature: `specs/049-product-variant-catalog-export/plan.md`
