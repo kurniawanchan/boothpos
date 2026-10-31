@@ -761,7 +761,12 @@ describe('PreordersView — dispatch status & print menu in detail', () => {
     expect(row).toHaveTextContent('28 Sep 2026');
   });
 
-  it('shows the invoice-sent and shipping dates inside the existing status cell (no extra column)', async () => {
+  // 053 — DITULIS ULANG (research R6): dulu tanggal tampil sebagai teks di bawah
+  // label status; kini di tooltip (di-teleport ke <body>) pada ikon ⓘ di sampingnya,
+  // supaya tinggi baris seragam. Tanggal tidak boleh lagi ada di dalam <tr>.
+  it('053: shows the invoice-sent and shipping dates in a tooltip beside the dispatch status, not as cell text', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
     listPreorders.mockResolvedValue({
       data: [{
         ...ROWS[0], fulfillment: 'courier', dispatch_status: 'shipping',
@@ -772,8 +777,63 @@ describe('PreordersView — dispatch status & print menu in detail', () => {
     await renderPreorders();
     const row = (await screen.findByText('PO-0010')).closest('tr');
 
-    expect(row).toHaveTextContent('Invoice terkirim: 27 Sep 2026');
-    expect(row).toHaveTextContent('Pengiriman mulai: 28 Sep 2026');
+    expect(row).not.toHaveTextContent('Invoice terkirim:');
+    expect(row).not.toHaveTextContent('Pengiriman mulai:');
+
+    const info = within(row).getByTestId('dispatch-dates-info');
+    expect(info.getAttribute('aria-label')).toMatch(/Invoice terkirim: 27 Sep 2026.*Pengiriman mulai: 28 Sep 2026/);
+
+    await user.hover(info);
+    const tip = screen.getByRole('tooltip');
+    expect(tip).toBeVisible();
+    expect(tip.textContent).toMatch(/^Invoice terkirim: 27 Sep 2026[^\n]*\nPengiriman mulai: 28 Sep 2026[^\n]*$/);
+
+    // Tetikus: menjauh menutup. Papan ketik: fokus membuka, Escape menutup
+    // (Escape didengar BaseTooltip di pembungkusnya, jadi fokus harus di dalamnya).
+    await user.unhover(info);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    await user.click(info);
+    expect(info).toHaveFocus();
+    expect(screen.getByRole('tooltip')).toBeVisible();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('053: the dispatch cell stays on one line, and the dates icon depends on the dates (not the status)', async () => {
+    const base = { ...ROWS[0], fulfillment: 'courier' };
+    listPreorders.mockResolvedValue({
+      data: [
+        { ...base, id: 31, preorder_number: 'PO-0031', dispatch_status: 'pending', invoice_sent_at: null, shipping_at: null },
+        { ...base, id: 32, preorder_number: 'PO-0032', dispatch_status: null, invoice_sent_at: null, shipping_at: null },
+        { ...base, id: 33, preorder_number: 'PO-0033', dispatch_status: 'shipping', invoice_sent_at: null, shipping_at: '2026-09-28T04:00:00Z' },
+        { ...base, id: 34, preorder_number: 'PO-0034', dispatch_status: 'invoice_sent', invoice_sent_at: '2026-09-27T03:00:00Z', shipping_at: null },
+      ],
+      meta: { current_page: 1, per_page: 25, total: 4, last_page: 1 },
+    });
+    await renderPreorders();
+    await screen.findByText('PO-0031');
+    const rowOf = (n) => screen.getByText(n).closest('tr');
+
+    // (a) Menunggu tanpa tanggal, (b) status kosong (= Menunggu) → tanpa ikon.
+    expect(within(rowOf('PO-0031')).queryByTestId('dispatch-dates-info')).not.toBeInTheDocument();
+    expect(within(rowOf('PO-0032')).queryByTestId('dispatch-dates-info')).not.toBeInTheDocument();
+    expect(rowOf('PO-0032')).toHaveTextContent(id.preorders.dispatch_status_pending);
+
+    // (c) hanya tanggal pengiriman (data lama/impor) → ikon ada, satu baris pengiriman saja.
+    const onlyShipping = within(rowOf('PO-0033')).getByTestId('dispatch-dates-info');
+    expect(onlyShipping.getAttribute('aria-label')).toMatch(/^Pengiriman mulai: 28 Sep 2026/);
+    expect(onlyShipping.getAttribute('aria-label')).not.toContain('Invoice terkirim');
+
+    // (d) hanya tanggal invoice → satu baris invoice.
+    const onlyInvoice = within(rowOf('PO-0034')).getByTestId('dispatch-dates-info');
+    expect(onlyInvoice.getAttribute('aria-label')).toMatch(/^Invoice terkirim: 27 Sep 2026/);
+    expect(onlyInvoice.getAttribute('aria-label')).not.toContain('Pengiriman mulai');
+
+    // (e) StatusPill dan ikon berada dalam satu pembungkus nowrap.
+    const cell = onlyInvoice.closest('.whitespace-nowrap');
+    expect(cell).not.toBeNull();
+    expect(cell).toHaveTextContent(id.preorders.dispatch_status_invoice_sent);
   });
 
   it('shows created, updated and dispatch dates in the detail drawer', async () => {
@@ -1922,5 +1982,62 @@ describe('PreordersView — navigasi keyboard (052 US3)', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(getPreorder).not.toHaveBeenCalled();
+  });
+});
+
+// 053-preorder-list-oneline-cells (US1) — sel DataTable tidak `nowrap`, jadi nomor
+// pre-order bisa patah setelah tanda hubung dan `Rp` bisa terpisah dari angkanya.
+// jsdom tidak melakukan layout, jadi yang dikunci di sini adalah kelasnya;
+// lebar satu baris yang sebenarnya dibuktikan di peramban nyata (quickstart.md).
+describe('PreordersView — sel satu baris: nomor & total (053 US1)', () => {
+  const LIST_ROWS = [
+    { ...ROWS[0], total_amount: '125000000.00', outstanding: '1.00' },
+    {
+      id: 20, preorder_number: 'PO-0020', customer_id: 7, customer_name: 'Wati', status: 'ordered',
+      fulfillment: 'courier', total_amount: '100000.00', outstanding: '100000.00', shipping_cost: '0.00',
+      customer_has_address: false, customer_address: null, sellers: [],
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getPreorderNeighbors.mockResolvedValue(NO_NEIGHBORS);
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: LIST_ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+  });
+
+  it('keeps the pre-order number on one line, with and without the shipping flag', async () => {
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    const plain = screen.getByRole('button', { name: 'PO-0010' });
+    expect(plain.closest('span')).toHaveClass('whitespace-nowrap');
+
+    const flagged = screen.getByRole('button', { name: 'PO-0020' });
+    const wrapper = flagged.closest('span');
+    expect(wrapper).toHaveClass('whitespace-nowrap');
+    expect(wrapper.querySelector('.ph-flag')).toBeInTheDocument();
+  });
+
+  it('keeps the Total on one line with exactly the formatIDR text', async () => {
+    const { formatIDR } = await import('../../resources/js/utils/money.js');
+    await renderPreorders();
+    const row = (await screen.findByText('PO-0010')).closest('tr');
+
+    const total = within(row).getByText(formatIDR('125000000.00'));
+    expect(total).toHaveClass('whitespace-nowrap');
+  });
+
+  it('still opens the detail when the one-line number is clicked', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockResolvedValue({ id: 10, preorder_number: 'PO-0010', status: 'ordered', dispatch_status: 'pending', fulfillment: 'pickup', items: [], payments: [] });
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    await user.click(screen.getByRole('button', { name: 'PO-0010' }));
+
+    await waitFor(() => expect(getPreorder).toHaveBeenCalledWith(10));
   });
 });

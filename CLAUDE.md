@@ -450,7 +450,16 @@ whose bar pattern the SPA draws and the Excel renders to PNG. Gate: `products` m
 Enter in `#pos-search` calls `GET /variants/lookup?exact=1` and adds the exact-SKU variant like a tap (no session
 required, as for taps). Revives PRD §7.18 / F6.5 / F17.5 (external scanners only) — needs dated PRD + CLAUDE.md scope
 notes. First task is a PDF size/time/sharpness spike; Excel memory at 500 variants must be tested. See research.md.
-Active feature plan: `specs/052-preorder-detail-prev-next/plan.md`
+Active feature plan: `specs/053-preorder-list-oneline-cells/plan.md`
+(branch `084-preorder-list-oneline-cells`, stacked on `083-preorder-detail-prev-next`; spec dir number ≠ branch number) —
+frontend only, no migration, no API or locale-key change. Pre-order LIST: the pre-order number and Total stay on one line
+(`whitespace-nowrap` on the cell slot content — `DataTable` cells have no nowrap, `formatIDR` uses a normal space and the
+number breaks after hyphens; `formatIDR` itself is NOT changed). The invoice-sent / shipping-started dates leave the
+dispatch-status cell text and move into a `BaseTooltip` on an ⓘ button beside the `StatusPill` (shown only when at least
+one date exists; `aria-label` carries the same text; one helper `dispatchDatesLines(row)`). `BaseTooltip`'s bubble gains
+`whitespace-pre-line` so the two dates sit on separate lines. Detail drawer, export and documents unchanged. See research.md.
+
+Previous feature: `specs/052-preorder-detail-prev-next/plan.md`
 (branch `083-preorder-detail-prev-next`, from `develop`; spec dir number ≠ branch number) — no migration, nothing stored.
 The pre-order detail drawer gets **‹ Previous / Next ›** buttons in its header (the `BaseDrawer` `header` slot), each
 labelled with the target pre-order number. Order = the Pre-order LIST as currently filtered and sorted, across pages —

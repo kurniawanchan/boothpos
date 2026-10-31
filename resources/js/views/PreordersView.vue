@@ -92,6 +92,23 @@ const DISPATCH_LABEL = computed(() => ({
   shipping: t('preorders.dispatch_status_shipping'),
 }));
 const DISPATCH_VARIANT = { pending: 'neutral', invoice_sent: 'warn', shipping: 'mint' };
+
+/**
+ * 053 — satu-satunya sumber teks tanggal progres untuk sel status dispatch di
+ * daftar: ikon ⓘ tampil bila array tidak kosong, tooltip = gabung `\n`,
+ * aria-label = gabung `. `. Pakai kunci locale & formatDateTime yang sudah ada.
+ *
+ * @param {{ invoice_sent_at?: string|null, shipping_at?: string|null }} row
+ * @returns {string[]} baris tanggal, urut invoice → pengiriman; [] bila tidak ada
+ */
+function dispatchDatesLines(row) {
+  // Bergantung pada TANGGAL, bukan dispatch_status: data lama/impor bisa punya
+  // shipping_at tanpa invoice_sent_at dan tetap harus tampil.
+  const lines = [];
+  if (row.invoice_sent_at) lines.push(t('preorders.dispatch_invoice_sent_on', { date: formatDateTime(row.invoice_sent_at) }));
+  if (row.shipping_at) lines.push(t('preorders.dispatch_shipping_on', { date: formatDateTime(row.shipping_at) }));
+  return lines;
+}
 // "Shipping in progress" hanya berlaku untuk Mail Order (fulfillment=courier)
 // — pesanan pickup diambil di booth. Backend menegakkan ini (409); ini cermin
 // UX supaya opsinya tidak ditawarkan sama sekali. Filter list tetap memuat
@@ -1488,8 +1505,11 @@ async function saveShipmentChanges() {
         <template #cell-preorder_number="{ row }">
           <!-- 013-preorder-list-filters-receipt (US2, T019) — reuses the
                existing openDetail(row) handler (research.md R7), a second
-               entry point into the row's already-existing "Detail" action. -->
-          <span class="inline-flex items-center gap-1.5">
+               entry point into the row's already-existing "Detail" action.
+               053 — `whitespace-nowrap`: sel DataTable tidak nowrap dan peramban
+               mematahkan nomor setelah tanda hubung; nomor harus utuh satu baris
+               (bukan truncate — nomor dicocokkan dengan invoice). -->
+          <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
             <button
               v-if="needsShippingAttention(row)"
               type="button"
@@ -1511,16 +1531,29 @@ async function saveShipmentChanges() {
         </template>
         <template #cell-status="{ row }"><StatusPill :variant="STATUS_VARIANT[row.status]">{{ STATUS_LABEL[row.status] }}</StatusPill></template>
         <template #cell-dispatch_status="{ row }">
-          <div class="flex flex-col items-start gap-1">
+          <!-- 053 — tanggal invoice/pengiriman pindah dari teks di bawah label ke
+               tooltip pada ikon ⓘ di sampingnya, supaya tinggi baris seragam.
+               BaseTooltip (bukan `title` native) karena harus bisa dicapai keyboard
+               dan tidak terpotong overflow-auto milik DataTable. -->
+          <span class="inline-flex items-center gap-1.5 whitespace-nowrap">
             <StatusPill :variant="DISPATCH_VARIANT[row.dispatch_status ?? 'pending']">{{ DISPATCH_LABEL[row.dispatch_status ?? 'pending'] }}</StatusPill>
-            <!-- Tanggal ditandai, di kolom yang sama (bukan kolom baru). -->
-            <span v-if="row.invoice_sent_at" class="text-[11px] leading-tight text-muted-3">{{ t('preorders.dispatch_invoice_sent_on', { date: formatDateTime(row.invoice_sent_at) }) }}</span>
-            <span v-if="row.shipping_at" class="text-[11px] leading-tight text-muted-3">{{ t('preorders.dispatch_shipping_on', { date: formatDateTime(row.shipping_at) }) }}</span>
-          </div>
+            <BaseTooltip v-if="dispatchDatesLines(row).length" :text="dispatchDatesLines(row).join('\n')">
+              <button
+                type="button"
+                data-testid="dispatch-dates-info"
+                class="flex h-5 w-5 items-center justify-center rounded text-muted-3 hover:text-brand-active"
+                :aria-label="dispatchDatesLines(row).join('. ')"
+              >
+                <i class="ph-duotone ph-info text-[14px]" aria-hidden="true"></i>
+              </button>
+            </BaseTooltip>
+          </span>
         </template>
         <template #cell-fulfillment="{ row }">{{ FULFILLMENT_LABEL[row.fulfillment] }}</template>
         <template #cell-sellers="{ row }">{{ row.sellers?.length ? row.sellers.map((s) => s.name).join(', ') : '—' }}</template>
-        <template #cell-total_amount="{ row }">{{ formatIDR(row.total_amount) }}</template>
+        <!-- 053 — formatIDR memakai spasi biasa, jadi `Rp` bisa terpisah dari angkanya.
+             formatIDR sengaja TIDAK diubah (dipakai struk/invoice/ekspor); cukup sel ini nowrap. -->
+        <template #cell-total_amount="{ row }"><span class="whitespace-nowrap">{{ formatIDR(row.total_amount) }}</span></template>
         <template #cell-outstanding="{ row }">{{ formatIDR(row.outstanding) }}</template>
         <template #cell-created_at="{ row }"><span class="whitespace-nowrap text-[12.5px] text-muted-4">{{ formatDateTime(row.created_at) }}</span></template>
         <template #cell-updated_at="{ row }"><span class="whitespace-nowrap text-[12.5px] text-muted-4">{{ formatDateTime(row.updated_at) }}</span></template>

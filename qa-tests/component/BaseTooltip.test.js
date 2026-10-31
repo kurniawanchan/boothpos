@@ -117,3 +117,16 @@ describe('BaseTooltip — fixed, teleported bubble (038)', () => {
   });
 });
 
+
+// 053 — daftar Pre-order menaruh dua tanggal (invoice, pengiriman) di satu tooltip,
+// satu per baris. Gelembung memakai `whitespace-pre-line` supaya `\n` menjadi baris
+// baru; teks tanpa `\n` tampil sama seperti sebelumnya.
+describe('BaseTooltip — teks multi-baris (053)', () => {
+  it('keeps newlines in the bubble text and renders them as separate lines', () => {
+    render(BaseTooltip, { props: { text: 'Baris satu\nBaris dua' }, slots: { default: '<button type="button">Info</button>' } });
+    const tip = screen.getByRole('tooltip', { hidden: true });
+
+    expect(tip).toHaveClass('whitespace-pre-line');
+    expect(tip.textContent).toBe('Baris satu\nBaris dua');
+  });
+});
