@@ -2450,6 +2450,8 @@ paths:
         - { name: dispatch_status, in: query, description: "Penanda manual invoice-terkirim/pengiriman-berjalan. Boleh diulang (`dispatch_status[]=a&dispatch_status[]=b`); nilai berbeda di-OR-kan. Berlaku juga untuk `/preorders/summary` dan `/preorders/export`.", schema: { type: array, items: { type: string, enum: [pending, invoice_sent, shipping] } } }
         - { name: search, in: query, description: "007-preorder-import-export-notify (US1) — cocok parsial, tidak peka huruf besar/kecil, terhadap nama pelanggan.", schema: { type: string } }
         - { name: artist_id, in: query, description: "013-preorder-list-filters-receipt (US1) — hanya pre-order yang punya minimal satu item milik penjual ini (via `whereHas`, tidak menduplikasi baris pre-order yang punya beberapa item dari penjual yang sama).", schema: { type: integer } }
+        - { name: sort_by, in: query, description: "Kolom urutan (whitelist; nilai lain → urutan bawaan `created_at desc`). 052-preorder-detail-prev-next: setiap urutan diakhiri pengikat `preorders.id` searah `sort_dir` (bawaan `created_at desc, id desc`), jadi baris bernilai sama selalu tampil dalam urutan tetap dan tidak pernah muncul di dua halaman.", schema: { type: string, enum: [preorder_number, customer_name, status, fulfillment, total_amount, outstanding, created_at, updated_at] } }
+        - { name: sort_dir, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -2569,6 +2571,36 @@ paths:
         '409': { description: 'Status bukan "ordered", atau sudah ada pembayaran tercatat — gunakan aksi Cancel.' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /preorders/{id}/neighbors:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Preorder]
+      summary: Pre-order sebelum/sesudah di daftar (052-preorder-detail-prev-next)
+      description: |
+        Tetangga pre-order `{id}` di daftar `GET /preorders` dengan filter dan
+        urutan yang SAMA (helper `applyFilters()` + `applySort()` yang sama),
+        dihitung atas seluruh daftar tersaring sehingga melintasi batas
+        halaman; `page`/`per_page` diabaikan. Hanya baca. Bila pre-order tidak
+        lolos filter: `in_list: false` dan kedua tetangga `null`. Pre-order
+        mode DEMO/LIVE lain → 404.
+      parameters:
+        - { name: status, in: query, schema: { type: array, items: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] } } }
+        - { name: dispatch_status, in: query, schema: { type: array, items: { type: string, enum: [pending, invoice_sent, shipping] } } }
+        - { name: fulfillment, in: query, schema: { type: array, items: { type: string, enum: [pickup, courier] } } }
+        - { name: artist_id, in: query, schema: { type: array, items: { type: integer } } }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: customer_id, in: query, schema: { type: integer } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: sort_by, in: query, schema: { type: string, enum: [preorder_number, customer_name, status, fulfillment, total_amount, outstanding, created_at, updated_at] } }
+        - { name: sort_dir, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PreorderNeighbors' }
+        '401': { description: Belum login }
+        '404': { description: Pre-order tidak ditemukan (atau milik mode DEMO/LIVE lain) }
   /preorders/{id}/invoice:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     get:
@@ -7139,6 +7171,26 @@ components:
           minItems: 1
           items: { $ref: '#/components/schemas/PreorderItemInput' }
 
+    PreorderNeighbors:
+      type: object
+      description: 052-preorder-detail-prev-next — hanya id + nomor, tanpa data pelanggan.
+      required: [in_list, position, total, previous, next]
+      properties:
+        in_list: { type: boolean, description: "true bila pre-order lolos filter aktif." }
+        position: { type: integer, nullable: true, description: "Urutan 1-based dalam daftar tersaring; null bila in_list = false." }
+        total: { type: integer, description: "Jumlah baris daftar tersaring (= meta.total GET /preorders dengan filter yang sama)." }
+        previous:
+          type: object
+          nullable: true
+          properties:
+            id: { type: integer }
+            preorder_number: { type: string, example: PO-20260927-0011 }
+        next:
+          type: object
+          nullable: true
+          properties:
+            id: { type: integer }
+            preorder_number: { type: string, example: PO-20260927-0009 }
     PreorderSummary:
       type: object
       properties:

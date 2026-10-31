@@ -1,11 +1,12 @@
 <script setup>
-import { reactive, ref, computed, onMounted, watch, h, render, getCurrentInstance } from 'vue';
+import { reactive, ref, computed, onMounted, onBeforeUnmount, watch, h, render, getCurrentInstance } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import {
   listPreorders,
   getPreorder,
+  getPreorderNeighbors,
   createPreorder,
   updatePreorder,
   deletePreorder,
@@ -46,6 +47,7 @@ import StatusPill from '../components/ui/StatusPill.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import BaseDrawer from '../components/ui/BaseDrawer.vue';
+import BaseTooltip from '../components/ui/BaseTooltip.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
@@ -265,7 +267,12 @@ function needsShippingAttention(row) {
   return row.fulfillment === 'courier' && (parseMoney(row.shipping_cost) <= 0 || !row.customer_has_address);
 }
 function preorderRowClass(row) {
-  return needsShippingAttention(row) ? 'bg-warn-bg' : '';
+  const classes = [];
+  if (needsShippingAttention(row)) classes.push('bg-warn-bg');
+  // 052 — sorot baris pre-order yang sedang dibuka di panel detail (digabung,
+  // tidak menimpa sorotan penanda ongkir/alamat).
+  if (showDetail.value && detail.value?.id === row.id) classes.push('bg-mint-50');
+  return classes.join(' ');
 }
 
 // Requested: clicking the flag shows the shipping cost + notes right
@@ -980,13 +987,48 @@ async function doResendNotification() {
   }
 }
 
+// 052-preorder-detail-prev-next — tetangga pre-order yang dibuka di daftar
+// (filter + urutan yang sama, dihitung server). `detailSeq` menaikkan nomor
+// setiap kali detail lain diminta; respons dengan nomor lama dibuang supaya
+// respons lambat tidak menimpa pre-order yang lebih baru (pelajaran pencarian
+// POS fitur 049; research.md Decision 5).
+const neighbors = ref(null);
+const neighborsLoading = ref(false);
+let detailSeq = 0;
+
+// Konteks daftar = filter/urutan yang sedang tampil, tanpa page/per_page
+// (posisi dihitung atas seluruh daftar, jadi navigasi melintasi halaman).
+function listContextParams() {
+  // eslint-disable-next-line no-unused-vars
+  const { page, per_page, ...context } = params;
+  return context;
+}
+
+async function loadNeighbors(id, seq = detailSeq) {
+  neighborsLoading.value = true;
+  try {
+    const result = await getPreorderNeighbors(id, listContextParams());
+    if (seq === detailSeq) neighbors.value = result ?? null;
+  } catch {
+    // Tetangga hanya alat bantu: gagal memuatnya cukup menonaktifkan tombol,
+    // panel detail tetap utuh.
+    if (seq === detailSeq) neighbors.value = null;
+  } finally {
+    if (seq === detailSeq) neighborsLoading.value = false;
+  }
+}
+
 async function openDetail(row) {
+  const seq = ++detailSeq;
   showDetail.value = true;
   detailLoading.value = true;
   shipment.value = null;
   showShipmentForm.value = false;
+  neighbors.value = null;
+  loadNeighbors(row.id, seq);
   try {
     const full = await getPreorder(row.id);
+    if (seq !== detailSeq) return;
     // customer_name masih dibawa dari baris list yang sudah dimuat, bukan
     // dari respons ini (lihat openDetailById di bawah untuk yang itu).
     detail.value = { ...full, customer_name: row.customer_name, fulfillment: full.fulfillment ?? row.fulfillment };
@@ -998,7 +1040,7 @@ async function openDetail(row) {
     // database — ditemukan lewat verifikasi browser sungguhan.
     shipment.value = full.shipment ?? null;
   } finally {
-    detailLoading.value = false;
+    if (seq === detailSeq) detailLoading.value = false;
   }
 }
 
@@ -1008,27 +1050,101 @@ async function openDetail(row) {
 // /preorders/{id} (show()) DOES eager-load 'customer' (see
 // PreorderController::show()), so customer_name/fulfillment come from the
 // same response instead of a list row.
-async function openDetailById(id) {
+//
+// 052 — `fromNav` (tombol Sebelumnya/Berikutnya): gagal memuat TIDAK menutup
+// panel; detail & pengiriman lama dipertahankan (baru diganti saat sukses)
+// dan tetangga dimuat ulang, karena tujuan mungkin sudah dihapus atau keluar
+// dari filter. Pemanggil lain tetap menutup panel seperti sebelumnya.
+async function openDetailById(id, { fromNav = false } = {}) {
+  const seq = ++detailSeq;
+  const previousId = detail.value?.id;
   showDetail.value = true;
   detailLoading.value = true;
-  shipment.value = null;
+  if (!fromNav) {
+    shipment.value = null;
+    neighbors.value = null;
+  }
   showShipmentForm.value = false;
+  loadNeighbors(id, seq);
   try {
     const full = await getPreorder(id);
+    if (seq !== detailSeq) return;
     detail.value = { ...full, customer_name: full.customer?.name ?? '', fulfillment: full.fulfillment };
     shipment.value = full.shipment ?? null;
   } catch (err) {
-    showDetail.value = false;
-    toast.error(err.message || t('preorders.load_failed'));
+    if (seq !== detailSeq) return;
+    if (fromNav && previousId) {
+      toast.error(t('preorders.nav_target_gone'));
+      loadNeighbors(previousId, seq);
+    } else {
+      showDetail.value = false;
+      toast.error(err.message || t('preorders.load_failed'));
+    }
   } finally {
-    detailLoading.value = false;
+    if (seq === detailSeq) detailLoading.value = false;
   }
 }
 
 async function refreshDetail() {
-  const full = await getPreorder(detail.value.id);
-  detail.value = { ...detail.value, ...full };
+  const id = detail.value.id;
+  loadNeighbors(id);
+  const full = await getPreorder(id);
+  // Pengguna mungkin sudah berpindah ke pre-order lain selama menunggu.
+  if (detail.value?.id === id) detail.value = { ...detail.value, ...full };
 }
+
+// 052 — daftar dimuat ulang (ubah status/penanda, hapus, duplikat, split,
+// ganti filter/urutan) bisa mengubah siapa tetangga pre-order yang dibuka.
+watch(items, () => {
+  if (showDetail.value && detail.value?.id) loadNeighbors(detail.value.id);
+});
+
+function goToNeighbor(direction) {
+  const state = navState.value[direction];
+  if (state.disabled) return;
+  openDetailById(state.target.id, { fromNav: true });
+}
+
+// Satu sumber status tombol (dipakai template, klik, dan keyboard). Nonaktif
+// bukan soal izin peran: semua yang bisa membuka detail boleh bernavigasi
+// (research.md Decision 7).
+const navState = computed(() => {
+  const busy = neighborsLoading.value || detailLoading.value || showShipmentForm.value;
+  const notInList = neighbors.value?.in_list === false;
+  const build = (target, edgeReason) => {
+    let reason = '';
+    if (busy) reason = t('preorders.nav_busy');
+    else if (notInList) reason = t('preorders.nav_not_in_list');
+    else if (!target) reason = t(edgeReason);
+    return { target: target ?? null, disabled: reason !== '', reason };
+  };
+  return {
+    previous: build(neighbors.value?.previous, 'preorders.nav_first'),
+    next: build(neighbors.value?.next, 'preorders.nav_last'),
+  };
+});
+
+// 052 US3 — ←/→ menavigasi selama fokus berada di DALAM panel detail. Satu
+// listener window karena slot header dan isi BaseDrawer bersaudara (tanpa
+// pembungkus bersama) dan BaseDrawer tidak diubah. Modal pembayaran/edit/
+// konfirmasi dan daftar pilihan BaseSelect di-Teleport ke <body> di luar
+// panel, jadi panah di sana otomatis diabaikan (research.md Decision 8).
+const detailNavEl = ref(null);
+const TEXT_ENTRY = 'input, textarea, select, [contenteditable="true"], [role="listbox"], [role="combobox"]';
+
+function onDetailKeydown(e) {
+  if (!showDetail.value || e.defaultPrevented) return;
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const panel = detailNavEl.value?.closest('[role="dialog"]');
+  if (!panel || !(e.target instanceof Element) || !panel.contains(e.target)) return;
+  if (e.target.closest(TEXT_ENTRY)) return;
+  e.preventDefault();
+  goToNeighbor(e.key === 'ArrowLeft' ? 'previous' : 'next');
+}
+
+onMounted(() => window.addEventListener('keydown', onDetailKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onDetailKeydown));
 
 const detailLines = computed(() =>
   (detail.value?.items ?? []).map((i) => ({ ...i, line_total: (parseMoney(i.sell_price) * i.qty).toFixed(2) }))
@@ -1592,6 +1708,41 @@ async function saveShipmentChanges() {
       max-width-class="max-w-[880px]"
       @close="showDetail = false"
     >
+      <!-- 052-preorder-detail-prev-next — judul bawaan BaseDrawer + navigasi ke
+           pre-order sebelum/sesudah di daftar. aria-disabled (bukan disabled)
+           supaya tombol tetap bisa difokus dan tooltip alasannya terbaca. -->
+      <template #header>
+        <div class="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-4 gap-y-2.5">
+          <div class="flex min-w-0 flex-col gap-0.5">
+            <h2 class="text-[19px] font-bold tracking-tight">{{ detail?.preorder_number ?? '' }}</h2>
+            <p v-if="detail" class="text-[12.5px] text-muted-2">{{ detail.customer_name }} · {{ FULFILLMENT_LABEL[detail.fulfillment] }}</p>
+          </div>
+          <nav ref="detailNavEl" class="flex flex-none items-center gap-1.5" :aria-label="t('preorders.nav_label')">
+            <BaseTooltip
+              v-for="dir in ['previous', 'next']"
+              :key="dir"
+              :text="navState[dir].disabled ? navState[dir].reason : ''"
+              :align="dir === 'next' ? 'right' : 'left'"
+            >
+              <button
+                type="button"
+                :data-testid="dir === 'previous' ? 'preorder-nav-prev' : 'preorder-nav-next'"
+                :aria-disabled="navState[dir].disabled ? 'true' : 'false'"
+                :aria-label="navState[dir].target
+                  ? t(dir === 'previous' ? 'preorders.nav_previous_aria' : 'preorders.nav_next_aria', { number: navState[dir].target.preorder_number })
+                  : t(dir === 'previous' ? 'preorders.nav_previous' : 'preorders.nav_next')"
+                class="flex h-[34px] items-center gap-1.5 rounded-lg border border-line-2 bg-white px-2.5 text-[12.5px] font-semibold text-muted-4 transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-mint-100"
+                :class="navState[dir].disabled ? 'cursor-not-allowed opacity-50' : 'hover:border-brand hover:text-brand-active'"
+                @click="goToNeighbor(dir)"
+              >
+                <i v-if="dir === 'previous'" class="ph-duotone ph-caret-left text-[15px]" aria-hidden="true"></i>
+                <span class="max-w-[150px] truncate font-mono">{{ navState[dir].target?.preorder_number ?? t(dir === 'previous' ? 'preorders.nav_previous' : 'preorders.nav_next') }}</span>
+                <i v-if="dir === 'next'" class="ph-duotone ph-caret-right text-[15px]" aria-hidden="true"></i>
+              </button>
+            </BaseTooltip>
+          </nav>
+        </div>
+      </template>
       <div v-if="detailLoading" class="py-14 text-center text-[13px] text-muted-3">{{ t('preorders.loading') }}</div>
       <div v-else-if="detail" class="flex flex-col gap-[18px]">
         <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">

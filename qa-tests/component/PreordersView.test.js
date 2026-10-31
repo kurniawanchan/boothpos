@@ -5,7 +5,7 @@ import { createI18n } from 'vue-i18n';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import PreordersView from '../../resources/js/views/PreordersView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listPreorders, getPreorder, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices, bulkPreorderInvoices, updatePreorderDispatchStatus, getPreorderInvoice, duplicatePreorders, splitPreorder, deletePreorderPayment, createPreorderPayment } from '../../resources/js/api/preorders';
+import { listPreorders, getPreorder, getPreorderNeighbors, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices, bulkPreorderInvoices, updatePreorderDispatchStatus, getPreorderInvoice, duplicatePreorders, splitPreorder, deletePreorderPayment, createPreorderPayment } from '../../resources/js/api/preorders';
 import { listArtists } from '../../resources/js/api/artists';
 import { listCustomers, getCustomer } from '../../resources/js/api/customers';
 import { lookupVariants } from '../../resources/js/api/products';
@@ -24,6 +24,7 @@ import en from '../../resources/js/locales/en.json';
 vi.mock('../../resources/js/api/preorders', () => ({
   listPreorders: vi.fn(),
   getPreorder: vi.fn(),
+  getPreorderNeighbors: vi.fn(),
   createPreorder: vi.fn(),
   updatePreorder: vi.fn(),
   deletePreorder: vi.fn(),
@@ -124,6 +125,14 @@ async function renderPreorders(role = 'Owner') {
   await router.isReady();
   return render(PreordersView, { global: { plugins: [pinia, i18n, router] } });
 }
+
+// 052-preorder-detail-prev-next — setiap buka detail kini juga memuat tetangga;
+// bawaan "tidak ada di daftar" supaya tes lama yang membuka detail tidak berubah.
+// (clearAllMocks di beforeEach per-describe tidak menghapus implementasi ini.)
+const NO_NEIGHBORS = { in_list: false, position: null, total: 0, previous: null, next: null };
+beforeEach(() => {
+  getPreorderNeighbors.mockResolvedValue(NO_NEIGHBORS);
+});
 
 describe('PreordersView — seller filter and column (013 US1)', () => {
   beforeEach(() => {
@@ -1572,5 +1581,346 @@ describe('PreordersView — mark payment verified (032)', () => {
     await waitFor(() => expect(verifyPayment).toHaveBeenCalledWith('preorders', 80, 5));
     await waitFor(() => expect(within(screen.getByTestId('payment-entry')).getByText('Terverifikasi')).toBeInTheDocument());
     await waitFor(() => expect(listPreorders.mock.calls.length).toBeGreaterThan(1));
+  });
+});
+
+/**
+ * 052-preorder-detail-prev-next (US1) — tombol Sebelumnya/Berikutnya di header
+ * panel detail: urutan dari server (getPreorderNeighbors, filter/urutan daftar
+ * tanpa page/per_page), panel tidak tertutup, respons usang dibuang, gagal
+ * navigasi tidak menutup panel, baris yang dibuka tersorot.
+ */
+describe('PreordersView — navigasi detail sebelumnya/berikutnya (052 US1)', () => {
+  const detailFor = (id) => ({
+    id,
+    preorder_number: `PO-00${id}`,
+    status: 'ordered',
+    dispatch_status: 'pending',
+    fulfillment: 'pickup',
+    items: [],
+    payments: [],
+  });
+  const NEIGHBORS_10 = { in_list: true, position: 1, total: 2, previous: null, next: { id: 11, preorder_number: 'PO-0011' } };
+  const NEIGHBORS_11 = { in_list: true, position: 2, total: 2, previous: { id: 10, preorder_number: 'PO-0010' }, next: null };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+    getPreorder.mockImplementation(async (id) => detailFor(id));
+    getPreorderNeighbors.mockImplementation(async (id) => (id === 10 ? NEIGHBORS_10 : NEIGHBORS_11));
+  });
+
+  async function openRow10(user) {
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+    await user.click(screen.getByRole('button', { name: 'PO-0010' }));
+    await screen.findByRole('dialog', { name: 'PO-0010' });
+  }
+
+  it('memuat tetangga dengan filter/urutan daftar yang sama, tanpa page/per_page', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await openRow10(user);
+
+    await waitFor(() => expect(getPreorderNeighbors).toHaveBeenCalled());
+    const [id, params] = getPreorderNeighbors.mock.calls.at(-1);
+    expect(id).toBe(10);
+    expect(params).not.toHaveProperty('page');
+    expect(params).not.toHaveProperty('per_page');
+    const { page, per_page, ...listContext } = listPreorders.mock.calls.at(-1)[0];
+    expect(params).toEqual(listContext);
+  });
+
+  it('Berikutnya membuka pre-order tetangga di panel yang sama dan memuat ulang tetangganya', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await openRow10(user);
+    const next = await screen.findByTestId('preorder-nav-next');
+    await waitFor(() => expect(next).toHaveAttribute('aria-disabled', 'false'));
+
+    await user.click(next);
+
+    await waitFor(() => expect(getPreorder).toHaveBeenLastCalledWith(11));
+    expect(await screen.findByRole('dialog', { name: 'PO-0011' })).toBeInTheDocument();
+    await waitFor(() => expect(getPreorderNeighbors).toHaveBeenLastCalledWith(11, expect.any(Object)));
+
+    await user.click(screen.getByTestId('preorder-nav-prev'));
+    expect(await screen.findByRole('dialog', { name: 'PO-0010' })).toBeInTheDocument();
+  });
+
+  it('membuang respons detail yang datang terlambat (FR-008)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    let resolveSlow;
+    getPreorder.mockImplementation((id) =>
+      id === 10 ? new Promise((r) => { resolveSlow = () => r(detailFor(10)); }) : Promise.resolve(detailFor(id)),
+    );
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    await user.click(screen.getByRole('button', { name: 'PO-0010' })); // lambat
+    await user.click(screen.getByRole('button', { name: 'Tutup' }));
+    await user.click(screen.getByRole('button', { name: 'PO-0011' })); // cepat
+    await screen.findByRole('dialog', { name: 'PO-0011' });
+
+    resolveSlow();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(screen.getByRole('dialog', { name: 'PO-0011' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'PO-0010' })).toBeNull();
+  });
+
+  it('gagal membuka tujuan: panel tetap terbuka dengan detail lama, toast, tetangga dimuat ulang', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    getPreorder.mockImplementation(async (id) => {
+      if (id === 11) throw new Error('Not found');
+      return detailFor(id);
+    });
+    await openRow10(user);
+    const next = await screen.findByTestId('preorder-nav-next');
+    await waitFor(() => expect(next).toHaveAttribute('aria-disabled', 'false'));
+    getPreorderNeighbors.mockClear();
+
+    await user.click(next);
+
+    const { useToastStore } = await import('../../resources/js/stores/toast');
+    await waitFor(() => expect(useToastStore().items.some((i) => i.message === id.preorders.nav_target_gone)).toBe(true));
+    expect(screen.getByRole('dialog', { name: 'PO-0010' })).toBeInTheDocument();
+    await waitFor(() => expect(getPreorderNeighbors).toHaveBeenCalledWith(10, expect.any(Object)));
+  });
+
+  it('memuat ulang tetangga saat daftar dimuat ulang (mis. setelah ubah penanda)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    updatePreorderDispatchStatus.mockResolvedValue({ ...detailFor(10), dispatch_status: 'invoice_sent' });
+    // Respons API sungguhan selalu array baru; mock bawaan memakai ulang ROWS.
+    listPreorders.mockImplementation(async () => ({ data: [...ROWS], meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } }));
+    await openRow10(user);
+    await waitFor(() => expect(getPreorderNeighbors).toHaveBeenCalled());
+    getPreorderNeighbors.mockClear();
+
+    await user.click(screen.getByRole('button', { name: 'Invoice terkirim', pressed: false }));
+
+    await waitFor(() => expect(getPreorderNeighbors).toHaveBeenCalledWith(10, expect.any(Object)));
+  });
+
+  it('menyorot baris yang sedang dibuka tanpa menghapus sorotan penanda ongkir', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    listPreorders.mockResolvedValue({
+      data: [{ ...ROWS[0], fulfillment: 'courier', shipping_cost: '0.00', customer_has_address: true }, ROWS[1]],
+      meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 },
+    });
+    await openRow10(user);
+
+    const row10 = screen.getByRole('button', { name: 'PO-0010' }).closest('tr');
+    const row11 = screen.getByRole('button', { name: 'PO-0011' }).closest('tr');
+    expect(row10.className).toContain('bg-mint-50');
+    expect(row10.className).toContain('bg-warn-bg');
+    expect(row11.className).not.toContain('bg-mint-50');
+  });
+});
+
+/**
+ * 052-preorder-detail-prev-next (US2) — label tombol = nomor tetangga;
+ * tombol tetap terlihat tetapi aria-disabled (dengan alasan di tooltip) di
+ * tepi daftar, di luar daftar, saat memuat, dan saat form pengiriman terbuka.
+ */
+describe('PreordersView — nomor tetangga & status nonaktif (052 US2)', () => {
+  const DETAIL = { id: 10, preorder_number: 'PO-0010', status: 'ordered', dispatch_status: 'pending', fulfillment: 'courier', items: [], payments: [] };
+  const MIDDLE = { in_list: true, position: 2, total: 3, previous: { id: 9, preorder_number: 'PO-0009' }, next: { id: 11, preorder_number: 'PO-0011' } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+    getPreorder.mockImplementation(async (id) => ({ ...DETAIL, id, preorder_number: `PO-00${id}` }));
+  });
+
+  async function openRow10() {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+    await user.click(screen.getByRole('button', { name: 'PO-0010' }));
+    await screen.findByRole('dialog', { name: 'PO-0010' });
+    return user;
+  }
+
+  const prev = () => screen.getByTestId('preorder-nav-prev');
+  const next = () => screen.getByTestId('preorder-nav-next');
+
+  it('menampilkan nomor tetangga di tombol dan aria-label berisi nomor tujuan', async () => {
+    getPreorderNeighbors.mockResolvedValue(MIDDLE);
+    await openRow10();
+
+    await waitFor(() => expect(prev()).toHaveTextContent('PO-0009'));
+    expect(next()).toHaveTextContent('PO-0011');
+    expect(prev()).toHaveAttribute('aria-label', 'Pre-order sebelumnya: PO-0009');
+    expect(next()).toHaveAttribute('aria-label', 'Pre-order berikutnya: PO-0011');
+    expect(prev()).toHaveAttribute('aria-disabled', 'false');
+  });
+
+  it('label ikut berganti setelah berpindah', async () => {
+    getPreorderNeighbors.mockImplementation(async (id) =>
+      id === 10 ? MIDDLE : { in_list: true, position: 3, total: 3, previous: { id: 10, preorder_number: 'PO-0010' }, next: null },
+    );
+    const user = await openRow10();
+    await waitFor(() => expect(next()).toHaveAttribute('aria-disabled', 'false'));
+
+    await user.click(next());
+
+    await screen.findByRole('dialog', { name: 'PO-0011' });
+    await waitFor(() => expect(prev()).toHaveTextContent('PO-0010'));
+    expect(next()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('pre-order pertama: Sebelumnya nonaktif dengan alasan, klik tidak berbuat apa-apa', async () => {
+    getPreorderNeighbors.mockResolvedValue({ ...MIDDLE, position: 1, previous: null });
+    const user = await openRow10();
+    await waitFor(() => expect(prev()).toHaveAttribute('aria-disabled', 'true'));
+    expect(next()).toHaveAttribute('aria-disabled', 'false');
+    getPreorder.mockClear();
+
+    await user.click(prev());
+
+    expect(getPreorder).not.toHaveBeenCalled();
+    expect(screen.getByText(id.preorders.nav_first)).toBeInTheDocument();
+  });
+
+  it('pre-order terakhir: Berikutnya nonaktif dengan alasan', async () => {
+    getPreorderNeighbors.mockResolvedValue({ ...MIDDLE, position: 3, next: null });
+    await openRow10();
+    await waitFor(() => expect(next()).toHaveAttribute('aria-disabled', 'true'));
+    expect(screen.getByText(id.preorders.nav_last)).toBeInTheDocument();
+  });
+
+  it('di luar daftar: keduanya nonaktif dengan alasan "tidak ada di daftar"', async () => {
+    getPreorderNeighbors.mockResolvedValue({ in_list: false, position: null, total: 5, previous: null, next: null });
+    await openRow10();
+    await waitFor(() => expect(screen.getAllByText(id.preorders.nav_not_in_list)).toHaveLength(2));
+    expect(prev()).toHaveAttribute('aria-disabled', 'true');
+    expect(next()).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('selama tetangga dimuat kedua tombol nonaktif', async () => {
+    let resolve;
+    getPreorderNeighbors.mockImplementation(() => new Promise((r) => { resolve = r; }));
+    await openRow10();
+    expect(prev()).toHaveAttribute('aria-disabled', 'true');
+    expect(next()).toHaveAttribute('aria-disabled', 'true');
+
+    resolve(MIDDLE);
+    await waitFor(() => expect(next()).toHaveAttribute('aria-disabled', 'false'));
+  });
+
+  it('form pengiriman terbuka menonaktifkan navigasi; menutupnya mengaktifkan lagi', async () => {
+    getPreorderNeighbors.mockResolvedValue(MIDDLE);
+    const user = await openRow10();
+    await waitFor(() => expect(next()).toHaveAttribute('aria-disabled', 'false'));
+
+    await user.click(screen.getByRole('button', { name: id.preorders.create_shipment_data }));
+    expect(next()).toHaveAttribute('aria-disabled', 'true');
+    expect(prev()).toHaveAttribute('aria-disabled', 'true');
+
+    await user.click(screen.getByRole('button', { name: id.common.cancel }));
+    expect(next()).toHaveAttribute('aria-disabled', 'false');
+  });
+});
+
+/**
+ * 052-preorder-detail-prev-next (US3) — ←/→ di dalam panel detail menavigasi,
+ * kecuali dari kolom isian, dengan tombol pengubah, atau ke arah yang nonaktif.
+ */
+describe('PreordersView — navigasi keyboard (052 US3)', () => {
+  const DETAIL = { id: 10, preorder_number: 'PO-0010', status: 'ordered', dispatch_status: 'pending', fulfillment: 'courier', items: [], payments: [] };
+  const MIDDLE = { in_list: true, position: 2, total: 3, previous: { id: 9, preorder_number: 'PO-0009' }, next: { id: 11, preorder_number: 'PO-0011' } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+    getPreorder.mockImplementation(async (pid) => ({ ...DETAIL, id: pid, preorder_number: `PO-00${pid}` }));
+    getPreorderNeighbors.mockResolvedValue(MIDDLE);
+  });
+
+  async function openRow10() {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+    await user.click(screen.getByRole('button', { name: 'PO-0010' }));
+    const dialog = await screen.findByRole('dialog', { name: 'PO-0010' });
+    await waitFor(() => expect(screen.getByTestId('preorder-nav-next')).toHaveAttribute('aria-disabled', 'false'));
+    getPreorder.mockClear();
+    return { user, dialog };
+  }
+
+  const press = (target, key, extra = {}) =>
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra }));
+
+  it('→ membuka berikutnya dan ← membuka sebelumnya', async () => {
+    const { dialog } = await openRow10();
+
+    press(dialog, 'ArrowRight');
+    await waitFor(() => expect(getPreorder).toHaveBeenLastCalledWith(11));
+    await screen.findByRole('dialog', { name: 'PO-0011' });
+    await waitFor(() => expect(screen.getByTestId('preorder-nav-prev')).toHaveAttribute('aria-disabled', 'false'));
+
+    press(screen.getByRole('dialog', { name: 'PO-0011' }), 'ArrowLeft');
+    await waitFor(() => expect(getPreorder).toHaveBeenLastCalledWith(9));
+  });
+
+  it('panah dari kolom isian tidak menavigasi', async () => {
+    const { user, dialog } = await openRow10();
+    await user.click(within(dialog).getByRole('button', { name: id.preorders.create_shipment_data }));
+    await user.click(within(dialog).getByRole('button', { name: id.common.cancel }));
+    const input = document.createElement('input');
+    dialog.appendChild(input);
+
+    press(input, 'ArrowRight');
+    press(input, 'ArrowLeft');
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(getPreorder).not.toHaveBeenCalled();
+  });
+
+  it('dengan tombol pengubah tidak menavigasi', async () => {
+    const { dialog } = await openRow10();
+
+    for (const mod of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey']) press(dialog, 'ArrowRight', { [mod]: true });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(getPreorder).not.toHaveBeenCalled();
+  });
+
+  it('arah yang nonaktif tidak menavigasi', async () => {
+    getPreorderNeighbors.mockResolvedValue({ ...MIDDLE, position: 3, next: null });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+    await user.click(screen.getByRole('button', { name: 'PO-0010' }));
+    const dialog = await screen.findByRole('dialog', { name: 'PO-0010' });
+    await waitFor(() => expect(screen.getByTestId('preorder-nav-next')).toHaveAttribute('aria-disabled', 'true'));
+    getPreorder.mockClear();
+
+    press(dialog, 'ArrowRight');
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(getPreorder).not.toHaveBeenCalled();
+  });
+
+  it('panah di luar panel detail (mis. halaman daftar) tidak menavigasi', async () => {
+    await openRow10();
+
+    press(document.body, 'ArrowRight');
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(getPreorder).not.toHaveBeenCalled();
   });
 });

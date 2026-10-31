@@ -425,6 +425,13 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - Excel carries no customer data; `SheetArrayExport` and `GenericArrayExport` share `App\Exports\Concerns\KeepsFormulaLookingTextAsText` (only `=`-prefixed text is forced to text). `MasterDataExport`/invoice exports built on `SheetArrayExport` are protected as a side effect.
 - Not verified against real owner data (no LIVE database on the dev machine); the Excel baseline columns and the `Sumber` sheet are the review instrument.
 
+## Pre-order detail prev/next (feature 052, 2026-10-31)
+
+- **`GET /preorders/{preorder}/neighbors` reuses `applyFilters()` + `applySort()` from `index()`** — the ONE ordering source. Never compute "previous/next" from a second ordering (client-side page arrays, a keyset copy of the sort branches). Position = `pluck('preorders.id')` of the filtered, sorted list (no hydration); `page`/`per_page` are ignored, so navigation crosses page boundaries. Returns only `id` + `preorder_number` (no customer data). `in_list:false` (both neighbours `null`) when the opened pre-order doesn't match the current filters; another DEMO/LIVE mode → 404.
+- **Every `applySort()` branch ends with a `preorders.id` tie-breaker** in the same direction (default `created_at desc, id desc`). Don't remove it: without it MySQL returns equal-value rows (status, customer, same-second `created_at` from imports) in an undefined order, so the existing list pagination could show a row on two pages and Next→Previous could skip or repeat. `PreorderSearchTest` / `PreorderNeighborsTest::test_neighbors_follow_every_sort_option` pin it.
+- **SPA (`PreordersView.vue`):** buttons live in `BaseDrawer`'s `header` slot (BaseDrawer itself unchanged), use `aria-disabled` (not `disabled`) so the reason tooltip stays reachable by keyboard, and one `navState` computed drives template, click and keyboard. A `detailSeq` counter drops stale `getPreorder`/neighbour responses; `openDetailById(id, { fromNav: true })` keeps the drawer and the previous detail on failure (other callers still close it). Neighbours reload on every detail open/refresh AND whenever the list `items` reload (status/dispatch/delete/duplicate/split/filter changes). ←/→ is one `window` listener that only acts for events inside the detail panel (teleported modals and dropdown lists are outside it) and never from text entry. The open row gets `bg-mint-50`, merged into `preorderRowClass`.
+- `npm test` also collects tests from nested worktrees under `.claude/worktrees/` — a failure there is not this repo's; `npx vitest run --exclude '.claude/**'` runs only this tree.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -443,7 +450,19 @@ whose bar pattern the SPA draws and the Excel renders to PNG. Gate: `products` m
 Enter in `#pos-search` calls `GET /variants/lookup?exact=1` and adds the exact-SKU variant like a tap (no session
 required, as for taps). Revives PRD §7.18 / F6.5 / F17.5 (external scanners only) — needs dated PRD + CLAUDE.md scope
 notes. First task is a PDF size/time/sharpness spike; Excel memory at 500 variants must be tested. See research.md.
-Active feature plan: `specs/051-stock-sync-from-transactions/plan.md`
+Active feature plan: `specs/052-preorder-detail-prev-next/plan.md`
+(branch `083-preorder-detail-prev-next`, from `develop`; spec dir number ≠ branch number) — no migration, nothing stored.
+The pre-order detail drawer gets **‹ Previous / Next ›** buttons in its header (the `BaseDrawer` `header` slot), each
+labelled with the target pre-order number. Order = the Pre-order LIST as currently filtered and sorted, across pages —
+not raw number order. Computed server-side by a new read-only `GET /preorders/{preorder}/neighbors` that reuses
+`applyFilters()` + `applySort()` from `index()` (ONE ordering source) and finds the position by plucking ordered ids
+(keyset rejected: it would copy the 8 sort branches). `applySort()` gains a stable `preorders.id` tie-breaker in every
+branch (equal values used to have an undefined order, which also affected the list's existing pagination).
+`in_list:false` when the opened pre-order doesn't match the filters. SPA: neighbours load in parallel with every detail
+load/refresh; a `detailSeq` counter drops stale responses; a failed navigation keeps the drawer open; ←/→ outside input
+fields; the open row is highlighted via the existing `preorderRowClass` (merge, don't overwrite). See research.md.
+
+Previous feature: `specs/051-stock-sync-from-transactions/plan.md`
 (branch `082-stock-sync-from-transactions`, from `develop`; spec dir number ≠ branch number) — no migration, no route.
 A one-off artisan correction, `app:sync-stock-from-transactions`, for LIVE variants whose "real stock" was typed AFTER
 sales / handed-over pre-orders already existed (so the typed number ignored them). DRY-RUN by default: computes per

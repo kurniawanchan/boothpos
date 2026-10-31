@@ -412,6 +412,49 @@ class PreorderController extends Controller
     }
 
     /**
+     * 052-preorder-detail-prev-next — pre-order sebelum/sesudah `$preorder`
+     * di daftar Pre-order, dengan filter dan urutan yang SAMA dengan index()
+     * (applyFilters() + applySort() yang persis sama, jadi tetangga tidak
+     * mungkin menyimpang dari daftar; research.md Decision 1). page/per_page
+     * diabaikan: posisi dihitung atas seluruh daftar tersaring, sehingga
+     * navigasi melintasi batas halaman.
+     *
+     * Posisi dicari dengan pluck id berurutan, bukan keyset: keyset menuntut
+     * salinan kedua dari 8 cabang urutan (termasuk JOIN pelanggan dan ekspresi
+     * outstanding) untuk skala yang tidak ada di satu toko (research.md
+     * Decision 2; tinjau ulang bila satu instalasi melewati ~50.000 pre-order).
+     * Hanya baca, dan hanya id + nomor yang dikembalikan (tanpa data pelanggan).
+     */
+    public function neighbors(Request $request, Preorder $preorder): JsonResponse
+    {
+        $ids = $this->applySort($this->applyFilters(Preorder::query(), $request), $request)
+            ->pluck('preorders.id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $index = array_search($preorder->id, $ids, true);
+
+        if ($index === false) {
+            return response()->json([
+                'in_list' => false, 'position' => null, 'total' => count($ids), 'previous' => null, 'next' => null,
+            ]);
+        }
+
+        $previousId = $ids[$index - 1] ?? null;
+        $nextId = $ids[$index + 1] ?? null;
+        $numbers = Preorder::query()->whereIn('id', array_filter([$previousId, $nextId]))->pluck('preorder_number', 'id');
+        $present = fn (?int $id) => $id === null ? null : ['id' => $id, 'preorder_number' => $numbers[$id]];
+
+        return response()->json([
+            'in_list' => true,
+            'position' => $index + 1,
+            'total' => count($ids),
+            'previous' => $present($previousId),
+            'next' => $present($nextId),
+        ]);
+    }
+
+    /**
      * 013-preorder-list-filters-receipt (T022, FR-010-013) — statistik
      * agregat atas himpunan preorder yang SAMA yang sedang difilter di
      * index(), lewat helper applyFilters() yang sama (research.md R4) —
@@ -544,6 +587,13 @@ class PreorderController extends Controller
      * that method uses. `sellers` has no single sortable value (a preorder
      * can have several) and is deliberately left out — its column header
      * simply renders without a sort affordance.
+     *
+     * 052-preorder-detail-prev-next (research.md Decision 3) — setiap cabang
+     * diakhiri pengikat `preorders.id` searah `sort_dir`. Tanpa itu baris
+     * bernilai sama (status, pelanggan, created_at hasil impor yang berdetik
+     * sama) tidak punya urutan pasti di MySQL: satu pre-order bisa muncul di
+     * dua halaman, dan navigasi Sebelumnya/Berikutnya di detail (neighbors())
+     * bisa melompat atau berulang. Jangan hapus pengikat ini.
      */
     private function applySort(Builder $query, Request $request): Builder
     {
@@ -563,18 +613,22 @@ class PreorderController extends Controller
         if ($sortBy === 'customer_name') {
             return $query->join('customers', 'customers.id', '=', 'preorders.customer_id')
                 ->select('preorders.*')
-                ->orderBy($columns['customer_name'], $sortDir);
+                ->orderBy($columns['customer_name'], $sortDir)
+                ->orderBy('preorders.id', $sortDir);
         }
 
         if ($sortBy === 'outstanding') {
-            return $query->orderByRaw("(preorders.total_amount - preorders.paid_amount) {$sortDir}");
+            return $query->orderByRaw("(preorders.total_amount - preorders.paid_amount) {$sortDir}")
+                ->orderBy('preorders.id', $sortDir);
         }
 
         if (isset($columns[$sortBy])) {
-            return $query->orderBy($columns[$sortBy], $sortDir);
+            return $query->orderBy($columns[$sortBy], $sortDir)->orderBy('preorders.id', $sortDir);
         }
 
-        return $query->orderByDesc('preorders.created_at');
+        // Urutan bawaan selalu terbaru-dulu, jadi pengikatnya ikut desc apa
+        // pun sort_dir yang (tanpa sort_by) kebetulan terkirim.
+        return $query->orderByDesc('preorders.created_at')->orderByDesc('preorders.id');
     }
 
     /**

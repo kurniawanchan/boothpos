@@ -272,6 +272,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/preorders/{preorder}/split', [PreorderController::class, 'split']);
         Route::post('/preorders/{preorder}/shipment', [ShipmentController::class, 'store']);
         Route::get('/preorders/{preorder}/invoice', [PreorderController::class, 'invoice']);
+        // 052-preorder-detail-prev-next — tetangga di daftar (filter/urutan sama dengan index()).
+        Route::get('/preorders/{preorder}/neighbors', [PreorderController::class, 'neighbors']);
         Route::post('/preorders/{preorder}/notifications/resend', [PreorderController::class, 'resendNotification']);
         Route::patch('/shipments/{shipment}', [ShipmentController::class, 'update']);
 
