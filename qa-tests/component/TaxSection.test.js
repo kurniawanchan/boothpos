@@ -82,9 +82,10 @@ describe('TaxSection', () => {
     expect(updateSettings.mock.calls[0][0][1]).toEqual({ key: 'tax_label', value: null, type: 'string', group: 'pos' });
   });
 
-  it('menjelaskan bahwa pajak tetap ditagih saat disembunyikan', () => {
+  // 2026-10-31 (perintah pemilik, membalik 083): disembunyikan = tidak dihitung untuk transaksi baru.
+  it('menjelaskan bahwa pajak tidak dihitung saat dimatikan', () => {
     setup();
 
-    expect(screen.getByText(/pajak tetap ditagih dan ikut dalam total/i)).toBeInTheDocument();
+    expect(screen.getByText(/pajak TIDAK dihitung untuk transaksi baru/i)).toBeInTheDocument();
   });
 });

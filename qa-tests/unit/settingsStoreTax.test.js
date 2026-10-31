@@ -40,4 +40,18 @@ describe('settings store — tax rate and label', () => {
     expect(store.taxRate).toBe(0);
     expect(store.taxLabel).toBe('');
   });
+
+  // Catatan bertanggal 2026-10-31 (perintah pemilik, membalik 083): pajak ditampilkan mati = pajak tidak dihitung.
+  it('effectiveTaxRate is the rate when tax is shown and 0 when it is hidden', async () => {
+    featureFlags.mockResolvedValue({ tax_rate: 100, tax_label: 'PPN', tax_show: false });
+    const store = useSettingsStore();
+    await store.load();
+    expect(store.taxRate).toBe(100);
+    expect(store.effectiveTaxRate).toBe(0);
+
+    featureFlags.mockResolvedValue({ tax_rate: 10, tax_label: 'PPN', tax_show: true });
+    await store.load();
+    expect(store.effectiveTaxRate).toBe(10);
+  });
 });
+

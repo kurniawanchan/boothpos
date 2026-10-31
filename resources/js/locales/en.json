@@ -1080,7 +1080,7 @@
     "tax_label_label": "Tax label",
     "tax_label_placeholder": "E.g. VAT",
     "tax_show_label": "Show the tax line on screens and documents",
-    "tax_help_hidden_still_charged": "When off, the tax line is hidden but the tax is still charged and included in the total.",
+    "tax_help_hidden_not_charged": "When off, tax is NOT charged on new sales and the tax line is hidden. Past sales keep the tax they were charged.",
     "tax_help_shared_modes": "This setting is shared by DEMO and LIVE modes and only applies to new orders.",
     "tax_saved": "Tax settings saved successfully.",
     "save_tax": "Save tax settings",

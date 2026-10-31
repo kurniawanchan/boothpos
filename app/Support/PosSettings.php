@@ -52,6 +52,17 @@ class PosSettings
         return filter_var(Setting::get(self::TAX_SHOW, true), FILTER_VALIDATE_BOOLEAN);
     }
 
+    /**
+     * Catatan bertanggal 2026-10-31 (perintah pemilik, MEMBALIK aturan 083 "toggle hanya tampilan, pajak tetap
+     * ditagih"): pajak yang ditampilkan mati TIDAK dihitung. Tarif yang dipakai menghitung order baru = tarif
+     * tersimpan bila tampil, 0 bila tidak. `taxRate()` tetap tarif tersimpan (layar Pengaturan, payload fitur).
+     * Order lama tidak berubah: mereka menyimpan `tax_amount`/`tax_rate_snapshot` sendiri.
+     */
+    public static function effectiveTaxRate(): float
+    {
+        return self::taxShow() ? self::taxRate() : 0.0;
+    }
+
     public static function cashOutApprovalThreshold(): int
     {
         return self::intOr(self::CASH_OUT_THRESHOLD, 200_000);

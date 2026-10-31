@@ -1080,7 +1080,7 @@
     "tax_label_label": "Label pajak",
     "tax_label_placeholder": "Mis. PPN",
     "tax_show_label": "Tampilkan baris pajak di layar dan dokumen",
-    "tax_help_hidden_still_charged": "Bila dimatikan, baris pajak disembunyikan tetapi pajak tetap ditagih dan ikut dalam total.",
+    "tax_help_hidden_not_charged": "Bila dimatikan, pajak TIDAK dihitung untuk transaksi baru dan barisnya disembunyikan. Transaksi lama tetap memakai pajak yang dulu ditagih.",
     "tax_help_shared_modes": "Pengaturan ini dipakai bersama oleh mode DEMO dan LIVE, dan hanya berlaku untuk pesanan baru.",
     "tax_saved": "Pengaturan pajak berhasil disimpan.",
     "save_tax": "Simpan pengaturan pajak",
