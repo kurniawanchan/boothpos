@@ -26,6 +26,12 @@ fun priceLines(priceText: String): Int = if (priceText.contains('–')) 2 else 1
 /** 075 — null (stok tidak dilacak, mis. hidangan made-to-order) berarti baris stok tidak ditampilkan. */
 fun stockLabel(stock: Int?): String? = stock?.let { "Stok $it" }
 
+/**
+ * 2026-11-01 — angka stok kartu: stok varian bila dilacak, selain itu porsi dari bahan (item bersumber modifier).
+ * Hanya tampilan; status habis tetap dari himpunan ketersediaan server.
+ */
+fun entryStock(e: com.warkop.pos.model.ProductEntry): Int? = e.stock ?: e.materialPortions
+
 fun variantCountLabel(count: Int): String = "$count varian"
 
 /** 075 — inisial pengganti foto: huruf pertama dua kata pertama; kosong → "?". */

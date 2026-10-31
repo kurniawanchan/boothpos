@@ -10,8 +10,33 @@ data class MenuCategory(val id: String, val name: String, val code: String, val 
 
 enum class Tone { INK, TINT, ACCENT, NEUTRAL, OUTLINE }
 
-data class ModOption(val name: String, val delta: Int, val id: Long = 0)
-data class ModGroup(val id: String, val name: String, val min: Int, val max: Int, val options: List<ModOption>)
+/** 2026-11-01 — bahan satu pilihan: pemakaian per porsi dan saldo di outlet tablet (null bila tidak dikirim server). */
+data class OptionMaterial(val name: String, val unit: String, val quantity: Double, val onHand: Double?)
+
+/** [portions] = porsi yang masih bisa dibuat dari bahannya di outlet ini (null = tanpa bahan / tak diketahui). */
+data class ModOption(
+    val name: String, val delta: Int, val id: Long = 0,
+    val portions: Int? = null, val materials: List<OptionMaterial> = emptyList(),
+)
+
+/** [portionPerOption] — "tiap pilihan = 1 porsi": pilihan ke-2 dst. menambah satu harga dasar (lihat ModifierPricing). */
+data class ModGroup(val id: String, val name: String, val min: Int, val max: Int, val options: List<ModOption>, val portionPerOption: Boolean = false) {
+    /** Boleh menambah satu pilihan lagi bila sudah [picked] terpilih ([max] = [UNLIMITED] → selalu boleh). */
+    fun allows(picked: Int): Boolean = picked < max
+
+    /** Teks aturan di pemilih; sama maknanya dengan web ("1", "1–2", "≥1"). */
+    val rule: String get() = when {
+        max == 1 -> "Pilih 1"
+        max == UNLIMITED -> if (min == 0) "Pilih bebas" else "Pilih minimal $min"
+        min == 0 -> "Hingga $max"
+        else -> "Pilih $min–$max"
+    }
+
+    companion object {
+        /** `max_select: null` dari server = tanpa batas atas. */
+        const val UNLIMITED = Int.MAX_VALUE
+    }
+}
 
 data class Product(
     val id: String, val icon: String, val cat: String, val name: String, val price: Int,
@@ -27,6 +52,8 @@ data class Product(
 data class ProductEntry(
     val id: String, val name: String, val cat: String, val categoryName: String,
     val imageUrl: String?, val variants: List<Product>,
+    /** 2026-11-01 — porsi yang masih bisa dibuat dari bahan (item bersumber modifier); null = tidak berlaku. Tidak memblokir jual. */
+    val materialPortions: Int? = null,
 ) {
     val isSingle: Boolean get() = variants.size == 1
     val minPrice: Int get() = variants.minOfOrNull { it.price } ?: 0
@@ -105,6 +132,8 @@ data class Order(
     val serverTotal: Int? = null, val serverPaid: Int? = null, val serverChange: Int? = null,
     /** 077 — catatan kasir untuk seluruh order (dari server; kosong = tanpa catatan). Beda dari catatan per baris. */
     val note: String = "",
+    /** 087 — bahan yang menjadi minus karena pelunasan ini (hanya pada respons bayar/split); kosong = tidak ada. */
+    val materialWarnings: List<MaterialWarning> = emptyList(),
 ) {
     // 084 — istilah baku: "Kasir" (dulu "Counter"). Judul layar Kasir memakai nomor saja (kasirTitle); daftar dan struk memakai label ini.
     val label: String get() = if (kind == OrderKind.COUNTER) "Kasir ${queue ?: ""}".trim() else "Meja ${table ?: ""}"
@@ -215,6 +244,18 @@ data class ReceiptView(
 /** 048 — hasil bagi per item: [paid] = bagian yang dibayar, [remaining] = sisa bill; total dari server. */
 data class SplitItemsResult(val paid: Order, val remaining: Order)
 
+/**
+ * 087 (2026-11-01) — satu bahan yang menjadi minus karena penjualan (penjualan TIDAK ditolak; FR-014). [outlet] null
+ * untuk server lama. Teks sama dengan web (`pos.material_negative_warning[_at]`).
+ */
+data class MaterialWarning(val material: String, val unit: String, val outlet: String?, val before: Double, val required: Double, val after: Double) {
+    fun message(): String {
+        val q = ModifierPricing::qty
+        val where = if (outlet.isNullOrBlank()) material else "$material di $outlet"
+        return "$where: stok ${q(before)} $unit, dibutuhkan ${q(required)}, kini ${q(after)}. Periksa stok bahan."
+    }
+}
+
 /** 048 / S4 — satu bagian bagi rata dari server: nomor urut dan jumlah rupiah (bagian terakhir membawa sisa pembulatan). */
 data class SplitPart(val index: Int, val amount: Int)
 
@@ -267,3 +308,14 @@ fun quickCash(target: Int): List<Int> {
     val up = listOf(10_000, 50_000, 100_000).map { ceil(target / it.toDouble()).toInt() * it }
     return (listOf(target) + up).distinct().take(4)
 }
+
+/** 087 lanjutan (2026-11-01) — satu bahan di layar "Stok Bahan" tablet; [onHand] = saldo outlet tablet (boleh minus). */
+data class MaterialStock(val id: Long, val code: String, val name: String, val unit: String, val kindLabel: String, val onHand: Double) {
+    val negative: Boolean get() = onHand < 0
+}
+
+/** Satu baris riwayat bahan; [note] = nomor pesanan (penjualan) atau alasan koreksi. */
+data class MaterialMove(
+    val typeLabel: String, val qtyText: String, val beforeText: String, val afterText: String,
+    val negativeAfter: Boolean, val note: String?, val user: String?, val at: String?,
+)

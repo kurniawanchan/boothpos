@@ -4,7 +4,7 @@ import com.warkop.pos.state.Dest
 
 /**
  * 084 — daftar menu navigasi dan URUTANNYA di satu tempat (tanpa ikon, jadi teruji tanpa Compose): Kasir, Meja, Pesanan,
- * Shift, Koneksi. Rail (layar lebar) dan bilah bawah (layar sempit) memakai daftar yang sama, sehingga urutan dan istilah
+ * Shift, Bahan (2026-11-01), Koneksi. Rail (layar lebar) dan bilah bawah (layar sempit) memakai daftar yang sama, sehingga urutan dan istilah
  * tidak bisa berbeda antar tata letak. "Koneksi" dulu "Perangkat" dan berdiri terpisah di dasar rail.
  */
 data class NavSpec(val dest: Dest, val label: String)
@@ -14,5 +14,7 @@ val NAV_SPECS: List<NavSpec> = listOf(
     NavSpec(Dest.TABLES, "Meja"),
     NavSpec(Dest.ORDERS, "Pesanan"),
     NavSpec(Dest.SHIFT, "Shift"),
+    // 2026-11-01 — Stok Bahan (hanya baca): saldo bahan outlet ini dan riwayatnya.
+    NavSpec(Dest.MATERIALS, "Bahan"),
     NavSpec(Dest.SYNC, "Koneksi"),
 )

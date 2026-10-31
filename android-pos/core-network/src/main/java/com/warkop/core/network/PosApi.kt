@@ -39,6 +39,10 @@ interface PosApi {
     /** 055 — kategori kasir menurut mode sistem (sumber kategori tablet). */
     @GET("pos/categories") suspend fun posCategories(): PosCategoriesPage
 
+    // --- stok bahan (087 lanjutan, 2026-11-01): layar "Stok Bahan" tablet, hanya baca. X-Outlet-Id menyempitkan ke outlet tablet. ---
+    @GET("materials") suspend fun materials(@Query("page") page: Int, @Query("per_page") perPage: Int = 100, @Query("search") search: String? = null): MaterialPage
+    @GET("materials/movements") suspend fun materialMovements(@Query("material_id") materialId: Long?, @Query("per_page") perPage: Int = 50): MaterialMovementPage
+
     /** `since` = etag terakhir; server menjawab 304 tanpa badan bila tak berubah. */
     @GET("menu/availability?pos=1")
     suspend fun availability(@Query("since") since: String?): Response<AvailabilityDto>

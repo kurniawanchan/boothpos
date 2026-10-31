@@ -8,6 +8,8 @@ import com.warkop.pos.model.MenuCatalog
 import com.warkop.pos.model.MenuCategory
 import com.warkop.pos.model.ModGroup
 import com.warkop.pos.model.ModOption
+import com.warkop.pos.model.ModifierPricing
+import com.warkop.pos.model.OptionMaterial
 import com.warkop.pos.model.Product
 import com.warkop.pos.model.ProductEntry
 import com.warkop.pos.model.Tone
@@ -67,6 +69,8 @@ object MenuMapper {
             if (variants.isNotEmpty()) entries += ProductEntry(
                 id = p.id.toString(), name = p.name, cat = catId, categoryName = catName,
                 imageUrl = productImage ?: variants.firstNotNullOfOrNull { it.imageUrl }, variants = variants,
+                // 2026-11-01 — item bersumber bahan modifier: porsi dari bahan di outlet tablet (tampilan saja).
+                materialPortions = if (p.stockSource == "modifier") ModifierPricing.materialPortions(groupIds.mapNotNull { groups[it] }) else null,
             )
         }
         return MenuCatalog(categories.values.toList(), items, groups, entries)
@@ -76,8 +80,15 @@ object MenuMapper {
         id = g.id.toString(), name = g.name,
         // Server: is_required + min/max; grup wajib minimal 1 pilihan walau min_select tertulis 0.
         min = if (g.isRequired) maxOf(1, g.minSelect) else g.minSelect,
-        max = maxOf(1, g.maxSelect),
-        options = g.options.map { ModOption(it.name, Money.parse(it.priceDelta).toInt(), it.id) },
+        // null = tanpa batas atas (lihat ModifierGroupDto.maxSelect).
+        max = g.maxSelect?.let { maxOf(1, it) } ?: ModGroup.UNLIMITED,
+        options = g.options.map { o ->
+            ModOption(
+                o.name, Money.parse(o.priceDelta).toInt(), o.id, portions = o.portions,
+                materials = o.materials.map { OptionMaterial(it.name.orEmpty(), it.unit.orEmpty(), it.quantity.toDoubleOrNull() ?: 0.0, it.onHand?.toDoubleOrNull()) },
+            )
+        },
+        portionPerOption = g.portionPerOption,
     )
 
     /** Ikon bawaan dari nama/kategori (foto belum dimuat di versi ini). */

@@ -150,13 +150,16 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
     val catalogGroups = store.menu?.groups.orEmpty()
     val groups = p.groups.mapNotNull { catalogGroups[it] }
     val chosen = groups.flatMap { picks[it.id].orEmpty() }
-    val unit = p.price + chosen.sumOf { it.delta }
+    // 2026-11-01 — harga berjalan mengikuti aturan server: grup "tiap pilihan = 1 porsi" menambah harga dasar per pilihan
+    // tambahan (ModifierPricing). Sebelumnya `harga + Σ selisih`, jadi 2 rasa tampil Rp 8.000 padahal ditagih Rp 16.000.
+    val unit = ModifierPricing.unitPrice(p.price, groups, picks)
+    val portions = ModifierPricing.portionCount(groups, picks)
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
             Title(p.name, rp(p.price), { store.show(null) })
             groups.forEach { g ->
                 val sel = picks[g.id].orEmpty()
-                val rule = if (g.max == 1) "Pilih 1" else if (g.min == 0) "Hingga ${g.max}" else "Pilih ${g.min}–${g.max}"
+                val rule = g.rule
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(g.name, Modifier.weight(1f), fontSize = 20.sp, fontWeight = FontWeight.Medium)
                     Text(rule, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(8.dp))
@@ -168,15 +171,25 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
                         val single = g.max == 1
                         val missing = firstMissing == g.id && sel.size < g.min
                         Surface(
-                            onClick = { picks[g.id] = if (single) listOf(o) else if (on) sel - o else if (sel.size < g.max) sel + o else sel; firstMissing = null },
+                            onClick = { picks[g.id] = if (single) listOf(o) else if (on) sel - o else if (g.allows(sel.size)) sel + o else sel; firstMissing = null },
                             shape = RoundedCornerShape(12.dp),
                             color = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
                             border = BorderStroke(if (on || missing) 2.dp else 1.dp, if (missing) MaterialTheme.colorScheme.error else if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
                         ) {
                             Row(Modifier.padding(horizontal = 14.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                                 if (single) RadioButton(on, null, Modifier.size(22.dp)) else Checkbox(on, null, Modifier.size(22.dp))
-                                Spacer(Modifier.width(10.dp)); Text(o.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                                if (o.delta > 0) { Spacer(Modifier.width(8.dp)); Text("+${num(o.delta)}", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                Spacer(Modifier.width(10.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(o.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                                        val d = ModifierPricing.optionDelta(p.price, g, o, if (on) sel else sel + o)
+                                        if (d > 0) { Spacer(Modifier.width(8.dp)); Text("+${num(d)}", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                                    }
+                                    // 2026-11-01 — stok bahan di outlet ini dan pemakaian per porsi; merah bila habis (tetap boleh dipilih).
+                                    ModifierPricing.stockLines(o).forEach { line ->
+                                        Text(line, fontSize = 13.sp, color = if (ModifierPricing.isShort(o)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
                             }
                         }
                     }
@@ -193,6 +206,7 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 QtyStepper(qty, { if (qty > 1) qty-- }, { qty++ }, Modifier.height(56.dp))
                 Spacer(Modifier.width(14.dp))
+                if (portions > 1) { Text("$portions porsi", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(14.dp)) }
                 PrimaryPill("Tambah", {
                     val bad = groups.firstOrNull { (picks[it.id]?.size ?: 0) < it.min }
                     if (bad != null) firstMissing = bad.id else store.addLine(p, chosen, note, qty)

@@ -120,4 +120,13 @@ class KasirScreenLabelsTest {
         assertEquals(listOf("1", "4", "5"), selectableTables(tables, currentTable = "4").map { it.name })
         assertEquals(listOf("1", "5"), selectableTables(tables, currentTable = null).map { it.name })
     }
+
+    // 2026-11-01 — item bersumber bahan: kartu menampilkan porsi dari bahan bila varian tidak punya stok sendiri.
+    @Test fun `kartu memakai porsi bahan bila varian tanpa stok`() {
+        val v = com.warkop.pos.model.Product("1", "soup", "c", "Indomie Kuah", 8000, stock = null)
+        val e = com.warkop.pos.model.ProductEntry("789", "Indomie Kuah", "c", "Indomie", null, listOf(v), materialPortions = 17)
+        assertEquals(17, entryStock(e))
+        assertEquals(5, entryStock(e.copy(variants = listOf(v.copy(stock = 5)))))
+        assertEquals(null, entryStock(e.copy(materialPortions = null)))
+    }
 }

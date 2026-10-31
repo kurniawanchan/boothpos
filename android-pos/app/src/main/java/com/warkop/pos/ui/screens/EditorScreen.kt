@@ -75,7 +75,7 @@ fun EditorScreen(store: PosStore) {
                         val tone = categoryTone(catalog?.categories.orEmpty(), e.cat)
                         ProductCard(
                             e.name, e.categoryName, e.imageUrl, tone, e.variants.sumOf { qtyById[it.id] ?: 0 }, e.isSoldOut(store.soldOut),
-                            if (e.isSingle) null else variantCountLabel(e.variants.size), e.hasOptions && e.isSingle, priceLabel(e.minPrice, e.maxPrice), stockLabel(e.stock),
+                            if (e.isSingle) null else variantCountLabel(e.variants.size), e.hasOptions && e.isSingle, priceLabel(e.minPrice, e.maxPrice), stockLabel(entryStock(e)),
                             onTap = { store.tapEntry(e) }, onHold = if (e.isSingle) ({ store.markSoldOut(e.variants.first()) }) else null,
                         )
                     }

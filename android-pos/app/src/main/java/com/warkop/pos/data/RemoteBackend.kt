@@ -457,7 +457,9 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
                 payments = listOf(PaymentInputDto("cash", cashAmount)),
             ))
         }
-        return SplitItemsResult(OrderMapper.tab(res.paidOrder, deviceId), OrderMapper.tab(res.tab, deviceId))
+        // 087 — peringatan bahan ada di tingkat atas respons split; dilekatkan ke order yang lunas.
+        val paid = OrderMapper.tab(res.paidOrder, deviceId).copy(materialWarnings = OrderMapper.warnings(res.materialWarnings))
+        return SplitItemsResult(paid, OrderMapper.tab(res.tab, deviceId))
     }
 
     override suspend fun reprintOrder(orderId: String, copyNo: Int, overrideToken: String?, key: String): Int =
@@ -468,6 +470,21 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
 
     override suspend fun closedOrders(sessionId: Long?): List<Order> =
         apiCall { api().closedOrders(25, sessionId) }.data.map { OrderMapper.closed(it) }
+
+    override suspend fun materialStock(): List<com.warkop.pos.model.MaterialStock> {
+        val outlet = outletId ?: throw ApiError.Network("Terminal belum disiapkan.")
+        val all = ArrayList<com.warkop.core.network.dto.MaterialDto>()
+        var page = 1
+        do {
+            val res = apiCall { api().materials(page) }
+            all += res.data
+            page++
+        } while (res.meta.currentPage < res.meta.lastPage)
+        return MaterialMapper.stocks(all, outlet)
+    }
+
+    override suspend fun materialMoves(materialId: Long): List<com.warkop.pos.model.MaterialMove> =
+        apiCall { api().materialMovements(materialId) }.data.map { MaterialMapper.move(it) }
 
     companion object {
         /** Kode peran untuk logika tampilan sementara (supervisor, batas diskon contoh). Server tetap penegak. */

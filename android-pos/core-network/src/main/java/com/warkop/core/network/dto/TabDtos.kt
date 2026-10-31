@@ -42,6 +42,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class TabDto(
     val id: Long,
+    // 087 — hanya pada respons pelunasan: bahan yang menjadi minus karena penjualan ini (penjualan tetap tercatat).
+    @SerialName("material_warnings") val materialWarnings: List<MaterialWarningDto> = emptyList(),
     @SerialName("order_number") val orderNumber: String = "",
     val status: String = "open",
     @SerialName("service_type") val serviceType: String = "",

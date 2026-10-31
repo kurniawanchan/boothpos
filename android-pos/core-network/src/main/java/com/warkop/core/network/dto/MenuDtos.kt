@@ -3,14 +3,35 @@ package com.warkop.core.network.dto
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Serializable data class ModifierOptionDto(val id: Long, val name: String, @SerialName("price_delta") val priceDelta: String = "0.00")
+/** 2026-11-01 — bahan satu pilihan modifier; [onHand] = saldo di outlet pemesanan (null tanpa outlet pemesanan). */
+@Serializable data class ModifierOptionMaterialDto(
+    @SerialName("material_id") val materialId: Long,
+    val name: String? = null,
+    val unit: String? = null,
+    val quantity: String = "0",
+    @SerialName("on_hand") val onHand: String? = null,
+)
+
+@Serializable data class ModifierOptionDto(
+    val id: Long,
+    val name: String,
+    @SerialName("price_delta") val priceDelta: String = "0.00",
+    // 2026-11-01 — porsi yang masih bisa dibuat dari bahannya di outlet ini (≥ 0); null = tanpa bahan (tak terbatas).
+    val portions: Int? = null,
+    val materials: List<ModifierOptionMaterialDto> = emptyList(),
+)
 
 @Serializable data class ModifierGroupDto(
     val id: Long,
     val name: String,
     @SerialName("is_required") val isRequired: Boolean = false,
     @SerialName("min_select") val minSelect: Int = 0,
-    @SerialName("max_select") val maxSelect: Int = 1,
+    // BUG YANG DITEMUKAN & DIPERBAIKI (2026-11-01): dulu `Int = 1`, sehingga `max_select: null` (tanpa batas atas)
+    // dipaksa coerceInputValues menjadi 1 dan grup tanpa batas (mis. Topping) hanya bisa dipilih satu di tablet.
+    // Nullable: null eksplisit tetap null (= tanpa batas); kunci yang hilang tetap 1.
+    @SerialName("max_select") val maxSelect: Int? = 1,
+    // 2026-11-01 — tiap pilihan = 1 porsi: pilihan ke-2 dst. menambah satu harga dasar (server yang menagih).
+    @SerialName("portion_per_option") val portionPerOption: Boolean = false,
     val options: List<ModifierOptionDto> = emptyList(),
 )
 
@@ -37,6 +58,8 @@ import kotlinx.serialization.Serializable
     @SerialName("is_active") val isActive: Boolean = true,
     val variants: List<VariantDto> = emptyList(),
     @SerialName("modifier_groups") val modifierGroups: List<ModifierGroupDto> = emptyList(),
+    // 087 US6 — `modifier`: stok item datang dari bahan pilihan modifier (bukan stok varian).
+    @SerialName("stock_source") val stockSource: String = "variant",
 )
 
 @Serializable data class PageMeta(
