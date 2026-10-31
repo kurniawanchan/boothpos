@@ -38,8 +38,10 @@ const props = defineProps({
   markupPercent: { type: Number, default: 150 },
   canCopyBomOnCreate: { type: Boolean, default: false },
   copySourceOptions: { type: Array, default: () => [] },
+  // 087 US6 — `modifier`: varian tidak punya stok sendiri; kolom stok dan saklar lacak tidak berlaku.
+  stockSource: { type: String, default: 'variant' },
 });
-const emit = defineEmits(['add', 'remove', 'duplicate', 'open-bom', 'enlarge-image']);
+const emit = defineEmits(['add', 'remove', 'duplicate', 'open-bom', 'enlarge-image', 'delete-permanent']);
 const { t } = useI18n();
 
 const isEdit = computed(() => props.mode === 'edit');
@@ -137,7 +139,10 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
                 :aria-invalid="errorOf(i, 'sell_price') ? 'true' : undefined"
               />
             </td>
-            <td class="border-r border-line-2 p-0">
+            <td v-if="stockSource === 'modifier'" class="border-r border-line-2 px-2 text-center text-[12px] font-semibold text-muted-3" data-testid="variant-stock-from-modifier">
+              {{ t('products.stock_from_modifier') }}
+            </td>
+            <td v-else class="border-r border-line-2 p-0">
               <input
                 v-model="row.current_stock"
                 type="number"
@@ -171,6 +176,12 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
                 <button v-if="canRemove(row)" type="button" class="text-muted-3 hover:text-danger-text" :aria-label="t('products.f_variant_remove_aria', { n: i + 1 })" @click="emit('remove', i)">
                   <i class="ph-duotone ph-x text-[12px]" aria-hidden="true"></i>
                 </button>
+                <!-- 2026-10-31 — varian tersimpan: hapus permanen lewat server (ditolak 409 bila sudah punya riwayat). -->
+                <BaseTooltip v-if="isEdit && row.id" :text="t('products.variant_delete_confirm')" align="right">
+                  <button type="button" :class="iconBtn" class="hover:text-danger-text" :aria-label="t('products.variant_delete_aria', { name: row.variant_name })" data-testid="variant-delete" @click="emit('delete-permanent', row)">
+                    <i class="ph-duotone ph-trash text-[14px]" aria-hidden="true"></i>
+                  </button>
+                </BaseTooltip>
               </div>
             </td>
           </tr>
@@ -191,7 +202,7 @@ const canRemove = (row) => !row.id && props.rows.length > 1;
                 </label>
                 <!-- 028 — hidangan made-to-order tidak punya stok fisik: matikan pelacakan supaya tidak ada stok palsu
                      dan penjualan tidak pernah terblokir "stok habis". -->
-                <label class="flex items-center gap-2">
+                <label v-if="stockSource !== 'modifier'" class="flex items-center gap-2">
                   <input v-model="row.track_stock" type="checkbox" class="h-4 w-4 accent-brand" :aria-label="t('products.f_variant_track_aria', { n: i + 1 })" />
                   {{ t('master_data.track_stock') }}
                 </label>

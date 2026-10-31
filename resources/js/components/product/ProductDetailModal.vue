@@ -8,6 +8,7 @@ import VariantBomModal from './VariantBomModal.vue';
 import VariantHistoryModal from './VariantHistoryModal.vue';
 import { getProduct } from '../../api/products';
 import { formatIDR } from '../../utils/money';
+import { stockText, variantHasOwnStock } from '../../utils/stockSource';
 import { useToastStore } from '../../stores/toast';
 import { useAuthStore } from '../../stores/auth';
 
@@ -78,7 +79,8 @@ watch(
   { immediate: true }
 );
 
-const totalStock = computed(() => (product.value?.variants ?? []).reduce((sum, v) => sum + Number(v.current_stock ?? 0), 0));
+// 087 — varian tanpa stok sendiri (sumber modifier / tidak dilacak) tidak ikut dijumlah.
+const totalStock = computed(() => (product.value?.variants ?? []).filter(variantHasOwnStock).reduce((sum, v) => sum + Number(v.current_stock ?? 0), 0));
 
 const lightboxOpen = ref(false);
 const lightboxSrc = ref(null);
@@ -169,7 +171,7 @@ function openImageLightbox(src, alt) {
                 <td class="px-3 py-2 font-mono text-[12px]">{{ v.sku }}</td>
                 <td class="px-3 py-2">{{ v.variant_name }}</td>
                 <td class="px-3 py-2 text-right">{{ formatIDR(v.sell_price) }}</td>
-                <td class="px-3 py-2 text-right font-semibold">{{ v.current_stock }}</td>
+                <td class="px-3 py-2 text-right font-semibold">{{ stockText(v) }}</td>
                 <td class="px-3 py-2">
                   <StatusPill :variant="v.is_active ? 'mint' : 'neutral'">{{ v.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
                 </td>

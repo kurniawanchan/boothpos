@@ -1,4 +1,5 @@
 <script setup>
+import { stockText } from '../../utils/stockSource';
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
@@ -60,7 +61,7 @@ const lightboxOpen = ref(false);
         </div>
         <div class="flex flex-col gap-0.5 rounded-lg border border-line-2 px-3.5 py-3">
           <span class="text-[11px] font-bold uppercase tracking-wide text-muted-3">{{ t('master_data.col_stock') }}</span>
-          <span class="text-[16px] font-extrabold tracking-tight">{{ variant.current_stock }}</span>
+          <span class="text-[16px] font-extrabold tracking-tight">{{ stockText(variant) }}</span>
         </div>
       </div>
     </div>

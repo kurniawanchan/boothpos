@@ -17,7 +17,9 @@ import ConfirmDialog from '../ui/ConfirmDialog.vue';
 import FilterBar from '../page/FilterBar.vue';
 import MaterialVendorPricesModal from './MaterialVendorPricesModal.vue';
 import MaterialStockAdjustModal from './MaterialStockAdjustModal.vue';
+import MaterialUsageModal from './MaterialUsageModal.vue';
 import { useOutletStore } from '../../stores/outlet';
+import { isNegativeStock, materialStockText } from '../../utils/materialStock';
 
 /**
  * Daftar bahan baku (pencarian, tabel, formulir, hapus, harga vendor) — dipecah UTUH dari MaterialsView (perilaku
@@ -38,9 +40,11 @@ const toast = useToastStore();
 const outletStore = useOutletStore();
 // 045 Stage 5 — stok bahan adalah saldo per outlet: koreksi per outlet; rincian per outlet hanya dengan beberapa outlet.
 const adjustTarget = ref(null);
-const stockText = (row) => (outletStore.multi && (row.outlet_stock ?? []).length
-  ? row.outlet_stock.map((o) => `${o.outlet_code} ${Number(o.on_hand)}`).join(' · ')
-  : String(Number(row.current_stock ?? 0)));
+// 087 — "Dipakai oleh" (pilihan modifier) dan riwayat pergerakan satu bahan.
+const usageTarget = ref(null);
+// Outlet navbar terpilih → saldo outlet itu saja (0 bila belum ada baris), tidak pernah total (lihat materialStock.js).
+const stockText = (row) => materialStockText(row, { multi: outletStore.multi, selected: outletStore.selected });
+const negative = (row) => isNegativeStock(row, outletStore.selected);
 
 const { items, meta, loading, error, load, setPage, setFilter } = usePaginatedList(listMaterials, props.kind ? { kind: props.kind } : {});
 const search = ref('');
@@ -53,12 +57,28 @@ function onSearchInput(value) {
   debouncedSearch();
 }
 
+// 2026-10-31 (permintaan pemilik "filter lengkap"): jenis (bila tidak dikunci tab), status aktif, dan stok
+// (tersedia / habis / minus; server `stock_status`, dinilai per outlet yang terlihat). '' = semua.
+const filters = reactive({ kind: '', active: '', stock: '' });
+const filtersActive = computed(() => !!search.value || Object.values(filters).some((v) => v !== ''));
+function applyFilters() {
+  setFilter({
+    ...(props.kind ? {} : { kind: filters.kind || undefined }),
+    is_active: filters.active === '' ? undefined : filters.active,
+    stock_status: filters.stock || undefined,
+  });
+}
+watch(() => ({ ...filters }), applyFilters);
+
 function resetSearch() {
   search.value = '';
-  setFilter({ search: undefined });
+  Object.assign(filters, { kind: '', active: '', stock: '' });
+  setFilter({ search: undefined, stock_status: undefined, is_active: undefined, ...(props.kind ? {} : { kind: undefined }) });
 }
 
 onMounted(load);
+// Daftar tidak dipasang ulang saat outlet navbar berganti; saldo dan saringan stok bergantung pada outlet itu.
+watch(() => outletStore.selected, () => load());
 
 // Berpindah tab jenis memakai komponen yang sama: filter jenis diganti dan halaman kembali ke 1.
 watch(
@@ -71,6 +91,18 @@ watch(
 
 const KINDS = ['ingredient', 'semi_finished', 'packaging'];
 const kindOptions = computed(() => KINDS.map((k) => ({ value: k, label: t(`vendors_materials.kind_${k}`) })));
+const kindFilterOptions = computed(() => [{ value: '', label: t('vendors_materials.filter_kind_all') }, ...kindOptions.value]);
+const activeFilterOptions = computed(() => [
+  { value: '', label: t('vendors_materials.filter_status_all') },
+  { value: '1', label: t('common.active') },
+  { value: '0', label: t('common.inactive') },
+]);
+const stockFilterOptions = computed(() => [
+  { value: '', label: t('vendors_materials.filter_stock_all') },
+  { value: 'available', label: t('vendors_materials.filter_stock_available') },
+  { value: 'out', label: t('vendors_materials.filter_stock_out') },
+  { value: 'negative', label: t('vendors_materials.negative_only') },
+]);
 
 const columns = computed(() => [
   { key: 'code', label: t('master_data.col_code') },
@@ -191,10 +223,14 @@ defineExpose({ openCreate, reload: load });
       :placeholder="t('vendors_materials.search_material_placeholder')"
       :search-label="t('vendors_materials.search_material')"
       :count="loading || error ? null : meta.total"
-      :active="!!search"
+      :active="filtersActive"
       @update:search="onSearchInput"
       @reset="resetSearch"
-    />
+    >
+      <BaseSelect v-if="!kind" v-model="filters.kind" :options="kindFilterOptions" class="w-44" data-testid="material-kind-filter" />
+      <BaseSelect v-model="filters.active" :options="activeFilterOptions" class="w-40" data-testid="material-active-filter" />
+      <BaseSelect v-model="filters.stock" :options="stockFilterOptions" class="w-44" data-testid="material-stock-filter" />
+    </FilterBar>
 
     <DataTable
       :columns="columns"
@@ -206,13 +242,17 @@ defineExpose({ openCreate, reload: load });
     >
       <template #cell-code="{ row }"><span class="font-mono text-[12.5px] font-bold text-brand-active">{{ row.code }}</span></template>
       <template #cell-kind="{ row }"><StatusPill variant="neutral">{{ t(`vendors_materials.kind_${row.kind ?? 'ingredient'}`) }}</StatusPill></template>
-      <template #cell-stock="{ row }"><span class="font-mono text-[12.5px]" data-testid="material-stock">{{ stockText(row) }}</span></template>
+      <template #cell-stock="{ row }">
+        <span class="font-mono text-[12.5px]" :class="negative(row) ? 'text-danger-text' : ''" data-testid="material-stock">{{ stockText(row) }}</span>
+        <StatusPill v-if="negative(row)" variant="danger" class="ml-1.5" data-testid="material-negative-pill">{{ t('vendors_materials.negative_pill') }}</StatusPill>
+      </template>
       <template #cell-vendor_price_count="{ row }">{{ row.vendor_price_count ?? 0 }}</template>
       <template #cell-is_active="{ row }">
         <StatusPill :variant="row.is_active ? 'success' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
       </template>
       <template #cell-actions="{ row }">
         <div class="flex justify-end gap-2">
+          <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" data-testid="material-usage" @click="usageTarget = row">{{ t('vendors_materials.usage_action') }}</button>
           <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" data-testid="material-adjust" @click="adjustTarget = row">{{ t('stock.material_stock_adjust') }}</button>
           <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openPrices(row)">{{ t('vendors_materials.vendor_prices_action') }}</button>
           <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
@@ -260,6 +300,8 @@ defineExpose({ openCreate, reload: load });
       </div>
     </template>
   </BaseModal>
+
+  <MaterialUsageModal :open="usageTarget !== null" :material="usageTarget" @close="usageTarget = null" />
 
   <MaterialStockAdjustModal :open="adjustTarget !== null" :material="adjustTarget" @close="adjustTarget = null" @saved="load(); emit('changed')" />
 

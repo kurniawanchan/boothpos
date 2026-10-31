@@ -22,7 +22,7 @@ const settings = useSettingsStore();
 const { t } = useI18n();
 
 // 048 — pratinjau subtotal, diskon, pajak, dan total; rumusnya sama dengan server (lihat utils/posTotals.js).
-const totals = computed(() => cartTotals({ subtotal: cart.subtotal, discount: props.discount, taxRate: settings.taxRate }));
+const totals = computed(() => cartTotals({ subtotal: cart.subtotal, discount: props.discount, taxRate: settings.effectiveTaxRate }));
 const taxName = computed(() => settings.taxLabel || t('pos.tax'));
 
 const lightboxSrc = ref(null);
@@ -81,7 +81,7 @@ function openImageLightbox(item) {
             <button
               type="button"
               class="flex h-[30px] w-[30px] items-center justify-center text-muted-5 hover:bg-line-7 disabled:opacity-30"
-              :disabled="item.qty >= item.current_stock"
+              :disabled="item.current_stock !== null && item.current_stock !== undefined && item.qty >= item.current_stock"
               :aria-label="t('pos.increase_item', { name: item.name })"
               @click="cart.increment(cartLineKey(item))"
             >

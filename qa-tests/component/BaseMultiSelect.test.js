@@ -71,3 +71,26 @@ describe('BaseMultiSelect', () => {
     expect(screen.getByText('2 dipilih')).toBeInTheDocument();
   });
 });
+
+// 2026-10-31 (laporan pemilik: "dropdown tidak bisa di-scroll", filter kategori POS) — akar masalah sama dengan
+// BaseSelect 036: listener scroll window (capture) menutup panel pada scroll di dalam daftarnya sendiri.
+describe('BaseMultiSelect — scrolling (2026-10-31)', () => {
+  it('stays open when its own list is scrolled', async () => {
+    const { fireEvent } = await import('@testing-library/vue');
+    renderMultiSelect();
+    await fireEvent.click(screen.getByRole('button'));
+    const list = screen.getByRole('listbox');
+
+    await fireEvent.scroll(list.querySelector('[data-testid="multiselect-options"]'));
+    expect(screen.queryByRole('listbox')).toBeInTheDocument();
+  });
+
+  it('still closes when the page outside scrolls', async () => {
+    const { fireEvent } = await import('@testing-library/vue');
+    renderMultiSelect();
+    await fireEvent.click(screen.getByRole('button'));
+
+    await fireEvent.scroll(document.body);
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+  });
+});

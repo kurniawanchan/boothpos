@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import PosView from '../../resources/js/views/PosView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
+import { useOutletStore } from '../../resources/js/stores/outlet';
 import { currentSession } from '../../resources/js/api/sessions';
 import { listCategories } from '../../resources/js/api/categories';
 import { listOutlets } from '../../resources/js/api/outlets';
@@ -25,9 +26,10 @@ const PRODUCTS = [
   },
 ];
 
-function renderPos() {
+function renderPos({ navbarOutlet = null } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
+  Object.assign(useOutletStore(), { multi: true, selected: navbarOutlet });
   const auth = useAuthStore();
   auth.user = { id: 1, role: 'Kasir', name: 'Kasir', menu_keys: ['dashboard', 'pos', 'session'] };
   return render(PosView, { global: { plugins: [pinia] } });
@@ -47,6 +49,21 @@ describe('PosView — product images & clickable outlet filter', () => {
     renderPos();
     await screen.findByText('Keychain A');
     expect(listProducts).toHaveBeenCalledWith(expect.objectContaining({ pos: 1, with_variants: 1 }));
+  });
+
+  // 2026-10-31 (laporan pemilik): navbar = Warkop WJM Demo, tetapi POS tetap "Semua outlet" dan menampilkan menu
+  // outlet lain. Filter outlet POS kini mengikuti outlet navbar, juga saat navbar diganti.
+  it('starts the outlet filter at the navbar outlet and follows it when the navbar changes', async () => {
+    renderPos({ navbarOutlet: 2 });
+    await screen.findByText('Keychain A');
+    expect(listProducts).toHaveBeenCalledWith(expect.objectContaining({ home_outlet_id: [2] }));
+    expect(screen.queryByText('Semua outlet')).toBeNull(); // pemicu filter menampilkan outlet navbar, bukan "Semua"
+
+    useOutletStore().selected = 1;
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ home_outlet_id: [1] })));
+
+    useOutletStore().selected = null;
+    await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.not.objectContaining({ home_outlet_id: expect.anything() })));
   });
 
   it('renders a product image for a card that has one and a placeholder for one that does not', async () => {

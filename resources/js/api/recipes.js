@@ -19,6 +19,11 @@ export function createRecipe(productId, payload) {
   return client.post(`/products/${productId}/recipes`, payload).then((r) => r.data);
 }
 
+/** 2026-10-31 — DELETE /products/{id}/recipes: hapus resep (semua versi); harga modal varian bisa diubah lagi. */
+export function removeRecipe(productId) {
+  return client.delete(`/products/${productId}/recipes`).then((r) => r.data);
+}
+
 /** POST /products/{id}/recipes/recalculate — "Hitung ulang biaya" eksplisit. */
 export function recalculateRecipeCost(productId) {
   return client.post(`/products/${productId}/recipes/recalculate`).then((r) => r.data);

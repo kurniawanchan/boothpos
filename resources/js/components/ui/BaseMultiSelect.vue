@@ -55,14 +55,19 @@ const displayLabel = computed(() => {
   return t('common.n_selected', { count: props.modelValue.length });
 });
 
+// Ukuran dan arah panel sama dengan BaseSelect (037): membuka ke atas bila ruang bawah sempit, tinggi 140–320px.
 function updatePanelPosition() {
   if (!triggerEl.value) return;
   const r = triggerEl.value.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - r.bottom - 12;
+  const spaceAbove = r.top - 12;
+  const openUp = spaceBelow < 220 && spaceAbove > spaceBelow;
   panelStyle.value = {
     position: 'fixed',
-    top: `${r.bottom + 6}px`,
+    ...(openUp ? { bottom: `${window.innerHeight - r.top + 6}px` } : { top: `${r.bottom + 6}px` }),
     left: `${r.left}px`,
     width: `${r.width}px`,
+    maxHeight: `${Math.round(Math.max(140, Math.min(320, openUp ? spaceAbove : spaceBelow)))}px`,
   };
 }
 
@@ -97,7 +102,11 @@ function onClickOutside(e) {
   const clickedPanel = panelEl.value && panelEl.value.contains(e.target);
   if (isOpen.value && !clickedTrigger && !clickedPanel) close();
 }
-function onScrollOrResize() {
+// BUG YANG DITEMUKAN & DIPERBAIKI (2026-10-31, laporan pemilik "dropdown tidak bisa di-scroll"): listener scroll
+// window (capture) juga menangkap scroll DI DALAM daftar ini, jadi panel menutup begitu daftar digulung — bug yang
+// sama dengan BaseSelect 036, tetapi perbaikannya dulu tidak disalin ke sini. Scroll dari dalam panel diabaikan.
+function onScrollOrResize(e) {
+  if (e?.type === 'scroll' && e.target instanceof Node && panelEl.value?.contains(e.target)) return;
   if (isOpen.value) close();
 }
 watch(isOpen, (open) => {
@@ -150,7 +159,7 @@ onBeforeUnmount(() => {
         role="listbox"
         aria-multiselectable="true"
         :style="panelStyle"
-        class="z-[95] flex max-h-80 flex-col overflow-hidden rounded-lg border border-line bg-white shadow-lg"
+        class="z-[95] flex flex-col overflow-hidden rounded-lg border border-line bg-white shadow-lg"
       >
         <div class="border-b border-line-6 p-2">
           <input
@@ -160,7 +169,7 @@ onBeforeUnmount(() => {
             class="h-9 w-full rounded-md border border-line px-2.5 text-[13.5px] outline-none focus:border-brand"
           />
         </div>
-        <div class="overflow-y-auto p-1">
+        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1" data-testid="multiselect-options">
           <button
             type="button"
             role="option"

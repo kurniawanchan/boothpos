@@ -84,6 +84,24 @@ describe('ModifierGroupsAdmin', () => {
     expect(body.options.map((o) => o.id)).toEqual([10, 11]);
   });
 
+  // 2026-10-31 — grup jamak "tiap pilihan = 1 porsi".
+  it('sends the portion flag for a multiple-choice group it was switched on for', async () => {
+    updateModifierGroup.mockResolvedValue(group());
+    listModifierGroups.mockResolvedValue({ data: [group({ selection_type: 'multiple', min_select: 1, max_select: 2, portion_per_option: true })] });
+    const user = userEvent.setup();
+    renderAdmin();
+    await screen.findByText('Size');
+
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const box = await screen.findByTestId('mod-portion-per-option');
+    expect(box).toBeChecked();
+    await user.click(box);
+    await user.click(screen.getByRole('button', { name: 'Simpan' }));
+
+    await waitFor(() => expect(updateModifierGroup).toHaveBeenCalledTimes(1));
+    expect(updateModifierGroup.mock.calls[0][1].portion_per_option).toBe(false);
+  });
+
   it('shows the server validation message next to the field', async () => {
     const { ApiError } = await import('../../resources/js/utils/errors');
     createModifierGroup.mockRejectedValue(new ApiError('x', { status: 422, errors: { name: ['Nama grup sudah dipakai.'] } }));

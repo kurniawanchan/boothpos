@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildProductCards, buildSearchCards, toCartItem } from '../../resources/js/utils/posProductCards';
+import { buildProductCards, buildSearchCards, toCartItem, stockOf, isOutOfStock } from '../../resources/js/utils/posProductCards';
 
 const variant = (overrides = {}) => ({
   id: 1,
@@ -216,5 +216,75 @@ describe('posProductCards on-hand (045 Stage 5)', () => {
     expect(toCartItem(cards[0], cards[0].variants[0]).current_stock).toBe(2);
     const plain = buildProductCards([{ id: 1, name: 'A', category_id: 1, variants: [{ id: 11, sku: 'S', variant_name: 'R', sell_price: '1000.00', current_stock: 9, is_active: true }] }]);
     expect(plain[0].total_stock).toBe(9);
+  });
+});
+
+// BUG YANG DITEMUKAN & DIPERBAIKI (087, laporan pemilik 2026-10-31): POS ritel mengabaikan `track_stock`, jadi item
+// bersumber stok modifier (dan menu masak sejak 028) tampil "Stok 0 / Habis" dan tidak bisa dijual.
+describe('items without their own stock (track_stock: false)', () => {
+  it('a card whose variants do not track stock is never out of stock and shows no stock number', () => {
+    const [card] = buildProductCards([product({ variants: [variant({ current_stock: 0, outlet_stock: 0, track_stock: false })] })]);
+    expect(card.out_of_stock).toBe(false);
+    expect(card.total_stock).toBeNull();
+  });
+
+  it('a tracked card still goes out of stock at zero', () => {
+    const [card] = buildProductCards([product({ variants: [variant({ current_stock: 0, outlet_stock: 0, track_stock: true })] })]);
+    expect(card.out_of_stock).toBe(true);
+    expect(card.total_stock).toBe(0);
+  });
+
+  it('cart items and search cards carry null stock for untracked variants and the outlet balance otherwise', () => {
+    const [card] = buildProductCards([product({ variants: [variant({ current_stock: 0, outlet_stock: 0, track_stock: false })] })]);
+    expect(toCartItem(card, card.variants[0]).current_stock).toBeNull();
+    const [tracked] = buildProductCards([product({ variants: [variant({ current_stock: 9, outlet_stock: 4 })] })]);
+    expect(toCartItem(tracked, tracked.variants[0]).current_stock).toBe(4);
+
+    const [search] = buildSearchCards([{ variant_id: 5, label: 'Indomie Kuah', sell_price: '15000.00', current_stock: 0, outlet_stock: 0, track_stock: false }]);
+    expect(search.current_stock).toBeNull();
+  });
+
+  it('stockOf and isOutOfStock are the one rule every POS control uses', () => {
+    expect(stockOf({ track_stock: false, current_stock: 0, outlet_stock: 0 })).toBeNull();
+    expect(stockOf({ current_stock: 7 })).toBe(7);
+    expect(isOutOfStock(null)).toBe(false);
+    expect(isOutOfStock(0)).toBe(true);
+    expect(isOutOfStock(3)).toBe(false);
+  });
+});
+
+// 2026-10-31 (permintaan pemilik) — produk bersumber bahan modifier menampilkan stok dari bahan yang dipetakan.
+describe('material-based stock on POS cards', () => {
+  const groups = [{
+    id: 1, name: 'Rasa', selection_type: 'multiple', is_required: true, min_select: 1, max_select: 2,
+    options: [
+      { id: 11, name: 'SOTO', portions: 17, materials: [{ material_id: 9 }] },
+      { id: 12, name: 'AYAM BAWANG', portions: 0, materials: [{ material_id: 10 }] },
+    ],
+  }];
+  const product = (over = {}) => ({
+    id: 789, name: 'Indomie Kuah', stock_source: 'modifier', modifier_groups: groups,
+    variants: [{ id: 1, sku: 'X', variant_name: 'Standard', sell_price: '8000.00', is_active: true, track_stock: false, current_stock: 0 }],
+    ...over,
+  });
+
+  it('shows the portions the mapped materials still allow, without blocking the sale', () => {
+    const [card] = buildProductCards([product()]);
+    expect(card.total_stock).toBeNull();
+    expect(card.material_portions).toBe(17);
+    expect(card.out_of_stock).toBe(false);
+  });
+
+  it('keeps zero visible but still sellable (sales never fail on materials, FR-014)', () => {
+    const empty = groups.map((g) => ({ ...g, options: g.options.map((o) => ({ ...o, portions: 0 })) }));
+    const [card] = buildProductCards([product({ modifier_groups: empty })]);
+    expect(card.material_portions).toBe(0);
+    expect(card.out_of_stock).toBe(false);
+  });
+
+  it('has no material figure for a product that keeps its own variant stock', () => {
+    const [card] = buildProductCards([product({ stock_source: 'variant', variants: [{ id: 1, sell_price: '1', is_active: true, current_stock: 5 }] })]);
+    expect(card.material_portions).toBeNull();
+    expect(card.total_stock).toBe(5);
   });
 });

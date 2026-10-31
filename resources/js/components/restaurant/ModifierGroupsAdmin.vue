@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n';
 import { listModifierGroups, createModifierGroup, updateModifierGroup, deleteModifierGroup, setModifierGroupAttachments } from '../../api/modifierGroups';
 import { listProducts } from '../../api/products';
 import { listCategories } from '../../api/categories';
+import { listMaterials } from '../../api/materials';
+import { materialsPayload, materialsSummary } from '../../utils/optionMaterials';
 import { useToastStore } from '../../stores/toast';
 import { describeRange, groupRange } from '../../utils/modifierRules';
 import { formatIDR } from '../../utils/money';
@@ -15,6 +17,7 @@ import BaseInput from '../ui/BaseInput.vue';
 import BaseSelect from '../ui/BaseSelect.vue';
 import BaseMultiSelect from '../ui/BaseMultiSelect.vue';
 import ConfirmDialog from '../ui/ConfirmDialog.vue';
+import OptionMaterialsEditor from './OptionMaterialsEditor.vue';
 
 /**
  * 028 US3 — tab "Modifier" pada Pengaturan Restoran: grup + opsi (selisih harga bertanda)
@@ -29,6 +32,18 @@ const groups = ref([]);
 const loading = ref(false);
 const products = ref([]);
 const categories = ref([]);
+// 087 — bahan aktif yang bisa dipetakan ke pilihan; dimuat sekali (semua halaman, maks 100 per halaman).
+const materials = ref([]);
+
+async function loadMaterials() {
+  const all = [];
+  for (let page = 1; ; page++) {
+    const res = await listMaterials({ is_active: 1, per_page: 100, page });
+    all.push(...res.data.map((m) => ({ id: m.id, name: m.name, unit: m.unit })));
+    if (page >= (res.meta?.last_page ?? 1)) break;
+  }
+  materials.value = all;
+}
 
 async function load() {
   loading.value = true;
@@ -43,6 +58,7 @@ onMounted(async () => {
   // Pilihan untuk dialog lampiran; dimuat sekali.
   products.value = (await listProducts({ per_page: 100 })).data;
   categories.value = (await listCategories({ per_page: 100 })).data;
+  await loadMaterials();
 });
 
 const columns = computed(() => [
@@ -59,16 +75,20 @@ const ruleText = (g) => `${g.selection_type === 'single' ? t('dining_setup.mod_s
 // --- form --------------------------------------------------------------------
 const showForm = ref(false);
 const editing = ref(null);
-const form = reactive({ name: '', selection_type: 'single', is_required: false, min_select: 0, max_select: '', is_active: true, options: [] });
+const form = reactive({ name: '', selection_type: 'single', is_required: false, min_select: 0, max_select: '', portion_per_option: false, is_active: true, options: [] });
 const formErrors = reactive({});
 const saving = ref(false);
 
-const blankOption = () => ({ id: null, name: '', price_delta: '0', is_active: true });
+const blankOption = () => ({ id: null, name: '', price_delta: '0', is_active: true, materials: [], showMaterials: false });
+// 087 — salinan baris bahan saat formulir dibuka, per id pilihan: hanya pilihan yang berubah yang mengirim `materials`.
+const originalMaterials = ref({});
+const toRows = (list) => (list ?? []).map((m) => ({ material_id: m.material_id, quantity: m.quantity, name: m.name, unit: m.unit }));
 const clearErrors = () => Object.keys(formErrors).forEach((k) => delete formErrors[k]);
 
 function openCreate() {
   editing.value = null;
-  Object.assign(form, { name: '', selection_type: 'single', is_required: false, min_select: 0, max_select: '', is_active: true, options: [blankOption()] });
+  Object.assign(form, { name: '', selection_type: 'single', is_required: false, min_select: 0, max_select: '', portion_per_option: false, is_active: true, options: [blankOption()] });
+  originalMaterials.value = {};
   clearErrors();
   showForm.value = true;
 }
@@ -77,14 +97,24 @@ function openEdit(group) {
   editing.value = group;
   Object.assign(form, {
     name: group.name, selection_type: group.selection_type, is_required: group.is_required,
-    min_select: group.min_select, max_select: group.max_select ?? '', is_active: group.is_active,
-    options: group.options.filter((o) => o.is_active).map((o) => ({ id: o.id, name: o.name, price_delta: o.price_delta, is_active: true })),
+    min_select: group.min_select, max_select: group.max_select ?? '', portion_per_option: !!group.portion_per_option, is_active: group.is_active,
+    options: group.options.filter((o) => o.is_active).map((o) => ({
+      id: o.id, name: o.name, price_delta: o.price_delta, is_active: true, materials: toRows(o.materials), showMaterials: false,
+    })),
   });
+  originalMaterials.value = Object.fromEntries(group.options.map((o) => [o.id, toRows(o.materials)]));
   clearErrors();
   showForm.value = true;
 }
 
 const removeOption = (idx) => form.options.splice(idx, 1);
+
+// Galat server `options.{i}.materials.{j}.field` → `{j}.field` untuk editor pilihan ke-i.
+function materialErrors(idx) {
+  const prefix = `options.${idx}.materials.`;
+  return Object.fromEntries(Object.entries(formErrors).filter(([k]) => k.startsWith(prefix)).map(([k, v]) => [k.slice(prefix.length), v]));
+}
+const hasMaterialError = (idx) => Object.keys(materialErrors(idx)).length > 0;
 
 function payload() {
   const multiple = form.selection_type === 'multiple';
@@ -93,9 +123,12 @@ function payload() {
     selection_type: form.selection_type,
     is_required: form.is_required,
     ...(multiple ? { min_select: Number(form.min_select) || 0, max_select: form.max_select === '' ? null : Number(form.max_select) } : {}),
+    // 2026-10-31 — hanya bermakna untuk grup jamak; grup tunggal selalu satu pilihan = satu porsi.
+    portion_per_option: multiple && form.portion_per_option,
     is_active: form.is_active,
     options: form.options.filter((o) => o.name.trim() !== '').map((o, i) => ({
       ...(o.id ? { id: o.id } : {}), name: o.name, price_delta: Number(o.price_delta) || 0, display_order: i,
+      ...materialsPayload(o.id ? originalMaterials.value[o.id] : undefined, o.materials),
     })),
   };
 }
@@ -179,6 +212,9 @@ async function performDelete() {
         <template #cell-rule="{ row }"><span class="text-[12.5px] text-muted-4">{{ ruleText(row) }}</span></template>
         <template #cell-options="{ row }">
           <span class="text-[12.5px] text-muted-4">{{ row.options.filter((o) => o.is_active).map((o) => (Number(o.price_delta) ? `${o.name} (${Number(o.price_delta) > 0 ? '+' : '−'}${formatIDR(Math.abs(Number(o.price_delta)))})` : o.name)).join(', ') }}</span>
+          <span v-if="row.options.some((o) => o.is_active && o.materials?.length)" class="ml-1.5 inline-flex items-center gap-1 text-[11.5px] font-semibold text-muted-3" :title="t('dining_setup.option_materials_title')">
+            <i class="ph-duotone ph-package text-[13px]" aria-hidden="true"></i>{{ t('dining_setup.option_materials_uses') }}
+          </span>
         </template>
         <template #cell-attached="{ row }">{{ t('dining_setup.mod_attached_count', { products: row.product_ids.length, categories: row.category_ids.length }) }}</template>
         <template #cell-is_active="{ row }"><StatusPill :variant="row.is_active ? 'mint' : 'neutral'">{{ row.is_active ? t('common.active') : t('common.inactive') }}</StatusPill></template>
@@ -209,6 +245,13 @@ async function performDelete() {
           <BaseInput v-model="form.min_select" type="number" min="0" :label="t('dining_setup.mod_min')" :error="formErrors.min_select" />
           <BaseInput v-model="form.max_select" type="number" min="1" :label="t('dining_setup.mod_max')" :hint="t('dining_setup.mod_max_hint')" :error="formErrors.max_select" />
         </div>
+        <label v-if="form.selection_type === 'multiple'" class="flex items-start gap-2.5 text-[13px] font-semibold text-muted-4">
+          <input v-model="form.portion_per_option" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-line accent-brand" data-testid="mod-portion-per-option" />
+          <span>
+            {{ t('dining_setup.mod_portion_per_option') }}
+            <span class="block text-[11.5px] font-normal text-muted-3">{{ t('dining_setup.mod_portion_per_option_hint') }}</span>
+          </span>
+        </label>
         <label class="flex items-center gap-2.5 text-[13px] font-semibold text-muted-4">
           <input v-model="form.is_active" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
           {{ t('common.active') }}
@@ -223,6 +266,20 @@ async function performDelete() {
             <button type="button" class="mb-0.5 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('common.delete')" @click="removeOption(idx)">
               <i class="ph-duotone ph-trash text-[15px]" aria-hidden="true"></i>
             </button>
+            <div class="col-span-3 -mt-1 flex flex-col gap-1.5">
+              <button
+                type="button"
+                class="flex items-center gap-1.5 self-start text-[12px] font-semibold text-muted-4 hover:text-brand-active"
+                :aria-expanded="o.showMaterials || hasMaterialError(idx)"
+                data-testid="toggle-option-materials"
+                @click="o.showMaterials = !o.showMaterials"
+              >
+                <i class="ph-duotone ph-package text-[14px]" aria-hidden="true"></i>
+                {{ t('dining_setup.option_materials_title') }}
+                <span v-if="o.materials.length" class="text-muted-3">· {{ materialsSummary(o.materials, t) }}</span>
+              </button>
+              <OptionMaterialsEditor v-if="o.showMaterials || hasMaterialError(idx)" v-model="o.materials" :materials="materials" :errors="materialErrors(idx)" />
+            </div>
           </div>
           <BaseButton variant="secondary" size="sm" class="self-start" @click="form.options.push(blankOption())">{{ t('dining_setup.mod_add_option') }}</BaseButton>
           <p class="text-[11.5px] text-muted-3">{{ t('dining_setup.mod_options_hint') }}</p>

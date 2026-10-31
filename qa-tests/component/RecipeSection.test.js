@@ -4,10 +4,10 @@ import { createPinia, setActivePinia } from 'pinia';
 import RecipeSection from '../../resources/js/components/product/RecipeSection.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { useToastStore } from '../../resources/js/stores/toast';
-import { listRecipes, getRecipe, createRecipe, recalculateRecipeCost } from '../../resources/js/api/recipes';
+import { listRecipes, getRecipe, createRecipe, recalculateRecipeCost, removeRecipe } from '../../resources/js/api/recipes';
 import { listMaterials, getMaterial } from '../../resources/js/api/materials';
 
-vi.mock('../../resources/js/api/recipes', () => ({ listRecipes: vi.fn(), getRecipe: vi.fn(), createRecipe: vi.fn(), recalculateRecipeCost: vi.fn() }));
+vi.mock('../../resources/js/api/recipes', () => ({ listRecipes: vi.fn(), getRecipe: vi.fn(), createRecipe: vi.fn(), recalculateRecipeCost: vi.fn(), removeRecipe: vi.fn() }));
 vi.mock('../../resources/js/api/materials', () => ({ listMaterials: vi.fn(), getMaterial: vi.fn() }));
 
 const VARIANTS = [{ id: 1, sku: 'KOP-1', variant_name: 'Panas', sell_price: '50000.00', is_active: true, bom_complete: false }];
@@ -161,4 +161,26 @@ describe('RecipeSection (043)', () => {
     expect(listRecipes).toHaveBeenCalledTimes(2);
     await waitFor(() => expect(screen.queryByRole('dialog', { name: /^resep$/i })).not.toBeInTheDocument());
   }, 30000);
+
+  // 2026-10-31 (permintaan pemilik) — hapus resep, dengan konfirmasi; tersembunyi tanpa izin edit resep.
+  it('removes the recipe after confirmation and reloads', async () => {
+    removeRecipe.mockResolvedValue({ removed_versions: 2 });
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    const { emitted } = renderSection();
+    await screen.findAllByTestId('recipe-version-row');
+
+    await user.click(screen.getByTestId('recipe-remove'));
+    const dialog = await screen.findByRole('dialog', { name: 'Hapus resep ini?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Hapus resep' }));
+
+    await waitFor(() => expect(removeRecipe).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(emitted().changed).toBeTruthy());
+  });
+
+  it('hides Remove without the recipe permission', async () => {
+    renderSection({ permissions: [] });
+    await screen.findAllByTestId('recipe-version-row');
+    expect(screen.queryByTestId('recipe-remove')).toBeNull();
+  });
 });

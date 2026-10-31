@@ -31,15 +31,46 @@ export function isSelectionValid(groups, selection) {
   });
 }
 
-/** Total selisih harga dari seluruh pilihan (angka); dipakai untuk menampilkan harga berjalan. */
-export function selectionDelta(groups, selection) {
+/**
+ * Total selisih harga dari seluruh pilihan (angka); dipakai untuk menampilkan harga berjalan.
+ *
+ * 2026-10-31 — grup `portion_per_option` ("tiap pilihan = 1 porsi"): pilihan pertama tertutup harga dasar, tiap
+ * pilihan berikutnya menambah SATU `base` lagi. Urutan = urutan opsi grup (bukan urutan klik), sama dengan
+ * ModifierResolver::resolve() di server. Tanpa `base` (pemanggil lama) perilakunya tidak berubah.
+ */
+export function selectionDelta(groups, selection, base = 0) {
   let delta = 0;
   for (const g of groups) {
+    let picked = 0;
     for (const o of g.options) {
-      if ((selection[g.id] ?? []).includes(o.id)) delta += Number(o.price_delta) || 0;
+      if (!(selection[g.id] ?? []).includes(o.id)) continue;
+      delta += (Number(o.price_delta) || 0) + (g.portion_per_option && picked > 0 ? base : 0);
+      picked += 1;
     }
   }
   return delta;
+}
+
+/** Jumlah porsi pilihan ini: terbesar dari banyaknya pilihan di grup porsi, minimal 1. */
+export function portionCount(groups, selection) {
+  return groups.reduce((n, g) => (g.portion_per_option ? Math.max(n, (selection[g.id] ?? []).length) : n), 1);
+}
+
+/**
+ * 2026-10-31 (permintaan pemilik) — stok produk bersumber bahan modifier: untuk tiap grup WAJIB yang memetakan bahan,
+ * jumlah porsi semua pilihannya (SOTO 17 + AYAM BAWANG 0 = 17); hasilnya grup terkecil. `null` = tidak diketahui:
+ * tidak ada grup wajib berbahan, atau sebuah pilihan wajib tanpa bahan (tak terbatas). `portions` per pilihan dari
+ * server (saldo outlet shift ÷ pemakaian per porsi, minus = 0).
+ */
+export function materialPortions(groups) {
+  let result = null;
+  for (const g of groups ?? []) {
+    if (groupRange(g)[0] < 1 || !g.options.some((o) => (o.materials ?? []).length)) continue;
+    if (g.options.some((o) => o.portions === null || o.portions === undefined)) return null;
+    const sum = g.options.reduce((n, o) => n + Math.max(0, o.portions), 0);
+    result = result === null ? sum : Math.min(result, sum);
+  }
+  return result;
 }
 
 export function selectedOptionIds(selection) {

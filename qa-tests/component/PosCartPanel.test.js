@@ -72,4 +72,14 @@ describe('PosCartPanel', () => {
     const enlarged = await screen.findAllByAltText('Produk A');
     expect(enlarged.length).toBeGreaterThan(1);
   });
+
+  // 087 — baris tanpa stok sendiri (current_stock null) tidak dibatasi jumlahnya.
+  it('never disables + for an item without its own stock', () => {
+    const { pinia } = renderPanel();
+    usePosCartStore(pinia).add({ variant_id: 9, sku: 'IKU', name: 'Indomie Kuah', sell_price: '15000.00', current_stock: null });
+    return Promise.resolve().then(() => {
+      expect(screen.getByRole('button', { name: 'Tambah Indomie Kuah' })).not.toBeDisabled();
+    });
+  });
 });
+

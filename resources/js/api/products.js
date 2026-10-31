@@ -36,6 +36,11 @@ export function addVariant(productId, payload) {
   return client.post(`/products/${productId}/variants`, payload).then((r) => r.data);
 }
 
+/** 2026-10-31 — DELETE /variants/{id}/permanent: hanya varian tanpa riwayat (409 bila dipakai / varian terakhir). */
+export function deleteVariantPermanent(variantId) {
+  return client.delete(`/variants/${variantId}/permanent`).then((r) => r.data);
+}
+
 export function updateVariant(variantId, payload) {
   return client.put(`/variants/${variantId}`, payload).then((r) => r.data);
 }
