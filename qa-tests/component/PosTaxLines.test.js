@@ -36,7 +36,8 @@ function renderPayment(over = {}) {
   });
 }
 
-// 083 / US2 — toggle hanya tampilan: baris pajak hilang, total tetap memuat pajak.
+// 083 / US2 — baris pajak mengikuti toggle. Catatan bertanggal 2026-10-31 (perintah pemilik, membalik 083):
+// toggle mati = pajak TIDAK dihitung, jadi total = dasar tanpa pajak.
 describe('keranjang POS', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -48,12 +49,13 @@ describe('keranjang POS', () => {
     expect(screen.getAllByText('Rp 7.700').length).toBeGreaterThan(0);
   });
 
-  it('menyembunyikan baris pajak tetapi total tetap 7.700 saat tampil mati', async () => {
+  it('tampil mati: baris pajak hilang DAN pajak tidak dihitung (total 7.000)', async () => {
     renderCart({ show: false });
     await Promise.resolve();
 
     expect(screen.queryByText(/PPN/)).not.toBeInTheDocument();
-    expect(screen.getAllByText('Rp 7.700').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Rp 7.700')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Rp 7.000').length).toBeGreaterThan(0);
   });
 
   it('tarif 0 tidak menampilkan baris walau tampil aktif', async () => {
@@ -73,7 +75,8 @@ describe('modal pembayaran POS', () => {
     expect(screen.getAllByText('Rp 7.700').length).toBeGreaterThan(0);
   });
 
-  it('menyembunyikan baris pajak tetapi total tetap 7.700', () => {
+  // Modal hanya MENAMPILKAN total dari PosView (prop); bila pajak ditampilkan mati, baris pajak tidak muncul.
+  it('menyembunyikan baris pajak; total adalah prop dari PosView', () => {
     renderPayment({ taxShow: false });
 
     expect(screen.queryByText(/PPN/)).not.toBeInTheDocument();

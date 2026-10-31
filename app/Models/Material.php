@@ -69,6 +69,12 @@ class Material extends Model
         return $this->hasMany(MaterialStockMovement::class);
     }
 
+    /** 087 — pilihan modifier yang memakai bahan ini ("dipakai oleh"). */
+    public function modifierUsages(): HasMany
+    {
+        return $this->hasMany(ModifierOptionMaterial::class);
+    }
+
     /**
      * Harga acuan bahan ini untuk perhitungan biaya BOM — lihat dokblok
      * BomCostCalculator untuk aturan lengkap pemilihan vendor saat lebih

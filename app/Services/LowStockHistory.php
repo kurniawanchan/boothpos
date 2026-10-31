@@ -39,7 +39,9 @@ class LowStockHistory
             ->where('product_variants.data_mode', ModeGate::current())
             ->whereNotNull('product_variants.low_stock_alert')
             ->whereColumn('variant_outlet_stock.current_stock', '<=', 'product_variants.low_stock_alert')
-            ->where('product_variants.is_active', 1);
+            ->where('product_variants.is_active', 1)
+            // 087 US6 — produk bersumber stok `modifier` tidak punya stok varian, jadi tidak pernah "menipis".
+            ->whereExists(fn ($p) => $p->selectRaw('1')->from('products')->whereColumn('products.id', 'product_variants.product_id')->where('products.stock_source', 'variant'));
 
         return OutletFilter::apply($q, 'variant_outlet_stock.outlet_id');
     }
@@ -57,6 +59,7 @@ class LowStockHistory
         $thresholds = ProductVariant::query()
             ->whereNotNull('low_stock_alert')
             ->where('is_active', 1)
+            ->stockFromVariant() // 087 US6
             ->pluck('low_stock_alert', 'id');
 
         if ($thresholds->isEmpty()) {

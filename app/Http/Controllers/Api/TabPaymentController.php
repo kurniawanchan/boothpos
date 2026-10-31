@@ -49,7 +49,8 @@ class TabPaymentController extends Controller
             $result = $this->settlement->split($order, $request->validated(), $request->user());
 
             return [
-                ['paid_order' => new TabResource($result['paid_order']), 'tab' => new TabResource($result['tab'])],
+                // 087 — peringatan bahan minus dari penjualan hasil split (aditif).
+                app(\App\Support\MaterialWarningBag::class)->attachTo(['paid_order' => new TabResource($result['paid_order']), 'tab' => new TabResource($result['tab'])]),
                 $result['replayed'] ? 200 : 201,
             ];
         });
@@ -58,7 +59,8 @@ class TabPaymentController extends Controller
     public function store(TabPaymentRequest $request, Order $order): JsonResponse
     {
         return $this->guarded(
-            fn () => new TabResource($this->settlement->settle($order, $request->validated(), $request->user())),
+            // 087 — peringatan bahan minus saat tab lunas (aditif).
+            fn () => app(\App\Support\MaterialWarningBag::class)->attachTo(new TabResource($this->settlement->settle($order, $request->validated(), $request->user()))),
         );
     }
 }

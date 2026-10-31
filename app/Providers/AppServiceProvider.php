@@ -21,6 +21,8 @@ class AppServiceProvider extends ServiceProvider
         // antar-permintaan pada worker jangka panjang).
         $this->app->scoped(\App\Support\OutletContext::class);
         $this->app->scoped(\App\Support\OutletPriceBook::class);
+        // 087 — peringatan bahan minus dari penyelesaian pesanan, per permintaan.
+        $this->app->scoped(\App\Support\MaterialWarningBag::class);
 
         // Pembungkus mysqldump/mysql untuk cadangan & pemulihan; test mengganti
         // binding ini dengan fake (lihat DatabaseDumper untuk alasannya).

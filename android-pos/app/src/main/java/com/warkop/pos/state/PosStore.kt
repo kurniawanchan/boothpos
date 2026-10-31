@@ -41,7 +41,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class Dest { SETUP, PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, SHIFT, XREPORT, CLOSE_SHIFT, CLOSE_RESULT, SYNC }
+enum class Dest { SETUP, PIN, OPEN_SHIFT, TABLES, EDITOR, TENDER, DONE, ORDERS, SHIFT, XREPORT, CLOSE_SHIFT, CLOSE_RESULT, SYNC, MATERIALS }
 
 /** 073 / FR-018 — layar alur "menyelesaikan order": terminal yang dicabut tidak memotongnya di tengah jalan. */
 internal val FINISHING_ORDER = setOf(Dest.EDITOR, Dest.TENDER, Dest.DONE)
@@ -192,6 +192,7 @@ class PosStore(
             Dest.ORDERS -> loadClosed()
             Dest.SHIFT, Dest.XREPORT, Dest.CLOSE_SHIFT -> refreshShiftReport()
             Dest.SYNC -> viewModelScope.launch { printer?.checkConnection() }
+            Dest.MATERIALS -> loadMaterials()
             else -> Job().apply { complete() }
         }
         refreshing = true
@@ -243,6 +244,15 @@ class PosStore(
     var activeId by mutableStateOf<String?>(null); private set
     var sheet by mutableStateOf<Sheet?>(null); private set
     var toast by mutableStateOf<String?>(null); private set
+    /**
+     * 087 (2026-11-01) — peringatan bahan minus dari pelunasan terakhir. Terpisah dari [toast] (satu slot, ditimpa pesan
+     * berikutnya seperti "QRIS dicatat") dan bertahan sampai kasir menutupnya. Penjualan sudah tercatat.
+     */
+    var materialNotice by mutableStateOf<List<String>>(emptyList()); private set
+    fun dismissMaterialNotice() { materialNotice = emptyList() }
+    private fun noteMaterialWarnings(order: Order) {
+        if (order.materialWarnings.isNotEmpty()) materialNotice = order.materialWarnings.map { it.message() }
+    }
     var pinFails by mutableIntStateOf(0); private set
     /** 073 — pesan di layar penyiapan saat tablet dikembalikan ke sana (terminal dicabut / tak berlaku lagi); null = tanpa pesan. */
     var setupNotice by mutableStateOf<String?>(null); private set
@@ -1154,6 +1164,7 @@ class PosStore(
                 conn = Conn.ONLINE
                 itemSplitResult = Load.Ready(result)
                 upsert(result.remaining)
+                noteMaterialWarnings(result.paid)
             } catch (e: ApiError) {
                 if (e is ApiError.Network) { conn = Conn.OFFLINE; itemSplitResult = Load.Idle; say(e.message); return@launch }
                 keys.settled(intent)
@@ -1199,6 +1210,7 @@ class PosStore(
      */
     private fun onSaleClosed(order: Order) {
         printer?.enqueueStruk(order.id, 1)
+        noteMaterialWarnings(order)
     }
 
 
@@ -1558,6 +1570,38 @@ class PosStore(
 
     /** Daftar penjualan selesai dari server (layar Order → Selesai). */
     /** 055 / T029 — data yang sudah tampil tetap saat menyegarkan; galat hanya mengganti keadaan bila belum ada data. */
+    // ---------- stok bahan (087 lanjutan, 2026-11-01): hanya baca, saldo outlet tablet ----------
+    var materials by mutableStateOf<Load<List<com.warkop.pos.model.MaterialStock>>>(Load.Idle); private set
+    var materialSelected by mutableStateOf<com.warkop.pos.model.MaterialStock?>(null); private set
+    var materialMoves by mutableStateOf<Load<List<com.warkop.pos.model.MaterialMove>>>(Load.Idle); private set
+
+    fun loadMaterials(): Job {
+        val b = backend ?: return Job().apply { complete() }
+        // Daftar lama tetap tampil saat menyegarkan; "memuat" hanya untuk pemuatan pertama.
+        if (materials !is Load.Ready) materials = Load.Loading
+        return viewModelScope.launch {
+            materials = try {
+                Load.Ready(retryNetwork { b.materialStock() }).also { conn = Conn.ONLINE }
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                Load.Failed(e)
+            }
+        }
+    }
+
+    fun openMaterial(m: com.warkop.pos.model.MaterialStock) {
+        val b = backend ?: return
+        materialSelected = m
+        materialMoves = Load.Loading
+        viewModelScope.launch {
+            val next = try { Load.Ready(retryNetwork { b.materialMoves(m.id) }) } catch (e: ApiError) { Load.Failed(e) }
+            // Pengguna bisa sudah memilih bahan lain sebelum jawaban ini tiba.
+            if (materialSelected?.id == m.id) materialMoves = next
+        }
+    }
+
+    fun closeMaterial() { materialSelected = null; materialMoves = Load.Idle }
+
     fun loadClosed(): Job {
         val b = backend ?: return Job().apply { complete() }
         // 084 — daftar Selesai hanya milik shift yang sedang terbuka; tanpa shift tidak ada yang ditampilkan (pesanan shift

@@ -175,6 +175,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/products/{product}/recipes', [\App\Http\Controllers\Api\RecipeController::class, 'index']);
         Route::post('/products/{product}/recipes', [\App\Http\Controllers\Api\RecipeController::class, 'store']);
         Route::post('/products/{product}/recipes/recalculate', [\App\Http\Controllers\Api\RecipeController::class, 'recalculate']);
+        Route::delete('/products/{product}/recipes', [\App\Http\Controllers\Api\RecipeController::class, 'destroy']);
         Route::get('/recipes/{recipe}', [\App\Http\Controllers\Api\RecipeController::class, 'show']);
         Route::put('/products/{product}/modifier-links', [\App\Http\Controllers\Api\ModifierLinkController::class, 'update']);
         Route::put('/products/{product}/variants', [\App\Http\Controllers\Api\VariantBatchController::class, 'update']);
@@ -201,6 +202,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/products/{product}/image', [ProductController::class, 'uploadImage']);
         Route::post('/products/{product}/variants', [ProductController::class, 'storeVariant']);
         Route::put('/variants/{variant}', [ProductController::class, 'updateVariant']);
+        // 2026-10-31 — hapus permanen hanya varian tanpa riwayat (409 bila dipakai / varian terakhir).
+        Route::delete('/variants/{variant}/permanent', [ProductController::class, 'destroyVariantPermanent']);
         // 045 Stage 3 — harga varian per outlet (lewat PriceService).
         Route::get('/variants/{variant}/outlet-prices', [\App\Http\Controllers\Api\VariantOutletPriceController::class, 'index']);
         Route::put('/variants/{variant}/outlet-prices/{outlet}', [\App\Http\Controllers\Api\VariantOutletPriceController::class, 'update']);
@@ -228,6 +231,8 @@ Route::prefix('v1')->group(function () {
         // /products/{product}/variants tidak berdiri sendiri sebagai
         // apiResource.
         Route::apiResource('vendors', VendorController::class);
+        // 2026-10-31 — buku besar semua bahan (log Inventori → Stok); SEBELUM apiResource supaya tidak ditangkap {material}.
+        Route::get('/materials/movements', [MaterialController::class, 'allMovements']);
         Route::apiResource('materials', MaterialController::class);
 
         // 006-purchase-order-and-ops (US1) — membalik pencoretan PRD §10.2
@@ -239,6 +244,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/purchase-orders/{purchase_order}/invoice', [PurchaseOrderController::class, 'invoice']);
         Route::post('/materials/{material}/vendor-prices', [MaterialController::class, 'storeVendorPrice']);
         Route::post('/materials/{material}/adjustments', [MaterialController::class, 'adjustStock']);
+        // 087 — riwayat pergerakan stok bahan (buku besar per outlet yang berlaku).
+        Route::get('/materials/{material}/movements', [MaterialController::class, 'movements']);
         Route::put('/vendor-prices/{vendorPrice}', [MaterialController::class, 'updateVendorPrice']);
         Route::delete('/vendor-prices/{vendorPrice}', [MaterialController::class, 'destroyVendorPrice']);
 

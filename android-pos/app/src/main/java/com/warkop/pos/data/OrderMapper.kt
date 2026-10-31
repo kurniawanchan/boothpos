@@ -84,6 +84,15 @@ object OrderMapper {
             serverPaid = rp(t.paidAmount),
             serverChange = rp(t.changeAmount),
             note = t.notes.orEmpty(),
+            materialWarnings = warnings(t.materialWarnings),
+        )
+    }
+
+    /** 087 — peringatan bahan minus dari respons pelunasan/split (angka desimal string → Double untuk tampilan). */
+    fun warnings(list: List<com.warkop.core.network.dto.MaterialWarningDto>): List<com.warkop.pos.model.MaterialWarning> = list.map {
+        com.warkop.pos.model.MaterialWarning(
+            it.material, it.unit, it.outlet,
+            it.stockBefore.toDoubleOrNull() ?: 0.0, it.required.toDoubleOrNull() ?: 0.0, it.stockAfter.toDoubleOrNull() ?: 0.0,
         )
     }
 

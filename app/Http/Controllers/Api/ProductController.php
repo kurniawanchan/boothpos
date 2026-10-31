@@ -160,6 +160,7 @@ class ProductController extends Controller
                 'tax_category' => $data['tax_category'] ?? null,
                 'prep_minutes' => $data['prep_minutes'] ?? null,
                 'is_retail' => $data['is_retail'] ?? false,
+                'stock_source' => $data['stock_source'] ?? \App\Models\Product::STOCK_VARIANT, // 087 US6
             ]);
 
             foreach ($data['variants'] as $variantInput) {
@@ -269,11 +270,26 @@ class ProductController extends Controller
         // snapshot before/after ditulis apa adanya (bukan hanya kalau harga
         // ikut berubah) supaya activity_logs tetap satu sumber audit yang
         // konsisten untuk seluruh perubahan master data produk.
-        DB::transaction(function () use ($request, $product) {
+        $warnings = [];
+        DB::transaction(function () use ($request, $product, &$warnings) {
             $before = $product->only($product->getFillable());
 
             $product->update(collect($request->validated())->except('outlet_ids')->all());
             $this->applyCarried($product, $request->validated());
+
+            // 087 US6 (FR-027) — perubahan sumber stok dicatat tersendiri, di transaksi yang sama.
+            if ($product->wasChanged('stock_source')) {
+                $this->activityLogger->log(
+                    userId: $request->user()?->id,
+                    action: 'stock_source_changed',
+                    entityType: 'Product',
+                    entityId: $product->id,
+                    description: "Mengubah sumber stok {$product->name} menjadi {$product->stock_source}.",
+                    oldValues: ['stock_source' => $before['stock_source'] ?? \App\Models\Product::STOCK_VARIANT],
+                    newValues: ['stock_source' => $product->stock_source],
+                );
+            }
+            $warnings = $this->stockSourceWarnings($product);
 
             $this->activityLogger->log(
                 userId: $request->user()?->id,
@@ -286,7 +302,39 @@ class ProductController extends Controller
             );
         });
 
-        return response()->json(new ProductResource($product->fresh(['homeOutlet', 'category', 'outletItemSettings.outlet', ...$this->variantRelations($request)])));
+        $resource = new ProductResource($product->fresh(['homeOutlet', 'category', 'outletItemSettings.outlet', ...$this->variantRelations($request)]));
+
+        // 087 US6 — `warnings` aditif, hanya bila ada (FR-027, FR-029); bentuk respons lama tidak berubah.
+        return response()->json($warnings === [] ? $resource : $resource->resolve($request) + ['warnings' => $warnings]);
+    }
+
+    /**
+     * 087 US6 — peringatan untuk produk bersumber `modifier` (tidak menolak):
+     *  - `variant_stock_remaining`: varian masih punya saldo yang kini tidak dipakai (hanya saat baru diubah);
+     *  - `no_material_mappings`: tidak ada pilihan modifier efektif yang memetakan bahan → penjualan tak mengurangi stok.
+     *
+     * @return list<array{code: string, total?: string}>
+     */
+    private function stockSourceWarnings(Product $product): array
+    {
+        if ($product->stock_source !== Product::STOCK_MODIFIER) {
+            return [];
+        }
+
+        $warnings = [];
+        if ($product->wasChanged('stock_source')) {
+            $total = (int) \App\Models\VariantOutletStock::query()->whereIn('variant_id', $product->variants()->withTrashed()->pluck('id'))->sum('current_stock');
+            if ($total !== 0) {
+                $warnings[] = ['code' => 'variant_stock_remaining', 'total' => (string) $total];
+            }
+        }
+
+        $optionIds = app(\App\Services\ModifierResolver::class)->effectiveGroups($product->fresh())->flatMap(fn ($g) => $g->options->pluck('id'));
+        if (! \App\Models\ModifierOptionMaterial::query()->whereIn('modifier_option_id', $optionIds)->exists()) {
+            $warnings[] = ['code' => 'no_material_mappings'];
+        }
+
+        return $warnings;
     }
 
     /**
@@ -375,6 +423,22 @@ class ProductController extends Controller
         }
 
         return response()->json(new ProductVariantResource($variant), 201);
+    }
+
+    /**
+     * 2026-10-31 (permintaan pemilik) — hapus varian permanen, hanya bila belum pernah dipakai (VariantDeletionService).
+     * 409 `variant_in_use` / `last_variant`: varian tetap ada dan masih bisa dinonaktifkan.
+     */
+    public function destroyVariantPermanent(Request $request, ProductVariant $variant): JsonResponse
+    {
+        $this->authorize('update', $variant->product);
+
+        $refused = app(\App\Services\VariantDeletionService::class)->deleteIfUnused($variant, $request->user());
+        if ($refused !== null) {
+            return response()->json(['message' => __("products.variant_delete_{$refused}"), 'code' => $refused], 409);
+        }
+
+        return response()->json(['message' => __('products.variant_deleted'), 'id' => $variant->id]);
     }
 
     public function updateVariant(UpdateVariantRequest $request, ProductVariant $variant): JsonResponse
@@ -553,6 +617,9 @@ class ProductController extends Controller
             'outlet_price' => ($op = app(\App\Support\OutletPriceBook::class)->forCurrentOutlet($v->id)) === null ? null : number_format($op, 2, '.', ''),
             'current_stock' => $v->current_stock,
             'outlet_stock' => app(\App\Support\OutletPriceBook::class)->orderingStockOrNull($v->id),
+            // 087 US6 — pelacakan EFEKTIF (sumber stok produk ikut): kartu hasil pencarian POS tidak menampilkan "habis"
+            // untuk produk bersumber modifier atau menu masak. Sebelumnya kunci ini tidak ada sama sekali di sini.
+            'track_stock' => $v->tracksOwnStock(),
             // Falls back to the PRODUCT's own image when this variant has
             // none of its own — same accessor ProductVariant::image_url now
             // exposes to every caller (see its docblock), not duplicated

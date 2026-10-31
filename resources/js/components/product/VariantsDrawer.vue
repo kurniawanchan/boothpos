@@ -6,6 +6,8 @@ import { useSettingsStore } from '../../stores/settings';
 import { useToastStore } from '../../stores/toast';
 import { variantName, variantPrice } from '../../utils/itemDetail';
 import FormDrawer from '../page/FormDrawer.vue';
+import ConfirmDialog from '../ui/ConfirmDialog.vue';
+import { useVariantDelete } from '../../composables/useVariantDelete';
 import BaseInput from '../ui/BaseInput.vue';
 import { CELL_ERROR, CELL_HEAD, ROW_REMOVE, TABLE_LINK, cellInputClass } from './cellStyles';
 
@@ -18,7 +20,8 @@ import { CELL_ERROR, CELL_HEAD, ROW_REMOVE, TABLE_LINK, cellInputClass } from '.
  * server (riwayat harga, mode rilis, ambang persetujuan) — klien hanya mengirim, tidak menghitung apa pun.
  *
  * - SKU varian baru dibangkitkan server (tidak ada kolom SKU yang bisa diisi); baris baru boleh dibuang sebelum
- *   disimpan, varian yang sudah ada TIDAK bisa dihapus (hanya dinonaktifkan) — server tak punya jalur hapus di sini.
+ *   disimpan. Varian tersimpan boleh dihapus PERMANEN (2026-10-31) hanya bila belum pernah dipakai — server yang
+ *   menilai (DELETE /variants/{id}/permanent, useVariantDelete); yang punya riwayat tetap hanya dinonaktifkan.
  * - "Berlaku mulai" satu tanggal untuk seluruh batch (kontrak server): kosong = seketika (rilis mati) / rilis
  *   berikutnya (rilis hidup).
  * - Kolom angka/tanggal tanpa atribut `min`/`max`: atribut itu memicu validasi bawaan browser yang menahan submit tanpa
@@ -35,7 +38,7 @@ const props = defineProps({
   open: { type: Boolean, default: false },
   product: { type: Object, default: null }, // { id, name, variants }
 });
-const emit = defineEmits(['close', 'saved']);
+const emit = defineEmits(['close', 'saved', 'changed']);
 const { t } = useI18n();
 const settings = useSettingsStore();
 const toast = useToastStore();
@@ -79,6 +82,13 @@ function removeNew(index) {
   // Indeks galat bergeser mengikuti baris; mengosongkannya lebih aman daripada menampilkan galat di baris yang salah.
   Object.keys(rowErrors).forEach((k) => delete rowErrors[k]);
 }
+
+// Hapus permanen varian tersimpan: baris dibuang dari tabel dan halaman di belakang dimuat ulang (`changed`).
+const variantDelete = useVariantDelete((variant) => {
+  rows.value = rows.value.filter((r) => r.id !== variant.id);
+  Object.keys(rowErrors).forEach((k) => delete rowErrors[k]);
+  emit('changed');
+});
 
 const newNumber = (index) => rows.value.slice(0, index + 1).filter((r) => r.id === null).length;
 const rowLabel = (r) => r.name || r.sku || '';
@@ -199,9 +209,12 @@ async function submit() {
                   <input v-model="r.active" type="checkbox" class="h-4 w-4 accent-brand" :aria-label="t('products.vd_active_aria', { name: rowLabel(r) || String(i + 1) })" />
                 </td>
                 <td class="border-l border-line-3 px-1 py-1.5 text-center">
-                  <!-- Hanya baris BARU yang bisa dibuang; varian tersimpan hanya dinonaktifkan (tidak pernah dihapus). -->
+                  <!-- Baris BARU dibuang di klien; varian tersimpan dihapus permanen lewat server (hanya bila tanpa riwayat). -->
                   <button v-if="r.id === null" type="button" :class="ROW_REMOVE" :aria-label="t('products.vd_remove_new', { n: newNumber(i) })" @click="removeNew(i)">
                     <i class="ph-duotone ph-x text-[14px]" aria-hidden="true"></i>
+                  </button>
+                  <button v-else type="button" :class="ROW_REMOVE" :aria-label="t('products.variant_delete_aria', { name: rowLabel(r) })" data-testid="vd-delete" @click="variantDelete.ask({ id: r.id, name: rowLabel(r) })">
+                    <i class="ph-duotone ph-trash text-[14px]" aria-hidden="true"></i>
                   </button>
                 </td>
               </tr>
@@ -223,5 +236,14 @@ async function submit() {
         />
       </div>
     </div>
+    <ConfirmDialog
+      :open="variantDelete.target.value !== null"
+      :title="t('products.variant_delete_title')"
+      :message="t('products.variant_delete_message', { name: variantDelete.target.value?.name ?? '' })"
+      :confirm-label="t('products.variant_delete_confirm')"
+      :loading="variantDelete.deleting.value"
+      @close="variantDelete.cancel()"
+      @confirm="variantDelete.confirm()"
+    />
   </FormDrawer>
 </template>

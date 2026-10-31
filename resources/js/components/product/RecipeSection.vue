@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { listRecipes, recalculateRecipeCost } from '../../api/recipes';
+import { listRecipes, recalculateRecipeCost, removeRecipe } from '../../api/recipes';
 import { useAuthStore } from '../../stores/auth';
 import { useToastStore } from '../../stores/toast';
 import { formatDate, formatIDR } from '../../utils/formatters';
@@ -86,6 +86,26 @@ async function afterSaved() {
   emit('changed');
 }
 
+// 2026-10-31 (permintaan pemilik) — hapus resep (semua versi). Konfirmasi dulu: tidak bisa dibatalkan, varian berhenti
+// mengikuti resep dan harga modalnya bisa diubah tangan lagi. Penjualan yang sudah tercatat tidak berubah.
+const showRemove = ref(false);
+const removing = ref(false);
+async function performRemove() {
+  removing.value = true;
+  try {
+    await removeRecipe(props.productId);
+    showRemove.value = false;
+    showDrawer.value = false;
+    toast.success(t('products.rc_removed'));
+    await loadVersions();
+    emit('changed');
+  } catch {
+    showRemove.value = false;
+  } finally {
+    removing.value = false;
+  }
+}
+
 async function performRecalc() {
   recalculating.value = true;
   try {
@@ -108,6 +128,7 @@ async function performRecalc() {
   <ItemSection :title="title" testid="section-recipe">
     <template v-if="canEditRecipe" #action>
       <BaseButton v-if="versions.length" variant="secondary" size="sm" data-testid="recipe-recalc" @click="showRecalc = true">{{ t('products.rc_recalc') }}</BaseButton>
+      <BaseButton v-if="versions.length" variant="danger" size="sm" data-testid="recipe-remove" @click="showRemove = true">{{ t('products.rc_remove') }}</BaseButton>
       <BaseButton variant="secondary" size="sm" data-testid="recipe-edit" @click="showDrawer = true">{{ versions.length ? t('products.rc_edit') : t('products.rc_create') }}</BaseButton>
     </template>
 
@@ -170,7 +191,16 @@ async function performRecalc() {
     </div>
 
     <template v-if="canEditRecipe">
-      <RecipeDrawer :open="showDrawer" :product="drawerProduct" :versions="versions" @close="showDrawer = false" @saved="afterSaved" />
+      <RecipeDrawer :open="showDrawer" :product="drawerProduct" :versions="versions" @close="showDrawer = false" @saved="afterSaved" @remove="showRemove = true" />
+      <ConfirmDialog
+        :open="showRemove"
+        :title="t('products.rc_remove_title')"
+        :message="t('products.rc_remove_message', { count: versions.length })"
+        :confirm-label="t('products.rc_remove')"
+        :loading="removing"
+        @close="showRemove = false"
+        @confirm="performRemove"
+      />
       <ConfirmDialog
         :open="showRecalc"
         :title="t('products.rc_recalc_title')"

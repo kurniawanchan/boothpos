@@ -44,7 +44,7 @@ async function save() {
       <input v-model="show" type="checkbox" class="h-4 w-4 border-line accent-brand" data-testid="tax-show" />
       {{ t('settings.tax_show_label') }}
     </label>
-    <p class="text-[12.5px] text-muted-3">{{ t('settings.tax_help_hidden_still_charged') }}</p>
+    <p class="text-[12.5px] text-muted-3">{{ t('settings.tax_help_hidden_not_charged') }}</p>
     <p class="text-[12.5px] text-muted-3">{{ t('settings.tax_help_shared_modes') }}</p>
     <BaseButton size="sm" class="self-start" :loading="saving" data-testid="tax-save" @click="save">{{ t('settings.save_tax') }}</BaseButton>
   </SettingsSection>

@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import { formatIDR, parseMoney } from '../../utils/money';
-import { describeRange, groupRange, isSelectionValid, selectedOptionIds, selectionDelta } from '../../utils/modifierRules';
+import { describeRange, groupRange, isSelectionValid, portionCount, selectedOptionIds, selectionDelta } from '../../utils/modifierRules';
 
 /**
  * 028 US3 — memilih modifier + catatan saat menambah item ke tab. Aturan
@@ -39,7 +39,10 @@ watch(
 );
 
 const valid = computed(() => isSelectionValid(props.groups, selection));
-const unitPrice = computed(() => parseMoney(String(props.basePrice)) + selectionDelta(props.groups, selection));
+const base = computed(() => parseMoney(String(props.basePrice)));
+// 2026-10-31 — grup "tiap pilihan = 1 porsi" menambah harga dasar per pilihan tambahan (sama dengan server).
+const unitPrice = computed(() => base.value + selectionDelta(props.groups, selection, base.value));
+const portions = computed(() => portionCount(props.groups, selection));
 const negative = computed(() => unitPrice.value < 0);
 
 const chosen = (g, option) => (selection[g.id] ?? []).includes(option.id);
@@ -59,11 +62,27 @@ function toggle(g, option) {
   else if (!full(g)) selection[g.id] = [...current, option.id];
 }
 
-const deltaLabel = (o) => {
-  const n = Number(o.price_delta);
+// Grup porsi: pilihan yang BUKAN porsi pertama (urutan opsi, seperti server) membawa harga dasar lagi.
+const extraPortion = (g, o) => {
+  if (!g.portion_per_option) return false;
+  const picked = g.options.filter((x) => chosen(g, x));
+  return picked.length > 0 && picked[0].id !== o.id;
+};
+const deltaLabel = (g, o) => {
+  const n = Number(o.price_delta) + (extraPortion(g, o) ? base.value : 0);
   if (!n) return '';
   return `${n > 0 ? '+' : '−'}${formatIDR(Math.abs(n))}`;
 };
+
+// 2026-10-31 (permintaan pemilik) — stok bahan per pilihan di outlet shift dan pemakaian per porsi. Hanya informasi:
+// penjualan tidak ditolak karena bahan (FR-014), jadi pilihan bersaldo habis tetap bisa dipilih, ditandai merah.
+const qty = (v) => {
+  const n = Number(v);
+  return `${n < 0 ? '−' : ''}${Math.abs(n).toLocaleString('id-ID', { maximumFractionDigits: 3 })}`;
+};
+const stockLines = (o) => (o.materials ?? []).filter((m) => m.on_hand !== null && m.on_hand !== undefined)
+  .map((m) => t('floor.tab.mod_stock_line', { material: m.name, stock: qty(m.on_hand), use: qty(m.quantity), unit: m.unit }));
+const lowStock = (o) => o.portions !== null && o.portions !== undefined && o.portions <= 0;
 
 function confirm() {
   if (!valid.value || negative.value) return;
@@ -96,8 +115,16 @@ function confirm() {
             @click="toggle(g, o)"
             @keydown.space.prevent="toggle(g, o)"
           />
-          <span class="flex-1 font-semibold">{{ o.name }}</span>
-          <span class="text-[12.5px] font-bold text-muted-4">{{ deltaLabel(o) }}</span>
+          <span class="flex flex-1 flex-col">
+            <span class="font-semibold">{{ o.name }}</span>
+            <span
+              v-if="stockLines(o).length"
+              class="text-[11.5px]"
+              :class="lowStock(o) ? 'text-danger-text' : 'text-muted-3'"
+              :data-testid="`option-stock-${o.id}`"
+            >{{ stockLines(o).join(' · ') }}</span>
+          </span>
+          <span class="text-[12.5px] font-bold text-muted-4">{{ deltaLabel(g, o) }}</span>
         </label>
       </fieldset>
 
@@ -116,7 +143,10 @@ function confirm() {
     </div>
     <template #footer>
       <div class="flex items-center justify-between gap-3">
-        <div class="text-[15px] font-extrabold" data-testid="modifier-price">{{ formatIDR(Math.max(0, unitPrice)) }}</div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-[15px] font-extrabold" data-testid="modifier-price">{{ formatIDR(Math.max(0, unitPrice)) }}</span>
+          <span v-if="portions > 1" class="text-[12px] font-semibold text-muted-4" data-testid="modifier-portions">{{ t('floor.tab.mod_portions', { count: portions }) }}</span>
+        </div>
         <div class="flex gap-2.5">
           <BaseButton variant="secondary" @click="emit('close')">{{ t('common.cancel') }}</BaseButton>
           <BaseButton :disabled="!valid || negative" :loading="submitting" @click="confirm">{{ t('floor.tab.mod_add') }}</BaseButton>

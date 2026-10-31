@@ -138,18 +138,36 @@ class TaxSettingTest extends TestCase
         $this->assertFalse(filter_var($log->new_values['value'], FILTER_VALIDATE_BOOLEAN));
     }
 
-    public function test_a_hidden_tax_is_still_charged_and_stored(): void
+    /**
+     * Catatan bertanggal 2026-10-31 (perintah pemilik, membalik 083): pajak yang ditampilkan mati TIDAK dihitung.
+     * Dulu tes ini memastikan kebalikannya (`a hidden tax is still charged and stored`).
+     */
+    public function test_a_hidden_tax_is_not_charged(): void
     {
         $this->actingAsRole('owner');
         $this->makeOutlets(1);
         $this->saveTax('10', 'PPN', false);
 
-        $orderId = $this->paidOrder(7000, 7700);
+        $orderId = $this->paidOrder(7000, 7000);
 
         $this->getJson("/api/v1/orders/{$orderId}")->assertOk()
-            ->assertJsonPath('tax_amount', '700.00')->assertJsonPath('tax_rate', '10.00')->assertJsonPath('total_amount', '7700.00');
+            ->assertJsonPath('tax_amount', '0.00')->assertJsonPath('tax_rate', '0.00')->assertJsonPath('total_amount', '7000.00');
         $this->getJson("/api/v1/orders/{$orderId}/receipt")->assertOk()
-            ->assertJsonPath('tax_show', false)->assertJsonPath('tax_amount', '700.00')->assertJsonPath('total_amount', '7700.00');
+            ->assertJsonPath('tax_show', false)->assertJsonPath('tax_amount', '0.00')->assertJsonPath('total_amount', '7000.00');
+    }
+
+    public function test_switching_tax_display_off_affects_only_new_orders(): void
+    {
+        $this->actingAsRole('owner');
+        $this->makeOutlets(1);
+        $this->saveTax('10', 'PPN', true);
+        $before = $this->paidOrder(7000, 7700);
+
+        $this->saveTax('10', 'PPN', false);
+        $after = $this->paidOrder(7000, 7000);
+
+        $this->getJson("/api/v1/orders/{$before}")->assertJsonPath('tax_amount', '700.00')->assertJsonPath('total_amount', '7700.00');
+        $this->getJson("/api/v1/orders/{$after}")->assertJsonPath('tax_amount', '0.00')->assertJsonPath('total_amount', '7000.00');
     }
 
     public function test_the_receipt_follows_the_toggle_but_never_the_total(): void

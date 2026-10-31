@@ -42,4 +42,17 @@ describe('ProductVariantPickerModal', () => {
     });
     expect(screen.queryByAltText('Koharu')).not.toBeInTheDocument();
   });
+
+  // 087 — varian tanpa stok sendiri (sumber modifier / menu masak): selalu bisa dipilih, tanpa label stok.
+  it('lets an untracked variant with zero stock be picked and shows no stock label', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const { emitted } = render(ProductVariantPickerModal, { props: { open: true, product: product({ image_url: null, variants: [
+      { id: 7, variant_name: 'Standard', sku: 'WJ3-I1-IKU-004', sell_price: '15000.00', current_stock: 0, outlet_stock: 0, track_stock: false, image_url: null },
+    ] }) } });
+
+    expect(screen.queryByText(/habis/i)).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: /Standard/ }));
+    expect(emitted().select?.[0]?.[0]?.id).toBe(7);
+  });
 });
+

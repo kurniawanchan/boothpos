@@ -185,4 +185,9 @@ interface PosBackend {
     suspend fun refundOrder(orderId: String, reasonCode: String, reason: String?, overrideToken: String?, key: String): Order
     /** 084 — [sessionId] = shift terbuka: pesanan shift yang sudah ditutup tidak ikut. */
     suspend fun closedOrders(sessionId: Long? = null): List<Order>
+
+    // --- stok bahan (087 lanjutan, 2026-11-01): layar "Stok Bahan", hanya baca, saldo outlet tablet ---
+    suspend fun materialStock(): List<com.warkop.pos.model.MaterialStock>
+    /** Riwayat terbaru satu bahan di outlet tablet (server menyempitkan lewat X-Outlet-Id). */
+    suspend fun materialMoves(materialId: Long): List<com.warkop.pos.model.MaterialMove>
 }

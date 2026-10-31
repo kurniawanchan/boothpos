@@ -4,10 +4,10 @@ import { createPinia, setActivePinia } from 'pinia';
 import VariantsDrawer from '../../resources/js/components/product/VariantsDrawer.vue';
 import { useSettingsStore } from '../../resources/js/stores/settings';
 import { useToastStore } from '../../resources/js/stores/toast';
-import { saveVariants } from '../../resources/js/api/products';
+import { saveVariants, deleteVariantPermanent } from '../../resources/js/api/products';
 import { ApiError } from '../../resources/js/utils/errors';
 
-vi.mock('../../resources/js/api/products', () => ({ saveVariants: vi.fn() }));
+vi.mock('../../resources/js/api/products', () => ({ saveVariants: vi.fn(), deleteVariantPermanent: vi.fn() }));
 
 const PRODUCT = {
   id: 12,
@@ -115,7 +115,8 @@ describe('VariantsDrawer (043)', () => {
     expect(saveVariants).not.toHaveBeenCalled();
   }, 30000);
 
-  it('only a NEW row can be discarded; a saved variant has no remove button (it can only be deactivated)', async () => {
+  // 2026-10-31: varian tersimpan kini punya tombol "hapus permanen" (server menolak bila ada riwayat), bukan "buang baris".
+  it('only a NEW row can be discarded client-side; a saved variant only offers permanent delete', async () => {
     const user = await userEv();
     renderDrawer();
     expect(screen.queryByRole('button', { name: /buang baris/i })).not.toBeInTheDocument();
@@ -123,7 +124,8 @@ describe('VariantsDrawer (043)', () => {
     expect(screen.getAllByTestId('vd-row')).toHaveLength(3);
     // satu-satunya "×" milik baris baru; dua varian tersimpan tidak punya tombol buang
     expect(screen.getAllByRole('button', { name: /buang baris/i })).toHaveLength(1);
-    expect(within(screen.getAllByTestId('vd-row')[0]).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(screen.getAllByTestId('vd-row')[0]).queryByRole('button', { name: /buang baris/i })).not.toBeInTheDocument();
+    expect(within(screen.getAllByTestId('vd-row')[0]).getByTestId('vd-delete')).toBeInTheDocument();
     expect(screen.getByText(/dibuat otomatis/i)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /buang baris varian baru 1/i }));
     expect(screen.getAllByTestId('vd-row')).toHaveLength(2);
@@ -179,4 +181,33 @@ describe('VariantsDrawer (043)', () => {
     await view.rerender({ open: true, product: PRODUCT });
     expect(screen.getByLabelText('Nama varian 1')).toHaveValue('Panas');
   }, 30000);
+
+  // 2026-10-31 (permintaan pemilik) — hapus permanen varian tersimpan (server hanya mengizinkan yang tanpa riwayat).
+  it('deletes a saved variant permanently after confirmation and drops its row', async () => {
+    deleteVariantPermanent.mockResolvedValue({ id: 2 });
+    const user = await userEv();
+    const { emitted } = renderDrawer();
+
+    await user.click(screen.getAllByTestId('vd-delete')[1]);
+    const dialog = await screen.findByRole('dialog', { name: 'Hapus varian permanen?' });
+    expect(dialog).toHaveTextContent('Es');
+    await user.click(within(dialog).getByRole('button', { name: 'Hapus permanen' }));
+
+    await waitFor(() => expect(deleteVariantPermanent).toHaveBeenCalledWith(2));
+    await waitFor(() => expect(screen.getAllByTestId('vd-row')).toHaveLength(1));
+    expect(emitted().changed).toBeTruthy();
+  });
+
+  it('keeps the row when the server refuses (variant has history)', async () => {
+    deleteVariantPermanent.mockRejectedValue(new ApiError('Varian ini sudah punya riwayat', { status: 409 }));
+    const user = await userEv();
+    renderDrawer();
+
+    await user.click(screen.getAllByTestId('vd-delete')[0]);
+    const dialog = await screen.findByRole('dialog', { name: 'Hapus varian permanen?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Hapus permanen' }));
+
+    await waitFor(() => expect(deleteVariantPermanent).toHaveBeenCalledWith(1));
+    expect(screen.getAllByTestId('vd-row')).toHaveLength(2);
+  });
 });

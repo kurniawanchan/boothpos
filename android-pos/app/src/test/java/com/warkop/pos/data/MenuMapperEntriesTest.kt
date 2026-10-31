@@ -97,4 +97,34 @@ class MenuMapperEntriesTest {
         assertEquals("Hot", c.entries[0].variants[0].variantName)
         assertEquals("A — Hot", c.products[0].name)
     }
+
+    // 087 lanjutan (2026-11-01) — bahan per pilihan + porsi; item bersumber modifier menampilkan porsi dari bahan.
+    @Test fun `pilihan membawa stok bahan dan item bersumber modifier punya porsi dari bahan`() {
+        val rasa = com.warkop.core.network.dto.ModifierGroupDto(
+            id = 5, name = "Rasa", isRequired = true, minSelect = 1, maxSelect = 2, portionPerOption = true,
+            options = listOf(
+                com.warkop.core.network.dto.ModifierOptionDto(50, "SOTO", portions = 17, materials = listOf(
+                    com.warkop.core.network.dto.ModifierOptionMaterialDto(9, "Indomie Soto", "pcs", "1.0000", "17.000"))),
+                com.warkop.core.network.dto.ModifierOptionDto(51, "AYAM BAWANG", portions = 0, materials = listOf(
+                    com.warkop.core.network.dto.ModifierOptionMaterialDto(10, "Indomie Ayam Bawang", "pcs", "1.0000", "-1.000"))),
+            ),
+        )
+        val kuah = ProductDto(id = 789, name = "Indomie Kuah", categoryId = 1, stockSource = "modifier",
+            variants = listOf(variant(1, "Standard", "8000.00", stock = 0, track = false)), modifierGroups = listOf(rasa))
+        val c = MenuMapper.toCatalog(listOf(kuah, product(2, "Roti", variant(20, "", "5000.00"))), cats)
+
+        val g = c.groups.getValue("5")
+        assertTrue(g.portionPerOption)
+        assertEquals(17, g.options[0].portions)
+        assertEquals(-1.0, g.options[1].materials.single().onHand!!, 0.0)
+        assertEquals(17, c.entries.first { it.name == "Indomie Kuah" }.materialPortions)
+        assertNull(c.entries.first { it.name == "Roti" }.materialPortions)
+        assertNull(c.entries.first { it.name == "Indomie Kuah" }.stock)
+    }
+
+    @Test fun `grup tanpa batas atas dari server tetap tanpa batas di tablet`() {
+        val topping = com.warkop.core.network.dto.ModifierGroupDto(id = 6, name = "Topping", minSelect = 0, maxSelect = null)
+        val c = MenuMapper.toCatalog(listOf(ProductDto(id = 1, name = "Mie", categoryId = 1, variants = listOf(variant(1, "", "1000.00")), modifierGroups = listOf(topping))), cats)
+        assertEquals(com.warkop.pos.model.ModGroup.UNLIMITED, c.groups.getValue("6").max)
+    }
 }

@@ -6,7 +6,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.warkop.pos.debug.DebugPresets
 import com.warkop.pos.setup.TerminalSetupScreen
 import com.warkop.pos.state.Dest
@@ -40,10 +44,13 @@ fun PosApp(store: PosStore, preset: String? = null) {
                     Dest.CLOSE_SHIFT -> RefreshableScreen(store.refreshing, store::refreshCurrent, Modifier.fillMaxSize()) { CloseShiftScreen(store) }
                     Dest.CLOSE_RESULT -> CloseResultScreen(store)
                     Dest.SYNC -> RefreshableScreen(store.refreshing, store::refreshCurrent, Modifier.fillMaxSize()) { SyncScreen(store) }
+                    Dest.MATERIALS -> RefreshableScreen(store.refreshing, store::refreshCurrent, Modifier.fillMaxSize()) { MaterialsScreen(store) }
                 }
                 }
                 SheetHost(store)
                 ModeChangedDialog(store)
+                // 087 — peringatan bahan minus: tetap tampil sampai ditutup (tidak ikut hilang seperti toast).
+                if (store.materialNotice.isNotEmpty()) MaterialNoticeBanner(store.materialNotice, store::dismissMaterialNotice, Modifier.align(Alignment.TopCenter).padding(top = 16.dp))
                 store.toast?.let { msg ->
                     LaunchedEffect(msg) { delay(3200); store.clearToast() }
                     Surface(Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp).widthIn(max = 560.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.inverseSurface, contentColor = MaterialTheme.colorScheme.inverseOnSurface) {
@@ -68,4 +75,20 @@ private fun ModeChangedDialog(store: PosStore) {
         text = { Text("Mode berubah ke ${new.name}. Keluar lalu masuk lagi untuk melanjutkan. Pesanan yang sedang terbuka tetap tersimpan.") },
         confirmButton = { TextButton({ store.leaveForNewMode() }) { Text("Keluar") } },
     )
+}
+
+/** 087 — kartu peringatan bahan minus; satu baris per bahan. Bukan galat: penjualan tetap tercatat. */
+@Composable
+private fun MaterialNoticeBanner(lines: List<String>, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(modifier.widthIn(max = 640.dp).padding(horizontal = 16.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer, shadowElevation = 6.dp) {
+        Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.Top) {
+            Icon(Icons.Filled.WarningAmber, null, Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Stok bahan minus", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                lines.forEach { Text(it, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp)) }
+            }
+            TextButton(onClose) { Text("Tutup") }
+        }
+    }
 }

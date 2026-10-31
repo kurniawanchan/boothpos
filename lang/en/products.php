@@ -47,6 +47,12 @@ return [
     'recipe_material_unknown' => 'Unknown material.',
     'recipe_conflict_bom' => 'Variant(s) :skus use a completed BOM as their cost source. Reopen the BOM before using a recipe.',
     'recipe_conflict_recipe' => 'This variant is driven by a recipe. Its cost cannot be marked complete through the BOM.',
+    // 2026-10-31 — hapus varian permanen (VariantDeletionService).
+    'variant_deleted' => 'Variant deleted permanently.',
+    'variant_delete_variant_in_use' => 'This variant already has history (orders, stock or transfers), so it cannot be deleted. Deactivate it instead.',
+    'variant_delete_last_variant' => 'An item needs at least one variant. Add another variant first.',
+    'recipe_removed' => "Recipe removed. The variants' cost price can be edited again.",
+    'recipe_none' => 'This item has no recipe.',
     'recipe_cost_locked' => 'This variant\'s cost price follows its recipe. Create a new recipe version to change it.',
     'bulk_price_scope_invalid' => 'Choose a valid price scope.',
     'bulk_price_outlets_required' => 'Choose at least one outlet.',

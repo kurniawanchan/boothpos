@@ -33,7 +33,7 @@ class TabSettlementService
     {
         $ref = $data['client_ref'];
 
-        return DB::transaction(function () use ($tab, $data, $ref) {
+        return DB::transaction(function () use ($tab, $data, $ref, $user) {
             $order = $this->tabs->lock($tab);
 
             // Idempotensi: pengiriman ulang (jaringan putus) dengan client_ref
@@ -124,6 +124,12 @@ class TabSettlementService
             }
 
             $order->update($update);
+
+            // 087 — bahan pilihan modifier dipotong saat tab SELESAI (lunas), dari isi akhir tab; pelunasan
+            // sebagian tidak memotong apa pun (research D4). Di dalam transaksi + kunci tab yang sama.
+            if ($completes) {
+                app(ModifierMaterialConsumption::class)->consumeOrder($order, $user);
+            }
 
             return $this->tabs->loaded($order);
         });
@@ -219,12 +225,18 @@ class TabSettlementService
                     'modifiers' => $line->modifiers,
                     'note' => $line->note,
                     'sent_at' => $line->sent_at,
+                    'stock_source' => $line->stock_source, // 087 US6 — klon membawa snapshot sumber stok baris asal
                 ]);
                 $remaining = $line->qty - $qty;
                 $line->update(['qty' => $remaining, 'line_total' => round((float) $line->sell_price * $remaining - (float) $line->discount_amount, 2)]);
             }
 
             $this->tabs->recalculate($paid);
+
+            // 087 — penjualan hasil split langsung `completed`: ia memotong bahan barisnya sendiri; sisa tab
+            // memotong saat ia lunas. Baris utuh dipindah dengan id yang sama, baris sebagian diklon beserta
+            // snapshot modifier-nya, jadi tidak ada yang terpotong dua kali (research D4).
+            app(ModifierMaterialConsumption::class)->consumeOrder($paid, $user);
 
             if (array_key_exists('discount_amount', $data) && $data['discount_amount'] !== null) {
                 $discount = round((float) $data['discount_amount'], 2);

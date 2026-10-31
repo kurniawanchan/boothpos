@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, ref, computed, onMounted } from 'vue';
+import { STOCK_SOURCES, stockSourceWarningKeys } from '../../utils/stockSource';
 import { useI18n } from 'vue-i18n';
 import { getProduct, createProduct, updateProduct, addVariant, updateVariant, uploadProductImage, uploadVariantImage, saveVariants, saveModifierLinks } from '../../api/products';
 import { createAdjustment } from '../../api/stock';
@@ -24,6 +25,8 @@ import { controlClass, textareaClass, borderOf } from './formStyle';
 import { blankLinkRow, validateRows, toLinksPayload } from './modifierLinkRows';
 import { moveRow, excludedIds } from '../../utils/modifierExclusion';
 import InheritedModifierList from '../../components/product/InheritedModifierList.vue';
+import ConfirmDialog from '../../components/ui/ConfirmDialog.vue';
+import { useVariantDelete } from '../../composables/useVariantDelete';
 
 /**
  * Drawer tambah/ubah produk beserta varian-variannya — dipecah utuh dari ProductsView. Drawer memegang seluruh
@@ -111,6 +114,7 @@ const productForm = reactive({
   tax_category: '',
   prep_minutes: '',
   is_retail: false,
+  stock_source: 'variant', // 087 US6
 });
 const variantRows = ref([createVariant()]);
 
@@ -211,6 +215,7 @@ function openCreate(defaults = {}) {
     tax_category: '',
     prep_minutes: '',
     is_retail: defaults.is_retail === true,
+    stock_source: 'variant',
   });
   variantRows.value = [createVariant()];
   modifierRows.value = [blankLinkRow()];
@@ -247,6 +252,7 @@ async function openEdit(product) {
     tax_category: full.tax_category ?? '',
     prep_minutes: full.prep_minutes ?? '',
     is_retail: full.is_retail === true,
+    stock_source: full.stock_source ?? 'variant',
   });
   variantRows.value = full.variants.length
     ? full.variants.map((v) => ({ ...v, cost_price: plainNumber(v.cost_price), sell_price: plainNumber(v.sell_price), low_stock_alert: v.low_stock_alert ?? '', original_stock: v.current_stock, image_file: null, image_error: '' }))
@@ -348,11 +354,17 @@ function duplicateVariantRow(index) {
   });
 }
 
+// 2026-10-31 (permintaan pemilik) — hapus permanen varian tersimpan (hanya tanpa riwayat; server yang menilai).
+const variantDelete = useVariantDelete((variant) => {
+  variantRows.value = variantRows.value.filter((r) => r.id !== variant.id);
+  emit('saved');
+});
+
 function removeVariantRow(index) {
   const row = variantRows.value[index];
   if (row.id) {
-    // Tidak ada DELETE /variants/{id} — varian yang sudah tersimpan hanya bisa dinonaktifkan, tidak pernah
-    // dihapus dari array di sisi server.
+    // Tombol x hanya menonaktifkan varian tersimpan; hapus permanen punya tombolnya sendiri (ikon tempat sampah,
+    // DELETE /variants/{id}/permanent) karena hanya boleh untuk varian tanpa riwayat.
     row.is_active = false;
     return;
   }
@@ -366,6 +378,7 @@ function factsPayload() {
     tax_category: productForm.tax_category || null,
     prep_minutes: productForm.prep_minutes === '' || productForm.prep_minutes === null ? null : Number(productForm.prep_minutes),
     is_retail: productForm.is_retail,
+    stock_source: productForm.stock_source, // 087 US6 — server menentukan efeknya di semua modul
   };
 }
 
@@ -425,13 +438,15 @@ async function saveProduct() {
   // Pasangan { variant_id, qty_change } untuk POST /stock/adjustments, alasan penundaan yang sama.
   const pendingStockAdjustments = [];
   function queueStockAdjustment(row, variantId) {
+    // 087 — produk bersumber modifier tidak punya stok varian (server menolak koreksinya dengan 409).
+    if (productForm.stock_source === 'modifier') return;
     const delta = Number(row.current_stock) - Number(row.original_stock ?? 0);
     if (delta !== 0) pendingStockAdjustments.push({ variant_id: variantId, qty_change: delta });
   }
   let created = false;
   try {
     if (editingProduct.value) {
-      await updateProduct(editingProduct.value.id, {
+      const updated = await updateProduct(editingProduct.value.id, {
         ...(outletStore.multi ? { outlet_ids: productForm.outlet_ids } : {}),
         home_outlet_id: Number(productForm.home_outlet_id),
         category_id: Number(productForm.category_id),
@@ -456,6 +471,8 @@ async function saveProduct() {
         queueStockAdjustment(row, variantId);
       }
       toast.success(t('master_data.product_updated'));
+      // 087 — peringatan sumber stok (saldo varian tersisa / tanpa pemetaan bahan): diberi tahu, tidak menolak.
+      for (const key of stockSourceWarningKeys(updated)) toast.warning(t(key), { timeout: 9000 });
       // Tautan modifier: hanya bila bagian itu terbaca DAN barisnya berubah (PUT mengganti seluruh tautan produk,
       // jadi tanpa perubahan tidak ada alasan menyentuhnya). Gagal di sini tidak membatalkan simpan: item sudah berubah.
       const links = toLinksPayload(modifierRows.value);
@@ -656,6 +673,7 @@ async function saveProduct() {
           :rows="variantRows"
           :errors="formErrors"
           :mode="isCreate ? 'create' : 'edit'"
+          :stock-source="productForm.stock_source"
           :can-see-cost="canSeeCost"
           :markup-percent="markupPercent"
           :can-copy-bom-on-create="canCopyBomOnCreate"
@@ -665,6 +683,7 @@ async function saveProduct() {
           @duplicate="duplicateVariantRow"
           @open-bom="openBomFor"
           @enlarge-image="openVariantImageLightbox"
+          @delete-permanent="(row) => variantDelete.ask({ id: row.id, name: row.variant_name })"
         />
         <!-- Stok tidak pernah ditulis langsung — perubahan di sini menjadi baris stock_movements sungguhan
              lewat POST /stock/adjustments (jalur StockService::applyMovement yang sama dengan impor
@@ -713,6 +732,17 @@ async function saveProduct() {
           <input v-model="productForm.is_retail" type="checkbox" class="h-4 w-4 accent-brand" />
           {{ t('products.is_retail') }}
         </label>
+        <!-- 087 US6 — sumber stok: varian (stok per varian) atau modifier (bahan dari pilihan modifier yang dipesan). -->
+        <fieldset class="flex flex-col gap-1.5" data-testid="stock-source">
+          <legend class="text-[12.5px] font-bold text-muted-4">{{ t('products.stock_source') }}</legend>
+          <div class="flex flex-wrap gap-4">
+            <label v-for="src in STOCK_SOURCES" :key="src" class="flex items-center gap-2 text-[13px] font-medium text-muted-5">
+              <input v-model="productForm.stock_source" type="radio" name="stock_source" :value="src" class="h-4 w-4 accent-brand" />
+              {{ t(`products.stock_source_${src}`) }}
+            </label>
+          </div>
+          <p class="text-[11.5px] text-muted-3">{{ t(`products.stock_source_${productForm.stock_source}_hint`) }}</p>
+        </fieldset>
       </ProductFormBlock>
 
       <!-- STATUS (070) — hanya saat UBAH: Draft atau Aktif. Saat buat item langsung aktif (atau draft bila rilis menu aktif);
@@ -788,4 +818,13 @@ async function saveProduct() {
     @changed="refreshBomState"
   />
   <ImageLightbox :open="!!lightboxSrc" :src="lightboxSrc" :alt="lightboxAlt" @close="lightboxSrc = null" />
+  <ConfirmDialog
+    :open="variantDelete.target.value !== null"
+    :title="t('products.variant_delete_title')"
+    :message="t('products.variant_delete_message', { name: variantDelete.target.value?.name ?? '' })"
+    :confirm-label="t('products.variant_delete_confirm')"
+    :loading="variantDelete.deleting.value"
+    @close="variantDelete.cancel()"
+    @confirm="variantDelete.confirm()"
+  />
 </template>

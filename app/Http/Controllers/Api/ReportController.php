@@ -589,6 +589,8 @@ class ReportController extends Controller
                 ->where('variant_outlet_stock.outlet_id', $outlet->id)
                 ->where('product_variants.data_mode', ModeGate::current())
                 ->whereNull('product_variants.deleted_at')
+                // 087 US6 — produk bersumber stok `modifier` tidak punya stok varian; tidak tercantum di laporan stok.
+                ->whereExists(fn ($p) => $p->selectRaw('1')->from('products')->whereColumn('products.id', 'product_variants.product_id')->where('products.stock_source', 'variant'))
                 ->orderBy('product_variants.variant_name')
                 ->get([
                     'product_variants.id as variant_id',
@@ -617,7 +619,9 @@ class ReportController extends Controller
             ->leftJoin('product_variants', function ($join) {
                 $join->on('product_variants.id', '=', 'variant_outlet_stock.variant_id')
                     ->where('product_variants.data_mode', ModeGate::current())
-                    ->whereNull('product_variants.deleted_at');
+                    ->whereNull('product_variants.deleted_at')
+                    // 087 US6 — sama dengan cabang per outlet: varian produk bersumber `modifier` tidak dihitung.
+                    ->whereExists(fn ($p) => $p->selectRaw('1')->from('products')->whereColumn('products.id', 'product_variants.product_id')->where('products.stock_source', 'variant'));
             })
             ->selectRaw('
                 outlets.id as outlet_id,

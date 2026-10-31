@@ -83,7 +83,12 @@ describe('ProductDetailView (043)', () => {
   it('shows the header card: kicker with the code, name, status, category and the facts grid', async () => {
     await renderPage();
     expect(await screen.findByRole('heading', { level: 1, name: 'Kopi Tubruk' })).toBeInTheDocument();
-    expect(screen.getByTestId('item-kicker')).toHaveTextContent('Menu item · KOP-001');
+    // 2026-10-31 (permintaan pemilik): kode pindah ke BAWAH nama, satu tingkat lebih kecil; kicker hanya jenis item.
+    expect(screen.getByTestId('item-kicker')).toHaveTextContent(/^Menu item$/);
+    expect(screen.getByTestId('item-code')).toHaveTextContent('KOP-001');
+    expect(screen.getByTestId('item-code').compareDocumentPosition(screen.getByRole('heading', { level: 1 })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(screen.getByTestId('fact-stock_source')).toHaveTextContent('Varian');
+    expect(screen.getByTestId('fact-status')).toHaveTextContent('Aktif');
     expect(screen.getByTestId('status-badge')).toHaveTextContent('Aktif');
     expect(screen.getByTestId('item-badges')).toHaveTextContent('Kopi');
     expect(screen.getByTestId('fact-short')).toHaveTextContent('Tubruk');
@@ -93,6 +98,13 @@ describe('ProductDetailView (043)', () => {
     expect(screen.getByTestId('fact-price')).toHaveTextContent('8.000');
     expect(screen.getByTestId('fact-price')).toHaveTextContent('10.000');
     expect(screen.queryByTestId('fact-release')).not.toBeInTheDocument();
+  });
+
+  it('shows the product image in the header, or a placeholder without one (2026-10-31)', async () => {
+    getProduct.mockResolvedValue(PRODUCT({ image_url: 'https://example.test/kopi.png', stock_source: 'modifier' }));
+    await renderPage();
+    expect(await screen.findByTestId('item-image')).toHaveAttribute('src', 'https://example.test/kopi.png');
+    expect(screen.getByTestId('fact-stock_source')).toHaveTextContent('Modifier');
   });
 
   it('renders every action only when the matching `can` flag is true (hidden, not disabled)', async () => {

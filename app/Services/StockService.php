@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Outlet;
+use App\Models\OrderItem;
 use App\Models\ProductVariant;
 use App\Models\StockMovement;
 use App\Models\VariantOutletStock;
@@ -52,7 +53,45 @@ class StockService
         ?string $reason = null,
         ?int $userId = null,
     ): ?StockMovement {
-        if (! $variant->track_stock) {
+        // 087 US6 — `tracksOwnStock()`: pelacakan varian DAN produk bersumber stok `variant` (research D17).
+        if (! $variant->tracksOwnStock()) {
+            return null;
+        }
+
+        return $this->applyMovement($variant, $outletId, $type, $qtyChange, $referenceType, $referenceId, $reason, $userId);
+    }
+
+    /**
+     * 087 US6 (research D18) — sumber stok baris pesanan saat stok dikurangi: `variant` bila stok varian bergerak,
+     * selain itu `modifier`. Disimpan di `order_items.stock_source`.
+     */
+    public function sourceForNewLine(ProductVariant $variant): string
+    {
+        return $variant->tracksOwnStock() ? \App\Models\Product::STOCK_VARIANT : \App\Models\Product::STOCK_MODIFIER;
+    }
+
+    /**
+     * 087 US6 — pergerakan stok varian untuk baris pesanan yang SUDAH ada (kembali, kurangi, tambah qty) mengikuti
+     * snapshot baris, BUKAN pengaturan produk saat ini: mengubah sumber stok di tengah tab tidak boleh mengembalikan
+     * stok yang tak pernah dipotong. Baris lama (NULL) memakai aturan lama (`track_stock`).
+     */
+    public function applyLineMovementIfTracked(
+        OrderItem $line,
+        ProductVariant $variant,
+        int $outletId,
+        string $type,
+        int $qtyChange,
+        ?string $referenceType = null,
+        ?int $referenceId = null,
+        ?string $reason = null,
+        ?int $userId = null,
+    ): ?StockMovement {
+        $moves = match ($line->stock_source) {
+            \App\Models\Product::STOCK_VARIANT => true,
+            \App\Models\Product::STOCK_MODIFIER => false,
+            default => (bool) $variant->track_stock,
+        };
+        if (! $moves) {
             return null;
         }
 

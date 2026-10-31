@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
 import { formatIDR } from '../../utils/money';
+import { stockOf, isOutOfStock } from '../../utils/posProductCards';
 
 const { t } = useI18n();
 
@@ -18,7 +19,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'select']);
 
 function pick(variant) {
-  if (variant.current_stock <= 0) return;
+  if (isOutOfStock(stockOf(variant))) return; // 087: varian tanpa stok sendiri selalu boleh dipilih
   emit('select', variant);
 }
 
@@ -46,7 +47,7 @@ function openImageLightbox(v) {
         v-for="v in product?.variants ?? []"
         :key="v.id"
         type="button"
-        :disabled="v.current_stock <= 0"
+        :disabled="isOutOfStock(stockOf(v))"
         class="flex items-center justify-between gap-3 rounded-lg border border-line-2 bg-white px-3.5 py-3 text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-50"
         @click="pick(v)"
       >
@@ -69,8 +70,8 @@ function openImageLightbox(v) {
         </div>
         <div class="flex flex-col items-end gap-0.5">
           <span class="text-[13.5px] font-bold text-brand-active">{{ formatIDR(v.sell_price) }}</span>
-          <span class="text-[11px]" :class="v.current_stock <= 0 ? 'font-semibold text-danger-text' : 'text-muted-3'">
-            {{ v.current_stock <= 0 ? t('pos.stock_out') : t('pos.stock_n', { count: v.current_stock }) }}
+          <span v-if="stockOf(v) !== null" class="text-[11px]" :class="isOutOfStock(stockOf(v)) ? 'font-semibold text-danger-text' : 'text-muted-3'">
+            {{ isOutOfStock(stockOf(v)) ? t('pos.stock_out') : t('pos.stock_n', { count: stockOf(v) }) }}
           </span>
         </div>
       </button>

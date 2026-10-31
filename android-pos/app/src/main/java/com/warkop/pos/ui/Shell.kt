@@ -33,6 +33,7 @@ private fun navIcon(d: Dest): androidx.compose.ui.graphics.vector.ImageVector = 
     Dest.TABLES -> Icons.Filled.TableRestaurant
     Dest.ORDERS -> Icons.Filled.Receipt
     Dest.SHIFT -> Icons.Filled.PointOfSale
+    Dest.MATERIALS -> Icons.Filled.Inventory2
     else -> Icons.Filled.TabletAndroid // Dest.SYNC (Koneksi)
 }
 

@@ -44,7 +44,16 @@ class Product extends Model
         'tax_category',
         'prep_minutes',
         'is_retail',
+        // 087 US6 — sumber stok (`variant`/`modifier`); aturannya hanya di ProductVariant::tracksOwnStock().
+        'stock_source',
     ];
+
+    public const STOCK_VARIANT = 'variant';
+
+    public const STOCK_MODIFIER = 'modifier';
+
+    // Default DB tidak terlihat pada model hasil create(); dicerminkan supaya tracksOwnStock() benar sebelum refresh.
+    protected $attributes = ['stock_source' => self::STOCK_VARIANT];
 
     public const STATUS_DRAFT = 'draft';
 

@@ -27,7 +27,7 @@ class ModifierGroupController extends Controller
         abort_unless($request->user()?->canAccessAnyMenu(['dining_setup', 'products']), 403, __('restaurant.forbidden'));
 
         $groups = ModifierGroup::query()
-            ->with(['options', 'products:id', 'categories:id'])
+            ->with(['options.materials.material', 'products:id', 'categories:id'])
             ->orderBy('display_order')->orderBy('name')
             ->get();
 
@@ -36,7 +36,7 @@ class ModifierGroupController extends Controller
 
     public function store(StoreModifierGroupRequest $request): JsonResponse
     {
-        return $this->guarded(fn () => new ModifierGroupResource($this->groups->create($request->validated())), 201);
+        return $this->guarded(fn () => new ModifierGroupResource($this->groups->create($request->validated(), $request->user()->id)), 201);
     }
 
     public function show(Request $request, ModifierGroup $modifierGroup): JsonResponse
@@ -48,7 +48,7 @@ class ModifierGroupController extends Controller
 
     public function update(UpdateModifierGroupRequest $request, ModifierGroup $modifierGroup): JsonResponse
     {
-        return $this->guarded(fn () => new ModifierGroupResource($this->groups->update($modifierGroup, $request->validated())));
+        return $this->guarded(fn () => new ModifierGroupResource($this->groups->update($modifierGroup, $request->validated(), $request->user()->id)));
     }
 
     public function attachments(AttachModifierGroupRequest $request, ModifierGroup $modifierGroup): JsonResponse

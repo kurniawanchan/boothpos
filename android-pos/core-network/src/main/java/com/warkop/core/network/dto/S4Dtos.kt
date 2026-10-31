@@ -55,6 +55,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class SplitItemsResponseDto(
     @SerialName("paid_order") val paidOrder: TabDto,
     val tab: TabDto,
+    @SerialName("material_warnings") val materialWarnings: List<MaterialWarningDto> = emptyList(),
 )
 
 /** 048 / S4 — cetak ulang; salinan pertama gratis, berikutnya wajib [overrideToken] (persetujuan `reprint`). */

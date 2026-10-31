@@ -10,8 +10,9 @@ import org.junit.Test
 /** 084 / US5 — urutan menu, jam berdetak, dan pilihan sidebar. */
 class NavAndClockTest {
     @Test fun `menu berurutan Kasir Meja Pesanan Shift Koneksi`() {
-        assertEquals(listOf("Kasir", "Meja", "Pesanan", "Shift", "Koneksi"), NAV_SPECS.map { it.label })
-        assertEquals(listOf(Dest.EDITOR, Dest.TABLES, Dest.ORDERS, Dest.SHIFT, Dest.SYNC), NAV_SPECS.map { it.dest })
+        // 2026-11-01 — "Bahan" (Stok Bahan, hanya baca) di antara Shift dan Koneksi.
+        assertEquals(listOf("Kasir", "Meja", "Pesanan", "Shift", "Bahan", "Koneksi"), NAV_SPECS.map { it.label })
+        assertEquals(listOf(Dest.EDITOR, Dest.TABLES, Dest.ORDERS, Dest.SHIFT, Dest.MATERIALS, Dest.SYNC), NAV_SPECS.map { it.dest })
     }
 
     @Test fun `tidak ada istilah lama di menu`() {

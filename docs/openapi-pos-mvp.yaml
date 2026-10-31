@@ -984,7 +984,7 @@ paths:
                     type: number
                     description: "048 — tarif pajak eksklusif (%), 0 bawaan. Angka tampilan; server selalu menghitung ulang."
                   tax_label: { type: string, description: "048 — label pajak di layar/struk (bawaan `Pajak`)." }
-                  tax_show: { type: boolean, description: "083 — tampilkan baris pajak (bawaan true). HANYA tampilan: pajak tetap ditagih dan ikut total saat false. Diubah lewat PUT /settings (kunci `tax_show`, tipe boolean, group `pos`); `tax_rate` 0–100 maks 2 desimal dan `tax_label` maks 30 karakter divalidasi 422." }
+                  tax_show: { type: boolean, description: "083 — tampilkan baris pajak (bawaan true). 2026-10-31 (perintah pemilik, membalik 083): false = pajak TIDAK dihitung untuk order BARU (tarif efektif 0; order lama tetap memakai snapshot-nya). Diubah lewat PUT /settings (kunci `tax_show`, tipe boolean, group `pos`); `tax_rate` 0–100 maks 2 desimal dan `tax_label` maks 30 karakter divalidasi 422." }
                   variance_tolerance: { type: integer, description: "048 — toleransi selisih kas saat tutup shift (Rp, bawaan 5000)." }
                   cash_out_approval_threshold: { type: integer, description: "048 — kas keluar di atas ini butuh persetujuan atasan (Rp, bawaan 200000)." }
                   schema_update_required:
@@ -1944,6 +1944,8 @@ paths:
                   movements:
                     type: array
                     items: { $ref: '#/components/schemas/StockMovement' }
+        '409':
+          description: "087 US6 — `code: stock_source_modifier`: varian produk bersumber stok modifier tidak punya stok untuk dikoreksi."
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /stock/balances:
@@ -2793,6 +2795,12 @@ paths:
         **Idempotensi** — sertakan `local_ref` berupa UUID yang dibuat
         klien. Bila permintaan dengan `local_ref` sama dikirim ulang,
         server mengembalikan transaksi yang sudah ada, bukan membuat baru.
+
+        **087 — bahan pilihan modifier.** Saat penjualan SELESAI, bahan yang dipetakan ke pilihan modifier yang dipesan
+        dipotong dari saldo outlet transaksi (`material_stock_movements.type = sale`, rujukan `order_item`). Stok bahan
+        TIDAK PERNAH menolak penjualan: saldo boleh minus, dan respons membawa bidang opsional `material_warnings`
+        (lihat skema `MaterialWarning`) HANYA bila ada bahan yang menjadi minus. Biaya bahan ditambahkan ke
+        `cost_price` baris (HPP), tidak ke harga jual.
       requestBody:
         required: true
         content:
@@ -2803,7 +2811,10 @@ paths:
           description: Transaksi tersimpan
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Order' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Order'
+                  - $ref: '#/components/schemas/MaterialWarnings'
         '409':
           description: Stok tidak mencukupi, sesi tertutup, atau local_ref sudah dipakai
           content:
@@ -4076,6 +4087,21 @@ paths:
       responses:
         '200': { description: "{updated:[{variant_id,sku,cost_price}], skipped:[{variant_id,sku,reason}]}" }
         '403': { description: Tanpa izin }
+
+  /products/{id}/recipes:
+    delete:
+      tags: [Menu]
+      summary: Hapus resep (semua versi)
+      description: >
+        2026-10-31 — menghapus SEMUA versi resep item; varian berhenti digerakkan resep (harga modal bisa diubah lagi,
+        nilai terakhir dibiarkan). `order_items.cost_price` yang tercatat tidak berubah. Isi versi disimpan di log
+        aktivitas `recipe_removed`. Izin sama dengan "Hitung ulang biaya".
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "{message, removed_versions}" }
+        '403': { description: Tanpa izin }
+        '404': { description: Item tidak punya resep }
 
   /recipes/{id}:
     get:
@@ -5408,6 +5434,13 @@ paths:
       parameters:
         - { name: search, in: query, schema: { type: string } }
         - { name: is_active, in: query, schema: { type: boolean } }
+        - name: stock_status
+          in: query
+          description: >
+            087 — `negative`: saldo < 0 di salah satu outlet yang berlaku. 2026-10-31: `available` = ada saldo > 0;
+            `out` = tidak ada saldo > 0 (kosong atau minus). Semua dinilai per outlet yang berlaku. Nilai lain → 422.
+          schema: { type: string, enum: [negative, available, out] }
+        - { name: kind, in: query, schema: { type: string, enum: [ingredient, semi_finished, packaging] } }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -5472,7 +5505,8 @@ paths:
       summary: Hapus bahan baku
       description: |
         Soft delete. Ditolak (409) bila bahan masih punya harga vendor
-        terdaftar ATAU masih dipakai baris BOM varian mana pun.
+        terdaftar ATAU masih dipakai baris BOM varian mana pun ATAU (087) masih
+        dipetakan ke pilihan modifier yang aktif.
       responses:
         '204': { description: Berhasil }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -5502,6 +5536,83 @@ paths:
         '201': { description: "{material_id,outlet_id,stock_before,stock_after}" }
         '403': { description: Outlet di luar jangkauan }
         '422': { description: Validasi / saldo negatif / outlet wajib }
+
+  /materials/movements:
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Buku besar SEMUA bahan (log Inventori → Stok, tab Bahan)
+      description: >
+        2026-10-31 — bentuk baris sama dengan `/materials/{material}/movements` plus `material_id`, `material_code`,
+        `material_name`, `unit`. Dibatasi outlet yang berlaku (OutletFilter). Gerbang: menu Bahan, Stok, ATAU `pos`
+        (2026-11-01: layar "Stok Bahan" tablet, hanya baca; lainnya 403).
+      parameters:
+        - name: 'type[]'
+          in: query
+          schema: { type: array, items: { type: string, enum: [purchase, adjustment, transfer_out, transfer_in, transfer_cancel, sale, return, waste] } }
+        - { name: 'outlet_id[]', in: query, schema: { type: array, items: { type: integer } } }
+        - { name: material_id, in: query, schema: { type: integer } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          allOf:
+                            - $ref: '#/components/schemas/MaterialMovement'
+                            - type: object
+                              properties:
+                                material_id: { type: integer }
+                                material_code: { type: string, nullable: true }
+                                material_name: { type: string, nullable: true }
+                                unit: { type: string, nullable: true }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /materials/{material}/movements:
+    parameters:
+      - { name: material, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Vendor & Bahan Baku]
+      summary: Riwayat pergerakan stok bahan (087)
+      description: >
+        Buku besar bahan per outlet yang berlaku (OutletFilter), terbaru dulu. Gerbang sama dengan koreksi stok bahan.
+        Rujukan `order_item` diterjemahkan ke nomor pesanan; `order_id`/`order_number` null bila baris sudah dihapus
+        (batal "buang").
+      parameters:
+        - name: 'type[]'
+          in: query
+          schema: { type: array, items: { type: string, enum: [purchase, adjustment, transfer_out, transfer_in, transfer_cancel, sale, return, waste] } }
+        - { name: 'outlet_id[]', in: query, schema: { type: array, items: { type: integer } } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Paginated'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/MaterialMovement' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 
   /materials/{material}/vendor-prices:
     parameters:
@@ -5561,6 +5672,21 @@ paths:
   # SEMUA aksi lain butuh menu `products` DAN `purchase_orders` (403 bila
   # tidak). Respons baca/mutasi berbentuk VariantBom { data, summary }.
   # ------------------------------------------------------------------
+
+  /variants/{variant}/permanent:
+    delete:
+      tags: [Produk]
+      summary: Hapus varian permanen (hanya varian tanpa riwayat)
+      description: >
+        2026-10-31 — ditolak 409 `variant_in_use` bila varian punya baris pesanan, pergerakan stok, saldo outlet ≠ 0,
+        atau baris transfer; 409 `last_variant` bila ini varian terakhir item. Varian yang ditolak tetap bisa
+        dinonaktifkan. Log aktivitas `variant_deleted`. Gerbang: izin ubah produk.
+      parameters:
+        - { name: variant, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "{message, id}" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: "{message, code: variant_in_use | last_variant}" }
 
   /variants/{variant}/outlet-prices:
     parameters: [{ name: variant, in: path, required: true, schema: { type: integer } }]
@@ -6636,6 +6762,10 @@ paths:
         pernah diterima maupun disimpan) dan `confirm_duplicate` (boolean). Kode yang sama dalam
         `edc_duplicate_window_seconds` → `409 duplicate_edc` kecuali `confirm_duplicate: true`. Selama ada QRIS `pending`
         di tab, non-tunai lain → `409 pending_qris` (tunai tetap boleh). Non-tunai tidak boleh melebihi sisa tagihan (409).
+
+        **087** — saat pembayaran ini MELUNASI tab (status menjadi `completed`), bahan pilihan modifier dari isi akhir tab
+        dipotong (pelunasan sebagian tidak memotong apa pun). Bahan kurang tidak menolak; respons membawa
+        `material_warnings` opsional.
       requestBody:
         required: true
         content:
@@ -6646,7 +6776,10 @@ paths:
           description: Tab terbaru
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Tab' }
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Tab'
+                  - $ref: '#/components/schemas/MaterialWarnings'
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -7086,6 +7219,9 @@ paths:
         pada baris yang sudah dikirim tetapi belum `served` (baris UTUH selalu boleh). Bila tak ada baris
         tersisa, tab ditutup (`voided`) dan mejanya kosong. `client_ref` sama → `200` dengan hasil semula,
         tidak memisah dua kali. `404`: baris milik tab lain.
+
+        **087** — penjualan baru (yang langsung `completed`) memotong bahan pilihan modifier barisnya sendiri; sisa tab
+        memotong saat ia lunas. Respons 201 boleh membawa `material_warnings` opsional di tingkat atas.
       requestBody:
         required: true
         content:
@@ -7781,6 +7917,63 @@ components:
           readOnly: true
           description: Hanya disertakan pada GET /materials/{id}.
           items: { $ref: '#/components/schemas/VendorMaterialPrice' }
+        used_by_modifier_options:
+          type: array
+          readOnly: true
+          description: 087 — hanya pada GET /materials/{id}. Pilihan modifier yang memakai bahan ini per porsi.
+          items:
+            type: object
+            properties:
+              option_id: { type: integer }
+              option: { type: string }
+              option_active: { type: boolean }
+              group_id: { type: integer }
+              group: { type: string, nullable: true }
+              quantity: { type: string, example: "1.0000" }
+
+    MaterialMovement:
+      type: object
+      description: 087 — satu baris buku besar bahan.
+      properties:
+        id: { type: integer }
+        type: { type: string, enum: [purchase, adjustment, transfer_out, transfer_in, transfer_cancel, sale, return, waste] }
+        outlet_id: { type: integer }
+        outlet_code: { type: string, nullable: true }
+        qty_change: { type: string, example: "-2.000" }
+        stock_before: { type: string, example: "1.000" }
+        stock_after: { type: string, example: "-1.000", description: Boleh negatif untuk sale/waste. }
+        reference:
+          type: object
+          nullable: true
+          properties:
+            type: { type: string, example: order_item }
+            id: { type: integer }
+            order_id: { type: integer, nullable: true }
+            order_number: { type: string, nullable: true }
+        reason: { type: string, nullable: true, description: "2026-10-31 — alasan koreksi manual; null untuk pergerakan otomatis dan baris lama." }
+        user: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string } } }
+        created_at: { type: string, format: date-time }
+
+    MaterialWarning:
+      type: object
+      description: 087 — bahan yang menjadi minus karena penjualan ini (penjualan tetap tercatat).
+      properties:
+        material_id: { type: integer }
+        material: { type: string }
+        unit: { type: string }
+        outlet_id: { type: integer }
+        outlet: { type: string, description: "2026-10-31 — nama outlet transaksi; saldo bahan per outlet" }
+        stock_before: { type: string, example: "1.000" }
+        required: { type: string, example: "2.000" }
+        stock_after: { type: string, example: "-1.000" }
+
+    MaterialWarnings:
+      type: object
+      properties:
+        material_warnings:
+          type: array
+          description: 087 — HANYA hadir bila ada bahan yang menjadi minus.
+          items: { $ref: '#/components/schemas/MaterialWarning' }
 
     MaterialInput:
       type: object
@@ -7993,7 +8186,8 @@ components:
         current_stock: { type: integer, readOnly: true }
         outlet_price: { type: string, nullable: true, readOnly: true, example: "9000.00", description: "045 — harga khusus di outlet yang berlaku; null = mengikuti sell_price. Layar kasir menampilkan outlet_price bila ada." }
         outlet_stock: { type: integer, nullable: true, readOnly: true, description: "045 — saldo di outlet pemesanan; hanya terisi untuk `pos=1`. Layar kasir menampilkan outlet_stock bila ada, selain itu current_stock." }
-        track_stock: { type: boolean, readOnly: true, description: "028 — false untuk hidangan made-to-order (tanpa stok fisik); layar kasir tidak menampilkan angka stok untuknya." }
+        track_stock: { type: boolean, readOnly: true, description: "028 — false untuk hidangan made-to-order (tanpa stok fisik); layar kasir tidak menampilkan angka stok untuknya. 087 US6 — pada payload POS (`pos=1`) dan `GET /variants/lookup` nilainya EFEKTIF: false juga untuk produk ber-`stock_source: modifier`." }
+        stock_tracked: { type: boolean, readOnly: true, description: "087 US6 — pelacakan efektif (track_stock DAN produk bersumber `variant`). Payload pengelolaan: track_stock tetap mentah." }
         image_url: { type: string, nullable: true, readOnly: true, description: "URL siap-pakai (disk publik) foto varian sendiri; null bila tidak ada (foto produk induk adalah field terpisah di Product)." }
         low_stock_alert: { type: integer, nullable: true }
         is_active: { type: boolean }
@@ -8018,7 +8212,7 @@ components:
       properties:
         variant_id: { type: integer }
         product_id: { type: integer, description: "084 — produk induk." }
-        modifier_groups: { type: array, items: { type: object }, description: "084 — hanya bila `with_modifiers=1`: grup modifier efektif aktif beserta opsi aktifnya." }
+        modifier_groups: { type: array, items: { type: object }, description: "084 — hanya bila `with_modifiers=1`: grup modifier efektif aktif beserta opsi aktifnya. 2026-10-31: grup membawa `portion_per_option`; tiap opsi membawa `materials[{material_id,name,unit,quantity,on_hand}]` (on_hand = saldo di outlet pemesanan, null tanpa outlet pemesanan) dan `portions` (porsi yang masih bisa dibuat, ≥ 0; null = tanpa bahan / tanpa outlet pemesanan)." }
         sku: { type: string }
         label: { type: string, example: Keychain Sakura — Varian A }
         artist_name: { type: string }
@@ -8041,6 +8235,18 @@ components:
         image_path: { type: string, nullable: true, description: "Diisi via POST /products/{id}/image atau impor massal (Task 6)." }
         image_url: { type: string, nullable: true, readOnly: true, description: "URL siap-pakai (disk publik), ditambahkan Task 5." }
         is_active: { type: boolean }
+        stock_source:
+          type: string
+          enum: [variant, modifier]
+          description: >
+            087 US6 — `variant`: stok di varian (bawaan). `modifier`: varian tidak punya stok (tidak pernah bergerak di
+            jual/tab/void/refund/transfer/koreksi, tidak tercantum di laporan stok); yang berkurang hanya bahan pilihan
+            modifier. Bahan pilihan modifier dipotong untuk KEDUA sumber.
+        warnings:
+          type: array
+          readOnly: true
+          description: "087 US6 — hanya pada respons PUT /products/{id} bila ada: `variant_stock_remaining` {total}, `no_material_mappings`."
+          items: { type: object, properties: { code: { type: string }, total: { type: string } } }
         variants:
           type: array
           items: { $ref: '#/components/schemas/Variant' }
@@ -8054,6 +8260,7 @@ components:
         name: { type: string, maxLength: 150 }
         description: { type: string, nullable: true }
         is_active: { type: boolean, default: true }
+        stock_source: { type: string, enum: [variant, modifier], default: variant, description: "087 US6 — sumber stok produk; nilai lain → 422." }
         outlet_ids:
           type: array
           minItems: 1
@@ -8487,8 +8694,8 @@ components:
         store_name: { type: string }
         store_contact: { type: string, nullable: true, description: "Kunci lama = telepon (outlet) atau kontak tunggal bersama." }
         store_notes: { type: string, nullable: true, description: "079 — catatan outlet; bisa beberapa baris." }
-        # 083 — pajak order ini (snapshot saat transaksi). `tax_show=false` TIDAK menghapus field dan TIDAK mengubah total_amount:
-        # klien hanya menyembunyikan barisnya. Baris tampil bila tax_show dan tax_amount > 0.
+        # 083 — pajak order ini (snapshot saat transaksi). Order yang dibuat saat tax_show=false (sejak 2026-10-31) menyimpan
+        # tax_amount 0 dan tax_rate 0; order lama tetap memakai pajak yang dulu ditagih. Baris tampil bila tax_show dan tax_amount > 0.
         tax_amount: { type: string, description: "083 — pajak eksklusif order ini." }
         tax_rate: { type: string, description: "083 — tarif (%) saat order dibuat (snapshot)." }
         tax_label: { type: string, description: "083 — label pajak saat ini (bawaan `Pajak`)." }
@@ -9028,6 +9235,18 @@ components:
         price_delta: { type: string, example: "5000.00", description: Positif, nol, atau negatif. }
         display_order: { type: integer }
         is_active: { type: boolean }
+        materials:
+          type: array
+          description: 087 — bahan yang dipakai pilihan ini per porsi; dipotong saat pesanan selesai.
+          items:
+            type: object
+            properties:
+              material_id: { type: integer }
+              code: { type: string, nullable: true }
+              name: { type: string, nullable: true }
+              unit: { type: string, nullable: true }
+              quantity: { type: string, example: "1.0000" }
+              material_active: { type: boolean, description: false = bahan nonaktif/terhapus (tidak memotong apa pun). }
 
     ModifierGroup:
       type: object
@@ -9038,6 +9257,7 @@ components:
         is_required: { type: boolean }
         min_select: { type: integer }
         max_select: { type: integer, nullable: true, description: null = tanpa batas atas. }
+        portion_per_option: { type: boolean, description: "2026-10-31 — tiap pilihan = 1 porsi: pilihan ke-2 dst. menambah satu harga dasar (di price_delta snapshot)." }
         display_order: { type: integer }
         is_active: { type: boolean }
         options: { type: array, items: { $ref: '#/components/schemas/ModifierOption' } }
@@ -9053,6 +9273,7 @@ components:
         is_required: { type: boolean }
         min_select: { type: integer, minimum: 0, maximum: 50 }
         max_select: { type: integer, nullable: true, minimum: 1, maximum: 50 }
+        portion_per_option: { type: boolean, description: "2026-10-31 — opsional; tanpa kunci = tidak berubah." }
         display_order: { type: integer }
         is_active: { type: boolean }
         options:
@@ -9067,6 +9288,18 @@ components:
               price_delta: { type: number }
               display_order: { type: integer }
               is_active: { type: boolean }
+              materials:
+                type: array
+                maxItems: 20
+                description: >
+                  087 — kunci ada (termasuk []) = penggantian penuh bahan pilihan ini; tidak ada = tidak berubah.
+                  Bahan harus aktif, tidak terhapus, dan mode data yang sama (422 `options.{i}.materials.{j}.material_id`).
+                items:
+                  type: object
+                  required: [material_id, quantity]
+                  properties:
+                    material_id: { type: integer }
+                    quantity: { type: number, exclusiveMinimum: 0, description: Satuan = satuan bahan. }
 
     Station:
       type: object

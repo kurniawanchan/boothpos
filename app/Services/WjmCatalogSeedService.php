@@ -404,6 +404,9 @@ class WjmCatalogSeedService
                 'name' => $item['name'],
                 'image_path' => $imagePath,
                 'is_active' => true,
+                // 087 US6 — eksplisit: katalog WJM mengisi stok di varian (initial_stock) atau tidak melacak sama sekali;
+                // tidak pernah `modifier`. Pemilik mengubah per item di formulir produk.
+                'stock_source' => Product::STOCK_VARIANT,
             ]);
 
             $initialStock = $catalog->initialStock();

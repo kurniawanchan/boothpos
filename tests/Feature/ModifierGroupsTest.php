@@ -206,7 +206,8 @@ class ModifierGroupsTest extends TestCase
 
         $with = $this->getJson('/api/v1/products?with_variants=1&with_modifiers=1')->assertOk()->json('data.0');
         $this->assertSame('Size', $with['modifier_groups'][0]['name']);
-        $this->assertSame(['id', 'name', 'price_delta'], array_keys($with['modifier_groups'][0]['options'][0]));
+        // 2026-10-31 — opsi juga membawa stok bahannya (`materials`, `portions`) untuk popup POS; bidang tambahan saja.
+        $this->assertSame(['id', 'name', 'price_delta', 'materials', 'portions'], array_keys($with['modifier_groups'][0]['options'][0]));
     }
 
     public function test_the_menu_listing_merges_product_and_category_groups_without_duplicates_and_hides_inactive_ones(): void

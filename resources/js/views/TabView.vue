@@ -13,6 +13,7 @@ import { setTicketItemStatus } from '../api/kitchen';
 import { buildProductCards } from '../utils/posProductCards';
 import { formatIDR } from '../utils/money';
 import { uuid } from '../utils/uuid';
+import { toastMaterialWarnings } from '../utils/materialWarnings';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { useMenuAvailability } from '../composables/useMenuAvailability';
 import TabLinesList from '../components/restaurant/TabLinesList.vue';
@@ -279,6 +280,7 @@ async function doSplit({ items, payments }) {
     showSplit.value = false;
     splitReceiptId.value = res.paid_order.id; // struk penjualan terpisah
     toast.success(t('floor.tab.split_done'));
+    toastMaterialWarnings(res, t, toast); // 087 — bahan menjadi minus: peringatan, bukan galat
   } catch {
     // 409 sudah ditoast global; dialog tetap terbuka agar bisa dikoreksi / dikirim ulang dengan referensi yang sama.
   } finally {
@@ -313,6 +315,7 @@ async function submitPayment(payments) {
     showPayment.value = false;
     if (updated.status === 'completed') showReceipt.value = true;
     else toast.success(t('floor.tab.paid_partial', { amount: formatIDR(updated.balance) }));
+    toastMaterialWarnings(updated, t, toast); // 087
   } catch {
     // 409 (shift tutup, tab tidak terbuka, kembalian tak valid) sudah ditoast global.
   } finally {

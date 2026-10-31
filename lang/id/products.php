@@ -47,6 +47,12 @@ return [
     'recipe_material_unknown' => 'Bahan tidak dikenal.',
     'recipe_conflict_bom' => 'Varian :skus memakai BOM yang sudah selesai sebagai sumber biaya. Buka kembali BOM-nya sebelum memakai resep.',
     'recipe_conflict_recipe' => 'Varian ini digerakkan resep. Biayanya tidak bisa ditandai selesai lewat BOM.',
+    // 2026-10-31 — hapus varian permanen (VariantDeletionService).
+    'variant_deleted' => 'Varian dihapus permanen.',
+    'variant_delete_variant_in_use' => 'Varian ini sudah punya riwayat (pesanan, stok, atau transfer), jadi tidak bisa dihapus. Nonaktifkan saja.',
+    'variant_delete_last_variant' => 'Item harus punya minimal satu varian. Tambahkan varian lain dulu.',
+    'recipe_removed' => 'Resep dihapus. Harga modal varian kini bisa diubah lagi.',
+    'recipe_none' => 'Item ini tidak punya resep.',
     'recipe_cost_locked' => 'Harga modal varian ini mengikuti resep. Buat versi resep baru untuk mengubahnya.',
     'bulk_price_scope_invalid' => 'Pilih cakupan harga yang valid.',
     'bulk_price_outlets_required' => 'Pilih minimal satu outlet.',

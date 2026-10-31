@@ -73,7 +73,8 @@ class OrderController extends Controller
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 409);
         }
 
-        return response()->json(new OrderResource($order), 201);
+        // 087 — `material_warnings` hanya muncul bila ada bahan yang menjadi minus (aditif; APK lama mengabaikan).
+        return response()->json(app(\App\Support\MaterialWarningBag::class)->attachTo(new OrderResource($order)), 201);
     }
 
     public function show(Order $order): JsonResponse

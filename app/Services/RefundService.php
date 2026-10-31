@@ -93,7 +93,9 @@ class RefundService
                 $variant = ProductVariant::withoutGlobalScopes()->find($item->variant_id);
                 if ($variant !== null) {
                     // Argumen bernama: uji invarian stok memeriksa outlet secara eksplisit (`outletId:`).
-                    $this->stock->applyMovementIfTracked(
+                    // 087 US6 — mengikuti snapshot sumber stok baris (bukan pengaturan produk saat ini).
+                    $this->stock->applyLineMovementIfTracked(
+                        line: $item,
                         variant: $variant,
                         outletId: (int) $locked->outlet_id,
                         type: 'return',
@@ -105,6 +107,9 @@ class RefundService
                     );
                 }
             }
+
+            // 087 — bahan pilihan modifier kembali sebesar potongan bersih yang tercatat (research D7).
+            app(ModifierMaterialConsumption::class)->restoreOrder($locked, $user);
 
             // Tanggal bisnis refund (zona toko): refund mengurangi penjualan PADA HARI INI, bukan hari penjualan.
             $refundedAt = now();

@@ -253,9 +253,16 @@ async function onConflict() {
 
     <div v-else-if="product" class="flex flex-col gap-5">
       <header class="flex flex-col gap-4 border-2 border-line bg-white px-6 py-5" data-testid="item-header">
-        <div class="flex flex-col gap-1.5">
-          <p class="text-[11.5px] font-bold uppercase tracking-wider text-muted" data-testid="item-kicker">{{ t('products.item_kicker', { code }) }}</p>
+        <!-- 2026-10-31 (permintaan pemilik): foto produk di kepala; kode di BAWAH nama, satu tingkat lebih kecil. -->
+        <div class="flex items-start gap-4">
+        <img v-if="product.image_url" :src="product.image_url" :alt="product.name" class="h-24 w-24 flex-none border-2 border-line object-cover" data-testid="item-image" />
+        <div v-else class="flex h-24 w-24 flex-none items-center justify-center border-2 border-line bg-surface-subtle text-muted-3" data-testid="item-image-placeholder">
+          <i class="ph-duotone ph-image text-[28px]" aria-hidden="true"></i>
+        </div>
+        <div class="flex min-w-0 flex-col gap-1.5">
+          <p class="text-[11.5px] font-bold uppercase tracking-wider text-muted" data-testid="item-kicker">{{ t('products.item_kicker_kind') }}</p>
           <h1 id="page-heading" tabindex="-1" class="text-[26px] font-bold leading-tight tracking-tight outline-none">{{ product.name }}</h1>
+          <p v-if="code" class="font-mono text-[20px] font-semibold leading-tight text-muted-4" data-testid="item-code">{{ code }}</p>
           <div class="mt-1 flex flex-wrap items-center gap-2" data-testid="item-badges">
             <StatusPill :variant="statusView.tone" data-testid="status-badge">{{ t(statusView.key) }}</StatusPill>
             <StatusPill v-if="soldOut" variant="danger" :title="availabilityMark.reason || undefined" data-testid="badge-86">
@@ -264,6 +271,7 @@ async function onConflict() {
             </StatusPill>
             <StatusPill v-if="product.category_name" variant="info">{{ product.category_name }}</StatusPill>
           </div>
+        </div>
         </div>
 
         <div v-if="can.edit || can.mark_86 || can.discontinue" class="flex flex-wrap items-center gap-2.5" data-testid="item-actions">
@@ -330,7 +338,7 @@ async function onConflict() {
       @confirm="performReactivate"
     />
 
-    <VariantsDrawer :open="showVariants" :product="product" @close="showVariants = false" @saved="afterVariantsSaved" />
+    <VariantsDrawer :open="showVariants" :product="product" @close="showVariants = false" @saved="afterVariantsSaved" @changed="loadCore" />
     <ModifierLinksDrawer :open="showModifiers" :product="product" :links="product?.modifier_links ?? []" :excluded="product?.modifier_excluded ?? []" @close="showModifiers = false" @saved="afterModifiersSaved" />
     <ProductFormDrawer ref="drawer" :outlets="outlets" :categories="categories" @saved="reloadAll" />
   </div>

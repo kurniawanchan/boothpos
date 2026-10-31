@@ -138,4 +138,8 @@ class FakePosBackend : PosBackend {
     val closedSessionRequests = mutableListOf<Long?>()
     var closedOrdersResult: (() -> List<Order>)? = null
     override suspend fun closedOrders(sessionId: Long?): List<Order> { closedSessionRequests += sessionId; return closedOrdersResult?.invoke() ?: unused() }
+    var materialStockResult: (() -> List<com.warkop.pos.model.MaterialStock>)? = null
+    var materialMovesResult: ((Long) -> List<com.warkop.pos.model.MaterialMove>)? = null
+    override suspend fun materialStock() = materialStockResult?.invoke() ?: unused()
+    override suspend fun materialMoves(materialId: Long) = materialMovesResult?.invoke(materialId) ?: unused()
 }

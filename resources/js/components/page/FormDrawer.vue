@@ -31,6 +31,8 @@ const formId = `form-drawer-${useId()}`;
       <slot />
     </form>
     <template #footer>
+      <!-- Aksi sekunder di kiri (mis. "Hapus resep"); opsional, pemanggil lain tidak berubah. -->
+      <div v-if="$slots['footer-start']" class="mr-auto"><slot name="footer-start" /></div>
       <BaseButton variant="secondary" @click="$emit('close')">{{ t('page.cancel') }}</BaseButton>
       <BaseButton type="submit" :form="formId" :loading="submitting">{{ submitLabel || t('common.save') }}</BaseButton>
     </template>

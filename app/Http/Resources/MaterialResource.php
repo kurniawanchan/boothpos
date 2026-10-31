@@ -33,6 +33,17 @@ class MaterialResource extends JsonResource
                 $this->relationLoaded('vendorPrices'),
                 fn () => VendorMaterialPriceResource::collection($this->vendorPrices)
             ),
+            // 087 — pilihan modifier yang memakai bahan ini; hanya di detail (daftar tetap ramping).
+            'used_by_modifier_options' => $this->when($this->relationLoaded('modifierUsages'), fn () => $this->modifierUsages
+                ->filter(fn ($u) => $u->option !== null)
+                ->map(fn ($u) => [
+                    'option_id' => $u->modifier_option_id,
+                    'option' => $u->option->name,
+                    'option_active' => (bool) $u->option->is_active,
+                    'group_id' => $u->option->modifier_group_id,
+                    'group' => $u->option->group?->name,
+                    'quantity' => number_format((float) $u->quantity, 4, '.', ''),
+                ])->values()),
         ];
     }
 }

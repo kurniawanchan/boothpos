@@ -43,7 +43,7 @@ final class OutletScopeRegistry
         'material_outlet_stock' => 'saldo bahan: dibaca lewat OutletFilter (MaterialController, StockTransfer, laporan)',
         'variant_outlet_stock' => 'saldo item: dibaca lewat OutletFilter (StockController, LowStockHistory, laporan)',
         'stock_movements' => 'buku besar stok: StockController::movements memakai OutletFilter',
-        'material_stock_movements' => 'buku besar bahan: hanya dibaca lewat jejak transfer/detail yang sudah terbatas',
+        'material_stock_movements' => 'buku besar bahan: jejak transfer/detail yang sudah terbatas, dan (087) GET /materials/{material}/movements lewat OutletFilter',
         'menu_changes' => 'perubahan menu menunggu rilis: payload membawa outlet; dikelola pemegang izin menu',
         'outlet_item_settings' => 'relasi outlet × item: dikelola lewat endpoint produk yang membatasi outlet yang boleh dilihat',
         'variant_outlet_prices' => 'harga khusus outlet: endpoint harga membatasi outlet yang boleh dilihat',
@@ -68,6 +68,9 @@ final class OutletScopeRegistry
         'app/Services/SettlementService.php' => 'exempt: rekap per periode dikelompokkan per outlet pelaporan; hanya outlet yang berhak ditampilkan pemanggilnya (ReportController)',
         'app/Services/StockMovementReferences.php' => 'exempt: menerjemahkan referensi pergerakan stok (verifikasi varian), tidak menampilkan angka',
         'app/Services/ModifierGroupService.php' => 'exempt: penjaga hapus grup modifier — harus melihat pemakaian di SEMUA outlet',
+        'app/Services/VariantDeletionService.php' => 'exempt: penjaga hapus varian permanen — riwayat di outlet/mode manapun menghalangi (FK tidak peduli scope)',
+        // 087 — riwayat bahan: pergerakan disaring OutletFilter dulu; gabungan order_items hanya menerjemahkan id baris itu.
+        'app/Http/Controllers/Api/MaterialController.php' => 'filtered',
         'app/Http/Controllers/Api/DiningTableController.php' => 'exempt: penjaga hapus meja — keberadaan order di outlet manapun',
         'app/Http/Controllers/Api/StationController.php' => 'exempt: penjaga hapus stasiun — keberadaan tiket di outlet manapun',
         'app/Http/Controllers/Api/PaymentChannelController.php' => 'exempt: penjaga hapus kanal pembayaran — pemakaian di outlet manapun',

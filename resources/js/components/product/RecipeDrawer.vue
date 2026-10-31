@@ -9,6 +9,7 @@ import { variantName, variantPrice } from '../../utils/itemDetail';
 import { computeRecipeCost, referencePrice } from '../../utils/recipeCost';
 import FormDrawer from '../page/FormDrawer.vue';
 import BaseInput from '../ui/BaseInput.vue';
+import BaseButton from '../ui/BaseButton.vue';
 import BaseTextarea from '../ui/BaseTextarea.vue';
 import ErrorState from '../ui/ErrorState.vue';
 import LoadingState from '../ui/LoadingState.vue';
@@ -41,7 +42,7 @@ const props = defineProps({
   product: { type: Object, default: null }, // { id, name, variants }
   versions: { type: Array, default: () => [] }, // GET /products/{id}/recipes (terbaru dulu)
 });
-const emit = defineEmits(['close', 'saved']);
+const emit = defineEmits(['close', 'saved', 'remove']);
 const { t } = useI18n();
 const toast = useToastStore();
 
@@ -302,6 +303,9 @@ async function submit() {
     @close="emit('close')"
     @submit="submit"
   >
+    <template v-if="versions.length" #footer-start>
+      <BaseButton variant="danger" data-testid="rc-remove" @click="emit('remove')">{{ t('products.rc_remove') }}</BaseButton>
+    </template>
     <LoadingState v-if="loadState === 'loading'" :rows="6" />
     <ErrorState v-else-if="loadState === 'error'" :message="t('products.rc_load_failed')" @retry="load" />
 

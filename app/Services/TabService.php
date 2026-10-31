@@ -172,10 +172,14 @@ class TabService
             // saat ditambahkan) digabung. Harga ikut dicocokkan: item yang sudah di tab
             // mempertahankan harga saat ia ditambahkan, hanya item baru yang memakai harga terbaru
             // (spec, edge case "harga berubah di tengah makan").
+            // 087 US6 — hanya digabung dengan baris bersumber stok SAMA: baris yang dulu memotong stok varian tidak
+            // boleh bercampur dengan baris yang tidak (sumber produk diubah di tengah tab), atau pengembalian salah.
+            $source = $this->stockService->sourceForNewLine($variant);
             $line = $order->items()
                 ->whereNull('sent_at')
                 ->where('variant_id', $variant->id)
                 ->where('sell_price', $unitPrice)
+                ->where('stock_source', $source)
                 ->when($note === null, fn ($q) => $q->whereNull('note'), fn ($q) => $q->where('note', $note))
                 ->get()
                 ->first(fn (OrderItem $l) => $this->sameOptions($l->modifiers, $snapshot));
@@ -197,11 +201,12 @@ class TabService
                     'line_total' => round($unitPrice * $qty, 2),
                     'note' => $note,
                     'modifiers' => $snapshot,
+                    'stock_source' => $source,
                 ]);
             }
 
-            $this->stockService->applyMovementIfTracked(
-                variant: $variant, outletId: (int) $order->outlet_id, type: 'sale', qtyChange: -$qty,
+            $this->stockService->applyLineMovementIfTracked(
+                line: $line, variant: $variant, outletId: (int) $order->outlet_id, type: 'sale', qtyChange: -$qty,
                 referenceType: 'order_item', referenceId: $line->id, userId: $user->id,
             );
 
@@ -243,7 +248,9 @@ class TabService
                 $delta = (int) $data['qty'] - $line->qty;
                 $variant = ProductVariant::lockForUpdate()->findOrFail($line->variant_id);
 
-                $this->stockService->applyMovementIfTracked(
+                // 087 US6 — dua arah mengikuti snapshot baris, bukan pengaturan produk saat ini.
+                $this->stockService->applyLineMovementIfTracked(
+                    line: $line,
                     variant: $variant,
                     outletId: $this->outletOfLine($line),
                     type: $delta > 0 ? 'sale' : 'return',
@@ -324,6 +331,10 @@ class TabService
             $ticketItem = $line->ticketItem;
             if ($stockDecision === 'return') {
                 $this->returnStock($line, $line->qty, $user);
+            } else {
+                // 087 — bahan dipotong saat pesanan SELESAI, jadi baris yang dibuang tak akan pernah memotongnya;
+                // catat sebagai terbuang sekarang, setelah persetujuan dan SEBELUM baris dihapus (research D8).
+                app(ModifierMaterialConsumption::class)->wasteLine($line, $user);
             }
             $ticketItem?->update([
                 'status' => KitchenTicketItem::CANCELLED,
@@ -410,6 +421,9 @@ class TabService
                 if ($line->sent_at === null || $ticketItem === null || $ticketItem->status === KitchenTicketItem::NEW) {
                     $this->returnStock($line, $line->qty, $user);
                     $returned++;
+                } else {
+                    // 087 — sudah dimasak: bahan pilihan modifier terpakai walau tab dibatalkan (research D8).
+                    app(ModifierMaterialConsumption::class)->wasteLine($line, $user);
                 }
 
                 if ($ticketItem && in_array($ticketItem->status, KitchenTicketItem::UNFINISHED, true)) {
@@ -447,8 +461,9 @@ class TabService
             return;
         }
 
-        $this->stockService->applyMovementIfTracked(
-            variant: $variant, outletId: $this->outletOfLine($line), type: 'return', qtyChange: $qty,
+        // 087 US6 — kembali hanya bila baris ini dulu memotong stok varian (snapshot `stock_source`).
+        $this->stockService->applyLineMovementIfTracked(
+            line: $line, variant: $variant, outletId: $this->outletOfLine($line), type: 'return', qtyChange: $qty,
             referenceType: 'order_item', referenceId: $line->id, userId: $user->id,
         );
     }

@@ -17,4 +17,6 @@ return [
     'transfer_untracked' => 'Item :sku does not track stock, so it cannot be transferred.',
     'transfer_whole_qty' => 'Items are transferred in whole units.',
     'transfer_client_ref_conflict' => 'This client reference was already used for a different transfer.',
+    // 087 US6
+    'stock_source_modifier' => 'Item :sku takes its stock from modifiers (materials), so its variant has no stock to adjust. Adjust the material stock on the Materials page instead.',
 ];

@@ -115,3 +115,30 @@ describe('ModifierPickerModal', () => {
     expect(screen.getByLabelText(/large/i)).not.toBeChecked();
   });
 });
+
+// 2026-10-31 (permintaan pemilik) — stok bahan per pilihan dan pemakaiannya; grup "tiap pilihan = 1 porsi".
+describe('ModifierPickerModal — material stock and portions', () => {
+  const rasa = { id: 5, name: 'Rasa (Indomie)', selection_type: 'multiple', is_required: true, min_select: 1, max_select: 2, portion_per_option: true, options: [
+    { id: 50, name: 'SOTO', price_delta: '0.00', portions: 17, materials: [{ material_id: 9, name: 'Indomie Soto', unit: 'pcs', quantity: '1.0000', on_hand: '17.000' }] },
+    { id: 51, name: 'AYAM BAWANG', price_delta: '0.00', portions: 0, materials: [{ material_id: 10, name: 'Indomie Ayam Bawang', unit: 'pcs', quantity: '1.0000', on_hand: '-1.000' }] },
+  ] };
+  const render2 = () => render(ModifierPickerModal, { props: { open: true, itemName: 'Indomie Kuah', basePrice: '8000.00', groups: [rasa] } });
+
+  it('shows the stock at this outlet and how much one portion uses, per option', () => {
+    render2();
+    expect(screen.getByTestId('option-stock-50')).toHaveTextContent('Indomie Soto: stok 17 pcs · pakai 1 pcs');
+    expect(screen.getByTestId('option-stock-51')).toHaveTextContent('stok −1 pcs');
+    expect(screen.getByTestId('option-stock-51')).toHaveClass('text-danger-text');
+  });
+
+  it('charges the base price again for the second option and shows the portion count', async () => {
+    const user = userEvent.setup();
+    render2();
+
+    await user.click(screen.getByLabelText(/SOTO/));
+    expect(screen.getByTestId('modifier-price')).toHaveTextContent('8.000');
+    await user.click(screen.getByLabelText(/AYAM BAWANG/));
+    expect(screen.getByTestId('modifier-price')).toHaveTextContent('16.000');
+    expect(screen.getByTestId('modifier-portions')).toHaveTextContent('2 porsi');
+  });
+});

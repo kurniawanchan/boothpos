@@ -24,6 +24,7 @@ import FilterBar from '../components/page/FilterBar.vue';
 import MasterDataImportModal from '../components/masterData/MasterDataImportModal.vue';
 import ProductDetailModal from '../components/product/ProductDetailModal.vue';
 import { MOVEMENT_TYPES, movementTypeLabelKey, movementTypeVariant } from '../utils/stockMovements';
+import MaterialLedgerTable from '../components/stock/MaterialLedgerTable.vue';
 
 const auth = useAuthStore();
 const outletStore = useOutletStore();
@@ -46,6 +47,12 @@ const lowOnly = computed(() => {
   return ['1', 'true'].includes(String(Array.isArray(raw) ? raw[0] : raw));
 });
 const lowItems = ref([]);
+
+// 2026-10-31 (permintaan pemilik) — log Bahan di samping log Produk: koreksi, pembelian, pemakaian penjualan dan
+// transfer bahan tercatat di buku besar bahan (`material_stock_movements`), bukan di `stock_movements` produk.
+// Tab hanya untuk pengguna yang boleh melihat bahan (menu Bahan atau Stok).
+const ledger = ref(route?.query?.ledger === 'materials' ? 'materials' : 'products');
+const canSeeMaterials = computed(() => auth.canAccessMenu('materials') || auth.canAccessMenu('stock'));
 const lowLoading = ref(false);
 const lowError = ref(false);
 async function loadLow() {
@@ -275,6 +282,21 @@ async function submitAdjustment() {
     </section>
 
     <section v-else class="mx-[26px] border-2 border-line bg-white">
+      <div v-if="canSeeMaterials" class="flex gap-1 border-b-2 border-line px-5 pt-3" role="tablist">
+        <button
+          v-for="tab in ['products', 'materials']"
+          :key="tab"
+          type="button"
+          role="tab"
+          :aria-selected="ledger === tab"
+          class="-mb-[2px] border-b-2 px-3 py-2 text-[13px] font-bold"
+          :class="ledger === tab ? 'border-brand text-brand-active' : 'border-transparent text-muted-4 hover:text-brand-active'"
+          :data-testid="`stock-ledger-${tab}`"
+          @click="ledger = tab"
+        >{{ t(`stock.ledger_${tab}`) }}</button>
+      </div>
+      <MaterialLedgerTable v-if="ledger === 'materials'" />
+      <template v-else>
       <FilterBar :searchable="false" :count="loading || error ? null : meta.total" :active="filtersActive" @reset="resetFilters">
         <BaseSelect
           v-model="typeFilter"
@@ -328,6 +350,7 @@ async function submitAdjustment() {
         <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
       </DataTable>
       <TablePagination :meta="meta" @change="setPage" />
+      </template>
     </section>
 
     <ProductDetailModal :open="detailProductId !== null" :product-id="detailProductId" :highlight-variant-id="detailVariantId" @close="closeDetail" />

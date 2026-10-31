@@ -58,6 +58,10 @@ export const useSettingsStore = defineStore('settings', {
     // 083 — SATU aturan tampil baris pajak untuk layar kerja (keranjang, pembayaran). Order tersimpan memakai
     // utils/taxDisplay.js (jumlah pajak order itu sendiri, bukan tarif saat ini).
     showTaxLine: (state) => state.taxShow && state.taxRate > 0,
+    // Catatan bertanggal 2026-10-31 (perintah pemilik, MEMBALIK aturan 083 "toggle hanya tampilan"): pajak yang
+    // ditampilkan mati TIDAK dihitung. Satu-satunya tarif untuk pratinjau total POS; server memakai aturan yang sama
+    // (PosSettings::effectiveTaxRate). `taxRate` tetap tarif yang tersimpan (layar Pengaturan).
+    effectiveTaxRate: (state) => (state.taxShow ? state.taxRate : 0),
   },
   actions: {
     async load() {

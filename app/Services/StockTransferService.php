@@ -208,7 +208,7 @@ class StockTransferService
                 if ($variant === null) {
                     throw ValidationException::withMessages(["lines.{$i}.item_id" => __('stock.transfer_item_not_found')]);
                 }
-                if (! $variant->track_stock) {
+                if (! $variant->tracksOwnStock()) { // 087 US6 — juga produk bersumber stok `modifier`
                     throw ValidationException::withMessages(["lines.{$i}.item_id" => __('stock.transfer_untracked', ['sku' => $variant->sku])]);
                 }
                 if ((float) $qty != (int) $qty) {

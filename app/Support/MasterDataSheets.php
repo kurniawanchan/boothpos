@@ -109,6 +109,8 @@ final class MasterDataSheets
                 // 043 — fakta item, DITAMBAHKAN di akhir supaya berkas lama tetap bisa diimpor. `status` hanya EKSPOR
                 // (turunan: draft/active/discontinued); status diubah lewat aksi diskontinu/aktifkan, bukan lewat impor.
                 'short_name', 'tax_category', 'prep_minutes', 'is_retail', 'status',
+                // 087 US6 — sumber stok (`variant`/`modifier`), DI AKHIR supaya berkas lama tetap terbaca.
+                'stock_source',
             ],
             // 045 Stage 5 — `outlet_code` di AKHIR (berkas lama tetap terbaca): stok adalah saldo per outlet; wajib bila
             // ada beberapa outlet.
@@ -217,6 +219,7 @@ final class MasterDataSheets
                 'prep_minutes' => '',
                 'is_retail' => 0,
                 'status' => '',
+                'stock_source' => 'variant',
             ],
             self::STOCK => [
                 'sku' => 'RYU-KY-SAK-001',

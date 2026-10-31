@@ -85,6 +85,38 @@ class RecipeService
     }
 
     /**
+     * 2026-10-31 (permintaan pemilik: "bisa hapus resep") — menghapus SEMUA versi resep sebuah item. Varian berhenti
+     * digerakkan resep (harga modal boleh diubah tangan lagi); harga modal terakhir dibiarkan apa adanya, dan
+     * `order_items.cost_price` yang sudah tercatat tidak pernah berubah. Isi tiap versi disimpan di log aktivitas
+     * karena barisnya ikut terhapus (baris resep dan tautan varian CASCADE).
+     *
+     * @return int banyaknya versi yang dihapus (0 = item tidak punya resep)
+     */
+    public function remove(Product $product, User $by): int
+    {
+        return DB::transaction(function () use ($product, $by) {
+            Product::query()->whereKey($product->id)->lockForUpdate()->first();
+            $versions = Recipe::query()->where('product_id', $product->id)->with(['lines', 'variants:product_variants.id'])->orderBy('version')->get();
+            if ($versions->isEmpty()) {
+                return 0;
+            }
+
+            $this->log->log(
+                userId: $by->id, action: 'recipe_removed', entityType: 'Product', entityId: $product->id,
+                description: "Resep {$product->name} dihapus ({$versions->count()} versi).",
+                oldValues: ['versions' => $versions->map(fn (Recipe $r) => [
+                    'version' => $r->version, 'yield' => (float) $r->yield, 'effective_from' => $r->effective_from?->toDateString(),
+                    'variant_ids' => $r->variants->pluck('id')->all(),
+                    'lines' => $r->lines->map(fn ($l) => ['material_id' => $l->material_id, 'quantity' => (float) $l->quantity, 'shrinkage_pct' => (float) $l->shrinkage_pct])->all(),
+                ])->all()],
+            );
+            Recipe::query()->whereKey($versions->pluck('id'))->delete();
+
+            return $versions->count();
+        });
+    }
+
+    /**
      * "Hitung ulang biaya": menulis ulang `cost_price` varian yang digerakkan resep dari biaya porsi SAAT INI
      * (harga vendor bisa berubah). Varian dengan biaya tak lengkap dilewati dan dilaporkan.
      *

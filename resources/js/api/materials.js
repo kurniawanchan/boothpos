@@ -25,6 +25,16 @@ export function deleteMaterial(id) {
   return client.delete(`/materials/${id}`);
 }
 
+/** 087 — riwayat pergerakan stok bahan ({ 'type[]', 'outlet_id[]', from, to, page, per_page }). */
+// 2026-10-31 — buku besar SEMUA bahan (log Inventori → Stok, tab Bahan).
+export function listAllMaterialMovements(params = {}) {
+  return client.get('/materials/movements', { params }).then((r) => r.data);
+}
+
+export function listMaterialMovements(id, params = {}) {
+  return client.get(`/materials/${id}/movements`, { params }).then((r) => r.data);
+}
+
 // Harga vendor per bahan — digantung di bawah /materials/{material}/vendor-prices
 // (bahan sebagai aggregate root), lihat routes/api.php.
 export function addVendorPrice(materialId, payload) {

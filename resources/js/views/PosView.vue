@@ -6,13 +6,15 @@ import { listCategories } from '../api/categories';
 import { listOutlets } from '../api/outlets';
 import { listProducts, lookupVariants } from '../api/products';
 import { createOrder } from '../api/orders';
+import { toastMaterialWarnings } from '../utils/materialWarnings';
 import { usePosCartStore } from '../stores/posCart';
+import { useOutletStore } from '../stores/outlet';
 import { useSettingsStore } from '../stores/settings';
 import { useToastStore } from '../stores/toast';
 import { cartTotals } from '../utils/posTotals';
 import { uuid } from '../utils/uuid';
 import { formatIDR, toMoneyString } from '../utils/money';
-import { buildProductCards, buildSearchCards, toCartItem } from '../utils/posProductCards';
+import { buildProductCards, buildSearchCards, toCartItem, isOutOfStock } from '../utils/posProductCards';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { useMenuAvailability } from '../composables/useMenuAvailability';
 import PosCartPanel from '../components/pos/PosCartPanel.vue';
@@ -42,7 +44,15 @@ const outlets = ref([]);
 // dengan pencarian), bukan lagi satu ID chip tunggal. Array kosong =
 // "Semua" — lihat BaseMultiSelect.vue.
 const selectedCategoryIds = ref([]);
-const selectedOutletIds = ref([]);
+// 2026-10-31 (laporan pemilik): filter outlet dulu selalu mulai "Semua outlet" walau navbar memilih satu outlet, jadi
+// menu outlet lain ikut tampil. Kini mulai dari outlet navbar dan mengikutinya saat navbar diganti; kasir tetap boleh
+// mengubah filter ini sendiri sesudahnya.
+const outletStore = useOutletStore();
+const navbarOutlets = () => (outletStore.selected != null ? [outletStore.selected] : []);
+const selectedOutletIds = ref(navbarOutlets());
+watch(() => outletStore.selected, () => {
+  selectedOutletIds.value = navbarOutlets();
+});
 const search = ref('');
 const browsedProducts = ref([]);
 const searchResults = ref(null);
@@ -52,7 +62,7 @@ const discount = ref(0);
 // 048 — pratinjau total (termasuk pajak) sebelum order dibuat; rumusnya sama dengan server. Setelah POST /orders,
 // struk dan laporan membaca total dari server.
 const settings = useSettingsStore();
-const totals = computed(() => cartTotals({ subtotal: cart.subtotal, discount: discount.value, taxRate: settings.taxRate }));
+const totals = computed(() => cartTotals({ subtotal: cart.subtotal, discount: discount.value, taxRate: settings.effectiveTaxRate }));
 const selectedCustomer = ref(null);
 const showCustomerPicker = ref(false);
 const showPayment = ref(false);
@@ -171,7 +181,7 @@ const modifierTarget = ref(null);
 
 function addToCart(item) {
   if (availability.isUnavailable(item)) return refuseUnavailable(item);
-  if (item.current_stock <= 0) return;
+  if (isOutOfStock(item.current_stock)) return; // 087: null = tanpa stok sendiri, selalu boleh
   if (item.modifier_groups?.length) {
     modifierTarget.value = item;
     return;
@@ -185,7 +195,8 @@ function confirmModifiers({ modifier_option_ids }) {
   const selection = Object.fromEntries(item.modifier_groups.map((g) => [g.id, g.options.filter((o) => modifier_option_ids.includes(o.id)).map((o) => o.id)]));
   cart.add({
     ...item,
-    sell_price: toMoneyString(Number(item.sell_price) + selectionDelta(item.modifier_groups, selection)),
+    // 2026-10-31 — harga dasar ikut dikirim: grup "tiap pilihan = 1 porsi" menambah satu harga dasar per pilihan tambahan.
+    sell_price: toMoneyString(Number(item.sell_price) + selectionDelta(item.modifier_groups, selection, Number(item.sell_price))),
     modifier_option_ids,
     modifiers: describeSelection(item.modifier_groups, modifier_option_ids),
   });
@@ -247,6 +258,7 @@ async function handlePaymentSubmit(payments) {
       payments,
     });
     lastOrderId.value = order.id;
+    toastMaterialWarnings(order, t, toast); // 087 — bahan menjadi minus: peringatan, penjualan tetap tercatat
     showPayment.value = false;
     showReceipt.value = true;
     cart.clear();
@@ -377,7 +389,7 @@ async function resumeDraft(draftId) {
             v-for="card in searchCards"
             :key="card.variant_id"
             type="button"
-            :disabled="card.current_stock <= 0"
+            :disabled="isOutOfStock(card.current_stock)"
             :aria-disabled="availability.isUnavailable(card) ? 'true' : undefined"
             :class="availability.isUnavailable(card) ? 'opacity-50 grayscale' : ''"
             class="flex flex-col overflow-hidden rounded-card border border-line-2 bg-white text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-60"
@@ -389,7 +401,7 @@ async function resumeDraft(draftId) {
               <i v-else class="ph-duotone ph-package text-[30px] opacity-40" aria-hidden="true"></i>
               <span class="absolute bottom-1.5 left-2 rounded bg-white/85 px-1.5 py-0.5 font-mono text-[9.5px] text-muted-5">{{ card.sku }}</span>
               <span v-if="availability.isUnavailable(card)" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text" data-testid="card-86">{{ t('pos.sold_out_86') }}</span>
-              <span v-else-if="card.current_stock <= 0" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>
+              <span v-else-if="isOutOfStock(card.current_stock)" class="absolute right-2 top-2 rounded-full bg-danger-bg px-2 py-0.5 text-[10px] font-bold text-danger-text">{{ t('pos.out_of_stock') }}</span>
             </div>
             <div class="flex flex-col gap-1 px-3 py-2.5">
               <span class="text-[13.5px] font-semibold leading-tight">{{ card.name }}</span>
@@ -397,7 +409,7 @@ async function resumeDraft(draftId) {
               <span class="text-[11px] text-muted-3">{{ card.home_outlet_name }}</span>
               <div class="mt-0.5 flex items-baseline justify-between gap-1.5">
                 <span class="text-[14.5px] font-bold text-brand-active">{{ formatIDR(card.sell_price) }}</span>
-                <span class="text-[11px] text-muted-3">{{ t('pos.stock_count', { count: card.current_stock }) }}</span>
+                <span v-if="card.current_stock !== null" class="text-[11px] text-muted-3">{{ t('pos.stock_count', { count: card.current_stock }) }}</span>
               </div>
             </div>
           </button>
@@ -435,7 +447,13 @@ async function resumeDraft(draftId) {
                   <template v-else-if="card.min_price === card.max_price">{{ formatIDR(card.min_price) }}</template>
                   <template v-else>{{ formatIDR(card.min_price) }}–{{ formatIDR(card.max_price) }}</template>
                 </span>
-                <span class="text-[11px] text-muted-3">{{ t('pos.stock_count', { count: card.total_stock }) }}</span>
+                <span v-if="card.total_stock !== null" class="text-[11px] text-muted-3">{{ t('pos.stock_count', { count: card.total_stock }) }}</span>
+                <span
+                  v-else-if="card.material_portions != null"
+                  class="text-[11px]"
+                  :class="card.material_portions > 0 ? 'text-muted-3' : 'text-danger-text'"
+                  data-testid="card-material-stock"
+                >{{ t('pos.stock_count', { count: card.material_portions }) }}</span>
               </div>
             </div>
           </button>
