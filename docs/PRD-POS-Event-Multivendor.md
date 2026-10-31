@@ -280,6 +280,18 @@ Atas permintaan pemilik produk, aplikasi Android tidak lagi meminta login owner/
 
 Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/073-android-outlet-terminal-login/`.
 
+**Catatan perubahan pasca-MVP — 2026-10-31 (fitur 087, pilihan modifier memakai bahan baku)**
+
+Atas permintaan pemilik produk, setiap pilihan modifier (mis. Rasa Kuah → SOTO, Topping → Telur) boleh memakai satu atau lebih bahan baku dengan jumlah per porsi. Saat pesanan **selesai** (penjualan ritel, tab lunas, atau split), bahan itu dipotong dari stok outlet transaksi. Satu bahan tetap satu saldo per outlet, berapa pun menu dan grup yang memakainya.
+
+- **Keputusan pemilik:** penjualan tidak pernah ditolak karena stok bahan; saldo bahan boleh minus (hanya karena penjualan atau bahan terbuang) dan kasir diberi peringatan. Koreksi dan transfer tetap tidak boleh membuat minus.
+- Void dan refund mengembalikan bahan sebesar yang dulu dipotong; baris yang sudah dimasak lalu dibatalkan "buang" dicatat sebagai bahan terbuang. Biaya bahan pilihan masuk HPP baris.
+- Ini kemampuan baru yang sempit: resep/BOM menu sendiri **tetap hanya untuk HPP** (tidak memotong stok), dan tidak ada konversi satuan. Bukan penghidupan kembali butir 10.2 ("materials/production" atau produksi terjadwal).
+
+- **Sumber stok per produk (tambahan 2026-10-31):** di formulir produk pemilik memilih stok dari **Varian** (bawaan, perilaku lama) atau **Modifier** (produk tidak punya stok sendiri; yang berkurang bahan pilihannya, mis. Indomie Kuah). Aturan ini berlaku di semua modul: kasir web, tab, tablet, void/refund, transfer, koreksi, laporan stok, dan impor master data. Produk bersumber Modifier tampil tanpa angka stok dan tidak pernah "habis".
+
+Tidak ada nomor F- baru. Lihat `specs/087-modifier-material-deduction/`.
+
 **Catatan perubahan pasca-MVP — 2026-10-27 (fitur 079, kode outlet bisa disunting; alamat dan identitas toko per outlet)**
 
 Atas permintaan pemilik produk: (1) kode outlet kini **3–5 huruf atau angka** dan **boleh disunting** setelah dibuat — ini membalik bagian "outlet" dari F19.4; (2) outlet punya **alamat**; (3) struk menampilkan nama, alamat, telepon, surel, dan catatan **outlet tempat penjualan terjadi**, dan layar (header, sidebar, layar PIN tablet) menampilkan outlet terpilih.
