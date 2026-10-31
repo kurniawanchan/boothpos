@@ -230,6 +230,12 @@ class PreorderDispatchStatusTest extends TestCase
         $older = $this->createPreorder();
         $this->travel(1)->hours();
         $newer = $this->createPreorder();
+        // BUG YANG DITEMUKAN & DIPERBAIKI (052) — tanpa jeda ini update `older`
+        // jatuh di DETIK yang sama dengan pembuatan `newer`, jadi updated_at
+        // keduanya seri dan urutan "older dulu" di bawah hanya kebetulan MySQL.
+        // Sejak applySort() memecah seri dengan preorders.id, seri itu
+        // dimenangkan `newer`; maksud tes (older BARU SAJA diubah) kini eksplisit.
+        $this->travel(1)->seconds();
         $this->patchJson("/api/v1/preorders/{$older['id']}/dispatch-status", ['dispatch_status' => 'invoice_sent'])->assertOk();
 
         $row = collect($this->getJson('/api/v1/preorders')->assertOk()->json('data'))->firstWhere('id', $older['id']);

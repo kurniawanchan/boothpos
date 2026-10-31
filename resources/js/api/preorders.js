@@ -15,6 +15,13 @@ export function getPreorder(id) {
   return client.get(`/preorders/${id}`).then((r) => r.data);
 }
 
+// 052-preorder-detail-prev-next — pre-order sebelum/sesudah di daftar. `params`
+// = filter + urutan yang sama dengan listPreorders() (tanpa page/per_page),
+// dihitung server lewat applyFilters()/applySort() yang sama dengan daftar.
+export function getPreorderNeighbors(id, params = {}) {
+  return client.get(`/preorders/${id}/neighbors`, { params }).then((r) => r.data);
+}
+
 export function createPreorder(payload) {
   return client.post('/preorders', payload).then((r) => r.data);
 }
