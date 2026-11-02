@@ -3613,6 +3613,22 @@ paths:
         '403': { description: Tanpa menu dashboard }
         '422': { description: period tidak valid }
 
+  /dashboard/materials:
+    get:
+      tags: [Dashboard]
+      summary: Statistik bahan & stok (088)
+      description: >
+        Hitungan = ringkasan /reports/materials/position dengan ambang bawaan (jendela 7, risk 3) untuk outlet yang sama;
+        `low_stock_products` = aturan stok menipis produk yang ada; `wasted_value` = bahan terbuang × biaya satuan di periode.
+        `stock_value`/`wasted_value` HANYA untuk menu `reports` (kunci tidak ada bagi yang lain). Cache 30 detik dikunci
+        mode data + outlet + periode + tanggal bisnis; `computed_at` = waktu hitung. Gerbang: menu `dashboard`.
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [today, 7d, 30d], default: today } }
+      responses:
+        '200': { description: "{counts{negative,out,low,at_risk_products}, low_stock_products, stock_value?, wasted_value?, params{window_days,risk_days}, computed_at}" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
   /dashboard/shifts:
     get:
       tags: [Dashboard]
@@ -4368,6 +4384,112 @@ paths:
                         total_sales: { $ref: '#/components/schemas/Money' }
                         modal: { $ref: '#/components/schemas/Money' }
                         gross_profit: { $ref: '#/components/schemas/Money' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /reports/materials/position:
+    get:
+      tags: [Report]
+      summary: Laporan Bahan — posisi & risiko per bahan per outlet (088)
+      description: >
+        Saldo, laju pemakaian harian (pemakaian bersih sale+return+waste di jendela ÷ HARI JUAL outlet), hari tersisa,
+        status (negative|out|low|ok|unused, low = hari tersisa < risk_days), penanda `usage_untracked` (bahan resep/BOM
+        tanpa pemetaan modifier), biaya satuan = aturan biaya resep, pilihan & menu yang terancam (hanya baris berisiko),
+        dan saran beli `max(0, target_days × laju − saldo)` dengan vendor/harga rujukan. `summary` dihitung SEBELUM
+        saringan `status`. Dibatasi outlet yang berlaku (X-Outlet-Id); "semua outlet" = baris per outlet. Gerbang: menu `reports`.
+      parameters:
+        - { name: window_days, in: query, schema: { type: integer, minimum: 1, maximum: 90, default: 7 } }
+        - { name: risk_days, in: query, schema: { type: integer, minimum: 1, maximum: 60, default: 3 } }
+        - { name: target_days, in: query, schema: { type: integer, minimum: 1, maximum: 90, default: 7 } }
+        - { name: 'status[]', in: query, schema: { type: array, items: { type: string, enum: [negative, out, low, ok, unused] } } }
+        - { name: 'kind[]', in: query, schema: { type: array, items: { type: string, enum: [ingredient, semi_finished, packaging] } } }
+        - { name: search, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: 'outlet_id[]', in: query, description: "Saringan outlet halaman (catatan 2026-11-02). Dipotong dengan outlet yang berlaku (X-Outlet-Id + izin pengguna), tidak pernah memperluas; tak satu pun boleh → data kosong. Tanpa nilai = semua outlet yang berlaku.", schema: { type: array, items: { type: integer } } }
+      responses:
+        '200': { description: "{data:[{material_id,code,name,unit,kind,outlet_id,outlet_code,on_hand,daily_usage,days_left,status,usage_untracked,unit_cost,stock_value,at_risk_options[{option_id,option,group,portions}],at_risk_products[{product_id,name}],suggestion{qty,vendor_id,vendor,unit_price,cost}|null}], summary{negative,out,low,ok,unused,at_risk_products,stock_value,suggestion_cost}, params{window_days,risk_days,target_days}, computed_at}" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /reports/materials/usage:
+    get:
+      tags: [Report]
+      summary: Laporan Bahan — pemakaian, terbuang, koreksi, pembelian, pindah per periode (088)
+      description: >
+        Per bahan per outlet di periode TANGGAL BISNIS (bawaan 7 hari terakhir; date_from ≤ date_to, ≤ 366 hari):
+        sold_net = −(sale + return), wasted, adjusted_in/out, purchased, transferred_in/out, transfer_cancelled, dengan
+        nilai rupiah. `totals` hanya rupiah; `trend` satu titik per tanggal bisnis; `top_used`/`top_wasted` maks 10.
+        Angka = buku besar bahan untuk outlet dan periode yang sama. Gerbang: menu `reports`.
+      parameters:
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: 'kind[]', in: query, schema: { type: array, items: { type: string, enum: [ingredient, semi_finished, packaging] } } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: 'outlet_id[]', in: query, description: "Saringan outlet halaman (catatan 2026-11-02). Dipotong dengan outlet yang berlaku (X-Outlet-Id + izin pengguna), tidak pernah memperluas; tak satu pun boleh → data kosong. Tanpa nilai = semua outlet yang berlaku.", schema: { type: array, items: { type: integer } } }
+      responses:
+        '200': { description: "{data[], totals{sold_net_value,wasted_value,adjusted_in_value,adjusted_out_value,purchased_value}, trend[{date,sold_net_value,wasted_value}], top_used[{material_id,name,value}], top_wasted[...]}" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /reports/materials/{material}/usage-by-menu:
+    get:
+      tags: [Report]
+      summary: Menu dan pilihan yang memakai satu bahan di periode (088)
+      parameters:
+        - { name: material, in: path, required: true, schema: { type: integer } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: 'outlet_id[]', in: query, description: "Saringan outlet halaman (catatan 2026-11-02). Dipotong dengan outlet yang berlaku (X-Outlet-Id + izin pengguna), tidak pernah memperluas; tak satu pun boleh → data kosong. Tanpa nilai = semua outlet yang berlaku.", schema: { type: array, items: { type: integer } } }
+      responses:
+        '200': { description: "{data:[{product_id,product,options[],qty}]} — dari baris pesanan rujukan pergerakan sale/return; pilihan = snapshot baris ∩ pemetaan bahan." }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /reports/materials/purchase-drafts:
+    post:
+      tags: [Report]
+      summary: Saran pembelian → draf PO per vendor (088)
+      description: >
+        Satu draf PO per vendor rujukan bahan (harga vendor pilihan, lalu termurah) lewat PurchaseOrderService (status draf,
+        log aktivitas; stok bergerak hanya saat PO diterima). Outlet = outlet TUNGGAL yang berlaku (X-Outlet-Id), tidak
+        pernah dari body; tanpa outlet tunggal → 422 `outlet`. Baris tanpa harga vendor / nonaktif / tak terlihat ditolak
+        per baris (`refused`). Semua ditolak → 422. Header `Idempotency-Key` opsional (middleware `idempotent`).
+        Gerbang: menu `reports` DAN izin membuat PO. Halaman Laporan mengirim `X-Outlet-Id` = satu outlet yang disaring di tab Bahan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lines]
+              properties:
+                lines:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [material_id, qty]
+                    properties:
+                      material_id: { type: integer }
+                      qty: { type: number, minimum: 0.001, maximum: 999999 }
+      responses:
+        '201': { description: "{created:[{purchase_order_id,po_number,vendor_id,vendor,line_count,total}], refused:[{material_id,reason: no_vendor|inactive_material|not_visible}]}" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { description: "Validasi, tanpa outlet tunggal, atau semua baris ditolak ({message, refused})" }
+
+  /reports/materials/export:
+    get:
+      tags: [Report]
+      summary: Ekspor Laporan Bahan (.xlsx, 3 sheet) (088)
+      description: Posisi & risiko, Saran pembelian, Pemakaian periode — baris sama dengan layar untuk parameter yang sama; string disimpan sebagai teks literal (bukan formula).
+      parameters:
+        - { name: window_days, in: query, schema: { type: integer } }
+        - { name: risk_days, in: query, schema: { type: integer } }
+        - { name: target_days, in: query, schema: { type: integer } }
+        - { name: 'status[]', in: query, schema: { type: array, items: { type: string } } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: 'outlet_id[]', in: query, description: "Saringan outlet halaman (catatan 2026-11-02). Dipotong dengan outlet yang berlaku (X-Outlet-Id + izin pengguna), tidak pernah memperluas; tak satu pun boleh → data kosong. Tanpa nilai = semua outlet yang berlaku.", schema: { type: array, items: { type: integer } } }
+      responses:
+        '200': { description: Berkas laporan-bahan.xlsx }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /reports/purchases:

@@ -292,6 +292,10 @@ Atas permintaan pemilik produk, setiap pilihan modifier (mis. Rasa Kuah → SOTO
 
 Tidak ada nomor F- baru. Lihat `specs/087-modifier-material-deduction/`.
 
+**Catatan perubahan pasca-MVP — 2026-11-01 (fitur 088, Laporan Bahan dan statistik stok di Dashboard)**
+
+Atas permintaan pemilik: tab **Laporan → Bahan** (risiko habis per outlet dari laju pemakaian ÷ hari jual, menu/pilihan yang terancam, saran beli yang bisa dijadikan **draf PO per vendor**, pemakaian/terbuang/selisih per periode, ekspor .xlsx) dan kartu **Bahan & stok** di Dashboard yang membuka laporan tersaring. Draf PO memakai alur PO yang ada (status draf; stok bertambah hanya saat diterima) — bukan modul pembelian baru, jadi pemotongan lingkup PRD §10.2 untuk manajemen pembelian tidak dibuka kembali. Tidak ada nomor F- baru. Lihat `specs/088-material-stock-report/`.
+
 **Catatan perubahan pasca-MVP — 2026-10-27 (fitur 079, kode outlet bisa disunting; alamat dan identitas toko per outlet)**
 
 Atas permintaan pemilik produk: (1) kode outlet kini **3–5 huruf atau angka** dan **boleh disunting** setelah dibuat — ini membalik bagian "outlet" dari F19.4; (2) outlet punya **alamat**; (3) struk menampilkan nama, alamat, telepon, surel, dan catatan **outlet tempat penjualan terjadi**, dan layar (header, sidebar, layar PIN tablet) menampilkan outlet terpilih.

@@ -59,3 +59,8 @@ export async function exportDashboard(params) {
   const blob = await exportDashboardBlob(params);
   saveBlob(blob, `dashboard-${params?.period ?? 'today'}-${new Date().toISOString().slice(0, 10)}.csv`);
 }
+
+/** 088 — GET /dashboard/materials: statistik bahan & stok (rupiah hanya bila server mengirimnya). */
+export function getDashboardMaterials(params = {}) {
+  return client.get('/dashboard/materials', { params: clean(params) }).then((r) => r.data);
+}

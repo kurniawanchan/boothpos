@@ -10,7 +10,9 @@ import { summary, attention, orders } from '../../resources/js/api/dashboard';
 
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), profitReport: vi.fn(), outletSettlements: vi.fn() }));
 vi.mock('../../resources/js/api/stock', () => ({ lowStock: vi.fn(), listMovements: vi.fn() }));
-vi.mock('../../resources/js/api/dashboard', () => ({ summary: vi.fn(), attention: vi.fn(), orders: vi.fn(), downloadOrdersCsv: vi.fn(), exportDashboard: vi.fn(),
+vi.mock('../../resources/js/api/dashboard', () => ({
+  // 088 — kartu statistik bahan di Dashboard (diuji sendiri di DashboardMaterialStats.test.js).
+  getDashboardMaterials: vi.fn().mockResolvedValue({ counts: { negative: 0, out: 0, low: 0, at_risk_products: 0 }, low_stock_products: 0, params: { window_days: 7, risk_days: 3 }, computed_at: '' }),  summary: vi.fn(), attention: vi.fn(), orders: vi.fn(), downloadOrdersCsv: vi.fn(), exportDashboard: vi.fn(),
   // 065 — panel "Shift terbuka": kosong di tes ini (diuji sendiri di OpenShiftsPanel.test.js).
   shifts: vi.fn().mockResolvedValue({ data: [], total_open: 0 }) }));
 vi.mock('vue-chartjs', () => ({

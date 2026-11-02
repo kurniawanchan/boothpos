@@ -39,7 +39,7 @@ describe('ReportsView — page kit structure (041)', () => {
     outletSettlements.mockResolvedValue({ data: ROWS });
   });
 
-  it('renders the page header (single h1) with the export action and a tablist with all five report tabs', async () => {
+  it('renders the page header (single h1) with the export action and a tablist with all six report tabs (088: + Bahan)', async () => {
     renderReports();
     await screen.findByText('Outlet A');
 
@@ -48,7 +48,8 @@ describe('ReportsView — page kit structure (041)', () => {
     expect(screen.getByRole('button', { name: /ekspor \.xlsx/i })).toBeInTheDocument();
 
     const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
-    expect(tabs).toHaveLength(5);
+    expect(tabs).toHaveLength(6);
+    expect(tabs[5]).toHaveTextContent('Bahan');
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
   });
 

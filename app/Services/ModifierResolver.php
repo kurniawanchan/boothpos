@@ -38,6 +38,55 @@ class ModifierResolver
     }
 
     /**
+     * 088 — pembaca BALIK aturan pewarisan di atas: "produk aktif mana yang memakai grup ini?" (laporan bahan: menu
+     * yang terancam bila bahan sebuah pilihan habis). Aturannya HARUS sama dengan inheritedGroups()/effectiveGroups():
+     * tautan produk ∪ produk dari kategori bertautan, minus produk yang melepas grup warisan (086); tautan produk
+     * langsung menang atas pengecualian. Tiga kueri untuk semua grup sekaligus (tanpa N+1).
+     *
+     * @param  array<int, int>  $groupIds
+     * @return array<int, list<array{product_id: int, name: string}>> grupId => produk (grup tanpa produk tidak ada)
+     */
+    public function productsUsingGroups(array $groupIds): array
+    {
+        $groupIds = array_values(array_unique(array_map('intval', $groupIds)));
+        if ($groupIds === []) {
+            return [];
+        }
+
+        $direct = \Illuminate\Support\Facades\DB::table('modifier_group_product')->whereIn('modifier_group_id', $groupIds)->get(['modifier_group_id', 'product_id']);
+        $viaCategory = \Illuminate\Support\Facades\DB::table('modifier_group_category')->whereIn('modifier_group_id', $groupIds)->get(['modifier_group_id', 'category_id']);
+        $excluded = \Illuminate\Support\Facades\DB::table('modifier_group_product_exclusions')->whereIn('modifier_group_id', $groupIds)->get(['modifier_group_id', 'product_id'])
+            ->map(fn ($r) => $r->modifier_group_id.':'.$r->product_id)->flip();
+
+        // Produk lewat model: global scope mode data berlaku; hanya produk aktif.
+        $products = Product::query()->where('is_active', true)
+            ->where(fn ($q) => $q->whereIn('id', $direct->pluck('product_id'))->orWhereIn('category_id', $viaCategory->pluck('category_id')))
+            ->get(['id', 'name', 'category_id']);
+        $byId = $products->keyBy('id');
+        $byCategory = $products->groupBy('category_id');
+
+        $out = [];
+        foreach ($groupIds as $gid) {
+            $ids = $direct->where('modifier_group_id', $gid)->pluck('product_id')->filter(fn ($id) => $byId->has($id));
+            $directSet = $ids->flip();
+            foreach ($viaCategory->where('modifier_group_id', $gid) as $link) {
+                foreach ($byCategory->get($link->category_id, collect()) as $p) {
+                    // Tautan produk menang atas pengecualian; pengecualian hanya melepas warisan kategori.
+                    if ($directSet->has($p->id) || ! $excluded->has($gid.':'.$p->id)) {
+                        $ids->push($p->id);
+                    }
+                }
+            }
+            $list = $ids->unique()->map(fn ($id) => ['product_id' => (int) $id, 'name' => $byId[$id]->name])->sortBy('name')->values()->all();
+            if ($list !== []) {
+                $out[$gid] = $list;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * @return Collection<int, ModifierGroup> grup aktif berurut (display_order, id), tiap grup membawa HANYA opsi aktif
      */
     public function effectiveGroups(Product $product): Collection
