@@ -408,9 +408,16 @@ Route::prefix('v1')->group(function () {
         Route::get('/dashboard/attention', [DashboardController::class, 'attention']);
         // 065 — shift terbuka semua pengguna (panel dashboard).
         Route::get('/dashboard/shifts', [DashboardController::class, 'shifts']);
+        Route::get('/dashboard/materials', [DashboardController::class, 'materials']);
         Route::get('/dashboard/orders', [DashboardController::class, 'orders']);
         Route::get('/dashboard/orders/export', [DashboardController::class, 'ordersExport']);
         Route::get('/dashboard/export', [DashboardController::class, 'export']);
+        // 088 — laporan Bahan (SEBELUM `reports/{report}/export` supaya `materials` tidak tertangkap sebagai nama laporan).
+        Route::get('/reports/materials/position', [\App\Http\Controllers\Api\MaterialReportController::class, 'position']);
+        Route::get('/reports/materials/export', [\App\Http\Controllers\Api\MaterialReportController::class, 'export']);
+        Route::get('/reports/materials/usage', [\App\Http\Controllers\Api\MaterialReportController::class, 'usage']);
+        Route::get('/reports/materials/{material}/usage-by-menu', [\App\Http\Controllers\Api\MaterialReportController::class, 'usageByMenu'])->whereNumber('material');
+        Route::post('/reports/materials/purchase-drafts', [\App\Http\Controllers\Api\MaterialReportController::class, 'purchaseDrafts'])->middleware('idempotent');
         Route::get('/reports/sales', [ReportController::class, 'sales']);
         Route::post('/reports/sales/transactions/export', [ReportController::class, 'exportSalesTransactions']);
         Route::get('/reports/profit', [ReportController::class, 'profit']);

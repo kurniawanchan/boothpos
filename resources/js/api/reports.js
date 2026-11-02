@@ -46,6 +46,34 @@ export function stockByOutletReport(params = {}) {
   return client.get('/reports/stock-by-outlet', { params }).then((r) => r.data);
 }
 
+// --- 088 Laporan Bahan --------------------------------------------------------------------------------------------
+// Catatan 2026-11-02: tab Bahan punya filter Outlet sendiri (`outlet_id[]`, pola 070/071). Header bilah atas
+// DILEWATI (`skipOutletHeader`) supaya filter bisa memilih outlet lain; server tetap memotong dengan outlet yang boleh dilihat.
+/** GET /reports/materials/position — posisi & risiko per bahan per outlet (`outlet_id[]` = saringan outlet halaman). */
+export function getMaterialPosition(params = {}) {
+  return client.get('/reports/materials/position', { params, skipOutletHeader: true }).then((r) => r.data);
+}
+
+/** GET /reports/materials/usage — pemakaian/terbuang/koreksi/pembelian per periode tanggal bisnis. */
+export function getMaterialUsage(params = {}) {
+  return client.get('/reports/materials/usage', { params, skipOutletHeader: true }).then((r) => r.data);
+}
+
+/** GET /reports/materials/{id}/usage-by-menu — menu yang memakai satu bahan di periode. */
+export function getMaterialUsageByMenu(materialId, params = {}) {
+  return client.get(`/reports/materials/${materialId}/usage-by-menu`, { params, skipOutletHeader: true }).then((r) => r.data);
+}
+
+/**
+ * POST /reports/materials/purchase-drafts — draf PO per vendor dari saran terpilih; `key` = Idempotency-Key per niat.
+ * Server mengambil outlet TUNGGAL dari header, jadi pemanggil mengirim `outletId` = satu outlet yang disaring di halaman
+ * (header bilah atas dilewati; tanpa `outletId` tidak ada header).
+ */
+export function createMaterialPurchaseDrafts(lines, key, outletId = null) {
+  const headers = { 'Idempotency-Key': key, ...(outletId != null ? { 'X-Outlet-Id': String(outletId) } : {}) };
+  return client.post('/reports/materials/purchase-drafts', { lines }, { headers, skipOutletHeader: true }).then((r) => r.data);
+}
+
 /**
  * report is one of: sales | profit | outlet-settlements | outlet-profit | purchases | stock-by-outlet. Downloaded via
  * axios (not a plain <a href>) because the export endpoint requires the

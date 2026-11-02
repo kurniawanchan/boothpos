@@ -44,6 +44,23 @@ class DashboardController extends Controller
         return response()->json($list->openShifts($request->user(), 50));
     }
 
+    /**
+     * 088 US3 — statistik bahan & stok (kartu klik-menuju Laporan → Bahan). Angka dari MaterialReport (sama dengan
+     * laporan); rupiah hanya untuk pemegang menu `reports` (research D6) — kuncinya dihapus, bukan dikosongkan.
+     */
+    public function materials(\Illuminate\Http\Request $request, \App\Services\MaterialReport $report): JsonResponse
+    {
+        abort_unless($request->user()->canAccessMenu('dashboard'), 403, __('reports.not_authorized_generic'));
+        $period = $request->validate(['period' => ['sometimes', 'in:'.implode(',', \App\Services\DashboardService::PERIODS)]])['period'] ?? 'today';
+
+        $stats = $report->dashboardStats($period);
+        if (! $request->user()->canAccessMenu('reports')) {
+            unset($stats['stock_value'], $stats['wasted_value']);
+        }
+
+        return response()->json($stats);
+    }
+
     /** Tabel "Order terbaru": baris + jumlah tab (semua filter kecuali tab) + tab yang disembunyikan. */
     public function orders(DashboardQueryRequest $request, DashboardOrdersQuery $query): JsonResponse
     {

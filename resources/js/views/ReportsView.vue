@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { toLocalDateKey } from '../utils/date';
@@ -24,6 +25,7 @@ import ProfitTab from './reports/ProfitTab.vue';
 import OutletProfitTab from './reports/OutletProfitTab.vue';
 import PurchasesTab from './reports/PurchasesTab.vue';
 import StockByOutletTab from './reports/StockByOutletTab.vue';
+import MaterialsTab from './reports/MaterialsTab.vue';
 
 // 041 (US2) — halaman ini dipecah: induk hanya memegang pemuatan data, filter, dan ekspor; tiap tab laporan
 // ada di views/reports/*. Perilaku, endpoint, dan semantik filter tidak berubah.
@@ -43,7 +45,10 @@ const toast = useToastStore();
 const today = toLocalDateKey(new Date());
 const dateFrom = ref(today);
 const dateTo = ref(today);
+// 088 — tab awal boleh datang dari tautan (`?tab=materials`, mis. kartu statistik Dashboard); tab tak dikenal → bawaan.
+const route = useRoute();
 const activeTab = ref('settlement');
+const materialsTab = ref(null);
 
 const settlements = ref(null);
 const profit = ref(null);
@@ -78,9 +83,15 @@ const tabs = computed(() =>
         // dan stok gudang bukan angka per-periode seperti tiga tab di atas.
         { key: 'purchases', label: t('reports.tab_purchases') },
         { key: 'stock-by-outlet', label: t('reports.tab_stock_by_artist') },
+        // 088 — Laporan Bahan: memuat datanya sendiri (parameter + outlet navbar), tanpa periode/filter bersama.
+        { key: 'materials', label: t('reports.tab_materials') },
       ]
     : []
 );
+{
+  const requested = route?.query?.tab;
+  if (requested && tabs.value.some((tab) => tab.key === requested)) activeTab.value = requested;
+}
 // Chip jumlah pada tab sengaja TIDAK ada: tiap tab dimuat hanya saat dibuka, jadi jumlah tab lain tidak diketahui
 // dari data yang sudah dimuat (aturan kit: chip hanya bila jumlahnya diketahui).
 
@@ -110,6 +121,8 @@ async function loadActiveTab() {
       outletProfit.value = res.data;
     } else if (activeTab.value === 'purchases') {
       purchases.value = await purchasesReport({ status: purchasesStatusFilter.value || undefined });
+    } else if (activeTab.value === 'materials') {
+      // MaterialsTab memuat sendiri.
     } else if (activeTab.value === 'stock-by-outlet') {
       // Tanpa outlet_id — respons ringkasan (array per-outlet) tidak
       // berubah, per research.md R9. Detail per-varian hanya diambil saat
@@ -157,7 +170,9 @@ const exportKey = computed(() => (activeTab.value === 'settlement' ? 'outlet-set
 
 async function doExport(report) {
   try {
-    await exportReport(report, PERIOD_TABS.includes(activeTab.value) ? periodParams() : {});
+    // 088 — tab Bahan punya parameter & saringannya sendiri; berkas harus sama dengan layar.
+    const params = activeTab.value === 'materials' ? materialsTab.value?.exportParams?.() ?? {} : PERIOD_TABS.includes(activeTab.value) ? periodParams() : {};
+    await exportReport(report, params);
   } catch {
     toast.error(t('reports.export_report_failed'));
   }
@@ -178,7 +193,7 @@ async function doExport(report) {
     <div class="mx-[26px] border-2 border-line bg-white pb-1">
       <TabBar v-model="activeTab" :tabs="tabs" :label="t('nav.reports')" />
 
-      <FilterBar :searchable="false" :count="rowCount">
+      <FilterBar v-if="activeTab !== 'materials'" :searchable="false" :count="rowCount">
         <!-- 046 — periode (tanggal bisnis) menggantikan pemilih event; hanya untuk tab yang mengikuti periode. -->
         <template v-if="PERIOD_TABS.includes(activeTab)">
           <input v-model="dateFrom" type="date" :max="dateTo || undefined" :aria-label="t('reports.filter_date_from')" class="h-9 border-2 border-line bg-white px-2.5 text-[13px]" data-testid="period-from" />
@@ -210,6 +225,7 @@ async function doExport(report) {
         <OutletProfitTab v-else-if="activeTab === 'outlet-profit'" :rows="filteredOutletProfit" :loading="loading" />
         <PurchasesTab v-else-if="activeTab === 'purchases'" :purchases="purchases" :loading="loading" />
         <StockByOutletTab v-else-if="activeTab === 'stock-by-outlet'" :rows="filteredStockByOutlet" :loading="loading" />
+        <MaterialsTab v-else-if="activeTab === 'materials'" ref="materialsTab" />
       </template>
     </div>
   </div>

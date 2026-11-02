@@ -10,6 +10,7 @@ import { useOutletStore } from '../stores/outlet';
 import { formatBusinessDate, formatClock, todayInZone } from '../utils/dashboardDates';
 import PageHeader from '../components/page/PageHeader.vue';
 import DashboardKpis from '../components/dashboard/DashboardKpis.vue';
+import DashboardMaterialStats from '../components/dashboard/DashboardMaterialStats.vue';
 import DashboardOrdersTable from '../components/dashboard/DashboardOrdersTable.vue';
 import AttentionPanel from '../components/page/AttentionPanel.vue';
 import OpenShiftsPanel from '../components/dashboard/OpenShiftsPanel.vue';
@@ -182,6 +183,9 @@ async function onExport() {
 
     <!-- 045: dengan satu outlet terpilih, kartu stok (seluruh organisasi) memberi catatannya. -->
     <DashboardKpis :summary="data" :state="state" :outlet-selected="outletStore.selected !== null" :tax-label="settings.taxLabel" @retry="loadSummary()" />
+
+    <!-- 088 — statistik bahan & stok; klik kartu → Laporan → Bahan tersaring (angka sama). -->
+    <DashboardMaterialStats :period="period" />
 
     <!-- Cakupan satu outlet: "Seluruh toko" (Stage B menggantinya dengan nama outlet / "Semua outlet"). -->
     <AttentionPanel
