@@ -7,6 +7,7 @@ use App\Models\CashierSession;
 use App\Models\Event;
 use App\Models\Order;
 use App\Models\Payment;
+use App\Services\CashierSessionQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -91,7 +92,7 @@ class CashierSessionController extends Controller
         return response()->json($session->load('openingCashEntries'), 201);
     }
 
-    public function close(Request $request, CashierSession $session): JsonResponse
+    public function close(Request $request, CashierSession $session, CashierSessionQuery $query): JsonResponse
     {
         // Otorisasi objek: sesi hanya boleh ditutup oleh pemiliknya atau
         // owner/admin. Ini mencegah IDOR — kasir A menutup paksa sesi
@@ -124,15 +125,9 @@ class CashierSessionController extends Controller
         // shift penjualannya (kembalian hanya terjadi saat checkout). Order batal
         // dikeluarkan seperti sebelumnya; pembayaran pre-order (session_id NULL)
         // tetap di luar kas shift.
-        $cashPaymentsTotal = Payment::where('session_id', $session->id)
-            ->where('method', 'cash')
-            ->where('verification', 'verified')
-            ->whereHas('order', fn ($q) => $q->where('status', '!=', 'voided'))
-            ->sum('amount');
-
-        $changeGiven = Order::where('session_id', $session->id)->where('status', '!=', 'voided')->sum('change_amount');
-
-        $expectedCash = (float) $session->opening_cash + (float) $cashPaymentsTotal - (float) $changeGiven;
+        // 054 — rumus kas yang diharapkan kini SATU tempat (CashierSessionQuery::expectedCash), dipakai juga
+        // rincian shift yang masih terbuka; hasilnya identik dengan perhitungan inline sebelumnya.
+        $expectedCash = $query->expectedCash($session);
         $closingCash = (float) $validated['closing_cash'];
 
         $session->update([
@@ -145,6 +140,44 @@ class CashierSessionController extends Controller
         ]);
 
         return response()->json($session->fresh());
+    }
+
+    // --- 054 (US12) riwayat shift kasir -----------------------------------------------------------
+    // Owner/admin melihat semua shift; selain itu hanya miliknya sendiri (aturan yang sama dengan summary()).
+
+    public function index(Request $request, CashierSessionQuery $query): JsonResponse
+    {
+        $validated = $request->validate([
+            'user_id' => ['nullable', 'integer'],
+            'event_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'in:open,closed'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+        ]);
+
+        return response()->json($query->list(
+            $request->user(), $validated, max(1, $request->integer('page', 1)), min(100, max(1, $request->integer('per_page', 25))),
+        ));
+    }
+
+    public function show(Request $request, CashierSession $session, CashierSessionQuery $query): JsonResponse
+    {
+        if (! CashierSessionQuery::mayView($session, $request->user())) {
+            return response()->json(['message' => __('events_sessions.not_authorized_view_summary')], 403);
+        }
+
+        return response()->json($query->detail($session));
+    }
+
+    public function transactions(Request $request, CashierSession $session, CashierSessionQuery $query): JsonResponse
+    {
+        if (! CashierSessionQuery::mayView($session, $request->user())) {
+            return response()->json(['message' => __('events_sessions.not_authorized_view_summary')], 403);
+        }
+
+        return response()->json($query->transactions(
+            $session, max(1, $request->integer('page', 1)), min(100, max(1, $request->integer('per_page', 25))),
+        ));
     }
 
     public function summary(Request $request, CashierSession $session): JsonResponse

@@ -25,6 +25,15 @@ class OrderResource extends JsonResource
             'notes' => $this->notes,
             'channel' => $this->channel,
             'created_at' => $this->created_at,
+            // 054 (US8) — referensi transaksi. Kolom-kolomnya ada di model, jadi blok ini SELALU ada (tidak
+            // bergantung pada relasi yang dimuat); hanya nama pengubah yang menunggu relasi `referenceEditor`.
+            'reference' => [
+                'note' => $this->reference_note,
+                'has_image' => $this->reference_image_path !== null,
+                'updated_at' => $this->reference_updated_at,
+                'updated_by_name' => $this->relationLoaded('referenceEditor') ? $this->referenceEditor?->name : null,
+                'can_edit' => $request->user() !== null && \App\Services\OrderReferenceService::mayEdit($this->resource, $request->user()),
+            ],
             // null (kunci tetap ada) untuk pembeli walk-in; hilang bila relasi tak dimuat.
             'customer' => $this->whenLoaded('customer', fn ($c) => ['id' => $c->id, 'name' => $c->name, 'phone' => $c->phone, 'email' => $c->email]),
             'cashier' => $this->whenLoaded('cashier', fn ($u) => ['id' => $u->id, 'name' => $u->name]),
@@ -53,7 +62,7 @@ class OrderResource extends JsonResource
             'payments' => $this->whenLoaded('payments', fn () => $this->payments->map(function ($p) use ($request) {
                 $user = $request->user();
                 $row = [
-                    'id' => $p->id, 'method' => $p->method, 'amount' => number_format((float) $p->amount, 2, '.', ''),
+                    'id' => $p->id, 'method' => $p->method, 'channel_id' => $p->channel_id, 'amount' => number_format((float) $p->amount, 2, '.', ''),
                     'verification' => $p->verification,
                     'paid_at' => $p->paid_at,
                     'reference' => $p->reference,
@@ -69,6 +78,9 @@ class OrderResource extends JsonResource
                     'can_edit_confirmation' => $user !== null && $this->status !== 'voided' && $p->confirmationEditableBy($user),
                     // 032 — boleh diverifikasi oleh pengguna yang meminta (dihitung SERVER): non-tunai, masih pending, penjualan tidak batal, bukan pencatatnya.
                     'can_verify' => $user !== null && $this->status !== 'voided' && $p->isVerifiable() && $p->mayVerify($user),
+                    // 054 — koreksi metode: orang yang berhak DAN keadaannya memungkinkan (dihitung SERVER;
+                    // aksi disembunyikan bila tak mungkin berhasil: batal, tunai di shift tertutup, tunai dengan kembalian).
+                    'can_change_method' => $user !== null && $p->mayManageConfirmation($user) && $p->methodChangeBlocker($this->resource) === null,
                     // 032 — kapan diverifikasi (NULL untuk tunai/pending); nama verifier hanya bila relasinya dimuat.
                     'verified_at' => $p->verified_at,
                 ];

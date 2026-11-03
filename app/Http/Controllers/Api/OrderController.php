@@ -12,6 +12,7 @@ use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Setting;
 use App\Services\ImageUploadService;
+use App\Services\OrderReferenceService;
 use App\Services\OrderService;
 use App\Services\PaymentService;
 use App\Support\AppName;
@@ -19,6 +20,8 @@ use App\Support\ModeGate;
 use App\Support\PaymentSummary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
@@ -178,6 +181,85 @@ class OrderController extends Controller
         ])));
     }
 
+    // --- 054 (US8) referensi transaksi -----------------------------------------------------------
+    // Membaca (catatan + gambar) = siapa pun yang punya menu 'sales' (halaman itu terbuka untuk semua peran
+    // dan setiap kasir memang melihat semua penjualan); mengubah/menghapus = owner/admin atau kasir penjualannya.
+
+    private function referenceBlock(Order $order, Request $request): array
+    {
+        $order->loadMissing('referenceEditor');
+
+        return [
+            'note' => $order->reference_note,
+            'has_image' => $order->reference_image_path !== null,
+            'updated_at' => $order->reference_updated_at,
+            'updated_by_name' => $order->referenceEditor?->name,
+            'can_edit' => OrderReferenceService::mayEdit($order, $request->user()),
+        ];
+    }
+
+    public function showReference(Request $request, Order $order): JsonResponse
+    {
+        abort_unless($request->user()->canAccessMenu('sales'), 403, __('orders_payments.reference_not_allowed_view'));
+
+        return response()->json($this->referenceBlock($order, $request));
+    }
+
+    public function referenceImage(Request $request, Order $order): Response|JsonResponse
+    {
+        abort_unless($request->user()->canAccessMenu('sales'), 403, __('orders_payments.reference_not_allowed_view'));
+
+        $path = $order->reference_image_path;
+        if ($path === null || ! Storage::disk('local')->exists($path)) {
+            return response()->json(['message' => __('orders_payments.reference_image_missing')], 404);
+        }
+
+        // Diautorisasi per permintaan lalu dilayani dari disk privat; tak pernah di-cache bersama.
+        return response(Storage::disk('local')->get($path))
+            ->header('Content-Type', $order->reference_image_mime ?: 'application/octet-stream')
+            ->header('Cache-Control', 'private, no-store');
+    }
+
+    public function saveReference(\App\Http\Requests\UpsertOrderReferenceRequest $request, Order $order, OrderReferenceService $service): JsonResponse
+    {
+        try {
+            $order = $service->save($order, $request->safe()->only(['note', 'remove_image']), $request->file('image'), $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json($this->referenceBlock($order, $request));
+    }
+
+    public function deleteReference(Request $request, Order $order, OrderReferenceService $service): JsonResponse
+    {
+        try {
+            $order = $service->delete($order, $request->user());
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json($this->referenceBlock($order, $request));
+    }
+
+    /** 054 (US7) — koreksi metode/kanal satu pembayaran (nominal tak pernah berubah). */
+    public function changePaymentMethod(\App\Http\Requests\ChangePaymentMethodRequest $request, Order $order, Payment $payment): JsonResponse
+    {
+        abort_unless($payment->mayManageConfirmation($request->user()), 403, __('orders_payments.payment_method_change_not_allowed'));
+
+        try {
+            $order = $this->paymentService->changeMethod($order, $payment, $request->validated(), $request->user());
+        } catch (\App\Exceptions\PaymentMethodChangeException $e) {
+            return response()->json(['message' => $e->getMessage(), 'code' => $e->reason], $e->status);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json(new OrderResource($order->load([
+            'items.variant.product.category', 'items.artist', 'payments.channel', 'payments.recorder', 'payments.proofs', 'payments.verifier', 'payments.session', 'customer', 'cashier', 'event',
+        ])));
+    }
+
     public function void(Request $request, Order $order): JsonResponse
     {
         // Sama seperti catatan di EventPolicy::create() — "batalkan
@@ -206,20 +288,14 @@ class OrderController extends Controller
     // PELANGGAN, bukan operator toko, jadi harus selalu Bahasa Indonesia
     // terlepas dari preferensi bahasa kasir yang sedang login. Jangan
     // "perbaiki" ini jadi ikut ter-i18n-kan.
-    public function receipt(Order $order): JsonResponse
+    /**
+     * 054 (US9) — identitas toko pada struk (nama, kontak, alamat, logo, footer, nama aplikasi). Sama untuk semua struk
+     * dalam satu permintaan, jadi dibangun SEKALI: membacanya per struk berarti ~8 query pengaturan per penjualan
+     * (88 query untuk 11 struk), yang membuat unduh massal 200 struk sangat boros.
+     */
+    private function receiptStoreBlock(): array
     {
-        $order->load(['items.artist', 'payments', 'cashier', 'event', 'customer']);
-        $summary = PaymentSummary::for($order);
-
-        return response()->json([
-            // 003-seed-demo-live follow-up — nama toko DEMO dan LIVE
-            // disimpan sebagai baris settings terpisah (lihat catatan di
-            // SakanaFridgeDemoSeeder), supaya menjalankan seeder tidak
-            // pernah menimpa nama toko sungguhan. Struk selalu memakai
-            // nama milik MODE ORDER INI (bukan mode aktif saat ini) —
-            // tapi karena Order sendiri sudah disaring DataModeScope,
-            // ModeGate::current() saat request ini pasti sama dengan
-            // data_mode order yang berhasil dimuat.
+        return [
             'store_name' => Setting::get(ModeGate::isDemo() ? 'store_name_demo' : 'store_name', 'Toko'),
             'store_contact' => Setting::get('store_contact'),
             // 001-user-store-settings User Story 3 / SC-004 — struk harus
@@ -240,6 +316,32 @@ class OrderController extends Controller
             'store_contact_email' => Setting::get('store_contact_email'),
             'receipt_footer_text' => Setting::get('receipt_footer_text'),
             'app_name' => AppName::current(),
+        ];
+    }
+
+    /**
+     * 054 (US9) — satu-satunya perakit isi struk, dipakai GET /orders/{id}/receipt DAN unduh massal
+     * (POST /orders/bulk-receipts), supaya struk massal tak pernah berbeda dari struk di layar.
+     */
+    private function receiptPayload(Order $order, ?array $store = null): array
+    {
+        $store ??= $this->receiptStoreBlock();
+        $order->loadMissing(['items.artist', 'payments', 'cashier', 'event', 'customer']);
+        // Entri yang sudah dimuat diteruskan: tanpa itu PaymentSummary menanyakan pembayaran SATU PER penjualan (N+1 di unduh massal).
+        $summary = PaymentSummary::for($order, $order->payments);
+
+        return [
+            // 054 — status ikut dikirim supaya struk penjualan batal bisa diberi tanda (unduh massal memuatnya bila daftar menampilkannya).
+            'status' => $order->status,
+            // 003-seed-demo-live follow-up — nama toko DEMO dan LIVE
+            // disimpan sebagai baris settings terpisah (lihat catatan di
+            // SakanaFridgeDemoSeeder), supaya menjalankan seeder tidak
+            // pernah menimpa nama toko sungguhan. Struk selalu memakai
+            // nama milik MODE ORDER INI (bukan mode aktif saat ini) —
+            // tapi karena Order sendiri sudah disaring DataModeScope,
+            // ModeGate::current() saat request ini pasti sama dengan
+            // data_mode order yang berhasil dimuat.
+            ...$store,
             // 003-seed-demo-live follow-up 2 (FR-024) — BUG YANG DITEMUKAN
             // & DIPERBAIKI: footer struk sebelumnya HANYA menampilkan
             // store_contact_person/phone/email (kontak TOKO, bukan
@@ -298,6 +400,34 @@ class OrderController extends Controller
             'paid_amount' => $summary['total_paid'],
             'balance_amount' => $summary['remaining'],
             'payment_status' => $summary['status'],
+        ];
+    }
+    public function receipt(Order $order): JsonResponse
+    {
+        return response()->json($this->receiptPayload($order));
+    }
+
+    /**
+     * 054 (US9) — isi struk banyak penjualan sekaligus untuk unduhan massal (PDF dirender di browser, sama
+     * seperti struk satuan). Dibatasi 200 id; id yang tak ditemukan pada mode data aktif (atau sudah hilang)
+     * dilaporkan di `missing`, bukan dikarang. Eager-load SEKALI untuk semua penjualan (tanpa N+1).
+     */
+    public function bulkReceipts(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'order_ids' => ['required', 'array', 'min:1', 'max:200'],
+            'order_ids.*' => ['integer'],
+        ]);
+        $ids = array_values(array_unique(array_map('intval', $validated['order_ids'])));
+
+        $orders = Order::with(['items.artist', 'payments', 'cashier', 'event', 'customer'])->whereIn('id', $ids)->get()->keyBy('id');
+        $store = $this->receiptStoreBlock();
+
+        return response()->json([
+            // Urutan mengikuti permintaan (urutan daftar di layar).
+            'data' => collect($ids)->filter(fn ($id) => $orders->has($id))->map(fn ($id) => $this->receiptPayload($orders[$id], $store))->values(),
+            'missing' => collect($ids)->reject(fn ($id) => $orders->has($id))->values(),
         ]);
     }
+
 }

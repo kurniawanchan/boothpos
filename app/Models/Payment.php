@@ -125,4 +125,31 @@ class Payment extends Model
             || $this->recorded_by === null
             || (int) $this->recorded_by !== (int) $user->id;
     }
+
+    /**
+     * 054 (US7) — SATU-SATUNYA definisi kapan metode pembayaran penjualan POS TIDAK bisa dikoreksi
+     * (dipakai service, dan flag `can_change_method` di presenter, supaya aksinya disembunyikan bila
+     * tak mungkin berhasil). Mengembalikan kode alasan atau null.
+     *   voided        — penjualan batal;
+     *   (tunai di shift yang sudah ditutup SEKARANG boleh dikoreksi — permintaan pemilik produk: salah pilih
+     *   metode sering baru ketahuan setelah shift tutup. Angka shift tertutup tetap yang TERSIMPAN saat ditutup;
+     *   koreksinya terlacak di activity log, tidak menulis ulang rekonsiliasi.)
+     *   change_given  — tunai pada penjualan yang menghasilkan kembalian: pembayaran menyimpan uang yang
+     *                   DISERAHKAN dan kembaliannya melekat pada pesanan, jadi tak bisa dipindah ke non-tunai.
+     * Hanya soal keadaan; siapa yang boleh dinilai mayManageConfirmation().
+     */
+    public function methodChangeBlocker(Order $order): ?string
+    {
+        if ($order->status === 'voided') {
+            return 'voided';
+        }
+
+        if ($this->method === 'cash') {
+            if ((float) $order->change_amount > 0) {
+                return 'change_given';
+            }
+        }
+
+        return null;
+    }
 }

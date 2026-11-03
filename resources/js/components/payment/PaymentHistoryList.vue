@@ -36,7 +36,7 @@ defineProps({
   showProof: { type: Boolean, default: true },
   showPrint: { type: Boolean, default: true },
 });
-const emit = defineEmits(['view-proof', 'print', 'delete', 'edit-confirmation', 'verify']);
+const emit = defineEmits(['view-proof', 'print', 'delete', 'edit-confirmation', 'verify', 'change-method']);
 
 // "Belum ada bukti" hanya bila server MENYATAKAN has_proof === false (non-tunai).
 const lacksProof = (p) => p.method !== 'cash' && p.has_proof === false;
@@ -93,7 +93,7 @@ const { t } = useI18n();
           </StatusPill>
         </div>
       </div>
-      <div v-if="(showProof && canViewProof(p)) || p.can_edit_confirmation || canVerify(p) || showPrint || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
+      <div v-if="(showProof && canViewProof(p)) || p.can_edit_confirmation || p.can_change_method || canVerify(p) || showPrint || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
         <button
           v-if="showProof && canViewProof(p)"
           type="button"
@@ -114,6 +114,14 @@ const { t } = useI18n();
           data-testid="edit-confirmation"
           @click="emit('edit-confirmation', p)"
         >{{ hasAnyConfirmation(p) ? t('payment_ledger.edit_confirmation') : t('payment_ledger.add_confirmation') }}</button>
+        <!-- 054 (US7) — koreksi metode/kanal; izin dan keadaan (batal, tunai di shift tertutup, kembalian) dihitung SERVER. -->
+        <button
+          v-if="p.can_change_method"
+          type="button"
+          class="whitespace-nowrap text-[12px] font-semibold text-brand-active hover:underline"
+          data-testid="change-method"
+          @click="emit('change-method', p)"
+        >{{ t('payment_ledger.change_method') }}</button>
         <button
           v-if="showPrint"
           type="button"

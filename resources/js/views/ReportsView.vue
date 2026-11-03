@@ -22,6 +22,8 @@ import DataTable from '../components/ui/DataTable.vue';
 import ArtistTransactionsModal from '../components/report/ArtistTransactionsModal.vue';
 import StockByArtistDetailModal from '../components/report/StockByArtistDetailModal.vue';
 import PreorderReportDetailModal from '../components/report/PreorderReportDetailModal.vue';
+import SalesByProductTab from '../components/report/SalesByProductTab.vue';
+import SalesByPaymentMethodTab from '../components/report/SalesByPaymentMethodTab.vue';
 
 // Tab "Penjualan" dikeluarkan menjadi halaman/menu tersendiri (SalesView.vue)
 // — laporan penjualan terbuka untuk semua peran, sedangkan ketiga tab yang
@@ -110,6 +112,10 @@ const tabs = computed(() =>
         // EVENT_SCOPED_TABS (yang menahan pemuatan sampai eventId terisi) —
         // filter event di sini hanya mempersempit, bukan prasyarat.
         { key: 'preorder', label: t('reports.tab_preorder') },
+        // 054 (US10/US11) — dua tab penjualan POS; event OPSIONAL (tanpa event = semua event) dan
+        // memuat datanya sendiri (komponen tab), jadi tidak masuk EVENT_SCOPED_TABS / loadActiveTab.
+        { key: 'sales-by-product', label: t('sales_reports.tab_by_product') },
+        { key: 'sales-by-payment-method', label: t('sales_reports.tab_by_method') },
       ]
     : []
 );
@@ -118,6 +124,8 @@ const tabs = computed(() =>
 // di bawah supaya tab tanpa event (purchases/stock-by-artist) tidak ikut
 // menunggu eventId ter-set lebih dulu.
 const EVENT_SCOPED_TABS = ['settlement', 'profit', 'artist-profit'];
+// 054 — tab yang memuat datanya sendiri; ReportsView hanya meneruskan eventId.
+const SELF_LOADING_TABS = ['sales-by-product', 'sales-by-payment-method'];
 
 // 010-split-payment-preorder-reports (US6, T036) — REUSE PreordersView.vue's
 // exact status-label keys (preorders.step_* + events_sessions.status_cancelled)
@@ -149,6 +157,7 @@ watch([eventId, activeTab], loadActiveTab);
 watch([purchasesStatusFilter], () => { if (activeTab.value === 'purchases') loadActiveTab(); });
 
 async function loadActiveTab() {
+  if (SELF_LOADING_TABS.includes(activeTab.value)) return;
   if (EVENT_SCOPED_TABS.includes(activeTab.value) && !eventId.value) return;
   loading.value = true;
   try {
@@ -332,12 +341,12 @@ function openPreorderDetail(row) {
            eksplisit, pengguna tidak bisa kembali ke tampilan semua-event
            setelah memilih satu event. -->
       <BaseSelect
-        v-if="EVENT_SCOPED_TABS.includes(activeTab) || activeTab === 'preorder'"
+        v-if="EVENT_SCOPED_TABS.includes(activeTab) || activeTab === 'preorder' || SELF_LOADING_TABS.includes(activeTab)"
         class="w-56"
         v-model="eventId"
         :placeholder="t('reports.all_events')"
         :options="
-          activeTab === 'preorder'
+          activeTab === 'preorder' || SELF_LOADING_TABS.includes(activeTab)
             ? [{ value: '', label: t('reports.all_events') }, ...events.map((e) => ({ value: e.id, label: e.name }))]
             : events.map((e) => ({ value: e.id, label: e.name }))
         "
@@ -711,6 +720,10 @@ function openPreorderDetail(row) {
         </DataTable>
       </div>
     </template>
+
+    <!-- 054 (US10/US11) — tab penjualan POS; masing-masing memuat datanya sendiri dan mengikuti filter event di atas. -->
+    <SalesByProductTab v-if="activeTab === 'sales-by-product'" :event-id="eventId" />
+    <SalesByPaymentMethodTab v-else-if="activeTab === 'sales-by-payment-method'" :event-id="eventId" />
 
     <ArtistTransactionsModal
       :open="showArtistTransactions"

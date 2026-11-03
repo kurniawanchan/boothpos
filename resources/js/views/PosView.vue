@@ -18,7 +18,7 @@ import ProductVariantPickerModal from '../components/pos/ProductVariantPickerMod
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
 import CustomerPickerModal from '../components/forms/CustomerPickerModal.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
-import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
+import PillFilterRow from '../components/pos/PillFilterRow.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import PosDraftsPanel from '../components/pos/PosDraftsPanel.vue';
 import { savePosDraft, resumePosDraft } from '../api/posDrafts';
@@ -207,12 +207,15 @@ function selectProductCard(card) {
   showVariantPicker.value = true;
 }
 
+// 054 (US1) — memilih varian TIDAK menutup pemilih lagi: kasir bisa memilih beberapa varian
+// berturut-turut lalu menutupnya lewat tombol Tutup (closeVariantPicker).
 function handleVariantPick(variant) {
   if (!variantPickerCard.value) return;
   addToCart(toCartItem(variantPickerCard.value, variant));
-  showVariantPicker.value = false;
-  variantPickerCard.value = null;
 }
+
+// { [variant_id]: qty } — diturunkan dari keranjang supaya hitungan di pemilih selalu mengikuti isinya.
+const cartQtyByVariant = computed(() => Object.fromEntries(cart.items.map((i) => [i.variant_id, i.qty])));
 
 function closeVariantPicker() {
   showVariantPicker.value = false;
@@ -333,8 +336,10 @@ async function resumeDraft(draftId) {
         <RouterLink :to="{ name: 'session' }" class="font-bold underline">{{ t('pos.open_here') }}</RouterLink>.
       </div>
 
-      <div class="flex flex-wrap items-center gap-2.5">
-        <div class="relative flex min-w-[240px] flex-1 items-center">
+      <!-- 054 (US3/US4) — baris cari: kotak cari ±setengah lebar semula + pil penjual yang menggulung
+           ke samping; pil kategori di baris tersendiri di bawahnya. -->
+      <div data-testid="search-row" class="flex items-center gap-3">
+        <div class="relative flex w-[min(42%,320px)] min-w-[160px] flex-none items-center">
           <i class="ph-duotone ph-magnifying-glass pointer-events-none absolute left-3.5 text-[17px] text-muted-3" aria-hidden="true"></i>
           <label class="sr-only" for="pos-search">{{ t('pos.search_product_or_sku') }}</label>
           <input
@@ -346,23 +351,10 @@ async function resumeDraft(draftId) {
             class="h-[46px] w-full rounded-lg border border-line bg-white pl-10 pr-3.5 text-[14.5px] outline-none focus:border-brand focus:ring-[3px] focus:ring-mint-100"
           />
         </div>
-        <BaseButton variant="secondary" :disabled="cart.isEmpty" :loading="savingDraft" @click="saveDraft">
-          <i class="ph-duotone ph-note-pencil text-[16px]" aria-hidden="true"></i>
-          {{ t('pos.save_as_draft') }}
-        </BaseButton>
-        <BaseButton variant="secondary" @click="showDrafts = true">
-          <i class="ph-duotone ph-tray text-[16px]" aria-hidden="true"></i>
-          {{ t('pos.drafts_title') }}
-        </BaseButton>
+        <PillFilterRow v-model="selectedArtistIds" class="flex-1" :aria-label="t('pos.filter_sellers')" :options="artistOptions" :all-label="t('master_data.all_artists')" />
       </div>
 
-      <!-- 005-ux-enhancements-dashboard (US1) — dropdown multi-pilih dengan
-           pencarian, menggantikan baris chip artist/category dari
-           004-sidebar-menu-reorg (lihat research.md R2). -->
-      <div class="flex flex-wrap gap-2.5">
-        <BaseMultiSelect v-model="selectedArtistIds" :options="artistOptions" :all-label="t('master_data.all_artists')" class="w-52" />
-        <BaseMultiSelect v-model="selectedCategoryIds" :options="categoryOptions" :all-label="t('master_data.all_categories')" class="w-52" />
-      </div>
+      <PillFilterRow v-model="selectedCategoryIds" :aria-label="t('pos.filter_categories')" :options="categoryOptions" :all-label="t('master_data.all_categories')" />
 
       <EmptyState v-if="!loadingGrid && cards.length === 0" icon="ph-package" :message="t('pos.no_matching_products')" />
       <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-3.5 pb-5">
@@ -438,6 +430,9 @@ async function resumeDraft(draftId) {
       :customer-name="selectedCustomer?.name ?? ''"
       :can-checkout="canCheckout"
       :checkout-blocked-reason="checkoutBlockedReason"
+      :saving-draft="savingDraft"
+      @save-draft="saveDraft"
+      @open-drafts="showDrafts = true"
       @update:discount="discount = $event"
       @pick-customer="showCustomerPicker = true"
       @pay="openPayment"
@@ -460,7 +455,7 @@ async function resumeDraft(draftId) {
 
     <ReceiptModal :open="showReceipt" :order-id="lastOrderId" @close="closeReceipt" />
 
-    <ProductVariantPickerModal :open="showVariantPicker" :product="variantPickerCard" @close="closeVariantPicker" @select="handleVariantPick" />
+    <ProductVariantPickerModal :open="showVariantPicker" :product="variantPickerCard" :cart-qty-by-variant="cartQtyByVariant" @close="closeVariantPicker" @select="handleVariantPick" />
     <PosDraftsPanel :open="showDrafts" @close="showDrafts = false" @resume="resumeDraft" />
   </div>
 </template>

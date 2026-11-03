@@ -291,4 +291,51 @@ class SalesTransactionsTest extends TestCase
         $this->assertSame('46000.00', $row['margin_amount']);
         $this->assertEquals(59.0, $row['margin_percent']);
     }
+
+    // --- 054 (US5): angka kartu ringkasan diturunkan dari baris yang sama dengan daftarnya ---
+
+    public function test_rows_carry_a_per_seller_breakdown_that_adds_up_to_the_item_totals(): void
+    {
+        $order = $this->makeOrder();
+        $this->actingAs($this->owner, 'sanctum');
+
+        $row = $this->rows()->firstWhere('key', "order:{$order->id}");
+
+        $this->assertNotEmpty($row['seller_items']);
+        $this->assertSame(
+            (float) $row['items_net'],
+            round(collect($row['seller_items'])->sum(fn ($p) => (float) $p['net']), 2),
+        );
+        $this->assertEquals((float) $row['unit_count'], collect($row['seller_items'])->sum('units'));
+    }
+
+    public function test_rows_carry_item_level_gross_and_net_in_the_report_definition(): void
+    {
+        // 3 × 10.000 + 1 × 50.000 (diskon item 2.000): net = Σ line_total = 78.000, bruto = net + diskon item = 80.000.
+        // Diskon tingkat order TIDAK ikut (definisi sama dengan GET /reports/sales: item-level).
+        $order = $this->makeOrder(['discount_amount' => 5000, 'payments' => [['method' => 'cash', 'amount' => 80000]]]);
+
+        $row = $this->rows()->firstWhere('key', "order:{$order->id}");
+
+        $this->assertSame('80000.00', $row['items_gross']);
+        $this->assertSame('78000.00', $row['items_net']);
+        // total pesanan pasca-diskon-order berbeda dari net item-level: itulah sebabnya field ini diperlukan.
+        $this->assertSame('73000.00', $row['total_amount']);
+    }
+
+    public function test_summing_the_row_figures_equals_the_report_pos_totals(): void
+    {
+        $this->makeOrder();
+        $this->makeOrder(['discount_amount' => 1000, 'payments' => [['method' => 'cash', 'amount' => 80000]]]);
+        $voided = $this->makeOrder();
+        $this->actingAs($this->owner, 'sanctum');
+        $this->postJson("/api/v1/orders/{$voided->id}/void", ['reason' => 'salah input'])->assertOk();
+
+        $report = $this->report();
+        $counted = collect($report['transactions'])->where('status', 'completed');
+
+        $this->assertSame($report['totals']['pos_gross_sales'], number_format($counted->sum(fn ($r) => (float) $r['items_gross']), 2, '.', ''));
+        $this->assertSame($report['totals']['pos_net_sales'], number_format($counted->sum(fn ($r) => (float) $r['items_net']), 2, '.', ''));
+        $this->assertSame((float) $report['totals']['pos_unit_count'], (float) $counted->sum('unit_count'));
+    }
 }

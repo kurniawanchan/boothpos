@@ -55,32 +55,27 @@ describe('PosView — product images & clickable artist filter', () => {
   // 005-ux-enhancements-dashboard (US1) — chip rows replaced by a
   // searchable multi-select dropdown (BaseMultiSelect.vue); the artist
   // dropdown is the first of the two on this screen.
-  it('filters via the searchable artist dropdown and refetches with artist_id', async () => {
+  // 054 (US3): dropdown penjual diganti baris pil; kontrak filter (artist_id[]) tidak berubah.
+  it('filters via the seller pills and refetches with artist_id', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderPos();
     await screen.findByText('Keychain A');
 
-    const artistTrigger = screen.getByText('Semua penjual');
-    await user.click(artistTrigger);
-    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await user.click(screen.getByRole('button', { name: 'Artist A' }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
   });
 
-  it('returns to showing all artists when "All" is re-selected in the dropdown', async () => {
+  it('returns to showing all artists when the "All sellers" pill is tapped', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderPos();
     await screen.findByText('Keychain A');
 
-    const artistTrigger = screen.getByText('Semua penjual');
-    await user.click(artistTrigger);
-    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await user.click(screen.getByRole('button', { name: 'Artist A' }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.objectContaining({ artist_id: [1] })));
 
-    // The panel stays open after a selection (multi-select) — pick "All"
-    // directly to clear the selection back to unfiltered.
-    await user.click(await screen.findByRole('option', { name: 'Semua penjual' }));
+    await user.click(screen.getByRole('button', { name: 'Semua penjual' }));
     await waitFor(() => expect(listProducts).toHaveBeenLastCalledWith(expect.not.objectContaining({ artist_id: expect.anything() })));
   });
 });
@@ -196,8 +191,7 @@ describe('PosView — product photo on search results (030)', () => {
     const user = await searchFor('slippery');
     await screen.findByAltText('MCYT — Slippery');
 
-    await user.click(screen.getByText('Semua penjual'));
-    await user.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await user.click(screen.getByRole('button', { name: 'Artist A' }));
 
     expect(await screen.findByAltText('MCYT — Slippery')).toHaveAttribute('src', PHOTO);
   });
@@ -227,5 +221,28 @@ describe('PosView — product photo on search results (030)', () => {
 
     expect(screen.queryByAltText('Produk Lama')).not.toBeInTheDocument();
     expect(screen.getByAltText('MCYT — Slippery')).toHaveAttribute('src', PHOTO);
+  });
+});
+
+// 054 (US2) — aksi draft pindah dari baris pencarian ke panel keranjang.
+describe('PosView — draft actions live in the cart panel (054)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    currentSession.mockResolvedValue(null);
+    listCategories.mockResolvedValue({ data: [] });
+    listArtists.mockResolvedValue({ data: [] });
+    listProducts.mockResolvedValue({ data: [] });
+    lookupVariants.mockResolvedValue({ data: [] });
+  });
+
+  it('does not render the draft buttons next to the search box, only inside the cart aside', async () => {
+    renderPos();
+    const search = await screen.findByPlaceholderText('Cari nama produk atau SKU…');
+    const cartAside = screen.getByRole('complementary');
+    const buttons = screen.getAllByRole('button', { name: /simpan sebagai draft|draft transaksi/i });
+
+    expect(buttons).toHaveLength(2);
+    buttons.forEach((b) => expect(cartAside.contains(b)).toBe(true));
+    expect(search.closest('aside')).toBeNull();
   });
 });

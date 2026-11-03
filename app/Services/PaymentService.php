@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Exceptions\PaymentMethodChangeException;
 use App\Models\CashierSession;
+use App\Models\PaymentChannel;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentProof;
@@ -311,6 +313,95 @@ class PaymentService
     }
 
     /** Teks kosong/spasi saja berarti "kosongkan" (NULL), sisanya di-trim. */
+    /**
+     * 054 (US7) — koreksi METODE (dan kanal) satu pembayaran penjualan POS. Satu-satunya yang boleh
+     * berubah: method, channel_id, verification (+verified_by/at) dan session_id. Nominal, tanggal,
+     * total, status, dan cache paid_amount TIDAK pernah disentuh (ringkasan pembayaran menghitung
+     * tunai dan non-tunai sama, jadi tak ada yang perlu dihitung ulang). Pengecualian yang disengaja
+     * dan tercatat atas aturan "entri pembayaran tak punya jalur edit".
+     *
+     *  - tujuan tunai: tanpa kanal, langsung `verified`, masuk ke shift TERBUKA milik pengubah (409
+     *    bila tak ada — aturan yang sama dengan pembayaran tunai susulan);
+     *  - tujuan non-tunai: kanal wajib, aktif, dan sejenis metodenya; kembali `pending` (butuh
+     *    verifikasi ulang), verifier lama dihapus (tercatat di log audit);
+     *  - penolakan keadaan: lihat Payment::methodChangeBlocker().
+     */
+    public function changeMethod(Order $target, Payment $payment, array $input, User $user): Order
+    {
+        return DB::transaction(function () use ($target, $payment, $input, $user) {
+            $locked = $this->lock($target);
+
+            // Pembayaran milik transaksi lain → 404, bukan diubah diam-diam.
+            $entry = $locked->payments()->with('session')->whereKey($payment->id)->firstOrFail();
+
+            if (! $entry->mayManageConfirmation($user)) {
+                throw ValidationException::withMessages(['payment' => __('orders_payments.payment_method_change_not_allowed')])->status(403);
+            }
+
+            $blocker = $entry->methodChangeBlocker($locked);
+            if ($blocker !== null) {
+                throw new PaymentMethodChangeException(__("orders_payments.payment_method_blocked_{$blocker}"), $blocker);
+            }
+
+            $method = $input['method'];
+            $channelId = $method === 'cash' ? null : ($input['channel_id'] ?? null);
+
+            if ($method === 'cash' && ! empty($input['channel_id'])) {
+                throw ValidationException::withMessages(['channel_id' => __('orders_payments.payment_method_cash_no_channel')]);
+            }
+            if ($method !== 'cash') {
+                if (! $channelId) {
+                    throw ValidationException::withMessages(['channel_id' => __('orders_payments.channel_required_for_non_cash')]);
+                }
+                $channel = PaymentChannel::find($channelId);
+                if (! $channel || ! $channel->is_active || $channel->type !== $method) {
+                    throw ValidationException::withMessages(['channel_id' => __('orders_payments.payment_method_channel_mismatch')]);
+                }
+            }
+
+            if ($entry->method === $method && (int) $entry->channel_id === (int) $channelId) {
+                throw ValidationException::withMessages(['method' => __('orders_payments.payment_method_unchanged')]);
+            }
+
+            $update = ['method' => $method, 'channel_id' => $channelId];
+            if ($method === 'cash') {
+                // Tunai masuk ke shift terbuka pengubah; belum ada → 409 (sama seperti pembayaran tunai susulan).
+                $shift = CashierSession::where('user_id', $user->id)->where('status', 'open')->first();
+                if (! $shift) {
+                    throw new PaymentMethodChangeException(__('orders_payments.payment_session_required'), 'no_open_shift');
+                }
+                $update += ['verification' => 'verified', 'verified_by' => null, 'verified_at' => null, 'reject_reason' => null, 'session_id' => $shift->id];
+            } else {
+                $update += ['verification' => 'pending', 'verified_by' => null, 'verified_at' => null, 'reject_reason' => null];
+            }
+
+            $old = [
+                'payment_id' => $entry->id, 'method' => $entry->method, 'channel_id' => $entry->channel_id,
+                'verification' => $entry->verification, 'verified_by' => $entry->verified_by, 'session_id' => $entry->session_id,
+            ];
+
+            $entry->update($update);
+
+            $this->activityLogger->log(
+                userId: $user->id,
+                action: 'payment_method_changed',
+                entityType: 'Order',
+                entityId: $locked->id,
+                description: sprintf(
+                    'Mengubah metode pembayaran Rp %s pada %s dari %s ke %s',
+                    number_format((float) $entry->amount, 0, ',', '.'), $locked->order_number, $old['method'], $method,
+                ),
+                oldValues: $old,
+                newValues: [
+                    'payment_id' => $entry->id, 'method' => $method, 'channel_id' => $channelId,
+                    'verification' => $update['verification'], 'verified_by' => null, 'session_id' => $update['session_id'] ?? $entry->session_id,
+                ],
+            );
+
+            return $this->reload($locked);
+        });
+    }
+
     private function blankToNull(?string $value): ?string
     {
         $value = $value === null ? null : trim($value);

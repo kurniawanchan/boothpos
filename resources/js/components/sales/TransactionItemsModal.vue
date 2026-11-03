@@ -12,6 +12,8 @@ import PaymentSummaryCard from '../payment/PaymentSummaryCard.vue';
 import PaymentHistoryList from '../payment/PaymentHistoryList.vue';
 import AddPaymentModal from '../payment/AddPaymentModal.vue';
 import PaymentConfirmationModal from '../payment/PaymentConfirmationModal.vue';
+import ChangePaymentMethodModal from './ChangePaymentMethodModal.vue';
+import OrderReferenceModal from './OrderReferenceModal.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
 import { getOrder, voidOrder, addOrderPayment, deleteOrderPayment } from '../../api/orders';
 import { getPaymentProofBlobUrl, verifyPayment } from '../../api/payments';
@@ -135,6 +137,18 @@ async function performDeletePayment() {
 // siapa yang boleh membuka file bukti dihitung SERVER per pembayaran (`can_edit_confirmation`,
 // `can_view_proof`); modal ini hanya menampilkan aksinya.
 const confirmationTarget = ref(null);
+// 054 (US7) — koreksi metode pembayaran; hasilnya (penjualan terbaru) menggantikan detail dan mengabari daftar.
+const methodTarget = ref(null);
+// 054 (US8) — referensi transaksi (catatan + gambar). `order.reference` dikirim server (termasuk `can_edit`).
+const showReference = ref(false);
+function handleReferenceSaved(result) {
+  if (order.value && result) order.value = { ...order.value, reference: result };
+  emit('changed');
+}
+function handleMethodSaved(result) {
+  if (result?.id) order.value = result;
+  emit('changed');
+}
 const proofLightboxSrc = ref(null);
 
 function handleConfirmationSaved(result) {
@@ -307,6 +321,15 @@ async function performVoid() {
           <div class="flex items-baseline justify-between border-t border-dashed border-line-2 pt-2"><span class="text-[13.5px] font-bold">{{ t('reports.col_total') }}</span><span class="text-[19px] font-extrabold tracking-tight">{{ formatIDR(order.total_amount) }}</span></div>
         </div>
 
+        <div v-if="order.reference && (order.reference.note || order.reference.has_image || order.reference.can_edit)" data-testid="order-reference" class="flex flex-col gap-2 rounded-lg border border-line-2 px-4 py-3.5">
+          <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">{{ t('sales_reference.title') }}</span>
+          <p v-if="order.reference.note" class="line-clamp-3 whitespace-pre-line break-words text-[13px]">{{ order.reference.note }}</p>
+          <p v-else-if="order.reference.has_image" class="text-[12.5px] text-muted-3">{{ t('sales_reference.image_label') }}</p>
+          <button type="button" class="w-fit whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" data-testid="open-reference" @click="showReference = true">
+            {{ order.reference.note || order.reference.has_image ? t('sales_reference.view') : t('sales_reference.add') }}
+          </button>
+        </div>
+
         <div v-if="payments.length || order.payment_summary" data-testid="order-payments" class="flex flex-col gap-3 rounded-lg border border-line-2 px-4 py-3.5">
           <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">{{ t('reports.order_payments') }}</span>
           <PaymentSummaryCard v-if="order.payment_summary" :summary="order.payment_summary" />
@@ -319,6 +342,7 @@ async function performVoid() {
             @view-proof="viewPaymentProof"
             @verify="(p) => (verifyTarget = p)"
             @edit-confirmation="(p) => (confirmationTarget = p)"
+            @change-method="(p) => (methodTarget = p)"
           />
           <div v-if="changeAmount > 0" class="flex justify-between text-[12.5px]">
             <span class="text-muted-4">{{ t('reports.order_change') }}</span><span class="font-semibold">{{ formatIDR(changeAmount) }}</span>
@@ -390,6 +414,15 @@ async function performVoid() {
     :target-id="order.id"
     @close="confirmationTarget = null"
     @saved="handleConfirmationSaved"
+  />
+  <OrderReferenceModal v-if="order" :open="showReference" :order-id="order.id" @close="showReference = false" @saved="handleReferenceSaved" />
+  <ChangePaymentMethodModal
+    v-if="order"
+    :open="methodTarget !== null"
+    :order-id="order.id"
+    :payment="methodTarget"
+    @close="methodTarget = null"
+    @saved="handleMethodSaved"
   />
   <ImageLightbox :open="!!proofLightboxSrc" :src="proofLightboxSrc" :alt="t('preorders.view_proof')" @close="closeProofLightbox" />
 

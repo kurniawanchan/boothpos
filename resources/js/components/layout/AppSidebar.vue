@@ -39,6 +39,9 @@ const NAV_DEFS = [
   { name: 'dashboard', label: 'nav.dashboard', icon: 'ph-house', menuKey: 'dashboard' },
   { name: 'pos', label: 'nav.pos', icon: 'ph-shopping-cart-simple', menuKey: 'pos' },
   { name: 'session', label: 'nav.session', icon: 'ph-cash-register', menuKey: 'session' },
+  // 054 (US12) — daftar sesi kasir (buka/tutup/transaksi). Sebelumnya hanya tautan di layar Sesi Kasir sehingga
+  // tak ditemukan; diletakkan tepat setelah Sesi Kasir (urutan relatif item lain tidak berubah).
+  { name: 'sessions-history', label: 'nav.sessions_history', icon: 'ph-clock-counter-clockwise', menuKey: 'session' },
   { name: 'sales', label: 'nav.sales', icon: 'ph-receipt', menuKey: 'sales' },
   {
     key: 'purchase-group',

@@ -15,7 +15,7 @@ import { useSettingsStore } from '../../resources/js/stores/settings';
 const ROUTE_NAMES = [
   'dashboard', 'pos', 'session', 'events', 'products', 'artists', 'categories',
   'stock', 'vendors', 'materials', 'customers', 'preorders', 'sales', 'reports',
-  'activity-log', 'settings', 'users', 'roles', 'profile', 'settlements',
+  'activity-log', 'settings', 'users', 'roles', 'profile', 'settlements', 'sessions-history',
 ];
 
 function makeRouter() {
@@ -245,5 +245,14 @@ describe('AppSidebar — brand block follows the store identity', () => {
 
     expect(screen.getByTestId('brand-name').getAttribute('title')).toBe(long);
     expect(screen.getByTestId('brand-name').className).toMatch(/truncate/);
+  });
+});
+
+describe('AppSidebar — session history entry (054 US12)', () => {
+  it('lists "Riwayat Sesi" right after "Sesi Kasir" for anyone with the session menu', async () => {
+    await renderSidebar(['dashboard', 'pos', 'session', 'sales']);
+    const labels = screen.getAllByRole('link').map((a) => a.textContent.trim());
+
+    expect(labels.indexOf('Riwayat Sesi')).toBe(labels.indexOf('Sesi Kasir') + 1);
   });
 });

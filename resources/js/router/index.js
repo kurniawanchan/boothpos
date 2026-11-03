@@ -48,6 +48,13 @@ const routes = [
         component: () => import('../views/SessionView.vue'),
         meta: { menuKey: 'session' },
       },
+      // 054 (US12) — riwayat shift; menu yang sama dengan Sesi Kasir (server membatasi cakupan per pengguna).
+      {
+        path: 'sessions-history',
+        name: 'sessions-history',
+        component: () => import('../views/SessionsHistoryView.vue'),
+        meta: { menuKey: 'session' },
+      },
       {
         path: 'events',
         name: 'events',

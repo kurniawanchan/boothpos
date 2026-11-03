@@ -67,6 +67,8 @@ final class CloneRegistry
                 'fks' => ['event_id' => 'events', 'session_id' => 'cashier_sessions', 'customer_id' => 'customers'],
                 'suffix' => ['order_number' => 30],
                 'uuid' => ['local_ref'],
+                // 054 — gambar referensi transaksi DISALIN (tak pernah dibagi), seperti berkas lain.
+                'files' => ['reference_image_path' => 'local'],
             ],
             'order_items' => ['fks' => ['order_id' => 'orders', 'variant_id' => 'product_variants', 'artist_id' => 'artists']],
             'preorders' => [

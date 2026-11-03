@@ -1425,6 +1425,23 @@ paths:
           description: Tidak ada sesi terbuka
 
   /sessions:
+    get:
+      tags: [Event & Session]
+      summary: Riwayat sesi kasir (054, US12)
+      description: |
+        Daftar sesi berhalaman, terbaru dulu. Owner/admin melihat SEMUA sesi (dan boleh menyaring `user_id`); selain
+        itu server SELALU membatasi ke sesi miliknya sendiri, apa pun `user_id` yang dikirim.
+      parameters:
+        - { name: user_id, in: query, schema: { type: integer }, description: "Hanya diindahkan untuk owner/admin." }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: status, in: query, schema: { type: string, enum: [open, closed] } }
+        - { name: date_from, in: query, schema: { type: string, format: date }, description: "Menyaring `opened_at`." }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, maximum: 100 } }
+      responses:
+        '200':
+          description: "`{ data: [{ id, cashier_id, cashier_name, event_id, event_name, opened_at, closed_at, status, opening_cash }], meta }`"
     post:
       tags: [Event & Session]
       summary: Buka sesi kasir
@@ -1464,6 +1481,34 @@ paths:
               schema: { $ref: '#/components/schemas/CashierSession' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /sessions/{id}:
+    get:
+      tags: [Event & Session]
+      summary: Rincian satu sesi kasir (054, US12)
+      description: |
+        Kas awal, kas yang diharapkan, kas dihitung dan selisih. Sesi TERTUTUP memakai nilai yang DISIMPAN saat ditutup;
+        sesi berjalan memakai rumus yang sama dengan `POST /sessions/{id}/close` ("diharapkan sejauh ini"; `closing_cash`
+        dan `cash_difference` null). Owner/admin atau pemilik sesi; selain itu 403.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "Rincian sesi + `order_count`, `total_sales`, `by_method[]`, `opening_cash_entries[]`." }
+        '403': { description: "Sesi milik kasir lain." }
+
+  /sessions/{id}/transactions:
+    get:
+      tags: [Event & Session]
+      summary: Transaksi dalam satu sesi (054, US12)
+      description: |
+        Penjualan yang DIBUAT di sesi ini (`kind: sale`, bisa `status: voided`) dan pembayaran yang DITERIMA di sesi ini
+        untuk penjualan sesi lain (`kind: payment_received`, dengan `method`) — kas milik sesi tempat uang diterima.
+        Berhalaman (`page`, `per_page`). Aturan akses sama dengan `GET /sessions/{id}`.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "`{ data: [{ kind, order_id, order_number, created_at, cashier_name, amount, status, method }], meta }`" }
+        '403': { description: "Sesi milik kasir lain." }
 
   /sessions/{id}/close:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -1966,6 +2011,104 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: "Penjualan sudah dibatalkan" }
         '422': { $ref: '#/components/responses/ValidationError' }
+
+  /orders/{id}/payments/{payment_id}/method:
+    patch:
+      tags: [Order]
+      summary: Koreksi metode/kanal satu pembayaran (054, US7)
+      description: |
+        Hanya `method`, `channel_id`, verifikasi (dan shift untuk tunai) yang berubah; NOMINAL, total, status, dan cache
+        `paid_amount` tidak pernah disentuh. Boleh: owner/admin atau pencatat pembayaran. Tujuan non-tunai: `channel_id`
+        wajib, aktif, sejenis metodenya, dan pembayaran kembali `pending`. Tujuan tunai: tanpa kanal, `verified`, masuk
+        ke shift TERBUKA milik pengubah. Dicatat di activity log (`payment_method_changed`).
+        409 (dengan `code`): `voided`, `change_given` (tunai dengan
+        kembalian), `no_open_shift`. 422: tak ada yang berubah, kanal kosong/salah jenis/tak aktif.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: payment_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method]
+              properties:
+                method: { type: string, enum: [cash, qr_ewallet, bank_transfer] }
+                channel_id: { type: integer, nullable: true }
+      responses:
+        '200': { description: "Penjualan terbaru; tiap pembayaran membawa `can_change_method` dan `channel_id`." }
+        '403': { description: "Bukan owner/admin dan bukan pencatat pembayaran." }
+        '409': { description: "Konflik aturan bisnis; badan memuat `code`." }
+        '422': { description: Validasi }
+
+  /orders/{id}/reference:
+    get:
+      tags: [Order]
+      summary: Referensi transaksi (catatan + gambar) (054, US8)
+      description: Dapat dibaca setiap pengguna dengan menu `sales`; selain itu 403.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "`{ note, has_image, updated_at, updated_by_name, can_edit }`" }
+        '403': { description: Tanpa menu sales }
+    put:
+      tags: [Order]
+      summary: Buat/ubah referensi transaksi (054, US8)
+      description: |
+        multipart (kirim sebagai POST + `_method=PUT`): `note` (≤1000, hanya diubah bila kuncinya ada; kosong
+        mengosongkan), `image` (JPEG/PNG/WebP ≤5 MB, jenis dibaca dari ISI berkas), `remove_image`. Hasil akhir tak
+        boleh kosong (422; gunakan DELETE). Boleh: owner/admin atau kasir penjualan itu. Tidak menyentuh uang, stok,
+        status, atau laporan; boleh pada penjualan batal. Berkas lama yang diganti dihapus.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "Blok referensi terbaru" }
+        '403': { description: "Bukan owner/admin dan bukan kasir penjualan ini." }
+        '422': { description: "Jenis/ukuran berkas, catatan terlalu panjang, atau hasil kosong." }
+    delete:
+      tags: [Order]
+      summary: Hapus referensi transaksi (catatan dan gambar) (054, US8)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "Blok referensi (kosong)" }
+        '403': { description: "Bukan owner/admin dan bukan kasir penjualan ini." }
+
+  /orders/{id}/reference/image:
+    get:
+      tags: [Order]
+      summary: Gambar referensi transaksi (054, US8)
+      description: |
+        Disajikan dari disk privat hanya lewat endpoint ini (menu `sales`), `Cache-Control: private, no-store`.
+        Harus diunduh dengan token (blob), bukan <img src> langsung.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "Berkas gambar", content: { 'image/*': { schema: { type: string, format: binary } } } }
+        '403': { description: Tanpa menu sales }
+        '404': { description: "Penjualan tak punya gambar referensi." }
+
+  /orders/bulk-receipts:
+    post:
+      tags: [Order]
+      summary: Isi struk banyak penjualan untuk unduhan massal (054, US9)
+      description: |
+        Setiap elemen `data` IDENTIK dengan `GET /orders/{id}/receipt` (satu perakit; sekarang juga memuat `status`).
+        Maksimal 200 id (422 di atasnya). Id yang tak ditemukan pada mode data aktif dilaporkan di `missing`. Urutan
+        `data` mengikuti urutan `order_ids`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_ids]
+              properties:
+                order_ids: { type: array, minItems: 1, maxItems: 200, items: { type: integer } }
+      responses:
+        '200': { description: "`{ data: [struk…], missing: [id…] }`" }
+        '422': { description: Validasi }
 
   /orders/{id}/receipt:
     parameters: [{ $ref: '#/components/parameters/Id' }]
@@ -3409,6 +3552,93 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  /reports/sales-by-product/export:
+    get:
+      tags: [Report]
+      summary: Ekspor Excel penjualan per produk (filter sama dengan laporan)
+      responses:
+        '200': { description: Berkas .xlsx dua sheet (Ringkasan, Per varian) }
+        '403': { description: Bukan owner/admin }
+  /reports/sales-by-product:
+    get:
+      tags: [Report]
+      summary: Penjualan per produk dengan penanda Terlaris (054, US10)
+      description: |
+        Penjualan POS selesai (batal tidak ikut) DIGABUNG dengan pre-order tidak-batal (hanya porsi yang sudah terbayar,
+        aturan `PreorderRecognizedRevenue`; update 2026-11-02), `data_mode` aktif. Filter opsional `artist_id[]`,
+        `category_id[]`, `product_id[]` (diterapkan sebelum peringkat); respons memuat `options` (pilihan filter) dan tiap
+        baris `category_name`, `pos_units/preorder_units`, `pos_sales/preorder_sales`, `variants[].is_top`.
+        Stok (update 2026-11-02): produk dan varian membawa `stock_in` (Σ qty_change>0 bertipe initial/purchase/adjustment;
+        retur pembatalan tidak dihitung) dan `stock_remaining` (`current_stock`). Angka produk = SEMUA varian aktifnya;
+        keduanya keadaan saat ini, tidak mengikuti filter event/tanggal. `totals` memuat `stock_in` dan `stock_remaining`
+        (Σ baris yang tampil). Kedua angka juga ada di ekspor Excel.
+        Ekspor Excel: `GET /reports/sales-by-product/export` (filter sama; dua sheet). Daftar transaksi per produk
+        memuat `kind: sale|preorder`. Satu baris per produk (dua produk
+        bernama sama dari penjual berbeda tetap terpisah): `units`, `sales` (net item-level), `transaction_count`,
+        `rank`, `is_best_seller`, dan `variants[]`. Terlaris = 3 produk teratas menurut unit, seri pada batas ikut
+        ditandai (aturan di `best_seller_rule`); peringkat dihitung atas SELURUH cakupan, tidak terpengaruh `q`.
+        `q` menyaring baris/total menurut nama produk atau varian. Tanpa modal/margin. Gerbang menu `reports`.
+      parameters:
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+      responses:
+        '200': { description: "`{ scope, best_seller_rule, totals: { units, sales, transaction_count }, data: [...] }`" }
+        '403': { description: Tanpa menu reports }
+
+  /reports/sales-by-product/{product}/transactions:
+    get:
+      tags: [Report]
+      summary: Transaksi yang memuat satu produk (054, US10)
+      description: "Berhalaman. `qty`/`amount` hanya baris produk itu. `q` opsional (nama varian, kecuali nama produknya cocok)."
+      parameters:
+        - { name: product, in: path, required: true, schema: { type: integer } }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: q, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: per_page, in: query, schema: { type: integer, maximum: 100 } }
+      responses:
+        '200': { description: "`{ data: [{ order_id, order_number, created_at, cashier_name, qty, amount }], meta }`" }
+        '403': { description: Tanpa menu reports }
+
+  /reports/sales-by-payment-method:
+    get:
+      tags: [Report]
+      summary: Penjualan per metode pembayaran (054, US11)
+      description: |
+        Definisi sama dengan halaman Sales: penjualan POS selesai, pembayaran `rejected` tak ikut, dikelompokkan menurut
+        waktu PENJUALAN, TUNAI = diterima dikurangi kembalian per penjualan, split payment per porsi. Satu baris per
+        (metode, kanal) dengan `transaction_count`, `amount`, `verified_amount`, `unverified_amount`.
+        `totals.transaction_count` menghitung penjualan DISTINCT. Gerbang menu `reports`.
+      parameters:
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: "`{ totals, data: [{ method, channel_id, label, transaction_count, amount, verified_amount, unverified_amount }] }`" }
+        '403': { description: Tanpa menu reports }
+
+  /reports/sales-by-payment-method/transactions:
+    get:
+      tags: [Report]
+      summary: Transaksi yang dibayar dengan satu metode (054, US11)
+      description: "Berhalaman; `amount` = porsi metode itu (tunai: bersih kembalian), `verification` = yang terburuk di antara pembayaran metode itu."
+      parameters:
+        - { name: method, in: query, required: true, schema: { type: string, enum: [cash, qr_ewallet, bank_transfer] } }
+        - { name: channel_id, in: query, schema: { type: integer } }
+        - { name: event_id, in: query, schema: { type: integer } }
+        - { name: date_from, in: query, schema: { type: string, format: date } }
+        - { name: date_to, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: per_page, in: query, schema: { type: integer, maximum: 100 } }
+      responses:
+        '200': { description: "`{ data: [{ order_id, order_number, created_at, cashier_name, amount, verification }], meta }`" }
+        '403': { description: Tanpa menu reports }
+        '422': { description: "`method` tidak valid." }
 
   /reports/profit:
     get:
@@ -7447,6 +7677,17 @@ components:
               payment_state: { type: string, enum: [verified, pending, rejected, none], description: "Verifikasi TERBURUK di antara pembayaran (rejected > pending > verified); `none` bila belum ada pembayaran." }
               cash_amount: { $ref: '#/components/schemas/Money', description: "Tunai BERSIH: tunai diterima dikurangi kembalian (pembayaran rejected tidak dihitung)." }
               noncash_amount: { $ref: '#/components/schemas/Money' }
+              items_gross: { $ref: '#/components/schemas/Money', description: "054 — Σ(line_total + diskon item) baris ini; definisi item-level yang sama dengan `totals.pos_gross_sales` (diskon tingkat order TIDAK ikut). Dipakai kartu ringkasan halaman Sales supaya mengikuti filter sisi-klien." }
+              items_net: { $ref: '#/components/schemas/Money', description: "054 — Σ line_total baris ini (= `totals.pos_net_sales` bila dijumlahkan atas baris non-batal)." }
+              seller_items:
+                type: object
+                description: "054 — rincian per penjual (kunci = nama penjual, sama dengan filter penjual di Sales). Σ net semua penjual = items_net, Σ units = unit_count. Saat filter penjual aktif, kartu ringkasan hanya menghitung bagian penjual terpilih, sehingga cocok dengan laporan Seller Cost (order campuran tidak dihitung utuh)."
+                additionalProperties:
+                  type: object
+                  properties:
+                    units: { type: number }
+                    gross: { $ref: '#/components/schemas/Money' }
+                    net: { $ref: '#/components/schemas/Money' }
               session_id: { type: integer, nullable: true, description: Shift kasir tempat order dibuat. }
               items_preview: { type: array, description: "Dua baris item terbesar.", items: { type: object, properties: { name: { type: string }, qty: { type: number } } } }
               items_more: { type: integer, description: "Jumlah baris item di luar pratinjau." }

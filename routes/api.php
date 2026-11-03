@@ -206,10 +206,13 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('events', EventController::class);
         Route::patch('/events/{event}/status', [EventController::class, 'updateStatus']);
 
+        Route::get('/sessions', [CashierSessionController::class, 'index']);
         Route::get('/sessions/current', [CashierSessionController::class, 'current']);
         Route::post('/sessions', [CashierSessionController::class, 'store']);
         Route::post('/sessions/{session}/close', [CashierSessionController::class, 'close']);
         Route::get('/sessions/{session}/summary', [CashierSessionController::class, 'summary']);
+        Route::get('/sessions/{session}', [CashierSessionController::class, 'show'])->whereNumber('session');
+        Route::get('/sessions/{session}/transactions', [CashierSessionController::class, 'transactions']);
 
         Route::get('/payment-channels', [PaymentChannelController::class, 'index']);
         Route::post('/payment-channels', [PaymentChannelController::class, 'store']);
@@ -232,8 +235,16 @@ Route::prefix('v1')->group(function () {
         Route::post('/orders/{order}/payments', [OrderController::class, 'storePayment']);
         Route::delete('/orders/{order}/payments/{payment}', [OrderController::class, 'destroyPayment']);
         Route::patch('/orders/{order}/payments/{payment}/confirmation', [OrderController::class, 'updatePaymentConfirmation']);
+        // 054 (US8) — referensi transaksi (catatan + satu gambar privat).
+        Route::get('/orders/{order}/reference', [OrderController::class, 'showReference']);
+        Route::get('/orders/{order}/reference/image', [OrderController::class, 'referenceImage']);
+        Route::put('/orders/{order}/reference', [OrderController::class, 'saveReference']);
+        Route::delete('/orders/{order}/reference', [OrderController::class, 'deleteReference']);
+        Route::patch('/orders/{order}/payments/{payment}/method', [OrderController::class, 'changePaymentMethod']);
         Route::post('/orders/{order}/payments/{payment}/verify', [OrderController::class, 'verifyPayment']);
         Route::post('/orders/verify-payments', [OrderController::class, 'verifyPayments']);
+        // 054 (US9) — statis, sebelum '/orders/{order}'.
+        Route::post('/orders/bulk-receipts', [OrderController::class, 'bulkReceipts']);
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
 
         // 007-preorder-import-export-notify — rute statis ('export',
@@ -288,6 +299,12 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/reports/sales', [ReportController::class, 'sales']);
         Route::post('/reports/sales/transactions/export', [ReportController::class, 'exportSalesTransactions']);
+        // 054 — laporan penjualan per produk / per metode bayar; statis, WAJIB sebelum '/reports/{report}/export'.
+        Route::get('/reports/sales-by-product', [ReportController::class, 'salesByProduct']);
+        Route::get('/reports/sales-by-product/export', [ReportController::class, 'exportSalesByProduct']);
+        Route::get('/reports/sales-by-product/{product}/transactions', [ReportController::class, 'salesByProductTransactions'])->whereNumber('product');
+        Route::get('/reports/sales-by-payment-method', [ReportController::class, 'salesByPaymentMethod']);
+        Route::get('/reports/sales-by-payment-method/transactions', [ReportController::class, 'salesByPaymentMethodTransactions']);
         Route::get('/reports/profit', [ReportController::class, 'profit']);
         Route::get('/reports/purchases', [ReportController::class, 'purchases']);
         Route::get('/reports/stock-by-artist', [ReportController::class, 'stockByArtist']);

@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
+import BaseButton from '../ui/BaseButton.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
 import { formatIDR } from '../../utils/money';
 
@@ -11,14 +12,25 @@ const { t } = useI18n();
 // variants: [...active only] }. Only opened for products with more than
 // one active variant; the single-variant case is added to the cart
 // directly by PosView without ever showing this picker.
+// 054 (US1) — pemilih TETAP TERBUKA setelah memilih varian: kasir memilih beberapa varian
+// (atau beberapa pcs varian yang sama) lalu menutupnya sendiri lewat tombol Tutup di bawah.
+// `cartQtyByVariant` ({ [variant.id]: qty }) diturunkan PosView dari keranjang, jadi hitungan di
+// sini tidak pernah basi walau keranjang dikosongkan dari tempat lain.
 const props = defineProps({
   open: { type: Boolean, default: false },
   product: { type: Object, default: null },
+  cartQtyByVariant: { type: Object, default: () => ({}) },
 });
 const emit = defineEmits(['close', 'select']);
 
+const inCart = (variant) => props.cartQtyByVariant?.[variant.id] ?? 0;
+// cart.add() sendiri tidak membatasi qty pada stok; pemilih yang tetap terbuka membuat
+// ketukan beruntun mudah, jadi varian dinonaktifkan begitu keranjang sudah memuat seluruh stoknya
+// (sama seperti tombol + di panel keranjang).
+const isUnavailable = (variant) => variant.current_stock <= 0 || inCart(variant) >= variant.current_stock;
+
 function pick(variant) {
-  if (variant.current_stock <= 0) return;
+  if (isUnavailable(variant)) return;
   emit('select', variant);
 }
 
@@ -46,8 +58,9 @@ function openImageLightbox(v) {
         v-for="v in product?.variants ?? []"
         :key="v.id"
         type="button"
-        :disabled="v.current_stock <= 0"
-        class="flex items-center justify-between gap-3 rounded-lg border border-line-2 bg-white px-3.5 py-3 text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-50"
+        :disabled="isUnavailable(v)"
+        class="flex items-center justify-between gap-3 rounded-lg border bg-white px-3.5 py-3 text-left transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-50"
+        :class="inCart(v) > 0 ? 'border-brand' : 'border-line-2'"
         @click="pick(v)"
       >
         <div class="flex items-center gap-2.5">
@@ -65,6 +78,7 @@ function openImageLightbox(v) {
           <div class="flex flex-col gap-0.5">
             <span class="text-[13.5px] font-semibold leading-tight">{{ v.variant_name }}</span>
             <span class="font-mono text-[10.5px] text-muted-3">{{ v.sku }}</span>
+            <span v-if="inCart(v) > 0" class="w-fit rounded-full bg-mint-100 px-2 py-0.5 text-[10.5px] font-bold text-brand-active">{{ t('pos.in_cart_count', { count: inCart(v) }) }}</span>
           </div>
         </div>
         <div class="flex flex-col items-end gap-0.5">
@@ -75,6 +89,12 @@ function openImageLightbox(v) {
         </div>
       </button>
     </div>
+
+    <template #footer>
+      <BaseButton variant="secondary" class="w-full" data-testid="picker-close" @click="emit('close')">
+        {{ t('pos.picker_close') }}
+      </BaseButton>
+    </template>
   </BaseModal>
 
   <ImageLightbox :open="!!lightboxSrc" :src="lightboxSrc" :alt="lightboxAlt" @close="lightboxSrc = null" />
