@@ -25,6 +25,7 @@ final class OutletScopeRegistry
     public const MODELS = [
         CashierSession::class, Order::class, Payment::class, KitchenTicket::class,
         DiningTable::class, Station::class, Device::class, CashMovement::class, \App\Models\Override::class,
+        \App\Models\SelfServiceOrder::class, // 090: kiriman pesan mandiri; outlet dari token QR, bukan body
     ];
 
     /** Tabel ber-outlet (nama tabel), diturunkan dari MODELS agar tak ada daftar kedua. */

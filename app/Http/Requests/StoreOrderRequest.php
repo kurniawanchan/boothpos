@@ -21,6 +21,8 @@ class StoreOrderRequest extends FormRequest
             'local_ref' => ['required', 'uuid'],
             'discount_amount' => ['sometimes', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string'],
+            // 090 / US5 — Dine-In atau Take Away. Opsional: klien lama tidak mengirimnya dan order tetap `retail`.
+            'service_type' => ['sometimes', 'in:dine_in,takeaway'],
 
             'items' => ['required', 'array', 'min:1'],
             'items.*.variant_id' => ['required', 'integer', 'exists:product_variants,id'],

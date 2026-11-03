@@ -8,6 +8,7 @@ import { cartTotals } from '../../utils/posTotals';
 import EmptyState from '../ui/EmptyState.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
+import ServiceTypeToggle from './ServiceTypeToggle.vue';
 import { modifierLabel } from '../../utils/modifierRules';
 
 const props = defineProps({
@@ -15,8 +16,10 @@ const props = defineProps({
   customerName: { type: String, default: '' },
   canCheckout: { type: Boolean, default: true },
   checkoutBlockedReason: { type: String, default: '' },
+  // 090 / US5 — Dine-In atau Take Away; bawaan Dine-In.
+  serviceType: { type: String, default: 'dine_in' },
 });
-const emit = defineEmits(['update:discount', 'pick-customer', 'pay']);
+const emit = defineEmits(['update:discount', 'update:serviceType', 'pick-customer', 'pay']);
 
 const cart = usePosCartStore();
 const settings = useSettingsStore();
@@ -94,6 +97,8 @@ function openImageLightbox(item) {
     </div>
 
     <div class="flex flex-col gap-3 border-t border-line-3 bg-surface-subtle px-[18px] pb-[18px] pt-3.5">
+      <ServiceTypeToggle :model-value="serviceType" @update:model-value="emit('update:serviceType', $event)" />
+
       <button
         type="button"
         class="flex items-center gap-2 self-start rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-muted-4 transition-colors hover:bg-line-7"

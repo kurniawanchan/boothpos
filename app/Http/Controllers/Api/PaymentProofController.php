@@ -79,9 +79,14 @@ class PaymentProofController extends Controller
         // tempat: Payment::proofViewableBy().
         $user = $request->user();
         $payment = $proof->payment;
-        $allowed = $payment
+        // 090 — bukti dari pesanan mandiri diunggah pelanggan publik (tanpa pengunggah) dan tidak pernah tercatat oleh staf,
+        // jadi aturan di atas menolak kasir. Pemegang menu `self_service` boleh membukanya HANYA untuk kiriman yang
+        // terlihat olehnya: SelfServiceOrder ber-scope outlet + mode, jadi bukti outlet lain tetap 403.
+        $selfService = $user->canAccessMenu('self_service')
+            && \App\Models\SelfServiceOrder::query()->where('proof_id', $proof->id)->exists();
+        $allowed = $selfService || ($payment
             ? $payment->proofViewableBy($user, $proof)
-            : ($user->isOwnerOrAdmin() || $proof->uploaded_by === $user->id);
+            : ($user->isOwnerOrAdmin() || $proof->uploaded_by === $user->id));
 
         if (! $allowed) {
             return response()->json(['message' => __('orders_payments.not_authorized_proof_access')], 403);

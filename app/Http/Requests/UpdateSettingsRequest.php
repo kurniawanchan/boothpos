@@ -121,6 +121,13 @@ class UpdateSettingsRequest extends FormRequest
                         $fail('Batas perangkat offline harus bilangan bulat 1–1440 menit.');
                     }
 
+                    // 090 — alamat dasar QR meja: harus bisa dijangkau ponsel pelanggan (bukan localhost/loopback). Kosong BOLEH
+                    // (= pakai asal halaman staf bila bukan loopback).
+                    if ($key === \App\Support\SelfServiceSettings::BASE_URL && $value !== null && $value !== ''
+                        && (! is_string($value) || ! \App\Support\SelfServiceSettings::isUsable($value))) {
+                        $fail('Alamat dasar Self-Service harus berupa URL http/https yang bisa dijangkau ponsel pelanggan, bukan localhost.');
+                    }
+
                     if ($key === 'theme_accent_color' && $value !== null && $value !== '' && ! preg_match('/^#[0-9a-fA-F]{6}$/', $value)) {
                         $fail('Warna tema harus berupa kode hex 6 digit, mis. #2f9e6e.');
                     }

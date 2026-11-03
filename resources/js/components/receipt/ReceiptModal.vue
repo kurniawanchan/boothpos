@@ -126,6 +126,10 @@ watch(
         <!-- 028 — penjualan dari tab: tampilkan meja atau label takeaway. -->
         <span v-if="receipt.table" class="text-[12.5px] font-semibold text-muted-4">Meja {{ receipt.table.name }}</span>
         <span v-else-if="receipt.service_type === 'takeaway'" class="text-[12.5px] font-semibold text-muted-4">Takeaway<template v-if="receipt.tab_label"> — {{ receipt.tab_label }}</template></span>
+        <!-- 090 / US5 — cara layanan pilihan kasir/pelanggan; takeaway tanpa meja sudah tertulis di baris di atas. -->
+        <span v-if="receipt.service_type === 'dine_in' || (receipt.service_type === 'takeaway' && receipt.table)" class="text-[12.5px] font-bold uppercase text-muted-4" data-testid="receipt-service-type">
+          {{ receipt.service_type === 'takeaway' ? $t('pos.service_takeaway') : $t('pos.service_dine_in') }}
+        </span>
         <span class="text-[12px] text-muted-2">{{ formatDateTime(receipt.created_at) }} · Kasir {{ receipt.cashier_name }}</span>
       </div>
 

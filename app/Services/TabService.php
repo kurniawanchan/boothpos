@@ -13,6 +13,7 @@ use App\Models\Device;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\ProductVariant;
+use App\Models\SelfServiceOrder;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -101,7 +102,8 @@ class TabService
                     'customer_id' => $data['customer_id'] ?? null,
                     'user_id' => $user->id,
                     'channel' => 'offline',
-                    'service_type' => $table ? Order::SERVICE_DINE_IN : Order::SERVICE_TAKEAWAY,
+                    // 090 — pilihan eksplisit kasir menang; bila tidak ada, turunan lama dari meja tetap berlaku.
+                    'service_type' => $data['service_type'] ?? ($table ? Order::SERVICE_DINE_IN : Order::SERVICE_TAKEAWAY),
                     'table_id' => $table?->id,
                     'tab_label' => isset($data['tab_label']) && trim($data['tab_label']) !== '' ? trim($data['tab_label']) : null,
                     'subtotal' => 0, 'discount_amount' => 0, 'total_amount' => 0, 'total_cost' => 0,
@@ -136,6 +138,36 @@ class TabService
         }
 
         return $this->loaded($order);
+    }
+
+    /**
+     * 090 / research D3 — order `open` SEMENTARA yang dibangun saat staf menekan "Kirim ke dapur" untuk kiriman pesan
+     * mandiri. Hanya hidup di dalam satu transaksi dispatch (open → addLine → kirim ke dapur → bayar → completed).
+     *
+     * `table_id` SENGAJA belum diisi: indeks `uniq_orders_open_table_key` hanya mengizinkan SATU order `open` per meja,
+     * jadi membuka order di meja yang sedang punya tab kasir akan bentrok. Dispatch mengisi `table_id` SETELAH order
+     * `completed` (indeks itu tidak lagi berlaku). `source` dan tautan balik ditulis lewat forceFill: keduanya tidak
+     * fillable, jadi klien POS staf tidak bisa memalsukan penanda self-service (FR-015).
+     */
+    public function openForSelfService(SelfServiceOrder $submission, CashierSession $session, User $user, ?int $customerId = null): Order
+    {
+        $this->assertSessionOpen($session);
+
+        $order = new Order([
+            'order_number' => $this->orderService->generateOrderNumber(),
+            'session_id' => $session->id,
+            'customer_id' => $customerId,
+            'user_id' => $user->id,
+            'channel' => 'offline',
+            'service_type' => $submission->service_type,
+            'tab_label' => $submission->reference_no,
+            'subtotal' => 0, 'discount_amount' => 0, 'total_amount' => 0, 'total_cost' => 0,
+            'paid_amount' => 0, 'change_amount' => 0,
+            'status' => Order::STATUS_OPEN,
+        ]);
+        $order->forceFill(['source' => Order::SOURCE_SELF_SERVICE, 'self_service_order_id' => $submission->id])->save();
+
+        return $order;
     }
 
     // --- baris --------------------------------------------------------------
@@ -498,6 +530,30 @@ class TabService
             $this->activityLogger->log(
                 $user->id, 'tab_note_updated', 'Order', $order->id,
                 $clean === null ? "Catatan order {$order->order_number} dihapus" : ($had ? "Catatan order {$order->order_number} diubah" : "Catatan order {$order->order_number} ditambahkan"),
+            );
+
+            return $this->loaded($order);
+        });
+    }
+
+    /**
+     * 090 / US5 — ganti Dine-In ↔ Take Away pada tab yang masih terbuka (tablet menyediakan pilihan ini di editor tab).
+     * Mengubah nilai yang sama tidak menulis apa pun dan tidak mencatat log.
+     */
+    public function setServiceType(Order $tab, string $type, User $user): Order
+    {
+        return DB::transaction(function () use ($tab, $type, $user) {
+            $order = $this->lockOpen($tab);
+            if ($order->service_type === $type) {
+                return $this->loaded($order);
+            }
+
+            $old = $order->service_type;
+            $order->forceFill(['service_type' => $type])->save();
+            $this->activityLogger->log(
+                $user->id, 'service_type_changed', 'Order', $order->id,
+                "Cara layanan order {$order->order_number} diubah menjadi ".($type === Order::SERVICE_TAKEAWAY ? 'Take Away' : 'Dine-In'),
+                ['service_type' => $old], ['service_type' => $type],
             );
 
             return $this->loaded($order);

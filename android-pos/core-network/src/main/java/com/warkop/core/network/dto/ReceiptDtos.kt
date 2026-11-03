@@ -23,6 +23,8 @@ import kotlinx.serialization.Serializable
     val notes: String? = null,
     @SerialName("receipt_no") val receiptNo: String? = null,
     @SerialName("queue_no") val queueNo: String? = null,
+    /** 090 / US5 — cara layanan: `dine_in` | `takeaway` | `retail` (order lama). Null/server lama = tidak dicetak. */
+    @SerialName("service_type") val serviceType: String? = null,
     /** 064 — nama terminal yang mengambil order; null bila order tanpa terminal. */
     @SerialName("terminal_name") val terminalName: String? = null,
     @SerialName("copy_no") val copyNo: Int? = null,

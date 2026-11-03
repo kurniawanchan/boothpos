@@ -37,6 +37,11 @@ watch(
 );
 
 const place = (tk) => (tk.table ? t('floor.tab.table_label', { name: tk.table.name }) : tk.tab_label || t('floor.takeaway'));
+// 090 / FR-032 — baris cara layanan + "MANDIRI" di tiket cetak, hanya bila server mengirimnya.
+const serviceLine = (tk) => [
+  tk.service_type === 'takeaway' ? t('kitchen.service_takeaway') : tk.service_type === 'dine_in' ? t('kitchen.service_dine_in') : null,
+  tk.self_service ? t('kitchen.self_service_tag') : null,
+].filter(Boolean).join(' · ');
 const printNow = () => window.print();
 </script>
 
@@ -48,6 +53,7 @@ const printNow = () => window.print();
         <div class="text-center text-[15px] font-extrabold uppercase">{{ ticket.station?.name ?? t('kitchen.no_station') }}</div>
         <div class="flex justify-between"><span>{{ place(ticket) }}</span><span>{{ t('kitchen.round', { n: ticket.round_no }) }}</span></div>
         <div class="flex justify-between text-[12px]"><span>{{ ticket.order.order_number }}</span><span>{{ formatDateTime(ticket.sent_at) }}</span></div>
+        <div v-if="serviceLine(ticket)" class="text-center text-[13px] font-extrabold uppercase" data-testid="ticket-service-line">{{ serviceLine(ticket) }}</div>
         <hr class="border-t border-dashed border-line" />
         <div v-for="item in ticket.items" :key="item.id" class="flex flex-col">
           <div class="flex gap-2 font-bold"><span>{{ item.qty }}×</span><span class="flex-1" :class="item.status === 'cancelled' ? 'line-through' : ''">{{ item.name }}</span></div>

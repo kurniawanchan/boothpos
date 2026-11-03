@@ -8,6 +8,7 @@ use App\Http\Requests\HandoverTabRequest;
 use App\Http\Requests\MergeTabRequest;
 use App\Http\Requests\MoveTabRequest;
 use App\Http\Requests\OpenTabRequest;
+use App\Http\Requests\UpdateTabServiceTypeRequest;
 use App\Http\Requests\UpdateTabNoteRequest;
 use App\Http\Requests\VoidTabRequest;
 use App\Http\Resources\TabResource;
@@ -101,6 +102,12 @@ class TabController extends Controller
     public function note(UpdateTabNoteRequest $request, Order $order): JsonResponse
     {
         return $this->guarded(fn () => new TabResource($this->tabs->setNote($order, $request->validated('notes'), $request->user())));
+    }
+
+    /** 090 / US5 — Dine-In ↔ Take Away pada tab terbuka; mengembalikan tab terbaru. */
+    public function serviceType(UpdateTabServiceTypeRequest $request, Order $order): JsonResponse
+    {
+        return $this->guarded(fn () => new TabResource($this->tabs->setServiceType($order, $request->validated('service_type'), $request->user())));
     }
 
     public function prebill(Request $request, Order $order): JsonResponse

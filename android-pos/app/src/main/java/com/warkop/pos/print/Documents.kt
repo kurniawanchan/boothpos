@@ -85,6 +85,8 @@ object Documents {
         r.paidAtText?.let { add(PrintLine(text = "Tanggal", right = it)) }
         r.cashier?.let { add(PrintLine(text = "Kasir", right = it)) }
         r.queueNo?.let { add(PrintLine(text = "Antrean", right = it)) }
+        // 090 / US5 — cara layanan pilihan kasir.
+        r.serviceLabel?.let { add(PrintLine(text = "Layanan", right = it)) }
         // 064 — nama terminal yang mengambil order (null bila tanpa terminal). SENGAJA satu baris kiri ("Terminal: nama"),
         // bukan pasangan kiri/kanan: pada pasangan, nama panjang mendorong sisi kiri menjadi 1 huruf per baris dan baris
         // melebihi 32 kolom TM-58V. Baris kiri tunggal dibungkus apa adanya oleh EscPos.wrap.

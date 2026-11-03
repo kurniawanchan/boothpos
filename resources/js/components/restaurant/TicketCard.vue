@@ -21,6 +21,8 @@ const emit = defineEmits(['status', 'print']);
 const { t } = useI18n();
 
 const place = computed(() => (props.ticket.table ? t('floor.tab.table_label', { name: props.ticket.table.name }) : props.ticket.tab_label || t('floor.takeaway')));
+// 090 / FR-032 — cara layanan (Dine-In / Take Away) dan penanda pesanan mandiri; hanya bila server mengirimnya (payload lama tanpa kunci ini tak berubah).
+const serviceLabel = computed(() => (props.ticket.service_type === 'takeaway' ? t('kitchen.service_takeaway') : props.ticket.service_type === 'dine_in' ? t('kitchen.service_dine_in') : null));
 const waitingMinutes = computed(() => Math.max(0, Math.floor((props.now - new Date(props.ticket.sent_at).getTime()) / 60000)));
 const late = computed(() => waitingMinutes.value >= 15 && props.ticket.items.some((i) => ['new', 'preparing'].includes(i.status)));
 
@@ -45,6 +47,10 @@ function actionFor(item) {
       <div class="min-w-0">
         <h3 class="truncate text-[17px] font-extrabold text-ink">{{ place }}</h3>
         <div class="text-[11.5px] font-semibold text-muted-3">{{ ticket.order.order_number }} · {{ t('kitchen.round', { n: ticket.round_no }) }}</div>
+        <div v-if="serviceLabel || ticket.self_service" class="mt-1 flex flex-wrap gap-1.5">
+          <StatusPill v-if="serviceLabel" :variant="ticket.service_type === 'takeaway' ? 'info' : 'neutral'" data-testid="ticket-service">{{ serviceLabel }}</StatusPill>
+          <StatusPill v-if="ticket.self_service" variant="accent" data-testid="ticket-self-service">{{ t('kitchen.self_service_tag') }}</StatusPill>
+        </div>
       </div>
       <div class="flex items-center gap-1.5">
         <StatusPill :variant="late ? 'warn' : 'neutral'">{{ t('kitchen.waiting', { n: waitingMinutes }) }}</StatusPill>

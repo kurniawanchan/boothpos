@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, nextTick, defineAsyncComponent } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, defineAsyncComponent } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { salesReport, exportSalesTransactions } from '../api/reports';
@@ -8,6 +8,8 @@ import { useToastStore } from '../stores/toast';
 import { useAuthStore } from '../stores/auth';
 import { useSalesFilters } from '../composables/useSalesFilters';
 import { useQueryState } from '../composables/useQueryState';
+import { usePolling } from '../composables/usePolling';
+import { listSelfServiceOrders } from '../api/selfServiceOrders';
 import { formatIDR } from '../utils/money';
 import { formatCount } from '../utils/formatters';
 import { formatDateTime, toLocalDateKey } from '../utils/date';
@@ -35,6 +37,8 @@ import OpenOrderDetail from '../components/sales/OpenOrderDetail.vue';
 // 044 — papan Meja dimuat malas: kodenya (dan polling lantai) hanya dibutuhkan pengguna yang membuka tampilan
 // Meja, jadi tak ikut membebani chunk utama maupun pemuatan awal daftar order.
 const FloorBoard = defineAsyncComponent(() => import('../components/sales/FloorBoard.vue'));
+// 090 / US6 — tab Self-Service (antrean pesanan mandiri); juga dimuat malas, hanya bagi pemegang menu `self_service`.
+const SelfServiceOrdersPanel = defineAsyncComponent(() => import('../components/selfservice/SelfServiceOrdersPanel.vue'));
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
@@ -58,11 +62,37 @@ const settings = useSettingsStore(); // 048 — label pajak untuk baris Net · D
 // Server tetap penjaga sebenarnya (GET /floor & /tabs/{id} menolak peran tanpa menu `floor`).
 const { state: viewState, set: setViewState } = useQueryState({ view: 'list' });
 const canSeeTables = computed(() => auth.canAccessMenu('floor'));
-const view = computed(() => (viewState.view === 'tables' && canSeeTables.value ? 'tables' : 'list'));
+// 090 / US6 — tampilan ketiga: antrean pesanan mandiri. Sama seperti Meja: hanya ada bagi yang berhak (disembunyikan, bukan
+// dinonaktifkan), dan nilai ?view= yang tak boleh dipakai jatuh ke daftar. Server tetap penjaga (menu `self_service`).
+const canSeeSelfService = computed(() => auth.canAccessMenu('self_service'));
+const selfServicePending = ref(0);
+const view = computed(() => {
+  if (viewState.view === 'tables' && canSeeTables.value) return 'tables';
+  if (viewState.view === 'self-service' && canSeeSelfService.value) return 'self-service';
+  return 'list';
+});
 const viewOptions = computed(() => [
   { value: 'list', label: t('sales.view_list'), icon: 'ph-list-bullets' },
-  { value: 'tables', label: t('sales.view_tables'), icon: 'ph-squares-four' },
+  ...(canSeeTables.value ? [{ value: 'tables', label: t('sales.view_tables'), icon: 'ph-squares-four' }] : []),
+  ...(canSeeSelfService.value ? [{ value: 'self-service', label: t('self_service_staff.view_label'), icon: 'ph-qr-code', badge: selfServicePending.value }] : []),
 ]);
+
+// Lencana jumlah pesanan yang menunggu tindakan: disegarkan berkala (berhenti saat tab tersembunyi). Saat panelnya
+// terbuka, panel sendiri yang memperbarui angkanya lewat `counts`.
+const onSelfServiceCounts = (counts) => { selfServicePending.value = counts.pending; };
+const badgePolling = usePolling(async () => {
+  try {
+    const res = await listSelfServiceOrders({ per_page: 1, status: ['awaiting_verification', 'verified'] });
+    selfServicePending.value = res.meta.counts.pending;
+  } catch (err) {
+    // Lencana hanya kenyamanan: bila server menolak secara permanen (403 tanpa hak, 503 skema belum dimigrasi, 404) berhenti
+    // sepenuhnya — jangan menembak server tiap 15 detik dan menumpuk toast galat. Galat jaringan sementara tetap dicoba ulang.
+    if (err.isForbidden || err.isSchemaOutdated || err.isNotFound) badgePolling.stop();
+    throw err;
+  }
+}, { interval: 15000, immediate: true });
+onMounted(() => { if (canSeeSelfService.value) badgePolling.start(); });
+onBeforeUnmount(() => badgePolling.stop());
 
 const sales = ref(null);
 const loading = ref(false);
@@ -388,7 +418,7 @@ function viewFinishedTransaction(orderId) {
   <div class="pb-10">
     <PageHeader :title="t('nav.sales')" :description="t('nav.sales_subtitle')">
       <template #actions>
-        <ViewToggle v-if="canSeeTables" :model-value="view" :options="viewOptions" :label="t('sales.view_aria')" @update:model-value="(v) => setViewState({ view: v })" />
+        <ViewToggle v-if="viewOptions.length > 1" :model-value="view" :options="viewOptions" :label="t('sales.view_aria')" @update:model-value="(v) => setViewState({ view: v })" />
         <!-- Tindakan khusus daftar (verifikasi massal, ekspor) tak berlaku di tampilan Meja. -->
         <template v-if="view === 'list'">
           <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
@@ -501,6 +531,9 @@ function viewFinishedTransaction(orderId) {
               <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" :class="{ 'line-through': isVoided(row) }" @click="openDetail(row)">{{ row.order_number }}</button>
               <StatusPill v-if="isVoided(row)" variant="danger">{{ t('reports.status_voided') }}</StatusPill>
               <StatusPill v-else-if="row.refunded" variant="warning">{{ t('reports.status_refunded') }}</StatusPill>
+              <!-- 090 — cara layanan dan asal order (pesanan mandiri dari QR meja). -->
+              <span v-if="row.service_type === 'dine_in' || row.service_type === 'takeaway'" class="text-[11.5px] font-semibold text-muted-3" data-testid="row-service-type">{{ row.service_type === 'takeaway' ? t('pos.service_takeaway') : t('pos.service_dine_in') }}</span>
+              <StatusPill v-if="row.source === 'self_service'" variant="accent" data-testid="row-self-service">{{ t('kitchen.self_service_tag') }}</StatusPill>
             </div>
           </template>
           <template #cell-customer_name="{ row }">
@@ -566,7 +599,8 @@ function viewFinishedTransaction(orderId) {
         </DataTable>
       </div>
     </section>
-    <FloorBoard v-else @select-order="openOrderDetail" />
+    <FloorBoard v-else-if="view === 'tables'" @select-order="openOrderDetail" />
+    <SelfServiceOrdersPanel v-else-if="view === 'self-service'" @counts="onSelfServiceCounts" />
 
     <ConfirmDialog
       :open="showBulkVerify"

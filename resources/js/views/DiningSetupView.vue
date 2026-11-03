@@ -28,7 +28,7 @@ const outletModel = computed({
   get: () => outletFilter.ids.value,
   set: (ids) => outletFilter.set(ids),
 });
-const propsFor = (key) => (FILTERED_TABS.includes(key) ? { outletIds: outletFilter.ids.value } : {});
+const propsFor = (key) => (FILTERED_TABS.includes(key) ? { outletIds: outletFilter.ids.value, ...(key === 'tables' ? { outletDirty: outletFilter.active.value } : {}) } : {});
 </script>
 
 <template>
@@ -48,7 +48,8 @@ const propsFor = (key) => (FILTERED_TABS.includes(key) ? { outletIds: outletFilt
       </button>
     </div>
 
-    <div v-if="outletFilter.visible.value && FILTERED_TABS.includes(active)" class="flex flex-wrap items-center gap-3" data-testid="outlet-filter-bar">
+    <!-- Tab Meja menaruh filter Outlet satu baris dengan Cari/Area/Status (slot di bawah); tab lain tetap memakai bilah sendiri. -->
+    <div v-if="outletFilter.visible.value && FILTERED_TABS.includes(active) && active !== 'tables'" class="flex flex-wrap items-center gap-3" data-testid="outlet-filter-bar">
       <BaseMultiSelect v-model="outletModel" :options="outletFilter.options.value" :all-label="t('dining_setup.filter_outlet_all')" class="w-60" data-testid="outlet-filter" />
       <button v-if="outletFilter.active.value" type="button" class="text-[12.5px] font-bold text-brand-active underline decoration-dotted hover:text-brand" @click="outletFilter.reset()">
         {{ t('page.reset_filters') }}
@@ -56,7 +57,14 @@ const propsFor = (key) => (FILTERED_TABS.includes(key) ? { outletIds: outletFilt
     </div>
 
     <template v-for="tab in tabs" :key="tab.key">
-      <component :is="tab.component" v-if="active === tab.key" v-bind="propsFor(tab.key)" />
+      <component :is="tab.component" v-if="active === tab.key" v-bind="propsFor(tab.key)" @reset-outlet="outletFilter.reset()">
+        <template v-if="tab.key === 'tables' && outletFilter.visible.value" #outlet-filter>
+          <div class="flex flex-col gap-1.5" data-testid="outlet-filter-bar">
+            <span class="text-[12.5px] font-semibold text-muted-4">{{ t('frame.outlet_label') }}</span>
+            <BaseMultiSelect v-model="outletModel" :options="outletFilter.options.value" :all-label="t('dining_setup.filter_outlet_all')" class="w-60" data-testid="outlet-filter" />
+          </div>
+        </template>
+      </component>
     </template>
   </div>
 </template>

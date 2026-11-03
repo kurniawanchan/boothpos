@@ -220,6 +220,7 @@ fun OrderPane(store: PosStore, modifier: Modifier, onBack: (() -> Unit)? = null)
                 items(o.sent, key = { it.id }) { l -> LineRow(l, store) }
             }
             // 077 / US4 — catatan kasir untuk seluruh order; tersimpan di server, bukan hanya di layar.
+            if (o.id.isNotBlank()) ServiceTypeRow(store, o)
             if (o.id.isNotBlank()) OrderNoteRow(store, o)
             // 055 / T038 — area total bisa disembunyikan; satu kontrol membukanya lagi (FR-006, FR-007).
             if (store.totalsVisible) {
@@ -261,6 +262,24 @@ private fun LineRow(l: OrderLine, store: PosStore) {
             }
             if (l.fired) Text("Terkirim ${l.firedAt}", fontSize = 10.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(end = 10.dp))
             Text(num(l.net), fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.padding(end = 6.dp))
+        }
+    }
+}
+
+/**
+ * 090 / US5 — pilihan Dine-In / Take Away untuk order aktif: dua tombol berdampingan, yang terpilih terisi. Order tertutup: baca-saja
+ * (tombol nonaktif). Pemilihan memanggil server (PUT); tampilan mengikuti nilai dari server, bukan tebakan lokal.
+ */
+@Composable
+private fun ServiceTypeRow(store: PosStore, o: Order) {
+    val current = o.serviceType ?: if (o.kind == OrderKind.COUNTER) SERVICE_TAKEAWAY else SERVICE_DINE_IN
+    val options = listOf(SERVICE_DINE_IN to "Dine-In", SERVICE_TAKEAWAY to "Take Away")
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { (value, label) ->
+            FilterChip(
+                selected = current == value, onClick = { store.setServiceType(value) }, enabled = !o.closed,
+                label = { Text(label, fontSize = 14.sp, fontWeight = FontWeight.SemiBold) }, modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+            )
         }
     }
 }

@@ -34,6 +34,9 @@ class OrderResource extends JsonResource
             'void_reason' => $this->void_reason,
             'notes' => $this->notes,
             'channel' => $this->channel,
+            // 090 — cara layanan dan asal order.
+            'service_type' => $this->service_type,
+            'source' => $this->source,
             'created_at' => $this->created_at,
             // null (kunci tetap ada) untuk pembeli walk-in; hilang bila relasi tak dimuat.
             'customer' => $this->whenLoaded('customer', fn ($c) => ['id' => $c->id, 'name' => $c->name, 'phone' => $c->phone, 'email' => $c->email]),

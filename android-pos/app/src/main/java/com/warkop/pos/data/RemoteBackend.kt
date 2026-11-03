@@ -10,6 +10,7 @@ import com.warkop.core.domain.ApiError
 import com.warkop.core.network.ApiClient
 import com.warkop.core.network.ApiErrorMapper
 import com.warkop.core.network.dto.AddLineRequestDto
+import com.warkop.core.network.dto.UpdateServiceTypeRequestDto
 import com.warkop.core.network.dto.ModifierSelectionDto
 import com.warkop.core.network.dto.CashMovementRequest
 import com.warkop.core.network.dto.MoveTabRequestDto
@@ -365,6 +366,34 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
 
     override suspend fun setNote(tabId: String, notes: String): Order =
         OrderMapper.tab(apiCall { api().setNote(tabId.toLong(), UpdateNoteRequestDto(notes)) }, deviceId)
+
+    override suspend fun setServiceType(tabId: String, type: String): Order =
+        OrderMapper.tab(apiCall { api().setServiceType(tabId.toLong(), UpdateServiceTypeRequestDto(type)) }, deviceId)
+
+    override suspend fun selfServiceAlerts(afterId: Long?): com.warkop.pos.model.SelfServiceAlerts {
+        val dto = apiCall { api().selfServiceAlerts(afterId) }
+        return com.warkop.pos.model.SelfServiceAlerts(
+            items = dto.items.map { com.warkop.pos.model.SelfServiceAlert(it.id, it.tableName, it.referenceNo, it.totalAmount) },
+            waiting = dto.waitingCount, lastId = dto.lastId,
+        )
+    }
+
+    override suspend fun selfServiceQueue(): com.warkop.pos.model.SelfServiceQueue {
+        val page = apiCall { api().selfServiceOrders(listOf("awaiting_verification", "verified")) }
+        return com.warkop.pos.model.SelfServiceQueue(page.data.map(::selfServiceView), page.meta.counts.pending)
+    }
+    override suspend fun selfServiceOrder(id: Long) = selfServiceView(apiCall { api().selfServiceOrder(id) }.data, detail = true)
+    override suspend fun verifySelfService(id: Long, reference: String) = selfServiceView(apiCall { api().verifySelfService(id, com.warkop.core.network.dto.VerifySelfServiceRequestDto(reference)) }.data, detail = true)
+    override suspend fun rejectSelfService(id: Long, reason: String) = selfServiceView(apiCall { api().rejectSelfService(id, com.warkop.core.network.dto.RejectSelfServiceRequestDto(reason)) }.data, detail = true)
+    override suspend fun dispatchSelfService(id: Long) = selfServiceView(apiCall { api().dispatchSelfService(id) }.data, detail = true)
+
+    private fun selfServiceView(d: com.warkop.core.network.dto.SelfServiceOrderDto, detail: Boolean = false) = com.warkop.pos.model.SelfServiceOrderView(
+        id = d.id, reference = d.referenceNo, status = d.status, tableName = d.table.name, takeaway = d.serviceType == "takeaway",
+        itemCount = d.itemCount, totalText = d.totalAmount, customerName = d.customer?.name?.takeIf { it.isNotBlank() }, createdAt = d.createdAt,
+        paymentReference = d.payment.reference, rejectReason = d.rejection?.reason, posOrderNumber = d.order?.orderNumber,
+        lines = d.lines.map { l -> com.warkop.pos.model.SelfServiceLineView(l.name, l.qty, l.lineTotal, l.note?.takeIf { it.isNotBlank() }, l.modifiers.mapNotNull { m -> m.option?.let { o -> if (m.qty > 1) "$o ×${m.qty}" else o } }) },
+        detailLoaded = detail,
+    )
 
     override suspend fun removeLine(tabId: String, lineId: Int, key: String): Order =
         OrderMapper.tab(apiCall { api().removeLine(tabId.toLong(), lineId.toLong(), key) }, deviceId)

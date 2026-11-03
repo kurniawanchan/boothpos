@@ -35,6 +35,8 @@ servers:
     description: Instalasi lokal pada laptop operasional
 
 tags:
+  - name: SelfService
+    description: "090 — pesan mandiri pelanggan lewat QR meja (rute PUBLIK tanpa token, dibatasi laju) dan antrean verifikasi untuk staf."
   - name: Devices
   - name: Dashboard
   - name: Menu
@@ -6571,9 +6573,17 @@ paths:
     get:
       tags: [Restaurant]
       summary: Daftar meja (menu `dining_setup`)
-      description: Tidak berpaginasi — jumlah meja terbatas secara fisik. `?active=1` menyembunyikan meja nonaktif.
+      description: |
+        Tanpa `page`: SELURUH daftar dalam bentuk lama `{data}` (lantai, tab, dan POS bergantung padanya). `?active=1` menyembunyikan meja nonaktif.
+        090 / US7 — dengan `page` (opt-in) datang amplop `{data, meta}`; `meta.areas` = area di outlet yang berlaku TANPA filter (pilihan filter tak menyusut).
+        Setiap meja membawa `qr_ready` (alamat dasar QR bisa dijangkau), bukan token.
       parameters:
         - { name: active, in: query, schema: { type: boolean } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 }, description: "090 — memicu paginasi dan amplop {data, meta}." }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: q, in: query, schema: { type: string, maxLength: 60 }, description: "090 — cari nama atau area." }
+        - { name: area, in: query, schema: { type: string } }
+        - { name: is_active, in: query, schema: { type: boolean } }
         - { name: outlet_id, in: query, style: form, explode: true, schema: { type: array, items: { type: integer } }, description: "071 — hanya outlet ini; dipotong dengan outlet yang boleh dilihat (dan header X-Outlet-Id bila ada). Tak satu pun boleh → daftar kosong. Bukan integer → 422." }
       responses:
         '200':
@@ -7473,6 +7483,307 @@ paths:
 # =====================================================================
 # COMPONENTS
 # =====================================================================
+  # ===== 090 — Pesan mandiri via QR meja =====
+  /self-service/{token}/context:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string }, description: "Token QR meja (ditandatangani HMAC; memuat meja, outlet, mode data, nonce)." }
+    get:
+      tags: [SelfService]
+      summary: Konteks halaman pesan mandiri (PUBLIK, tanpa token Bearer)
+      description: |
+        090 — pengecualian Konstitusi IV (rute tanpa login; preseden 073). Outlet dan meja datang HANYA dari token QR; tidak pernah dari body.
+        Tetap lewat gerbang lisensi (423 bila belum aktif). Dibatasi `self-service-read`.
+        Token tak sah → `404 qr_invalid`; token sah tetapi meja/outlet nonaktif atau mode data berbeda → `409 table_unavailable`.
+      security: []
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      outlet: { type: object, properties: { name: { type: string }, logo_url: { type: string, nullable: true } } }
+                      table: { type: object, properties: { name: { type: string } } }
+                      available: { type: boolean, description: "false bila tidak ada kanal QRIS aktif bergambar." }
+                      unavailable_reason: { type: string, nullable: true, enum: [qris_unavailable] }
+                      tax: { type: object, properties: { label: { type: string }, rate: { type: number }, show: { type: boolean } } }
+                      payment: { type: object, nullable: true, properties: { method: { type: string, enum: [qris] }, channel_id: { type: integer }, qr_image_url: { type: string } } }
+        '404': { description: "`qr_invalid` — token rusak/dipalsukan/dicabut." }
+        '409': { description: "`table_unavailable` — meja/outlet nonaktif atau mode berbeda." }
+        '423': { description: Instalasi belum diaktivasi }
+        '429': { description: Dibatasi (`throttled`) }
+  /self-service/{token}/menu:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [SelfService]
+      summary: Menu outlet QR (PUBLIK; field daftar-putih)
+      description: |
+        090 — hanya menu yang dibawa outlet itu. TIDAK memuat `cost_price`, angka stok, SKU, outlet asal, atau bahan modifier.
+        `sold_out` dari aturan ketersediaan server (tanda 86), bukan dari angka stok.
+      security: []
+      parameters:
+        - { name: q, in: query, schema: { type: string, maxLength: 60 } }
+        - { name: category_id, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      categories: { type: array, items: { type: object, properties: { id: { type: integer }, name: { type: string } } } }
+                      products: { type: array, items: { type: object } }
+        '404': { description: "`qr_invalid`" }
+        '409': { description: "`table_unavailable`" }
+  /self-service/{token}/proofs:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [SelfService]
+      summary: Unggah foto bukti bayar (PUBLIK)
+      description: JPEG/PNG ≤ 5 MB, MIME dari isi berkas, disimpan di disk privat dengan nama acak tanpa pengunggah. Dibatasi `self-service-proof`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, captured_via]
+              properties:
+                file: { type: string, format: binary }
+                captured_via: { type: string, enum: [webcam, upload] }
+      responses:
+        '201':
+          description: Tersimpan
+          content:
+            application/json:
+              schema: { type: object, properties: { proof_token: { type: string, format: uuid }, file_size: { type: integer } } }
+        '404': { description: "`qr_invalid`" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { description: Dibatasi }
+  /self-service/{token}/orders:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [SelfService]
+      summary: Kirim pesanan mandiri (PUBLIK; ditahan sampai staf memverifikasi)
+      description: |
+        090 — harga, pajak, dan total SELALU dihitung server; field harga/diskon/total/outlet/meja DITOLAK (422). Pesanan ditahan di
+        `self_service_orders`: TIDAK ada order, stok, pembayaran, atau tiket dapur sampai staf memverifikasi dan menekan "Kirim ke dapur".
+        Idempoten lewat `local_ref` (kirim ulang → 200 dengan struk yang sama). Item yang tak bisa dipesan → `409 item_unavailable` dengan rincian.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [local_ref, service_type, proof_token, items]
+              properties:
+                local_ref: { type: string, format: uuid }
+                service_type: { type: string, enum: [dine_in, takeaway] }
+                proof_token: { type: string, format: uuid }
+                customer:
+                  type: object
+                  nullable: true
+                  description: "Opsional (tamu = dihilangkan). Bila ada isi: `name` dan `phone` wajib."
+                  properties: { name: { type: string, maxLength: 100 }, phone: { type: string }, email: { type: string, format: email, nullable: true } }
+                items:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    required: [variant_id, qty]
+                    properties:
+                      variant_id: { type: integer }
+                      qty: { type: integer, minimum: 1, maximum: 99 }
+                      note: { type: string, maxLength: 200, nullable: true }
+                      modifier_option_ids: { type: array, items: { type: integer } }
+                      modifier_selections: { type: array, items: { type: object, properties: { option_id: { type: integer }, qty: { type: integer } } } }
+      responses:
+        '201': { description: "Diterima (`data.receipt_token`, `reference_no`, `status: awaiting_verification`, total)" }
+        '200': { description: Kirim ulang dengan `local_ref` yang sama }
+        '404': { description: "`qr_invalid`" }
+        '409': { description: "`table_unavailable` | `qris_unavailable` | `item_unavailable` (memuat `items`)" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { description: Dibatasi (5/mnt per IP+meja, 20/jam per IP) }
+  /self-service/receipts/{receiptToken}:
+    parameters:
+      - { name: receiptToken, in: path, required: true, schema: { type: string, minLength: 40, maxLength: 40 } }
+    get:
+      tags: [SelfService]
+      summary: Struk pelanggan (PUBLIK; token struk acak, bukan id)
+      description: |
+        Potret saat kirim + status terbaru (`awaiting_verification | verified | dispatched | rejected`). Nomor order POS terisi setelah `dispatched`.
+        Daftar-putih: tanpa id internal, HPP, bukti, atau data pelanggan selain nama. Token dicocokkan persis (membedakan huruf).
+      security: []
+      responses:
+        '200': { description: Berhasil (`data`) }
+        '404': { description: "`receipt_not_found`" }
+        '429': { description: Dibatasi }
+  /self-service/orders:
+    get:
+      tags: [SelfService]
+      summary: Antrean pesanan mandiri untuk staf (menu `self_service`)
+      parameters:
+        - { name: status, in: query, style: form, explode: true, schema: { type: array, items: { type: string, enum: [awaiting_verification, verified, dispatched, rejected] } } }
+        - { name: table_id, in: query, schema: { type: integer } }
+        - { name: q, in: query, schema: { type: string, maxLength: 60 } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: per_page, in: query, schema: { type: integer, maximum: 100 } }
+      description: Yang menunggu tindakan di atas dan TERTUA dulu. `meta.counts` per status + `pending` (tidak ikut filter). Telepon pelanggan tersamar di daftar.
+      responses:
+        '200': { description: "`{data, meta:{current_page, per_page, total, last_page, counts}}`" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /self-service/orders/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [SelfService]
+      summary: Detail pesanan mandiri (menu `self_service`)
+      description: Memuat baris, pembayaran, data pelanggan penuh, dan `proof_id` (foto lewat `GET /payment-proofs/{id}/file`). Outlet/mode lain → 404.
+      responses:
+        '200': { description: Berhasil }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /self-service/orders/{id}/verify:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [SelfService]
+      summary: Verifikasi pembayaran QRIS pesanan mandiri
+      description: Butuh izin `payment.qris.verify`. Belum membuat order/stok/tiket. Selain `awaiting_verification` → `409 invalid_transition`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reference], properties: { reference: { type: string, minLength: 4, maxLength: 100 } } }
+      responses:
+        '200': { description: Terverifikasi }
+        '403': { description: "`verify_not_allowed` atau tanpa menu" }
+        '409': { description: "`invalid_transition`" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /self-service/orders/{id}/reject:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [SelfService]
+      summary: Tolak pesanan mandiri (final)
+      description: Butuh izin `payment.qris.verify`. Alasan wajib. Tidak membuat order/stok/tiket/pembayaran.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 255 } } }
+      responses:
+        '200': { description: Ditolak }
+        '403': { description: "`verify_not_allowed` atau tanpa menu" }
+        '409': { description: "`invalid_transition`" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /self-service/orders/{id}/dispatch:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [SelfService]
+      summary: Kirim ke dapur (menu `self_service`; wajib sudah terverifikasi dan punya shift terbuka di outlet)
+      description: |
+        SATU transaksi lewat layanan yang sudah ada: order `open` tanpa meja → baris (ketersediaan, harga outlet, modifier, stok) → total harus
+        sama dengan yang dibayar pelanggan → tiket dapur → pelunasan QRIS terverifikasi (completed) → isi `table_id`. Gagal di mana pun memutar
+        balik semuanya. Hasil: `{data, order:{id, order_number}, tickets}`.
+      responses:
+        '200': { description: Terkirim }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: "`invalid_transition` | `no_open_shift` | `total_changed` | `item_unavailable`" }
+  /self-service/alerts:
+    get:
+      tags: [SelfService]
+      summary: Pesanan mandiri baru untuk notifikasi tablet (menu `self_service` atau `pos`)
+      description: |
+        Tanpa `after_id` = inisialisasi (tanpa item; hanya `last_id` dan `waiting_count`) supaya aplikasi yang baru dibuka tidak memutar ulang
+        suara pesanan lama. Hanya yang masih `awaiting_verification` diumumkan; kursor tetap maju melewati yang sudah diproses. Maks 20 item per panggilan.
+        Tanpa data pelanggan.
+      parameters:
+        - { name: after_id, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { type: object, properties: { id: { type: integer }, table_name: { type: string }, reference_no: { type: string }, total_amount: { type: string }, created_at: { type: string, format: date-time } } } }
+                  waiting_count: { type: integer }
+                  last_id: { type: integer }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /dining-tables/qr-batch:
+    post:
+      tags: [Restaurant]
+      summary: QR pesan mandiri untuk banyak meja (menu `dining_setup`)
+      description: |
+        Tepat SATU dari `ids` (meja terpilih) atau `filter` (semua hasil filter, kriteria sama dengan daftar). Maks 200 meja (lebih → 422 `qr_batch_too_large`).
+        Meja nonaktif dilewati dan dihitung di `skipped.inactive`. Alamat dasar harus bisa dijangkau ponsel pelanggan (bukan localhost), selain itu `409 qr_base_url_invalid`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids: { type: array, maxItems: 200, items: { type: integer } }
+                filter: { type: object, properties: { q: { type: string }, area: { type: string }, is_active: { type: boolean }, outlet_id: { type: array, items: { type: integer } } } }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { type: object, properties: { table_id: { type: integer }, outlet_name: { type: string }, table_name: { type: string }, area: { type: string }, url: { type: string } } } }
+                  skipped: { type: object, properties: { inactive: { type: integer } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: "`qr_base_url_invalid`" }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /dining-tables/{id}/qr/rotate:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Restaurant]
+      summary: Buat ulang QR meja (mencabut QR lama; menu `dining_setup`)
+      responses:
+        '200': { description: "`{table_id, url}` — URL baru; QR lama kini `404 qr_invalid`" }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: "`qr_base_url_invalid`" }
+  /tabs/{id}/service-type:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Restaurant]
+      summary: Ganti Dine-In / Take Away pada tab terbuka (menu `floor`)
+      description: 090 / US5 — nilai sama = tanpa efek dan tanpa log; tab tidak terbuka → 409; dicatat `service_type_changed`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [service_type], properties: { service_type: { type: string, enum: [dine_in, takeaway] } } }
+      responses:
+        '200': { description: Tab terbaru }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { description: Tab tidak terbuka }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
 components:
 
   securitySchemes:
@@ -8786,6 +9097,7 @@ components:
         session_id: { type: integer }
         customer_id: { type: integer, nullable: true, description: Kosongkan untuk pembeli walk-in. }
         local_ref: { type: string, format: uuid, description: Dibuat klien. Menjamin idempotensi bila permintaan dikirim ulang. }
+        service_type: { type: string, enum: [dine_in, takeaway], description: "090 / US5 — Dine-In atau Take Away. Opsional: tanpa ini order tetap `retail` (klien lama). `retail` tidak diterima dari klien." }
         discount_amount: { $ref: '#/components/schemas/Money' }
         notes: { type: string, nullable: true }
         items:
@@ -9379,6 +9691,7 @@ components:
         customer_id: { type: integer, nullable: true }
         local_ref: { type: string, format: uuid, nullable: true }
         guest_count: { type: integer, nullable: true, minimum: 1, maximum: 99, description: "048 — jumlah tamu. Terminal dikenali dari header `X-Device-Id` (bukan body)." }
+        service_type: { type: string, enum: [dine_in, takeaway], description: "090 / US5 — pilihan eksplisit; tanpa ini diturunkan dari meja (meja → dine_in, tanpa meja → takeaway)." }
 
     AddTabLineInput:
       type: object

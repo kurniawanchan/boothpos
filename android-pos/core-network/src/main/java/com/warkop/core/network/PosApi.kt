@@ -78,6 +78,8 @@ interface PosApi {
     suspend fun removeLine(@Path("id") id: Long, @Path("item") item: Long, @Header("Idempotency-Key") key: String): TabDto
     /** 077 — catatan kasir untuk seluruh order; teks kosong menghapus. Menetapkan keadaan, jadi aman diulang. */
     @PUT("tabs/{id}/note") suspend fun setNote(@Path("id") id: Long, @Body body: UpdateNoteRequestDto): TabDto
+    /** 090 / US5 — Dine-In ↔ Take Away pada tab terbuka. */
+    @PUT("tabs/{id}/service-type") suspend fun setServiceType(@Path("id") id: Long, @Body body: UpdateServiceTypeRequestDto): TabDto
     /** 084 — mengubah meja pesanan; pesanan selesai hanya dikoreksi penempatannya (server). */
     @POST("tabs/{id}/move") suspend fun moveTab(@Path("id") id: Long, @Body body: MoveTabRequestDto): TabDto
     /** 084 — membuang tab KOSONG (204); server menolak bila sudah berisi. */
@@ -99,6 +101,14 @@ interface PosApi {
     suspend fun uploadQrImage(@Path("id") id: Long, @retrofit2.http.Part image: okhttp3.MultipartBody.Part): retrofit2.Response<okhttp3.ResponseBody>
     @POST("tabs/{id}/prebill") suspend fun prebill(@Path("id") id: Long): TabDto
     /** Heartbeat perangkat (US6). Tanpa Idempotency-Key: bukan tulisan bisnis, aman diulang. */
+    /** 090 / US8 — pesanan mandiri baru sejak kursor. Tanpa `after_id` = inisialisasi (tanpa item). */
+    /** 090 — tab Mandiri di Pesanan. `status[]` memilih yang masih menunggu tindakan. */
+    @GET("self-service/orders") suspend fun selfServiceOrders(@Query("status[]") status: List<String>, @Query("per_page") perPage: Int = 50): SelfServiceOrdersPageDto
+    @GET("self-service/orders/{id}") suspend fun selfServiceOrder(@Path("id") id: Long): SelfServiceOrderEnvelopeDto
+    @POST("self-service/orders/{id}/verify") suspend fun verifySelfService(@Path("id") id: Long, @Body body: VerifySelfServiceRequestDto): SelfServiceOrderEnvelopeDto
+    @POST("self-service/orders/{id}/reject") suspend fun rejectSelfService(@Path("id") id: Long, @Body body: RejectSelfServiceRequestDto): SelfServiceOrderEnvelopeDto
+    @POST("self-service/orders/{id}/dispatch") suspend fun dispatchSelfService(@Path("id") id: Long): SelfServiceOrderEnvelopeDto
+    @GET("self-service/alerts") suspend fun selfServiceAlerts(@Query("after_id") afterId: Long? = null): SelfServiceAlertsDto
     @POST("devices/heartbeat") suspend fun heartbeat(@Body body: HeartbeatRequestDto): HeartbeatResponseDto
     /** Struk server (T038). Order yang masih terbuka menjawab 409; layar struk hanya dibuka untuk order selesai. */
     @GET("orders/{id}/receipt") suspend fun receipt(@Path("id") id: Long): ReceiptDto

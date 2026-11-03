@@ -42,9 +42,11 @@ fun OrdersScreen(store: PosStore) {
             ScrollableTabRow(selectedTabIndex = tab, edgePadding = 0.dp, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
                 Tab(tab == 0, { store.ordersTab = 0 }, selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurface, text = { Text("Terbuka · ${open.size}", fontWeight = if (tab == 0) FontWeight.Bold else FontWeight.Medium) })
                 Tab(tab == 1, { store.ordersTab = 1 }, selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurface, text = { Text("Selesai · ${closed.size}", fontWeight = if (tab == 1) FontWeight.Bold else FontWeight.Medium) })
+                // 090 — pesanan dari QR meja yang menunggu verifikasi / kirim ke dapur (angka dari server, bukan hitungan lokal).
+                Tab(tab == 2, { store.ordersTab = 2 }, selectedContentColor = MaterialTheme.colorScheme.onSurface, unselectedContentColor = MaterialTheme.colorScheme.onSurface, text = { Text("Mandiri · ${store.selfServiceWaiting}", fontWeight = if (tab == 2) FontWeight.Bold else FontWeight.Medium) })
             }
             Spacer(Modifier.height(10.dp))
-            Row(Modifier.weight(1f)) {
+            if (tab == 2) SelfServiceOrdersPane(store, Modifier.weight(1f)) else Row(Modifier.weight(1f)) {
                 // T039: kegagalan memuat tampil sebagai ErrorState (bukan toast, bukan daftar kosong).
                 val listFailure = if (tab == 1) (store.closedLoad as? Load.Failed)?.error else (store.floor as? Load.Failed)?.error
                 if (listFailure != null) {

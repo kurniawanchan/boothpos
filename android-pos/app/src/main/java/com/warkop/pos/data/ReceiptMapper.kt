@@ -18,6 +18,7 @@ object ReceiptMapper {
         storeContactPhone = dto.storeContactPhone?.trim()?.takeIf { it.isNotBlank() },
         storeContactEmail = dto.storeContactEmail?.trim()?.takeIf { it.isNotBlank() },
         storeNotes = dto.storeNotes?.trim()?.takeIf { it.isNotBlank() },
+        serviceLabel = when (dto.serviceType) { "dine_in" -> "Dine-In"; "takeaway" -> "Take Away"; else -> null },
         storeLogoUrl = ServerUrl.resolve(serverBase, dto.storeLogoUrl),
         orderNumber = dto.orderNumber,
         orderNote = dto.notes?.trim()?.takeIf { it.isNotBlank() },

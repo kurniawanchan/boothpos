@@ -21,6 +21,9 @@ class DiningTableResource extends JsonResource
             'is_active' => $this->is_active,
             // Diisi withExists('openTab as has_open_tab') pada daftar; false bila tidak dimuat.
             'has_open_tab' => (bool) ($this->has_open_tab ?? false),
+            // 090 — apakah QR bisa dibuat (alamat dasar yang bisa dijangkau ponsel pelanggan tersedia). BUKAN token.
+            // Dihitung SEKALI per permintaan (Setting::get kosong tidak ter-cache → satu query per baris bila dihitung per meja).
+            'qr_ready' => $request->attributes->get('qr_ready') ?? tap(\App\Support\SelfServiceSettings::baseUrl($request->getSchemeAndHttpHost()) !== null, fn ($v) => $request->attributes->set('qr_ready', $v)),
         ];
     }
 }

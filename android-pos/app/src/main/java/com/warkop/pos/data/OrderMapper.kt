@@ -84,6 +84,7 @@ object OrderMapper {
             serverPaid = rp(t.paidAmount),
             serverChange = rp(t.changeAmount),
             note = t.notes.orEmpty(),
+            serviceType = t.serviceType.ifBlank { null },
             materialWarnings = warnings(t.materialWarnings),
         )
     }

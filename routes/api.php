@@ -69,6 +69,18 @@ Route::prefix('v1')->group(function () {
     Route::get('/staff/roster', [\App\Http\Controllers\Api\PinAuthController::class, 'roster'])->middleware('throttle:tablet-read');
     Route::post('/auth/pin-sessions', [\App\Http\Controllers\Api\PinAuthController::class, 'login'])->middleware('throttle:pin-login');
 
+    // 090 — pesan mandiri pelanggan lewat QR meja: rute PUBLIK tanpa token (pengecualian Konstitusi IV, dicatat di
+    // specs/090-self-service-qr-ordering/plan.md → Complexity Tracking; preseden 073). Tetap melewati
+    // EnsureInstallationIsActivated (middleware API global, FR-026). Identitas outlet/meja datang HANYA dari token
+    // QR yang ditandatangani (middleware `self-service.table` mengikat OutletContext); body tidak pernah menentukan outlet.
+    Route::get('/self-service/receipts/{receiptToken}', [\App\Http\Controllers\Api\SelfServicePublicController::class, 'receipt'])->middleware('throttle:self-service-read');
+    Route::prefix('self-service/{token}')->middleware('self-service.table')->group(function () {
+        Route::get('/context', [\App\Http\Controllers\Api\SelfServicePublicController::class, 'context'])->middleware('throttle:self-service-read');
+        Route::get('/menu', [\App\Http\Controllers\Api\SelfServicePublicController::class, 'menu'])->middleware('throttle:self-service-read');
+        Route::post('/proofs', [\App\Http\Controllers\Api\SelfServicePublicController::class, 'uploadProof'])->middleware('throttle:self-service-proof');
+        Route::post('/orders', [\App\Http\Controllers\Api\SelfServicePublicController::class, 'submit'])->middleware('throttle:self-service-submit');
+    });
+
     // 078 — percobaan gagal dihitung per akun di AuthController::login; ini hanya batas banjir per IP (hitungan terpisah).
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login-flood');
 
@@ -354,6 +366,17 @@ Route::prefix('v1')->group(function () {
         // 028-restaurant-dine-in-ordering — meja dan lantai. Setiap rute
         // memeriksa menu-key-nya sendiri di sisi server (`dining_setup` /
         // `floor`); layar hanya mencerminkan keputusan itu.
+        // 090 / US6 — tab Self-Service untuk staf (gerbang menu `self_service`; kiriman outlet/mode lain → 404 lewat scope).
+        Route::get('/self-service/alerts', [\App\Http\Controllers\Api\SelfServiceOrderController::class, 'alerts']);
+        Route::get('/self-service/orders', [\App\Http\Controllers\Api\SelfServiceOrderController::class, 'index']);
+        Route::get('/self-service/orders/{self_service_order}', [\App\Http\Controllers\Api\SelfServiceOrderController::class, 'show']);
+        Route::post('/self-service/orders/{self_service_order}/verify', [\App\Http\Controllers\Api\SelfServiceOrderController::class, 'verify']);
+        Route::post('/self-service/orders/{self_service_order}/reject', [\App\Http\Controllers\Api\SelfServiceOrderController::class, 'reject']);
+        Route::post('/self-service/orders/{self_service_order}/dispatch', [\App\Http\Controllers\Api\SelfServiceOrderController::class, 'dispatch']);
+
+        // 090 / US2 — QR pesan mandiri per meja (gerbang `dining_setup` di FormRequest/controller).
+        Route::post('/dining-tables/qr-batch', [DiningTableController::class, 'qrBatch']);
+        Route::post('/dining-tables/{dining_table}/qr/rotate', [DiningTableController::class, 'rotateQr']);
         Route::apiResource('dining-tables', DiningTableController::class);
         Route::get('/floor', [FloorController::class, 'index']);
 
@@ -378,6 +401,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/tabs/{order}/prebill', [TabController::class, 'prebill']);
         // 077 / US4 — catatan kasir untuk seluruh order (menetapkan keadaan, jadi aman diulang tanpa kunci idempotensi).
         Route::put('/tabs/{order}/note', [TabController::class, 'note']);
+        // 090 / US5 — Dine-In ↔ Take Away pada tab terbuka.
+        Route::put('/tabs/{order}/service-type', [TabController::class, 'serviceType']);
         Route::post('/tabs/{order}/void', [TabController::class, 'void']);
         // 048 / S3 — batal seluruh tab (409 has_payments bila sudah dibayar), persetujuan di titik aksi, dan
         // verifikasi/penandaan QRIS tab.

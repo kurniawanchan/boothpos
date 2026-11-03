@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,6 +52,11 @@ fun PosApp(store: PosStore, preset: String? = null) {
                 ModeChangedDialog(store)
                 // 087 — peringatan bahan minus: tetap tampil sampai ditutup (tidak ikut hilang seperti toast).
                 if (store.materialNotice.isNotEmpty()) MaterialNoticeBanner(store.materialNotice, store::dismissMaterialNotice, Modifier.align(Alignment.TopCenter).padding(top = 16.dp))
+                // 090 / US8 — pesanan mandiri baru: tetap tampil sampai ditutup (staf mungkin sedang jauh dari layar saat suara terdengar).
+                if (store.selfServiceNotice.isNotEmpty()) SelfServiceBanner(
+                    store.selfServiceNotice, store.selfServiceWaiting, store::dismissSelfServiceNotice,
+                    Modifier.align(Alignment.TopCenter).padding(top = if (store.materialNotice.isNotEmpty()) 160.dp else 16.dp),
+                )
                 store.toast?.let { msg ->
                     LaunchedEffect(msg) { delay(3200); store.clearToast() }
                     Surface(Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp).widthIn(max = 560.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.inverseSurface, contentColor = MaterialTheme.colorScheme.inverseOnSurface) {
@@ -75,6 +81,26 @@ private fun ModeChangedDialog(store: PosStore) {
         text = { Text("Mode berubah ke ${new.name}. Keluar lalu masuk lagi untuk melanjutkan. Pesanan yang sedang terbuka tetap tersimpan.") },
         confirmButton = { TextButton({ store.leaveForNewMode() }) { Text("Keluar") } },
     )
+}
+
+/**
+ * 090 / US8 — spanduk pesanan mandiri baru: meja, nomor, total, dan berapa yang menunggu. Memeriksa, memverifikasi, dan mengirim ke
+ * dapur dikerjakan di web (Penjualan → Self-Service); tablet hanya memberi tahu (keputusan spec). Tanpa data pelanggan.
+ */
+@Composable
+private fun SelfServiceBanner(items: List<com.warkop.pos.model.SelfServiceAlert>, waiting: Int, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(modifier.widthIn(max = 640.dp).padding(horizontal = 16.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer, shadowElevation = 6.dp) {
+        Row(Modifier.padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.Top) {
+            Icon(Icons.Filled.Notifications, null, Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Pesanan mandiri baru", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                items.forEach { Text("Meja ${it.tableName} · ${it.reference} · ${it.totalLabel}", fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp)) }
+                if (waiting > 0) Text("$waiting pesanan menunggu. Periksa di web: Penjualan → Self-Service.", fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+            }
+            TextButton(onClose) { Text("Tutup") }
+        }
+    }
 }
 
 /** 087 — kartu peringatan bahan minus; satu baris per bahan. Bukan galat: penjualan tetap tercatat. */
