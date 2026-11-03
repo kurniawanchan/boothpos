@@ -131,6 +131,7 @@ class Payment extends Model
      * (dipakai service, dan flag `can_change_method` di presenter, supaya aksinya disembunyikan bila
      * tak mungkin berhasil). Mengembalikan kode alasan atau null.
      *   voided        — penjualan batal;
+     *   rejected      — pembayaran sudah ditolak verifikasi (koreksi metode akan menghapus penolakan itu);
      *   (tunai di shift yang sudah ditutup SEKARANG boleh dikoreksi — permintaan pemilik produk: salah pilih
      *   metode sering baru ketahuan setelah shift tutup. Angka shift tertutup tetap yang TERSIMPAN saat ditutup;
      *   koreksinya terlacak di activity log, tidak menulis ulang rekonsiliasi.)
@@ -142,6 +143,12 @@ class Payment extends Model
     {
         if ($order->status === 'voided') {
             return 'voided';
+        }
+
+        // Pembayaran yang DITOLAK verifikasi tak boleh "dicuci" lewat koreksi metode: tunai langsung
+        // berstatus verified, jadi penolakan akan terhapus diam-diam oleh pencatatnya sendiri.
+        if ($this->verification === 'rejected') {
+            return 'rejected';
         }
 
         if ($this->method === 'cash') {

@@ -128,25 +128,36 @@ class PaymentMethodChangeTest extends TestCase
         $this->assertNull($payment->verified_at);
     }
 
-    public function test_a_channel_payment_can_be_corrected_to_cash_into_the_actors_open_shift(): void
+    public function test_an_owner_can_correct_a_channel_payment_to_cash_into_their_own_open_shift(): void
     {
         $order = $this->qrisSale();
+        $ownerShift = CashierSession::factory()->create(['event_id' => $this->session->event_id, 'user_id' => $this->owner->id, 'status' => 'open']);
 
-        $this->change($order, ['method' => 'cash'])->assertOk();
+        $this->as($this->owner)->change($order, ['method' => 'cash'])->assertOk();
 
         $payment = Payment::find($order['payments'][0]['id']);
         $this->assertSame('cash', $payment->method);
         $this->assertNull($payment->channel_id);
         $this->assertSame('verified', $payment->verification);
-        $this->assertSame($this->session->id, $payment->session_id);
+        $this->assertSame($ownerShift->id, $payment->session_id);
+    }
+
+    public function test_a_cashier_cannot_turn_a_non_cash_payment_into_cash_even_their_own(): void
+    {
+        $order = $this->qrisSale(); // dicatat kasir sendiri, shift kasir terbuka
+
+        $this->as($this->cashier)->change($order, ['method' => 'cash'])->assertForbidden();
+
+        $payment = Payment::find($order['payments'][0]['id']);
+        $this->assertSame('qr_ewallet', $payment->method);
+        $this->assertSame('pending', $payment->verification);
     }
 
     public function test_changing_to_cash_needs_an_open_shift_of_the_actor(): void
     {
-        $order = $this->qrisSale();
-        $this->session->update(['status' => 'closed', 'closed_at' => now(), 'closing_cash' => 0, 'expected_cash' => 0]);
+        $order = $this->qrisSale(); // pemilik tidak punya shift terbuka
 
-        $this->change($order, ['method' => 'cash'])->assertStatus(409);
+        $this->as($this->owner)->change($order, ['method' => 'cash'])->assertStatus(409);
 
         $this->assertSame('qr_ewallet', Payment::find($order['payments'][0]['id'])->method);
     }
@@ -211,6 +222,18 @@ class PaymentMethodChangeTest extends TestCase
         $this->assertSame('qr_ewallet', Payment::find($order['payments'][0]['id'])->method);
         // Angka shift tertutup adalah catatan historis: tidak ditulis ulang.
         $this->assertSame('50000.00', number_format((float) $this->session->fresh()->expected_cash, 2, '.', ''));
+    }
+
+    public function test_a_rejected_payment_cannot_be_turned_into_verified_cash(): void
+    {
+        $order = $this->qrisSale();
+        Payment::whereKey($order['payments'][0]['id'])->update(['verification' => 'rejected']);
+
+        $this->as($this->cashier);
+        $res = $this->change($order, ['method' => 'cash'])->assertStatus(409);
+
+        $this->assertSame('rejected', $res->json('code'));
+        $this->assertSame('rejected', Payment::find($order['payments'][0]['id'])->verification);
     }
 
     public function test_cash_with_change_given_cannot_be_recategorised(): void
