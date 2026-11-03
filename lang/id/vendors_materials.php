@@ -15,6 +15,6 @@ return [
     'material_delete_used_by_modifier' => 'Bahan masih dipakai pilihan modifier (:usage). Lepaskan dulu dari grup modifier.',
     'option_material_not_found' => 'Bahan tidak ditemukan.',
     'option_material_inactive' => 'Bahan :material nonaktif atau sudah dihapus; pilih bahan aktif.',
-    'option_material_duplicate' => 'Bahan yang sama tidak boleh dipilih dua kali pada satu pilihan.',
+    'option_material_duplicate' => 'Bahan yang sama tidak boleh dipilih dua kali pada pilihan ":option".',
     'option_material_quantity' => 'Jumlah bahan harus lebih dari 0.',
 ];

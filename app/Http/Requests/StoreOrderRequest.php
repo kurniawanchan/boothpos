@@ -29,6 +29,11 @@ class StoreOrderRequest extends FormRequest
             // 084 — pilihan modifier POS web. Hanya id: nama/harga dihitung server (ModifierResolver).
             'items.*.modifier_option_ids' => ['sometimes', 'array'],
             'items.*.modifier_option_ids.*' => ['integer'],
+            // 089 — pilihan berjumlah: `[{option_id, qty}]`. Batas min/maks per pilihan diperiksa ModifierResolver (butuh DB);
+            // mengirim keduanya sekaligus ditolak di sana juga (422 `modifier_selections`).
+            'items.*.modifier_selections' => ['sometimes', 'array', 'max:50'],
+            'items.*.modifier_selections.*.option_id' => ['required', 'integer'],
+            'items.*.modifier_selections.*.qty' => ['required', 'integer', 'min:1', 'max:50'],
 
             'payments' => ['required', 'array', 'min:1'],
             'payments.*.method' => ['required', 'in:cash,bank_transfer,qr_ewallet'],

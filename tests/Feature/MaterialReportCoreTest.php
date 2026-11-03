@@ -67,6 +67,25 @@ class MaterialReportCoreTest extends TestCase
         $this->assertTrue($sambal['usage_untracked']);
     }
 
+    /** 089 — resep AKTIF memotong stok, jadi bahannya tercatat; resep arsip/belum berlaku/tak tertaut tidak. */
+    public function test_a_material_in_an_active_linked_recipe_is_no_longer_untracked(): void
+    {
+        $recipe = \App\Models\Recipe::query()->sole();
+        $untracked = fn () => collect(app(MaterialReport::class)->positions(['window_days' => 7, 'risk_days' => 3, 'target_days' => 7])['rows'])
+            ->first(fn ($r) => $r['name'] === 'Sambal' && $r['outlet_id'] === $this->outletA->id)['usage_untracked'];
+
+        $this->assertTrue($untracked(), 'resep tak tertaut ke varian');
+
+        $recipe->variants()->sync([$this->nasiGoreng->id]);
+        $this->assertFalse($untracked(), 'resep aktif tertaut memotong stok, jadi tercatat');
+
+        $recipe->update(['archived_at' => now()]);
+        $this->assertTrue($untracked(), 'arsip tidak memotong');
+
+        $recipe->update(['archived_at' => null, 'effective_from' => now()->addDays(5)->toDateString()]);
+        $this->assertTrue($untracked(), 'belum berlaku tidak memotong');
+    }
+
     public function test_unit_cost_matches_the_recipe_cost_rule_and_values_follow(): void
     {
         $soto = $this->row('Indomie Soto', $this->outletA);

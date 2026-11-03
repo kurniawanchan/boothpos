@@ -448,7 +448,11 @@ class MaterialReport
             ->unique('material_id')->keyBy('material_id');
     }
 
-    /** Bahan yang ada di resep/BOM tetapi tidak di pemetaan modifier mana pun: pemakaiannya tidak tercatat (D3). */
+    /**
+     * Bahan yang ada di resep/BOM tetapi pemakaiannya TIDAK tercatat (D3): tidak dipetakan ke pilihan modifier dan tidak
+     * ada di resep AKTIF. 089: resep aktif kini memotong stok saat pesanan selesai, jadi bahannya tercatat; yang tetap
+     * tak tercatat = bahan BOM, serta bahan di resep yang belum berlaku, diarsipkan, atau tak tertaut ke varian.
+     */
     private function usageUntracked(Collection $materialIds): Collection
     {
         if ($materialIds->isEmpty()) {
@@ -460,8 +464,14 @@ class MaterialReport
             ->where('recipes.data_mode', $mode)->whereIn('recipe_lines.material_id', $materialIds)->pluck('recipe_lines.material_id')
             ->merge(DB::table('product_variant_bom_lines')->where('data_mode', $mode)->whereIn('material_id', $materialIds)->pluck('material_id'));
         $mapped = DB::table('modifier_option_materials')->where('data_mode', $mode)->whereIn('material_id', $materialIds)->pluck('material_id')->flip();
+        // Aturan "resep aktif" sama dengan Recipe::scopeActive (tidak arsip, sudah berlaku) dan wajib tertaut ke varian.
+        $inActiveRecipe = DB::table('recipe_lines')->join('recipes', 'recipes.id', '=', 'recipe_lines.recipe_id')
+            ->where('recipes.data_mode', $mode)->whereNull('recipes.archived_at')
+            ->whereDate('recipes.effective_from', '<=', \App\Support\BusinessDay::today())
+            ->whereExists(fn ($q) => $q->selectRaw('1')->from('recipe_variants')->whereColumn('recipe_variants.recipe_id', 'recipes.id'))
+            ->whereIn('recipe_lines.material_id', $materialIds)->pluck('recipe_lines.material_id')->flip();
 
-        return $inRecipeOrBom->unique()->reject(fn ($id) => $mapped->has($id))->flip();
+        return $inRecipeOrBom->unique()->reject(fn ($id) => $mapped->has($id) || $inActiveRecipe->has($id))->flip();
     }
 
     private function qty(float $v): string

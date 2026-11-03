@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import StatusPill from '../ui/StatusPill.vue';
 import BaseButton from '../ui/BaseButton.vue';
+import { modifierLabel } from '../../utils/modifierRules';
 
 /**
  * 028 US4 — satu tiket di layar stasiun: meja/label, nomor tab, ronde, lama menunggu,
@@ -63,7 +64,7 @@ function actionFor(item) {
         <span class="min-w-[26px] text-[15px] font-bold text-brand-active">{{ item.qty }}×</span>
         <div class="min-w-0 flex-1" :class="item.status === 'cancelled' ? 'opacity-70' : ''">
           <div class="text-[14px] font-bold leading-snug" :class="item.status === 'cancelled' ? 'text-danger-text line-through' : 'text-ink'">{{ item.name }}</div>
-          <div v-if="item.modifiers.length" class="text-[12px] text-muted-4">{{ item.modifiers.map((m) => m.option).join(', ') }}</div>
+          <div v-if="item.modifiers.length" class="text-[12px] text-muted-4">{{ item.modifiers.map(modifierLabel).join(', ') }}</div>
           <div v-if="item.note" class="text-[12px] font-semibold italic text-warn-text">“{{ item.note }}”</div>
           <div v-if="item.status === 'cancelled'" class="text-[12px] font-bold text-danger-text">
             {{ t('kitchen.cancelled') }}<template v-if="item.cancel_reason"> — {{ item.cancel_reason }}</template>

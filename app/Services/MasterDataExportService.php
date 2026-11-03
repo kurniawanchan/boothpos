@@ -43,6 +43,12 @@ class MasterDataExportService
             MasterDataSheets::MATERIALS => $this->materialRows(),
             MasterDataSheets::VENDOR_PRICES => $this->vendorPriceRows(),
             MasterDataSheets::BOM => $this->bomRows(),
+            MasterDataSheets::MATERIAL_STOCK => $this->materialStockRows(),
+            MasterDataSheets::RECIPES => $this->recipeRows(),
+            MasterDataSheets::MODIFIER_GROUPS => $this->modifierGroupRows(),
+            MasterDataSheets::MODIFIER_OPTIONS => $this->modifierOptionRows(),
+            MasterDataSheets::MODIFIER_OPTION_MATERIALS => $this->modifierOptionMaterialRows(),
+            MasterDataSheets::MODIFIER_LINKS => $this->modifierLinkRows(),
             MasterDataSheets::OUTLET_ITEMS => $this->outletItemRows(),
             MasterDataSheets::OUTLET_PRICES => $this->outletPriceRows(),
             MasterDataSheets::ROLES => $this->roleRows(),
@@ -62,6 +68,12 @@ class MasterDataExportService
             MasterDataSheets::MATERIALS => 'data-bahan.xlsx',
             MasterDataSheets::VENDOR_PRICES => 'data-harga-vendor.xlsx',
             MasterDataSheets::BOM => 'data-bom.xlsx',
+            MasterDataSheets::MATERIAL_STOCK => 'data-stok-bahan.xlsx',
+            MasterDataSheets::RECIPES => 'data-resep.xlsx',
+            MasterDataSheets::MODIFIER_GROUPS => 'data-grup-modifier.xlsx',
+            MasterDataSheets::MODIFIER_OPTIONS => 'data-pilihan-modifier.xlsx',
+            MasterDataSheets::MODIFIER_OPTION_MATERIALS => 'data-bahan-pilihan.xlsx',
+            MasterDataSheets::MODIFIER_LINKS => 'data-tautan-modifier.xlsx',
             MasterDataSheets::OUTLET_ITEMS => 'data-item-outlet.xlsx',
             MasterDataSheets::OUTLET_PRICES => 'data-harga-outlet.xlsx',
             MasterDataSheets::ROLES => 'data-peran.xlsx',
@@ -138,7 +150,117 @@ class MasterDataExportService
             'unit' => $m->unit,
             'notes' => $m->notes,
             'is_active' => $m->is_active ? 1 : 0,
+            'kind' => $m->kind,
+            'standard_cost' => $m->standard_cost,
         ])->all();
+    }
+
+    /** 090 — satu baris per (bahan, outlet) yang punya saldo; jumlah AKHIR, siap diimpor ulang. */
+    private function materialStockRows(): array
+    {
+        // Bahan dan outlet diambil lewat model (global scope mode DEMO/LIVE dan outlet), bukan join mentah.
+        $materials = Material::query()->pluck('code', 'id');
+        $outlets = Outlet::query()->pluck('code', 'id');
+
+        return \App\Models\MaterialOutletStock::query()
+            ->whereIn('material_id', $materials->keys())->whereIn('outlet_id', $outlets->keys())
+            ->get()
+            ->map(fn ($r) => [
+                'material_code' => $materials[$r->material_id], 'outlet_code' => $outlets[$r->outlet_id],
+                'current_stock' => rtrim(rtrim(number_format((float) $r->current_stock, 4, '.', ''), '0'), '.'), 'reason' => null,
+            ])
+            ->sortBy(['outlet_code', 'material_code'])->values()->all();
+    }
+
+    /** 090 — resep aktif (bukan arsip): satu baris per bahan; kolom kepala hanya di baris pertama tiap resep. */
+    private function recipeRows(): array
+    {
+        $rows = [];
+        foreach (\App\Models\Recipe::query()->whereNull('archived_at')->with(['product', 'blocks.lines.material', 'blocks.variant'])->orderBy('product_id')->orderBy('id')->get() as $r) {
+            if ($r->product === null) {
+                continue;
+            }
+            $allVariants = $r->product->variants()->count();
+            // Sheet ini memuat resep DASAR saja (blok tanpa pilihan modifier); tabel bermodifier hanya di layar Resep.
+            $base = $r->blocks->filter(fn ($b) => $b->modifier_option_id === null)->values();
+            $skus = $base->map(fn ($b) => $b->variant?->sku)->filter()->unique()->values();
+            foreach (($base->first()?->lines ?? collect()) as $i => $l) {
+                $rows[] = [
+                    'recipe_name' => $r->name,
+                    'product_code' => $r->product->code_prefix,
+                    'variant_skus' => $i === 0 && $skus->count() !== $allVariants ? $skus->implode(',') : null,
+                    'portions' => $i === 0 ? rtrim(rtrim(number_format((float) $r->yield, 3, '.', ''), '0'), '.') : null,
+                    'effective_from' => $i === 0 ? $r->effective_from?->toDateString() : null,
+                    'material_code' => $l->material?->code,
+                    'quantity' => rtrim(rtrim(number_format((float) $l->quantity, 4, '.', ''), '0'), '.'),
+                    'shrinkage_pct' => (float) $l->shrinkage_pct,
+                    'note' => $i === 0 ? $r->note : null,
+                ];
+            }
+        }
+
+        return $rows;
+    }
+
+    private function modifierGroupRows(): array
+    {
+        return \App\Models\ModifierGroup::query()->orderBy('display_order')->orderBy('name')->get()->map(fn ($g) => [
+            'name' => $g->name,
+            'selection_type' => $g->selection_type,
+            'is_required' => $g->is_required ? 1 : 0,
+            'min_select' => $g->min_select,
+            'max_select' => $g->max_select ?? 'unlimited',
+            'portion_per_option' => $g->portion_per_option ? 1 : 0,
+            'display_order' => $g->display_order,
+            'is_active' => $g->is_active ? 1 : 0,
+        ])->all();
+    }
+
+    private function modifierOptionRows(): array
+    {
+        $rows = [];
+        foreach (\App\Models\ModifierGroup::query()->with('options')->orderBy('display_order')->orderBy('name')->get() as $g) {
+            foreach ($g->options as $o) {
+                $rows[] = [
+                    'group_name' => $g->name, 'option_name' => $o->name, 'price_delta' => number_format((float) $o->price_delta, 2, '.', ''),
+                    'min_qty' => $o->min_qty, 'max_qty' => $o->max_qty ?? 'unlimited', 'display_order' => $o->display_order, 'is_active' => $o->is_active ? 1 : 0,
+                ];
+            }
+        }
+
+        return $rows;
+    }
+
+    private function modifierOptionMaterialRows(): array
+    {
+        $rows = [];
+        foreach (\App\Models\ModifierGroup::query()->with('options.materials.material')->orderBy('display_order')->orderBy('name')->get() as $g) {
+            foreach ($g->options as $o) {
+                foreach ($o->materials as $m) {
+                    $rows[] = [
+                        'group_name' => $g->name, 'option_name' => $o->name, 'material_code' => $m->material?->code,
+                        'quantity' => rtrim(rtrim(number_format((float) $m->quantity, 4, '.', ''), '0'), '.'),
+                    ];
+                }
+            }
+        }
+
+        return $rows;
+    }
+
+    private function modifierLinkRows(): array
+    {
+        $rows = [];
+        foreach (\App\Models\ModifierGroup::query()->with(['products:id,code_prefix', 'categories:id,code'])->orderBy('display_order')->orderBy('name')->get() as $g) {
+            foreach ($g->products as $p) {
+                $rows[] = ['group_name' => $g->name, 'product_code' => $p->code_prefix, 'category_code' => null, 'is_linked' => 1];
+            }
+            foreach ($g->categories as $c) {
+                $rows[] = ['group_name' => $g->name, 'product_code' => null, 'category_code' => $c->code, 'is_linked' => 1];
+            }
+        }
+
+        return $rows;
     }
 
     private function vendorPriceRows(): array

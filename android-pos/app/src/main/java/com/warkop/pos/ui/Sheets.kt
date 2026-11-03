@@ -144,6 +144,8 @@ private fun ColumnScope.PaxSheet(store: PosStore, s: Sheet.Pax) {
 private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
     val p = s.product
     val picks = remember { mutableStateMapOf<String, List<ModOption>>() }
+    // 089 — jumlah per pilihan terpilih (kunci = opsi menu); pilihan yang tak boleh lebih dari satu tidak punya entri.
+    val qtys = remember { mutableStateMapOf<ModOption, Int>() }
     var note by remember { mutableStateOf("") }
     var qty by remember { mutableIntStateOf(1) }
     var firstMissing by remember { mutableStateOf<String?>(null) }
@@ -152,8 +154,8 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
     val chosen = groups.flatMap { picks[it.id].orEmpty() }
     // 2026-11-01 — harga berjalan mengikuti aturan server: grup "tiap pilihan = 1 porsi" menambah harga dasar per pilihan
     // tambahan (ModifierPricing). Sebelumnya `harga + Σ selisih`, jadi 2 rasa tampil Rp 8.000 padahal ditagih Rp 16.000.
-    val unit = ModifierPricing.unitPrice(p.price, groups, picks)
-    val portions = ModifierPricing.portionCount(groups, picks)
+    val unit = ModifierPricing.unitPrice(p.price, groups, picks, qtys)
+    val portions = ModifierPricing.portionCount(groups, picks, qtys)
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(start = 24.dp, end = 24.dp, top = 24.dp)) {
             Title(p.name, rp(p.price), { store.show(null) })
@@ -163,15 +165,25 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
                 Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(g.name, Modifier.weight(1f), fontSize = 20.sp, fontWeight = FontWeight.Medium)
                     Text(rule, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(8.dp))
-                    when { g.min == 0 -> Text("Opsional", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); sel.size >= g.min -> Pill("Terpilih", MaterialTheme.pos.okContainer, MaterialTheme.pos.onOkContainer); else -> Pill("Wajib", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer) }
+                    when { g.min == 0 -> Text("Opsional", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant); ModifierPricing.meetsMin(g, sel, qtys) -> Pill("Terpilih", MaterialTheme.pos.okContainer, MaterialTheme.pos.onOkContainer); else -> Pill("Wajib", MaterialTheme.colorScheme.errorContainer, MaterialTheme.colorScheme.onErrorContainer) }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     g.options.forEach { o ->
                         val on = o in sel
                         val single = g.max == 1
-                        val missing = firstMissing == g.id && sel.size < g.min
+                        val blocked = !on && !single && ModifierPricing.isFull(g, sel, qtys)
+                        val missing = firstMissing == g.id && !ModifierPricing.meetsMin(g, sel, qtys)
                         Surface(
-                            onClick = { picks[g.id] = if (single) listOf(o) else if (on) sel - o else if (g.allows(sel.size)) sel + o else sel; firstMissing = null },
+                            enabled = !blocked,
+                            onClick = {
+                                val next = if (single) listOf(o) else if (on) sel - o else if (!ModifierPricing.isFull(g, sel, qtys)) sel + o else sel
+                                // Opsi yang keluar dari pilihan kehilangan jumlahnya; yang baru masuk mulai dari minimumnya.
+                                (sel - next.toSet()).forEach { qtys.remove(it) }
+                                (next - sel.toSet()).forEach { qtys[it] = it.minQty }
+                                // 2026-11-02 — pilihan berbeda sudah sebanyak "pilih n": semua jumlah kembali ke minimum dan terkunci.
+                                if (ModifierPricing.isLocked(g, next)) next.forEach { qtys[it] = it.minQty }
+                                picks[g.id] = next; firstMissing = null
+                            },
                             shape = RoundedCornerShape(12.dp),
                             color = if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
                             border = BorderStroke(if (on || missing) 2.dp else 1.dp, if (missing) MaterialTheme.colorScheme.error else if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
@@ -185,10 +197,19 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
                                         val d = ModifierPricing.optionDelta(p.price, g, o, if (on) sel else sel + o)
                                         if (d > 0) { Spacer(Modifier.width(8.dp)); Text("+${num(d)}", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                     }
-                                    // 2026-11-01 — stok bahan di outlet ini dan pemakaian per porsi; merah bila habis (tetap boleh dipilih).
-                                    ModifierPricing.stockLines(o).forEach { line ->
-                                        Text(line, fontSize = 13.sp, color = if (ModifierPricing.isShort(o)) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
+                                }
+                                // 089 — pemilih jumlah hanya untuk pilihan terpilih yang boleh dipesan lebih dari sekali.
+                                if (on && o.allowsQty) {
+                                    val q = qtys[o] ?: o.minQty
+                                    Spacer(Modifier.width(12.dp))
+                                    QtyStepper(
+                                        q,
+                                        { if (ModifierPricing.canDecrease(g, o, sel, qtys)) qtys[o] = q - 1 },
+                                        { if (ModifierPricing.canIncrease(g, o, sel, qtys)) qtys[o] = q + 1 },
+                                        Modifier.height(40.dp),
+                                        plusEnabled = ModifierPricing.canIncrease(g, o, sel, qtys),
+                                        minusEnabled = ModifierPricing.canDecrease(g, o, sel, qtys),
+                                    )
                                 }
                             }
                         }
@@ -208,8 +229,8 @@ private fun ModifierSheet(store: PosStore, s: Sheet.Modifier) {
                 Spacer(Modifier.width(14.dp))
                 if (portions > 1) { Text("$portions porsi", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(14.dp)) }
                 PrimaryPill("Tambah", {
-                    val bad = groups.firstOrNull { (picks[it.id]?.size ?: 0) < it.min }
-                    if (bad != null) firstMissing = bad.id else store.addLine(p, chosen, note, qty)
+                    val bad = groups.firstOrNull { !ModifierPricing.meetsMin(it, picks[it.id].orEmpty(), qtys) }
+                    if (bad != null) firstMissing = bad.id else store.addLine(p, chosen, note, qty, chosen.associate { it.id to (qtys[it] ?: 1) })
                 }, Modifier.weight(1f), trailing = rp(unit * qty))
             }
         }

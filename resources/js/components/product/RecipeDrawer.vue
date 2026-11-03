@@ -1,7 +1,7 @@
 <script setup>
 import { computed, reactive, ref, useId, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { createRecipe, getRecipe } from '../../api/recipes';
+import { createRecipe, getRecipe, listRecipeModifierOptions, updateRecipe } from '../../api/recipes';
 import { getMaterial, listMaterials } from '../../api/materials';
 import { useToastStore } from '../../stores/toast';
 import { formatIDR } from '../../utils/formatters';
@@ -16,10 +16,12 @@ import LoadingState from '../ui/LoadingState.vue';
 import { CELL_ERROR, CELL_HEAD, ROW_REMOVE, TABLE_LINK, cellInputClass } from './cellStyles';
 
 /**
- * 043 (US8) — laci "Resep": menyimpan resep sebagai VERSI BARU (`POST /products/{id}/recipes`); versi lama tidak
- * pernah diubah. Dibuka dari bagian Resep hanya untuk pemegang izin `menu.recipe.edit`; server tetap menolak yang lain.
+ * 043 (US8), diubah 089 — laci "Resep": membuat satu resep (`POST /products/{id}/recipes`) atau mengubahnya di tempat
+ * (`PUT /recipes/{id}`); resep tidak lagi berversi. Satu varian boleh ada di banyak resep (semuanya dijumlahkan saat
+ * penjualan), jadi varian yang sudah tertaut ke resep lain tetap boleh dicentang. Dibuka dari bagian Resep hanya untuk
+ * pemegang izin `menu.recipe.edit`; server tetap menolak yang lain.
  *
- * - Kalimat versi memang TIDAK menjanjikan pemotongan stok bahan (belum dibangun, research D12 / O6).
+ * - Stok bahan dipotong saat PESANAN SELESAI (bukan saat resep disimpan); catatan di atas formulir menjelaskannya.
  * - Satuan baris = satuan bahan (read-only): tidak ada konversi satuan.
  * - Bahan = SATU tabel "Bahan per porsi" (rancangan Back Office). Pengelompokan per jenis (bahan baku / setengah jadi /
  *   kemasan) dipertahankan DI DALAM <select> lewat <optgroup>, bukan lagi tiga kotak terpisah. Urutan kirim = urutan baris
@@ -35,12 +37,17 @@ import { CELL_ERROR, CELL_HEAD, ROW_REMOVE, TABLE_LINK, cellInputClass } from '.
  * - Kolom angka/tanggal SENGAJA tanpa atribut `min`/`max`: atribut itu memicu validasi bawaan browser yang menahan
  *   submit dengan balon berbahasa browser dan tanpa pesan kita; batasnya (yield > 0, jumlah > 0, susut 0–99,99,
  *   tanggal ≥ hari ini − 30) dicek `validate()` dengan pesan per kolom, dan server tetap menolak yang lolos.
- * - Prefill dari versi TERBARU (bukan hanya yang aktif) supaya "ubah sedikit lalu simpan" bekerja dari titik terakhir.
+ * - Mengubah resep memuat isinya dari `GET /recipes/{id}`; resep baru mulai kosong.
+ *
+ * 2026-11-02 (permintaan pemilik) — bahan kini berupa BEBERAPA tabel ("blok"), satu per (varian, pilihan modifier). Pengguna memilih
+ *   varian, lalu pilihan modifier (atau "tanpa modifier" = resep dasar varian); tabel bahan aktif setelah varian dipilih. Pasangan
+ *   (varian, pilihan) yang sudah dipakai blok lain tidak bisa dipilih lagi. Server memotong blok bermodifier hanya bila
+ *   pilihannya dipesan. Resep baru dimulai dengan satu blok dasar per varian aktif (bukan BOM-selesai).
  */
 const props = defineProps({
   open: { type: Boolean, default: false },
   product: { type: Object, default: null }, // { id, name, variants }
-  versions: { type: Array, default: () => [] }, // GET /products/{id}/recipes (terbaru dulu)
+  recipe: { type: Object, default: null }, // baris daftar yang diubah; null = resep baru
 });
 const emit = defineEmits(['close', 'saved', 'remove']);
 const { t } = useI18n();
@@ -53,20 +60,21 @@ const tableLabelId = `rc-table-${useId()}`;
 const loadState = ref('loading'); // loading | ready | error
 const materials = ref([]);
 const unitCosts = reactive({}); // material_id → number | null (null = diketahui TIDAK punya harga)
+const recipeName = ref('');
 const yieldQty = ref('1');
 const effectiveFrom = ref('');
-const variantIds = ref([]);
+const blocks = ref([]); // { key, variant_id, modifier_option_id (null = tanpa modifier), lines: [] }
+const modifierGroups = ref([]); // [{ id, name, options: [{ id, name }] }]
 const note = ref('');
-const lines = ref([]);
 const submitting = ref(false);
 const alertMessage = ref('');
 const fieldErrors = reactive({});
 const lineErrors = reactive({}); // { [line.key]: { material, quantity, shrinkage } }
+const blockErrors = reactive({}); // { [block.key]: { variant, modifier, lines } }
 let keySeq = 0;
 let loadSeq = 0;
 
-const latestVersion = computed(() => props.versions.reduce((m, v) => Math.max(m, Number(v.version) || 0), 0));
-const nextVersion = computed(() => latestVersion.value + 1);
+const isEdit = computed(() => !!props.recipe);
 const variants = computed(() => props.product?.variants ?? []);
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -108,27 +116,35 @@ async function load() {
   alertMessage.value = '';
   Object.keys(fieldErrors).forEach((k) => delete fieldErrors[k]);
   Object.keys(lineErrors).forEach((k) => delete lineErrors[k]);
+  Object.keys(blockErrors).forEach((k) => delete blockErrors[k]);
   try {
-    const latest = [...props.versions].sort((a, b) => b.version - a.version)[0] ?? null;
-    const [mats, recipe] = await Promise.all([loadAllMaterials(), latest ? getRecipe(latest.id) : Promise.resolve(null)]);
+    const [mats, recipe, groups] = await Promise.all([
+      loadAllMaterials(),
+      props.recipe ? getRecipe(props.recipe.id) : Promise.resolve(null),
+      props.product?.id ? listRecipeModifierOptions(props.product.id).catch(() => []) : Promise.resolve([]),
+    ]);
     if (mine !== loadSeq) return;
     materials.value = mats;
+    modifierGroups.value = groups ?? [];
     Object.keys(unitCosts).forEach((k) => delete unitCosts[k]);
-    effectiveFrom.value = today();
-    note.value = '';
+    effectiveFrom.value = recipe?.effective_from ?? today();
+    note.value = recipe?.note ?? '';
 
     if (recipe) {
+      recipeName.value = recipe.name ?? '';
       yieldQty.value = String(Number(recipe.yield));
-      lines.value = (recipe.lines ?? []).map(lineFromRecipe);
-      (recipe.lines ?? []).forEach((l) => {
-        if (l.unit_cost !== undefined && l.unit_cost !== null) unitCosts[l.material_id] = Number(l.unit_cost);
-      });
       const existing = new Set(variants.value.map((v) => v.id));
-      variantIds.value = (recipe.variants ?? []).map((v) => v.id).filter((id) => existing.has(id));
+      // Server lama/ringkas tanpa `blocks`: satu blok dasar per varian dengan bahan yang sama.
+      const source = recipe.blocks ?? (recipe.variants ?? []).map((v) => ({ variant_id: v.id, modifier_option_id: null, lines: recipe.lines ?? [] }));
+      blocks.value = source.filter((b) => existing.has(b.variant_id)).map((b) => newBlock(b.variant_id, b.modifier_option_id ?? null, (b.lines ?? []).map(lineFromRecipe)));
+      source.forEach((b) => (b.lines ?? []).forEach((l) => {
+        if (l.unit_cost !== undefined && l.unit_cost !== null) unitCosts[l.material_id] = Number(l.unit_cost);
+      }));
     } else {
+      recipeName.value = '';
       yieldQty.value = '1';
-      lines.value = [];
-      variantIds.value = variants.value.filter((v) => v.is_active !== false && !v.bom_complete).map((v) => v.id);
+      // "Berdasarkan jumlah varian": satu tabel dasar per varian aktif yang bukan BOM-selesai.
+      blocks.value = variants.value.filter((v) => v.is_active !== false && !v.bom_complete).map((v) => newBlock(v.id, null, []));
     }
     loadState.value = 'ready';
   } catch {
@@ -155,14 +171,58 @@ const materialGroups = computed(() =>
 // Bahan baris yang sudah tak aktif (tak ada di daftar) tetap harus tampil sebagai pilihan terpilih.
 const orphanOption = (line) => (line.material_id && !materials.value.some((m) => m.id === line.material_id) ? { id: line.material_id, name: line.name || String(line.material_id) } : null);
 
-function addLine() {
-  lines.value.push({ key: `l${++keySeq}`, material_id: null, name: '', unit: '', quantity: '', shrinkage: '0' });
+function newBlock(variantId, optionId, blockLines) {
+  return { key: `b${++keySeq}`, variant_id: variantId, modifier_option_id: optionId, lines: blockLines };
 }
 
-function removeLine(line) {
-  lines.value = lines.value.filter((l) => l !== line);
+function addLine(block) {
+  block.lines.push({ key: `l${++keySeq}`, material_id: null, name: '', unit: '', quantity: '', shrinkage: '0' });
+}
+
+function removeLine(block, line) {
+  block.lines = block.lines.filter((l) => l !== line);
   delete lineErrors[line.key];
 }
+
+// --- blok (varian + modifier) ---------------------------------------------------------------------------------------
+/** Kunci pasangan; `base` = tanpa modifier. */
+const pairKey = (variantId, optionId) => `${variantId}:${optionId ?? 'base'}`;
+const usedByOthers = (block) => new Set(blocks.value.filter((b) => b !== block && b.variant_id).map((b) => pairKey(b.variant_id, b.modifier_option_id)));
+const modifierOptionCount = computed(() => modifierGroups.value.reduce((n, g) => n + g.options.length, 0));
+/** Varian tak bisa dipilih lagi bila semua pasangannya (dasar + tiap pilihan) sudah dipakai blok lain. */
+function variantTaken(block, variantId) {
+  const used = usedByOthers(block);
+  const optionIds = modifierGroups.value.flatMap((g) => g.options.map((o) => o.id));
+  return used.has(pairKey(variantId, null)) && optionIds.every((id) => used.has(pairKey(variantId, id)));
+}
+const optionTaken = (block, optionId) => block.variant_id !== null && usedByOthers(block).has(pairKey(block.variant_id, optionId));
+
+/** Pilih varian: modifier jatuh ke pasangan pertama yang masih bebas (dasar dulu). */
+function pickVariant(block, raw) {
+  const id = raw === '' ? null : Number(raw);
+  block.variant_id = id;
+  delete blockErrors[block.key]?.variant;
+  if (id === null) return;
+  const optionIds = modifierGroups.value.flatMap((g) => g.options.map((o) => o.id));
+  block.modifier_option_id = [null, ...optionIds].find((o) => !optionTaken(block, o)) ?? null;
+}
+
+function pickModifier(block, raw) {
+  block.modifier_option_id = raw === '' ? null : Number(raw);
+  delete blockErrors[block.key]?.modifier;
+}
+
+function addBlock() {
+  blocks.value.push(newBlock(null, null, []));
+}
+
+function removeBlock(block) {
+  blocks.value = blocks.value.filter((b) => b !== block);
+  block.lines.forEach((l) => delete lineErrors[l.key]);
+  delete blockErrors[block.key];
+}
+
+const variantOf = (block) => variants.value.find((v) => v.id === block.variant_id) ?? null;
 
 /** Biaya satuan sebuah bahan: harga vendor acuan, selain itu `standard_cost` bahan setengah jadi (cermin RecipeService::unitCost). */
 async function resolveUnitCost(material) {
@@ -193,55 +253,74 @@ function pickMaterial(line, rawValue) {
 const unitCostOf = (line) => (line.material_id !== null && Object.prototype.hasOwnProperty.call(unitCosts, line.material_id) ? unitCosts[line.material_id] : null);
 
 // --- pratinjau biaya -------------------------------------------------------------------------------------------
-const headVariant = computed(() => variants.value.filter((v) => variantIds.value.includes(v.id)).sort((a, b) => a.id - b.id)[0] ?? null);
-const basePrice = computed(() => (headVariant.value && variantPrice(headVariant.value) !== null ? Number(variantPrice(headVariant.value)) : null));
-const orderedLines = computed(() => lines.value);
-const preview = computed(() =>
-  computeRecipeCost(
-    orderedLines.value.map((l) => ({ quantity: l.quantity, shrinkage_pct: l.shrinkage, unit_cost: l.material_id === null ? null : unitCostOf(l) })),
+/** Biaya per BLOK (tiap tabel punya total sendiri); harga jual acuan = varian blok itu. */
+function previewOf(block) {
+  const v = variantOf(block);
+  const price = v && variantPrice(v) !== null ? Number(variantPrice(v)) : null;
+
+  return computeRecipeCost(
+    block.lines.map((l) => ({ quantity: l.quantity, shrinkage_pct: l.shrinkage, unit_cost: l.material_id === null ? null : unitCostOf(l) })),
     Number(yieldQty.value),
-    basePrice.value,
-  ),
-);
-const lineCostText = (line) => {
-  const c = preview.value.lineCosts[orderedLines.value.indexOf(line)];
+    price,
+  );
+}
+const lineCostText = (block, line) => {
+  const c = previewOf(block).lineCosts[block.lines.indexOf(line)];
   return c === null || c === undefined ? '—' : formatIDR(c);
 };
-const incompleteCount = computed(() => preview.value.unknownCount);
+const incompleteCount = computed(() => blocks.value.reduce((n, b) => n + previewOf(b).unknownCount, 0));
 
 // --- validasi & simpan ---------------------------------------------------------------------------------------------
 function validate() {
   Object.keys(fieldErrors).forEach((k) => delete fieldErrors[k]);
   Object.keys(lineErrors).forEach((k) => delete lineErrors[k]);
+  Object.keys(blockErrors).forEach((k) => delete blockErrors[k]);
   let ok = true;
+  if (!recipeName.value.trim()) {
+    fieldErrors.name = t('products.rc_err_name');
+    ok = false;
+  }
   const y = Number(yieldQty.value);
   if (yieldQty.value === '' || !Number.isFinite(y) || y <= 0) {
     fieldErrors.yield = t('products.rc_err_yield');
     ok = false;
   }
-  if (!effectiveFrom.value || effectiveFrom.value < minDate()) {
+  // Resep yang sudah ada boleh disimpan dengan tanggal berlakunya yang lama; hanya tanggal yang DIUBAH dibatasi 30 hari.
+  const dateUnchanged = isEdit.value && effectiveFrom.value === props.recipe?.effective_from;
+  if (!effectiveFrom.value || (!dateUnchanged && effectiveFrom.value < minDate())) {
     fieldErrors.effective_from = t('products.rc_err_date', { days: MAX_BACKDATE_DAYS });
     ok = false;
   }
-  if (!variantIds.value.length) {
-    fieldErrors.variant_ids = t('products.rc_variants_required');
+  if (!blocks.value.length) {
+    fieldErrors.blocks = t('products.rc_variants_required');
     ok = false;
   }
-  if (!lines.value.length) {
-    fieldErrors.lines = t('products.rc_err_lines');
-    ok = false;
-  }
-  lines.value.forEach((l) => {
-    const e = {};
-    if (l.material_id === null) e.material = t('products.rc_err_material');
-    const q = l.quantity === '' ? NaN : Number(l.quantity);
-    if (!Number.isFinite(q) || q <= 0) e.quantity = t('products.rc_err_qty');
-    const s = l.shrinkage === '' ? 0 : Number(l.shrinkage);
-    if (!Number.isFinite(s) || s < 0 || s > 99.99) e.shrinkage = t('products.rc_err_shrink');
-    if (Object.keys(e).length) {
-      lineErrors[l.key] = e;
+  const seen = new Set();
+  blocks.value.forEach((b) => {
+    const be = {};
+    if (b.variant_id === null) be.variant = t('products.rc_variants_required');
+    else {
+      const k = pairKey(b.variant_id, b.modifier_option_id);
+      if (seen.has(k)) be.modifier = t('products.rc_block_duplicate');
+      seen.add(k);
+    }
+    if (!b.lines.length) be.lines = t('products.rc_err_lines');
+    if (Object.keys(be).length) {
+      blockErrors[b.key] = be;
       ok = false;
     }
+    b.lines.forEach((l) => {
+      const e = {};
+      if (l.material_id === null) e.material = t('products.rc_err_material');
+      const q = l.quantity === '' ? NaN : Number(l.quantity);
+      if (!Number.isFinite(q) || q <= 0) e.quantity = t('products.rc_err_qty');
+      const sh = l.shrinkage === '' ? 0 : Number(l.shrinkage);
+      if (!Number.isFinite(sh) || sh < 0 || sh > 99.99) e.shrinkage = t('products.rc_err_shrink');
+      if (Object.keys(e).length) {
+        lineErrors[l.key] = e;
+        ok = false;
+      }
+    });
   });
   return ok;
 }
@@ -249,13 +328,19 @@ function validate() {
 function applyServerErrors(errors, order) {
   Object.entries(errors ?? {}).forEach(([field, messages]) => {
     const message = Array.isArray(messages) ? messages[0] : messages;
-    const m = /^lines\.(\d+)\.(material_id|quantity|shrinkage_pct)$/.exec(field);
-    if (m) {
-      const line = order[Number(m[1])];
-      if (!line) return;
-      const column = m[2] === 'material_id' ? 'material' : m[2] === 'quantity' ? 'quantity' : 'shrinkage';
-      lineErrors[line.key] = { ...(lineErrors[line.key] ?? {}), [column]: message };
-    } else if (['yield', 'effective_from', 'variant_ids', 'lines'].includes(field)) {
+    const line = /^blocks\.(\d+)\.lines\.(\d+)\.(material_id|quantity|shrinkage_pct)$/.exec(field);
+    const blk = /^blocks\.(\d+)\.(variant_id|modifier_option_id|lines)$/.exec(field);
+    if (line) {
+      const target = order[Number(line[1])]?.lines[Number(line[2])];
+      if (!target) return;
+      const column = line[3] === 'material_id' ? 'material' : line[3] === 'quantity' ? 'quantity' : 'shrinkage';
+      lineErrors[target.key] = { ...(lineErrors[target.key] ?? {}), [column]: message };
+    } else if (blk) {
+      const target = order[Number(blk[1])];
+      if (!target) return;
+      const column = blk[2] === 'variant_id' ? 'variant' : blk[2] === 'modifier_option_id' ? 'modifier' : 'lines';
+      blockErrors[target.key] = { ...(blockErrors[target.key] ?? {}), [column]: message };
+    } else if (['name', 'yield', 'effective_from', 'blocks'].includes(field)) {
       fieldErrors[field] = message;
     } else {
       alertMessage.value = message;
@@ -266,19 +351,23 @@ function applyServerErrors(errors, order) {
 async function submit() {
   alertMessage.value = '';
   if (!validate()) return;
-  const order = [...orderedLines.value];
+  const order = [...blocks.value];
   const payload = {
+    name: recipeName.value.trim(),
     yield: Number(yieldQty.value),
     effective_from: effectiveFrom.value,
-    variant_ids: [...variantIds.value],
-    lines: order.map((l) => ({ material_id: l.material_id, quantity: Number(l.quantity), shrinkage_pct: l.shrinkage === '' ? 0 : Number(l.shrinkage) })),
+    blocks: order.map((b) => ({
+      variant_id: b.variant_id,
+      modifier_option_id: b.modifier_option_id,
+      lines: b.lines.map((l) => ({ material_id: l.material_id, quantity: Number(l.quantity), shrinkage_pct: l.shrinkage === '' ? 0 : Number(l.shrinkage) })),
+    })),
     note: note.value.trim() || null,
   };
 
   submitting.value = true;
   try {
-    const recipe = await createRecipe(props.product.id, payload);
-    toast.success(t('products.rc_saved', { n: recipe?.version ?? nextVersion.value }));
+    const recipe = isEdit.value ? await updateRecipe(props.recipe.id, payload) : await createRecipe(props.product.id, payload);
+    toast.success(t('products.rc_saved'));
     emit('saved', recipe);
   } catch (err) {
     if (err?.isValidation) applyServerErrors(err.errors, order);
@@ -295,31 +384,29 @@ async function submit() {
 <template>
   <FormDrawer
     :open="open"
-    :title="t('products.rc_title')"
+    :title="isEdit ? t('products.rc_title_edit') : t('products.rc_title')"
     :subtitle="product?.name ?? ''"
-    :submit-label="t('products.rc_submit', { n: nextVersion })"
+    :submit-label="t('products.rc_submit')"
     :submitting="submitting"
     max-width-class="max-w-[960px]"
     @close="emit('close')"
     @submit="submit"
   >
-    <template v-if="versions.length" #footer-start>
+    <template v-if="isEdit" #footer-start>
       <BaseButton variant="danger" data-testid="rc-remove" @click="emit('remove')">{{ t('products.rc_remove') }}</BaseButton>
     </template>
     <LoadingState v-if="loadState === 'loading'" :rows="6" />
     <ErrorState v-else-if="loadState === 'error'" :message="t('products.rc_load_failed')" @retry="load" />
 
     <div v-else class="flex flex-col gap-5">
-      <p class="border-2 border-line bg-surface-subtle px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-5" data-testid="rc-versioning">{{ t('products.rc_versioning') }}</p>
+      <p class="border-2 border-line bg-surface-subtle px-3.5 py-2.5 text-[12.5px] leading-relaxed text-muted-5" data-testid="rc-stock-note">{{ t('products.rc_stock_note') }}</p>
       <p v-if="alertMessage" role="alert" class="border-2 border-danger-border bg-danger-bg px-3.5 py-2.5 text-[12.5px] font-semibold text-danger-text" data-testid="rc-alert">{{ alertMessage }}</p>
 
+      <BaseInput v-model="recipeName" type="text" maxlength="100" :label="t('products.rc_name')" :hint="t('products.rc_name_hint')" :error="fieldErrors.name" data-testid="rc-name" />
+
       <div class="grid grid-cols-2 gap-3.5">
-        <div class="flex items-start gap-2">
-          <div class="flex-1">
-            <BaseInput v-model="yieldQty" type="number" step="any" :label="t('products.rc_yield')" :error="fieldErrors.yield" />
-          </div>
-          <span class="pt-[34px] text-[13px] text-muted-4">{{ t('products.rc_yield_unit') }}</span>
-        </div>
+        <!-- 089: label "Portions"; tanpa satuan di samping isian (angkanya sudah jelas dari labelnya). -->
+        <BaseInput v-model="yieldQty" type="number" step="any" :label="t('products.rc_yield')" :error="fieldErrors.yield" />
         <BaseInput
           v-model="effectiveFrom"
           type="date"
@@ -329,86 +416,128 @@ async function submit() {
         />
       </div>
 
-      <fieldset class="flex flex-col gap-2" data-testid="rc-variants">
-        <legend class="mb-1 text-[12.5px] font-semibold text-muted-4">{{ t('products.rc_variants') }}</legend>
-        <label v-for="v in variants" :key="v.id" class="flex flex-wrap items-center gap-2 text-[13px]">
-          <input v-model="variantIds" type="checkbox" :value="v.id" class="h-4 w-4 accent-brand" />
-          <span class="font-semibold">{{ variantName(v) }}</span>
-          <span class="font-mono text-[11.5px] text-muted-4">{{ v.sku }}</span>
-          <span v-if="v.is_active === false" class="text-[11.5px] text-muted-4">({{ t('products.rc_variant_inactive') }})</span>
-          <span v-if="v.bom_complete" class="text-[11.5px] font-semibold text-warn-text" data-testid="rc-bom-note">{{ t('products.rc_variant_bom_note') }}</span>
-        </label>
-        <p v-if="fieldErrors.variant_ids" class="text-[12px] font-medium text-danger-text" role="alert">{{ fieldErrors.variant_ids }}</p>
-      </fieldset>
-
-      <div class="flex flex-col gap-1.5" data-testid="rc-materials">
+      <div class="flex flex-col gap-4" data-testid="rc-blocks">
         <p class="text-[11.5px] font-bold uppercase tracking-wide text-muted">{{ t('products.rc_section_label') }}</p>
-        <p :id="tableLabelId" class="text-[13px] font-semibold text-ink">{{ t('products.rc_materials_label') }}<span class="text-danger-text" aria-hidden="true"> *</span></p>
-        <!-- Satu tabel (rancangan Back Office): jenis bahan tetap terkelompok, tetapi di dalam <select> lewat <optgroup>.
-             Biaya baris yang belum diketahui tampil "—", tidak pernah nol diam-diam. -->
-        <div class="overflow-x-auto border-2 border-line bg-white">
-          <table class="w-full min-w-[620px] border-collapse text-left text-[13px]" :aria-labelledby="tableLabelId">
-            <thead>
-              <tr class="border-b border-line-2 bg-surface-subtle">
-                <th scope="col" :class="CELL_HEAD">{{ t('products.rc_col_material_full') }}</th>
-                <th scope="col" :class="[CELL_HEAD, 'w-24 border-l border-line-3 text-right']">{{ t('products.rc_col_qty_short') }}</th>
-                <th scope="col" :class="[CELL_HEAD, 'w-20 border-l border-line-3 text-right']">{{ t('products.rc_col_uom') }}</th>
-                <th scope="col" :class="[CELL_HEAD, 'w-24 border-l border-line-3 text-right']">{{ t('products.rc_col_shrink') }}</th>
-                <th scope="col" :class="[CELL_HEAD, 'w-32 border-l border-line-3 text-right']">{{ t('products.rc_col_cost') }}</th>
-                <th scope="col" aria-hidden="true" class="w-10 border-l border-line-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(l, i) in lines" :key="l.key" class="border-b border-line-2 align-top" data-testid="rc-line">
-                <td class="p-0">
-                  <select
-                    :value="l.material_id ?? ''"
-                    :class="cellInputClass({ error: !!lineErrors[l.key]?.material })"
-                    :aria-label="t('products.rc_row_material_aria', { n: i + 1 })"
-                    :aria-invalid="lineErrors[l.key]?.material ? 'true' : undefined"
-                    @change="pickMaterial(l, $event.target.value)"
-                  >
-                    <option value="" disabled>{{ t('products.rc_material_placeholder') }}</option>
-                    <option v-if="orphanOption(l)" :value="orphanOption(l).id">{{ orphanOption(l).name }}</option>
-                    <optgroup v-for="g in materialGroups" :key="g.kind" :label="kindLabel(g.kind)">
-                      <option v-for="m in g.items" :key="m.id" :value="m.id">{{ m.name }}</option>
-                    </optgroup>
-                  </select>
-                  <p v-if="lineErrors[l.key]?.material" role="alert" :class="CELL_ERROR">{{ lineErrors[l.key].material }}</p>
-                </td>
-                <td class="border-l border-line-3 p-0">
-                  <input v-model="l.quantity" type="number" step="any" :class="cellInputClass({ number: true, error: !!lineErrors[l.key]?.quantity })" :aria-label="t('products.rc_row_qty_aria', { n: i + 1 })" :aria-invalid="lineErrors[l.key]?.quantity ? 'true' : undefined" />
-                  <p v-if="lineErrors[l.key]?.quantity" role="alert" :class="[CELL_ERROR, 'text-right']">{{ lineErrors[l.key].quantity }}</p>
-                </td>
-                <!-- Satuan = satuan bahan terpilih, teks biasa (tidak ada konversi satuan). -->
-                <td class="border-l border-line-3 px-3 py-3 text-right font-semibold text-muted-4" data-testid="rc-unit">{{ l.unit || '—' }}</td>
-                <td class="border-l border-line-3 p-0">
-                  <input v-model="l.shrinkage" type="number" step="any" :class="cellInputClass({ number: true, error: !!lineErrors[l.key]?.shrinkage })" :aria-label="t('products.rc_row_shrink_aria', { n: i + 1 })" :aria-invalid="lineErrors[l.key]?.shrinkage ? 'true' : undefined" />
-                  <p v-if="lineErrors[l.key]?.shrinkage" role="alert" :class="[CELL_ERROR, 'text-right']">{{ lineErrors[l.key].shrinkage }}</p>
-                </td>
-                <td class="border-l border-line-3 px-3 py-3 text-right font-bold tabular-nums" data-testid="rc-line-cost" :title="lineCostText(l) === '—' ? t('products.rc_cost_unknown') : undefined">{{ lineCostText(l) }}</td>
-                <td class="border-l border-line-3 px-1 py-1.5 text-center">
-                  <button type="button" :class="ROW_REMOVE" :aria-label="t('products.rc_row_remove_aria', { n: i + 1 })" @click="removeLine(l)">
-                    <i class="ph-duotone ph-x text-[14px]" aria-hidden="true"></i>
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <div class="flex items-center justify-between gap-3 px-3 py-2.5" data-testid="rc-footer">
-            <button type="button" :class="TABLE_LINK" data-testid="rc-add" @click="addLine">{{ t('products.rc_add_line') }}</button>
-            <p class="flex gap-1.5 text-[13px] font-bold tabular-nums" data-testid="rc-totals">
-              <span>{{ preview.incomplete ? t('products.rc_portion_cost_partial') : t('products.rc_portion_cost') }}</span>
-              <span data-testid="rc-portion-cost">{{ formatIDR(preview.portionCost) }}</span>
+        <p v-if="fieldErrors.blocks" class="text-[12px] font-medium text-danger-text" role="alert">{{ fieldErrors.blocks }}</p>
+
+        <!-- Satu kartu = satu tabel bahan untuk SATU (varian, pilihan modifier). Tabel baru aktif setelah varian dipilih. -->
+        <section v-for="(b, bi) in blocks" :key="b.key" class="flex flex-col gap-3 border-2 border-line bg-white p-3.5" data-testid="rc-block">
+          <div class="flex flex-wrap items-start gap-3">
+            <label class="flex min-w-[200px] flex-1 flex-col gap-1 text-[12.5px] font-semibold text-muted-4">
+              {{ t('products.rc_block_variant') }}
+              <select
+                :value="b.variant_id ?? ''"
+                :class="cellInputClass({ error: !!blockErrors[b.key]?.variant })"
+                data-testid="rc-block-variant"
+                :aria-label="t('products.rc_block_variant_aria', { n: bi + 1 })"
+                @change="pickVariant(b, $event.target.value)"
+              >
+                <option value="" disabled>{{ t('products.rc_block_variant_placeholder') }}</option>
+                <option v-for="v in variants" :key="v.id" :value="v.id" :disabled="variantTaken(b, v.id)">
+                  {{ variantName(v) }} · {{ v.sku }}{{ v.is_active === false ? ` (${t('products.rc_variant_inactive')})` : '' }}
+                </option>
+              </select>
+              <span v-if="blockErrors[b.key]?.variant" class="text-[12px] font-medium text-danger-text" role="alert">{{ blockErrors[b.key].variant }}</span>
+            </label>
+            <label class="flex min-w-[200px] flex-1 flex-col gap-1 text-[12.5px] font-semibold text-muted-4">
+              {{ t('products.rc_block_modifier') }}
+              <select
+                :value="b.modifier_option_id ?? ''"
+                :disabled="b.variant_id === null"
+                :class="cellInputClass({ error: !!blockErrors[b.key]?.modifier })"
+                data-testid="rc-block-modifier"
+                :aria-label="t('products.rc_block_modifier_aria', { n: bi + 1 })"
+                @change="pickModifier(b, $event.target.value)"
+              >
+                <option value="" :disabled="optionTaken(b, null)">{{ t('products.rc_block_no_modifier') }}</option>
+                <optgroup v-for="g in modifierGroups" :key="g.id" :label="g.name">
+                  <option v-for="o in g.options" :key="o.id" :value="o.id" :disabled="optionTaken(b, o.id)">{{ o.name }}</option>
+                </optgroup>
+              </select>
+              <span v-if="blockErrors[b.key]?.modifier" class="text-[12px] font-medium text-danger-text" role="alert">{{ blockErrors[b.key].modifier }}</span>
+            </label>
+            <button type="button" class="mt-6 flex h-8 w-8 items-center justify-center rounded-md border border-line text-muted-4 hover:bg-surface-subtle" data-testid="rc-block-remove" :aria-label="t('products.rc_block_remove_aria', { n: bi + 1 })" @click="removeBlock(b)">
+              <i class="ph-duotone ph-trash text-[15px]" aria-hidden="true"></i>
+            </button>
+          </div>
+          <p v-if="variantOf(b)?.bom_complete" class="text-[11.5px] font-semibold text-warn-text" data-testid="rc-bom-note">{{ t('products.rc_variant_bom_note') }}</p>
+          <p v-if="b.variant_id !== null && b.modifier_option_id !== null && !modifierOptionCount" class="text-[11.5px] text-muted-4">{{ t('products.rc_block_no_options') }}</p>
+
+          <p v-if="b.variant_id === null" class="border border-dashed border-line px-3 py-3 text-[12.5px] text-muted-4" data-testid="rc-block-inactive">{{ t('products.rc_block_pick_variant') }}</p>
+
+          <div v-else class="flex flex-col gap-1.5" data-testid="rc-materials">
+            <p :id="`${tableLabelId}-${b.key}`" class="text-[13px] font-semibold text-ink">{{ t('products.rc_materials_label') }}<span class="text-danger-text" aria-hidden="true"> *</span></p>
+            <!-- Satu tabel (rancangan Back Office): jenis bahan tetap terkelompok, tetapi di dalam <select> lewat <optgroup>.
+                 Biaya baris yang belum diketahui tampil "—", tidak pernah nol diam-diam. -->
+            <div class="overflow-x-auto border-2 border-line bg-white">
+              <table class="w-full min-w-[620px] border-collapse text-left text-[13px]" :aria-labelledby="`${tableLabelId}-${b.key}`">
+                <thead>
+                  <tr class="border-b border-line-2 bg-surface-subtle">
+                    <th scope="col" :class="CELL_HEAD">{{ t('products.rc_col_material_full') }}</th>
+                    <th scope="col" :class="[CELL_HEAD, 'w-24 border-l border-line-3 text-right']">{{ t('products.rc_col_qty_short') }}</th>
+                    <th scope="col" :class="[CELL_HEAD, 'w-20 border-l border-line-3 text-right']">{{ t('products.rc_col_uom') }}</th>
+                    <th scope="col" :class="[CELL_HEAD, 'w-24 border-l border-line-3 text-right']">{{ t('products.rc_col_shrink') }}</th>
+                    <th scope="col" :class="[CELL_HEAD, 'w-32 border-l border-line-3 text-right']">{{ t('products.rc_col_cost') }}</th>
+                    <th scope="col" aria-hidden="true" class="w-10 border-l border-line-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(l, i) in b.lines" :key="l.key" class="border-b border-line-2 align-top" data-testid="rc-line">
+                    <td class="p-0">
+                      <select
+                        :value="l.material_id ?? ''"
+                        :class="cellInputClass({ error: !!lineErrors[l.key]?.material })"
+                        :aria-label="t('products.rc_row_material_aria', { n: i + 1 })"
+                        :aria-invalid="lineErrors[l.key]?.material ? 'true' : undefined"
+                        @change="pickMaterial(l, $event.target.value)"
+                      >
+                        <option value="" disabled>{{ t('products.rc_material_placeholder') }}</option>
+                        <option v-if="orphanOption(l)" :value="orphanOption(l).id">{{ orphanOption(l).name }}</option>
+                        <optgroup v-for="g in materialGroups" :key="g.kind" :label="kindLabel(g.kind)">
+                          <option v-for="m in g.items" :key="m.id" :value="m.id">{{ m.name }}</option>
+                        </optgroup>
+                      </select>
+                      <p v-if="lineErrors[l.key]?.material" role="alert" :class="CELL_ERROR">{{ lineErrors[l.key].material }}</p>
+                    </td>
+                    <td class="border-l border-line-3 p-0">
+                      <input v-model="l.quantity" type="number" step="any" :class="cellInputClass({ number: true, error: !!lineErrors[l.key]?.quantity })" :aria-label="t('products.rc_row_qty_aria', { n: i + 1 })" :aria-invalid="lineErrors[l.key]?.quantity ? 'true' : undefined" />
+                      <p v-if="lineErrors[l.key]?.quantity" role="alert" :class="[CELL_ERROR, 'text-right']">{{ lineErrors[l.key].quantity }}</p>
+                    </td>
+                    <!-- Satuan = satuan bahan terpilih, teks biasa (tidak ada konversi satuan). -->
+                    <td class="border-l border-line-3 px-3 py-3 text-right font-semibold text-muted-4" data-testid="rc-unit">{{ l.unit || '—' }}</td>
+                    <td class="border-l border-line-3 p-0">
+                      <input v-model="l.shrinkage" type="number" step="any" :class="cellInputClass({ number: true, error: !!lineErrors[l.key]?.shrinkage })" :aria-label="t('products.rc_row_shrink_aria', { n: i + 1 })" :aria-invalid="lineErrors[l.key]?.shrinkage ? 'true' : undefined" />
+                      <p v-if="lineErrors[l.key]?.shrinkage" role="alert" :class="[CELL_ERROR, 'text-right']">{{ lineErrors[l.key].shrinkage }}</p>
+                    </td>
+                    <td class="border-l border-line-3 px-3 py-3 text-right font-bold tabular-nums" data-testid="rc-line-cost" :title="lineCostText(b, l) === '—' ? t('products.rc_cost_unknown') : undefined">{{ lineCostText(b, l) }}</td>
+                    <td class="border-l border-line-3 px-1 py-1.5 text-center">
+                      <button type="button" :class="ROW_REMOVE" :aria-label="t('products.rc_row_remove_aria', { n: i + 1 })" @click="removeLine(b, l)">
+                        <i class="ph-duotone ph-x text-[14px]" aria-hidden="true"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="flex items-center justify-between gap-3 px-3 py-2.5" data-testid="rc-footer">
+                <button type="button" :class="TABLE_LINK" data-testid="rc-add" @click="addLine(b)">{{ t('products.rc_add_line') }}</button>
+                <p class="flex gap-1.5 text-[13px] font-bold tabular-nums" data-testid="rc-totals">
+                  <span>{{ previewOf(b).incomplete ? t('products.rc_portion_cost_partial') : t('products.rc_portion_cost') }}</span>
+                  <span data-testid="rc-portion-cost">{{ formatIDR(previewOf(b).portionCost) }}</span>
+                </p>
+              </div>
+            </div>
+            <p v-if="blockErrors[b.key]?.lines" class="text-[12px] font-medium text-danger-text" role="alert">{{ blockErrors[b.key].lines }}</p>
+            <!-- Food cost dan margin: tenang di bawah tabel; "—" selama ada bahan tanpa harga (tidak dihitung dari data parsial). -->
+            <p class="text-[12.5px] text-muted-4">
+              {{ t('products.rc_food_cost') }} <span class="font-semibold tabular-nums text-ink" data-testid="rc-food-cost">{{ previewOf(b).foodCostPct === null ? '—' : `${previewOf(b).foodCostPct.toFixed(1)}%` }}</span>
+              · {{ t('products.rc_margin') }} <span class="font-semibold tabular-nums text-ink" data-testid="rc-margin">{{ previewOf(b).grossMargin === null ? '—' : formatIDR(previewOf(b).grossMargin) }}</span>
             </p>
           </div>
+        </section>
+
+        <div>
+          <button type="button" :class="TABLE_LINK" data-testid="rc-add-block" @click="addBlock">{{ t('products.rc_add_block') }}</button>
         </div>
-        <p v-if="fieldErrors.lines" class="text-[12px] font-medium text-danger-text" role="alert">{{ fieldErrors.lines }}</p>
-        <!-- Food cost dan margin: tenang di bawah tabel; "—" selama ada bahan tanpa harga (tidak dihitung dari data parsial). -->
-        <p class="text-[12.5px] text-muted-4">
-          {{ t('products.rc_food_cost') }} <span class="font-semibold tabular-nums text-ink" data-testid="rc-food-cost">{{ preview.foodCostPct === null ? '—' : `${preview.foodCostPct.toFixed(1)}%` }}</span>
-          · {{ t('products.rc_margin') }} <span class="font-semibold tabular-nums text-ink" data-testid="rc-margin">{{ preview.grossMargin === null ? '—' : formatIDR(preview.grossMargin) }}</span>
-        </p>
         <p v-if="incompleteCount" role="status" class="text-[12.5px] font-semibold text-warn-text" data-testid="rc-incomplete">
           {{ t('products.rc_incomplete_notice', { count: incompleteCount }) }}
         </p>

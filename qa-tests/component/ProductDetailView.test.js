@@ -215,7 +215,7 @@ describe('ProductDetailView (043)', () => {
   });
 
   it('shows food cost and gross margin when a recipe exists', async () => {
-    getProduct.mockResolvedValue(PRODUCT({ recipe: { version: 3, portion_cost: '3100.00', food_cost_pct: 38.7, gross_margin: '4900.00', lines: [] } }));
+    getProduct.mockResolvedValue(PRODUCT({ recipe: { name: 'Dasar', recipe_count: 1, portion_cost: '3100.00', food_cost_pct: 38.7, gross_margin: '4900.00', lines: [] } }));
     await renderPage();
     const summary = await screen.findByTestId('recipe-summary');
     expect(summary).toHaveTextContent('38.7%');

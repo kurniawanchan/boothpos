@@ -105,9 +105,12 @@ class FakePosBackend : PosBackend {
     override suspend fun tab(id: String): Order { tabCalls += id; return tabResult?.invoke(id) ?: unused() }
     /** 075 — varian yang dikirim ke addLine, berurutan; hasilnya diatur lewat [addLineResult]. */
     val addLineCalls = mutableListOf<String>()
+    /** 089 — jumlah per pilihan yang dikirim tiap addLine, berurutan. */
+    val addLineQtys = mutableListOf<Map<Long, Int>>()
     var addLineResult: ((String) -> Order)? = null
-    override suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order {
+    override suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String, modifierQtys: Map<Long, Int>): Order {
         addLineCalls += variantId
+        addLineQtys += modifierQtys
         return addLineResult?.invoke(variantId) ?: unused()
     }
     override suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order = unused()

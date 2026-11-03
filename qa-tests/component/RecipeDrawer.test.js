@@ -3,12 +3,12 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import RecipeDrawer from '../../resources/js/components/product/RecipeDrawer.vue';
 import { useToastStore } from '../../resources/js/stores/toast';
-import { createRecipe, getRecipe } from '../../resources/js/api/recipes';
+import { createRecipe, getRecipe, listRecipeModifierOptions, updateRecipe } from '../../resources/js/api/recipes';
 import { getMaterial, listMaterials } from '../../resources/js/api/materials';
 import { ApiError } from '../../resources/js/utils/errors';
 import { computeRecipeCost, referencePrice } from '../../resources/js/utils/recipeCost';
 
-vi.mock('../../resources/js/api/recipes', () => ({ createRecipe: vi.fn(), getRecipe: vi.fn() }));
+vi.mock('../../resources/js/api/recipes', () => ({ createRecipe: vi.fn(), getRecipe: vi.fn(), updateRecipe: vi.fn(), listRecipeModifierOptions: vi.fn() }));
 vi.mock('../../resources/js/api/materials', () => ({ listMaterials: vi.fn(), getMaterial: vi.fn() }));
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -34,14 +34,14 @@ const MATERIALS = [
   { id: 3, name: 'Sirup gula', unit: 'ml', kind: 'semi_finished', standard_cost: '12.5000' },
   { id: 4, name: 'Gelas', unit: 'pcs', kind: 'packaging', standard_cost: null },
 ];
-const VERSIONS = [
-  { id: 30, version: 3, effective_from: '2026-10-01', variants: [{ id: 1, sku: 'KOP-1', name: 'Panas' }] },
-  { id: 20, version: 2, effective_from: '2026-09-01', variants: [{ id: 1, sku: 'KOP-1', name: 'Panas' }] },
-];
+// 089: resep tanpa versi — laci menerima SATU baris daftar yang diubah (null = resep baru).
+const RECIPE_ROW = { id: 30, name: 'Dasar', effective_from: '2026-10-01', variants: [{ id: 1, sku: 'KOP-1', name: 'Panas' }] };
 // Contoh hitung tangan: 2 × 5.000 + 0,5 @ 20% × 40.000 = 10.000 + 25.000 = 35.000; yield 2 → 17.500; harga 50.000 → 35,0%.
 const RECIPE_V3 = {
   id: 30,
-  version: 3,
+  name: 'Dasar',
+  effective_from: '2026-10-01',
+  note: null,
   yield: '2.000',
   variants: [{ id: 1, sku: 'KOP-1', name: 'Panas' }],
   lines: [
@@ -56,25 +56,27 @@ async function userEv() {
   return userEvent.setup();
 }
 
-async function renderDrawer({ versions = VERSIONS, product = PRODUCT } = {}) {
+async function renderDrawer({ recipe = RECIPE_ROW, product = PRODUCT } = {}) {
   const pinia = createPinia();
   setActivePinia(pinia);
-  const view = render(RecipeDrawer, { props: { open: true, product, versions }, global: { plugins: [pinia] } });
-  await screen.findByTestId('rc-versioning');
+  const view = render(RecipeDrawer, { props: { open: true, product, recipe }, global: { plugins: [pinia] } });
+  await screen.findByTestId('rc-stock-note');
   return view;
 }
 
 const lineRows = () => screen.queryAllByTestId('rc-line');
 const submitBtn = (name) => screen.getByRole('button', { name });
 
-// 043 (T076) — laci Resep.
-describe('RecipeDrawer (043)', () => {
+// 043 (T076), diubah 089 — laci Resep (satu resep, tanpa versi).
+describe('RecipeDrawer (043/089)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listMaterials.mockResolvedValue({ data: MATERIALS, meta: { current_page: 1, last_page: 1 } });
     getRecipe.mockResolvedValue(RECIPE_V3);
+    listRecipeModifierOptions.mockResolvedValue([]);
     getMaterial.mockResolvedValue({ ...MATERIALS[0], vendor_prices: [] });
-    createRecipe.mockResolvedValue({ id: 40, version: 4 });
+    createRecipe.mockResolvedValue({ id: 40, name: 'Topping' });
+    updateRecipe.mockResolvedValue({ id: 30, name: 'Dasar' });
   });
 
   describe('cost maths (pure helper, same formula as the server)', () => {
@@ -105,24 +107,32 @@ describe('RecipeDrawer (043)', () => {
     });
   });
 
-  it('first recipe: says saving creates a NEW version without deducting stock, labels the button v1, skips BOM-complete variants', async () => {
-    await renderDrawer({ versions: [] });
+  it('new recipe: the note says stock is deducted when an order completes (no versions), the label is "Porsi" with no unit beside it, BOM-complete variants are skipped', async () => {
+    await renderDrawer({ recipe: null });
     expect(getRecipe).not.toHaveBeenCalled();
-    const sentence = screen.getByTestId('rc-versioning');
-    expect(sentence).toHaveTextContent(/versi baru/i);
-    expect(sentence).toHaveTextContent(/versi sebelumnya tetap tersimpan/i);
-    expect(sentence).toHaveTextContent(/tidak mengurangi stok/i);
-    expect(submitBtn(/simpan sebagai v1/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/panas/i)).toBeChecked();
-    expect(screen.getByLabelText(/es/i, { selector: 'input[type=checkbox]' })).not.toBeChecked();
-    expect(screen.getByTestId('rc-bom-note')).toHaveTextContent(/bom selesai/i);
+    const note = screen.getByTestId('rc-stock-note');
+    expect(note).toHaveTextContent(/stok bahan dipotong saat pesanan selesai/i);
+    expect(note).toHaveTextContent(/semuanya dijumlahkan/i);
+    expect(note).not.toHaveTextContent(/versi/i);
+    expect(screen.getByRole('dialog', { name: /^resep$/i })).toBeInTheDocument();
+    expect(submitBtn(/simpan resep/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/^porsi$/i)).toHaveValue(1);
+    expect(screen.queryByText(/^portions$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/hasil \(yield\)/i)).not.toBeInTheDocument();
+    // 2026-11-02: satu tabel bahan per varian aktif yang bukan BOM-selesai (Es dilewati).
+    expect(screen.getAllByTestId('rc-block')).toHaveLength(1);
+    expect(screen.getByTestId('rc-block-variant')).toHaveValue('1');
+    expect(screen.getByTestId('rc-block-modifier')).toHaveValue('');
     expect(screen.getByLabelText(/berlaku mulai/i)).toHaveValue(TODAY);
   }, 30000);
 
-  it('prefills from the LATEST version into ONE table (unit of each material shown), and labels the button v{latest+1}', async () => {
+  it('editing prefills the recipe into ONE table (unit of each material shown) with its own name and date, and says "Ubah resep"', async () => {
     await renderDrawer();
     expect(getRecipe).toHaveBeenCalledWith(30);
-    expect(submitBtn(/simpan sebagai v4/i)).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /ubah resep/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/nama resep/i)).toHaveValue('Dasar');
+    expect(screen.getByLabelText(/berlaku mulai/i)).toHaveValue('2026-10-01');
+    expect(submitBtn(/simpan resep/i)).toBeInTheDocument();
     expect(lineRows()).toHaveLength(3);
     expect(within(lineRows()[0]).getByTestId('rc-unit')).toHaveTextContent('kg');
     expect(within(lineRows()[2]).getByTestId('rc-unit')).toHaveTextContent('pcs');
@@ -130,8 +140,8 @@ describe('RecipeDrawer (043)', () => {
     expect(screen.getByLabelText('Bahan 3')).toHaveValue('4');
     expect(screen.getByLabelText('Jumlah bahan 2')).toHaveValue(0.5);
     expect(screen.getByLabelText('Susut % bahan 2')).toHaveValue(20);
-    expect(screen.getByLabelText(/hasil \(yield\)/i)).toHaveValue(2);
-    expect(screen.getByLabelText(/panas/i)).toBeChecked();
+    expect(screen.getByLabelText(/^porsi$/i)).toHaveValue(2);
+    expect(screen.getByTestId('rc-block-variant')).toHaveValue('1');
   }, 30000);
 
   it('computes the live cost preview exactly (35.000 → 17.500 per portion → 35,0% food cost) and follows edits', async () => {
@@ -150,7 +160,7 @@ describe('RecipeDrawer (043)', () => {
     expect(screen.getByTestId('rc-portion-cost')).toHaveTextContent('Rp 22.500');
     expect(screen.getByTestId('rc-food-cost')).toHaveTextContent('45.0%');
 
-    const yieldInput = screen.getByLabelText(/hasil \(yield\)/i);
+    const yieldInput = screen.getByLabelText(/^porsi$/i);
     await user.clear(yieldInput);
     await user.type(yieldInput, '3'); // 45.000 ÷ 3 = 15.000 → 30,0%
     expect(screen.getByTestId('rc-portion-cost')).toHaveTextContent('Rp 15.000');
@@ -170,7 +180,7 @@ describe('RecipeDrawer (043)', () => {
 
   it('adding an ingredient fetches its reference price; semi-finished falls back to standard_cost; a failed fetch stays "unknown"', async () => {
     const user = await userEv();
-    await renderDrawer({ versions: [] });
+    await renderDrawer({ recipe: null });
 
     // bahan baku dengan harga vendor (preferensi menang atas yang termurah)
     getMaterial.mockResolvedValueOnce({ ...MATERIALS[1], vendor_prices: [{ id: 1, price: '30000.00', is_preferred: false }, { id: 2, price: '40000.00', is_preferred: true }] });
@@ -198,7 +208,7 @@ describe('RecipeDrawer (043)', () => {
   }, 30000);
 
   it('renders ONE table headed BAHAN PER PORSI, with the material select grouped by kind (<optgroup>) instead of three boxes', async () => {
-    await renderDrawer({ versions: [] });
+    await renderDrawer({ recipe: null });
     expect(screen.getByText('Bahan per porsi')).toBeInTheDocument();
     expect(screen.getAllByRole('table')).toHaveLength(1);
     expect(screen.getAllByRole('columnheader').map((h) => h.textContent.trim()).filter(Boolean)).toEqual(['Bahan / setengah jadi', 'Qty', 'UOM', 'Susut %', 'Biaya']);
@@ -235,50 +245,82 @@ describe('RecipeDrawer (043)', () => {
     expect(screen.getByTestId('rc-portion-cost')).toHaveTextContent('Rp 12.500');
   }, 30000);
 
-  it('submits yield, effective date, variants, lines in kind order and the trimmed note; then emits saved and toasts the version', async () => {
+  it('creating submits name, portions, effective date, variants, lines and the trimmed note; then emits saved and toasts', async () => {
     const user = await userEv();
-    const view = await renderDrawer();
+    const view = await renderDrawer({ recipe: null });
     useToastStore().items = [];
-    const note = screen.getByLabelText(/catatan perubahan/i);
-    await user.type(note, '  kurangi susu  ');
-    await user.click(submitBtn(/simpan sebagai v4/i));
+    await user.type(screen.getByLabelText(/nama resep/i), '  Topping  ');
+    const portions = screen.getByLabelText(/^porsi$/i);
+    await user.clear(portions);
+    await user.type(portions, '2');
+    await user.click(screen.getByTestId('rc-add'));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Bahan 1' }), 'Susu');
+    await user.type(screen.getByLabelText('Jumlah bahan 1'), '0.5');
+    await user.type(screen.getByLabelText(/catatan perubahan/i), '  kurangi susu  ');
+    await user.click(submitBtn(/simpan resep/i));
 
     await waitFor(() => expect(createRecipe).toHaveBeenCalledTimes(1));
+    expect(updateRecipe).not.toHaveBeenCalled();
     expect(createRecipe).toHaveBeenCalledWith(12, {
+      name: 'Topping',
       yield: 2,
       effective_from: TODAY,
-      variant_ids: [1],
-      lines: [
-        { material_id: 1, quantity: 2, shrinkage_pct: 0 },
-        { material_id: 2, quantity: 0.5, shrinkage_pct: 20 },
-        { material_id: 4, quantity: 1, shrinkage_pct: 0 },
-      ],
+      blocks: [{ variant_id: 1, modifier_option_id: null, lines: [{ material_id: 2, quantity: 0.5, shrinkage_pct: 0 }] }],
       note: 'kurangi susu',
     });
     await waitFor(() => expect(view.emitted().saved).toHaveLength(1));
-    expect(useToastStore().items.map((i) => i.message).join(' ')).toMatch(/resep v4 disimpan/i);
+    expect(useToastStore().items.map((i) => i.message).join(' ')).toMatch(/resep disimpan/i);
+  }, 30000);
+
+  it('editing saves IN PLACE with PUT /recipes/{id} (no new version) and keeps an old effective date that was not changed', async () => {
+    const user = await userEv();
+    const view = await renderDrawer();
+    await user.type(screen.getByLabelText(/catatan perubahan/i), 'ubah');
+    await user.click(submitBtn(/simpan resep/i));
+
+    await waitFor(() => expect(updateRecipe).toHaveBeenCalledTimes(1));
+    expect(createRecipe).not.toHaveBeenCalled();
+    const [id, payload] = updateRecipe.mock.calls[0];
+    expect(id).toBe(30);
+    expect(payload).toMatchObject({ name: 'Dasar', yield: 2, effective_from: '2026-10-01', note: 'ubah' });
+    expect(payload.blocks).toHaveLength(1);
+    expect(payload.blocks[0]).toMatchObject({ variant_id: 1, modifier_option_id: null });
+    expect(payload.blocks[0].lines).toHaveLength(3);
+    await waitFor(() => expect(view.emitted().saved).toHaveLength(1));
+  }, 30000);
+
+  it('editing offers Remove in the footer and asks the page to remove THIS recipe; a new recipe has no Remove', async () => {
+    const user = await userEv();
+    const view = await renderDrawer();
+    await user.click(screen.getByTestId('rc-remove'));
+    expect(view.emitted().remove).toHaveLength(1);
+    view.unmount();
+
+    await renderDrawer({ recipe: null });
+    expect(screen.queryByTestId('rc-remove')).not.toBeInTheDocument();
   }, 30000);
 
   it('refuses invalid input before calling the API, naming each field', async () => {
     const user = await userEv();
-    await renderDrawer({ versions: [] });
-    await user.clear(screen.getByLabelText(/hasil \(yield\)/i));
-    await user.type(screen.getByLabelText(/hasil \(yield\)/i), '0');
-    await user.click(screen.getByLabelText(/panas/i)); // tidak ada varian
-    await user.click(submitBtn(/simpan sebagai v1/i));
-    expect(await screen.findByText(/hasil harus lebih dari 0/i)).toBeInTheDocument();
+    await renderDrawer({ recipe: null });
+    await user.clear(screen.getByLabelText(/^porsi$/i));
+    await user.type(screen.getByLabelText(/^porsi$/i), '0');
+    await user.click(screen.getByTestId('rc-block-remove')); // tidak ada tabel
+    await user.click(submitBtn(/simpan resep/i));
+    expect(await screen.findByText(/porsi harus lebih dari 0/i)).toBeInTheDocument();
+    expect(screen.getByText(/beri nama resep/i)).toBeInTheDocument();
     expect(screen.getByText(/pilih minimal satu varian/i)).toBeInTheDocument();
-    expect(screen.getByText(/tambahkan minimal satu bahan/i)).toBeInTheDocument();
     expect(createRecipe).not.toHaveBeenCalled();
 
     // baris: bahan belum dipilih, jumlah 0, susut 100
-    await user.click(screen.getByLabelText(/panas/i));
+    await user.click(screen.getByTestId('rc-add-block'));
+    await user.selectOptions(screen.getByTestId('rc-block-variant'), '1');
     await user.click(screen.getByTestId('rc-add'));
     await user.type(screen.getByLabelText('Jumlah bahan 1'), '0');
     const shrink = screen.getByLabelText('Susut % bahan 1');
     await user.clear(shrink);
     await user.type(shrink, '100');
-    await user.click(submitBtn(/simpan sebagai v1/i));
+    await user.click(submitBtn(/simpan resep/i));
     expect(await screen.findByText(/pilih bahan\./i)).toBeInTheDocument();
     expect(screen.getByText(/jumlah harus lebih dari 0/i)).toBeInTheDocument();
     expect(screen.getByText(/susut harus antara 0 dan 99,99/i)).toBeInTheDocument();
@@ -290,16 +332,17 @@ describe('RecipeDrawer (043)', () => {
     await renderDrawer();
     const { fireEvent } = await import('@testing-library/vue');
     await fireEvent.update(screen.getByLabelText(/berlaku mulai/i), daysAgo(45));
-    await user.click(submitBtn(/simpan sebagai v4/i));
+    await user.click(submitBtn(/simpan resep/i));
     expect(await screen.findByText(/tanggal berlaku wajib diisi dan paling lama 30 hari ke belakang/i)).toBeInTheDocument();
     expect(createRecipe).not.toHaveBeenCalled();
+    expect(updateRecipe).not.toHaveBeenCalled();
   }, 30000);
 
   it('shows server 422 errors on the right line (lines.N.quantity) and keeps the drawer open', async () => {
     const user = await userEv();
     const view = await renderDrawer();
-    createRecipe.mockRejectedValueOnce(new ApiError('invalid', { status: 422, errors: { 'lines.1.quantity': ['Jumlah ditolak server.'], yield: ['Yield ditolak server.'] } }));
-    await user.click(submitBtn(/simpan sebagai v4/i));
+    updateRecipe.mockRejectedValueOnce(new ApiError('invalid', { status: 422, errors: { 'blocks.0.lines.1.quantity': ['Jumlah ditolak server.'], yield: ['Yield ditolak server.'] } }));
+    await user.click(submitBtn(/simpan resep/i));
     const err = await screen.findByText('Jumlah ditolak server.');
     expect(err.closest('[data-testid="rc-line"]')).toHaveTextContent('liter');
     expect(screen.getByText('Yield ditolak server.')).toBeInTheDocument();
@@ -309,8 +352,8 @@ describe('RecipeDrawer (043)', () => {
   it('surfaces a 409 cost_source_conflict with the server message and the offending SKUs', async () => {
     const user = await userEv();
     const view = await renderDrawer();
-    createRecipe.mockRejectedValueOnce(new ApiError('Varian memakai biaya BOM.', { status: 409, code: 'cost_source_conflict', data: { variants: [{ id: 2, sku: 'KOP-2' }] } }));
-    await user.click(submitBtn(/simpan sebagai v4/i));
+    updateRecipe.mockRejectedValueOnce(new ApiError('Varian memakai biaya BOM.', { status: 409, code: 'cost_source_conflict', data: { variants: [{ id: 2, sku: 'KOP-2' }] } }));
+    await user.click(submitBtn(/simpan resep/i));
     const alert = await screen.findByTestId('rc-alert');
     expect(alert).toHaveTextContent('Varian memakai biaya BOM.');
     expect(alert).toHaveTextContent('KOP-2');
@@ -322,11 +365,76 @@ describe('RecipeDrawer (043)', () => {
     listMaterials.mockRejectedValueOnce(new Error('boom'));
     const pinia = createPinia();
     setActivePinia(pinia);
-    render(RecipeDrawer, { props: { open: true, product: PRODUCT, versions: VERSIONS }, global: { plugins: [pinia] } });
+    render(RecipeDrawer, { props: { open: true, product: PRODUCT, recipe: RECIPE_ROW }, global: { plugins: [pinia] } });
     expect(await screen.findByText(/data resep gagal dimuat/i)).toBeInTheDocument();
-    expect(screen.queryByTestId('rc-versioning')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('rc-stock-note')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /coba lagi/i }));
-    expect(await screen.findByTestId('rc-versioning')).toBeInTheDocument();
+    expect(await screen.findByTestId('rc-stock-note')).toBeInTheDocument();
     expect(lineRows()).toHaveLength(3);
   }, 30000);
+
+  // 2026-11-02 — tabel bahan per (varian, modifier).
+  describe('blocks per variant and modifier', () => {
+    const GROUPS = [{ id: 5, name: 'Level', options: [{ id: 50, name: 'Lvl 1' }, { id: 51, name: 'Lvl 2' }] }];
+    const TWO = { ...PRODUCT, variants: PRODUCT.variants.map((v) => ({ ...v, bom_complete: false })) };
+
+    it('starts with one active table per variant; a table without a variant is inactive until one is chosen', async () => {
+      const user = await userEv();
+      listRecipeModifierOptions.mockResolvedValue(GROUPS);
+      await renderDrawer({ recipe: null, product: TWO });
+      expect(screen.getAllByTestId('rc-block')).toHaveLength(2);
+
+      await user.click(screen.getByTestId('rc-add-block'));
+      const blocks = screen.getAllByTestId('rc-block');
+      expect(blocks).toHaveLength(3);
+      expect(within(blocks[2]).getByTestId('rc-block-inactive')).toBeInTheDocument();
+      expect(within(blocks[2]).queryByTestId('rc-add')).not.toBeInTheDocument();
+      expect(within(blocks[2]).getByTestId('rc-block-modifier')).toBeDisabled();
+
+      await user.selectOptions(within(blocks[2]).getByTestId('rc-block-variant'), '1');
+      expect(within(screen.getAllByTestId('rc-block')[2]).getByTestId('rc-add')).toBeInTheDocument();
+    }, 30000);
+
+    it('does not let the same variant + modifier pair be chosen twice, and sends the modifier option', async () => {
+      const user = await userEv();
+      listRecipeModifierOptions.mockResolvedValue(GROUPS);
+      await renderDrawer({ recipe: null, product: PRODUCT }); // satu blok: Panas, dasar
+      await user.click(screen.getByTestId('rc-add-block'));
+      const second = screen.getAllByTestId('rc-block')[1];
+
+      await user.selectOptions(within(second).getByTestId('rc-block-variant'), '1'); // Panas lagi → jatuh ke pilihan bebas pertama
+      const modifier = within(second).getByTestId('rc-block-modifier');
+      expect(modifier).toHaveValue('50');
+      const none = within(modifier).getByRole('option', { name: /tanpa modifier/i });
+      expect(none).toBeDisabled(); // pasangan (Panas, dasar) sudah dipakai blok pertama
+
+      await user.type(screen.getByLabelText(/nama resep/i), 'Pedas');
+      for (const block of screen.getAllByTestId('rc-block')) {
+        await user.click(within(block).getByTestId('rc-add'));
+      }
+      const selects = screen.getAllByRole('combobox', { name: 'Bahan 1' });
+      await user.selectOptions(selects[0], 'Susu');
+      await user.selectOptions(selects[1], 'Susu');
+      const qty = screen.getAllByLabelText('Jumlah bahan 1');
+      await user.type(qty[0], '1');
+      await user.type(qty[1], '2');
+      await user.click(submitBtn(/simpan resep/i));
+
+      await waitFor(() => expect(createRecipe).toHaveBeenCalledTimes(1));
+      const payload = createRecipe.mock.calls[0][1];
+      expect(payload.blocks.map((b) => [b.variant_id, b.modifier_option_id])).toEqual([[1, null], [1, 50]]);
+      expect(payload.variant_ids).toBeUndefined();
+    }, 30000);
+
+    it('offers a variant only while it still has a free modifier slot (no options: one table per variant)', async () => {
+      const user = await userEv();
+      listRecipeModifierOptions.mockResolvedValue([]);
+      await renderDrawer({ recipe: null, product: PRODUCT });
+      await user.click(screen.getByTestId('rc-add-block'));
+      const second = within(screen.getAllByTestId('rc-block')[1]).getByTestId('rc-block-variant');
+
+      expect(within(second).getByRole('option', { name: /panas/i })).toBeDisabled(); // sudah dipakai blok pertama
+      expect(within(second).getByRole('option', { name: /^es/i })).toBeEnabled();
+    }, 30000);
+  });
 });

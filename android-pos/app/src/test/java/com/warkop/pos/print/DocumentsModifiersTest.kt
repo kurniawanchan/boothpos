@@ -73,4 +73,19 @@ class DocumentsModifiersTest {
         )).filter { it.startsWith("   ") })
         assertEquals(listOf("Boba"), line.mods)
     }
+
+    // 089 — jumlah pilihan tercetak "Telur x2" (× ditransliterasi printer) di struk; label dari server atau disusun dari qty.
+    @Test fun `jumlah pilihan tercetak di struk`() {
+        val receipt = ReceiptMapper.map(dto("""[{
+            "name":"Nasi Goreng","qty":1,"price":"26000.00","line_total":"26000.00",
+            "modifiers":[{"group":"Topping","option":"Telur","qty":2,"label":"Telur ×2","price_delta":"6000.00"},{"group":"Pedas","option":"Sedang","price_delta":"0.00"}]
+        }]"""))
+
+        val t = texts(Documents.struk(receipt))
+        val item = t.indexOf("1 x Nasi Goreng")
+        assertTrue(item >= 0)
+        assertEquals("   Telur ×2", t[item + 1])
+        assertEquals("   Sedang", t[item + 2])
+        assertEquals("   Telur x2", EscPos.sanitize(t[item + 1]))
+    }
 }

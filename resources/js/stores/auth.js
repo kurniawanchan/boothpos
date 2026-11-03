@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import * as authApi from '../api/auth';
-import { getToken, setToken, clearToken } from '../utils/storage';
+import { adoptTokenFromOtherTabs, getToken, setToken, clearToken } from '../utils/storage';
 import { i18n, loadLocale } from '../i18n';
 import { clearOutletSelection } from '../utils/outletSelection';
 
@@ -89,7 +89,8 @@ export const useAuthStore = defineStore('auth', {
       if (this._restorePromise) return this._restorePromise;
 
       this._restorePromise = (async () => {
-        if (!getToken()) {
+        // Tab baru: ambil sesi dari tab lain yang masih terbuka sebelum menyimpulkan "belum login".
+        if (!getToken() && !(await adoptTokenFromOtherTabs())) {
           this.ready = true;
           return;
         }

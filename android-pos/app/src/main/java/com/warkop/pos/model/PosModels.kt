@@ -13,11 +13,29 @@ enum class Tone { INK, TINT, ACCENT, NEUTRAL, OUTLINE }
 /** 2026-11-01 — bahan satu pilihan: pemakaian per porsi dan saldo di outlet tablet (null bila tidak dikirim server). */
 data class OptionMaterial(val name: String, val unit: String, val quantity: Double, val onHand: Double?)
 
-/** [portions] = porsi yang masih bisa dibuat dari bahannya di outlet ini (null = tanpa bahan / tak diketahui). */
+/**
+ * [portions] = porsi yang masih bisa dibuat dari bahannya di outlet ini (null = tanpa bahan / tak diketahui).
+ *
+ * 089 — jumlah per pilihan. Di MENU: [minQty]..[maxQty] = berapa kali satu pesanan boleh memilih opsi ini saat dipilih
+ * ([maxQty] null = tanpa batas atas; bawaan 1..1 = pilih atau tidak, perilaku lama). Pada BARIS PESANAN: [qty] = berapa kali
+ * opsi itu dipesan dan [delta] = kontribusi harga TOTAL opsi itu (server sudah mengalikan jumlah).
+ */
 data class ModOption(
     val name: String, val delta: Int, val id: Long = 0,
     val portions: Int? = null, val materials: List<OptionMaterial> = emptyList(),
-)
+    val minQty: Int = 1, val maxQty: Int? = 1, val qty: Int = 1,
+) {
+    /** Pemilih jumlah muncul hanya bila opsi boleh dipesan lebih dari sekali. */
+    val allowsQty: Boolean get() = maxQty == null || maxQty > 1
+
+    /** Jumlah terbesar yang boleh dipilih (menghormati batas keras server). */
+    val qtyCap: Int get() = minOf(maxQty ?: MAX_QTY, MAX_QTY)
+
+    /** "Telur ×2" bila lebih dari satu, selain itu nama saja (struk, KOT, ringkasan baris). */
+    val label: String get() = if (qty > 1) "$name ×$qty" else name
+
+    companion object { const val MAX_QTY = 50 }
+}
 
 /** [portionPerOption] — "tiap pilihan = 1 porsi": pilihan ke-2 dst. menambah satu harga dasar (lihat ModifierPricing). */
 data class ModGroup(val id: String, val name: String, val min: Int, val max: Int, val options: List<ModOption>, val portionPerOption: Boolean = false) {
@@ -26,10 +44,8 @@ data class ModGroup(val id: String, val name: String, val min: Int, val max: Int
 
     /** Teks aturan di pemilih; sama maknanya dengan web ("1", "1–2", "≥1"). */
     val rule: String get() = when {
-        max == 1 -> "Pilih 1"
         max == UNLIMITED -> if (min == 0) "Pilih bebas" else "Pilih minimal $min"
-        min == 0 -> "Hingga $max"
-        else -> "Pilih $min–$max"
+        else -> "Pilih $max" // 2026-11-02: selalu "Pilih n", n = batas pilihan di web (bukan "2–2")
     }
 
     companion object {
@@ -102,7 +118,7 @@ data class OrderLine(
     val unit: Int get() = basePrice + mods.sumOf { it.delta }
     val gross: Int get() = unit * qty
     val net: Int get() = lineTotal ?: (gross * (100 - discPct) / 100.0).roundToInt()
-    val modLabel: String get() = mods.joinToString(", ") { it.name }
+    val modLabel: String get() = mods.joinToString(", ") { it.label }
 }
 
 enum class TenderMethod(val label: String) { CASH("Tunai"), EDC("EDC BCA"), QRIS("QRIS"), TRANSFER("Transfer bank") }

@@ -902,14 +902,16 @@ class PosStore(
     }
 
     /** Tambah baris ke tab aktif. Server menggabungkan baris identik (belum terkirim) sesuai aturannya sendiri. */
-    fun addLine(p: Product, mods: List<ModOption>, note: String, qty: Int = 1) {
+    fun addLine(p: Product, mods: List<ModOption>, note: String, qty: Int = 1, modQtys: Map<Long, Int> = emptyMap()) {
         val b = backend ?: return
         sheet = null
+        // 089 — jumlah per pilihan ikut kunci niat: Telur ×1 dan Telur ×2 adalah dua permintaan berbeda.
+        val optionQtys = mods.associate { it.id to (modQtys[it.id] ?: 1) }
         // 084 — Kasir draf: tab counter dibuat saat item pertama ditambahkan, bukan saat layar dibuka.
         withActiveTab { tab ->
-            val intent = "line:add:$tab:${p.id}:$qty:${mods.map { it.id }}:${note.trim()}"
+            val intent = "line:add:$tab:${p.id}:$qty:${mods.map { "${it.id}x${optionQtys[it.id]}" }}:${note.trim()}"
             val key = keys.keyFor(intent)
-            send(intent, { b.addLine(tab, p.id, qty, note.trim(), mods.map { it.id }, key) })
+            send(intent, { b.addLine(tab, p.id, qty, note.trim(), mods.map { it.id }, key, optionQtys) })
         }
     }
 

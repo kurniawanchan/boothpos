@@ -16,6 +16,9 @@ use Illuminate\Support\Facades\Log;
  * 087 — SATU-SATUNYA penerjemah "baris pesanan + pilihan modifier yang dipesan" menjadi pergerakan stok bahan.
  * Semua tulis tetap lewat MaterialStockService::applyMovement() (satu penulis stok bahan, konstitusi I).
  *
+ * 089: kelas ini kini membaca DUA sumber — bahan pilihan modifier (087) dan resep aktif varian (089). Nama kelas
+ * dipertahankan (tes dan riwayat 087); tidak ada penerjemah kedua.
+ *
  * Dipanggil hanya dari:
  *  - titik pesanan MENJADI SELESAI → consumeOrder (OrderService::checkout, TabSettlementService::settle/split).
  *    Keputusan pemilik 2026-10-31 (FR-015): bahan dipotong saat selesai, bukan saat item masuk tab — jadi
@@ -138,14 +141,34 @@ class ModifierMaterialConsumption
     }
 
     /**
-     * Kebutuhan bahan per baris, dari snapshot `order_items.modifiers` + pemetaan saat ini (bahan aktif saja).
-     * Satu query pemetaan untuk seluruh pesanan (konstitusi V).
+     * Kebutuhan bahan per (bahan, baris): bahan pilihan modifier (087) DITAMBAH bahan semua resep aktif varian baris
+     * itu (089). Satu penerjemah untuk keduanya supaya jejak, penguncian, idempotensi, dan void/refund tetap satu.
+     *
+     * @param  Collection<int, OrderItem>  $items
+     * @return array{0: array<int, array<int, float>>, 1: array<int, Material>, 2: array<int, float>} [need, materials, costPerPortion]
+     */
+    private function needFor(Collection $items): array
+    {
+        [$need, $materials, $costPerPortion] = $this->modifierNeed($items);
+        $this->addRecipeNeed($items, $need, $materials, $costPerPortion);
+
+        ksort($need);
+        foreach ($need as $materialId => $perLine) {
+            ksort($perLine);
+            $need[$materialId] = array_filter(array_map(fn ($q) => round($q, 3), $perLine), fn ($q) => $q > 0);
+        }
+
+        return [array_filter($need), $materials, $costPerPortion];
+    }
+
+    /**
+     * 087 — bahan pilihan modifier. `$costPerPortion` HANYA berisi biaya bahan pilihan: biaya resep sudah ada di
+     * `cost_price` varian (disinkronkan RecipeService), jadi menambahkannya lagi di sini akan menghitung dua kali (089 D9).
      *
      * @param  Collection<int, OrderItem>  $items
      * @return array{0: array<int, array<int, float>>, 1: array<int, Material>, 2: array<int, float>}
-     *         [need[material_id][order_item_id] => qty, materials by id, biaya bahan per porsi per baris]
      */
-    private function needFor(Collection $items): array
+    private function modifierNeed(Collection $items): array
     {
         $optionIds = $items->flatMap(fn (OrderItem $i) => collect($i->modifiers ?? [])->pluck('option_id'))
             ->filter()->map(fn ($id) => (int) $id)->unique()->values();
@@ -168,21 +191,77 @@ class ModifierMaterialConsumption
         $need = [];
         $costPerPortion = [];
         foreach ($items as $item) {
-            foreach (collect($item->modifiers ?? [])->pluck('option_id')->filter()->unique() as $optionId) {
-                foreach ($mappings->get((int) $optionId, collect()) as $m) {
-                    $need[$m->material_id][$item->id] = ($need[$m->material_id][$item->id] ?? 0) + (float) $m->quantity * $item->qty;
-                    $costPerPortion[$item->id] = ($costPerPortion[$item->id] ?? 0) + (float) $m->quantity * $unitCost[$m->material_id];
+            // 089: jumlah pilihan (`qty` snapshot, baris lama tanpa kunci = 1) mengalikan bahan pilihan itu. Pilihan yang
+            // sama tidak muncul dua kali dalam satu snapshot (ModifierResolver menolak kembar), jadi cukup dijumlahkan per baris.
+            $optionQty = [];
+            foreach (collect($item->modifiers ?? [])->filter(fn ($m) => ! empty($m['option_id'])) as $m) {
+                $optionQty[(int) $m['option_id']] = ($optionQty[(int) $m['option_id']] ?? 0) + max(1, (int) ($m['qty'] ?? 1));
+            }
+            foreach ($optionQty as $optionId => $qty) {
+                foreach ($mappings->get($optionId, collect()) as $m) {
+                    $need[$m->material_id][$item->id] = ($need[$m->material_id][$item->id] ?? 0) + (float) $m->quantity * $qty * $item->qty;
+                    $costPerPortion[$item->id] = ($costPerPortion[$item->id] ?? 0) + (float) $m->quantity * $qty * $unitCost[$m->material_id];
                 }
             }
         }
 
-        ksort($need);
-        foreach ($need as $materialId => $perLine) {
-            ksort($perLine);
-            $need[$materialId] = array_filter(array_map(fn ($q) => round($q, 3), $perLine), fn ($q) => $q > 0);
+        return [$need, $materials->all(), $costPerPortion];
+    }
+
+    /**
+     * 089 — bahan resep aktif. Rumus SAMA dengan biaya resep (RecipeCost): per porsi `jumlah ÷ (1 − susut%) ÷ Portions`,
+     * dikali qty baris. Semua resep aktif sebuah varian dijumlahkan (keputusan pemilik 2026-11-02). Resep semua varian
+     * pesanan dimuat sekaligus (tanpa N+1). Bahan nonaktif atau terhapus dilewati, seperti bahan pilihan.
+     *
+     * @param  Collection<int, OrderItem>  $items
+     * @param  array<int, array<int, float>>  $need  diisi
+     * @param  array<int, Material>  $materials  diisi
+     * @param  array<int, float>  $costPerPortion  diisi (hanya biaya blok bermodifier)
+     */
+    private function addRecipeNeed(Collection $items, array &$need, array &$materials, array &$costPerPortion): void
+    {
+        $byVariant = $this->recipes->activeRecipesForVariants($items->pluck('variant_id')->filter()->all());
+        if ($byVariant === []) {
+            return;
         }
 
-        return [array_filter($need), $materials->all(), $costPerPortion];
+        foreach ($items as $item) {
+            // Pilihan modifier yang dipesan baris ini (`qty` snapshot, baris lama = 1): menentukan blok resep bermodifier mana yang berlaku.
+            $optionQty = [];
+            foreach (collect($item->modifiers ?? [])->filter(fn ($m) => ! empty($m['option_id'])) as $m) {
+                $optionQty[(int) $m['option_id']] = ($optionQty[(int) $m['option_id']] ?? 0) + max(1, (int) ($m['qty'] ?? 1));
+            }
+
+            foreach ($byVariant[(int) $item->variant_id] ?? [] as $recipe) {
+                $portions = (float) $recipe->yield;
+                if ($portions <= 0) {
+                    continue;
+                }
+                foreach ($recipe->blocks as $block) {
+                    if ((int) $block->variant_id !== (int) $item->variant_id) {
+                        continue;
+                    }
+                    // Blok dasar (tanpa pilihan) selalu berlaku; blok bermodifier hanya bila pilihannya dipesan, dikali jumlah pilihan.
+                    $times = $block->modifier_option_id === null ? 1 : ($optionQty[(int) $block->modifier_option_id] ?? 0);
+                    if ($times === 0) {
+                        continue;
+                    }
+                    foreach ($block->lines as $line) {
+                        $material = $line->material;
+                        if ($material === null || $material->trashed() || ! $material->is_active) {
+                            continue;
+                        }
+                        $perPortion = (float) $line->quantity / (1 - (float) $line->shrinkage_pct / 100) / $portions * $times;
+                        $need[$material->id][$item->id] = ($need[$material->id][$item->id] ?? 0) + $perPortion * $item->qty;
+                        $materials[$material->id] ??= $material;
+                        // Biaya blok DASAR sudah ada di cost_price varian; biaya blok bermodifier belum, jadi masuk HPP baris di sini.
+                        if ($block->modifier_option_id !== null) {
+                            $costPerPortion[$item->id] = ($costPerPortion[$item->id] ?? 0) + $perPortion * (float) ($this->recipes->unitCost($material) ?? 0);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**

@@ -176,7 +176,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/products/{product}/recipes', [\App\Http\Controllers\Api\RecipeController::class, 'store']);
         Route::post('/products/{product}/recipes/recalculate', [\App\Http\Controllers\Api\RecipeController::class, 'recalculate']);
         Route::delete('/products/{product}/recipes', [\App\Http\Controllers\Api\RecipeController::class, 'destroy']);
+        Route::get('/products/{product}/recipe-modifier-options', [\App\Http\Controllers\Api\RecipeController::class, 'modifierOptions']);
         Route::get('/recipes/{recipe}', [\App\Http\Controllers\Api\RecipeController::class, 'show']);
+        Route::put('/recipes/{recipe}', [\App\Http\Controllers\Api\RecipeController::class, 'update']);
+        Route::delete('/recipes/{recipe}', [\App\Http\Controllers\Api\RecipeController::class, 'destroyOne']);
         Route::put('/products/{product}/modifier-links', [\App\Http\Controllers\Api\ModifierLinkController::class, 'update']);
         Route::put('/products/{product}/variants', [\App\Http\Controllers\Api\VariantBatchController::class, 'update']);
         Route::get('/products/{product}/price-history', [ProductController::class, 'priceHistory']);
@@ -399,7 +402,7 @@ Route::prefix('v1')->group(function () {
         // bertabrakan dengan apiResource /artists/{artist} dan supaya
         // seluruh permukaan berkas berpasangan simetris di satu tempat.
         Route::get('/exports/{entity}', [MasterDataExportController::class, 'show'])
-            ->where('entity', 'outlets|categories|products|stock|vendors|materials|vendor_prices|bom|outlet_items|outlet_prices|roles|users');
+            ->where('entity', 'outlets|categories|products|stock|vendors|materials|vendor_prices|bom|material_stock|recipes|modifier_groups|modifier_options|modifier_option_materials|modifier_links|outlet_items|outlet_prices|roles|users');
         Route::get('/imports/master-data/template', [MasterDataImportController::class, 'template']);
         Route::post('/imports/master-data', [MasterDataImportController::class, 'store']);
 

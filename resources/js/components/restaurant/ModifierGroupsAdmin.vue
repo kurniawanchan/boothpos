@@ -5,7 +5,7 @@ import { listModifierGroups, createModifierGroup, updateModifierGroup, deleteMod
 import { listProducts } from '../../api/products';
 import { listCategories } from '../../api/categories';
 import { listMaterials } from '../../api/materials';
-import { materialsPayload, materialsSummary } from '../../utils/optionMaterials';
+import { duplicateMaterialRows, materialsPayload, materialsSummary } from '../../utils/optionMaterials';
 import { useToastStore } from '../../stores/toast';
 import { describeRange, groupRange } from '../../utils/modifierRules';
 import { formatIDR } from '../../utils/money';
@@ -79,7 +79,8 @@ const form = reactive({ name: '', selection_type: 'single', is_required: false, 
 const formErrors = reactive({});
 const saving = ref(false);
 
-const blankOption = () => ({ id: null, name: '', price_delta: '0', is_active: true, materials: [], showMaterials: false });
+// 089 — `min_qty`/`max_qty`: jumlah per pilihan saat dipilih (bawaan 1..1); `max_qty` kosong = tanpa batas atas.
+const blankOption = () => ({ id: null, name: '', price_delta: '0', min_qty: '1', max_qty: '1', is_active: true, materials: [], showMaterials: false });
 // 087 — salinan baris bahan saat formulir dibuka, per id pilihan: hanya pilihan yang berubah yang mengirim `materials`.
 const originalMaterials = ref({});
 const toRows = (list) => (list ?? []).map((m) => ({ material_id: m.material_id, quantity: m.quantity, name: m.name, unit: m.unit }));
@@ -99,7 +100,8 @@ function openEdit(group) {
     name: group.name, selection_type: group.selection_type, is_required: group.is_required,
     min_select: group.min_select, max_select: group.max_select ?? '', portion_per_option: !!group.portion_per_option, is_active: group.is_active,
     options: group.options.filter((o) => o.is_active).map((o) => ({
-      id: o.id, name: o.name, price_delta: o.price_delta, is_active: true, materials: toRows(o.materials), showMaterials: false,
+      id: o.id, name: o.name, price_delta: o.price_delta, min_qty: String(o.min_qty ?? 1), max_qty: o.max_qty === undefined ? '1' : o.max_qty === null ? '' : String(o.max_qty),
+      is_active: true, materials: toRows(o.materials), showMaterials: false,
     })),
   });
   originalMaterials.value = Object.fromEntries(group.options.map((o) => [o.id, toRows(o.materials)]));
@@ -128,14 +130,36 @@ function payload() {
     is_active: form.is_active,
     options: form.options.filter((o) => o.name.trim() !== '').map((o, i) => ({
       ...(o.id ? { id: o.id } : {}), name: o.name, price_delta: Number(o.price_delta) || 0, display_order: i,
+      min_qty: Math.max(1, Number(o.min_qty) || 1), max_qty: o.max_qty === '' || o.max_qty === null ? null : Number(o.max_qty),
       ...materialsPayload(o.id ? originalMaterials.value[o.id] : undefined, o.materials),
     })),
   };
 }
 
+/**
+ * 089 — pemeriksaan sebelum kirim, per pilihan: bahan kembar DI DALAM satu pilihan dan min > maks. Satu bahan di banyak
+ * pilihan sah. Server tetap penentu (422 dengan kunci pilihan yang sama).
+ */
+function validateOptions() {
+  let ok = true;
+  form.options.forEach((o, i) => {
+    duplicateMaterialRows(o.materials).forEach((j) => {
+      formErrors[`options.${i}.materials.${j}.material_id`] = t('dining_setup.option_materials_duplicate', { option: o.name });
+      ok = false;
+    });
+    const min = Math.max(1, Number(o.min_qty) || 1);
+    if (o.max_qty !== '' && o.max_qty !== null && Number(o.max_qty) < min) {
+      formErrors[`options.${i}.max_qty`] = t('dining_setup.mod_option_qty_range');
+      ok = false;
+    }
+  });
+  return ok;
+}
+
 async function save() {
-  saving.value = true;
   clearErrors();
+  if (!validateOptions()) return;
+  saving.value = true;
   try {
     if (editing.value) {
       await updateModifierGroup(editing.value.id, payload());
@@ -266,6 +290,11 @@ async function performDelete() {
             <button type="button" class="mb-0.5 flex h-[42px] w-[42px] items-center justify-center rounded-lg border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('common.delete')" @click="removeOption(idx)">
               <i class="ph-duotone ph-trash text-[15px]" aria-hidden="true"></i>
             </button>
+            <div class="col-span-3 -mt-1 grid grid-cols-[120px_120px_1fr] items-end gap-2" data-testid="option-qty">
+              <BaseInput v-model="o.min_qty" type="number" min="1" :label="t('dining_setup.mod_option_min_qty')" :error="formErrors[`options.${idx}.min_qty`]" />
+              <BaseInput v-model="o.max_qty" type="number" min="1" :label="t('dining_setup.mod_option_max_qty')" :error="formErrors[`options.${idx}.max_qty`]" />
+              <p class="mb-3 text-[11.5px] text-muted-3">{{ t('dining_setup.mod_option_qty_hint') }}</p>
+            </div>
             <div class="col-span-3 -mt-1 flex flex-col gap-1.5">
               <button
                 type="button"

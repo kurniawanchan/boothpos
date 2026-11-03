@@ -24,6 +24,8 @@ class ModifierGroupResource extends JsonResource
                 'id' => $o->id,
                 'name' => $o->name,
                 'price_delta' => number_format((float) $o->price_delta, 2, '.', ''),
+                'min_qty' => max(1, (int) ($o->min_qty ?? 1)),
+                'max_qty' => $o->max_qty === null ? null : (int) $o->max_qty,
                 'display_order' => $o->display_order,
                 'is_active' => $o->is_active,
                 // 087 — bahan per porsi; hanya bila relasinya dimuat (jalur grup modifier selalu memuatnya).

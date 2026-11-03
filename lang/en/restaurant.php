@@ -23,6 +23,11 @@ return [
 
     // Modifiers (US3)
     'modifier_rule_violated' => 'Group ":group": choose :range option(s).',
+    'modifier_qty_range_invalid' => 'The minimum quantity cannot be higher than the maximum.',
+    'modifier_qty_violated' => 'Group ":group", option ":option": choose a quantity of :range.',
+    'modifier_selection_conflict' => 'Send either modifier_selections or modifier_option_ids, not both.',
+    'modifier_selection_invalid' => 'Each selection needs an option_id and a quantity of at least 1.',
+    'modifier_selection_duplicate' => 'The same option cannot be listed twice; use its quantity instead.',
     'modifier_option_invalid' => 'One of the chosen options is not available for this item.',
     'modifier_price_negative' => 'The chosen options would make the item price negative.',
     'modifier_min_above_max' => 'The minimum selection cannot be higher than the maximum.',

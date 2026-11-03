@@ -11,14 +11,22 @@ class ModifierSnapshot
 {
     /**
      * @param  array<int, array<string, mixed>>|null  $snapshot
-     * @return array<int, array{group: string, option: string, price_delta: string}>
+     * @return array<int, array{group: string, option: string, qty: int, label: string, price_delta: string}>
      */
     public static function forDisplay(?array $snapshot): array
     {
-        return array_values(array_map(fn (array $m) => [
-            'group' => (string) ($m['group'] ?? ''),
-            'option' => (string) ($m['option'] ?? ''),
-            'price_delta' => number_format((float) ($m['price_delta'] ?? 0), 2, '.', ''),
-        ], $snapshot ?? []));
+        // 089: `qty` (baris lama tanpa kunci = 1) dan `label` "Nama ×N" bila lebih dari satu; `price_delta` = kontribusi total.
+        return array_values(array_map(function (array $m) {
+            $qty = max(1, (int) ($m['qty'] ?? 1));
+            $option = (string) ($m['option'] ?? '');
+
+            return [
+                'group' => (string) ($m['group'] ?? ''),
+                'option' => $option,
+                'qty' => $qty,
+                'label' => $qty > 1 ? "{$option} ×{$qty}" : $option,
+                'price_delta' => number_format((float) ($m['price_delta'] ?? 0), 2, '.', ''),
+            ];
+        }, $snapshot ?? []));
     }
 }

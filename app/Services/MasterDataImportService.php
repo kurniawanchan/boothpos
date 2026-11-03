@@ -93,6 +93,9 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
  */
 class MasterDataImportService
 {
+    // 090 — sheet stok bahan, resep, dan modifier (validasi + penerapan) ada di trait supaya berkas ini tidak membengkak.
+    use Concerns\ImportsRecipesAndModifiers;
+
     /** Baris data pertama: baris 1 selalu judul kolom (WithHeadingRow). */
     private const FIRST_DATA_ROW = 2;
 
@@ -143,6 +146,7 @@ class MasterDataImportService
         }
 
         [$sheets, $ignored] = $this->readSheets($absolutePath);
+        $this->presentSheets = array_fill_keys(array_keys($sheets), true);
 
         if ($sheets === []) {
             $this->addError(null, null, null, 'Berkas tidak memuat satu pun sheet yang dikenali ('.implode(', ', MasterDataSheets::ORDER).'). Unduh template impor untuk melihat format yang benar.');
@@ -178,6 +182,33 @@ class MasterDataImportService
             $sheets[MasterDataSheets::BOM] ?? [],
             $plan[MasterDataSheets::PRODUCTS],
             $plan[MasterDataSheets::MATERIALS],
+        );
+        $plan[MasterDataSheets::MATERIAL_STOCK] = $this->validateMaterialStock(
+            $sheets[MasterDataSheets::MATERIAL_STOCK] ?? [],
+            $plan[MasterDataSheets::MATERIALS],
+            $plan[MasterDataSheets::OUTLETS],
+        );
+        $plan[MasterDataSheets::RECIPES] = $this->validateRecipes(
+            $sheets[MasterDataSheets::RECIPES] ?? [],
+            $plan[MasterDataSheets::PRODUCTS],
+            $plan[MasterDataSheets::MATERIALS],
+        );
+        $plan[MasterDataSheets::MODIFIER_GROUPS] = $this->validateModifierGroups($sheets[MasterDataSheets::MODIFIER_GROUPS] ?? []);
+        $plan[MasterDataSheets::MODIFIER_OPTIONS] = $this->validateModifierOptions(
+            $sheets[MasterDataSheets::MODIFIER_OPTIONS] ?? [],
+            $plan[MasterDataSheets::MODIFIER_GROUPS],
+        );
+        $plan[MasterDataSheets::MODIFIER_OPTION_MATERIALS] = $this->validateModifierOptionMaterials(
+            $sheets[MasterDataSheets::MODIFIER_OPTION_MATERIALS] ?? [],
+            $plan[MasterDataSheets::MODIFIER_GROUPS],
+            $plan[MasterDataSheets::MODIFIER_OPTIONS],
+            $plan[MasterDataSheets::MATERIALS],
+        );
+        $plan[MasterDataSheets::MODIFIER_LINKS] = $this->validateModifierLinks(
+            $sheets[MasterDataSheets::MODIFIER_LINKS] ?? [],
+            $plan[MasterDataSheets::MODIFIER_GROUPS],
+            $plan[MasterDataSheets::PRODUCTS],
+            $plan[MasterDataSheets::CATEGORIES],
         );
         $plan[MasterDataSheets::OUTLET_ITEMS] = $this->validateOutletItems(
             $sheets[MasterDataSheets::OUTLET_ITEMS] ?? [],
@@ -1121,6 +1152,15 @@ class MasterDataImportService
             $this->applyMaterials($plan[MasterDataSheets::MATERIALS]);
             $this->applyVendorPrices($plan[MasterDataSheets::VENDOR_PRICES]);
             $this->applyBom($plan[MasterDataSheets::BOM]);
+            $this->applyMaterialStock($plan[MasterDataSheets::MATERIAL_STOCK], $user);
+            $this->applyRecipes($plan[MasterDataSheets::RECIPES], $user);
+            $this->applyModifiers(
+                $plan[MasterDataSheets::MODIFIER_GROUPS],
+                $plan[MasterDataSheets::MODIFIER_OPTIONS],
+                $plan[MasterDataSheets::MODIFIER_OPTION_MATERIALS],
+                $plan[MasterDataSheets::MODIFIER_LINKS],
+                $user,
+            );
             $this->applyOutletItems($plan[MasterDataSheets::OUTLET_ITEMS]);
             $this->applyOutletPrices($plan[MasterDataSheets::OUTLET_PRICES], $user);
             $this->applyRoles($plan[MasterDataSheets::ROLES]);
@@ -1568,6 +1608,23 @@ class MasterDataImportService
                 $isActive = $this->parseBool($sheet, $row, 'is_active', $values['is_active']);
                 if ($isActive !== null) {
                     $attributes['is_active'] = $isActive;
+                }
+            }
+
+            // 090 — jenis bahan dan biaya standar (untuk bahan setengah jadi tanpa harga vendor).
+            if ($this->filled($values, 'kind')) {
+                $kind = strtolower($this->stringValue($values, 'kind'));
+                if (in_array($kind, ['ingredient', 'semi_finished', 'packaging'], true)) {
+                    $attributes['kind'] = $kind;
+                } else {
+                    $this->addError($sheet, $row, 'kind', "Nilai '{$kind}' tidak dikenali. Isi ingredient, semi_finished, atau packaging.");
+                }
+            }
+            if ($this->filled($values, 'standard_cost')) {
+                if (! is_numeric($values['standard_cost']) || (float) $values['standard_cost'] < 0 || (float) $values['standard_cost'] > 9999999999.9999) {
+                    $this->addError($sheet, $row, 'standard_cost', 'Biaya standar harus angka polos 0 atau lebih.');
+                } else {
+                    $attributes['standard_cost'] = round((float) $values['standard_cost'], 4);
                 }
             }
 

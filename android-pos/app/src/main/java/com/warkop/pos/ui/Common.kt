@@ -107,12 +107,12 @@ fun FitPill(text: String, container: Color, content: Color, modifier: Modifier =
 }
 
 @Composable
-fun QtyStepper(qty: Int, onMinus: () -> Unit, onPlus: () -> Unit, modifier: Modifier = Modifier) {
+fun QtyStepper(qty: Int, onMinus: () -> Unit, onPlus: () -> Unit, modifier: Modifier = Modifier, plusEnabled: Boolean = true, minusEnabled: Boolean = true) {
     Surface(modifier, shape = RoundedCornerShape(50), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onMinus, Modifier.size(40.dp)) { Icon(Icons.Filled.Remove, "Kurangi") }
+            IconButton(onClick = onMinus, Modifier.size(40.dp), enabled = minusEnabled) { Icon(Icons.Filled.Remove, "Kurangi") }
             Text(qty.toString(), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.widthIn(min = 22.dp))
-            IconButton(onClick = onPlus, Modifier.size(40.dp)) { Icon(Icons.Filled.Add, "Tambah") }
+            IconButton(onClick = onPlus, Modifier.size(40.dp), enabled = plusEnabled) { Icon(Icons.Filled.Add, "Tambah") }
         }
     }
 }

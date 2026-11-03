@@ -124,7 +124,7 @@ object Documents {
         add(separator())
         o.live.forEach { line -> // baris batal tidak ikut tercetak
             add(PrintLine(text = "${line.qty} x ${line.name}", right = rp(line.lineTotal ?: line.net)))
-            line.mods.forEach { add(PrintLine(text = "   ${it.name}")) }
+            line.mods.forEach { add(PrintLine(text = "   ${it.label}")) }
             line.note.takeIf { it.isNotBlank() }?.let { add(PrintLine(text = "   Catatan: $it")) }
         }
         add(separator())

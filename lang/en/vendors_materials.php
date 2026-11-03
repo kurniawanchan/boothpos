@@ -15,6 +15,6 @@ return [
     'material_delete_used_by_modifier' => 'This material is still used by a modifier option (:usage). Remove it from the modifier group first.',
     'option_material_not_found' => 'Material not found.',
     'option_material_inactive' => 'Material :material is inactive or deleted; choose an active material.',
-    'option_material_duplicate' => 'The same material cannot be chosen twice for one option.',
+    'option_material_duplicate' => 'The same material cannot be chosen twice for option ":option".',
     'option_material_quantity' => 'Material quantity must be greater than 0.',
 ];

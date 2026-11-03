@@ -60,6 +60,22 @@ final class MasterDataSheets
 
     public const OUTLET_PRICES = 'outlet_prices';
 
+    /**
+     * 090 — bahan per outlet, resep, grup/pilihan modifier, bahan pilihan, dan tautan modifier ke item. Semuanya merujuk
+     * lewat KODE/NAMA (bukan id) seperti sheet lain. Dibaca lewat trait `ImportsRecipesAndModifiers`.
+     */
+    public const MATERIAL_STOCK = 'material_stock';
+
+    public const RECIPES = 'recipes';
+
+    public const MODIFIER_GROUPS = 'modifier_groups';
+
+    public const MODIFIER_OPTIONS = 'modifier_options';
+
+    public const MODIFIER_OPTION_MATERIALS = 'modifier_option_materials';
+
+    public const MODIFIER_LINKS = 'modifier_links';
+
     public const ROLES = 'roles';
 
     public const USERS = 'users';
@@ -77,6 +93,8 @@ final class MasterDataSheets
     public const ORDER = [
         self::OUTLETS, self::CATEGORIES, self::PRODUCTS, self::STOCK,
         self::VENDORS, self::MATERIALS, self::VENDOR_PRICES, self::BOM,
+        self::MATERIAL_STOCK, self::RECIPES,
+        self::MODIFIER_GROUPS, self::MODIFIER_OPTIONS, self::MODIFIER_OPTION_MATERIALS, self::MODIFIER_LINKS,
         self::OUTLET_ITEMS, self::OUTLET_PRICES,
         self::ROLES, self::USERS,
     ];
@@ -120,8 +138,9 @@ final class MasterDataSheets
             self::VENDORS => [
                 'code', 'name', 'contact_phone', 'contact_email', 'notes', 'is_active',
             ],
+            // 090 — `kind` (ingredient/semi_finished/packaging) dan `standard_cost` DI AKHIR supaya berkas lama tetap terbaca.
             self::MATERIALS => [
-                'code', 'name', 'unit', 'notes', 'is_active',
+                'code', 'name', 'unit', 'notes', 'is_active', 'kind', 'standard_cost',
             ],
             self::VENDOR_PRICES => [
                 'vendor_code', 'material_code', 'price', 'is_preferred', 'notes',
@@ -129,6 +148,23 @@ final class MasterDataSheets
             self::BOM => [
                 'sku', 'material_code', 'qty_needed', 'notes',
             ],
+            // 090 — `current_stock` = jumlah AKHIR bahan di outlet itu (bukan selisih), seperti sheet `stock`.
+            self::MATERIAL_STOCK => ['material_code', 'outlet_code', 'current_stock', 'reason'],
+            // 090 — SATU BARIS PER BAHAN. Baris dengan (product_code, recipe_name) sama = satu resep. `variant_skus` (dipisah
+            // koma; kosong = semua varian produk), `portions`, `effective_from`, `note` cukup di baris pertama resep.
+            self::RECIPES => [
+                'recipe_name', 'product_code', 'variant_skus', 'portions', 'effective_from',
+                'material_code', 'quantity', 'shrinkage_pct', 'note',
+            ],
+            self::MODIFIER_GROUPS => [
+                'name', 'selection_type', 'is_required', 'min_select', 'max_select', 'portion_per_option', 'display_order', 'is_active',
+            ],
+            self::MODIFIER_OPTIONS => [
+                'group_name', 'option_name', 'price_delta', 'min_qty', 'max_qty', 'display_order', 'is_active',
+            ],
+            self::MODIFIER_OPTION_MATERIALS => ['group_name', 'option_name', 'material_code', 'quantity'],
+            // Tepat satu dari product_code / category_code per baris. `is_linked` 0 = lepas tautan.
+            self::MODIFIER_LINKS => ['group_name', 'product_code', 'category_code', 'is_linked'],
             self::OUTLET_ITEMS => ['outlet_code', 'product_code', 'is_carried'],
             self::OUTLET_PRICES => ['sku', 'outlet_code', 'price'],
             // menu_keys: daftar kunci menu dipisah koma dalam SATU sel,
@@ -241,6 +277,56 @@ final class MasterDataSheets
                 'unit' => 'lembar',
                 'notes' => '',
                 'is_active' => 1,
+                'kind' => 'ingredient',
+                'standard_cost' => '',
+            ],
+            self::MATERIAL_STOCK => [
+                'material_code' => 'AC3',
+                'outlet_code' => 'RYU',
+                'current_stock' => 50,
+                'reason' => 'Isi jumlah AKHIR di outlet itu, bukan selisih. Contoh: stok awal.',
+            ],
+            self::RECIPES => [
+                'recipe_name' => 'Resep Keychain Sakura',
+                'product_code' => 'RYU-KY-SAK',
+                'variant_skus' => '',
+                'portions' => 1,
+                'effective_from' => '',
+                'material_code' => 'AC3',
+                'quantity' => '0.5',
+                'shrinkage_pct' => 0,
+                'note' => 'variant_skus kosong = semua varian produk. portions/effective_from/note cukup di baris pertama resep.',
+            ],
+            self::MODIFIER_GROUPS => [
+                'name' => 'Tambahan Contoh',
+                'selection_type' => 'multiple',
+                'is_required' => 0,
+                'min_select' => 0,
+                'max_select' => 'unlimited',
+                'portion_per_option' => 0,
+                'display_order' => 1,
+                'is_active' => 1,
+            ],
+            self::MODIFIER_OPTIONS => [
+                'group_name' => 'Tambahan Contoh',
+                'option_name' => 'Ekstra Lembar',
+                'price_delta' => '2000.00',
+                'min_qty' => 1,
+                'max_qty' => 3,
+                'display_order' => 1,
+                'is_active' => 1,
+            ],
+            self::MODIFIER_OPTION_MATERIALS => [
+                'group_name' => 'Tambahan Contoh',
+                'option_name' => 'Ekstra Lembar',
+                'material_code' => 'AC3',
+                'quantity' => '1',
+            ],
+            self::MODIFIER_LINKS => [
+                'group_name' => 'Tambahan Contoh',
+                'product_code' => 'RYU-KY-SAK',
+                'category_code' => '',
+                'is_linked' => 1,
             ],
             self::VENDOR_PRICES => [
                 'vendor_code' => 'VNAKR',

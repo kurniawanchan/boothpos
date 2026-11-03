@@ -143,7 +143,8 @@ interface PosBackend {
     suspend fun floor(version: String?): FloorSnapshot?
     suspend fun openTab(sessionId: Long, tableId: Long?, guests: Int?, localRef: String): Order
     suspend fun tab(id: String): Order
-    suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order
+    /** [modifierQtys] (089) = jumlah per id pilihan; tanpa entri = 1. Bila semua 1, yang dikirim tetap daftar id (jalur lama). */
+    suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String, modifierQtys: Map<Long, Int> = emptyMap()): Order
     suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order
     suspend fun removeLine(tabId: String, lineId: Int, key: String): Order
     /** 077 — catatan kasir untuk seluruh order; [notes] kosong menghapus. Server menolak bila tab sudah tidak terbuka (409). */

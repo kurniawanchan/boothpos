@@ -28,7 +28,7 @@ class ModifierGroupService
     {
         return DB::transaction(function () use ($data, $userId) {
             $group = ModifierGroup::create($this->normalised($data, null));
-            $this->logMaterialChanges($group, $this->syncOptions($group, $data['options'] ?? []), $userId);
+            $this->logOptionChanges($group, $this->syncOptions($group, $data['options'] ?? []), $userId);
 
             return $this->loaded($group);
         });
@@ -42,7 +42,7 @@ class ModifierGroupService
 
             // `options` hadir → penggantian PENUH menurut id; tidak hadir → opsi tak disentuh.
             if (array_key_exists('options', $data)) {
-                $this->logMaterialChanges($group, $this->syncOptions($group, $data['options']), $userId);
+                $this->logOptionChanges($group, $this->syncOptions($group, $data['options']), $userId);
             }
 
             return $this->loaded($group);
@@ -144,12 +144,13 @@ class ModifierGroupService
      * dinonaktifkan (tidak pernah dihapus — baris lama masih merujuk namanya lewat snapshot).
      *
      * @param array<int, array<string, mixed>> $options
-     * @return array<int, array{option: string, old: array<int, array{material_id:int, quantity:string}>, new: array<int, array{material_id:int, quantity:string}>}>
-     *         perubahan pemetaan bahan per id pilihan (087), kosong bila tidak ada yang berubah
+     * @return array{materials: array<int, array<string, mixed>>, qty: array<int, array<string, mixed>>}
+     *         perubahan pemetaan bahan (087) dan batas jumlah (089) per id pilihan; kosong bila tidak ada yang berubah
      */
     private function syncOptions(ModifierGroup $group, array $options): array
     {
         $materialChanges = [];
+        $qtyChanges = [];
         $existing = $group->options()->get()->keyBy('id');
         $kept = [];
 
@@ -161,16 +162,34 @@ class ModifierGroupService
                 'is_active' => $row['is_active'] ?? true,
             ];
 
+            $option = null;
             if (! empty($row['id'])) {
                 $option = $existing->get((int) $row['id']);
                 if (! $option) {
                     throw InputRejectedException::withMessages(['options' => [__('restaurant.modifier_option_not_in_group')]]);
                 }
+            }
+
+            // 089 — batas jumlah per pilihan. Tanpa kunci = tidak berubah (opsi baru: bawaan 1..1); `max_qty` null = tanpa
+            // batas atas. Hubungan min ≤ maks diperiksa terhadap nilai EFEKTIF (kiriman, atau yang tersimpan bila tak
+            // dikirim) sebelum menyentuh DB, supaya CHECK tabel tak pernah menjadi penjaga yang melempar 500.
+            $oldQty = [$option?->min_qty ?? 1, $option ? $option->max_qty : 1];
+            $newMin = array_key_exists('min_qty', $row) ? (int) $row['min_qty'] : $oldQty[0];
+            $newMax = array_key_exists('max_qty', $row) ? ($row['max_qty'] === null ? null : (int) $row['max_qty']) : $oldQty[1];
+            if ($newMax !== null && $newMin > $newMax) {
+                throw InputRejectedException::withMessages(["options.{$i}.max_qty" => [__('restaurant.modifier_qty_range_invalid')]]);
+            }
+            $attrs += ['min_qty' => $newMin, 'max_qty' => $newMax];
+
+            if ($option) {
                 $option->update($attrs);
             } else {
                 $option = $group->options()->create($attrs);
             }
             $kept[] = $option->id;
+            if ($oldQty !== [$newMin, $newMax]) {
+                $qtyChanges[$option->id] = ['option' => $option->name, 'old' => $oldQty, 'new' => [$newMin, $newMax]];
+            }
 
             if (array_key_exists('materials', $row)) {
                 $change = $this->syncOptionMaterials($option, (array) $row['materials'], $i);
@@ -183,7 +202,7 @@ class ModifierGroupService
         // Pemetaan bahan pilihan yang dinonaktifkan dibiarkan: pilihan nonaktif tidak bisa dipesan, jadi tak memotong.
         $group->options()->whereNotIn('id', $kept)->update(['is_active' => false]);
 
-        return $materialChanges;
+        return ['materials' => $materialChanges, 'qty' => $qtyChanges];
     }
 
     /**
@@ -225,6 +244,24 @@ class ModifierGroupService
         }
 
         return ['old' => $old, 'new' => $new];
+    }
+
+    /** 087 FR-006 + 089 — satu entri log per jenis perubahan pilihan pada sebuah penyimpanan grup, di transaksi yang sama. */
+    private function logOptionChanges(ModifierGroup $group, array $changes, ?int $userId): void
+    {
+        $this->logMaterialChanges($group, $changes['materials'], $userId);
+
+        if ($changes['qty'] !== []) {
+            $this->activityLogger->log(
+                userId: $userId,
+                action: 'modifier_qty_changed',
+                entityType: 'ModifierGroup',
+                entityId: $group->id,
+                description: "Mengubah batas jumlah pilihan modifier di grup {$group->name}: ".implode(', ', array_column($changes['qty'], 'option')).'.',
+                oldValues: array_map(fn ($c) => ['min_qty' => $c['old'][0], 'max_qty' => $c['old'][1]], $changes['qty']),
+                newValues: array_map(fn ($c) => ['min_qty' => $c['new'][0], 'max_qty' => $c['new'][1]], $changes['qty']),
+            );
+        }
     }
 
     /** 087 FR-006 — satu entri log per penyimpanan grup yang mengubah pemetaan bahan, di transaksi yang sama. */

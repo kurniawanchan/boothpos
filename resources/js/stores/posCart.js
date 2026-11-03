@@ -8,7 +8,9 @@ import { parseMoney, toMoneyString } from '../utils/money';
  */
 export function cartLineKey(item) {
   const ids = [...(item.modifier_option_ids ?? [])].sort((a, b) => a - b);
-  return ids.length ? `${item.variant_id}:${ids.join(',')}` : String(item.variant_id);
+  // 089: pilihan yang sama dengan jumlah berbeda adalah baris berbeda ("1x2" = id 1 jumlah 2); jumlah 1 tetap "1" (kunci lama).
+  const part = (id) => (Number(item.modifier_quantities?.[id] ?? 1) > 1 ? `${id}x${item.modifier_quantities[id]}` : String(id));
+  return ids.length ? `${item.variant_id}:${ids.map(part).join(',')}` : String(item.variant_id);
 }
 
 /**

@@ -4046,24 +4046,30 @@ paths:
   /products/{id}/recipes:
     get:
       tags: [Menu]
-      summary: Daftar versi resep sebuah item (terbaru dulu)
+      summary: Daftar resep sebuah item (diurutkan menurut nama)
       description: |
-        Menu `products`. `is_active_now` = versi aktif untuk setidaknya satu varian. Bidang biaya (`portion_cost`,
+        Menu `products`. 089 — resep TIDAK lagi berversi (`version` dihapus); satu varian boleh punya banyak resep aktif dan
+        semuanya dijumlahkan. `is_active_now` = resep berlaku hari ini (tidak arsip, sudah berlaku, tertaut ke varian);
+        `archived` = sisa versi lama hasil migrasi (baca-saja, tidak memotong stok). Bidang biaya (`portion_cost`,
         `incomplete`, `food_cost_pct`) hanya untuk pemegang menu produk/laporan DAN izin `menu.recipe.edit`.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
-        '200': { description: "{data:[{id,version,yield,effective_from,note,variants[],is_active_now,portion_cost?,food_cost_pct?}]}" }
+        '200': { description: "{data:[{id,name,yield,effective_from,note,archived,variants[],is_active_now,portion_cost?,food_cost_pct?}]}" }
         '403': { description: Tanpa menu produk }
     post:
       tags: [Menu]
-      summary: Membuat versi resep berikutnya
+      summary: Membuat satu resep
       description: |
-        Menu `products` + izin `menu.recipe.edit`. Versi tidak pernah diubah; menyimpan = versi baru, versi lama tetap.
+        Menu `products` + izin `menu.recipe.edit`. 089 — membuat resep BARU tanpa menimpa resep lain; sebuah varian boleh
+        tertaut ke banyak resep dan SEMUA resep aktifnya dijumlahkan. `yield` = Portions (jumlah porsi yang dihasilkan
+        bahan yang tertulis).
         Rumus biaya satu tempat (`RecipeCost`): `jumlah ÷ (1 − susut%/100) × biaya satuan`, biaya porsi = Σ ÷ yield.
         Biaya satuan = harga vendor acuan, atau `standard_cost` bahan setengah jadi. Baris tanpa biaya membuat hasil
-        `incomplete` (tidak pernah nol diam-diam). `cost_price` varian yang tercakup ditulis saat versi mulai berlaku.
-        Tanpa pemotongan stok bahan dan tanpa konversi satuan.
+        `incomplete` (tidak pernah nol diam-diam). `cost_price` varian = JUMLAH biaya porsi semua resep aktifnya, ditulis
+        saat resep mulai berlaku; bila salah satu resep tak lengkap `cost_price` tidak ditulis.
+        Stok bahan dipotong saat PESANAN SELESAI (bukan saat resep disimpan): per porsi terjual
+        `jumlah ÷ (1 − susut%/100) ÷ yield × qty`; void/refund mengembalikan potongan nyata. Tanpa konversi satuan.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       requestBody:
@@ -4072,9 +4078,33 @@ paths:
           application/json:
             schema:
               type: object
-              required: [yield, effective_from, variant_ids, lines]
+              required: [name, yield, effective_from]
+              description: |
+                2026-11-02 — isi bahan dikirim sebagai `blocks` (tabel bahan per varian + pilihan modifier opsional) ATAU bentuk
+                lama `variant_ids` + `lines` (satu blok dasar per varian dengan bahan yang sama). Blok tanpa
+                `modifier_option_id` = resep dasar varian (selalu berlaku); blok dengan pilihan hanya dipotong bila pilihan itu
+                dipesan (× jumlah pilihan). Pasangan (varian, pilihan) tidak boleh kembar (422), pilihan harus milik grup
+                efektif item. Respons membawa `blocks[]` dan, untuk pembaca lama, `lines`/biaya blok dasar pertama.
               properties:
-                yield: { type: number, description: "> 0" }
+                blocks:
+                  type: array
+                  items:
+                    type: object
+                    required: [variant_id, lines]
+                    properties:
+                      variant_id: { type: integer }
+                      modifier_option_id: { type: integer, nullable: true }
+                      lines:
+                        type: array
+                        items:
+                          type: object
+                          required: [material_id, quantity]
+                          properties:
+                            material_id: { type: integer }
+                            quantity: { type: number }
+                            shrinkage_pct: { type: number }
+                name: { type: string, maxLength: 100, description: 'Pembeda antar resep satu item (mis. Dasar, Topping standar).' }
+                yield: { type: number, description: "Portions, > 0" }
                 effective_from: { type: string, format: date, description: "Tidak lebih dari 30 hari ke belakang" }
                 note: { type: string, maxLength: 500 }
                 variant_ids: { type: array, items: { type: integer } }
@@ -4088,10 +4118,22 @@ paths:
                       quantity: { type: number, description: "> 0, satuan bahan" }
                       shrinkage_pct: { type: number, minimum: 0, maximum: 99.99 }
       responses:
-        '201': { description: "Versi dibuat (bentuk sama dengan GET /recipes/{id})" }
+        '201': { description: "Resep dibuat (bentuk sama dengan GET /recipes/{id})" }
         '403': { description: Tanpa izin }
         '409': { description: "`cost_source_conflict` — varian BOM-selesai dipilih" }
         '422': { description: Validasi }
+
+  /products/{id}/recipe-modifier-options:
+    get:
+      tags: [Menu]
+      summary: Pilihan modifier yang bisa dipilih sebuah tabel bahan resep
+      description: |
+        Menu `products`. Grup modifier EFEKTIF item (tautan + warisan kategori, minus yang dilepas) beserta pilihan aktifnya.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "{data:[{id,name,options:[{id,name}]}]}" }
+        '403': { description: Tanpa menu produk }
 
   /products/{id}/recipes/recalculate:
     post:
@@ -4107,27 +4149,52 @@ paths:
   /products/{id}/recipes:
     delete:
       tags: [Menu]
-      summary: Hapus resep (semua versi)
+      summary: Hapus SEMUA resep sebuah item
       description: >
-        2026-10-31 — menghapus SEMUA versi resep item; varian berhenti digerakkan resep (harga modal bisa diubah lagi,
-        nilai terakhir dibiarkan). `order_items.cost_price` yang tercatat tidak berubah. Isi versi disimpan di log
-        aktivitas `recipe_removed`. Izin sama dengan "Hitung ulang biaya".
+        2026-10-31 — menghapus SEMUA resep item; varian berhenti digerakkan resep (harga modal bisa diubah lagi,
+        nilai terakhir dibiarkan). `order_items.cost_price` yang tercatat tidak berubah. Isi tiap resep disimpan di log
+        aktivitas `recipe_removed`. Izin sama dengan "Hitung ulang biaya". Untuk satu resep: `DELETE /recipes/{id}`.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
-        '200': { description: "{message, removed_versions}" }
+        '200': { description: "{message, removed, removed_versions}; `removed_versions` = alias lama dari `removed`" }
         '403': { description: Tanpa izin }
         '404': { description: Item tidak punya resep }
 
   /recipes/{id}:
     get:
       tags: [Menu]
-      summary: Satu versi resep lengkap dengan baris bahan
+      summary: Satu resep lengkap dengan baris bahan
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
-        '200': { description: "Versi + lines[{material_id,name,unit,kind,quantity,shrinkage_pct,unit_cost?,line_cost?}] + portion_cost?, food_cost_pct?, gross_margin?, incomplete?" }
+        '200': { description: "Resep (id,name,archived,yield,effective_from,note,variants[]) + lines[{material_id,name,unit,kind,quantity,shrinkage_pct,unit_cost?,line_cost?}] + portion_cost?, food_cost_pct?, gross_margin?, incomplete?" }
         '403': { description: Tanpa menu produk }
+    put:
+      tags: [Menu]
+      summary: Mengubah resep di tempat (089, tanpa versi)
+      description: |
+        Menu `products` + izin `menu.recipe.edit`. Tubuh sama dengan `POST /products/{id}/recipes`. Baris dan tautan varian
+        diganti penuh; log `recipe_updated` (nilai lama/baru) dan perhitungan ulang `cost_price` varian terdampak berada dalam
+        transaksi yang sama. Pesanan yang sudah selesai tidak berubah.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "Bentuk sama dengan GET /recipes/{id}" }
+        '403': { description: Tanpa izin }
+        '409': { description: "`recipe_archived` (resep arsip baca-saja) atau `cost_source_conflict` (varian BOM-selesai)" }
+        '422': { description: Validasi }
+    delete:
+      tags: [Menu]
+      summary: Menghapus SATU resep (089)
+      description: |
+        Isi resep disimpan di log `recipe_removed`. Varian yang tak lagi punya resep aktif berhenti digerakkan resep; harga
+        modal terakhir dibiarkan dan `order_items.cost_price` tak berubah.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "{message, removed: 1}" }
+        '403': { description: Tanpa izin }
 
   /menu/changes:
     get:
@@ -6277,7 +6344,7 @@ paths:
       - name: entity
         in: path
         required: true
-        schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, outlet_items, outlet_prices, roles, users] }
+        schema: { type: string, enum: [artists, categories, products, stock, vendors, materials, vendor_prices, bom, material_stock, recipes, modifier_groups, modifier_options, modifier_option_materials, modifier_links, outlet_items, outlet_prices, roles, users] }
     get:
       tags: [Import & Export]
       summary: Ekspor satu entitas master data ke Excel
@@ -6374,6 +6441,12 @@ paths:
         | `materials` | `code` |
         | `vendor_prices` | pasangan (`vendor_code`, `material_code`) |
         | `bom` | pasangan (`sku`, `material_code`) |
+        | `material_stock` | pasangan (`material_code`, `outlet_code`) — jumlah AKHIR bahan di outlet itu (dicatat sebagai koreksi `adjustment`; selisih nol dilewati) |
+        | `recipes` | (`product_code` = `code_prefix`, `recipe_name`); SATU BARIS PER BAHAN; `portions`, `effective_from`, `variant_skus` (kosong = semua varian), `note` cukup di baris pertama resep. Resep yang sudah ada diubah di tempat (lewat `RecipeService`) |
+        | `modifier_groups` | `name`; `selection_type` single/multiple, `max_select` angka atau `unlimited` |
+        | `modifier_options` | pasangan (`group_name`, `option_name`); `min_qty`/`max_qty` (angka atau `unlimited`). Grup yang pilihannya tertulis di sheet ini = DAFTAR LENGKAP: pilihan lain di grup itu dinonaktifkan |
+        | `modifier_option_materials` | tiga serangkai (`group_name`, `option_name`, `material_code`) + `quantity` per porsi; satu bahan boleh di banyak pilihan. Bila sheet ini ada, bahan pilihan yang tertulis di sheet pilihan DIGANTI penuh oleh isinya |
+        | `modifier_links` | (`group_name`, `product_code` ATAU `category_code`); `is_linked` 0 = lepas. Hanya menambah/melepas tautan yang disebut, tautan lain tidak disentuh |
         | `outlet_items` | pasangan (`outlet_code`, `product_code` = `code_prefix`); `is_carried` 1/0 (kosong = dibawa untuk baris baru) |
         | `outlet_prices` | pasangan (`sku`, `outlet_code`); `price` angka ≥ 0, atau kata `base` untuk menghapus harga khusus. Ditolak (per baris) saat rilis menu aktif; outlet harus boleh dikelola pengunggah |
         | `roles` | `name` |
@@ -8695,7 +8768,16 @@ components:
             084 — pilihan modifier (POS web). Divalidasi server terhadap grup efektif produk (wajib/opsional,
             tunggal/jamak, min/max) oleh `ModifierResolver`; pelanggaran → `422` (`modifier_option_ids`) yang menyebut grup
             dan rentangnya. Harga TIDAK dikirim: harga per unit = harga outlet + selisih pilihan, dan pilihan di-SNAPSHOT pada
-            baris (`items[].modifiers`). Tanpa field ini perilaku sama seperti sebelumnya.
+            baris (`items[].modifiers`). Tanpa field ini perilaku sama seperti sebelumnya. Tiap id = jumlah 1. Jangan
+            dikirim bersama `modifier_selections` (422).
+        modifier_selections:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/ModifierSelection' }
+          description: |
+            089 — pilihan modifier BERJUMLAH. Jumlah tiap pilihan harus dalam `[min_qty, max_qty]` pilihan itu (422
+            `modifier_selections` yang menyebut grup dan batasnya). Selisih harga dan bahan terpotong dikalikan jumlah.
+            Opsi kembar → 422. Dikirim BERSAMA `modifier_option_ids` → 422.
 
     OrderInput:
       type: object
@@ -9311,7 +9393,12 @@ components:
           description: |
             Pilihan modifier. Divalidasi server terhadap grup efektif produk (wajib/opsional, tunggal/jamak,
             min/max) — pelanggaran → `422` yang menyebut grup dan rentangnya. Harga efektif per unit =
-            harga menu + selisih pilihan (tidak boleh negatif); pilihan di-SNAPSHOT pada baris.
+            harga menu + selisih pilihan (tidak boleh negatif); pilihan di-SNAPSHOT pada baris. Tiap id = jumlah 1.
+        modifier_selections:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/ModifierSelection' }
+          description: 089 — pilihan berjumlah (lihat `OrderItemInput.modifier_selections`). Tidak boleh bersama `modifier_option_ids`.
 
     UpdateTabLineInput:
       type: object
@@ -9322,6 +9409,11 @@ components:
           type: array
           items: { type: integer }
           description: Mengganti pilihan; harga dihitung ulang dari harga dasar SAAT baris ditambahkan (bukan harga menu hari ini).
+        modifier_selections:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/ModifierSelection' }
+          description: 089 — mengganti pilihan dengan jumlah; aturan sama dengan `modifier_option_ids` ditambah batas jumlah per pilihan.
 
     TabPaymentInput:
       type: object
@@ -9342,12 +9434,21 @@ components:
               proof_token: { type: string, format: uuid, nullable: true }
               notes: { type: string, nullable: true }
 
+    ModifierSelection:
+      type: object
+      required: [option_id, qty]
+      properties:
+        option_id: { type: integer }
+        qty: { type: integer, minimum: 1, maximum: 50 }
+
     ModifierChoice:
       type: object
       properties:
         group: { type: string, example: Size }
         option: { type: string, example: Large }
-        price_delta: { type: string, example: "5000.00", description: Bertanda. }
+        qty: { type: integer, minimum: 1, description: "089 — berapa kali pilihan dipesan; baris lama tanpa kunci dibaca 1." }
+        label: { type: string, example: "Telur ×2", description: "089 — nama pilihan, ditambah ×N bila qty > 1." }
+        price_delta: { type: string, example: "5000.00", description: "Bertanda. KONTRIBUSI TOTAL pilihan itu (sudah × qty), jadi harga satuan = dasar + Σ price_delta." }
 
     ModifierOption:
       type: object
@@ -9355,6 +9456,8 @@ components:
         id: { type: integer }
         name: { type: string, maxLength: 100 }
         price_delta: { type: string, example: "5000.00", description: Positif, nol, atau negatif. }
+        min_qty: { type: integer, minimum: 1, description: "089 — jumlah minimum saat dipilih (bawaan 1)." }
+        max_qty: { type: integer, nullable: true, description: "089 — jumlah maksimum saat dipilih (bawaan 1); null = tanpa batas atas (tegak 50)." }
         display_order: { type: integer }
         is_active: { type: boolean }
         materials:
@@ -9408,6 +9511,8 @@ components:
               id: { type: integer, nullable: true, description: Ada → ubah opsi itu; tanpa id → buat. }
               name: { type: string, maxLength: 100 }
               price_delta: { type: number }
+              min_qty: { type: integer, minimum: 1, maximum: 50, description: "089 — opsional; tanpa kunci = tidak berubah (opsi baru: 1)." }
+              max_qty: { type: integer, nullable: true, minimum: 1, maximum: 50, description: "089 — opsional; null = tanpa batas atas; harus ≥ min_qty (422 `options.{i}.max_qty`); opsi baru: 1." }
               display_order: { type: integer }
               is_active: { type: boolean }
               materials:
@@ -9416,6 +9521,8 @@ components:
                 description: >
                   087 — kunci ada (termasuk []) = penggantian penuh bahan pilihan ini; tidak ada = tidak berubah.
                   Bahan harus aktif, tidak terhapus, dan mode data yang sama (422 `options.{i}.materials.{j}.material_id`).
+                  089 — satu bahan BOLEH dipakai di banyak pilihan; hanya kembar di dalam SATU pilihan yang ditolak (422 dengan
+                  kunci pilihan dan baris itu). Bahan pilihan dipotong `quantity × jumlah pilihan × qty baris`.
                 items:
                   type: object
                   required: [material_id, quantity]

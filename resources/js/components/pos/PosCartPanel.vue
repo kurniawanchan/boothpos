@@ -8,6 +8,7 @@ import { cartTotals } from '../../utils/posTotals';
 import EmptyState from '../ui/EmptyState.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
+import { modifierLabel } from '../../utils/modifierRules';
 
 const props = defineProps({
   discount: { type: Number, default: 0 },
@@ -66,7 +67,7 @@ function openImageLightbox(item) {
         <div class="flex min-w-0 flex-1 flex-col gap-1">
           <span class="text-[13.5px] font-semibold leading-tight">{{ item.name }}</span>
           <!-- 084 — pilihan modifier di bawah nama item (struk dan detail pesanan membaca snapshot server yang sama) -->
-          <span v-if="item.modifiers?.length" class="text-[11.5px] leading-snug text-muted-4" data-testid="cart-modifiers">{{ item.modifiers.map((m) => m.option).join(', ') }}</span>
+          <span v-if="item.modifiers?.length" class="text-[11.5px] leading-snug text-muted-4" data-testid="cart-modifiers">{{ item.modifiers.map(modifierLabel).join(', ') }}</span>
           <span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span>
           <span v-if="item.home_outlet_name" class="text-[10.5px] text-muted-3">{{ item.home_outlet_name }}</span>
           <span class="text-[12px] text-muted">{{ formatIDR(item.sell_price) }}</span>

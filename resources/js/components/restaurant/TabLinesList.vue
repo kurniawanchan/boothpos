@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { formatIDR } from '../../utils/money';
 import StatusPill from '../ui/StatusPill.vue';
 import BaseButton from '../ui/BaseButton.vue';
+import { modifierLabel } from '../../utils/modifierRules';
 
 /**
  * 028 US2 — baris-baris sebuah tab. Hanya tampilan + niat pengguna: semua angka
@@ -45,7 +46,7 @@ function commitNote(line) {
         <div class="min-w-0 flex-1">
           <div class="text-[13.5px] font-bold leading-snug text-ink">{{ line.name }}</div>
           <ul v-if="line.modifiers?.length" class="mt-0.5 flex flex-wrap gap-x-2 text-[12px] text-muted-3">
-            <li v-for="(m, i) in line.modifiers" :key="i">{{ m.option }}</li>
+            <li v-for="(m, i) in line.modifiers" :key="i">{{ modifierLabel(m) }}</li>
           </ul>
           <div class="mt-0.5 text-[12px] text-muted-3">{{ formatIDR(line.unit_price) }}</div>
         </div>

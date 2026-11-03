@@ -132,20 +132,28 @@ class ProductDetailService
      * Ringkasan resep AKTIF varian pertama (null bila tidak ada). Bidang biaya hanya untuk pemegang izin biaya.
      * Daftar produk tidak memanggil ini (N+1); angka food cost di daftar berasal dari `cost_price` yang sudah
      * disinkronkan RecipeService dari rumus RecipeCost yang sama.
+     *
+     * 089: varian boleh punya banyak resep aktif. `recipe` = resep pertama (menurut nama) supaya klien lama tidak patah;
+     * `recipes` = ringkasan SEMUA resep aktif varian itu dan `recipe_count` banyaknya.
      */
     private function recipeSummary(Product $product, User $user): ?array
     {
         $recipes = app(RecipeService::class);
         $head = $product->variants->sortBy('id')->first();
-        $recipe = $head ? $recipes->activeFor($head) : null;
-        if ($recipe === null) {
+        $active = $head ? $recipes->activeRecipesFor($head) : collect();
+        if ($active->isEmpty()) {
             return null;
         }
 
-        $full = $recipes->present($recipe, $recipes->mayCost($user));
-        unset($full['lines']);
+        $mayCost = $recipes->mayCost($user);
+        $all = $active->map(function ($recipe) use ($recipes, $mayCost) {
+            $full = $recipes->present($recipe, $mayCost);
+            unset($full['lines']);
 
-        return $full + ['line_count' => $recipe->lines()->count()];
+            return $full + ['line_count' => $recipe->lines->count()];
+        })->values();
+
+        return $all->first() + ['recipes' => $all->all(), 'recipe_count' => $all->count()];
     }
 
     /** Tautan (produk, lalu kategori) dengan aturan efektif: nilai tautan bila ada, selain itu nilai grup. */

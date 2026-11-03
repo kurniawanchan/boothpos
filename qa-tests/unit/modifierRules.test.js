@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupRange, describeRange, isSelectionValid, selectionDelta, selectedOptionIds, materialPortions, portionCount } from '../../resources/js/utils/modifierRules';
+import { groupRange, describeRange, isSelectionValid, selectionDelta, selectedOptionIds, materialPortions, portionCount, optionQtyRange, allowsQuantity, optionQtyCap, modifierPayload, modifierLabel, isGroupLocked, isGroupFull, canIncreaseQty } from '../../resources/js/utils/modifierRules';
 
 // Harus sejalan dengan ModifierResolver::range() di server (tests/Feature/ModifierResolverTest).
 const single = (over) => ({ id: 1, selection_type: 'single', is_required: true, min_select: 1, max_select: 1, options: [], ...over });
@@ -105,5 +105,88 @@ describe('portion groups and material stock', () => {
     expect(materialPortions([plain])).toBeNull();
     expect(materialPortions([topping])).toBeNull();
     expect(materialPortions([])).toBeNull();
+  });
+});
+
+// 089 — jumlah per pilihan; harus sama dengan ModifierResolver::resolve() (tests/Feature/ModifierQuantityTest).
+describe('option quantity limits', () => {
+  it('payload without the keys (old server / old data) means exactly one, no stepper', () => {
+    expect(optionQtyRange({ id: 1 })).toEqual([1, 1]);
+    expect(allowsQuantity({ id: 1 })).toBe(false);
+  });
+
+  it('reads min/max and offers a stepper only when more than one is allowed', () => {
+    expect(optionQtyRange({ min_qty: 1, max_qty: 3 })).toEqual([1, 3]);
+    expect(allowsQuantity({ min_qty: 1, max_qty: 3 })).toBe(true);
+    expect(allowsQuantity({ min_qty: 1, max_qty: 1 })).toBe(false);
+    expect(optionQtyCap({ min_qty: 1, max_qty: 3 })).toBe(3);
+  });
+
+  it('an empty maximum means no upper limit, capped at 50', () => {
+    expect(optionQtyRange({ min_qty: 1, max_qty: null })).toEqual([1, null]);
+    expect(allowsQuantity({ min_qty: 1, max_qty: null })).toBe(true);
+    expect(optionQtyCap({ min_qty: 1, max_qty: null })).toBe(50);
+    expect(optionQtyCap({ min_qty: 1, max_qty: 99 })).toBe(50);
+  });
+});
+
+describe('selectionDelta with quantities', () => {
+  const groups = [multi({ id: 2, options: [{ id: 20, price_delta: '3000.00' }, { id: 21, price_delta: '500.00' }] })];
+
+  it('multiplies each difference by the chosen quantity; a missing quantity is 1', () => {
+    expect(selectionDelta(groups, { 2: [20, 21] }, 0, { 20: 2, 21: 3 })).toBe(6000 + 1500);
+    expect(selectionDelta(groups, { 2: [20] })).toBe(3000);
+  });
+
+  it('portion group counts every UNIT of quantity (SOTO x2 + AYAM x1 = 3 portions, first one covered by the base price)', () => {
+    const rasa = [multi({ id: 3, portion_per_option: true, options: [{ id: 30, price_delta: '0.00' }, { id: 31, price_delta: '500.00' }] })];
+    // dasar 20.000: SOTO x2 → 1 porsi ekstra; AYAM x1 → 500 + 1 porsi ekstra
+    expect(selectionDelta(rasa, { 3: [30, 31] }, 20000, { 30: 2, 31: 1 })).toBe(20000 + 20500);
+    expect(portionCount(rasa, { 3: [30, 31] }, { 30: 2, 31: 1 })).toBe(3);
+    // satu pilihan x1 saja = perilaku lama (tanpa porsi ekstra)
+    expect(selectionDelta(rasa, { 3: [30] }, 20000, { 30: 1 })).toBe(0);
+    expect(portionCount(rasa, { 3: [30] })).toBe(1);
+  });
+});
+
+describe('modifierPayload and modifierLabel', () => {
+  it('keeps the old id list when every quantity is 1 (works with an old server and an old tablet)', () => {
+    expect(modifierPayload([10, 20], { 10: 1, 20: 1 })).toEqual({ modifier_option_ids: [10, 20] });
+    expect(modifierPayload([10, 20])).toEqual({ modifier_option_ids: [10, 20] });
+  });
+
+  it('sends modifier_selections as soon as one quantity is not 1', () => {
+    expect(modifierPayload([10, 20], { 10: 1, 20: 2 })).toEqual({ modifier_selections: [{ option_id: 10, qty: 1 }, { option_id: 20, qty: 2 }] });
+  });
+
+  it('labels "Name xN" only when more than one; prefers the server label', () => {
+    expect(modifierLabel({ option: 'Telur', qty: 2 })).toBe('Telur ×2');
+    expect(modifierLabel({ option: 'Telur', qty: 1 })).toBe('Telur');
+    expect(modifierLabel({ option: 'Telur' })).toBe('Telur');
+    expect(modifierLabel({ option: 'Telur', qty: 2, label: 'Telur ×2' })).toBe('Telur ×2');
+  });
+});
+
+describe('batas jumlah per grup (2026-11-02)', () => {
+  const g = { id: 1, selection_type: 'multiple', is_required: true, min_select: 2, max_select: 2, options: [] };
+  const o = (id, max) => ({ id, min_qty: 1, max_qty: max });
+
+  it('minimum dihitung dalam satuan jumlah, maksimum dalam pilihan berbeda', () => {
+    expect(isSelectionValid([g], { 1: [10] }, { 10: 2 })).toBe(true);
+    expect(isSelectionValid([g], { 1: [10] }, { 10: 1 })).toBe(false);
+    expect(isSelectionValid([g], { 1: [10, 11, 12] }, {})).toBe(false);
+  });
+
+  it('terkunci saat pilihan berbeda = maks (>1); grup tunggal tidak pernah terkunci', () => {
+    expect(isGroupLocked(g, [10, 11])).toBe(true);
+    expect(isGroupLocked(g, [10])).toBe(false);
+    expect(isGroupLocked({ ...g, selection_type: 'single', max_select: 1 }, [10])).toBe(false);
+  });
+
+  it('penuh bila jumlah total mencapai maks, dan jumlah tak bisa naik lagi', () => {
+    expect(isGroupFull(g, [10], { 10: 2 })).toBe(true);
+    expect(isGroupFull(g, [10], { 10: 1 })).toBe(false);
+    expect(canIncreaseQty(g, o(10, 5), [10], { 10: 2 })).toBe(false);
+    expect(canIncreaseQty(g, o(10, 5), [10], { 10: 1 })).toBe(true);
   });
 });

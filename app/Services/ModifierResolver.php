@@ -140,6 +140,8 @@ class ModifierResolver
                 'portion_per_option' => (bool) $g->portion_per_option,
                 'options' => $g->options->map(fn ($o) => [
                     'id' => $o->id, 'name' => $o->name, 'price_delta' => number_format((float) $o->price_delta, 2, '.', ''),
+                    // 089 — batas jumlah per pilihan saat dipilih; max null = tanpa batas atas.
+                    'min_qty' => max(1, (int) ($o->min_qty ?? 1)), 'max_qty' => $o->max_qty === null ? null : (int) $o->max_qty,
                 ] + $this->optionStock($o, $book))->values(),
             ])->values()->all();
     }
@@ -172,17 +174,65 @@ class ModifierResolver
     }
 
     /**
-     * @param  array<int, int|string>  $optionIds
+     * 089 — SATU pintu bentuk permintaan pilihan modifier. Klien baru mengirim `modifier_selections`
+     * (`[{option_id, qty}]`), klien lama `modifier_option_ids` (tiap id = jumlah 1). Keduanya sekaligus ditolak: tidak ada
+     * aturan penggabungan yang tak ambigu. null = tidak ada kunci sama sekali (pemanggil memutuskan, mis. "tak berubah").
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<int, int>|null optionId => qty
+     *
+     * @throws InputRejectedException
+     */
+    public function selectionFrom(array $data): ?array
+    {
+        $hasSelections = array_key_exists('modifier_selections', $data);
+        $hasIds = array_key_exists('modifier_option_ids', $data);
+
+        if ($hasSelections && $hasIds) {
+            throw $this->reject(__('restaurant.modifier_selection_conflict'), 'modifier_selections');
+        }
+        if ($hasSelections) {
+            $out = [];
+            foreach ((array) $data['modifier_selections'] as $row) {
+                $id = (int) ($row['option_id'] ?? 0);
+                $qty = (int) ($row['qty'] ?? 0);
+                if ($id <= 0 || $qty < 1 || $qty > self::MAX_QTY) {
+                    throw $this->reject(__('restaurant.modifier_selection_invalid'), 'modifier_selections');
+                }
+                if (isset($out[$id])) {
+                    throw $this->reject(__('restaurant.modifier_selection_duplicate'), 'modifier_selections');
+                }
+                $out[$id] = $qty;
+            }
+
+            return $out;
+        }
+        if ($hasIds) {
+            return array_fill_keys(array_values(array_unique(array_map('intval', (array) $data['modifier_option_ids']))), 1);
+        }
+
+        return null;
+    }
+
+    /** Jumlah maksimum yang pernah diterima untuk satu pilihan (sama dengan batas validasi request). */
+    public const MAX_QTY = 50;
+
+    /**
+     * @param  array<int, int|string>  $selection  daftar id pilihan (jumlah 1 tiap id; bentuk lama) ATAU peta id => jumlah
      * @param  float|null  $basePrice  harga dasar per unit; default harga varian SAAT INI
      *                                 (dipakai saat mengubah pilihan baris lama: dasar = harga saat baris ditambahkan)
      * @return array{snapshot: array<int, array<string, mixed>>, delta: float, unit_price: float}
      *
      * @throws InputRejectedException
      */
-    public function resolve(ProductVariant $variant, array $optionIds, ?float $basePrice = null): array
+    public function resolve(ProductVariant $variant, array $selection, ?float $basePrice = null): array
     {
         $variant->loadMissing('product');
-        $ids = array_values(array_unique(array_map('intval', $optionIds)));
+        // Id option dimulai dari 1, jadi peta id => jumlah tidak pernah berbentuk daftar (kunci 0..n-1) kecuali kosong.
+        $quantities = array_is_list($selection)
+            ? array_fill_keys(array_values(array_unique(array_map('intval', $selection))), 1)
+            : array_map('intval', array_combine(array_map('intval', array_keys($selection)), array_values($selection)));
+        $ids = array_keys($quantities);
 
         // Validasi SELALU memakai grup terbaru dari database: relasi yang sudah ter-cache pada
         // instance produk bisa basi (grup baru diubah/dinonaktifkan), dan aturan pilihan tidak
@@ -203,10 +253,13 @@ class ModifierResolver
         $base = $basePrice ?? (float) $variant->sell_price;
 
         foreach ($groups as $group) {
-            $picked = $group->options->filter(fn ($o) => in_array($o->id, $ids, true));
+            $picked = $group->options->filter(fn ($o) => isset($quantities[$o->id]));
             [$min, $max] = $this->range($group);
 
-            if ($picked->count() < $min || ($max !== null && $picked->count() > $max)) {
+            // MAKSIMUM menghitung PILIHAN berbeda; MINIMUM menghitung satuan jumlah (2026-11-02: SOTO ×2 memenuhi "pilih 2").
+            // Jumlah per pilihan dibatasi `min_qty`/`max_qty` pilihan itu. Tanpa jumlah (semua 1) hasilnya sama dengan dulu.
+            $units = $picked->sum(fn ($o) => $quantities[$o->id]);
+            if ($units < $min || ($max !== null && $picked->count() > $max)) {
                 throw $this->reject(__('restaurant.modifier_rule_violated', [
                     'group' => $group->name,
                     'range' => $this->describeRange($min, $max),
@@ -214,15 +267,29 @@ class ModifierResolver
             }
 
             foreach ($picked->values() as $i => $option) {
+                $qty = $quantities[$option->id];
+                [$minQty, $maxQty] = $this->qtyRange($option);
+                if ($qty < $minQty || ($maxQty !== null && $qty > $maxQty)) {
+                    // Kunci `modifier_selections` (kontrak): jumlah hanya bisa melanggar batas bila klien memilih jumlah.
+                    throw $this->reject(__('restaurant.modifier_qty_violated', [
+                        'group' => $group->name, 'option' => $option->name, 'range' => $this->describeRange($minQty, $maxQty),
+                    ]), 'modifier_selections');
+                }
+
                 // 2026-10-31 — grup "tiap pilihan = 1 porsi": pilihan pertama tertutup harga dasar, tiap pilihan
-                // berikutnya membawa SATU harga dasar lagi di price_delta snapshot-nya. Dengan begitu
-                // `unit_price = dasar + Σ price_delta` tetap benar bagi semua pembaca (struk, ubah baris tab).
-                $optionDelta = (float) $option->price_delta + ($group->portion_per_option && $i > 0 ? $base : 0.0);
+                // berikutnya membawa SATU harga dasar lagi di price_delta snapshot-nya. 089: porsi dihitung per SATUAN
+                // jumlah (SOTO ×2 = dua bungkus = dua porsi, sama dengan bahan yang terpotong ×qty): pilihan pertama
+                // menanggung `qty − 1` harga dasar ekstra, pilihan berikutnya `qty`. `price_delta` snapshot = KONTRIBUSI
+                // TOTAL pilihan itu, jadi `unit_price = dasar + Σ price_delta` tetap benar bagi semua pembaca (struk,
+                // ubah baris tab) dan baris lama tanpa `qty` dibaca sebagai 1.
+                $extraPortions = $group->portion_per_option ? $qty - ($i === 0 ? 1 : 0) : 0;
+                $optionDelta = (float) $option->price_delta * $qty + $extraPortions * $base;
                 $snapshot[] = [
                     'group_id' => $group->id,
                     'group' => $group->name,
                     'option_id' => $option->id,
                     'option' => $option->name,
+                    'qty' => $qty,
                     'price_delta' => number_format($optionDelta, 2, '.', ''),
                 ];
                 $delta += $optionDelta;
@@ -237,6 +304,15 @@ class ModifierResolver
         }
 
         return ['snapshot' => $snapshot, 'delta' => $delta, 'unit_price' => $unit];
+    }
+
+    /** @return array{0: int, 1: int|null} [min, max] jumlah saat dipilih — max null = tanpa batas atas (dibatasi MAX_QTY) */
+    private function qtyRange(\App\Models\ModifierOption $option): array
+    {
+        $min = max(1, (int) ($option->min_qty ?? 1));
+        $max = $option->max_qty === null ? self::MAX_QTY : min(self::MAX_QTY, (int) $option->max_qty);
+
+        return [$min, $option->max_qty === null ? null : $max];
     }
 
     /** @return array{0: int, 1: int|null} [min, max] — max null = tanpa batas atas */
@@ -267,8 +343,8 @@ class ModifierResolver
         };
     }
 
-    private function reject(string $message): InputRejectedException
+    private function reject(string $message, string $field = 'modifier_option_ids'): InputRejectedException
     {
-        return InputRejectedException::withMessages(['modifier_option_ids' => [$message]]);
+        return InputRejectedException::withMessages([$field => [$message]]);
     }
 }

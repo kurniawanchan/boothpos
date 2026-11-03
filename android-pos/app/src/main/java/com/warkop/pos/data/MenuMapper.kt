@@ -85,6 +85,7 @@ object MenuMapper {
         options = g.options.map { o ->
             ModOption(
                 o.name, Money.parse(o.priceDelta).toInt(), o.id, portions = o.portions,
+                minQty = maxOf(1, o.minQty), maxQty = o.maxQty,
                 materials = o.materials.map { OptionMaterial(it.name.orEmpty(), it.unit.orEmpty(), it.quantity.toDoubleOrNull() ?: 0.0, it.onHand?.toDoubleOrNull()) },
             )
         },

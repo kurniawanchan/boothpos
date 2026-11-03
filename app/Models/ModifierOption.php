@@ -13,13 +13,14 @@ class ModifierOption extends Model
 {
     use HasDataMode, HasFactory;
 
-    protected $fillable = ['modifier_group_id', 'name', 'price_delta', 'display_order', 'is_active'];
+    protected $fillable = ['modifier_group_id', 'name', 'price_delta', 'min_qty', 'max_qty', 'display_order', 'is_active'];
 
-    protected $attributes = ['price_delta' => 0, 'display_order' => 0, 'is_active' => true];
+    // 089: jumlah bawaan 1..1 = perilaku lama (ada atau tidak ada). `max_qty` NULL = tanpa batas atas.
+    protected $attributes = ['price_delta' => 0, 'min_qty' => 1, 'max_qty' => 1, 'display_order' => 0, 'is_active' => true];
 
     protected function casts(): array
     {
-        return ['price_delta' => 'decimal:2', 'is_active' => 'boolean', 'display_order' => 'integer'];
+        return ['price_delta' => 'decimal:2', 'min_qty' => 'integer', 'max_qty' => 'integer', 'is_active' => 'boolean', 'display_order' => 'integer'];
     }
 
     public function group(): BelongsTo

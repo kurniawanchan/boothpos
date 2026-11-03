@@ -52,7 +52,8 @@ import kotlinx.serialization.Serializable
     val modifiers: List<ReceiptModifierDto> = emptyList(),
 )
 
-@Serializable data class ReceiptModifierDto(val group: String = "", val option: String = "")
+// 089 — `qty`/`label` dari server ("Telur ×2"); server lama tanpa kunci = jumlah 1 dan label null.
+@Serializable data class ReceiptModifierDto(val group: String = "", val option: String = "", val qty: Int = 1, val label: String? = null)
 
 @Serializable data class ReceiptPaymentDto(
     val method: String = "",
