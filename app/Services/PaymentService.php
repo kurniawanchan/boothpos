@@ -363,6 +363,12 @@ class PaymentService
                 throw ValidationException::withMessages(['method' => __('orders_payments.payment_method_unchanged')]);
             }
 
+            // Non-tunai → tunai langsung berstatus verified tanpa verifikator kedua (pemisahan tugas), jadi
+            // hanya owner/admin yang boleh memindahkannya ke tunai (keputusan pemilik produk, 2026-11-03).
+            if ($method === 'cash' && $entry->method !== 'cash' && ! $user->isOwnerOrAdmin()) {
+                throw ValidationException::withMessages(['payment' => __('orders_payments.payment_method_to_cash_owner_only')])->status(403);
+            }
+
             $update = ['method' => $method, 'channel_id' => $channelId];
             if ($method === 'cash') {
                 // Tunai masuk ke shift terbuka pengubah; belum ada → 409 (sama seperti pembayaran tunai susulan).

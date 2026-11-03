@@ -2021,8 +2021,9 @@ paths:
         `paid_amount` tidak pernah disentuh. Boleh: owner/admin atau pencatat pembayaran. Tujuan non-tunai: `channel_id`
         wajib, aktif, sejenis metodenya, dan pembayaran kembali `pending`. Tujuan tunai: tanpa kanal, `verified`, masuk
         ke shift TERBUKA milik pengubah. Dicatat di activity log (`payment_method_changed`).
-        409 (dengan `code`): `voided`, `change_given` (tunai dengan
-        kembalian), `no_open_shift`. 422: tak ada yang berubah, kanal kosong/salah jenis/tak aktif.
+        Mengubah pembayaran NON-tunai menjadi tunai hanya boleh owner/admin (403), karena tunai langsung `verified`.
+        409 (dengan `code`): `voided`, `rejected` (pembayaran sudah ditolak verifikasi), `change_given` (tunai dengan
+        kembalian), `no_open_shift`. 403 juga untuk pengguna yang bukan pencatat/owner/admin. 422: tak ada yang berubah, kanal kosong/salah jenis/tak aktif.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: payment_id, in: path, required: true, schema: { type: integer } }
