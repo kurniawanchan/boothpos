@@ -14,6 +14,7 @@ import { buildProductCards } from '../utils/posProductCards';
 import { formatIDR } from '../utils/money';
 import { uuid } from '../utils/uuid';
 import { toastMaterialWarnings } from '../utils/materialWarnings';
+import { modifierPayload } from '../utils/modifierRules';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { useMenuAvailability } from '../composables/useMenuAvailability';
 import TabLinesList from '../components/restaurant/TabLinesList.vue';
@@ -167,10 +168,10 @@ function startAdd(card, variant) {
 async function addVariant(variant, extra = {}) {
   await run(() => addTabLine(tabId.value, { variant_id: variant.id, qty: 1, ...extra }));
 }
-async function confirmModifiers({ modifier_option_ids, note }) {
+async function confirmModifiers({ modifier_option_ids, modifier_quantities = {}, note }) {
   const { variant } = modifierTarget.value;
   // 422 (aturan dilanggar) ditampilkan sebagai toast oleh penangan pusat; dialog tetap terbuka.
-  const ok = await run(() => addTabLine(tabId.value, { variant_id: variant.id, qty: 1, modifier_option_ids, ...(note ? { note } : {}) }));
+  const ok = await run(() => addTabLine(tabId.value, { variant_id: variant.id, qty: 1, ...modifierPayload(modifier_option_ids, modifier_quantities), ...(note ? { note } : {}) }));
   if (ok) modifierTarget.value = null;
 }
 

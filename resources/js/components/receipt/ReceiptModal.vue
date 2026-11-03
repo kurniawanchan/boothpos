@@ -10,6 +10,7 @@ import { formatDateTime } from '../../utils/date';
 import { downloadElementAsPdf, downloadElementAsPng } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
 import { useOutletStore } from '../../stores/outlet';
+import { modifierLabel } from '../../utils/modifierRules';
 
 /**
  * 002-language-toggle FR-009 — labels in this component's template
@@ -138,7 +139,7 @@ watch(
               <template v-if="item.home_outlet_name"> · {{ item.home_outlet_name }}</template>
             </span>
             <!-- 028 — pilihan modifier & catatan (struk selalu Bahasa Indonesia, lihat FR-009 fitur 002). -->
-            <span v-if="item.modifiers?.length" class="text-[12px] text-muted-4">{{ item.modifiers.map((m) => m.option).join(', ') }}</span>
+            <span v-if="item.modifiers?.length" class="text-[12px] text-muted-4">{{ item.modifiers.map(modifierLabel).join(', ') }}</span>
             <span v-if="item.note" class="text-[12px] italic text-muted-3">“{{ item.note }}”</span>
           </div>
           <span class="text-[14.5px] font-bold">{{ formatIDR(item.line_total) }}</span>

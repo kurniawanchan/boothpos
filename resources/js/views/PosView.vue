@@ -27,7 +27,7 @@ import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import PosDraftsPanel from '../components/pos/PosDraftsPanel.vue';
 import ModifierPickerModal from '../components/restaurant/ModifierPickerModal.vue';
-import { describeSelection, selectionDelta } from '../utils/modifierRules';
+import { describeSelection, modifierPayload, selectionDelta } from '../utils/modifierRules';
 import { savePosDraft, resumePosDraft } from '../api/posDrafts';
 
 const cart = usePosCartStore();
@@ -189,16 +189,18 @@ function addToCart(item) {
   cart.add(item);
 }
 
-function confirmModifiers({ modifier_option_ids }) {
+function confirmModifiers({ modifier_option_ids, modifier_quantities = {} }) {
   const item = modifierTarget.value;
   if (!item) return;
   const selection = Object.fromEntries(item.modifier_groups.map((g) => [g.id, g.options.filter((o) => modifier_option_ids.includes(o.id)).map((o) => o.id)]));
   cart.add({
     ...item,
     // 2026-10-31 — harga dasar ikut dikirim: grup "tiap pilihan = 1 porsi" menambah satu harga dasar per pilihan tambahan.
-    sell_price: toMoneyString(Number(item.sell_price) + selectionDelta(item.modifier_groups, selection, Number(item.sell_price))),
+    // 089: selisih dikali jumlah pilihan, dan porsi dihitung per satuan jumlah (sama dengan server).
+    sell_price: toMoneyString(Number(item.sell_price) + selectionDelta(item.modifier_groups, selection, Number(item.sell_price), modifier_quantities)),
     modifier_option_ids,
-    modifiers: describeSelection(item.modifier_groups, modifier_option_ids),
+    modifier_quantities,
+    modifiers: describeSelection(item.modifier_groups, modifier_option_ids, modifier_quantities),
   });
   modifierTarget.value = null;
 }
@@ -254,7 +256,7 @@ async function handlePaymentSubmit(payments) {
       customer_id: selectedCustomer.value?.id ?? null,
       local_ref: localRef.value,
       discount_amount: toMoneyString(discount.value),
-      items: cart.items.map((i) => ({ variant_id: i.variant_id, qty: i.qty, ...(i.modifier_option_ids?.length ? { modifier_option_ids: i.modifier_option_ids } : {}) })),
+      items: cart.items.map((i) => ({ variant_id: i.variant_id, qty: i.qty, ...(i.modifier_option_ids?.length ? modifierPayload(i.modifier_option_ids, i.modifier_quantities) : {}) })),
       payments,
     });
     lastOrderId.value = order.id;

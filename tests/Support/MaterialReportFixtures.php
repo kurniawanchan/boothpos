@@ -130,8 +130,9 @@ trait MaterialReportFixtures
         $this->sellDays($this->outletB, [$this->daysAgo(1)]);
         $this->setStock('telur', $this->outletB, 0);
 
-        // Sambal: hanya dipakai resep (tidak memotong stok) → "pemakaian tidak tercatat".
-        $recipe = \App\Models\Recipe::create(['product_id' => $this->nasiGoreng->product_id, 'version' => 1, 'yield' => 1, 'effective_from' => $this->daysAgo(10)]);
+        // Sambal: ada di resep yang TIDAK tertaut ke varian mana pun (089: resep aktif memotong stok, yang tak tertaut tidak)
+        // → "pemakaian tidak tercatat".
+        $recipe = \App\Models\Recipe::create(['product_id' => $this->nasiGoreng->product_id, 'name' => 'Dasar', 'yield' => 1, 'effective_from' => $this->daysAgo(10)]);
         $recipe->lines()->create(['material_id' => $this->sambal->id, 'quantity' => 10, 'shrinkage_pct' => 0, 'display_order' => 0]);
         $this->move('sambal', $this->outletA, 'adjustment', 500);
 

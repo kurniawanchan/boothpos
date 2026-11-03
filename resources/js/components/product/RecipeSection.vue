@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { listRecipes, recalculateRecipeCost, removeRecipe } from '../../api/recipes';
+import { listRecipes, recalculateRecipeCost, removeOneRecipe, removeRecipe } from '../../api/recipes';
 import { useAuthStore } from '../../stores/auth';
 import { useToastStore } from '../../stores/toast';
 import { formatDate, formatIDR } from '../../utils/formatters';
@@ -14,16 +14,16 @@ import ConfirmDialog from '../ui/ConfirmDialog.vue';
 import StatusPill from '../ui/StatusPill.vue';
 
 /**
- * 043 (US2/US8) — "Resep (BOM)". Ringkasan resep AKTIF dari `GET /products/{id}` (`recipe`; nilai dari server, tidak
- * dihitung ulang di sini), ringkasan BOM lama bila ada varian ber-BOM, dan daftar VERSI resep
- * (`GET /products/{id}/recipes`: versi, tanggal berlaku, "berlaku sekarang", biaya porsi / food cost %).
+ * 043 (US2/US8), diubah 089 — "Resep (BOM)". Resep TIDAK lagi berversi: daftar di bawah memuat SEMUA resep item
+ * (`GET /products/{id}/recipes`: nama, Portions, tanggal berlaku, "berlaku sekarang", biaya porsi / food cost %), dan
+ * satu varian boleh punya banyak resep aktif yang SEMUANYA dijumlahkan saat penjualan (potong stok bahan) dan harga modal.
  *
- * - "Edit resep" dan "Hitung ulang biaya" dirender HANYA untuk pemegang `menu.recipe.edit` (tersembunyi, bukan
- *   nonaktif); server tetap menolak yang lain (403). Mengubah resep selalu membuat versi baru lewat RecipeDrawer.
+ * - "Tambah resep", "Ubah", "Hapus", dan "Hitung ulang biaya" dirender HANYA untuk pemegang `menu.recipe.edit`
+ *   (tersembunyi, bukan nonaktif); server tetap menolak yang lain (403). Resep arsip (sisa versi lama hasil migrasi)
+ *   hanya tampil, tanpa tombol ubah.
  * - Angka biaya dirender hanya bila payload membawanya: server menghilangkan biaya untuk pengguna tanpa izin biaya,
  *   jadi tampilan TIDAK boleh menganggap bidang itu ada dan tidak menampilkan "0" sebagai pengganti.
- * - Daftar versi punya keadaan galat sendiri (+ Coba lagi): gagal memuat versi tidak mengosongkan ringkasan yang
- *   sudah ada, dan bukan "belum ada versi".
+ * - Daftar punya keadaan galat sendiri (+ Coba lagi): gagal memuat tidak berarti "belum ada resep".
  * - "Hitung ulang biaya" menulis ulang harga modal varian dari harga bahan saat ini, maka diminta konfirmasi.
  */
 const props = defineProps({
@@ -44,65 +44,95 @@ const bomCostText = computed(() => {
   if (!bom.value || bom.value.cost === null) return '';
   return bom.value.cost === bom.value.costMax ? formatIDR(bom.value.cost) : `${formatIDR(bom.value.cost)} – ${formatIDR(bom.value.costMax)}`;
 });
-const title = computed(() => (props.recipe?.version ? `${t('products.sec_recipe')} v${props.recipe.version}` : t('products.sec_recipe')));
 
-// --- versi -------------------------------------------------------------------------------------------------------
-const versions = ref([]);
-const versionsState = ref('loading'); // loading | ready | error
+// --- daftar resep ------------------------------------------------------------------------------------------------
+const recipes = ref([]);
+const listState = ref('loading'); // loading | ready | error
 let seq = 0;
 
-async function loadVersions() {
+async function loadRecipes() {
   if (props.productId === null || props.productId === undefined) {
-    versionsState.value = 'ready';
+    listState.value = 'ready';
     return;
   }
   const mine = ++seq;
-  versionsState.value = 'loading';
+  listState.value = 'loading';
   try {
     const res = await listRecipes(props.productId);
     if (mine !== seq) return;
-    versions.value = res?.data ?? [];
-    versionsState.value = 'ready';
+    recipes.value = res?.data ?? [];
+    listState.value = 'ready';
   } catch {
     if (mine !== seq) return;
-    versionsState.value = 'error';
+    listState.value = 'error';
   }
 }
-onMounted(loadVersions);
-watch(() => props.productId, loadVersions);
+onMounted(loadRecipes);
+watch(() => props.productId, loadRecipes);
 
 const hasCost = (v) => v.portion_cost !== undefined && v.portion_cost !== null;
 const variantsText = (v) => (v.variants ?? []).map((x) => variantName(x)).join(', ') || '—';
+const liveRecipes = computed(() => recipes.value.filter((r) => !r.archived));
 
-// --- edit & hitung ulang ---------------------------------------------------------------------------------------------
+// --- tambah / ubah / hapus ------------------------------------------------------------------------------------------
 const showDrawer = ref(false);
+const editing = ref(null); // baris daftar yang diubah; null = resep baru
 const drawerProduct = computed(() => ({ id: props.productId, name: props.productName, variants: props.variants }));
 const showRecalc = ref(false);
 const recalculating = ref(false);
 
+function openCreate() {
+  editing.value = null;
+  showDrawer.value = true;
+}
+function openEdit(r) {
+  editing.value = r;
+  showDrawer.value = true;
+}
+
 async function afterSaved() {
   showDrawer.value = false;
-  await loadVersions();
+  await loadRecipes();
   emit('changed');
 }
 
-// 2026-10-31 (permintaan pemilik) — hapus resep (semua versi). Konfirmasi dulu: tidak bisa dibatalkan, varian berhenti
-// mengikuti resep dan harga modalnya bisa diubah tangan lagi. Penjualan yang sudah tercatat tidak berubah.
-const showRemove = ref(false);
-const removing = ref(false);
-async function performRemove() {
-  removing.value = true;
+// Hapus SATU resep. Konfirmasi dulu: tidak bisa dibatalkan; bahan resep itu berhenti terpotong dan harga modal varian
+// dihitung ulang dari resep yang tersisa. Penjualan yang sudah tercatat tidak berubah.
+const removeTarget = ref(null);
+const removingOne = ref(false);
+async function performRemoveOne() {
+  if (!removeTarget.value) return;
+  removingOne.value = true;
   try {
-    await removeRecipe(props.productId);
-    showRemove.value = false;
+    await removeOneRecipe(removeTarget.value.id);
+    removeTarget.value = null;
     showDrawer.value = false;
     toast.success(t('products.rc_removed'));
-    await loadVersions();
+    await loadRecipes();
     emit('changed');
   } catch {
-    showRemove.value = false;
+    removeTarget.value = null;
   } finally {
-    removing.value = false;
+    removingOne.value = false;
+  }
+}
+
+// 2026-10-31 (permintaan pemilik) — hapus SEMUA resep item.
+const showRemoveAll = ref(false);
+const removingAll = ref(false);
+async function performRemoveAll() {
+  removingAll.value = true;
+  try {
+    await removeRecipe(props.productId);
+    showRemoveAll.value = false;
+    showDrawer.value = false;
+    toast.success(t('products.rc_removed'));
+    await loadRecipes();
+    emit('changed');
+  } catch {
+    showRemoveAll.value = false;
+  } finally {
+    removingAll.value = false;
   }
 }
 
@@ -113,7 +143,7 @@ async function performRecalc() {
     showRecalc.value = false;
     toast.success(t('products.rc_recalc_done', { count: res?.updated?.length ?? 0 }));
     if (res?.skipped?.length) toast.warning(t('products.rc_recalc_skipped', { count: res.skipped.length }));
-    await loadVersions();
+    await loadRecipes();
     emit('changed');
   } catch {
     // 409/403 sudah di-toast handler pusat; dialog ditutup supaya pengguna tidak terjebak.
@@ -125,81 +155,91 @@ async function performRecalc() {
 </script>
 
 <template>
-  <ItemSection :title="title" testid="section-recipe">
+  <ItemSection :title="t('products.sec_recipe')" testid="section-recipe">
     <template v-if="canEditRecipe" #action>
-      <BaseButton v-if="versions.length" variant="secondary" size="sm" data-testid="recipe-recalc" @click="showRecalc = true">{{ t('products.rc_recalc') }}</BaseButton>
-      <BaseButton v-if="versions.length" variant="danger" size="sm" data-testid="recipe-remove" @click="showRemove = true">{{ t('products.rc_remove') }}</BaseButton>
-      <BaseButton variant="secondary" size="sm" data-testid="recipe-edit" @click="showDrawer = true">{{ versions.length ? t('products.rc_edit') : t('products.rc_create') }}</BaseButton>
+      <BaseButton v-if="liveRecipes.length" variant="secondary" size="sm" data-testid="recipe-recalc" @click="showRecalc = true">{{ t('products.rc_recalc') }}</BaseButton>
+      <BaseButton v-if="recipes.length" variant="danger" size="sm" data-testid="recipe-remove" @click="showRemoveAll = true">{{ t('products.rc_remove_all') }}</BaseButton>
+      <BaseButton variant="secondary" size="sm" data-testid="recipe-add" @click="openCreate">{{ t('products.rc_create') }}</BaseButton>
     </template>
 
-    <div v-if="recipe" class="flex flex-col gap-3 px-5 py-4" data-testid="recipe-summary">
+    <!-- Ringkasan resep aktif dari GET /products/{id} (`recipe`, nilai dari server). Dengan BANYAK resep aktif angkanya
+         tampil per baris di daftar (menjumlahkannya di sini berarti menghitung biaya di klien). -->
+    <div v-if="recipe && (recipe.recipe_count ?? 1) <= 1" class="flex flex-col gap-3 px-5 py-4" data-testid="recipe-summary">
       <p class="text-[13.5px] font-semibold">
         {{ t('products.recipe_cost', { cost: recipe.portion_cost === null || recipe.portion_cost === undefined ? '—' : formatIDR(recipe.portion_cost), pct: recipe.food_cost_pct ?? '—' }) }}
         <span v-if="recipe.incomplete" class="ml-2 text-warn-text">{{ t('products.recipe_incomplete') }}</span>
       </p>
       <p v-if="recipe.gross_margin !== null && recipe.gross_margin !== undefined" class="text-[13px] text-muted-4">{{ t('products.recipe_margin', { margin: formatIDR(recipe.gross_margin) }) }}</p>
-      <ul v-if="recipe.lines?.length" class="flex flex-col divide-y divide-line border border-line text-[12.5px]">
-        <li v-for="(l, i) in recipe.lines" :key="l.material_id ?? i" class="flex justify-between gap-3 px-3 py-2">
-          <span>{{ l.name }} · {{ l.quantity }} {{ l.unit }}</span>
-          <span class="tabular-nums text-muted-4">{{ l.line_cost === null || l.line_cost === undefined ? '—' : formatIDR(l.line_cost) }}</span>
-        </li>
-      </ul>
     </div>
-    <p v-else-if="bom" class="px-5 py-5 text-[13.5px] text-muted-5" data-testid="bom-summary">
+    <p v-if="listState === 'ready' && !recipes.length && bom" class="px-5 py-5 text-[13.5px] text-muted-5" data-testid="bom-summary">
       {{ bomCostText ? t('products.recipe_bom_summary', { count: bom.count, cost: bomCostText }) : t('products.recipe_bom_summary_nocost', { count: bom.count }) }}
     </p>
-    <p v-else class="px-5 py-6 text-[13px] text-muted-4" data-testid="recipe-empty">{{ t('products.recipe_none') }}</p>
+    <p v-else-if="listState === 'ready' && !recipes.length" class="px-5 py-6 text-[13px] text-muted-4" data-testid="recipe-empty">{{ t('products.recipe_none') }}</p>
 
-    <div class="border-t border-line" data-testid="recipe-versions">
-      <h3 class="px-5 pb-1 pt-3 text-[13px] font-semibold text-muted-5">{{ t('products.rc_versions') }}</h3>
-      <p v-if="versionsState === 'loading'" class="px-5 py-4 text-[13px] text-muted-4" role="status">{{ t('common.loading_data') }}</p>
-      <div v-else-if="versionsState === 'error'" class="flex flex-wrap items-center gap-3 px-5 py-4" role="alert" data-testid="recipe-versions-error">
-        <span class="text-[13px] text-danger-text">{{ t('products.rc_versions_failed') }}</span>
-        <BaseButton variant="secondary" size="sm" @click="loadVersions">{{ t('common.retry') }}</BaseButton>
+    <div class="border-t border-line" data-testid="recipe-list">
+      <p v-if="liveRecipes.length > 1" class="px-5 pt-3 text-[12.5px] text-muted-5" data-testid="recipe-sum-note">{{ t('products.rc_sum_note', { count: liveRecipes.length }) }}</p>
+      <p v-if="listState === 'loading'" class="px-5 py-4 text-[13px] text-muted-4" role="status">{{ t('common.loading_data') }}</p>
+      <div v-else-if="listState === 'error'" class="flex flex-wrap items-center gap-3 px-5 py-4" role="alert" data-testid="recipe-list-error">
+        <span class="text-[13px] text-danger-text">{{ t('products.rc_list_failed') }}</span>
+        <BaseButton variant="secondary" size="sm" @click="loadRecipes">{{ t('common.retry') }}</BaseButton>
       </div>
-      <p v-else-if="!versions.length" class="px-5 py-4 text-[13px] text-muted-4" data-testid="recipe-versions-empty">{{ t('products.rc_versions_empty') }}</p>
-      <SectionTable v-else>
+      <SectionTable v-else-if="recipes.length">
         <template #head>
           <tr>
-            <th scope="col">{{ t('products.rc_col_version') }}</th>
+            <th scope="col">{{ t('products.rc_col_name') }}</th>
+            <th scope="col">{{ t('products.rc_yield') }}</th>
             <th scope="col">{{ t('products.rc_col_from') }}</th>
             <th scope="col">{{ t('products.rc_col_variants') }}</th>
-            <th v-if="versions.some(hasCost)" scope="col">{{ t('products.rc_col_cost') }}</th>
-            <th scope="col">{{ t('products.rc_note') }}</th>
+            <th v-if="recipes.some(hasCost)" scope="col">{{ t('products.rc_col_cost') }}</th>
+            <th v-if="canEditRecipe" scope="col"><span class="sr-only">{{ t('products.rc_col_actions') }}</span></th>
           </tr>
         </template>
-        <tr v-for="v in versions" :key="v.id" data-testid="recipe-version-row">
+        <tr v-for="r in recipes" :key="r.id" data-testid="recipe-row">
           <td class="font-semibold">
-            <span>v{{ v.version }}</span>
-            <StatusPill v-if="v.is_active_now" variant="success" class="ml-2" data-testid="version-active">{{ t('products.rc_active_now') }}</StatusPill>
+            <span>{{ r.name }}</span>
+            <StatusPill v-if="r.archived" variant="neutral" class="ml-2" data-testid="recipe-archived">{{ t('products.rc_archived') }}</StatusPill>
+            <StatusPill v-else-if="r.is_active_now" variant="success" class="ml-2" data-testid="recipe-active">{{ t('products.rc_active_now') }}</StatusPill>
+            <span v-if="r.note" class="block text-[11.5px] font-normal text-muted-4">{{ r.note }}</span>
           </td>
-          <td class="tabular-nums">{{ formatDate(v.effective_from) }}</td>
-          <td class="text-muted-4">{{ variantsText(v) }}</td>
-          <td v-if="versions.some(hasCost)" class="tabular-nums" data-testid="version-cost">
-            <template v-if="hasCost(v)">
-              {{ t('products.rc_version_cost', { cost: formatIDR(v.portion_cost), pct: v.food_cost_pct ?? '—' }) }}
-              <span v-if="v.incomplete" class="ml-1 text-warn-text">{{ t('products.recipe_incomplete') }}</span>
+          <td class="tabular-nums">{{ r.yield }}</td>
+          <td class="tabular-nums">{{ formatDate(r.effective_from) }}</td>
+          <td class="text-muted-4">{{ variantsText(r) }}</td>
+          <td v-if="recipes.some(hasCost)" class="tabular-nums" data-testid="recipe-cost">
+            <template v-if="hasCost(r)">
+              {{ t('products.rc_recipe_cost', { cost: formatIDR(r.portion_cost), pct: r.food_cost_pct ?? '—' }) }}
+              <span v-if="r.incomplete" class="ml-1 text-warn-text">{{ t('products.recipe_incomplete') }}</span>
             </template>
             <template v-else>—</template>
           </td>
-          <td class="text-muted-4">
-            <span v-if="v.note">{{ v.note }}</span>
-            <span v-if="v.created_by" class="block text-[11.5px]">{{ t('products.rc_by', { name: v.created_by }) }}</span>
+          <td v-if="canEditRecipe" class="whitespace-nowrap text-right">
+            <template v-if="!r.archived">
+              <BaseButton variant="secondary" size="sm" data-testid="recipe-edit" @click="openEdit(r)">{{ t('products.rc_edit') }}</BaseButton>
+              <BaseButton variant="danger" size="sm" class="ml-1.5" data-testid="recipe-remove-one" @click="removeTarget = r">{{ t('products.rc_remove_one') }}</BaseButton>
+            </template>
           </td>
         </tr>
       </SectionTable>
     </div>
 
     <template v-if="canEditRecipe">
-      <RecipeDrawer :open="showDrawer" :product="drawerProduct" :versions="versions" @close="showDrawer = false" @saved="afterSaved" @remove="showRemove = true" />
+      <RecipeDrawer :open="showDrawer" :product="drawerProduct" :recipe="editing" @close="showDrawer = false" @saved="afterSaved" @remove="removeTarget = editing" />
       <ConfirmDialog
-        :open="showRemove"
+        :open="removeTarget !== null"
+        :title="t('products.rc_remove_one_title')"
+        :message="t('products.rc_remove_one_message', { name: removeTarget?.name ?? '' })"
+        :confirm-label="t('products.rc_remove_one')"
+        :loading="removingOne"
+        @close="removeTarget = null"
+        @confirm="performRemoveOne"
+      />
+      <ConfirmDialog
+        :open="showRemoveAll"
         :title="t('products.rc_remove_title')"
-        :message="t('products.rc_remove_message', { count: versions.length })"
-        :confirm-label="t('products.rc_remove')"
-        :loading="removing"
-        @close="showRemove = false"
-        @confirm="performRemove"
+        :message="t('products.rc_remove_message', { count: recipes.length })"
+        :confirm-label="t('products.rc_remove_all')"
+        :loading="removingAll"
+        @close="showRemoveAll = false"
+        @confirm="performRemoveAll"
       />
       <ConfirmDialog
         :open="showRecalc"

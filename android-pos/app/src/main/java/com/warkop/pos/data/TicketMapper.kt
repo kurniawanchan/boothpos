@@ -26,7 +26,10 @@ object TicketMapper {
             PrintableItem(
                 qty = item.qty,
                 name = item.name,
-                modifiers = item.modifiers.map { m -> if (m.group.isBlank()) m.option else "${m.group}: ${m.option}" },
+                modifiers = item.modifiers.map { m ->
+                    val name = m.label?.takeIf { l -> l.isNotBlank() } ?: if (m.qty > 1) "${m.option} ×${m.qty}" else m.option   // 089
+                    if (m.group.isBlank()) name else "${m.group}: $name"
+                },
                 note = item.note?.takeIf { it.isNotBlank() },
             )
         },

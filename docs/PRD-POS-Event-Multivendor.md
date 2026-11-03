@@ -987,6 +987,8 @@ Salinan produk ini yang dikhususkan untuk **restoran** menambahkan alur pesan-du
 
 Yang sengaja **tidak** dibangun di fitur ini (masing-masing fitur terpisah di kemudian hari): pajak & service charge, pengurangan stok berbasis resep bahan, QRIS/penyedia pembayaran, integrasi platform pengantaran, reservasi, loyalti, multi-outlet, cetak termal ESC/POS, dan pemesanan mandiri lewat QR meja.
 
+**Catatan perubahan cakupan — 2026-11-02 (fitur 089: resep memotong stok, resep ganda, jumlah pilihan modifier).** Dua hal yang dulu sengaja tidak dibangun kini dibangun atas permintaan pemilik: *pengurangan stok berbasis resep bahan* (stok bahan resep dipotong saat pesanan selesai, semua resep aktif sebuah varian dijumlahkan) dan *jumlah per pilihan modifier* dengan batas minimum/maksimum. Resep tidak lagi berversi. Ini kapabilitas baru yang sempit — bukan kebangkitan pembelian bahan, jadwal produksi, atau butir lain yang dicoret di 10.2. Rincian: `specs/089-recipe-multi-modifier-qty/`.
+
 Aturan bisnis yang menjadi keputusan (rinciannya di `specs/028-restaurant-dine-in-ordering/`): stok dikurangi **saat item ditambahkan ke tab** dan hanya kembali bila item dibatalkan sebelum mulai dimasak; membatalkan item yang sudah dimasak hanya oleh owner/admin dengan alasan tercatat; tab yang sudah punya pembayaran tidak bisa dipisah, digabung (sebagai sumber), maupun dibatalkan; shift kasir tidak bisa ditutup selama masih ada tab terbuka; tab yang belum dibayar tidak pernah masuk ke laporan penjualan, laba, maupun rekap artist.
 
 ### 10.3 Cakupan MVP Oktober

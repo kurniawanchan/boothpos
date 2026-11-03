@@ -42,5 +42,8 @@ import kotlinx.serialization.Serializable
 @Serializable data class TicketModifierDto(
     val group: String = "",
     val option: String = "",
+    // 089 — jumlah dan label "Telur ×2" dari server (server lama tanpa kunci = 1 / null).
+    val qty: Int = 1,
+    val label: String? = null,
     @SerialName("price_delta") val priceDelta: String = "0.00",
 )

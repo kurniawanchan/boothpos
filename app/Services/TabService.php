@@ -141,7 +141,7 @@ class TabService
     // --- baris --------------------------------------------------------------
 
     /**
-     * @param array{variant_id:int, qty:int, note?:?string, modifier_option_ids?:array<int,int>} $data
+     * @param array{variant_id:int, qty:int, note?:?string, modifier_option_ids?:array<int,int>, modifier_selections?:array<int,array{option_id:int,qty:int}>} $data
      */
     public function addLine(Order $tab, array $data, User $user): Order
     {
@@ -164,7 +164,7 @@ class TabService
             // Pilihan modifier divalidasi & di-snapshot SERVER-side (ModifierResolver); harga
             // efektif per unit = harga menu + selisih pilihan. Validasi terjadi SEBELUM stok
             // disentuh, dan karena semuanya satu transaksi, penolakan tidak meninggalkan jejak.
-            $resolved = $this->modifiers->resolve($variant, $data['modifier_option_ids'] ?? []);
+            $resolved = $this->modifiers->resolve($variant, $this->modifiers->selectionFrom($data) ?? []);
             $snapshot = $resolved['snapshot'] ?: null;
             $unitPrice = $resolved['unit_price'];
 
@@ -217,7 +217,7 @@ class TabService
     }
 
     /**
-     * @param array{qty?:int, note?:?string, modifier_option_ids?:array<int,int>} $data
+     * @param array{qty?:int, note?:?string, modifier_option_ids?:array<int,int>, modifier_selections?:array<int,array{option_id:int,qty:int}>} $data
      */
     public function updateLine(Order $tab, int $itemId, array $data, User $user): Order
     {
@@ -234,10 +234,12 @@ class TabService
 
             // Mengganti pilihan modifier: harga dasar = harga SAAT BARIS DITAMBAHKAN
             // (harga efektif lama dikurangi selisih lama), bukan harga menu hari ini.
-            if (array_key_exists('modifier_option_ids', $data)) {
+            $selection = $this->modifiers->selectionFrom($data);
+            if ($selection !== null) {
                 $variant = ProductVariant::with('product')->findOrFail($line->variant_id);
+                // `price_delta` snapshot = kontribusi TOTAL pilihan (sudah × jumlah), jadi jumlahnya tetap benar tanpa memandang qty.
                 $oldDelta = collect($line->modifiers ?? [])->sum(fn ($m) => (float) $m['price_delta']);
-                $resolved = $this->modifiers->resolve($variant, $data['modifier_option_ids'], (float) $line->sell_price - $oldDelta);
+                $resolved = $this->modifiers->resolve($variant, $selection, (float) $line->sell_price - $oldDelta);
 
                 $line->modifiers = $resolved['snapshot'] ?: null;
                 $line->sell_price = $resolved['unit_price'];
@@ -761,7 +763,8 @@ class TabService
     /** Dua daftar pilihan dianggap sama bila himpunan id opsinya sama, apa pun urutan kirimnya. */
     private function sameOptions(?array $a, ?array $b): bool
     {
-        $ids = fn (?array $snap) => collect($snap ?? [])->pluck('option_id')->map(fn ($i) => (int) $i)->sort()->values()->all();
+        // 089: pilihan yang sama dengan jumlah berbeda BUKAN baris yang identik (Telur ×1 vs Telur ×2).
+        $ids = fn (?array $snap) => collect($snap ?? [])->map(fn ($m) => (int) $m['option_id'].'x'.(int) ($m['qty'] ?? 1))->sort()->values()->all();
 
         return $ids($a) === $ids($b);
     }

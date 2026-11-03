@@ -23,6 +23,11 @@ return [
 
     // Modifier (US3)
     'modifier_rule_violated' => 'Grup ":group": pilih :range opsi.',
+    'modifier_qty_range_invalid' => 'Jumlah minimum tidak boleh lebih besar dari maksimum.',
+    'modifier_qty_violated' => 'Grup ":group", opsi ":option": pilih jumlah :range.',
+    'modifier_selection_conflict' => 'Kirim modifier_selections atau modifier_option_ids, jangan keduanya.',
+    'modifier_selection_invalid' => 'Tiap pilihan butuh option_id dan jumlah minimal 1.',
+    'modifier_selection_duplicate' => 'Opsi yang sama tidak boleh ditulis dua kali; gunakan jumlahnya.',
     'modifier_option_invalid' => 'Salah satu opsi yang dipilih tidak tersedia untuk item ini.',
     'modifier_price_negative' => 'Opsi yang dipilih membuat harga item menjadi negatif.',
     'modifier_min_above_max' => 'Pilihan minimum tidak boleh lebih besar dari maksimum.',

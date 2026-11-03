@@ -79,7 +79,7 @@ describe('ModifierPickerModal', () => {
     await user.type(screen.getByLabelText(/catatan untuk dapur/i), '  tanpa es  ');
     await user.click(confirmButton());
 
-    expect(emitted().confirm[0][0]).toEqual({ modifier_option_ids: [11, 20], note: 'tanpa es' });
+    expect(emitted().confirm[0][0]).toEqual({ modifier_option_ids: [11, 20], modifier_quantities: { 11: 1, 20: 1 }, note: 'tanpa es' });
   });
 
   it('sends a null note when none was typed', async () => {
@@ -89,7 +89,7 @@ describe('ModifierPickerModal', () => {
     await user.click(screen.getByLabelText(/regular/i));
     await user.click(confirmButton());
 
-    expect(emitted().confirm[0][0]).toEqual({ modifier_option_ids: [10], note: null });
+    expect(emitted().confirm[0][0]).toEqual({ modifier_option_ids: [10], modifier_quantities: { 10: 1 }, note: null });
   });
 
   it('blocks a choice that would make the price negative and says why', async () => {
@@ -124,11 +124,50 @@ describe('ModifierPickerModal — material stock and portions', () => {
   ] };
   const render2 = () => render(ModifierPickerModal, { props: { open: true, itemName: 'Indomie Kuah', basePrice: '8000.00', groups: [rasa] } });
 
-  it('shows the stock at this outlet and how much one portion uses, per option', () => {
+  it('shows no stock or usage line under an option', () => {
     render2();
-    expect(screen.getByTestId('option-stock-50')).toHaveTextContent('Indomie Soto: stok 17 pcs · pakai 1 pcs');
-    expect(screen.getByTestId('option-stock-51')).toHaveTextContent('stok −1 pcs');
-    expect(screen.getByTestId('option-stock-51')).toHaveClass('text-danger-text');
+    expect(screen.queryByTestId('option-stock-50')).not.toBeInTheDocument();
+    expect(screen.queryByText(/stok|pakai/i)).not.toBeInTheDocument();
+  });
+
+  // 2026-11-02 — grup "pilih 2": satu pilihan ×2 sudah cukup; dua pilihan berbeda mengunci jumlah dan pilihan lain.
+  describe('group limits', () => {
+    const pilih2 = { id: 7, name: 'Rasa', selection_type: 'multiple', is_required: true, min_select: 2, max_select: 2, options: [
+      { id: 70, name: 'SOTO', price_delta: '0.00', min_qty: 1, max_qty: 2 },
+      { id: 71, name: 'AYAM', price_delta: '0.00', min_qty: 1, max_qty: 2 },
+      { id: 72, name: 'KARI', price_delta: '0.00', min_qty: 1, max_qty: 2 },
+    ] };
+    const open2 = () => render(ModifierPickerModal, { props: { open: true, itemName: 'Indomie Double', basePrice: '8000.00', groups: [pilih2] } });
+
+    it('lets one option at the maximum quantity complete the group and blocks the other options', async () => {
+      const user = userEvent.setup();
+      open2();
+      await user.click(screen.getByLabelText(/^SOTO/));
+      expect(confirmButton()).toBeDisabled(); // 1 satuan < pilih 2
+      await user.click(screen.getByRole('button', { name: /tambah jumlah soto/i }));
+      expect(screen.getByTestId('qty-value-70')).toHaveTextContent('2');
+      expect(confirmButton()).toBeEnabled();
+      expect(screen.getByRole('button', { name: /tambah jumlah soto/i })).toBeDisabled();
+      expect(screen.getByLabelText(/^AYAM/)).toBeDisabled();
+    });
+
+    it('resets every quantity to 1 and locks the rest when the distinct options reach the maximum, then unlocks on release', async () => {
+      const user = userEvent.setup();
+      open2();
+      await user.click(screen.getByLabelText(/^SOTO/));
+      await user.click(screen.getByLabelText(/^AYAM/));
+
+      expect(screen.getByTestId('qty-value-70')).toHaveTextContent('1');
+      expect(screen.getByTestId('qty-value-71')).toHaveTextContent('1');
+      expect(screen.getByRole('button', { name: /tambah jumlah soto/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /tambah jumlah ayam/i })).toBeDisabled();
+      expect(screen.getByLabelText(/^KARI/)).toBeDisabled();
+      expect(confirmButton()).toBeEnabled();
+
+      await user.click(screen.getByLabelText(/^AYAM/)); // lepas
+      expect(screen.getByLabelText(/^KARI/)).toBeEnabled();
+      expect(screen.getByRole('button', { name: /tambah jumlah soto/i })).toBeEnabled();
+    });
   });
 
   it('charges the base price again for the second option and shows the portion count', async () => {
@@ -140,5 +179,65 @@ describe('ModifierPickerModal — material stock and portions', () => {
     await user.click(screen.getByLabelText(/AYAM BAWANG/));
     expect(screen.getByTestId('modifier-price')).toHaveTextContent('16.000');
     expect(screen.getByTestId('modifier-portions')).toHaveTextContent('2 porsi');
+  });
+
+  // 089 — jumlah per pilihan.
+  describe('option quantity (089)', () => {
+    const topping = { id: 5, name: 'Topping', selection_type: 'multiple', is_required: false, min_select: 0, max_select: null, options: [
+      { id: 50, name: 'Telur', price_delta: '3000.00', min_qty: 1, max_qty: 3 },
+      { id: 51, name: 'Keju', price_delta: '2000.00', min_qty: 2, max_qty: null },
+      { id: 52, name: 'Kerupuk', price_delta: '1000.00', min_qty: 1, max_qty: 1 },
+    ] };
+
+    it('shows a stepper only for a chosen option that may be ordered more than once', async () => {
+      const user = userEvent.setup();
+      renderPicker({ groups: [topping] });
+
+      expect(screen.queryByTestId('qty-50')).not.toBeInTheDocument();
+      await user.click(screen.getByLabelText(/^telur/i));
+      expect(screen.getByTestId('qty-50')).toBeInTheDocument();
+      await user.click(screen.getByLabelText(/^kerupuk/i));
+      expect(screen.queryByTestId('qty-52')).not.toBeInTheDocument(); // 1..1 = pilih atau tidak
+    });
+
+    it('starts at the minimum, respects min and max, and prices the quantity', async () => {
+      const user = userEvent.setup();
+      renderPicker({ groups: [topping] });
+
+      await user.click(screen.getByLabelText(/^telur/i));
+      expect(screen.getByTestId('qty-value-50')).toHaveTextContent('1');
+      expect(screen.getByRole('button', { name: /kurangi jumlah telur/i })).toBeDisabled();
+      await user.click(screen.getByRole('button', { name: /tambah jumlah telur/i }));
+      await user.click(screen.getByRole('button', { name: /tambah jumlah telur/i }));
+      expect(screen.getByTestId('qty-value-50')).toHaveTextContent('3');
+      expect(screen.getByRole('button', { name: /tambah jumlah telur/i })).toBeDisabled();
+      expect(screen.getByTestId('modifier-price')).toHaveTextContent('34.000'); // 25.000 + 3 × 3.000
+    });
+
+    it('starts a minimum-2 option at 2 and an unbounded option keeps growing', async () => {
+      const user = userEvent.setup();
+      renderPicker({ groups: [topping] });
+
+      await user.click(screen.getByLabelText(/^keju/i));
+      expect(screen.getByTestId('qty-value-51')).toHaveTextContent('2');
+      expect(screen.getByRole('button', { name: /kurangi jumlah keju/i })).toBeDisabled();
+      for (let i = 0; i < 5; i += 1) await user.click(screen.getByRole('button', { name: /tambah jumlah keju/i }));
+      expect(screen.getByTestId('qty-value-51')).toHaveTextContent('7');
+      expect(screen.getByRole('button', { name: /tambah jumlah keju/i })).toBeEnabled();
+    });
+
+    it('emits the chosen quantities, and un-ticking an option drops its quantity', async () => {
+      const user = userEvent.setup();
+      const { emitted } = renderPicker({ groups: [topping] });
+
+      await user.click(screen.getByLabelText(/^telur/i));
+      await user.click(screen.getByRole('button', { name: /tambah jumlah telur/i }));
+      await user.click(screen.getByLabelText(/^kerupuk/i));
+      await user.click(screen.getByLabelText(/^keju/i));
+      await user.click(screen.getByLabelText(/^keju/i)); // lepas
+      await user.click(confirmButton());
+
+      expect(emitted().confirm[0][0]).toEqual({ modifier_option_ids: [50, 52], modifier_quantities: { 50: 2, 52: 1 }, note: null });
+    });
   });
 });

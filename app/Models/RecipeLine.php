@@ -10,7 +10,7 @@ class RecipeLine extends Model
 {
     public $timestamps = false;
 
-    protected $fillable = ['recipe_id', 'material_id', 'quantity', 'shrinkage_pct', 'display_order'];
+    protected $fillable = ['recipe_id', 'block_id', 'material_id', 'quantity', 'shrinkage_pct', 'display_order'];
 
     protected function casts(): array
     {

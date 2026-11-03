@@ -36,6 +36,21 @@ describe('ReceiptModal modifier (084)', () => {
     expect(screen.getByText('Kurang manis, Boba')).toBeTruthy();
   });
 
+  // 089 — jumlah pilihan: server mengirim `label` ("Telur ×2"); baris lama tanpa `qty`/`label` tampil seperti dulu.
+  it('menampilkan jumlah pilihan sebagai "Nama ×N" hanya bila lebih dari satu', async () => {
+    renderModal([{
+      qty: 1, name: 'Nasi Goreng', price: '26000.00', line_total: '26000.00',
+      modifiers: [
+        { group: 'Topping', option: 'Telur', qty: 2, label: 'Telur ×2', price_delta: '6000.00' },
+        { group: 'Topping', option: 'Kerupuk', qty: 1, label: 'Kerupuk', price_delta: '1000.00' },
+        { group: 'Pedas', option: 'Sedang', price_delta: '0.00' },
+      ],
+    }]);
+
+    expect(await screen.findByText('Nasi Goreng')).toBeTruthy();
+    expect(screen.getByText('Telur ×2, Kerupuk, Sedang')).toBeTruthy();
+  });
+
   it('item tanpa modifier tidak menambah baris modifier', async () => {
     renderModal([{ qty: 1, name: 'Roti Bakar', price: '10000.00', line_total: '10000.00', modifiers: [] }]);
 

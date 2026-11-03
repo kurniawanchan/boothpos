@@ -44,3 +44,20 @@ export function materialsSummary(rows, t) {
   const n = (rows ?? []).length;
   return n ? t('dining_setup.option_materials_count', { n }) : '';
 }
+
+/**
+ * 089 — indeks baris yang menulis bahan yang SAMA lebih dari sekali DI DALAM satu pilihan (baris ke-2 dst.). Satu bahan
+ * boleh dipakai di banyak pilihan; hanya kembar dalam satu pilihan yang ditolak server, jadi klien memeriksa sebuah
+ * pilihan sendiri-sendiri dan tidak pernah membandingkan lintas pilihan.
+ */
+export function duplicateMaterialRows(rows) {
+  const seen = new Set();
+  const dup = [];
+  (rows ?? []).forEach((r, j) => {
+    const id = r.material_id ? Number(r.material_id) : null;
+    if (id === null) return;
+    if (seen.has(id)) dup.push(j);
+    seen.add(id);
+  });
+  return dup;
+}

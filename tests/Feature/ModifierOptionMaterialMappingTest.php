@@ -173,4 +173,43 @@ class ModifierOptionMaterialMappingTest extends TestCase
         $this->actingAs(User::factory()->create(['role' => 'cashier']), 'sanctum');
         $this->postJson('/api/v1/modifier-groups', $this->topping([['material_id' => $this->telur->id, 'quantity' => 1]]))->assertForbidden();
     }
+
+    /** 089 — satu bahan boleh dipakai di BANYAK pilihan (Level Pedas 1, 2, 4 → Cabe), tiap pilihan dengan jumlahnya sendiri. */
+    public function test_the_same_material_can_be_used_by_several_options(): void
+    {
+        $payload = ['name' => 'Level Pedas', 'selection_type' => 'single', 'options' => [
+            ['name' => '1', 'price_delta' => 0, 'materials' => [['material_id' => $this->telur->id, 'quantity' => 1]]],
+            ['name' => '2', 'price_delta' => 0, 'materials' => [['material_id' => $this->telur->id, 'quantity' => 2]]],
+            ['name' => '4', 'price_delta' => 0, 'materials' => [['material_id' => $this->telur->id, 'quantity' => 4]]],
+        ]];
+
+        $group = $this->create($payload);
+
+        $this->assertSame(['1.0000', '2.0000', '4.0000'], array_map(fn ($o) => $o['materials'][0]['quantity'], $group['options']));
+        $this->assertSame(3, ModifierOptionMaterial::where('material_id', $this->telur->id)->count());
+
+        // Menyimpan ulang (PUT) dengan bahan yang sama di banyak pilihan juga sah.
+        $this->putJson("/api/v1/modifier-groups/{$group['id']}", ['options' => array_map(fn ($o) => [
+            'id' => $o['id'], 'name' => $o['name'], 'price_delta' => 0, 'materials' => [['material_id' => $this->telur->id, 'quantity' => 3]],
+        ], $group['options'])])->assertOk();
+    }
+
+    /** 089 — kembar di dalam SATU pilihan tetap ditolak, dan galatnya menunjuk pilihan itu saja (bukan pilihan lain). */
+    public function test_a_duplicate_inside_one_option_is_rejected_and_points_at_that_option_only(): void
+    {
+        $payload = ['name' => 'Level Pedas', 'selection_type' => 'single', 'options' => [
+            ['name' => '1', 'price_delta' => 0, 'materials' => [['material_id' => $this->telur->id, 'quantity' => 1]]],
+            ['name' => '2', 'price_delta' => 0, 'materials' => [
+                ['material_id' => $this->telur->id, 'quantity' => 2],
+                ['material_id' => $this->telur->id, 'quantity' => 3],
+            ]],
+        ]];
+
+        $res = $this->postJson('/api/v1/modifier-groups', $payload)->assertStatus(422);
+
+        $errors = $res->json('errors');
+        $this->assertSame(['options.1.materials.1.material_id'], array_keys($errors));
+        $this->assertStringContainsString('"2"', $errors['options.1.materials.1.material_id'][0]);
+        $this->assertSame(0, ModifierOptionMaterial::count());
+    }
 }

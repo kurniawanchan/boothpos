@@ -164,6 +164,6 @@ class Product extends Model
 
     public function recipes(): HasMany
     {
-        return $this->hasMany(Recipe::class)->orderByDesc('version');
+        return $this->hasMany(Recipe::class)->orderBy('name')->orderBy('id');
     }
 }

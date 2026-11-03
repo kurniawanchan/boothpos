@@ -5,6 +5,7 @@ import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import { getTicket } from '../../api/kitchen';
 import { formatDateTime } from '../../utils/date';
+import { modifierLabel } from '../../utils/modifierRules';
 
 /**
  * 028 US4 — tampilan cetak tiket (FR-035): memuat tiket UTUH dari server lalu mencetaknya lewat
@@ -50,7 +51,7 @@ const printNow = () => window.print();
         <hr class="border-t border-dashed border-line" />
         <div v-for="item in ticket.items" :key="item.id" class="flex flex-col">
           <div class="flex gap-2 font-bold"><span>{{ item.qty }}×</span><span class="flex-1" :class="item.status === 'cancelled' ? 'line-through' : ''">{{ item.name }}</span></div>
-          <div v-if="item.modifiers.length" class="pl-6 text-[12px]">{{ item.modifiers.map((m) => m.option).join(', ') }}</div>
+          <div v-if="item.modifiers.length" class="pl-6 text-[12px]">{{ item.modifiers.map(modifierLabel).join(', ') }}</div>
           <div v-if="item.note" class="pl-6 text-[12px] italic">“{{ item.note }}”</div>
           <div v-if="item.status === 'cancelled'" class="pl-6 text-[12px] font-bold">{{ t('kitchen.cancelled') }}</div>
         </div>

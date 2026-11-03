@@ -105,7 +105,7 @@ object OrderMapper {
         name = l.name,
         basePrice = rp(l.unitPrice),
         qty = l.qty,
-        mods = l.modifiers.map { ModOption(it.option, rp(it.priceDelta)) },
+        mods = l.modifiers.map { ModOption(it.option, rp(it.priceDelta), qty = it.qty.coerceAtLeast(1)) },
         note = l.note.orEmpty(),
         fired = l.sent,
         lineTotal = rp(l.lineTotal),

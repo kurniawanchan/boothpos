@@ -26,6 +26,18 @@ describe('posCart modifiers', () => {
     expect(cartLineKey(line({ modifier_option_ids: [9, 5] }))).toBe('1:5,9');
   });
 
+  // 089 — jumlah pilihan ikut kunci baris: Telur x1 dan Telur x2 adalah dua baris (harga dan stok bahan berbeda).
+  it('treats the same option with a different quantity as a different line, and quantity 1 keeps the old key', () => {
+    expect(cartLineKey(line({ modifier_option_ids: [5], modifier_quantities: { 5: 1 } }))).toBe('1:5');
+    expect(cartLineKey(line({ modifier_option_ids: [5], modifier_quantities: { 5: 2 } }))).toBe('1:5x2');
+    const cart = usePosCartStore();
+    cart.add(line({ modifier_option_ids: [5], modifier_quantities: { 5: 1 }, sell_price: '23000.00' }));
+    cart.add(line({ modifier_option_ids: [5], modifier_quantities: { 5: 2 }, sell_price: '26000.00' }));
+    cart.add(line({ modifier_option_ids: [5], modifier_quantities: { 5: 2 }, sell_price: '26000.00' }));
+    expect(cart.items).toHaveLength(2);
+    expect(cart.items.map((i) => i.qty).sort()).toEqual([1, 2]);
+  });
+
   it('merges the same variant with the same options into one line', () => {
     const cart = usePosCartStore();
     cart.add(line({ modifier_option_ids: [5], sell_price: '23000.00' }));
@@ -75,8 +87,15 @@ describe('describeSelection', () => {
 
   it('returns group/option pairs for the picked ids only, in group order', () => {
     expect(describeSelection(groups, [9, 5])).toEqual([
-      { group: 'Level gula', option: 'Kurang manis' },
-      { group: 'Topping', option: 'Boba' },
+      { group: 'Level gula', option: 'Kurang manis', qty: 1, label: 'Kurang manis' },
+      { group: 'Topping', option: 'Boba', qty: 1, label: 'Boba' },
+    ]);
+  });
+
+  it('carries the quantity and a "Name xN" label when more than one', () => {
+    expect(describeSelection(groups, [9, 5], { 9: 2 })).toEqual([
+      { group: 'Level gula', option: 'Kurang manis', qty: 1, label: 'Kurang manis' },
+      { group: 'Topping', option: 'Boba', qty: 2, label: 'Boba ×2' },
     ]);
   });
 

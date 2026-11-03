@@ -10,6 +10,9 @@ import kotlinx.serialization.Serializable
 @Serializable data class ModifierDisplayDto(
     val group: String = "",
     val option: String = "",
+    // 089 — berapa kali pilihan dipesan (server lama tanpa kunci = 1) dan labelnya ("Telur ×2"). `price_delta` = kontribusi total.
+    val qty: Int = 1,
+    val label: String? = null,
     @SerialName("price_delta") val priceDelta: String = "0.00",
 )
 
@@ -124,11 +127,20 @@ import kotlinx.serialization.Serializable
     @SerialName("local_ref") val localRef: String,
 )
 
+/** 089 — satu pilihan modifier berjumlah. */
+@Serializable data class ModifierSelectionDto(@SerialName("option_id") val optionId: Long, val qty: Int)
+
+/**
+ * Menambah baris tab. Pilihan modifier dikirim SEBAGAI SALAH SATU: [modifierOptionIds] (jalur lama, tiap id = jumlah 1,
+ * tetap dipakai bila semua jumlah 1 supaya server lama berfungsi) atau [modifierSelections] (089, ada jumlah ≠ 1). Server
+ * menolak keduanya sekaligus (422), dan `encodeDefaults = false` membuat yang kosong tidak ikut terkirim.
+ */
 @Serializable data class AddLineRequestDto(
     @SerialName("variant_id") val variantId: Long,
     val qty: Int,
     val note: String? = null,
     @SerialName("modifier_option_ids") val modifierOptionIds: List<Long> = emptyList(),
+    @SerialName("modifier_selections") val modifierSelections: List<ModifierSelectionDto>? = null,
 )
 
 @Serializable data class UpdateLineRequestDto(val qty: Int? = null, val note: String? = null)

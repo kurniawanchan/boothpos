@@ -8,6 +8,7 @@ import '@phosphor-icons/web/duotone';
 import App from './App.vue';
 import router from './router';
 import { useAuthStore } from './stores/auth';
+import { listenForTokenRequests } from './utils/storage';
 import { useLicenseStore } from './stores/license';
 import { i18n, loadLocale } from './i18n';
 
@@ -24,6 +25,7 @@ const auth = useAuthStore();
 // navigation could resolve before the license status is known.
 const license = useLicenseStore();
 // 043 — 'id' dimuat sebelum mount (layar login, tamu, dan fallback); 'en' hanya bila pengguna memakainya (auth.restore).
+listenForTokenRequests(); // tab lain boleh meminta sesi ini (tab baru tak perlu login ulang)
 Promise.all([auth.restore(), license.restore(), loadLocale('id')]).finally(() => {
   app.mount('#app');
 });

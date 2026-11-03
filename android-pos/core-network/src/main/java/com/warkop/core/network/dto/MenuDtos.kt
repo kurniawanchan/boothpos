@@ -16,6 +16,10 @@ import kotlinx.serialization.Serializable
     val id: Long,
     val name: String,
     @SerialName("price_delta") val priceDelta: String = "0.00",
+    // 089 — jumlah per pilihan saat dipilih. `max_qty: null` = tanpa batas atas (tetap null, sama pola `max_select`);
+    // kunci yang hilang (server lama) tetap 1..1 = pilih atau tidak.
+    @SerialName("min_qty") val minQty: Int = 1,
+    @SerialName("max_qty") val maxQty: Int? = 1,
     // 2026-11-01 — porsi yang masih bisa dibuat dari bahannya di outlet ini (≥ 0); null = tanpa bahan (tak terbatas).
     val portions: Int? = null,
     val materials: List<ModifierOptionMaterialDto> = emptyList(),

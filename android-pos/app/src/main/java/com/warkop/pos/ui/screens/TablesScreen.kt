@@ -24,6 +24,7 @@ import com.warkop.pos.state.PosStore
 import com.warkop.pos.state.Sheet
 import com.warkop.pos.theme.pos
 import com.warkop.pos.ui.ErrorState
+import com.warkop.pos.ui.FitPill
 import com.warkop.pos.ui.Pill
 import com.warkop.pos.ui.friendlyLoadError
 import com.warkop.pos.ui.isOfflineError
@@ -93,22 +94,18 @@ private fun TableTile(store: PosStore, t: FloorTable) {
         onClick = { if (tab == null) store.show(Sheet.Pax(t.name)) else store.openOrder(tab.id.toString()) },
     ) {
         Column(Modifier.padding(if (compact) 12.dp else 16.dp)) {
-            // 084 — status ("Terisi"/"Tersedia"/…) kini pil kecil di SAMPING nomor meja; dulu teks besar di tengah kartu yang
-            // mendorong baris terakhir (nominal) keluar dari kartu sehingga terpotong.
+            // 084 — status ("Terisi"/"Tersedia"/…) berupa pil kecil, bukan teks besar di tengah kartu yang mendorong nominal keluar.
             val status = when {
                 tab == null -> "Tersedia"
                 tab.billPrinted -> "Bill tercetak"
                 other -> "Terminal ${tab.otherDevice}"
                 else -> "Terisi"
             }
-            // FlowRow: bila lebar kartu tak cukup untuk nomor + pil, pil turun ke baris bawah dan TEKSNYA UTUH ("Tersedia" dulu
-            // terpotong jadi "Tersedi" karena pil dijepit di samping nomor).
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                Text(t.name, fontSize = if (compact) 28.sp else 34.sp)
-                Pill(status, fg.copy(alpha = 0.18f), fg, Modifier.align(Alignment.CenterVertically))
-            }
+            // 2026-11-02 — status di BARIS ATAS, di atas nama meja, memenuhi lebar kartu dan memakai FitPill (teks mengecil
+            // agar utuh, tak pernah terpotong "Tersedi"/"Terminal …"); sebelumnya pil dijepit di samping nomor.
+            FitPill(status, fg.copy(alpha = 0.18f), fg, Modifier.fillMaxWidth())
+            Spacer(Modifier.height(6.dp))
+            Text(t.name, fontSize = if (compact) 28.sp else 34.sp)
             Spacer(Modifier.weight(1f))
             if (tab != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {

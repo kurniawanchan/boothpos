@@ -4,13 +4,17 @@ import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import { formatIDR, parseMoney } from '../../utils/money';
-import { describeRange, groupRange, isSelectionValid, portionCount, selectedOptionIds, selectionDelta } from '../../utils/modifierRules';
+import { allowsQuantity, canIncreaseQty, describeRange, groupRange, isGroupFull, isGroupLocked, isSelectionValid, optionQtyRange, portionCount, selectedOptionIds, selectionDelta } from '../../utils/modifierRules';
 
 /**
  * 028 US3 — memilih modifier + catatan saat menambah item ke tab. Aturan
  * (wajib/opsional, tunggal/jamak, min/maks) ditegakkan di sini hanya sebagai
  * kemudahan; harga berjalan juga hanya tampilan — server menghitung ulang dan
  * menolak pelanggaran.
+ *
+ * 089 — pilihan yang boleh dipesan lebih dari sekali (`max_qty` ≠ 1) menampilkan pemilih jumlah saat terpilih; jumlah
+ * awal = `min_qty`, dan batasnya dihormati di sini sebagai kemudahan saja (server memeriksa lagi). Melepas pilihan =
+ * mencabut centang (jumlah 0 tidak ada). Pilihan `max_qty = 1` tetap pilih/lepas tanpa pemilih jumlah.
  */
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -25,6 +29,7 @@ const emit = defineEmits(['close', 'confirm']);
 const { t } = useI18n();
 
 const selection = reactive({});
+const quantities = reactive({}); // id opsi terpilih → jumlah (hanya yang terpilih)
 const note = ref('');
 
 watch(
@@ -32,34 +37,63 @@ watch(
   () => {
     if (!props.open) return;
     Object.keys(selection).forEach((k) => delete selection[k]);
+    Object.keys(quantities).forEach((k) => delete quantities[k]);
     props.groups.forEach((g) => { selection[g.id] = []; });
     note.value = '';
   },
   { immediate: true }
 );
 
-const valid = computed(() => isSelectionValid(props.groups, selection));
+const valid = computed(() => isSelectionValid(props.groups, selection, quantities));
 const base = computed(() => parseMoney(String(props.basePrice)));
 // 2026-10-31 — grup "tiap pilihan = 1 porsi" menambah harga dasar per pilihan tambahan (sama dengan server).
-const unitPrice = computed(() => base.value + selectionDelta(props.groups, selection, base.value));
-const portions = computed(() => portionCount(props.groups, selection));
+const unitPrice = computed(() => base.value + selectionDelta(props.groups, selection, base.value, quantities));
+const portions = computed(() => portionCount(props.groups, selection, quantities));
 const negative = computed(() => unitPrice.value < 0);
 
 const chosen = (g, option) => (selection[g.id] ?? []).includes(option.id);
-const full = (g) => {
-  const [, max] = groupRange(g);
-  return max !== null && (selection[g.id] ?? []).length >= max;
-};
+const full = (g) => isGroupFull(g, selection[g.id], quantities);
+const locked = (g) => isGroupLocked(g, selection[g.id]);
+// 2026-11-02 — begitu pilihan berbeda sudah sebanyak "pilih n", semua jumlah kembali ke minimum (dan terkunci).
+function resetIfLocked(g) {
+  if (!isGroupLocked(g, selection[g.id])) return;
+  g.options.filter((o) => chosen(g, o)).forEach((o) => { quantities[o.id] = optionQtyRange(o)[0]; });
+}
+
+function select(g, option) {
+  quantities[option.id] = optionQtyRange(option)[0];
+}
+function deselect(option) {
+  delete quantities[option.id];
+}
 
 function toggle(g, option) {
   const current = selection[g.id] ?? [];
   if (g.selection_type === 'single') {
     // Pilih lagi opsi yang sama pada grup OPSIONAL = membatalkan pilihan.
-    selection[g.id] = chosen(g, option) && !g.is_required ? [] : [option.id];
+    const releasing = chosen(g, option) && !g.is_required;
+    current.forEach((id) => delete quantities[id]);
+    selection[g.id] = releasing ? [] : [option.id];
+    if (!releasing) select(g, option);
     return;
   }
-  if (chosen(g, option)) selection[g.id] = current.filter((id) => id !== option.id);
-  else if (!full(g)) selection[g.id] = [...current, option.id];
+  if (chosen(g, option)) {
+    selection[g.id] = current.filter((id) => id !== option.id);
+    deselect(option);
+  } else if (!full(g)) {
+    selection[g.id] = [...current, option.id];
+    select(g, option);
+    resetIfLocked(g);
+  }
+}
+
+// 089 — jumlah per pilihan: stepper hanya untuk pilihan yang boleh lebih dari satu.
+const qtyOf = (o) => quantities[o.id] ?? 1;
+const canDec = (g, o) => !locked(g) && qtyOf(o) > optionQtyRange(o)[0];
+const canInc = (g, o) => canIncreaseQty(g, o, selection[g.id], quantities);
+function bump(g, o, step) {
+  if (step < 0 ? !canDec(g, o) : !canInc(g, o)) return;
+  quantities[o.id] += step;
 }
 
 // Grup porsi: pilihan yang BUKAN porsi pertama (urutan opsi, seperti server) membawa harga dasar lagi.
@@ -69,24 +103,16 @@ const extraPortion = (g, o) => {
   return picked.length > 0 && picked[0].id !== o.id;
 };
 const deltaLabel = (g, o) => {
+  // Selisih per SATU unit pilihan (jumlah dipilih lewat stepper); porsi tambahan menambah harga dasar.
   const n = Number(o.price_delta) + (extraPortion(g, o) ? base.value : 0);
   if (!n) return '';
   return `${n > 0 ? '+' : '−'}${formatIDR(Math.abs(n))}`;
 };
 
-// 2026-10-31 (permintaan pemilik) — stok bahan per pilihan di outlet shift dan pemakaian per porsi. Hanya informasi:
-// penjualan tidak ditolak karena bahan (FR-014), jadi pilihan bersaldo habis tetap bisa dipilih, ditandai merah.
-const qty = (v) => {
-  const n = Number(v);
-  return `${n < 0 ? '−' : ''}${Math.abs(n).toLocaleString('id-ID', { maximumFractionDigits: 3 })}`;
-};
-const stockLines = (o) => (o.materials ?? []).filter((m) => m.on_hand !== null && m.on_hand !== undefined)
-  .map((m) => t('floor.tab.mod_stock_line', { material: m.name, stock: qty(m.on_hand), use: qty(m.quantity), unit: m.unit }));
-const lowStock = (o) => o.portions !== null && o.portions !== undefined && o.portions <= 0;
-
 function confirm() {
   if (!valid.value || negative.value) return;
-  emit('confirm', { modifier_option_ids: selectedOptionIds(selection), note: note.value.trim() || null });
+  const ids = selectedOptionIds(selection);
+  emit('confirm', { modifier_option_ids: ids, modifier_quantities: Object.fromEntries(ids.map((id) => [id, quantities[id] ?? 1])), note: note.value.trim() || null });
 }
 </script>
 
@@ -117,12 +143,24 @@ function confirm() {
           />
           <span class="flex flex-1 flex-col">
             <span class="font-semibold">{{ o.name }}</span>
-            <span
-              v-if="stockLines(o).length"
-              class="text-[11.5px]"
-              :class="lowStock(o) ? 'text-danger-text' : 'text-muted-3'"
-              :data-testid="`option-stock-${o.id}`"
-            >{{ stockLines(o).join(' · ') }}</span>
+          </span>
+          <!-- 089: pemilih jumlah hanya untuk pilihan terpilih yang boleh dipesan lebih dari sekali. -->
+          <span v-if="chosen(g, o) && allowsQuantity(o)" class="flex items-center gap-1.5" :data-testid="`qty-${o.id}`">
+            <button
+              type="button"
+              class="flex h-7 w-7 items-center justify-center rounded-md border border-line bg-white text-[15px] font-bold disabled:cursor-not-allowed disabled:opacity-40"
+              :aria-label="t('floor.tab.mod_qty_dec', { option: o.name })"
+              :disabled="!canDec(g, o)"
+              @click.stop.prevent="bump(g, o, -1)"
+            >−</button>
+            <span class="min-w-6 text-center text-[13.5px] font-bold tabular-nums" :data-testid="`qty-value-${o.id}`" aria-live="polite">{{ qtyOf(o) }}</span>
+            <button
+              type="button"
+              class="flex h-7 w-7 items-center justify-center rounded-md border border-line bg-white text-[15px] font-bold disabled:cursor-not-allowed disabled:opacity-40"
+              :aria-label="t('floor.tab.mod_qty_inc', { option: o.name })"
+              :disabled="!canInc(g, o)"
+              @click.stop.prevent="bump(g, o, 1)"
+            >+</button>
           </span>
           <span class="text-[12.5px] font-bold text-muted-4">{{ deltaLabel(g, o) }}</span>
         </label>

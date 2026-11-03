@@ -687,6 +687,13 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 - Tablet membaca pengaturan saat menyegarkan menu; tanpa jaringan memakai nilai terakhir. **APK lama** tidak mengenal pengaturan tampil dan tetap mencetak baris pajak; pasang APK baru untuk mengikuti.
 - Jejak: tiap perubahan tercatat di Log Aktivitas (entitas Setting, kunci `tax_rate`/`tax_label`/`tax_show`).
 
+### 13.10 Resep memotong stok bahan (fitur 089, 2026-11-02)
+- **Perilaku baru saat rilis:** resep yang selama ini hanya dipakai menghitung HPP kini **memotong stok bahan saat pesanan selesai**. Saldo bahan akan mulai turun setelah rilis; umumkan ke pemilik/inventori dan cek saldo awal bahan sebelum membuka toko.
+- Resep tidak berversi. Satu varian boleh punya beberapa resep aktif; semuanya dijumlahkan (stok dan harga modal). Arsip = sisa versi lama hasil migrasi (baca-saja, tidak memotong).
+- **Migrasi `2026_12_31_000001_make_recipes_unversioned` satu arah** (tidak memulihkan versi). Cadangkan dulu: `php artisan app:backup`. Migrasi melepas tautan varian dari versi yang tergantikan dan mencatatnya di Log Aktivitas (`recipe_migrated`). Resep MASA DEPAN pada varian yang sudah punya resep aktif dilepas tautannya (di model lama ia menggantikan yang aktif; di model baru keduanya akan terjumlah dan bahan terpotong dua kali) dan dicatat `recipe_migrated`: setelah rilis, cari entri itu di Log Aktivitas dan tautkan ulang resepnya bila memang pengganti. Resep masa depan pada varian TANPA resep aktif tetap tertaut dan mulai berlaku pada tanggalnya.
+- Pilihan modifier punya jumlah minimum/maksimum. **APK lama** hanya mengirim id (jumlah 1): pilihan dengan minimum > 1 ditolak 422 di APK lama; pasang APK baru untuk memesan dengan jumlah.
+- Pesan "Bahan yang sama tidak boleh dipilih dua kali" kini hanya muncul bila bahan yang sama ditulis dua kali di DALAM satu pilihan.
+
 ## 14. Katalog WJM dari Odoo (fitur 068, 2026-10-24)
 
 Mengisi katalog Warkop WJM 3 (10 kategori, 79 item, 111 varian, 57 foto) dari ekspor Odoo ke mode LIVE dan/atau DEMO. Hanya berjalan bila dipanggil; **tidak** ikut `db:seed` bawaan. Sumbernya `database/seeders/data/wjm-odoo/catalog.json`, dibangkitkan dari `specs/068-odoo-catalog-seeder/catalog-mapping.md`. Selama tabel itu belum disetujui pemilik (status `DRAF`), pengisian sungguhan ditolak; pratinjau tetap bisa.

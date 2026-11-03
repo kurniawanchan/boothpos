@@ -10,6 +10,7 @@ import com.warkop.core.domain.ApiError
 import com.warkop.core.network.ApiClient
 import com.warkop.core.network.ApiErrorMapper
 import com.warkop.core.network.dto.AddLineRequestDto
+import com.warkop.core.network.dto.ModifierSelectionDto
 import com.warkop.core.network.dto.CashMovementRequest
 import com.warkop.core.network.dto.MoveTabRequestDto
 import com.warkop.core.network.dto.OverrideRequest
@@ -341,13 +342,12 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
 
     override suspend fun tab(id: String): Order = OrderMapper.tab(apiCall { api().tab(id.toLong()) }, deviceId)
 
-    override suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String): Order =
-        OrderMapper.tab(
-            apiCall {
-                api().addLine(tabId.toLong(), key, AddLineRequestDto(variantId = variantId.toLong(), qty = qty, note = note.ifBlank { null }, modifierOptionIds = modifierIds))
-            },
-            deviceId,
-        )
+    override suspend fun addLine(tabId: String, variantId: String, qty: Int, note: String, modifierIds: List<Long>, key: String, modifierQtys: Map<Long, Int>): Order {
+        // 089 — jumlah ≠ 1 hanya bisa dikirim sebagai `modifier_selections`; selain itu tetap daftar id supaya server lama
+        // dan tablet baru + server lama berfungsi. Server menolak keduanya sekaligus, jadi hanya satu yang diisi.
+        val body = addLineBody(variantId.toLong(), qty, note, modifierIds, modifierQtys)
+        return OrderMapper.tab(apiCall { api().addLine(tabId.toLong(), key, body) }, deviceId)
+    }
 
     override suspend fun updateLine(tabId: String, lineId: Int, qty: Int, note: String, key: String): Order =
         OrderMapper.tab(
@@ -496,4 +496,17 @@ class RemoteBackend(private val vault: SecretStore, private val log: (String) ->
             else -> "CSH"
         }
     }
+}
+
+/**
+ * 089 — badan `POST /tabs/{id}/lines`. Jumlah pilihan ≠ 1 hanya bisa dikirim sebagai `modifier_selections`; selain itu tetap
+ * daftar id (kompatibel dengan server lama). Hanya SATU dari keduanya yang berisi: server menolak keduanya sekaligus (422).
+ */
+internal fun addLineBody(variantId: Long, qty: Int, note: String, modifierIds: List<Long>, modifierQtys: Map<Long, Int>): AddLineRequestDto {
+    val counted = modifierQtys.any { it.value != 1 }
+    return AddLineRequestDto(
+        variantId = variantId, qty = qty, note = note.ifBlank { null },
+        modifierOptionIds = if (counted) emptyList() else modifierIds,
+        modifierSelections = if (counted) modifierIds.map { ModifierSelectionDto(it, modifierQtys[it] ?: 1) } else null,
+    )
 }

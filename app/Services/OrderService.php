@@ -101,7 +101,7 @@ class OrderService
                 // 084 — pilihan modifier divalidasi dan di-snapshot SERVER-side oleh ModifierResolver (satu-satunya
                 // tempat aturannya). Harga per unit = harga outlet + selisih; klien tidak pernah mengirim harga.
                 // Varian tanpa grup menghasilkan snapshot kosong dan harga yang sama seperti sebelumnya.
-                $resolved = $this->modifiers->resolve($variant, $itemInput['modifier_option_ids'] ?? []);
+                $resolved = $this->modifiers->resolve($variant, $this->modifiers->selectionFrom($itemInput) ?? []);
                 $unitPrice = $resolved['unit_price'];
                 $lineValue = $unitPrice * $qty;
 

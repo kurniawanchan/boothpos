@@ -15,6 +15,7 @@ import DetailPanel from '../page/DetailPanel.vue';
 import StatusPill from '../ui/StatusPill.vue';
 import ErrorState from '../ui/ErrorState.vue';
 import BaseButton from '../ui/BaseButton.vue';
+import { modifierLabel } from '../../utils/modifierRules';
 
 /**
  * 044-sales-table-view (US3) — detail order TERBUKA di sisi kanan halaman Sales. STRICTLY HANYA-BACA: tidak ada
@@ -211,7 +212,7 @@ const canOpenCashier = computed(() => phase.value === 'live' && auth.canAccessMe
               <td class="px-3 py-2.5">
                 <span class="font-bold" :class="{ 'line-through': line.prep_status === 'cancelled' }">{{ line.name }}</span>
                 <ul v-if="line.modifiers?.length" class="mt-0.5 flex flex-wrap gap-x-2 text-[12px] text-muted-3">
-                  <li v-for="(m, i) in line.modifiers" :key="i">{{ m.option }}</li>
+                  <li v-for="(m, i) in line.modifiers" :key="i">{{ modifierLabel(m) }}</li>
                 </ul>
                 <p v-if="line.note" class="mt-0.5 text-[12px] italic text-muted-3">“{{ line.note }}”</p>
               </td>
