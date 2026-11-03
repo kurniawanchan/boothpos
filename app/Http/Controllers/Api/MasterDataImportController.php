@@ -93,7 +93,8 @@ class MasterDataImportController extends Controller
             ], 422);
         }
 
-        $result = $this->importService->import(
+        try {
+            $result = $this->importService->import(
             absolutePath: $absolutePath,
             user: $request->user(),
             dryRun: $request->boolean('dry_run'),
@@ -104,6 +105,13 @@ class MasterDataImportController extends Controller
             // .xlsx di atas (rule Laravel + pembuktian ulang di controller).
             images: $request->file('images', []),
         );
+        } catch (\Throwable $e) {
+            // Penolakan izin per sheet (AuthorizationException) atau galat tak terduga: berkas yang belum diterapkan tidak
+            // boleh tertinggal di penyimpanan (temuan tinjauan keamanan 2026-11-03).
+            Storage::disk('local')->delete($storedPath);
+
+            throw $e;
+        }
 
         // Berkas sumber hanya disimpan bila impornya BENAR-BENAR diterapkan
         // — sebagai jejak audit atas perubahan massal (mitigasi risiko
