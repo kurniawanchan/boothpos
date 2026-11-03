@@ -45,6 +45,8 @@ class SalesTransactionsService
             ->when(! empty($filters['date_from']), fn ($q) => $q->where('business_date', '>=', \Illuminate\Support\Carbon::parse($filters['date_from'])->toDateString()))
             ->when(! empty($filters['date_to']), fn ($q) => $q->where('business_date', '<=', \Illuminate\Support\Carbon::parse($filters['date_to'])->toDateString()))
             ->when($ids !== null, fn ($q) => $q->whereIn('id', $ids))
+            // 090 — penanda asal (`pos` | `self_service`); hanya menyaring daftar/ekspor, tidak mengubah angka laporan.
+            ->when(in_array($filters['source'] ?? null, ['pos', 'self_service'], true), fn ($q) => $q->where('source', $filters['source']))
             ->get();
 
         $rows = $orders->map(fn (Order $o) => $this->orderRow($o, $withMargin, $detail))
@@ -123,6 +125,9 @@ class SalesTransactionsService
             'payment_methods' => $order->payments->pluck('method')->unique()->values(),
             'payment_state' => $this->paymentState($order->payments),
             'channel' => $order->channel,
+            // 090 — cara layanan (Dine-In/Take Away/ritel lama) dan asal order (POS atau pesan mandiri).
+            'service_type' => $order->service_type,
+            'source' => $order->source,
             // 048 / S4 — refund: baris tetap tampil dengan tanda `refunded`; total halaman mengecualikannya bila
             // tanggal refund berada dalam rentang yang dipilih (lihat useSalesFilters).
             'refunded' => $order->refunded_at !== null,

@@ -59,6 +59,8 @@ const searchResults = ref(null);
 const loadingGrid = ref(false);
 
 const discount = ref(0);
+// 090 / US5 — cara layanan transaksi ini; bawaan Dine-In, kembali ke bawaan setelah tiap transaksi.
+const serviceType = ref('dine_in');
 // 048 — pratinjau total (termasuk pajak) sebelum order dibuat; rumusnya sama dengan server. Setelah POST /orders,
 // struk dan laporan membaca total dari server.
 const settings = useSettingsStore();
@@ -255,6 +257,7 @@ async function handlePaymentSubmit(payments) {
       session_id: session.value.id,
       customer_id: selectedCustomer.value?.id ?? null,
       local_ref: localRef.value,
+      service_type: serviceType.value,
       discount_amount: toMoneyString(discount.value),
       items: cart.items.map((i) => ({ variant_id: i.variant_id, qty: i.qty, ...(i.modifier_option_ids?.length ? modifierPayload(i.modifier_option_ids, i.modifier_quantities) : {}) })),
       payments,
@@ -265,6 +268,7 @@ async function handlePaymentSubmit(payments) {
     showReceipt.value = true;
     cart.clear();
     discount.value = 0;
+    serviceType.value = 'dine_in';
     selectedCustomer.value = null;
   } catch (err) {
     if (err.isValidation) {
@@ -466,10 +470,12 @@ async function resumeDraft(draftId) {
 
     <PosCartPanel
       :discount="discount"
+      :service-type="serviceType"
       :customer-name="selectedCustomer?.name ?? ''"
       :can-checkout="canCheckout"
       :checkout-blocked-reason="checkoutBlockedReason"
       @update:discount="discount = $event"
+      @update:service-type="serviceType = $event"
       @pick-customer="showCustomerPicker = true"
       @pay="openPayment"
     />

@@ -21,6 +21,22 @@ const routes = [
     meta: { public: true },
   },
   {
+    // 090 — halaman PUBLIK pesan mandiri (pelanggan memindai QR meja). Di luar AppShell: tanpa sidebar, tanpa login.
+    // `selfService` membuat beforeEach melewatinya sebelum gerbang lisensi/auth — instalasi yang terkunci dijawab server
+    // dengan 423 dan halaman menampilkannya sendiri; pelanggan tidak boleh dilempar ke layar aktivasi/login staf.
+    // `/pesan/struk/...` lebih spesifik dari `/pesan/:token`, jadi dicocokkan lebih dulu oleh vue-router.
+    path: '/pesan/struk/:receiptToken',
+    name: 'self-service-receipt',
+    component: () => import('../views/SelfOrderReceiptView.vue'),
+    meta: { public: true, selfService: true },
+  },
+  {
+    path: '/pesan/:token',
+    name: 'self-service',
+    component: () => import('../views/SelfOrderView.vue'),
+    meta: { public: true, selfService: true },
+  },
+  {
     path: '/',
     component: () => import('../components/layout/AppShell.vue'),
     meta: { requiresAuth: true },
@@ -252,6 +268,11 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to) => {
+  // 090 — halaman pelanggan tidak menyentuh lisensi/auth staf sama sekali (lihat komentar pada rute `/pesan`).
+  if (to.meta.selfService) {
+    return true;
+  }
+
   const license = useLicenseStore();
 
   // 018-license-activation — dicek LEBIH DULU, sebelum pemeriksaan auth

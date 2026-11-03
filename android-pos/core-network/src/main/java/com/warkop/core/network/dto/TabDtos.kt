@@ -185,3 +185,6 @@ import kotlinx.serialization.Serializable
 
 /** 084 — POST /tabs/{id}/move: pindah/ubah meja pesanan (terbuka maupun selesai). */
 @Serializable data class MoveTabRequestDto(@SerialName("table_id") val tableId: Long)
+
+/** 090 / US5 — PUT /tabs/{id}/service-type. Nilai: `dine_in` | `takeaway`. */
+@Serializable data class UpdateServiceTypeRequestDto(@SerialName("service_type") val serviceType: String)

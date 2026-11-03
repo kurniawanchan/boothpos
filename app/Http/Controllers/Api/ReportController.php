@@ -200,6 +200,7 @@ class ReportController extends Controller
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
             'include_voided' => ['nullable', 'boolean'],
+            'source' => ['nullable', 'in:pos,self_service'],
             'keys' => ['nullable', 'array', 'max:5000'],
             'keys.*' => ['string', 'regex:/^order:\d+$/'],
         ]);

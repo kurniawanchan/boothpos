@@ -785,3 +785,25 @@ Setara: `php artisan db:seed --class=Wjm2CatalogSeeder`.
   diaktivasi ulang dengan kunci lisensi (lihat catatan restore di CLAUDE.md).
 - Simulasi (tanpa `--force`) TIDAK memeriksa baris LIVE yang merujuk baris DEMO;
   pembatalan karena rujukan lintas mode itu hanya terjadi saat `--force`.
+
+## 15. Pesan mandiri via QR meja (fitur 090, 2026-11-03)
+
+**Alamat dasar QR.** QR meja berisi alamat halaman pelanggan, jadi harus bisa dibuka dari ponsel pelanggan: **bukan `localhost`**. Atur di
+Pengaturan → Self-Service ("Alamat dasar QR meja"), mis. `http://192.168.1.10:8010` (IP LAN laptop toko, ponsel di Wi-Fi yang sama) atau domain toko.
+Kosong = dipakai alamat halaman staf bila bukan localhost. Mengganti alamat membuat QR yang sudah dicetak menunjuk alamat lama: cetak ulang.
+`http://<IP-LAN>` cukup: kamera dan galeri memakai `<input type=file>`, tidak butuh HTTPS.
+
+**Prasyarat per outlet.** Satu kanal pembayaran QRIS aktif dengan gambar; meja aktif; pengguna yang mengirim ke dapur punya **shift terbuka di outlet itu**.
+Verifikasi/Tolak butuh izin `payment.qris.verify` (peran bawaan Owner/Admin). **Peran Kasir bawaan TIDAK memegangnya**: beri izin itu di layar Peran bila
+kasir harus memverifikasi sendiri; tanpa itu kasir hanya bisa Kirim ke dapur pesanan yang sudah diverifikasi pemilik/admin.
+
+**QR bocor atau hilang.** Restaurant Setup → Buat QR pada meja itu → **Buat ulang QR**: nonce meja berganti, QR lama langsung `404 qr_invalid`.
+
+**Pembersihan.** `php artisan self-service:purge-orphan-proofs` menghapus foto bukti unggahan publik yang tak pernah dikirim (> 24 jam). Sudah dijadwalkan harian di
+`routes/console.php`, tetapi butuh `php artisan schedule:run` tiap menit (cron/Task Scheduler) di mesin toko; tanpa itu jalankan perintahnya manual berkala.
+
+**Batas laju (nilai awal, belum diukur).** baca 120/mnt per IP; kirim 5/mnt per IP+meja dan 20/jam per IP; unggah bukti 10/mnt per IP. Di toko yang semua pelanggannya
+di belakang satu IP (NAT), 20/jam per IP bisa terlalu ketat: naikkan di `AppServiceProvider::boot` bila pelanggan sah mulai ditolak (429).
+
+**Android.** Tablet memberi tahu pesanan baru ("Pesanan dari meja X") hanya saat aplikasi di layar depan; memeriksa dan memverifikasi dikerjakan di web
+(Penjualan → Self-Service). Suara dapat dimatikan di layar Koneksi (per perangkat).

@@ -29,7 +29,11 @@ class AppContainer(app: Application) {
 
     /** 050 / T016 — satu-satunya printer service. Antrean dan pilihan printer disimpan di filesDir (tidak di-backup). */
     /** 061 / T013 — satu mesin ucap per proses (dibuat sekali, seperti printer). */
-    val queueAnnouncer = com.warkop.pos.audio.QueueAnnouncer(com.warkop.pos.audio.TtsSpeechEngine(app))
+    private val speechEngine = com.warkop.pos.audio.TtsSpeechEngine(app)
+    val queueAnnouncer = com.warkop.pos.audio.QueueAnnouncer(speechEngine)
+
+    /** 090 / US8 — antrean "Pesanan dari meja X" memakai mesin ucap yang SAMA (satu TextToSpeech per proses). */
+    val orderCalls = com.warkop.pos.audio.OrderCallQueue(speechEngine)
 
     val printer = PrinterService(
         context = app,

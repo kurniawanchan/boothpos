@@ -51,6 +51,16 @@ class AppServiceProvider extends ServiceProvider
             \Illuminate\Cache\RateLimiting\Limit::perMinute(30)->by('ip:'.$r->ip()),
         ]);
 
+        // 090 — pesan mandiri pelanggan (rute publik tanpa token, pengecualian Konstitusi IV). Pembatas BERNAMA sesuai aturan 078:
+        // `throttle:N,1` pada rute tanpa token memakai kunci domain|ip sehingga semua rute tanpa token berbagi SATU hitungan.
+        // Angka awal adalah ASUMSI (belum diukur) dan disetel setelah uji beban ringan (tasks.md, fase Polish).
+        \Illuminate\Support\Facades\RateLimiter::for('self-service-read', fn (\Illuminate\Http\Request $r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(120)->by('ss-read|'.$r->ip()));
+        \Illuminate\Support\Facades\RateLimiter::for('self-service-submit', fn (\Illuminate\Http\Request $r) => [
+            \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by('ss-submit|'.$r->ip().'|'.sha1((string) $r->route('token'))),
+            \Illuminate\Cache\RateLimiting\Limit::perHour(20)->by('ss-submit-ip|'.$r->ip()),
+        ]);
+        \Illuminate\Support\Facades\RateLimiter::for('self-service-proof', fn (\Illuminate\Http\Request $r) => \Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by('ss-proof|'.$r->ip()));
+
         // 045 Stage 3 — relasi outlet × produk dibuat otomatis untuk SETIAP jalur pembuatan produk/outlet.
         \App\Models\Product::created(fn ($product) => app(\App\Services\OutletMenuService::class)->materializeForProduct($product));
         \App\Models\Outlet::created(fn ($outlet) => app(\App\Services\OutletMenuService::class)->materializeForOutlet($outlet));

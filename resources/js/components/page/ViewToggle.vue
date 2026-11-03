@@ -8,7 +8,8 @@ import { nextTick, ref } from 'vue';
  *
  * Ukuran ringkas (garis tipis, tinggi ~30 px) mengikuti toolbar daftar desain Back Office; segmen aktif terisi warna brand.
  *
- * options: [{ value, label, icon? }]   icon = kelas Phosphor mis. 'ph-squares-four'
+ * options: [{ value, label, icon?, badge? }]   icon = kelas Phosphor mis. 'ph-squares-four'; badge = angka kecil
+ * (mis. jumlah pesanan menunggu) yang hanya tampil bila > 0
  */
 const props = defineProps({
   options: { type: Array, required: true },
@@ -51,6 +52,11 @@ function onKeydown(e, index) {
     >
       <i v-if="opt.icon" class="ph-duotone text-[14px]" :class="opt.icon" aria-hidden="true"></i>
       {{ opt.label }}
+      <span
+        v-if="opt.badge > 0"
+        class="min-w-[18px] rounded-full bg-danger-text px-1.5 text-center text-[11px] font-extrabold leading-[18px] text-white"
+        :data-testid="`view-badge-${opt.value}`"
+      >{{ opt.badge }}</span>
     </button>
   </div>
 </template>

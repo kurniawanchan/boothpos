@@ -17,6 +17,7 @@ import com.warkop.pos.ui.autoDark
 private const val TOTALS_KEY = "counter_totals_visible"
 private const val SPLIT_KEY = "counter_split_fraction"
 private const val RAIL_KEY = "rail_visible"
+private const val SELF_SERVICE_VOICE_KEY = "self_service_voice"
 
 /** Satu activity; seluruh navigasi dipegang PosStore (lihat state/PosStore.kt) mengikuti prototipe desain. */
 class MainActivity : ComponentActivity() {
@@ -41,7 +42,15 @@ class MainActivity : ComponentActivity() {
                     read = { if (prefs.contains(RAIL_KEY)) prefs.getBoolean(RAIL_KEY, true) else null },
                     write = { prefs.edit().putBoolean(RAIL_KEY, it).apply() },
                 )
-                return PosStore(container.backend, container.backend, container.printer, totalsPref = totals, splitPref = split, announcer = container.queueAnnouncer, railPref = rail) as T
+                // 090 / US8 — suara notifikasi pesanan mandiri per perangkat.
+                val selfService = com.warkop.pos.state.SelfServicePreference(
+                    read = { if (prefs.contains(SELF_SERVICE_VOICE_KEY)) prefs.getBoolean(SELF_SERVICE_VOICE_KEY, true) else null },
+                    write = { prefs.edit().putBoolean(SELF_SERVICE_VOICE_KEY, it).apply() },
+                )
+                return PosStore(
+                    container.backend, container.backend, container.printer, totalsPref = totals, splitPref = split, announcer = container.queueAnnouncer,
+                    railPref = rail, orderCalls = container.orderCalls, selfServicePref = selfService,
+                ) as T
             }
         }
     }
@@ -50,10 +59,12 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         store.startHeartbeat()
+        store.startSelfServiceAlerts()
     }
 
     override fun onStop() {
         store.stopHeartbeat()
+        store.stopSelfServiceAlerts()
         super.onStop()
     }
 

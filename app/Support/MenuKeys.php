@@ -45,6 +45,8 @@ class MenuKeys
         'floor' => 'Lantai & Tab',
         'kitchen' => 'Dapur & Bar',
         'dining_setup' => 'Pengaturan Restoran',
+        // 090-self-service-qr-ordering — tab Self-Service di Penjualan (verifikasi, tolak, kirim ke dapur)
+        'self_service' => 'Pesan Mandiri',
     ];
 
     /**

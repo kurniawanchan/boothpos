@@ -325,6 +325,16 @@ fun SyncScreen(store: PosStore) {
                 com.warkop.pos.ui.appVersionCell(com.warkop.pos.state.APP_VERSION, androidx.compose.ui.platform.LocalContext.current.getString(com.warkop.pos.R.string.app_build)),
             )
             cells.chunked(if (windowSize() == Size.COMPACT) 2 else 5).forEach { row -> Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) { row.forEach { (a, b, c) -> Cell(a, b, c, Modifier.weight(1f).heightIn(min = 118.dp)) } } }
+            // 090 / US8 — suara notifikasi pesanan mandiri (per perangkat). Mematikannya tidak mematikan spanduk.
+            Surface(Modifier.fillMaxWidth().padding(bottom = 10.dp), shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Suara pesanan mandiri", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Text("Mengucapkan \"Pesanan dari meja …\" saat pelanggan mengirim pesanan.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = store.selfServiceVoice, onCheckedChange = { store.changeSelfServiceVoice(it) })
+                }
+            }
             // 050 / T024 — printer sungguhan menggantikan baris "Belum tersedia".
             store.printer?.let { printer -> Spacer(Modifier.height(18.dp)); PrinterPanel(printer) }
         }

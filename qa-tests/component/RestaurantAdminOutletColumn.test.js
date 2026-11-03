@@ -69,10 +69,10 @@ describe('Outlet column in Restaurant Setup tables (071 US1)', () => {
   it('reloads with the outlet filter given by the page, without the top-bar header', async () => {
     const { rerender } = renderWith(TablesAdmin, TWO, { outletIds: [2] });
     await screen.findAllByText('D1');
-    expect(listDiningTables).toHaveBeenLastCalledWith({ outlet_id: [2] }, { skipOutletHeader: true });
+    expect(listDiningTables).toHaveBeenLastCalledWith({ page: 1, per_page: 25, outlet_id: [2] }, { skipOutletHeader: true });
 
     await rerender({ outletIds: [] });
 
-    await vi.waitFor(() => expect(listDiningTables).toHaveBeenLastCalledWith({}, { skipOutletHeader: true }));
+    await vi.waitFor(() => expect(listDiningTables).toHaveBeenLastCalledWith({ page: 1, per_page: 25 }, { skipOutletHeader: true }));
   });
 });

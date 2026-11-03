@@ -1086,3 +1086,12 @@ Poin berikut masih berstatus ASSUMPTION dan perlu dikonfirmasi:
 4. Siapa yang mengoperasikan sistem saat event, dan apakah orangnya sama dengan developer?
 5. Apakah tersedia laptop cadangan bila perangkat utama bermasalah di tengah event?
 6. Apakah QR e-wallet yang dipakai berupa QR statis, dan atas nama akun apa?
+
+---
+
+> **Catatan bertanggal 2026-11-03 (fitur 090, atas permintaan pemilik produk) — kapabilitas baru, bukan pembatalan cakupan lama.**
+> Pelanggan kini dapat memesan sendiri dengan memindai QR meja: halaman publik mobile-first, pembayaran HANYA QRIS dengan foto bukti,
+> tanpa diskon. Pesanan **ditahan** sampai staf memverifikasi pembayaran lalu menekan "Kirim ke dapur" (baru saat itu order, stok, dan tiket
+> dapur dibuat). Ini TIDAK menghidupkan kembali apa pun yang dipotong di §10.2/§10.3 (bukan portal artist, bukan katalog tercetak). Tambahan:
+> pilihan Dine-In / Take Away pada POS web dan Android, QR per meja (dengan filter dan paginasi di Restaurant Setup), dan notifikasi suara di
+> tablet Android. Rute publik tanpa token adalah pengecualian Konstitusi IV yang dicatat (lihat `specs/090-self-service-qr-ordering/plan.md`).

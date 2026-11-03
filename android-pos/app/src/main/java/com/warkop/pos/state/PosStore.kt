@@ -140,6 +140,10 @@ class PosStore(
     private val announcer: QueueAnnouncer = QueueAnnouncer(SilentSpeech),
     /** 084 — tampil/sembunyi sidebar (hamburger); penyimpanan perangkat di Android, in-memory di uji. */
     private val railPref: RailPreference = RailPreference({ null }, {}),
+    /** 090 / US8 — antrean ucapan "Pesanan dari meja X"; default diam supaya uji tidak butuh mesin ucap. */
+    private val orderCalls: com.warkop.pos.audio.OrderCallQueue = com.warkop.pos.audio.OrderCallQueue(SilentSpeech),
+    /** 090 / US8 — suara notifikasi pesanan mandiri hidup/mati per perangkat. */
+    private val selfServicePref: SelfServicePreference = SelfServicePreference({ null }, {}),
 ) : ViewModel() {
     /** 084 — sidebar navigasi tampil (layar lebar). Pilihan tersimpan per perangkat. */
     var railVisible by mutableStateOf(railPref.visible); private set
@@ -189,7 +193,7 @@ class PosStore(
     fun refreshCurrent() {
         val job: Job = when (dest) {
             Dest.TABLES -> fetchFloorNow()
-            Dest.ORDERS -> loadClosed()
+            Dest.ORDERS -> if (ordersTab == 2) loadSelfServiceQueue() else loadClosed()
             Dest.SHIFT, Dest.XREPORT, Dest.CLOSE_SHIFT -> refreshShiftReport()
             Dest.SYNC -> viewModelScope.launch { printer?.checkConnection() }
             Dest.MATERIALS -> loadMaterials()
@@ -262,6 +266,89 @@ class PosStore(
     // 048 / US6 — keadaan dari POST /devices/heartbeat. Tidak ada antrean atau cetak tiruan: yang tampil hanya angka server.
     var heartbeat by mutableStateOf(HeartbeatState()); private set
     private val heartbeatWorker = HeartbeatWorker(viewModelScope, tick = { heartbeatOnce() })
+
+    // 090 / US8 — pesanan mandiri baru: spanduk yang bertahan sampai ditutup, jumlah menunggu, dan suara per perangkat.
+    var selfServiceNotice by mutableStateOf<List<com.warkop.pos.model.SelfServiceAlert>>(emptyList()); private set
+    var selfServiceWaiting by mutableStateOf(0); private set
+    var selfServiceVoice by mutableStateOf(selfServicePref.voiceEnabled); private set
+    fun changeSelfServiceVoice(on: Boolean) { selfServiceVoice = on; selfServicePref.voiceEnabled = on }
+    fun dismissSelfServiceNotice() { selfServiceNotice = emptyList() }
+
+    // ---------- 090 — tab Mandiri di Pesanan: antrean, detail, verifikasi, tolak, kirim ke dapur ----------
+    var selfServiceQueue by mutableStateOf<Load<com.warkop.pos.model.SelfServiceQueue>>(Load.Idle); private set
+    /** Pesanan mandiri yang rinciannya sedang dibuka (lembar detail); null = tertutup. */
+    var selfServiceOpen by mutableStateOf<com.warkop.pos.model.SelfServiceOrderView?>(null); private set
+    var selfServiceBusy by mutableStateOf(false); private set
+
+    fun loadSelfServiceQueue(): Job {
+        val b = backend ?: return Job().apply { complete() }
+        if (selfServiceQueue !is Load.Ready) selfServiceQueue = Load.Loading
+        return viewModelScope.launch {
+            selfServiceQueue = try {
+                val q = retryNetwork { b.selfServiceQueue() }
+                selfServiceWaiting = q.pending
+                Load.Ready(q)
+            } catch (e: ApiError) {
+                if (selfServiceQueue is Load.Ready) selfServiceQueue else Load.Failed(e)
+            }
+        }
+    }
+
+    fun openSelfServiceOrder(row: com.warkop.pos.model.SelfServiceOrderView) {
+        val b = backend ?: return
+        selfServiceOpen = row
+        viewModelScope.launch {
+            try { selfServiceOpen = retryNetwork { b.selfServiceOrder(row.id) } }
+            catch (e: ApiError) { say(e.message) }
+        }
+    }
+
+    fun closeSelfServiceOrder() { selfServiceOpen = null }
+
+    /** Satu pintu untuk tiga tindakan staf. Hasil server (status baru) menggantikan lembar dan antrean dimuat ulang. */
+    private fun selfServiceAction(done: String, call: suspend (PosBackend) -> com.warkop.pos.model.SelfServiceOrderView) {
+        val b = backend ?: return
+        if (selfServiceBusy || modeBlocked()) return
+        selfServiceBusy = true
+        viewModelScope.launch {
+            try {
+                // Tulis tidak diulang otomatis: verifikasi/kirim ke dapur bukan idempoten di sisi tablet.
+                selfServiceOpen = call(b)
+                say(done)
+                loadSelfServiceQueue()
+            } catch (e: ApiError) {
+                if (e is ApiError.Network) conn = Conn.OFFLINE
+                onShiftRefused(e)
+                if (!isModeChange(e)) say(writeErrorText(e))
+            } finally { selfServiceBusy = false }
+        }
+    }
+
+    fun verifySelfService(id: Long, reference: String) = selfServiceAction("Pembayaran terverifikasi.") { it.verifySelfService(id, reference.trim()) }
+    fun rejectSelfService(id: Long, reason: String) = selfServiceAction("Pesanan ditolak.") { it.rejectSelfService(id, reason.trim()) }
+    fun dispatchSelfService(id: Long) = selfServiceAction("Pesanan dikirim ke dapur.") { it.dispatchSelfService(id) }
+
+    private val selfServicePoller = SelfServicePoller(
+        viewModelScope,
+        // Belum masuk (tanpa sesi) atau tanpa backend: tidak polling, tidak dihitung gagal.
+        fetch = { after -> backend?.takeIf { session != null }?.selfServiceAlerts(after) },
+        onResult = ::onSelfServiceResult,
+    )
+
+    /** Dipanggil saat aplikasi masuk/keluar latar depan, bersama heartbeat. */
+    fun startSelfServiceAlerts() = selfServicePoller.start()
+    fun stopSelfServiceAlerts() = selfServicePoller.stop()
+
+    /**
+     * Hasil polling. `announce=false` = catch-up (app baru dibuka/tersambung lagi): hanya jumlah menunggu, tanpa suara atau
+     * spanduk lama. Pesanan baru: spanduk (maks 5 terakhir) dan, bila suara hidup, satu ucapan per pesanan berurutan.
+     */
+    internal fun onSelfServiceResult(result: com.warkop.pos.model.SelfServiceAlerts, announce: Boolean) {
+        selfServiceWaiting = result.waiting
+        if (!announce || result.items.isEmpty()) return
+        selfServiceNotice = (selfServiceNotice + result.items).takeLast(5)
+        if (selfServiceVoice) result.items.forEach { orderCalls.enqueue(com.warkop.pos.audio.SelfServicePhrase.spoken(it.tableName)) }
+    }
 
     /** Dipanggil saat aplikasi masuk ke latar depan. */
     fun startHeartbeat() = heartbeatWorker.start()
@@ -792,6 +879,18 @@ class PosStore(
         if (clean.length > ORDER_NOTE_MAX) { say("Catatan maksimal $ORDER_NOTE_MAX karakter."); return }
         if (o.closed) { say("Pesanan sudah ditutup. Catatan tidak bisa diubah."); return }
         send("note:${o.id}:$clean", { b.setNote(o.id, clean) }) { onSaved() }
+    }
+
+    /**
+     * 090 / US5 — ganti Dine-In ↔ Take Away pada order aktif lewat jalur tulis yang sama (`send`): penyetelan keadaan (PUT)
+     * aman diulang. Order tertutup tidak bisa diubah; nilai yang sudah sama tidak memanggil server.
+     */
+    fun setServiceType(type: String) {
+        val b = backend ?: return
+        val o = active ?: return
+        if (o.closed) { say("Pesanan sudah ditutup. Cara layanan tidak bisa diubah."); return }
+        if (o.serviceType == type) return
+        send("svc:${o.id}:$type", { b.setServiceType(o.id, type) }) { }
     }
 
     /**

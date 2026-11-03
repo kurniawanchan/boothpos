@@ -131,6 +131,10 @@ data class Tender(
 
 enum class OrderKind { COUNTER, DINE_IN }
 
+/** 090 — nilai cara layanan, sama dengan server (`orders.service_type`). */
+const val SERVICE_DINE_IN = "dine_in"
+const val SERVICE_TAKEAWAY = "takeaway"
+
 data class Order(
     val id: String, val kind: OrderKind, val table: String?, val pax: Int, val queue: String?,
     val waiter: String, val openedAt: String, val lines: List<OrderLine> = emptyList(),
@@ -148,11 +152,14 @@ data class Order(
     val serverTotal: Int? = null, val serverPaid: Int? = null, val serverChange: Int? = null,
     /** 077 — catatan kasir untuk seluruh order (dari server; kosong = tanpa catatan). Beda dari catatan per baris. */
     val note: String = "",
+    /** 090 — cara layanan dari server: "dine_in" | "takeaway" | null (order lama/ritel). Dipilih kasir di editor. */
+    val serviceType: String? = null,
     /** 087 — bahan yang menjadi minus karena pelunasan ini (hanya pada respons bayar/split); kosong = tidak ada. */
     val materialWarnings: List<MaterialWarning> = emptyList(),
 ) {
     // 084 — istilah baku: "Kasir" (dulu "Counter"). Judul layar Kasir memakai nomor saja (kasirTitle); daftar dan struk memakai label ini.
     val label: String get() = if (kind == OrderKind.COUNTER) "Kasir ${queue ?: ""}".trim() else "Meja ${table ?: ""}"
+    val isTakeaway: Boolean get() = serviceType == SERVICE_TAKEAWAY
     val live: List<OrderLine> get() = lines.filter { !it.voided }
     val gross: Int get() = serverSubtotal ?: live.sumOf { it.net }
     val discount: Int get() = serverDiscount ?: (gross * discPct / 100.0).roundToInt()
@@ -253,6 +260,8 @@ data class ReceiptView(
     val storeNotes: String? = null,
     /** 078 — catatan kasir untuk seluruh order; null/kosong = tidak dicetak. */
     val orderNote: String? = null,
+    /** 090 / US5 — "Dine-In" | "Take Away" untuk dicetak; null = order lama (ritel) atau server lama. */
+    val serviceLabel: String? = null,
     /** 083 — false = baris pajak tidak dicetak/ditampilkan; [tax] dan [total] tetap dari server. */
     val taxShow: Boolean = true,
 )

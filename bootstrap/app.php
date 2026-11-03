@@ -24,7 +24,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [EnsureInstallationIsActivated::class]);
 
         // 048 / api-gap B15 — `Idempotency-Key` untuk tambah/ubah baris dan kirim ke dapur.
-        $middleware->alias(['idempotent' => \App\Http\Middleware\EnsureIdempotent::class]);
+        // 090 — `alias()` MENGGANTI seluruh peta (bukan menggabung): dua alias harus dalam SATU panggilan, kalau tidak
+        // yang pertama hilang diam-diam. `self-service.table` = verifikasi token QR + ikat konteks outlet dari token (rute publik).
+        $middleware->alias([
+            'idempotent' => \App\Http\Middleware\EnsureIdempotent::class,
+            'self-service.table' => \App\Http\Middleware\ResolveSelfServiceTable::class,
+        ]);
 
         // 045 Stage 2 — konteks outlet HARUS terisi sebelum route-model binding, kalau tidak {order}/{session}
         // dst. di-resolve tanpa OutletScope dan kasir bisa membuka record outlet lain lewat id.
@@ -71,6 +76,15 @@ return Application::configure(basePath: dirname(__DIR__))
                 'code' => 'throttled',
                 'retry_after' => $seconds,
             ], 429, $headers);
+        });
+
+        // 090 — token QR meja ditolak: 404 `qr_invalid` atau 409 `table_unavailable` (kontrak self-service-api.md).
+        $exceptions->render(function (\App\Support\InvalidSelfServiceQr $e, Request $request) {
+            if (! $request->is('api/*') && ! $request->expectsJson()) {
+                return null;
+            }
+
+            return response()->json(['message' => $e->getMessage(), 'code' => $e->reason], $e->status());
         });
 
         $exceptions->render(function (QueryException $e, Request $request) {

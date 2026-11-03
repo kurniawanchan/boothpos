@@ -18,6 +18,7 @@ import BusinessDaySection from './settings/BusinessDaySection.vue';
 import ReasonCodesSection from './settings/ReasonCodesSection.vue';
 import MenuReleaseSection from './settings/MenuReleaseSection.vue';
 import ServerAddressSection from './settings/ServerAddressSection.vue';
+import SelfServiceSection from './settings/SelfServiceSection.vue';
 
 /**
  * 041-back-office-ui-redesign (US2) — Pengaturan dipecah dari satu halaman 8 kartu menjadi daftar bagian di kiri
@@ -46,6 +47,7 @@ const SECTIONS = {
   reasons: ReasonCodesSection,
   menu_release: MenuReleaseSection,
   server: ServerAddressSection,
+  self_service: SelfServiceSection,
   backup: BackupRestoreSection,
 };
 
@@ -59,6 +61,8 @@ const groups = computed(() => [
       // 083 — tarif, label, tampil/sembunyi pajak.
       { key: 'tax', label: t('settings.tax_section_title') },
       { key: 'channels', label: t('settings.payment_channels') },
+      // 090 — alamat dasar QR meja pesan mandiri.
+      { key: 'self_service', label: t('settings.self_service_section_title') },
     ],
   },
   {

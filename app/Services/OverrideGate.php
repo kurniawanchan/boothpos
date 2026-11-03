@@ -126,7 +126,7 @@ final class OverrideGate
 
         // 048 / S4: diskon di atas batas, cetak ulang, dan refund TIDAK pernah lolos karena izin peminta sendiri
         // (`$bypassByPermission = false`): batas milik peminta tidak boleh menyetujui dirinya sendiri.
-        if ($bypassByPermission && $requester->hasPermission($this->permissionFor($action))) {
+        if ($bypassByPermission && $this->holds($requester, $action)) {
             return null;
         }
 
@@ -195,6 +195,15 @@ final class OverrideGate
     private function inOutlet(User $user, int $outletId): bool
     {
         return $user->hasAllOutlets() || $user->outlets()->whereKey($outletId)->exists();
+    }
+
+    /**
+     * 090 — apakah [user] memegang izin sebuah aksi persetujuan (mis. `qris_verify`). SATU-SATUNYA penerjemah
+     * aksi → izin untuk pemanggil di luar gerbang ini (verifikasi QRIS pesanan mandiri), supaya aturannya tidak disalin.
+     */
+    public function holds(User $user, string $action): bool
+    {
+        return $user->hasPermission($this->permissionFor($action));
     }
 
     private function permissionFor(string $action): string

@@ -195,6 +195,8 @@ class OrderService
                 'customer_id' => $data['customer_id'] ?? null,
                 'user_id' => $cashier->id,
                 'channel' => 'offline',
+                // 090 — pilihan kasir; tanpa pilihan tetap `retail` bawaan model (order lama dan klien lama).
+                'service_type' => $data['service_type'] ?? Order::SERVICE_RETAIL,
                 'subtotal' => $subtotal,
                 'discount_amount' => $orderDiscount,
                 'total_amount' => $totalAmount,

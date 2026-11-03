@@ -58,12 +58,13 @@ describe('Restaurant Setup outlet filter (071 US1)', () => {
     const user = userEvent.setup();
     renderView();
     await waitFor(() => expect(listDiningTables).toHaveBeenCalled());
-    expect(listDiningTables.mock.calls[0]).toEqual([{}, SKIP]);
+    // 090 / US7 — daftar kini berpaginasi: parameter halaman ikut, tetapi tanpa filter outlet bila tak dipilih.
+    expect(listDiningTables.mock.calls[0]).toEqual([{ page: 1, per_page: 25 }, SKIP]);
 
     await user.click(filterButton());
     await user.click(await screen.findByRole('option', { name: 'Warkop WJM 2' }));
 
-    await waitFor(() => expect(lastTables()).toEqual([{ outlet_id: [2] }, SKIP]));
+    await waitFor(() => expect(lastTables()).toEqual([{ page: 1, per_page: 25, outlet_id: [2] }, SKIP]));
   });
 
   it('sends several outlets when several are picked', async () => {
@@ -75,7 +76,7 @@ describe('Restaurant Setup outlet filter (071 US1)', () => {
     await user.click(await screen.findByRole('option', { name: 'Warkop WJM 1' }));
     await user.click(await screen.findByRole('option', { name: 'Warkop WJM 2' }));
 
-    await waitFor(() => expect(lastTables()).toEqual([{ outlet_id: [1, 2] }, SKIP]));
+    await waitFor(() => expect(lastTables()).toEqual([{ page: 1, per_page: 25, outlet_id: [1, 2] }, SKIP]));
   });
 
   it('shares the choice with the Stations tab', async () => {
@@ -84,22 +85,22 @@ describe('Restaurant Setup outlet filter (071 US1)', () => {
     await waitFor(() => expect(listDiningTables).toHaveBeenCalled());
     await user.click(filterButton());
     await user.click(await screen.findByRole('option', { name: 'Warkop WJM 2' }));
-    await waitFor(() => expect(lastTables()[0]).toEqual({ outlet_id: [2] }));
+    await waitFor(() => expect(lastTables()[0]).toMatchObject({ outlet_id: [2] }));
 
     await user.click(screen.getByRole('tab', { name: 'Stasiun' }));
 
     await waitFor(() => expect(listStations).toHaveBeenCalled());
-    expect(lastStations()).toEqual([{ outlet_id: [2] }, SKIP]);
+    expect(lastStations()).toEqual([{ outlet_id: [2] }, SKIP]); // Stasiun tidak berpaginasi
   });
 
   it('starts from the top-bar outlet and follows it when it changes', async () => {
     renderView({ selected: 2 });
     await waitFor(() => expect(listDiningTables).toHaveBeenCalled());
-    expect(listDiningTables.mock.calls[0]).toEqual([{ outlet_id: [2] }, SKIP]);
+    expect(listDiningTables.mock.calls[0]).toEqual([{ page: 1, per_page: 25, outlet_id: [2] }, SKIP]);
 
     useOutletStore().select(1);
 
-    await waitFor(() => expect(lastTables()).toEqual([{ outlet_id: [1] }, SKIP]));
+    await waitFor(() => expect(lastTables()).toEqual([{ page: 1, per_page: 25, outlet_id: [1] }, SKIP]));
   });
 
   it('keeps an explicit "all outlets" while the top bar has an outlet', async () => {
@@ -110,7 +111,7 @@ describe('Restaurant Setup outlet filter (071 US1)', () => {
     await user.click(filterButton());
     await user.click(await screen.findByRole('option', { name: 'Semua outlet' }));
 
-    await waitFor(() => expect(lastTables()).toEqual([{}, SKIP]));
+    await waitFor(() => expect(lastTables()).toEqual([{ page: 1, per_page: 25 }, SKIP]));
   });
 
   it('shows a filtered empty message and a reset that returns to the starting point', async () => {
@@ -122,9 +123,9 @@ describe('Restaurant Setup outlet filter (071 US1)', () => {
 
     await user.click(filterButton());
     await user.click(await screen.findByRole('option', { name: 'Semua outlet' }));
-    await waitFor(() => expect(lastTables()[0]).toEqual({}));
+    await waitFor(() => expect(lastTables()[0]).toEqual({ page: 1, per_page: 25 }));
     await user.click(await screen.findByRole('button', { name: 'Atur ulang filter' }));
 
-    await waitFor(() => expect(lastTables()[0]).toEqual({ outlet_id: [2] }));
+    await waitFor(() => expect(lastTables()[0]).toMatchObject({ outlet_id: [2] }));
   });
 });

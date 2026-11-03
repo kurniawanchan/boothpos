@@ -149,6 +149,16 @@ interface PosBackend {
     suspend fun removeLine(tabId: String, lineId: Int, key: String): Order
     /** 077 — catatan kasir untuk seluruh order; [notes] kosong menghapus. Server menolak bila tab sudah tidak terbuka (409). */
     suspend fun setNote(tabId: String, notes: String): Order
+    /** 090 / US5 — ganti Dine-In ↔ Take Away pada tab terbuka; mengembalikan tab terbaru. */
+    suspend fun setServiceType(tabId: String, type: String): Order
+    /** 090 / US8 — pesanan mandiri baru sejak [afterId] (null = inisialisasi tanpa item). */
+    suspend fun selfServiceAlerts(afterId: Long?): com.warkop.pos.model.SelfServiceAlerts
+    /** 090 — antrean tab Mandiri (menunggu verifikasi + terverifikasi) dan jumlahnya. */
+    suspend fun selfServiceQueue(): com.warkop.pos.model.SelfServiceQueue
+    suspend fun selfServiceOrder(id: Long): com.warkop.pos.model.SelfServiceOrderView
+    suspend fun verifySelfService(id: Long, reference: String): com.warkop.pos.model.SelfServiceOrderView
+    suspend fun rejectSelfService(id: Long, reason: String): com.warkop.pos.model.SelfServiceOrderView
+    suspend fun dispatchSelfService(id: Long): com.warkop.pos.model.SelfServiceOrderView
     /** 084 — ubah meja pesanan (terbuka: pindah meja bebas; selesai: koreksi penempatan). */
     suspend fun moveTab(tabId: String, tableId: Long): Order
     /** 084 — buang tab kosong (mis. sebelum tutup shift); server menolak bila tab sudah berisi. */

@@ -22,6 +22,8 @@ class OpenTabRequest extends FormRequest
             'tab_label' => ['nullable', 'string', 'max:100'],
             'customer_id' => ['nullable', 'integer'],
             'local_ref' => ['nullable', 'uuid'],
+            // 090 / US5 — pilihan eksplisit Dine-In/Take Away; tanpa itu diturunkan dari meja (meja → dine_in, tanpa meja → takeaway).
+            'service_type' => ['sometimes', 'in:dine_in,takeaway'],
             // 048 — jumlah tamu (pax). Perangkat TIDAK dari body: dibaca dari header X-Device-Id dan dicek milik outlet pengguna.
             'guest_count' => ['nullable', 'integer', 'min:1', 'max:99'],
         ];

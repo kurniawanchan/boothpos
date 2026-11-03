@@ -43,7 +43,8 @@ describe('TablesAdmin', () => {
 
     await user.click(screen.getByRole('button', { name: /meja baru/i }));
     await user.type(await screen.findByLabelText(/nama \/ nomor meja/i), 'T1');
-    await user.type(screen.getByLabelText(/^area/i), 'Terrace');
+    // Bilah filter (090) juga memuat pilihan "Area"; kolom formulir dicari di dalam dialognya.
+    await user.type(within(await screen.findByRole('dialog')).getByLabelText(/^area/i), 'Terrace');
     await user.click(screen.getByRole('button', { name: 'Simpan' }));
 
     await waitFor(() => expect(createDiningTable).toHaveBeenCalledTimes(1));

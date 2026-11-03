@@ -7,7 +7,10 @@ use App\Http\Requests\StoreDiningTableRequest;
 use App\Http\Requests\UpdateDiningTableRequest;
 use App\Http\Resources\DiningTableResource;
 use App\Models\DiningTable;
+use App\Http\Requests\QrBatchRequest;
 use App\Services\OutletMoveGuard;
+use App\Support\SelfServiceQrToken;
+use App\Support\SelfServiceSettings;
 use App\Models\Order;
 use App\Services\ActivityLogger;
 use Illuminate\Http\JsonResponse;
@@ -24,19 +27,46 @@ class DiningTableController extends Controller
     public function index(Request $request): JsonResponse
     {
         $this->ensureSetupAccess($request);
-        $request->validate(['outlet_id' => ['sometimes', 'array'], 'outlet_id.*' => ['nullable', 'integer']]);
+        $request->validate([
+            'outlet_id' => ['sometimes', 'array'], 'outlet_id.*' => ['nullable', 'integer'],
+            // 090 / US7 — paginasi dan filter OPT-IN: konsumen lama (lantai, tab, POS) tidak mengirim `page` dan tetap
+            // menerima SELURUH daftar dalam bentuk lama {data}. Dengan `page` datang amplop {data, meta} + daftar area.
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1'],
+            'q' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'area' => ['sometimes', 'nullable', 'string', 'max:60'],
+            'is_active' => ['sometimes', 'nullable', 'boolean'],
+        ]);
         $outletIds = app(\App\Support\OutletContext::class)->narrowedOrNull((array) $request->input('outlet_id', []));
 
-        $tables = DiningTable::query()
-            ->withExists('openTab as has_open_tab')
-            ->when($request->boolean('active'), fn ($q) => $q->where('is_active', true))
+        $base = DiningTable::query()
             // 071 — filter outlet halaman Restaurant Setup: hanya menyempitkan (OutletContext::narrowedIds); tak satu pun
             // yang boleh dilihat -> hasil kosong, bukan semua.
-            ->when($outletIds !== null, fn ($q) => $q->whereIn('outlet_id', $outletIds ?: [0]))
-            ->orderBy('area')->orderBy('display_order')->orderBy('name')
-            ->get();
+            ->when($outletIds !== null, fn ($q) => $q->whereIn('outlet_id', $outletIds ?: [0]));
 
-        return response()->json(['data' => DiningTableResource::collection($tables)]);
+        $query = (clone $base)
+            ->withExists('openTab as has_open_tab')
+            ->when($request->boolean('active'), fn ($q) => $q->where('is_active', true))
+            ->filtered([
+                'q' => $request->input('q'), 'area' => $request->input('area'),
+                'is_active' => $request->has('is_active') ? $request->input('is_active') : null,
+            ])
+            ->orderBy('area')->orderBy('display_order')->orderBy('name')->orderBy('id');
+
+        if (! $request->has('page')) {
+            return response()->json(['data' => DiningTableResource::collection($query->get())]);
+        }
+
+        $page = $query->paginate(min((int) $request->integer('per_page', 25), 100));
+
+        return response()->json([
+            'data' => DiningTableResource::collection($page->items()),
+            'meta' => [
+                'current_page' => $page->currentPage(), 'per_page' => $page->perPage(), 'total' => $page->total(), 'last_page' => $page->lastPage(),
+                // Area yang ada di outlet yang berlaku, TANPA filter pencarian/area/status: pilihan filter tidak ikut menyusut.
+                'areas' => (clone $base)->where('area', '!=', '')->distinct()->orderBy('area')->pluck('area')->all(),
+            ],
+        ]);
     }
 
     public function store(StoreDiningTableRequest $request): JsonResponse
@@ -136,6 +166,89 @@ class DiningTableController extends Controller
         });
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * 090 / US2 — QR meja untuk dicetak: satu URL bertanda tangan per meja AKTIF. Gambar QR dirender di klien (pustaka
+     * dimuat dinamis); server hanya menerbitkan token. Meja nonaktif dilewati dan dihitung, bukan membuat QR yang tak berguna.
+     */
+    public function qrBatch(QrBatchRequest $request): JsonResponse
+    {
+        $origin = SelfServiceSettings::baseUrl($request->getSchemeAndHttpHost());
+        if ($origin === null) {
+            return $this->baseUrlInvalid();
+        }
+
+        $query = DiningTable::query()->with('outlet:id,name')->orderBy('area')->orderBy('display_order')->orderBy('name');
+        if ($request->filled('ids')) {
+            // OutletScope (global) sudah menyempitkan ke outlet yang boleh dilihat: id outlet lain tidak ditemukan.
+            $query->whereIn('id', array_map('intval', $request->input('ids')));
+        } else {
+            $f = (array) $request->input('filter', []);
+            $query->filtered([
+                'q' => $f['q'] ?? null, 'area' => $f['area'] ?? null, 'is_active' => $f['is_active'] ?? null,
+                'outlet_ids' => app(\App\Support\OutletContext::class)->narrowedOrNull((array) ($f['outlet_id'] ?? [])),
+            ]);
+        }
+
+        $tables = $query->limit(QrBatchRequest::MAX + 1)->get();
+        if ($tables->count() > QrBatchRequest::MAX) {
+            return response()->json(['message' => __('self_service.qr_batch_too_large', ['max' => QrBatchRequest::MAX]), 'code' => 'qr_batch_too_large'], 422);
+        }
+
+        $active = $tables->where('is_active', true)->values();
+
+        // Satu entri log per pembuatan (bukan per meja). Token/URL/nonce adalah rahasia penandatanganan: tidak masuk log.
+        $this->activityLogger->log(
+            userId: $request->user()?->id,
+            action: 'table_qr_generated',
+            entityType: 'DiningTable',
+            entityId: null,
+            description: "Membuat QR pesan mandiri untuk {$active->count()} meja.",
+            newValues: ['table_ids' => $active->pluck('id')->all()],
+        );
+
+        return response()->json([
+            'items' => $active->map(fn (DiningTable $t) => [
+                'table_id' => $t->id,
+                'outlet_name' => $t->outlet?->name,
+                'table_name' => $t->name,
+                'area' => $t->area ?? '',
+                'url' => $origin.'/pesan/'.SelfServiceQrToken::issue($t),
+            ])->all(),
+            'skipped' => ['inactive' => $tables->count() - $active->count()],
+        ]);
+    }
+
+    /** 090 / US2 — mencabut QR lama sebuah meja (nonce baru). Mengembalikan URL baru. */
+    public function rotateQr(Request $request, DiningTable $diningTable): JsonResponse
+    {
+        $this->ensureSetupAccess($request);
+
+        $origin = SelfServiceSettings::baseUrl($request->getSchemeAndHttpHost());
+        if ($origin === null) {
+            return $this->baseUrlInvalid();
+        }
+
+        $token = DB::transaction(function () use ($diningTable, $request) {
+            $token = SelfServiceQrToken::rotate($diningTable);
+            $this->activityLogger->log(
+                userId: $request->user()?->id,
+                action: 'table_qr_rotated',
+                entityType: 'DiningTable',
+                entityId: $diningTable->id,
+                description: "Membuat ulang QR meja {$diningTable->name} (QR lama tidak berlaku lagi).",
+            );
+
+            return $token;
+        });
+
+        return response()->json(['table_id' => $diningTable->id, 'url' => $origin.'/pesan/'.$token]);
+    }
+
+    private function baseUrlInvalid(): JsonResponse
+    {
+        return response()->json(['message' => __('self_service.qr_base_url_invalid'), 'code' => 'qr_base_url_invalid'], 409);
     }
 
     private function ensureSetupAccess(Request $request): void

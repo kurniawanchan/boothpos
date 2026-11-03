@@ -124,6 +124,23 @@ class FakePosBackend : PosBackend {
     val emptyClosed = mutableListOf<String>()
     override suspend fun closeEmptyTab(tabId: String) { emptyClosed += tabId }
     override suspend fun setNote(tabId: String, notes: String): Order { noteCalls += tabId to notes; return setNoteResult?.invoke(notes) ?: unused() }
+    /** 090 — cara layanan yang dikirim ke setServiceType, berurutan; hasil diatur lewat [setServiceTypeResult]. */
+    val serviceTypeCalls = mutableListOf<Pair<String, String>>()
+    var setServiceTypeResult: ((String) -> Order)? = null
+    override suspend fun setServiceType(tabId: String, type: String): Order { serviceTypeCalls += tabId to type; return setServiceTypeResult?.invoke(type) ?: unused() }
+    /** 090 — kursor yang dikirim ke selfServiceAlerts, berurutan; hasil dari [alertsResult] (default: kosong). */
+    val alertCalls = mutableListOf<Long?>()
+    var alertsResult: (Long?) -> com.warkop.pos.model.SelfServiceAlerts = { com.warkop.pos.model.SelfServiceAlerts(emptyList(), 0, it ?: 0) }
+    override suspend fun selfServiceAlerts(afterId: Long?): com.warkop.pos.model.SelfServiceAlerts { alertCalls += afterId; return alertsResult(afterId) }
+    /** 090 — tab Mandiri: hasil dan panggilan yang bisa diatur tes. */
+    var ssQueueResult: () -> com.warkop.pos.model.SelfServiceQueue = { com.warkop.pos.model.SelfServiceQueue(emptyList(), 0) }
+    val ssCalls = mutableListOf<String>()
+    var ssActionResult: (String, Long, String?) -> com.warkop.pos.model.SelfServiceOrderView = { _, _, _ -> unused() }
+    override suspend fun selfServiceQueue() = ssQueueResult()
+    override suspend fun selfServiceOrder(id: Long): com.warkop.pos.model.SelfServiceOrderView { ssCalls += "show:$id"; return ssActionResult("show", id, null) }
+    override suspend fun verifySelfService(id: Long, reference: String): com.warkop.pos.model.SelfServiceOrderView { ssCalls += "verify:$id:$reference"; return ssActionResult("verify", id, reference) }
+    override suspend fun rejectSelfService(id: Long, reason: String): com.warkop.pos.model.SelfServiceOrderView { ssCalls += "reject:$id:$reason"; return ssActionResult("reject", id, reason) }
+    override suspend fun dispatchSelfService(id: Long): com.warkop.pos.model.SelfServiceOrderView { ssCalls += "dispatch:$id"; return ssActionResult("dispatch", id, null) }
     override suspend fun removeLine(tabId: String, lineId: Int, key: String): Order = unused()
     override suspend fun sendToKitchen(tabId: String, key: String): KitchenSend = unused()
     override suspend fun ticket(ticketId: Long): PrintableKot = unused()

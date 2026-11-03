@@ -27,6 +27,11 @@ class Order extends Model
     public const SERVICE_DINE_IN = 'dine_in';
     public const SERVICE_TAKEAWAY = 'takeaway';
 
+    // 090 — asal order. `source` TIDAK fillable: hanya SelfServiceOrderService yang mengisinya (forceFill), jadi
+    // klien POS staf tidak bisa memalsukan penanda self-service.
+    public const SOURCE_POS = 'pos';
+    public const SOURCE_SELF_SERVICE = 'self_service';
+
     protected $fillable = [
         'order_number', 'session_id', 'customer_id', 'user_id', 'channel',
         // 048 — pajak diisi server (TaxCalculator), tidak pernah dari request. Tanpa ini Order::create() membuang
@@ -91,6 +96,8 @@ class Order extends Model
         return \App\Support\PaymentSummary::for($this);
     }
     public function table(): BelongsTo { return $this->belongsTo(DiningTable::class, 'table_id'); }
+    /** 090 — kiriman pesan mandiri asal order ini (null untuk order POS biasa). */
+    public function selfServiceOrder(): BelongsTo { return $this->belongsTo(SelfServiceOrder::class, 'self_service_order_id'); }
     public function splitFrom(): BelongsTo { return $this->belongsTo(self::class, 'split_from_order_id'); }
 
     /** 028 — tiket dapur yang berasal dari tab ini. */
