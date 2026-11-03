@@ -126,10 +126,24 @@ describe('SalesView — POS transactions only', () => {
     expect(within(cards).getByText('Transaksi').nextElementSibling).toHaveTextContent('3');
   });
 
-  it('falls back to the shared figures when an older response has no POS-only ones', async () => {
-    await setup({ data: { ...WITHOUT_VOIDED, totals: { order_count: 3, unit_count: 5, gross_sales: '150000.00', net_sales: '150000.00' } } });
+  // 054 (US5) — kartu tidak lagi membaca total server (yang hanya mengenal filter event): angkanya
+  // diturunkan dari baris yang sama dengan daftar, jadi tetap benar walau respons tanpa `totals` sama sekali.
+  it('derives the cards from the listed rows, even when the response carries no totals at all', async () => {
+    await setup({ data: { ...WITHOUT_VOIDED, totals: {} } });
 
-    expect(screen.getByTestId('kpi-cards')).toHaveTextContent(/Rp\s*150\.000/);
+    const cards = screen.getByTestId('kpi-cards');
+    expect(cards).toHaveTextContent(/Rp\s*205\.000/);
+    expect(within(cards).getByText('Transaksi').nextElementSibling).toHaveTextContent('3');
+  });
+
+  it('keeps the cards in step with a filter that only the browser applies', async () => {
+    const user = await setup();
+    await pick(user, 'Semua kasir', 'Kasir B');
+
+    const cards = screen.getByTestId('kpi-cards');
+    expect(within(cards).getByText('Transaksi').nextElementSibling).toHaveTextContent('1');
+    expect(cards).toHaveTextContent(/Rp\s*115\.000/);
+    expect(cards).not.toHaveTextContent(/205\.000/);
   });
 });
 

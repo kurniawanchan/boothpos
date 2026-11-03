@@ -143,6 +143,13 @@ async function handleClose() {
 
 <template>
   <div class="px-[26px] pb-10 pt-[22px]">
+    <!-- 054 (US12) — riwayat shift (daftar sesi + rincian + transaksinya). Tautan di sini, bukan item sidebar baru,
+         supaya urutan menu sidebar yang sudah ditetapkan (fitur 004) tidak berubah. -->
+    <div v-if="!loading" class="mb-4 flex justify-end">
+      <RouterLink :to="{ name: 'sessions-history' }" class="flex items-center gap-1.5 text-[12.5px] font-semibold text-brand-active hover:underline" data-testid="sessions-history-link">
+        <i class="ph-duotone ph-clock-counter-clockwise text-[16px]" aria-hidden="true"></i>{{ t('sessions_history.link') }}
+      </RouterLink>
+    </div>
     <div v-if="loading" class="py-14 text-center text-[13px] text-muted-3">{{ t('events_sessions.loading') }}</div>
 
     <!-- No open session — designed fresh, no mockup reference for this state. -->

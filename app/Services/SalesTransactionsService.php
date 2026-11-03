@@ -121,7 +121,28 @@ class SalesTransactionsService
             'artist_names' => $items->pluck('artist.name')->filter()->unique()->values(),
             'items_preview' => $top->take(2)->map(fn ($i) => ['name' => $i->name_snapshot, 'qty' => (float) $i->qty])->values(),
             'items_more' => max(0, $items->count() - 2),
+            // Sisa item di luar pratinjau: dipakai tombol "+N lainnya" supaya bisa dibuka di tempat tanpa
+            // memanggil detail (nama + qty saja, tanpa harga).
+            'items_rest' => $top->slice(2)->map(fn ($i) => ['name' => $i->name_snapshot, 'qty' => (float) $i->qty])->values(),
             'total_amount' => $this->money($order->total_amount),
+            // 054 (US5) — angka ITEM-LEVEL dengan definisi yang sama persis dengan GET /reports/sales
+            // (bruto = Σ(line_total + diskon item), net = Σ line_total; diskon tingkat order tidak ikut).
+            // `discount_amount`/`total_amount` di atas sudah memuat diskon order, jadi kartu ringkasan
+            // tidak bisa menurunkannya dari kedua field itu; tanpa ini kartu hanya bisa memakai total
+            // server yang tak mengenal filter sisi-klien (akar masalah "statistik tak cocok dengan filter").
+            // 054 (US8) — hanya penanda; isi catatan/gambar dimuat saat tautannya dibuka (daftar tetap ramping).
+            'has_reference' => $order->hasReference(),
+            'items_gross' => $this->money($items->sum(fn ($i) => (float) $i->line_total + (float) $i->discount_amount)),
+            'items_net' => $this->money($items->sum(fn ($i) => (float) $i->line_total)),
+            // Rincian per penjual (kunci = nama, sama dengan filter penjual di Sales). Saat filter penjual
+            // aktif, kartu ringkasan hanya menghitung item milik penjual terpilih — tanpa ini sebuah order
+            // campuran ikut dihitung utuh dan angkanya lebih besar dari laporan Seller Cost.
+            'seller_items' => $items->groupBy(fn ($i) => $i->artist->name ?? '')->filter(fn ($g, $name) => $name !== '')
+                ->map(fn ($g) => [
+                    'units' => (float) $g->sum('qty'),
+                    'gross' => $this->money($g->sum(fn ($i) => (float) $i->line_total + (float) $i->discount_amount)),
+                    'net' => $this->money($g->sum(fn ($i) => (float) $i->line_total)),
+                ])->all(),
             // Tunai BERSIH: uang tunai yang diterima dikurangi kembalian.
             'cash_amount' => $this->money(max(0, $cash - (float) $order->change_amount)),
             'noncash_amount' => $this->money($noncash),

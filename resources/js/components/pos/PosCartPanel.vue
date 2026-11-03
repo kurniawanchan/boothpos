@@ -12,8 +12,10 @@ const props = defineProps({
   customerName: { type: String, default: '' },
   canCheckout: { type: Boolean, default: true },
   checkoutBlockedReason: { type: String, default: '' },
+  // 054 (US2) — status simpan draft milik PosView (state keranjang/pelanggan/diskon ada di sana).
+  savingDraft: { type: Boolean, default: false },
 });
-const emit = defineEmits(['update:discount', 'pick-customer', 'pay']);
+const emit = defineEmits(['update:discount', 'pick-customer', 'pay', 'save-draft', 'open-drafts']);
 
 const cart = usePosCartStore();
 const { t } = useI18n();
@@ -32,19 +34,34 @@ function openImageLightbox(item) {
 
 <template>
   <aside aria-label="Keranjang" class="flex h-full w-[372px] flex-none flex-col border-l border-line-2 bg-white">
-    <div class="flex items-center justify-between gap-2.5 border-b border-line-3 px-[18px] pb-3 pt-[18px]">
-      <div class="flex flex-col gap-0.5">
-        <span class="text-[15px] font-bold tracking-tight">{{ t('pos.cart') }}</span>
-        <span class="text-[11.5px] text-muted-3">{{ t('pos.item_count', { count: cart.count }) }}</span>
+    <div class="flex flex-none flex-col gap-3 border-b border-line-3 px-[18px] pb-3 pt-[18px]">
+      <div class="flex items-center justify-between gap-2.5">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[15px] font-bold tracking-tight">{{ t('pos.cart') }}</span>
+          <span class="text-[11.5px] text-muted-3">{{ t('pos.item_count', { count: cart.count }) }}</span>
+        </div>
+        <button
+          type="button"
+          class="rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-danger-text transition-colors hover:bg-danger-bg disabled:opacity-40"
+          :disabled="cart.isEmpty"
+          @click="cart.clear()"
+        >
+          {{ t('pos.empty_cart') }}
+        </button>
       </div>
-      <button
-        type="button"
-        class="rounded-md px-2 py-1.5 text-[12.5px] font-semibold text-danger-text transition-colors hover:bg-danger-bg disabled:opacity-40"
-        :disabled="cart.isEmpty"
-        @click="cart.clear()"
-      >
-        {{ t('pos.empty_cart') }}
-      </button>
+      <!-- 054 (US2) — aksi draft milik transaksi yang sedang berjalan, jadi tempatnya di panel
+           keranjang (bukan di baris pencarian). flex-wrap: di lebar sempit tombol turun baris,
+           tidak menimpa judul atau tombol Kosongkan. -->
+      <div class="flex flex-wrap gap-2">
+        <BaseButton variant="secondary" size="sm" :disabled="cart.isEmpty" :loading="savingDraft" @click="emit('save-draft')">
+          <i class="ph-duotone ph-note-pencil text-[15px]" aria-hidden="true"></i>
+          {{ t('pos.save_as_draft') }}
+        </BaseButton>
+        <BaseButton variant="secondary" size="sm" @click="emit('open-drafts')">
+          <i class="ph-duotone ph-tray text-[15px]" aria-hidden="true"></i>
+          {{ t('pos.drafts_title') }}
+        </BaseButton>
+      </div>
     </div>
 
     <div class="flex-1 overflow-auto px-3 py-2">

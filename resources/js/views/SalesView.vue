@@ -7,6 +7,7 @@ import { salesReport, exportSalesTransactions } from '../api/reports';
 import { verifyOrderPayments } from '../api/payments';
 import { useToastStore } from '../stores/toast';
 import { useSalesFilters } from '../composables/useSalesFilters';
+import { useBulkReceipts, MAX_BULK_RECEIPTS } from '../composables/useBulkReceipts';
 import { formatIDR } from '../utils/money';
 import { formatDateTime, toLocalDateKey } from '../utils/date';
 import { paymentMethodLabel } from '../utils/paymentMethods';
@@ -18,8 +19,10 @@ import BaseModal from '../components/ui/BaseModal.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 import DataTable from '../components/ui/DataTable.vue';
+import TablePagination from '../components/ui/TablePagination.vue';
 import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
+import OrderReferenceModal from '../components/sales/OrderReferenceModal.vue';
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
@@ -44,7 +47,8 @@ const sessions = computed(() => sales.value?.sessions ?? []);
 const {
   search, filters, includeVoided, sortKey, sortDir,
   cashierOptions, sellerOptions, paymentMethods,
-  filtered, sorted, summary, shiftSummary, hasMargin,
+  filtered, sorted, summary, kpis, shiftSummary, hasMargin,
+  page, pageSize, paged, pageMeta, PAGE_SIZES,
   activeCount, hasFilterOtherThanSearch,
   reset, sortBy, toQuery, applyQuery,
 } = useSalesFilters({ transactions, sessions });
@@ -61,7 +65,11 @@ onMounted(async () => {
   await load();
 });
 
-watch(eventId, () => { if (restored) load(); });
+// Event lain = daftar lain: kembali ke halaman 1 (filter lain sudah mereset halaman di composable).
+// 'sync' (BUG YANG DITEMUKAN & DIPERBAIKI, 054): dengan flush bawaan, penetapan event awal di onMounted
+// baru diproses SETELAH `restored = true`, sehingga pemulihan URL memuat ulang dan — sejak halaman ada —
+// mengembalikan halaman yang baru dipulihkan ke 1. Sync = berjalan saat penetapan, ketika restored masih false.
+watch(eventId, () => { if (restored) { page.value = 1; load(); } }, { flush: 'sync' });
 // 'sync': dijalankan seketika saat applyQuery() mengubah nilainya (restored masih false).
 watch(includeVoided, () => { if (restored) load(); }, { flush: 'sync' });
 
@@ -81,7 +89,7 @@ async function load() {
 }
 
 // --- filter tersimpan di URL (bisa di-bookmark / dibagikan) -----------------------
-const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'seller', 'pay', 'session', 'cust', 'pstate', 'min', 'max', 'voided', 'sort', 'dir'];
+const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'seller', 'pay', 'session', 'cust', 'pstate', 'settle', 'min', 'max', 'voided', 'sort', 'dir', 'page', 'size'];
 watch(() => JSON.stringify(toQuery()), (json) => {
   if (!restored || !router) return;
   const others = Object.fromEntries(Object.entries(route.query).filter(([k]) => !OUR_QUERY_KEYS.includes(k)));
@@ -89,6 +97,19 @@ watch(() => JSON.stringify(toQuery()), (json) => {
 });
 
 // --- opsi filter -------------------------------------------------------------------
+// Baris yang item-nya dibuka penuh lewat "+N lainnya" (sisa item dikirim server di `items_rest`).
+const expandedItemRows = ref(new Set());
+function toggleItemRows(key) {
+  const next = new Set(expandedItemRows.value);
+  next.has(key) ? next.delete(key) : next.add(key);
+  expandedItemRows.value = next;
+}
+
+const eventOptions = computed(() => [
+  { value: '', label: t('reports.all_events') },
+  ...events.value.map((e) => ({ value: e.id, label: e.name })),
+]);
+const pageSizeOptions = computed(() => PAGE_SIZES.map((n) => ({ value: n, label: t('reports.rows_per_page', { count: n }) })));
 const paymentLabel = (method) => paymentMethodLabel(t, method);
 const paymentOptions = computed(() => paymentMethods.value.map((value) => ({ value, label: paymentLabel(value) })));
 const customerTypeOptions = computed(() => [
@@ -201,6 +222,29 @@ function toggleAllVisible() {
   selected.value = next;
 }
 
+// --- unduh semua struk (054 US9) --------------------------------------------------------------
+// Mencakup SEMUA baris yang lolos filter (semua halaman), bukan hanya halaman yang tampil. Voided ikut hanya
+// bila daftar sedang menampilkannya (sama dengan yang terlihat). Dibatasi 200 per unduhan (server juga menolak).
+const bulk = useBulkReceipts();
+const bulkIds = computed(() => sorted.value.map((tx) => tx.id));
+
+async function doBulkReceipts() {
+  if (bulk.running.value || bulkIds.value.length === 0) return;
+  if (bulkIds.value.length > MAX_BULK_RECEIPTS) {
+    toast.warning(t('reports.bulk_receipts_limit', { max: MAX_BULK_RECEIPTS, count: bulkIds.value.length }));
+    return;
+  }
+  try {
+    const result = await bulk.download(bulkIds.value, `struk-${toLocalDateKey(new Date())}.zip`);
+    const notDone = result.failed + result.missing;
+    if (result.ok === 0) toast.error(t('reports.bulk_receipts_none'));
+    else if (notDone > 0) toast.error(t('reports.bulk_receipts_partial', { ok: result.ok, failed: notDone }));
+    else toast.success(t('reports.bulk_receipts_done', { count: result.ok }));
+  } catch {
+    toast.error(t('reports.bulk_receipts_failed'));
+  }
+}
+
 const exporting = ref(false);
 async function doExport() {
   exporting.value = true;
@@ -277,6 +321,9 @@ function openDetail(row) {
   showItems.value = true;
 }
 
+// 054 (US8) — referensi transaksi dibuka dari tautan di baris (tanpa meninggalkan halaman).
+const referenceOrderId = ref(null);
+
 const showReceipt = ref(false);
 const receiptOrderId = ref(null);
 function openReceipt(row) {
@@ -300,11 +347,19 @@ function showCustomerDetail(row) {
 <template>
   <div class="flex flex-col gap-4 px-[26px] pb-10 pt-5">
     <div class="flex flex-wrap items-center gap-2.5">
-      <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="events.map((e) => ({ value: e.id, label: e.name }))" />
+      <!-- BUG YANG DITEMUKAN & DIPERBAIKI (054) — "Semua event" tak bisa dipilih: BaseSelect menggambar
+           placeholder sebagai baris yang tidak bisa diklik, kecuali pemanggil memberi opsi kosong sendiri.
+           Opsi kosong eksplisit ini membuat "Semua event" benar-benar bisa dipilih (server sudah
+           mengembalikan semua event bila event_id tak dikirim). -->
+      <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="eventOptions" />
       <span class="flex-1"></span>
       <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
         <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
         {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
+      </BaseButton>
+      <BaseButton variant="secondary" data-testid="bulk-receipts" :loading="bulk.running.value" :disabled="bulkIds.length === 0" @click="doBulkReceipts">
+        <i class="ph-duotone ph-files text-[16px]" aria-hidden="true"></i>
+        {{ bulk.running.value ? t('reports.bulk_receipts_progress', { done: bulk.progress.value.done, total: bulk.progress.value.total }) : t('reports.bulk_receipts', { count: bulkIds.length }) }}
       </BaseButton>
       <BaseButton variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
@@ -312,15 +367,15 @@ function showCustomerDetail(row) {
       </BaseButton>
     </div>
 
-    <!-- Kartu ringkasan = transaksi dari POS saja, sama dengan daftar di bawahnya. Angka laporan
-         bersama (unit_count/gross_sales/net_sales) memuat pendapatan pre-order dan dipakai
-         Dashboard/Laporan; halaman ini memakai pos_* (dengan cadangan ke angka bersama untuk
-         respons lama yang belum punya pos_*). -->
+    <!-- Kartu ringkasan = transaksi dari POS saja, dihitung dari baris yang SAMA dengan daftar di
+         bawahnya setelah SEMUA filter (054): dulu dibaca dari `totals` server yang hanya mengenal event,
+         sehingga tak cocok dengan filter kasir/penjual/tanggal/pencarian. Angka laporan bersama
+         (unit_count/gross_sales/net_sales) memuat pre-order dan tetap dipakai Dashboard/Laporan. -->
     <div data-testid="kpi-cards" class="grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.transactions') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ sales?.totals?.order_count ?? 0 }}</span></div>
-      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.units_sold') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ sales?.totals?.pos_unit_count ?? sales?.totals?.unit_count ?? 0 }}</span></div>
-      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.gross_sales') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.pos_gross_sales ?? sales?.totals?.gross_sales ?? 0) }}</span></div>
-      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.net_sales') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(sales?.totals?.pos_net_sales ?? sales?.totals?.net_sales ?? 0) }}</span></div>
+      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.transactions') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ kpis.count }}</span></div>
+      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.units_sold') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ kpis.units }}</span></div>
+      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.gross_sales') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(kpis.gross) }}</span></div>
+      <div class="flex flex-col gap-1.5 rounded-card border border-line-2 bg-white p-4"><span class="text-[11.5px] font-semibold text-muted-2">{{ t('reports.net_sales') }}</span><span class="text-[23px] font-extrabold tracking-tight">{{ formatIDR(kpis.net) }}</span></div>
     </div>
 
     <div class="flex flex-col gap-2">
@@ -393,15 +448,19 @@ function showCustomerDetail(row) {
         </template>
       </div>
 
-      <label class="flex w-fit items-center gap-2 text-[12px] font-semibold text-muted-4">
-        <input type="checkbox" class="h-4 w-4 rounded border-line accent-brand" :checked="allVisibleSelected" @change="toggleAllVisible" />
-        {{ t('reports.select_all') }}
-      </label>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <label class="flex w-fit items-center gap-2 text-[12px] font-semibold text-muted-4">
+          <input type="checkbox" class="h-4 w-4 rounded border-line accent-brand" :checked="allVisibleSelected" @change="toggleAllVisible" />
+          {{ t('reports.select_all') }}
+        </label>
+        <!-- 054 — dengan halaman, "pilih semua" tetap berarti SEMUA baris yang lolos filter; dikatakan terang-terangan. -->
+        <span v-if="pageMeta.last_page > 1" class="text-[11.5px] text-muted-3">{{ t('reports.select_all_scope', { count: visibleKeys.length }) }}</span>
+      </div>
 
       <div class="overflow-hidden rounded-card border border-line-2 bg-white">
         <DataTable
           :columns="columns"
-          :rows="sorted"
+          :rows="paged"
           row-key="key"
           :loading="loading"
           :sort-key="sortKey"
@@ -420,8 +479,8 @@ function showCustomerDetail(row) {
             />
           </template>
           <template #cell-order_number="{ row }">
-            <div class="flex flex-col items-start gap-1">
-              <button type="button" class="font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" :class="{ 'line-through': isVoided(row) }" @click="openDetail(row)">{{ row.order_number }}</button>
+            <div class="flex flex-col items-start gap-1 whitespace-nowrap">
+              <button type="button" class="whitespace-nowrap font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" :class="{ 'line-through': isVoided(row) }" @click="openDetail(row)">{{ row.order_number }}</button>
               <StatusPill v-if="isVoided(row)" variant="danger">{{ t('reports.status_voided') }}</StatusPill>
             </div>
           </template>
@@ -444,13 +503,23 @@ function showCustomerDetail(row) {
               <span v-else>—</span>
             </span>
           </template>
-          <template #cell-created_at="{ row }">{{ formatDateTime(row.created_at) }}</template>
+          <template #cell-created_at="{ row }"><span class="whitespace-nowrap">{{ formatDateTime(row.created_at) }}</span></template>
           <template #cell-item_count="{ row }">
             <div class="flex max-w-[240px] flex-col gap-0.5">
               <span>{{ row.item_count }}</span>
               <template v-if="(row.items_preview ?? []).length">
                 <span v-for="item in row.items_preview" :key="item.name" class="truncate text-[11.5px] text-muted-3">{{ item.name }} ×{{ plain(item.qty) }}</span>
-                <span v-if="row.items_more > 0" class="text-[11.5px] font-semibold text-muted-3">{{ t('reports.items_more', { count: row.items_more }) }}</span>
+                <template v-if="expandedItemRows.has(row.key)">
+                  <span v-for="(item, i) in row.items_rest ?? []" :key="`rest-${i}`" class="truncate text-[11.5px] text-muted-3">{{ item.name }} ×{{ plain(item.qty) }}</span>
+                </template>
+                <button
+                  v-if="row.items_more > 0"
+                  type="button"
+                  class="self-start text-[11.5px] font-semibold text-brand-active hover:underline"
+                  data-testid="items-more"
+                  :aria-expanded="expandedItemRows.has(row.key)"
+                  @click.stop="toggleItemRows(row.key)"
+                >{{ expandedItemRows.has(row.key) ? t('reports.items_less') : t('reports.items_more', { count: row.items_more }) }}</button>
               </template>
             </div>
           </template>
@@ -474,7 +543,9 @@ function showCustomerDetail(row) {
             <span v-else class="text-muted-3">—</span>
           </template>
           <template #cell-total_amount="{ row }">
-            {{ formatIDR(row.total_amount) }}
+            <!-- 054 (US6): satu baris. formatIDR memakai spasi biasa ("Rp 1.234.500"), jadi tanpa nowrap
+                 angka terbelah di kolom sempit; formatIDR sendiri sengaja tidak diubah. -->
+            <span class="whitespace-nowrap">{{ formatIDR(row.total_amount) }}</span>
           </template>
           <template #cell-actions="{ row }">
             <!-- Dua tautan ditumpuk rata kiri dan tak boleh terbelah baris: dulu berdampingan dengan
@@ -482,9 +553,19 @@ function showCustomerDetail(row) {
             <div class="flex flex-col items-start gap-1.5">
               <button type="button" class="whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" @click="openDetail(row)">{{ t('reports.view_items') }}</button>
               <button type="button" class="whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" @click="openReceipt(row)">{{ t('reports.view_receipt') }}</button>
+              <!-- Hanya penjualan yang punya referensi (catatan/gambar) -->
+              <button v-if="row.has_reference" type="button" class="flex items-center gap-1 whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" data-testid="reference-link" @click="referenceOrderId = row.id">
+                <i class="ph-duotone ph-paperclip text-[14px]" aria-hidden="true"></i>{{ t('sales_reference.link') }}
+              </button>
             </div>
           </template>
         </DataTable>
+        <!-- 054 (US5) — halaman dikerjakan di klien atas daftar yang sudah dimuat; kartu, "pilih semua"
+             dan ekspor tetap mencakup SEMUA baris yang lolos filter, bukan hanya halaman ini. -->
+        <TablePagination v-if="pageMeta.total > 0" :meta="pageMeta" @change="page = $event" />
+      </div>
+      <div v-if="pageMeta.total > PAGE_SIZES[0]" class="flex items-center justify-end gap-2 text-[12px] text-muted-3">
+        <BaseSelect class="w-40" v-model="pageSize" :options="pageSizeOptions" :aria-label="t('reports.rows_per_page_label')" />
       </div>
     </div>
 
@@ -500,6 +581,7 @@ function showCustomerDetail(row) {
 
     <TransactionItemsModal :open="showItems" :order-id="itemsOrderId" @close="showItems = false" @changed="load" />
     <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" @close="showReceipt = false" />
+    <OrderReferenceModal :open="referenceOrderId !== null" :order-id="referenceOrderId" @close="referenceOrderId = null" @saved="load" />
 
     <BaseModal :open="detailCustomer !== null" :title="t('reports.customer_detail')" max-width-class="max-w-[360px]" @close="detailCustomer = null">
       <div v-if="detailCustomer" class="flex flex-col gap-2.5 px-6 py-5 text-[13.5px]">

@@ -78,3 +78,27 @@ export async function exportReport(report, params = {}) {
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+// --- 054 (US10/US11) laporan penjualan per produk dan per metode pembayaran ---------------------------
+// event_id/date_from/date_to/q semuanya opsional. Hanya penjualan POS yang selesai; gerbang menu `reports`.
+
+export function salesByProductReport(params = {}) {
+  return client.get('/reports/sales-by-product', { params }).then((r) => r.data);
+}
+
+/** Ekspor Excel laporan penjualan per produk dengan filter yang sama; balasan: Blob .xlsx. */
+export function exportSalesByProduct(params = {}) {
+  return client.get('/reports/sales-by-product/export', { params, responseType: 'blob' }).then((r) => r.data);
+}
+
+export function salesByProductTransactions(productId, params = {}) {
+  return client.get(`/reports/sales-by-product/${productId}/transactions`, { params }).then((r) => r.data);
+}
+
+export function salesByPaymentMethodReport(params = {}) {
+  return client.get('/reports/sales-by-payment-method', { params }).then((r) => r.data);
+}
+
+export function salesByPaymentMethodTransactions(params = {}) {
+  return client.get('/reports/sales-by-payment-method/transactions', { params }).then((r) => r.data);
+}

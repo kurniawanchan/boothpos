@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import { toLocalDateKey } from '../utils/date';
 
 /**
@@ -18,6 +18,9 @@ const PAY_STATES = ['pending', 'rejected', 'verified'];
 const SETTLEMENTS = ['unpaid', 'partially_paid', 'fully_paid'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LIST = 50;
+// 054 (US5) — halaman tabel. Hanya ukuran ini yang dikenal; nilai lain dari URL diabaikan.
+const PAGE_SIZES = [25, 50, 100];
+const DEFAULT_PAGE_SIZE = 25;
 
 // Nilai kosong (walk-in, tanpa penjual, tanpa margin) SELALU di akhir, apa pun arahnya.
 export const SORT_ACCESSORS = {
@@ -54,6 +57,8 @@ export function useSalesFilters({ transactions, sessions }) {
   });
   const sortKey = ref('created_at');
   const sortDir = ref('desc');
+  const page = ref(1);
+  const pageSize = ref(DEFAULT_PAGE_SIZE);
 
   // Setiap baris punya `key` ("order:5") — dipakai untuk seleksi baris dan ekspor. Payload lama
   // tanpa `key` dilengkapi di sini.
@@ -156,6 +161,20 @@ export function useSalesFilters({ transactions, sessions }) {
   // Transaksi batal tampil (bila diminta) tapi TIDAK PERNAH ikut dihitung.
   const hasMargin = computed(() => all.value.some((tx) => tx.margin_amount !== undefined));
 
+  // Bagian transaksi yang dihitung ke kartu/ringkasan: saat filter penjual aktif hanya item milik
+  // penjual terpilih (order campuran tidak lagi dihitung utuh); baris lama tanpa `seller_items` utuh.
+  const part = (tx) => {
+    const sel = filters.sellers;
+    const si = tx.seller_items;
+    if (!sel.length || !si) return null;
+    const p = { units: 0, gross: 0, net: 0 };
+    for (const name of sel) {
+      if (!si[name]) continue;
+      p.units += Number(si[name].units); p.gross += num(si[name].gross); p.net += num(si[name].net);
+    }
+    return p;
+  };
+
   const summary = computed(() => {
     const rows = filtered.value;
     const counted = rows.filter((tx) => !isVoided(tx));
@@ -164,8 +183,8 @@ export function useSalesFilters({ transactions, sessions }) {
       shown: rows.length,
       total: all.value.length,
       voided: rows.length - counted.length,
-      units: Number(sum((tx) => Number(tx.unit_count ?? tx.item_count ?? 0)).toFixed(2)),
-      amount: sum((tx) => num(tx.total_amount)),
+      units: Number(sum((tx) => part(tx)?.units ?? Number(tx.unit_count ?? tx.item_count ?? 0)).toFixed(2)),
+      amount: sum((tx) => part(tx)?.net ?? num(tx.total_amount)),
       cash: sum((tx) => num(tx.cash_amount)),
       noncash: sum((tx) => num(tx.noncash_amount)),
       // 028 — sisa tagihan penjualan yang sedang tampil (transaksi batal tak pernah dihitung).
@@ -173,6 +192,46 @@ export function useSalesFilters({ transactions, sessions }) {
       margin: hasMargin.value ? sum((tx) => num(tx.margin_amount)) : null,
     };
   });
+
+  // --- kartu ringkasan (054 US5) ---------------------------------------------------------
+  // BUG YANG DITEMUKAN & DIPERBAIKI (054) — kartu dulu membaca `totals` dari server, yang hanya
+  // mengenal filter EVENT; semua filter lain (kasir, penjual, pembayaran, pencarian, tanggal, rentang
+  // total, dsb.) berjalan di browser, jadi kartu dan baris "N transaksi" bisa saling bertentangan.
+  // Kini kartu dihitung dari `filtered` — baris yang SAMA dengan daftar dan ringkasan — di SEMUA
+  // halaman, bukan hanya halaman yang tampil. Transaksi batal tak pernah dihitung. Bruto/net memakai
+  // definisi item-level laporan (items_gross/items_net dari server); baris lama tanpa field itu
+  // dihitung dari total barisnya.
+  const kpis = computed(() => {
+    const counted = filtered.value.filter((tx) => !isVoided(tx));
+    const sum = (fn) => counted.reduce((acc, tx) => acc + fn(tx), 0);
+    return {
+      count: counted.length,
+      units: Number(sum((tx) => part(tx)?.units ?? Number(tx.unit_count ?? tx.item_count ?? 0)).toFixed(2)),
+      gross: sum((tx) => part(tx)?.gross ?? num(tx.items_gross ?? tx.total_amount)),
+      net: sum((tx) => part(tx)?.net ?? num(tx.items_net ?? tx.total_amount)),
+    };
+  });
+
+  // --- halaman (054 US5) --------------------------------------------------------------------
+  // Dikerjakan di klien atas `sorted` (lihat catatan di kepala berkas: daftar satu event kecil,
+  // dan semua filter + panel shift + ekspor sudah bekerja atas array yang dimuat). Kartu, "pilih
+  // semua", ekspor, dan unduh struk memakai `filtered`/`sorted` — SEMUA halaman — bukan `paged`.
+  const pageCount = computed(() => Math.max(1, Math.ceil(sorted.value.length / pageSize.value)));
+  // Dijepit pada rentang: halaman yang tak valid (dari URL, atau daftar yang menyusut setelah dimuat
+  // ulang) menampilkan halaman terdekat yang ada, bukan tabel kosong, tanpa mengubah state mentahnya.
+  const currentPage = computed(() => Math.min(Math.max(1, Number(page.value) || 1), pageCount.value));
+  const paged = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value;
+    return sorted.value.slice(start, start + pageSize.value);
+  });
+  const pageMeta = computed(() => ({
+    current_page: currentPage.value, per_page: pageSize.value, total: sorted.value.length, last_page: pageCount.value,
+  }));
+
+  // Filter, pencarian, urutan, tombol "tampilkan batal", dan ukuran halaman SELALU mengembalikan ke
+  // halaman 1 (hasilnya berbeda, jadi halaman lama tak bermakna). flush 'sync' supaya urutannya
+  // deterministik: applyQuery() menetapkan filter lebih dulu (reset ke 1) lalu halaman dari URL.
+  watch([search, filters, includeVoided, sortKey, sortDir, pageSize], () => { page.value = 1; }, { deep: true, flush: 'sync' });
 
   // --- ringkasan shift (hanya bila TEPAT satu shift dipilih) ---------------------------
   const shiftSummary = computed(() => {
@@ -216,6 +275,8 @@ export function useSalesFilters({ transactions, sessions }) {
     put('min', f.minTotal); put('max', f.maxTotal);
     if (includeVoided.value) q.voided = '1';
     if (sortKey.value !== 'created_at' || sortDir.value !== 'desc') { q.sort = sortKey.value; q.dir = sortDir.value; }
+    if (pageSize.value !== DEFAULT_PAGE_SIZE) q.size = String(pageSize.value);
+    if (currentPage.value > 1) q.page = String(currentPage.value);
     return q;
   }
 
@@ -245,12 +306,18 @@ export function useSalesFilters({ transactions, sessions }) {
       sortKey.value = sort;
       sortDir.value = one(query.dir) === 'asc' ? 'asc' : 'desc';
     }
+
+    // Ukuran lebih dulu, halaman terakhir: menetapkan filter/ukuran mengembalikan halaman ke 1.
+    pageSize.value = PAGE_SIZES.includes(Number(one(query.size))) ? Number(one(query.size)) : DEFAULT_PAGE_SIZE;
+    const wanted = Number(one(query.page));
+    page.value = Number.isInteger(wanted) && wanted >= 1 ? wanted : 1;
   }
 
   return {
     search, filters, includeVoided, sortKey, sortDir,
     cashierOptions, sellerOptions, paymentMethods,
-    filtered, sorted, summary, shiftSummary, hasMargin,
+    filtered, sorted, summary, kpis, shiftSummary, hasMargin,
+    page, pageSize, currentPage, pageCount, paged, pageMeta, PAGE_SIZES,
     activeCount, hasFilterOtherThanSearch,
     reset, sortBy, toQuery, applyQuery,
   };

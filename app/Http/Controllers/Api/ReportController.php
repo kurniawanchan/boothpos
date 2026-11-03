@@ -8,6 +8,8 @@ use App\Models\ArtistSettlement;
 use App\Models\Event;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Services\SalesByPaymentMethodReport;
+use App\Services\SalesByProductReport;
 use App\Services\SettlementService;
 use App\Support\ModeGate;
 use App\Support\PreorderRecognizedRevenue;
@@ -385,6 +387,108 @@ class ReportController extends Controller
             $request->filled('date_from') ? $request->date('date_from') : null,
             $request->filled('date_to') ? $request->date('date_to') : null,
         );
+    }
+
+    // --- 054 (US10/US11) laporan penjualan per produk dan per metode pembayaran -----------------------
+    // Digerbang `reports` seperti laporan lain; event/tanggal OPSIONAL (tanpa event = semua event).
+
+    private function salesScopeFilters(Request $request): array
+    {
+        return $request->validate([
+            'event_id' => ['nullable', 'integer', 'exists:events,id'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date'],
+            'q' => ['nullable', 'string', 'max:100'],
+            // Filter laporan penjualan per produk (boleh satu nilai atau larik).
+            'artist_id' => ['nullable', 'array'],
+            'artist_id.*' => ['integer'],
+            'category_id' => ['nullable', 'array'],
+            'category_id.*' => ['integer'],
+            'product_id' => ['nullable', 'array'],
+            'product_id.*' => ['integer'],
+        ]);
+    }
+
+    private function pageParams(Request $request): array
+    {
+        return [max(1, $request->integer('page', 1)), min(100, max(1, $request->integer('per_page', 25)))];
+    }
+
+    public function salesByProduct(Request $request, SalesByProductReport $report): JsonResponse
+    {
+        if (! $request->user()->canAccessMenu('reports')) {
+            return response()->json(['message' => __('reports.not_authorized')], 403);
+        }
+
+        return response()->json($report->build($this->salesScopeFilters($request)));
+    }
+
+    /** Ekspor Excel laporan penjualan per produk: dua sheet berjudul jelas, angka sebagai angka (bukan teks). */
+    public function exportSalesByProduct(Request $request, SalesByProductReport $report)
+    {
+        if (! $request->user()->canAccessMenu('reports')) {
+            return response()->json(['message' => __('reports.not_authorized')], 403);
+        }
+
+        $data = $report->build($this->salesScopeFilters($request));
+
+        $h = fn (string $k) => __("reports.sbp_export.$k");
+        $summaryHeadings = array_map($h, ['rank', 'best_seller', 'product', 'seller', 'category', 'pos_units', 'preorder_units', 'units', 'pos_sales', 'preorder_sales', 'sales', 'transactions', 'stock_in', 'stock_remaining']);
+        $summary = collect($data['data'])->map(fn ($r) => array_combine($summaryHeadings, [
+            $r['rank'], $r['is_best_seller'] ? $h('yes') : '', $r['product_name'], $r['artist_name'], $r['category_name'] ?? '',
+            $r['pos_units'], $r['preorder_units'], $r['units'], (float) $r['pos_sales'], (float) $r['preorder_sales'], (float) $r['sales'], $r['transaction_count'], $r['stock_in'], $r['stock_remaining'],
+        ]))->all();
+        $summary[] = array_combine($summaryHeadings, [
+            '', '', $h('total'), '', '', $data['totals']['pos_units'], $data['totals']['preorder_units'], $data['totals']['units'],
+            (float) $data['totals']['pos_sales'], (float) $data['totals']['preorder_sales'], (float) $data['totals']['sales'], $data['totals']['transaction_count'], $data['totals']['stock_in'], $data['totals']['stock_remaining'],
+        ]);
+
+        $variantHeadings = array_map($h, ['product', 'seller', 'category', 'variant', 'top_variant', 'pos_units', 'preorder_units', 'units', 'sales', 'stock_in', 'stock_remaining']);
+        $variants = collect($data['data'])->flatMap(fn ($r) => collect($r['variants'])->map(fn ($v) => array_combine($variantHeadings, [
+            $r['product_name'], $r['artist_name'], $r['category_name'] ?? '', $v['variant_name'] ?: '—', $v['is_top'] ? $h('yes') : '',
+            $v['pos_units'], $v['preorder_units'], $v['units'], (float) $v['sales'], $v['stock_in'], $v['stock_remaining'],
+        ])))->all();
+
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\MultiSheetArrayExport([
+                new \App\Exports\SheetArrayExport($h('sheet_summary'), $summaryHeadings, $summary),
+                new \App\Exports\SheetArrayExport($h('sheet_variants'), $variantHeadings, $variants),
+            ]),
+            'penjualan-per-produk.xlsx'
+        );
+    }
+
+    public function salesByProductTransactions(Request $request, int $product, SalesByProductReport $report): JsonResponse
+    {
+        if (! $request->user()->canAccessMenu('reports')) {
+            return response()->json(['message' => __('reports.not_authorized')], 403);
+        }
+        [$page, $perPage] = $this->pageParams($request);
+
+        return response()->json($report->transactions($product, $this->salesScopeFilters($request), $page, $perPage));
+    }
+
+    public function salesByPaymentMethod(Request $request, SalesByPaymentMethodReport $report): JsonResponse
+    {
+        if (! $request->user()->canAccessMenu('reports')) {
+            return response()->json(['message' => __('reports.not_authorized')], 403);
+        }
+
+        return response()->json($report->build($this->salesScopeFilters($request)));
+    }
+
+    public function salesByPaymentMethodTransactions(Request $request, SalesByPaymentMethodReport $report): JsonResponse
+    {
+        if (! $request->user()->canAccessMenu('reports')) {
+            return response()->json(['message' => __('reports.not_authorized')], 403);
+        }
+        $validated = $request->validate([
+            'method' => ['required', 'in:cash,qr_ewallet,bank_transfer'],
+            'channel_id' => ['nullable', 'integer'],
+        ]);
+        [$page, $perPage] = $this->pageParams($request);
+
+        return response()->json($report->transactions($validated['method'], isset($validated['channel_id']) ? (int) $validated['channel_id'] : null, $this->salesScopeFilters($request), $page, $perPage));
     }
 
     public function profit(Request $request): JsonResponse

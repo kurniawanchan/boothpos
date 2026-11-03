@@ -87,4 +87,39 @@ describe('PosCartPanel', () => {
     expect(summary).not.toBeNull();
     expect(summary).toHaveClass('flex-none');
   });
+
+  // 054 (US2) — aksi draft ada di bagian atas panel keranjang.
+  describe('draft actions in the header (054)', () => {
+    it('renders Save as draft and Draft Transactions in the cart panel', () => {
+      renderPanel();
+      expect(screen.getByRole('button', { name: /simpan sebagai draft/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /draft transaksi/i })).toBeInTheDocument();
+    });
+
+    it('disables Save as draft on an empty cart but keeps Draft Transactions usable', () => {
+      renderPanel();
+      expect(screen.getByRole('button', { name: /simpan sebagai draft/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /draft transaksi/i })).toBeEnabled();
+    });
+
+    it('emits save-draft and open-drafts', async () => {
+      const user = userEvent.setup();
+      const { pinia, emitted } = renderPanel();
+      usePosCartStore(pinia).add({ variant_id: 1, sku: 'S1', name: 'A', sell_price: '10000.00', current_stock: 5 });
+      await Promise.resolve();
+
+      await user.click(screen.getByRole('button', { name: /simpan sebagai draft/i }));
+      await user.click(screen.getByRole('button', { name: /draft transaksi/i }));
+
+      expect(emitted()['save-draft']).toHaveLength(1);
+      expect(emitted()['open-drafts']).toHaveLength(1);
+    });
+
+    it('places the draft actions above the item list', () => {
+      renderPanel();
+      const save = screen.getByRole('button', { name: /simpan sebagai draft/i });
+      const empty = screen.getByText(/pilih produk untuk mulai transaksi/i);
+      expect(save.compareDocumentPosition(empty) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
 });
