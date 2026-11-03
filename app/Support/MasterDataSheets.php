@@ -404,4 +404,22 @@ final class MasterDataSheets
     private const LEGACY_COLUMNS = [
         self::PRODUCTS => ['artist_code' => 'home_outlet_code'],
     ];
+
+    /**
+     * 2026-11-03 (temuan tinjauan keamanan) — izin PER SHEET untuk sheet bahan/resep/modifier. Gerbang kasar impor/ekspor
+     * ("salah satu menu master data") terlalu lebar bagi sheet ini, jadi disamakan dengan layar interaktifnya supaya impor
+     * tidak jadi jalan pintas: resep = menu `products` + izin ubah resep; modifier = menu `dining_setup`; stok bahan =
+     * menu `stock` (gerbang koreksi stok). Sheet lain tetap memakai gerbang kasar yang sudah ada.
+     */
+    public static function allows(string $sheet, \App\Models\User $user, bool $forExport = false): bool
+    {
+        return match ($sheet) {
+            self::RECIPES => $user->canAccessMenu('products') && ($forExport || $user->hasPermission(\App\Support\PermissionCatalog::RECIPE_EDIT)),
+            self::MODIFIER_GROUPS, self::MODIFIER_OPTIONS, self::MODIFIER_OPTION_MATERIALS, self::MODIFIER_LINKS => $forExport
+                ? $user->canAccessAnyMenu(['dining_setup', 'products'])
+                : $user->canAccessMenu('dining_setup'),
+            self::MATERIAL_STOCK => $user->canAccessMenu('stock'),
+            default => true,
+        };
+    }
 }

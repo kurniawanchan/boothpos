@@ -314,4 +314,21 @@ class MasterDataImportRecipeModifierTest extends TestCase
         $this->assertSame(2, ModifierGroup::where('name', 'Tambahan')->first()->options()->count());
         $this->assertSame([$product->id], ModifierGroup::where('name', 'Susu')->first()->products()->pluck('products.id')->all());
     }
+
+    /** Temuan tinjauan keamanan 2026-11-03: sheet baru memakai izin layar interaktifnya, bukan gerbang kasar "menu master data". */
+    public function test_new_sheets_need_the_permission_of_their_own_screen_for_import_and_export(): void
+    {
+        [$variant] = $this->setUpShop();
+        // Hanya menu `materials`: lolos gerbang kasar impor/ekspor, tetapi tak boleh resep, modifier, maupun stok bahan.
+        $role = \App\Models\Role::factory()->create(['menu_keys' => ['materials']]);
+        $this->actingAs(User::factory()->create(['role_id' => $role->id]), 'sanctum');
+
+        $this->post090([MasterDataSheets::RECIPES => []])->assertForbidden();
+        $this->post090([MasterDataSheets::MODIFIER_GROUPS => []])->assertForbidden();
+        $this->post090([MasterDataSheets::MATERIAL_STOCK => []])->assertForbidden();
+        foreach (['recipes', 'modifier_groups', 'modifier_links', 'material_stock'] as $entity) {
+            $this->get("/api/v1/exports/{$entity}")->assertForbidden();
+        }
+        $this->assertSame(0, Recipe::count());
+    }
 }

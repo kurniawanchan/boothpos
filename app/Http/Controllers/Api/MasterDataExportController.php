@@ -44,6 +44,10 @@ class MasterDataExportController extends Controller
             return response()->json(['message' => __('master_data_import.not_authorized_export')], 403);
         }
 
+        if (! MasterDataSheets::allows($entity, $request->user(), forExport: true)) {
+            return response()->json(['message' => __('master_data_import.not_authorized_export')], 403);
+        }
+
         $sheet = new SheetArrayExport(
             $entity,
             MasterDataSheets::headings($entity),

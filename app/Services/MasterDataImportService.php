@@ -148,6 +148,12 @@ class MasterDataImportService
         [$sheets, $ignored] = $this->readSheets($absolutePath);
         $this->presentSheets = array_fill_keys(array_keys($sheets), true);
 
+        foreach (array_keys($sheets) as $sheetName) {
+            if (! MasterDataSheets::allows($sheetName, $user)) {
+                throw new \Illuminate\Auth\Access\AuthorizationException("Anda tidak berhak mengimpor sheet '{$sheetName}'.");
+            }
+        }
+
         if ($sheets === []) {
             $this->addError(null, null, null, 'Berkas tidak memuat satu pun sheet yang dikenali ('.implode(', ', MasterDataSheets::ORDER).'). Unduh template impor untuk melihat format yang benar.');
 
