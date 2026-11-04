@@ -41,7 +41,10 @@ class SalesTransactionsService
             : null;
 
         $orders = ($ids === []) ? collect() : Order::query()
-            ->with(['cashier', 'customer', 'items.artist', 'payments', 'session.user'])
+            // 056 — `payments.proofs` dimuat SEKALI untuk `payment_proof_count` (bukan per baris).
+            ->with(array_merge(['cashier', 'customer', 'items.artist', 'payments.proofs', 'session.user'],
+                // 056 (US8) — path gambar referensi hanya dibutuhkan ekspor (detail); daftar tetap memakai withCount.
+                $detail ? ['referenceImages'] : []))
             // 055 — `has_reference` butuh jumlah gambar referensi; satu agregat, bukan kueri per baris.
             ->withCount(['items', 'referenceImages'])
             ->whereIn('status', filter_var($filters['include_voided'] ?? false, FILTER_VALIDATE_BOOLEAN) ? ['completed', 'voided'] : ['completed'])
@@ -51,7 +54,7 @@ class SalesTransactionsService
             ->when($ids !== null, fn ($q) => $q->whereIn('id', $ids))
             ->get();
 
-        $rows = $orders->map(fn (Order $o) => $this->orderRow($o, $withMargin, $detail))
+        $rows = $orders->map(fn (Order $o) => $this->orderRow($o, $withMargin, $detail, $user))
             ->sortByDesc(fn (array $r) => $r['created_at'].sprintf('%012d', $r['id']))
             ->values();
 
@@ -88,7 +91,7 @@ class SalesTransactionsService
         return ['transactions' => $rows, 'sessions' => $sessions];
     }
 
-    private function orderRow(Order $order, bool $withMargin, bool $detail): array
+    private function orderRow(Order $order, bool $withMargin, bool $detail, User $user): array
     {
         $items = $order->items;
         $payments = $order->payments->where('verification', '!=', 'rejected');
@@ -97,7 +100,23 @@ class SalesTransactionsService
         $noncash = (float) $payments->where('method', '!=', 'cash')->sum('amount');
         $top = $items->sortByDesc(fn ($i) => (float) $i->line_total)->values();
 
-        $row = ($detail ? ['items_text' => $items->map(fn ($i) => $i->name_snapshot.' ×'.$this->plain($i->qty))->implode('; ')] : []) + [
+        // 056 (US8) — HANYA untuk ekspor: catatan referensi dan path gambar (kunci berawalan `_` = bukan kolom).
+        // Bukti bayar disaring dengan Payment::proofViewableBy() — definisi izin yang sama dengan daftar & detail —
+        // sehingga berkas Excel tak pernah memuat bukti yang tak boleh dilihat pengekspornya. Daftar JSON tak
+        // pernah membawa path apa pun (`$detail` false).
+        $exportOnly = [];
+        if ($detail) {
+            $viewable = $order->payments->filter(fn (Payment $p) => $p->method !== 'cash'
+                && ($cur = $p->currentProof()) !== null && $p->proofViewableBy($user, $cur));
+            $exportOnly = [
+                'reference_note' => (string) ($order->reference_note ?? ''),
+                '_reference_images' => $order->referenceImages->pluck('path')->values()->all(),
+                '_proof_images' => $viewable->map(fn (Payment $p) => $p->currentProof()->file_path)->values()->all(),
+                '_proof_labels' => $viewable->map(fn (Payment $p) => $p->method.' '.$this->money($p->amount))->values()->all(),
+            ];
+        }
+
+        $row = $exportOnly + ($detail ? ['items_text' => $items->map(fn ($i) => $i->name_snapshot.' ×'.$this->plain($i->qty))->implode('; ')] : []) + [
             'key' => "order:{$order->id}",
             'id' => $order->id,
             'order_number' => $order->order_number,
@@ -133,6 +152,15 @@ class SalesTransactionsService
             // server yang tak mengenal filter sisi-klien (akar masalah "statistik tak cocok dengan filter").
             // 054 (US8) — hanya penanda; isi catatan/gambar dimuat saat tautannya dibuka (daftar tetap ramping).
             'has_reference' => $order->hasReference(),
+            // 056 — berapa pembayaran NON-TUNAI yang bukti BERLAKU-nya boleh dilihat PENGGUNA INI. Hanya
+            // hitungan: tak ada id/URL/gambar di daftar (gambar dimuat saat tautannya dibuka, lewat endpoint
+            // berotorisasi). Dihitung per pengguna lewat Payment::proofViewableBy() — satu-satunya definisi
+            // izin — supaya kasir lain tak mendapat petunjuk adanya bukti yang tak bisa ia buka.
+            'payment_proof_count' => $order->payments->filter(
+                fn (Payment $p) => $p->method !== 'cash'
+                    && ($current = $p->currentProof()) !== null
+                    && $p->proofViewableBy($user, $current)
+            )->count(),
             'items_gross' => $this->money($items->sum(fn ($i) => (float) $i->line_total + (float) $i->discount_amount)),
             'items_net' => $this->money($items->sum(fn ($i) => (float) $i->line_total)),
             // Rincian per penjual (kunci = nama, sama dengan filter penjual di Sales). Saat filter penjual

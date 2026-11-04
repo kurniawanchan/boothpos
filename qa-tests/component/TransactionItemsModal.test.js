@@ -671,3 +671,49 @@ describe('TransactionItemsModal — reference thumbnails (055)', () => {
     expect(screen.queryByTestId('order-reference')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * 056 (US1) — detail penjualan: thumbnail bukti pada pembayaran non-tunai; klik membuka penampil ukuran
+ * penuh yang sudah ada; thumbnail yang gagal dimuat tidak merusak sisa detail.
+ */
+describe('TransactionItemsModal — payment proof thumbnail (056)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const qris = (overrides = {}) => ({
+    id: 2, method: 'qr_ewallet', amount: '85000.00', verification: 'pending', status: 'paid',
+    paid_at: '2026-09-27T11:25:00Z', provider: 'Shopee', reference: null, notes: null, recorded_by_name: 'Kasir Satu',
+    proof_id: 31, has_proof: true, can_view_proof: true, can_edit_confirmation: false, ...overrides,
+  });
+  const orderWith = (entry) => ({
+    ...FULL_ORDER, paid_amount: '85000.00', change_amount: '0.00',
+    payment_summary: { grand_total: '85000.00', total_paid: '85000.00', remaining: '0.00', status: 'fully_paid', payment_count: 1 },
+    payments: [entry],
+  });
+
+  it('shows the thumbnail of the current proof and opens the full-size viewer on click', async () => {
+    getPaymentProofBlobUrl.mockResolvedValue('blob:proof-31');
+    const user = await open(orderWith(qris()));
+
+    const thumb = within(screen.getByTestId('payment-entry')).getByTestId('payment-proof-thumbnail');
+    await waitFor(() => expect(thumb).not.toBeDisabled());
+    await user.click(thumb);
+
+    expect(await screen.findByRole('img', { name: /bukti/i })).toHaveAttribute('src', 'blob:proof-31');
+  });
+
+  it('shows no thumbnail for a payment without a proof and keeps the "no proof" cue', async () => {
+    await open(orderWith(qris({ proof_id: null, has_proof: false, can_view_proof: false })));
+
+    const entry = screen.getByTestId('payment-entry');
+    expect(within(entry).queryByTestId('payment-proof-thumbnail')).not.toBeInTheDocument();
+    expect(within(entry).getByTestId('no-proof')).toBeInTheDocument();
+  });
+
+  it('degrades a thumbnail that cannot load to a placeholder without breaking the rest of the detail', async () => {
+    getPaymentProofBlobUrl.mockRejectedValue(new Error('gone'));
+    await open(orderWith(qris()));
+
+    expect(await screen.findByTestId('payment-proof-unavailable')).toBeInTheDocument();
+    expect(screen.getByTestId('order-payments')).toHaveTextContent(/85\.000/);
+  });
+});

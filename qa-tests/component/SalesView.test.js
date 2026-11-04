@@ -235,13 +235,16 @@ describe('SalesView — transaction search (F10.6)', () => {
     expect(await screen.findByText('Detail pelanggan')).toBeInTheDocument();
   });
 
-  it('fills the search box when clicking an artist name', async () => {
+  // 056 (US9) — dulu klik nama penjual hanya mengisi kotak cari, sehingga kartu statistik tetap menghitung
+  // transaksi campuran utuh. Kini klik itu memasang FILTER penjual (kotak cari dikosongkan).
+  it('applies the seller filter (and leaves the search box empty) when clicking an artist name', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
     renderSales();
     await screen.findByText('ORD-001');
     await user.click(screen.getAllByRole('button', { name: 'Nekoyama Studio' })[0]);
-    expect(screen.getByLabelText('Cari transaksi')).toHaveValue('Nekoyama Studio');
+    expect(screen.getByLabelText('Cari transaksi')).toHaveValue('');
+    expect(screen.queryByText('Semua penjual')).toBeNull(); // filter penjual kini aktif (pemicunya menampilkan nama)
   });
 
   it('shows a "no match" empty message and does not throw for a null-customer row when searching', async () => {

@@ -1861,7 +1861,7 @@
     "delete_confirm": "Hapus catatan dan gambar referensi ini? Tindakan ini tidak bisa dibatalkan.",
     "load_failed": "Referensi tidak bisa dimuat.",
     "updated": "Terakhir diubah oleh {name} · {when}",
-    "link": "Referensi",
+    "link": "Referensi Penjualan",
     "add": "Tambah referensi",
     "view": "Lihat / ubah referensi",
     "loading": "Memuat…",
@@ -1879,7 +1879,10 @@
     "new_badge": "Baru",
     "remove_from_selection": "Batalkan pilihan",
     "undo_remove": "Pertahankan gambar",
-    "marked_for_removal": "Akan dihapus saat disimpan"
+    "marked_for_removal": "Akan dihapus saat disimpan",
+    "filter_all": "Semua referensi penjualan",
+    "filter_has": "Punya Referensi Penjualan",
+    "filter_none": "Tanpa Referensi Penjualan"
   },
   "sales_reports": {
     "stat_transactions": "Transaksi",
@@ -1967,5 +1970,19 @@
     "loading": "Memuat…",
     "load_failed": "Sesi tidak bisa dimuat.",
     "link": "Riwayat sesi"
+  },
+  "payment_proof": {
+    "link": "Bukti Pembayaran",
+    "title": "Bukti pembayaran",
+    "loading": "Memuat…",
+    "load_failed": "Bukti pembayaran tidak bisa dimuat.",
+    "none": "Penjualan ini tidak punya bukti pembayaran yang bisa Anda lihat.",
+    "unavailable": "Bukti tidak tersedia",
+    "thumb_alt": "Bukti pembayaran, {method} {amount}",
+    "open": "Buka bukti ukuran penuh"
+  },
+  "sales_attachments": {
+    "toggle": "Tampilkan referensi & bukti bayar",
+    "toggle_hint": "Tampilkan atau sembunyikan Referensi Penjualan dan Bukti Pembayaran semua transaksi di halaman ini"
   }
 }

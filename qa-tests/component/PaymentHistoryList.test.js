@@ -1,7 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/vue';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, within, waitFor } from '@testing-library/vue';
 import userEvent from '@testing-library/user-event';
 import PaymentHistoryList from '../../resources/js/components/payment/PaymentHistoryList.vue';
+import { getPaymentProofBlobUrl } from '../../resources/js/api/payments';
+
+vi.mock('../../resources/js/api/payments', () => ({ getPaymentProofBlobUrl: vi.fn() }));
 
 const PAYMENTS = [
   { id: 1, method: 'cash', amount: '200000.00', paid_at: '2026-10-04T05:00:00Z', reference: null, recorded_by_name: 'Kasir Satu', status: 'paid', proof_id: null },
@@ -282,3 +285,67 @@ describe('PaymentHistoryList — who verified and when (032 US2)', () => {
   });
 });
 
+
+/**
+ * 056 (US1) — thumbnail bukti pembayaran di riwayat pembayaran: opt-in (`proofThumbnails`), hanya untuk bukti
+ * yang SERVER nyatakan boleh dilihat, hanya non-tunai; klik = aksi "view-proof" yang sudah ada.
+ */
+describe('PaymentHistoryList — proof thumbnails (056 US1)', () => {
+  const entry = (overrides = {}) => ({
+    id: 2, method: 'qr_ewallet', amount: '85000.00', paid_at: '2026-10-04T06:30:00Z', status: 'paid', verification: 'pending',
+    proof_id: 31, has_proof: true, can_view_proof: true, ...overrides,
+  });
+  const thumbs = (row) => within(row).queryAllByTestId('payment-proof-thumbnail');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getPaymentProofBlobUrl.mockResolvedValue('blob:p');
+  });
+
+  it('shows a thumbnail on a non-cash payment with a viewable proof, and clicking it emits view-proof', async () => {
+    const payment = entry();
+    const { emitted } = render(PaymentHistoryList, { props: { payments: [payment], proofThumbnails: true } });
+
+    expect(thumbs(rows()[0])).toHaveLength(1);
+    expect(getPaymentProofBlobUrl).toHaveBeenCalledWith(31);
+    await waitFor(() => expect(thumbs(rows()[0])[0]).not.toBeDisabled());
+    await userEvent.setup().click(thumbs(rows()[0])[0]);
+    expect(emitted()['view-proof'][0][0]).toMatchObject({ id: 2, proof_id: 31 });
+  });
+
+  it('keeps the text "View proof" link next to the thumbnail', () => {
+    render(PaymentHistoryList, { props: { payments: [entry()], proofThumbnails: true } });
+
+    expect(within(rows()[0]).getByRole('button', { name: /lihat bukti/i })).toBeInTheDocument();
+  });
+
+  it('shows no thumbnail without permission, without a proof, or for cash — and keeps "No proof yet"', () => {
+    render(PaymentHistoryList, {
+      props: {
+        proofThumbnails: true,
+        payments: [
+          entry({ id: 1, can_view_proof: false }),
+          entry({ id: 2, proof_id: null, has_proof: false }),
+          entry({ id: 3, method: 'cash', proof_id: 40 }),
+        ],
+      },
+    });
+
+    for (const row of rows()) expect(thumbs(row)).toHaveLength(0);
+    expect(within(rows()[1]).getByTestId('no-proof')).toBeInTheDocument();
+    expect(getPaymentProofBlobUrl).not.toHaveBeenCalled();
+  });
+
+  it('is off by default (Pre-orders are unchanged)', () => {
+    render(PaymentHistoryList, { props: { payments: [entry()] } });
+
+    expect(thumbs(rows()[0])).toHaveLength(0);
+    expect(getPaymentProofBlobUrl).not.toHaveBeenCalled();
+  });
+
+  it('renders every proof of a sale with several payments, one thumbnail each', () => {
+    render(PaymentHistoryList, { props: { proofThumbnails: true, payments: [entry({ id: 1, proof_id: 31 }), entry({ id: 2, proof_id: 32 })] } });
+
+    expect(screen.getAllByTestId('payment-proof-thumbnail')).toHaveLength(2);
+  });
+});

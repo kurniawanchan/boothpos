@@ -6,6 +6,7 @@ import SalesView from '../../resources/js/views/SalesView.vue';
 import { listEvents } from '../../resources/js/api/events';
 import { salesReport } from '../../resources/js/api/reports';
 import { getReference, getReferenceImageUrl } from '../../resources/js/api/orders';
+import { i18n } from '../../resources/js/i18n';
 
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/reports', () => ({ salesReport: vi.fn(), exportReport: vi.fn(), exportSalesTransactions: vi.fn() }));
@@ -60,5 +61,18 @@ describe('SalesView — reference link (054 US8)', () => {
     expect(await screen.findByText('Foto WA')).toBeInTheDocument();
     expect(getReference).toHaveBeenCalledWith(1);
     expect(screen.getByText('ORD-001')).toBeInTheDocument();
+  });
+
+  // 056 (US3) — "Reference" → "Sale Reference", supaya tak tertukar dengan tautan "Payment Proof" di sebelahnya.
+  it('labels the link "Sale Reference" in English and "Referensi Penjualan" in Indonesian', async () => {
+    i18n.global.locale.value = 'en';
+    await open();
+    expect(screen.getByTestId('reference-link')).toHaveTextContent(/^\s*Sale Reference\s*$/);
+    expect(screen.getByTestId('reference-link')).not.toHaveTextContent(/^\s*Reference\s*$/);
+  });
+
+  it('keeps the Indonesian label "Referensi Penjualan" by default', async () => {
+    await open();
+    expect(screen.getByTestId('reference-link')).toHaveTextContent(/^\s*Referensi Penjualan\s*$/);
   });
 });
