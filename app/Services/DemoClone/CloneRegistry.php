@@ -67,8 +67,14 @@ final class CloneRegistry
                 'fks' => ['event_id' => 'events', 'session_id' => 'cashier_sessions', 'customer_id' => 'customers'],
                 'suffix' => ['order_number' => 30],
                 'uuid' => ['local_ref'],
-                // 054 — gambar referensi transaksi DISALIN (tak pernah dibagi), seperti berkas lain.
-                'files' => ['reference_image_path' => 'local'],
+            ],
+            // 055 — gambar referensi transaksi (dulu satu kolom di orders). Tanpa data_mode: ikut mode order-nya.
+            // Berkasnya DISALIN (tak pernah dibagi), baris yang berkas sumbernya hilang dilewati.
+            'order_reference_images' => [
+                'fks' => ['order_id' => 'orders'],
+                'files' => ['path' => 'local'],
+                'required_files' => ['path'],
+                'via' => 'orders.order_id',
             ],
             'order_items' => ['fks' => ['order_id' => 'orders', 'variant_id' => 'product_variants', 'artist_id' => 'artists']],
             'preorders' => [

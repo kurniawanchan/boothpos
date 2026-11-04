@@ -14,6 +14,7 @@ import AddPaymentModal from '../payment/AddPaymentModal.vue';
 import PaymentConfirmationModal from '../payment/PaymentConfirmationModal.vue';
 import ChangePaymentMethodModal from './ChangePaymentMethodModal.vue';
 import OrderReferenceModal from './OrderReferenceModal.vue';
+import ReferenceThumbnails from './ReferenceThumbnails.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
 import { getOrder, voidOrder, addOrderPayment, deleteOrderPayment } from '../../api/orders';
 import { getPaymentProofBlobUrl, verifyPayment } from '../../api/payments';
@@ -324,7 +325,8 @@ async function performVoid() {
         <div v-if="order.reference && (order.reference.note || order.reference.has_image || order.reference.can_edit)" data-testid="order-reference" class="flex flex-col gap-2 rounded-lg border border-line-2 px-4 py-3.5">
           <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">{{ t('sales_reference.title') }}</span>
           <p v-if="order.reference.note" class="line-clamp-3 whitespace-pre-line break-words text-[13px]">{{ order.reference.note }}</p>
-          <p v-else-if="order.reference.has_image" class="text-[12.5px] text-muted-3">{{ t('sales_reference.image_label') }}</p>
+          <!-- 055 — gambar langsung terlihat sebagai thumbnail (dulu hanya teks "Gambar"); klik = ukuran penuh. -->
+          <ReferenceThumbnails v-if="order.reference.images?.length" :order-id="order.id" :images="order.reference.images" />
           <button type="button" class="w-fit whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" data-testid="open-reference" @click="showReference = true">
             {{ order.reference.note || order.reference.has_image ? t('sales_reference.view') : t('sales_reference.add') }}
           </button>

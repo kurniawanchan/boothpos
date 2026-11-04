@@ -42,7 +42,8 @@ class SalesTransactionsService
 
         $orders = ($ids === []) ? collect() : Order::query()
             ->with(['cashier', 'customer', 'items.artist', 'payments', 'session.user'])
-            ->withCount('items')
+            // 055 — `has_reference` butuh jumlah gambar referensi; satu agregat, bukan kueri per baris.
+            ->withCount(['items', 'referenceImages'])
             ->whereIn('status', filter_var($filters['include_voided'] ?? false, FILTER_VALIDATE_BOOLEAN) ? ['completed', 'voided'] : ['completed'])
             ->when(! empty($filters['event_id']), fn ($q) => $q->where('event_id', (int) $filters['event_id']))
             ->when(! empty($filters['date_from']), fn ($q) => $q->whereDate('created_at', '>=', $filters['date_from']))

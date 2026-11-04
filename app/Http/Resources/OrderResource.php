@@ -25,15 +25,9 @@ class OrderResource extends JsonResource
             'notes' => $this->notes,
             'channel' => $this->channel,
             'created_at' => $this->created_at,
-            // 054 (US8) — referensi transaksi. Kolom-kolomnya ada di model, jadi blok ini SELALU ada (tidak
-            // bergantung pada relasi yang dimuat); hanya nama pengubah yang menunggu relasi `referenceEditor`.
-            'reference' => [
-                'note' => $this->reference_note,
-                'has_image' => $this->reference_image_path !== null,
-                'updated_at' => $this->reference_updated_at,
-                'updated_by_name' => $this->relationLoaded('referenceEditor') ? $this->referenceEditor?->name : null,
-                'can_edit' => $request->user() !== null && \App\Services\OrderReferenceService::mayEdit($this->resource, $request->user()),
-            ],
+            // 054 (US8) / 055 — referensi transaksi: SATU presenter untuk resource ini dan endpoint referensi
+            // (dulu bloknya disalin di dua tempat). Presenter memuat relasinya sendiri bila belum dimuat.
+            'reference' => \App\Services\OrderReferenceService::present($this->resource, $request->user()),
             // null (kunci tetap ada) untuk pembeli walk-in; hilang bila relasi tak dimuat.
             'customer' => $this->whenLoaded('customer', fn ($c) => ['id' => $c->id, 'name' => $c->name, 'phone' => $c->phone, 'email' => $c->email]),
             'cashier' => $this->whenLoaded('cashier', fn ($u) => ['id' => $u->id, 'name' => $u->name]),

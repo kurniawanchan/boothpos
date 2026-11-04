@@ -43,7 +43,8 @@ class LiveToDemoClonerTest extends TestCase
 
         $this->assertSame(['demo_delete' => 1, 'live_clone' => 1], $plan['tables']['orders']);
         $this->assertSame(['demo_delete' => 2, 'live_clone' => 2], $plan['tables']['preorders']);
-        $this->assertSame(6, $plan['files']['files']); // 3 gambar + 1 bukti bayar + 1 tanda tangan + 1 bukti bayar settlement LIVE
+        $this->assertSame(8, $plan['files']['files']); // 3 gambar + 1 bukti bayar + 1 tanda tangan + 1 bukti bayar settlement + 2 gambar referensi (055) LIVE
+        $this->assertSame(['demo_delete' => 2, 'live_clone' => 2], $plan['tables']['order_reference_images']);
         $this->assertGreaterThan(0, $plan['files']['bytes']);
         $this->assertSame(1, $this->mode('orders', 'demo')->count());
         $this->assertSame($this->oldDemo['order'], $this->demo('orders')->id);
@@ -177,6 +178,26 @@ class LiveToDemoClonerTest extends TestCase
         $demoAck = DB::table('seller_settlement_acknowledgements')->where('settlement_id', $settlement->id)->first();
         $this->assertSame('live-signature-bytes', Storage::disk('local')->get($demoAck->signature_path));
         $this->assertTrue(Storage::disk('local')->exists($livePath));
+    }
+
+    public function test_order_reference_images_ride_their_order_and_their_files_are_copied(): void
+    {
+        (new LiveToDemoCloner)->run();
+
+        $demoOrder = $this->demo('orders');
+        $images = DB::table('order_reference_images')->where('order_id', $demoOrder->id)->orderBy('position')->get();
+        $livePaths = DB::table('order_reference_images')->where('order_id', $this->live['order'])->orderBy('position')->pluck('path')->all();
+
+        $this->assertCount(2, $images);
+        $this->assertSame([1, 2], $images->pluck('position')->map(fn ($p) => (int) $p)->all());
+        foreach ($images as $i => $image) {
+            // Berkas DISALIN (path baru, isi sama), tidak pernah menunjuk berkas LIVE.
+            $this->assertNotContains($image->path, $livePaths);
+            $this->assertSame('live-ref-'.($i + 1).'-bytes', Storage::disk('local')->get($image->path));
+        }
+        foreach ($livePaths as $path) {
+            $this->assertTrue(Storage::disk('local')->exists($path));
+        }
     }
 
     public function test_old_demo_settlement_files_are_removed_but_a_live_file_is_never_deleted(): void

@@ -3,19 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\ActivityLog;
-use App\Models\Artist;
-use App\Models\CashierSession;
-use App\Models\Category;
-use App\Models\Event;
-use App\Models\Order;
-use App\Models\Product;
 use App\Models\Role;
-use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
+use Tests\Support\BuildsReferenceSales;
 use Tests\TestCase;
 
 /**
@@ -23,60 +16,21 @@ use Tests\TestCase;
  * Dikunci di sini: bentuk dan batas berkas, siapa boleh mengubah (owner/admin atau kasir penjualannya)
  * dan melihat (menu sales), berkas hanya lewat endpoint yang mengotorisasi (disk privat), jejak audit
  * dalam transaksi, dan referensi TIDAK pernah menyentuh uang, stok, atau status.
+ *
+ * 055 — kontrak tulis berubah dari satu `image`/`remove_image` menjadi `images[]`/`remove_image_ids[]`
+ * dan gambar dilayani per id (`/reference/images/{image}`); aturan 054 di atas tetap sama. Aturan khusus
+ * banyak-gambar (batas, urutan, rollback, binding bertingkat) ada di OrderReferenceImagesTest.
  */
 class OrderReferenceTest extends TestCase
 {
+    use BuildsReferenceSales;
     use RefreshDatabase;
-
-    private User $cashier;
-
-    private User $owner;
-
-    private ProductVariant $variant;
-
-    private CashierSession $session;
 
     protected function setUp(): void
     {
         parent::setUp();
         Storage::fake('local');
-
-        $this->cashier = User::factory()->create(['role' => 'cashier']);
-        $this->owner = User::factory()->create(['role' => 'owner']);
-        $product = Product::factory()->create(['artist_id' => Artist::factory()->create()->id, 'category_id' => Category::factory()->create()->id]);
-        $this->variant = $product->variants()->create(['sku' => 'REF0001', 'sell_price' => 25000, 'cost_price' => 10000, 'current_stock' => 100]);
-        $this->session = CashierSession::factory()->create([
-            'event_id' => Event::factory()->create(['status' => 'active'])->id, 'user_id' => $this->cashier->id, 'status' => 'open',
-        ]);
-    }
-
-    private function as(User $user): static
-    {
-        $this->actingAs($user, 'sanctum');
-
-        return $this;
-    }
-
-    private function sale(): Order
-    {
-        $this->as($this->cashier);
-        $id = $this->postJson('/api/v1/orders', [
-            'session_id' => $this->session->id, 'local_ref' => (string) Str::uuid(),
-            'items' => [['variant_id' => $this->variant->id, 'qty' => 2]], 'payments' => [['method' => 'cash', 'amount' => 50000]],
-        ])->assertCreated()->json('id');
-
-        return Order::find($id);
-    }
-
-    private function png(string $name = 'wa.png', int $kb = 20): UploadedFile
-    {
-        return UploadedFile::fake()->image($name, 40, 40)->size($kb);
-    }
-
-    private function saveRef(Order $order, array $body)
-    {
-        // PUT multipart: Laravel hanya mengurai multipart pada POST, jadi dikirim sebagai POST + _method.
-        return $this->post("/api/v1/orders/{$order->id}/reference", $body + ['_method' => 'PUT'], ['Accept' => 'application/json']);
+        $this->setUpReferenceSales();
     }
 
     // --- buat / ubah ---------------------------------------------------------------
@@ -86,11 +40,12 @@ class OrderReferenceTest extends TestCase
         $order = $this->sale();
 
         $this->saveRef($order, ['note' => 'Foto WA dari Budi, jam 10.15'])->assertOk()
-            ->assertJsonPath('note', 'Foto WA dari Budi, jam 10.15')->assertJsonPath('has_image', false);
+            ->assertJsonPath('note', 'Foto WA dari Budi, jam 10.15')->assertJsonPath('has_image', false)
+            ->assertJsonPath('images', [])->assertJsonPath('image_count', 0);
 
         $order->refresh();
         $this->assertSame('Foto WA dari Budi, jam 10.15', $order->reference_note);
-        $this->assertNull($order->reference_image_path);
+        $this->assertSame(0, $order->referenceImages()->count());
         $this->assertSame($this->cashier->id, $order->reference_updated_by);
     }
 
@@ -98,56 +53,49 @@ class OrderReferenceTest extends TestCase
     {
         $order = $this->sale();
 
-        $this->saveRef($order, ['image' => $this->png('foto-pelanggan.png')])->assertOk()->assertJsonPath('has_image', true);
+        $this->saveRef($order, ['images' => [$this->png('foto-pelanggan.png')]])->assertOk()
+            ->assertJsonPath('has_image', true)->assertJsonPath('image_count', 1);
 
-        $order->refresh();
-        $this->assertStringStartsWith('order-references/', $order->reference_image_path);
-        $this->assertStringNotContainsString('foto-pelanggan', $order->reference_image_path);
-        Storage::disk('local')->assertExists($order->reference_image_path);
-        $this->assertSame('image/png', $order->reference_image_mime);
+        $image = $order->referenceImages()->sole();
+        $this->assertStringStartsWith('order-references/', $image->path);
+        $this->assertStringNotContainsString('foto-pelanggan', $image->path);
+        Storage::disk('local')->assertExists($image->path);
+        $this->assertSame('image/png', $image->mime);
+        $this->assertSame($this->cashier->id, $image->uploaded_by);
     }
 
-    public function test_replacing_the_image_deletes_the_old_file(): void
+    public function test_the_note_can_change_while_images_stay_and_an_image_can_be_removed(): void
     {
         $order = $this->sale();
-        $this->saveRef($order, ['image' => $this->png('a.png')])->assertOk();
-        $old = $order->fresh()->reference_image_path;
-
-        $this->saveRef($order, ['image' => $this->png('b.png')])->assertOk();
-
-        $this->assertNotSame($old, $order->fresh()->reference_image_path);
-        Storage::disk('local')->assertMissing($old);
-        Storage::disk('local')->assertExists($order->fresh()->reference_image_path);
-    }
-
-    public function test_the_note_can_change_while_the_image_stays_and_the_image_can_be_removed(): void
-    {
-        $order = $this->sale();
-        $this->saveRef($order, ['note' => 'awal', 'image' => $this->png()])->assertOk();
-        $path = $order->fresh()->reference_image_path;
+        $this->saveRef($order, ['note' => 'awal', 'images' => [$this->png()]])->assertOk();
+        $image = $order->referenceImages()->sole();
 
         $this->saveRef($order, ['note' => 'revisi'])->assertOk();
         $this->assertSame('revisi', $order->fresh()->reference_note);
-        $this->assertSame($path, $order->fresh()->reference_image_path);
+        $this->assertSame($image->id, $order->referenceImages()->sole()->id);
 
-        $this->saveRef($order, ['remove_image' => true])->assertOk()->assertJsonPath('has_image', false);
-        $this->assertNull($order->fresh()->reference_image_path);
-        Storage::disk('local')->assertMissing($path);
+        $this->saveRef($order, ['remove_image_ids' => [$image->id]])->assertOk()->assertJsonPath('has_image', false);
+        $this->assertSame(0, $order->referenceImages()->count());
+        Storage::disk('local')->assertMissing($image->path);
     }
 
-    public function test_delete_removes_note_and_image(): void
+    public function test_delete_removes_note_and_every_image(): void
     {
         $order = $this->sale();
-        $this->saveRef($order, ['note' => 'x', 'image' => $this->png()])->assertOk();
-        $path = $order->fresh()->reference_image_path;
+        $this->saveRef($order, ['note' => 'x', 'images' => $this->pngs(2)])->assertOk();
+        $paths = $order->referenceImages()->pluck('path')->all();
 
-        $this->deleteJson("/api/v1/orders/{$order->id}/reference")->assertOk();
+        $this->deleteJson("/api/v1/orders/{$order->id}/reference")->assertOk()
+            ->assertJsonPath('images', [])->assertJsonPath('image_count', 0);
 
         $order->refresh();
         $this->assertNull($order->reference_note);
-        $this->assertNull($order->reference_image_path);
-        Storage::disk('local')->assertMissing($path);
-        $this->assertNotNull(ActivityLog::where('action', 'order_reference_removed')->first());
+        $this->assertSame(0, $order->referenceImages()->count());
+        foreach ($paths as $path) {
+            Storage::disk('local')->assertMissing($path);
+        }
+        $log = ActivityLog::where('action', 'order_reference_removed')->sole();
+        $this->assertSame(2, $log->old_values['image_count']);
     }
 
     // --- validasi ------------------------------------------------------------------
@@ -156,15 +104,10 @@ class OrderReferenceTest extends TestCase
     {
         $order = $this->sale();
 
-        $this->saveRef($order, ['image' => UploadedFile::fake()->create('dok.pdf', 20, 'application/pdf')])->assertStatus(422);
-        $this->saveRef($order, ['image' => $this->png('big.png', 6000)])->assertStatus(422);
+        $this->saveRef($order, ['images' => [UploadedFile::fake()->create('dok.pdf', 20, 'application/pdf')]])->assertStatus(422);
+        $this->saveRef($order, ['images' => [$this->png('big.png', 6000)]])->assertStatus(422);
         $this->saveRef($order, ['note' => str_repeat('a', 1001)])->assertStatus(422);
-        // Berkas yang hanya diganti ekstensinya (isi bukan gambar). UploadedFile::fake() melaporkan jenis dari
-        // EKSTENSI, jadi untuk benar-benar menguji pembacaan isi dipakai berkas sungguhan di disk.
-        $path = tempnam(sys_get_temp_dir(), 'ref');
-        file_put_contents($path, 'ini bukan gambar sama sekali');
-        $this->saveRef($order, ['image' => new UploadedFile($path, 'palsu.png', 'image/png', null, true)])->assertStatus(422);
-        @unlink($path);
+        $this->saveRef($order, ['images' => [$this->fakePngWithTextContent()]])->assertStatus(422)->assertJsonValidationErrors('images.0');
 
         $this->assertSame([], Storage::disk('local')->allFiles());
         $this->assertFalse($order->fresh()->hasReference());
@@ -185,15 +128,19 @@ class OrderReferenceTest extends TestCase
     public function test_only_owner_admin_or_the_sales_cashier_may_edit_but_every_sales_user_may_read(): void
     {
         $order = $this->sale();
-        $this->saveRef($order, ['note' => 'catatan', 'image' => $this->png()])->assertOk();
+        $this->saveRef($order, ['note' => 'catatan', 'images' => [$this->png()]])->assertOk();
+        $imageId = $order->referenceImages()->sole()->id;
         $other = User::factory()->create(['role' => 'cashier']);
 
         $this->as($other);
         $this->saveRef($order, ['note' => 'ubahan orang lain'])->assertStatus(403);
+        $this->saveRef($order, ['images' => [$this->png()]])->assertStatus(403);
+        $this->saveRef($order, ['remove_image_ids' => [$imageId]])->assertStatus(403);
         $this->deleteJson("/api/v1/orders/{$order->id}/reference")->assertStatus(403);
         $this->getJson("/api/v1/orders/{$order->id}/reference")->assertOk()->assertJsonPath('note', 'catatan')->assertJsonPath('can_edit', false);
-        $this->get("/api/v1/orders/{$order->id}/reference/image")->assertOk();
+        $this->get($this->imageUrl($order, $imageId))->assertOk();
         $this->assertSame('catatan', $order->fresh()->reference_note);
+        $this->assertSame(1, $order->referenceImages()->count());
 
         $this->as($this->owner);
         $this->saveRef($order, ['note' => 'ubah owner'])->assertOk();
@@ -203,35 +150,38 @@ class OrderReferenceTest extends TestCase
     public function test_a_user_without_the_sales_menu_cannot_read_the_reference_or_image(): void
     {
         $order = $this->sale();
-        $this->saveRef($order, ['note' => 'rahasia', 'image' => $this->png()])->assertOk();
+        $this->saveRef($order, ['note' => 'rahasia', 'images' => [$this->png()]])->assertOk();
+        $imageId = $order->referenceImages()->sole()->id;
         $noSales = User::factory()->create(['role' => 'cashier']);
         $noSales->update(['role_id' => Role::factory()->create(['menu_keys' => ['dashboard']])->id]);
         $this->as($noSales->fresh());
 
         $this->getJson("/api/v1/orders/{$order->id}/reference")->assertStatus(403);
-        $this->get("/api/v1/orders/{$order->id}/reference/image")->assertStatus(403);
+        $this->get($this->imageUrl($order, $imageId), ['Accept' => 'application/json'])->assertStatus(403);
     }
 
     public function test_the_image_is_served_with_private_headers_and_unauthenticated_requests_are_refused(): void
     {
         $order = $this->sale();
-        $this->saveRef($order, ['image' => $this->png()])->assertOk();
+        $this->saveRef($order, ['images' => [$this->png()]])->assertOk();
+        $imageId = $order->referenceImages()->sole()->id;
 
-        $res = $this->get("/api/v1/orders/{$order->id}/reference/image")->assertOk();
+        $res = $this->get($this->imageUrl($order, $imageId))->assertOk();
         $this->assertStringContainsString('no-store', (string) $res->headers->get('Cache-Control'));
         $this->assertStringContainsString('private', (string) $res->headers->get('Cache-Control'));
         $this->assertSame('image/png', $res->headers->get('Content-Type'));
 
         $this->app['auth']->forgetGuards();
-        $this->get("/api/v1/orders/{$order->id}/reference/image", ['Accept' => 'application/json'])->assertStatus(401);
+        $this->get($this->imageUrl($order, $imageId), ['Accept' => 'application/json'])->assertStatus(401);
     }
 
     public function test_a_sale_without_a_reference_has_no_image(): void
     {
         $order = $this->sale();
 
-        $this->getJson("/api/v1/orders/{$order->id}/reference")->assertOk()->assertJsonPath('note', null)->assertJsonPath('has_image', false);
-        $this->get("/api/v1/orders/{$order->id}/reference/image")->assertStatus(404);
+        $this->getJson("/api/v1/orders/{$order->id}/reference")->assertOk()
+            ->assertJsonPath('note', null)->assertJsonPath('has_image', false)->assertJsonPath('images', []);
+        $this->get($this->imageUrl($order, 999999), ['Accept' => 'application/json'])->assertStatus(404);
     }
 
     // --- efek samping --------------------------------------------------------------
@@ -241,11 +191,13 @@ class OrderReferenceTest extends TestCase
         $order = $this->sale();
         $before = $order->only(['total_amount', 'paid_amount', 'change_amount', 'status']);
         $stock = $this->variant->fresh()->current_stock;
+        $payments = $order->payments()->get(['id', 'amount', 'method', 'verification'])->toArray();
 
-        $this->saveRef($order, ['note' => 'bukti', 'image' => $this->png()])->assertOk();
+        $this->saveRef($order, ['note' => 'bukti', 'images' => $this->pngs(2)])->assertOk();
 
         $this->assertEquals($before, $order->fresh()->only(['total_amount', 'paid_amount', 'change_amount', 'status']));
         $this->assertSame($stock, $this->variant->fresh()->current_stock);
+        $this->assertEquals($payments, $order->payments()->get(['id', 'amount', 'method', 'verification'])->toArray());
         $log = ActivityLog::where('action', 'order_reference_updated')->latest('id')->first();
         $this->assertNotNull($log);
         $this->assertSame($this->cashier->id, (int) $log->user_id);
@@ -256,15 +208,16 @@ class OrderReferenceTest extends TestCase
         $order = $this->sale();
         $this->as($this->owner)->postJson("/api/v1/orders/{$order->id}/void", ['reason' => 'salah'])->assertOk();
 
-        $this->saveRef($order, ['note' => 'alasan pembatalan: pelanggan tidak jadi'])->assertOk();
+        $this->saveRef($order, ['note' => 'alasan pembatalan: pelanggan tidak jadi', 'images' => [$this->png()]])->assertOk();
     }
 
     public function test_the_order_detail_carries_the_reference_block(): void
     {
         $order = $this->sale();
-        $this->saveRef($order, ['note' => 'ada', 'image' => $this->png()])->assertOk();
+        $this->saveRef($order, ['note' => 'ada', 'images' => [$this->png()]])->assertOk();
 
         $this->getJson("/api/v1/orders/{$order->id}")->assertOk()
-            ->assertJsonPath('reference.note', 'ada')->assertJsonPath('reference.has_image', true)->assertJsonPath('reference.can_edit', true);
+            ->assertJsonPath('reference.note', 'ada')->assertJsonPath('reference.has_image', true)
+            ->assertJsonPath('reference.image_count', 1)->assertJsonPath('reference.can_edit', true);
     }
 }

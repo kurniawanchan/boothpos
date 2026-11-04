@@ -44,6 +44,14 @@ describe('SalesView — reference link (054 US8)', () => {
     expect(within(screen.getByText('ORD-002').closest('tr')).queryByTestId('reference-link')).not.toBeInTheDocument();
   });
 
+  it('places the link directly below the transaction number, in the same cell (055)', async () => {
+    await open();
+
+    const numberCell = screen.getByText('ORD-001').closest('td');
+    const link = within(numberCell).getByTestId('reference-link');
+    expect(screen.getByText('ORD-001').compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('opens the reference without leaving the page', async () => {
     const user = await open();
 

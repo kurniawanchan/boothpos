@@ -235,9 +235,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/orders/{order}/payments', [OrderController::class, 'storePayment']);
         Route::delete('/orders/{order}/payments/{payment}', [OrderController::class, 'destroyPayment']);
         Route::patch('/orders/{order}/payments/{payment}/confirmation', [OrderController::class, 'updatePaymentConfirmation']);
-        // 054 (US8) — referensi transaksi (catatan + satu gambar privat).
+        // 054 (US8) — referensi transaksi (catatan + gambar privat). 055 — banyak gambar, dilayani per id;
+        // scopeBindings: {referenceImage} harus milik {order} (gambar penjualan lain → 404). Nama parameter
+        // menentukan relasi yang dipakai Laravel (Order::referenceImages()), jadi jangan disingkat jadi {image}.
         Route::get('/orders/{order}/reference', [OrderController::class, 'showReference']);
-        Route::get('/orders/{order}/reference/image', [OrderController::class, 'referenceImage']);
+        Route::get('/orders/{order}/reference/images/{referenceImage}', [OrderController::class, 'referenceImage'])->scopeBindings();
         Route::put('/orders/{order}/reference', [OrderController::class, 'saveReference']);
         Route::delete('/orders/{order}/reference', [OrderController::class, 'deleteReference']);
         Route::patch('/orders/{order}/payments/{payment}/method', [OrderController::class, 'changePaymentMethod']);

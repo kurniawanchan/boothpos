@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\OrderReferenceLimitException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreOrderRequest;
 use App\Http\Requests\StorePaymentRequest;
@@ -9,6 +10,7 @@ use App\Http\Requests\UpdatePaymentConfirmationRequest;
 use App\Http\Requests\VerifyOrderPaymentsRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
+use App\Models\OrderReferenceImage;
 use App\Models\Payment;
 use App\Models\Setting;
 use App\Services\ImageUploadService;
@@ -43,6 +45,9 @@ class OrderController extends Controller
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('created_at', '>=', $request->date('date_from')))
             ->when($request->filled('date_to'), fn ($q) => $q->whereDate('created_at', '<=', $request->date('date_to')))
             ->withCount('items')
+            // 055 — blok referensi di OrderResource membaca kedua relasi ini; dimuat sekali untuk satu halaman
+            // supaya presenter tidak memuatnya per baris (N+1).
+            ->with(['referenceImages', 'referenceEditor'])
             ->orderByDesc('created_at')
             ->paginate($perPage);
 
@@ -187,15 +192,7 @@ class OrderController extends Controller
 
     private function referenceBlock(Order $order, Request $request): array
     {
-        $order->loadMissing('referenceEditor');
-
-        return [
-            'note' => $order->reference_note,
-            'has_image' => $order->reference_image_path !== null,
-            'updated_at' => $order->reference_updated_at,
-            'updated_by_name' => $order->referenceEditor?->name,
-            'can_edit' => OrderReferenceService::mayEdit($order, $request->user()),
-        ];
+        return OrderReferenceService::present($order, $request->user());
     }
 
     public function showReference(Request $request, Order $order): JsonResponse
@@ -205,25 +202,34 @@ class OrderController extends Controller
         return response()->json($this->referenceBlock($order, $request));
     }
 
-    public function referenceImage(Request $request, Order $order): Response|JsonResponse
+    /** 055 — satu gambar referensi; `{referenceImage}` di-scope ke `{order}` oleh route (scopeBindings). */
+    public function referenceImage(Request $request, Order $order, OrderReferenceImage $referenceImage): Response|JsonResponse
     {
         abort_unless($request->user()->canAccessMenu('sales'), 403, __('orders_payments.reference_not_allowed_view'));
 
-        $path = $order->reference_image_path;
-        if ($path === null || ! Storage::disk('local')->exists($path)) {
+        if (! Storage::disk('local')->exists($referenceImage->path)) {
             return response()->json(['message' => __('orders_payments.reference_image_missing')], 404);
         }
 
         // Diautorisasi per permintaan lalu dilayani dari disk privat; tak pernah di-cache bersama.
-        return response(Storage::disk('local')->get($path))
-            ->header('Content-Type', $order->reference_image_mime ?: 'application/octet-stream')
+        return response(Storage::disk('local')->get($referenceImage->path))
+            ->header('Content-Type', $referenceImage->mime ?: 'application/octet-stream')
             ->header('Cache-Control', 'private, no-store');
     }
 
     public function saveReference(\App\Http\Requests\UpsertOrderReferenceRequest $request, Order $order, OrderReferenceService $service): JsonResponse
     {
         try {
-            $order = $service->save($order, $request->safe()->only(['note', 'remove_image']), $request->file('image'), $request->user());
+            $order = $service->save(
+                $order,
+                $request->safe()->only(['note', 'remove_image_ids']),
+                array_values($request->file('images', [])),
+                $request->user(),
+            );
+        } catch (OrderReferenceLimitException $e) {
+            return response()->json([
+                'message' => $e->getMessage(), 'code' => OrderReferenceLimitException::CODE, 'max' => $e->max, 'remaining' => $e->remaining,
+            ], 409);
         } catch (ValidationException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
         }

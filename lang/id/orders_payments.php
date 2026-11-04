@@ -53,5 +53,6 @@ return [
     'reference_not_allowed_view' => 'Anda tidak punya akses ke referensi transaksi.',
     'reference_empty' => 'Isi catatan atau gambar; untuk menghapus referensi seluruhnya, hapus saja.',
     'reference_image_invalid' => 'Berkas harus berupa gambar JPEG, PNG, atau WebP.',
+    'reference_image_limit' => 'Satu penjualan paling banyak punya :max gambar referensi; masih bisa ditambah :remaining lagi.',
     'reference_image_missing' => 'Penjualan ini tidak punya gambar referensi.',
 ];
