@@ -372,6 +372,18 @@ class SalesTransactionsExportTest extends TestCase
         $this->assertSame(44000.0, $scoped['total']);       // Total tetap utuh (pembayaran tak dibagi per penjual)
     }
 
+    public function test_a_user_without_the_sales_menu_cannot_export_references_or_proofs(): void
+    {
+        $order = $this->makeOrder();
+        $this->addReference($order, [], 'rahasia');
+        $noSales = User::factory()->create(['role' => 'cashier']);
+        $noSales->update(['role_id' => \App\Models\Role::factory()->create(['menu_keys' => ['dashboard']])->id]);
+        $this->assertFalse($noSales->fresh()->canAccessMenu('sales'), 'prasyarat: peran khusus tanpa menu sales');
+
+        $this->actingAs($noSales->fresh(), 'sanctum');
+        $this->postJson(self::URL, ['event_id' => $this->event->id])->assertStatus(403);
+    }
+
     public function test_it_requires_a_login(): void
     {
         $this->app['auth']->forgetGuards();

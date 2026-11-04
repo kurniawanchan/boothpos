@@ -295,6 +295,10 @@ class ReportController extends Controller
      */
     public function exportSalesTransactions(Request $request)
     {
+        // 056 — sejajar dengan endpoint referensi (showReference): berkas ini memuat catatan referensi dan gambar
+        // referensi/bukti, jadi hanya peran dengan menu `sales` (halaman Sales) yang boleh mengekspornya.
+        abort_unless($request->user()->canAccessMenu('sales'), 403, __('orders_payments.reference_not_allowed_view'));
+
         $validated = $request->validate([
             'event_id' => ['nullable', 'integer'],
             'date_from' => ['nullable', 'date'],
