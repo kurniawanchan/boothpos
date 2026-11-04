@@ -1,6 +1,7 @@
 <script setup>
 import { useI18n } from 'vue-i18n';
 import StatusPill from '../ui/StatusPill.vue';
+import PaymentProofThumbnail from './PaymentProofThumbnail.vue';
 import { formatIDR } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { paymentMethodLabel } from '../../utils/paymentMethods';
@@ -21,6 +22,10 @@ import { paymentMethodLabel } from '../../utils/paymentMethods';
  * `can_view_proof`) — komponen ini tak menebak izin dari peran. Entri dari endpoint
  * yang tak memuat bukti (tanpa `has_proof`) tampil persis seperti sebelumnya.
  *
+ * 056 — thumbnail bukti (opt-in `proofThumbnails`, dipakai detail penjualan): hanya untuk entri NON-TUNAI yang
+ * bukti BERLAKU-nya boleh dilihat menurut server (`canViewProof`); klik memancarkan `view-proof` yang sama dengan
+ * tautan teks "Lihat bukti". Default mati karena komponen ini dipakai bersama layar Pre-orders (di luar lingkup).
+ *
  * 032-mark-payment-verified — pembayaran NON-TUNAI menampilkan status verifikasinya ("Belum
  * terverifikasi" sampai dicocokkan dengan mutasi bank/e-wallet) dan, bila SERVER menyatakan
  * `can_verify` (pencatat pembayaran tidak boleh memverifikasi miliknya sendiri), aksi "Tandai
@@ -28,13 +33,14 @@ import { paymentMethodLabel } from '../../utils/paymentMethods';
  * Komponen ini hanya menampilkan dan memancarkan event; pemanggil yang membuka
  * bukti, membuka dialog konfirmasi, memverifikasi, mencetak invoice, dan mengonfirmasi hapus.
  */
-defineProps({
+const props = defineProps({
   payments: { type: Array, default: () => [] },
   canDelete: { type: Boolean, default: false },
   // Penjualan POS tak punya invoice-per-pembayaran (showPrint=false); sejak 031 bukti dimuat di
   // detail penjualan juga, jadi keduanya menampilkan "Lihat bukti" (menurut flag server).
   showProof: { type: Boolean, default: true },
   showPrint: { type: Boolean, default: true },
+  proofThumbnails: { type: Boolean, default: false },
 });
 const emit = defineEmits(['view-proof', 'print', 'delete', 'edit-confirmation', 'verify', 'change-method']);
 
@@ -55,6 +61,7 @@ function verifiedLine(p) {
 }
 const hasAnyConfirmation = (p) => !!(p.has_proof || p.proof_id || p.reference || p.notes);
 const canViewProof = (p) => p.proof_id && p.can_view_proof !== false;
+const showsThumbnail = (p) => props.proofThumbnails && props.showProof && p.method !== 'cash' && !!canViewProof(p);
 
 const { t } = useI18n();
 </script>
@@ -81,6 +88,14 @@ const { t } = useI18n();
           <span v-if="p.recorded_by_name" class="text-[11px] text-muted-3" data-testid="payment-recorder">
             {{ t('payment_ledger.recorded_by', { name: p.recorded_by_name }) }}
           </span>
+          <PaymentProofThumbnail
+            v-if="showsThumbnail(p)"
+            :key="p.proof_id"
+            class="mt-1"
+            :proof-id="p.proof_id"
+            :alt="t('payment_proof.thumb_alt', { method: paymentMethodLabel(t, p.method), amount: formatIDR(p.amount) })"
+            @open="emit('view-proof', p)"
+          />
         </div>
         <div class="flex flex-col items-end gap-1">
           <span class="whitespace-nowrap text-[13.5px] font-bold">{{ formatIDR(p.amount) }}</span>

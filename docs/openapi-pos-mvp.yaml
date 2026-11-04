@@ -3548,9 +3548,23 @@ paths:
         = seluruh transaksi sesuai filter. Maks. 5000 kunci.
 
         Kolom: `transaction_no, status, time, customer, sellers, cashier, items` (SEMUA baris
-        item, "Nama ×qty; …"), `units, discount, payment_methods, payment_status, cash, non_cash, total`;
-        pengguna yang boleh melihat laporan juga mendapat `cost, margin`. Kontak pelanggan
+        item, "Nama ×qty; …"), `units, gross_sales, net_sales, discount, payment_methods, payment_status,
+        verification, cash, non_cash, total`; pengguna yang boleh melihat laporan juga mendapat `cost, margin`
+        (Total sebelum Margin, seperti di layar), lalu `paid, balance, reference_note, payment_proofs`
+        dan kolom gambar `reference_image_N` / `payment_proof_image_N`. Kontak pelanggan
         (telepon/email) SENGAJA tidak ikut. Nominal berupa angka agar bisa dijumlah di Excel.
+
+        056 (US8) — gambar TERTANAM di baris tiap penjualan: gambar Sale Reference, dan gambar bukti bayar
+        BERLAKU milik pembayaran non-tunai yang boleh dilihat PENGEKSPOR (`Payment::proofViewableBy()`, aturan
+        yang sama dengan daftar/detail; bukti yang tak boleh dilihat tidak muncul sama sekali). Gambar hilang,
+        rusak, atau bukan gambar (mis. PDF) tidak menggagalkan ekspor — selnya berisi "tidak dapat ditanam".
+        Jumlah gambar dibatasi (`config('sales.export_max_images')`); melewatinya = 422 dengan pesan yang
+        menyebut batasnya, tidak pernah berkas terpotong. `verification` = status seperti pil di layar
+        (kosong bila hanya tunai).
+
+        056 (US9) — `sellers[]` (nama penjual yang sedang difilter di layar): kolom `units, gross_sales,
+        net_sales` hanya memuat item penjual itu (sama dengan kartu ringkasan); `total`, `cash`, `non_cash`
+        tetap angka seluruh penjualan.
 
         028-partial-split-payment: kolom `payment_status` kini berisi `unpaid|partially_paid|fully_paid`
         (dulu status verifikasi mentah) dan ditambah `paid`, `balance` (setelah `total`, sebelum `cost, margin`).
@@ -3569,6 +3583,11 @@ paths:
                   type: array
                   maxItems: 5000
                   items: { type: string, pattern: '^order:\d+$' }
+                sellers:
+                  type: array
+                  maxItems: 200
+                  items: { type: string, maxLength: 255 }
+                  description: Nama penjual yang sedang difilter; menskop kolom unit/bruto/net.
       responses:
         '200':
           description: Berkas .xlsx
@@ -3577,7 +3596,7 @@ paths:
               schema: { type: string, format: binary }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422':
-          description: Kunci tidak valid / lebih dari 5000
+          description: Kunci tidak valid / lebih dari 5000, ATAU gambar yang akan ditanam melebihi batas (pesan menyebut batasnya)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -7732,6 +7751,7 @@ components:
               payment_state: { type: string, enum: [verified, pending, rejected, none], description: "Verifikasi TERBURUK di antara pembayaran (rejected > pending > verified); `none` bila belum ada pembayaran." }
               cash_amount: { $ref: '#/components/schemas/Money', description: "Tunai BERSIH: tunai diterima dikurangi kembalian (pembayaran rejected tidak dihitung)." }
               noncash_amount: { $ref: '#/components/schemas/Money' }
+              payment_proof_count: { type: integer, minimum: 0, description: "056 — jumlah pembayaran NON-TUNAI penjualan ini yang bukti berlakunya (belum ter-supersede) boleh dilihat PENGGUNA YANG MEMINTA (`Payment::proofViewableBy`); selalu ada, 0 bila tak ada. Hanya hitungan — tak ada id/URL/gambar bukti di daftar; bukti dibuka lewat `GET /orders/{id}` (flag `can_view_proof`) dan `GET /payment-proofs/{id}/file`. Ekspor Excel tidak memuat kolom ini." }
               items_gross: { $ref: '#/components/schemas/Money', description: "054 — Σ(line_total + diskon item) baris ini; definisi item-level yang sama dengan `totals.pos_gross_sales` (diskon tingkat order TIDAK ikut). Dipakai kartu ringkasan halaman Sales supaya mengikuti filter sisi-klien." }
               items_net: { $ref: '#/components/schemas/Money', description: "054 — Σ line_total baris ini (= `totals.pos_net_sales` bila dijumlahkan atas baris non-batal)." }
               seller_items:

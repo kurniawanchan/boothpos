@@ -23,6 +23,8 @@ import TablePagination from '../components/ui/TablePagination.vue';
 import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue';
 import ReceiptModal from '../components/receipt/ReceiptModal.vue';
 import OrderReferenceModal from '../components/sales/OrderReferenceModal.vue';
+import PaymentProofsModal from '../components/sales/PaymentProofsModal.vue';
+import RowAttachments from '../components/sales/RowAttachments.vue';
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
@@ -50,7 +52,7 @@ const {
   filtered, sorted, summary, kpis, shiftSummary, hasMargin,
   page, pageSize, paged, pageMeta, PAGE_SIZES,
   activeCount, hasFilterOtherThanSearch,
-  reset, sortBy, toQuery, applyQuery,
+  filterBySeller, reset, sortBy, toQuery, applyQuery,
 } = useSalesFilters({ transactions, sessions });
 
 // --- muat data --------------------------------------------------------------
@@ -89,7 +91,7 @@ async function load() {
 }
 
 // --- filter tersimpan di URL (bisa di-bookmark / dibagikan) -----------------------
-const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'seller', 'pay', 'session', 'cust', 'pstate', 'settle', 'min', 'max', 'voided', 'sort', 'dir', 'page', 'size'];
+const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'seller', 'pay', 'session', 'cust', 'pstate', 'settle', 'ref', 'min', 'max', 'voided', 'sort', 'dir', 'page', 'size'];
 watch(() => JSON.stringify(toQuery()), (json) => {
   if (!restored || !router) return;
   const others = Object.fromEntries(Object.entries(route.query).filter(([k]) => !OUR_QUERY_KEYS.includes(k)));
@@ -126,6 +128,11 @@ const settlementOptions = computed(() => [
   { value: 'partially_paid', label: t('payment_ledger.status_partially_paid') },
   { value: 'unpaid', label: t('payment_ledger.status_unpaid') },
   { value: 'fully_paid', label: t('payment_ledger.status_fully_paid') },
+]);
+// 056 — filter Sale Reference (kosong = semua): punya catatan/gambar referensi, atau belum punya.
+const referenceOptions = computed(() => [
+  { value: 'has', label: t('sales_reference.filter_has') },
+  { value: 'none', label: t('sales_reference.filter_none') },
 ]);
 const sessionOptions = computed(() =>
   sessions.value.map((s) => ({
@@ -174,13 +181,15 @@ const columns = computed(() => [
   { key: 'cashier_name', label: t('reports.col_cashier'), sortable: true },
   { key: 'item_count', label: t('reports.col_item'), sortable: true },
   { key: 'payment_methods', label: t('reports.col_payment'), sortable: true },
-  // Kolom margin HANYA ada bila server mengirimnya (owner/admin) — bukan disembunyikan di sini.
-  ...(hasMargin.value ? [{ key: 'margin_amount', label: t('reports.col_margin'), sortable: true }] : []),
+  // 056 — Total SEBELUM Margin (dulu sebaliknya). Kolom margin HANYA ada bila server mengirimnya
+  // (owner/admin) — bukan disembunyikan di sini; tanpa margin, Total menjadi kolom data terakhir.
   { key: 'total_amount', label: t('reports.col_total'), sortable: true },
+  ...(hasMargin.value ? [{ key: 'margin_amount', label: t('reports.col_margin'), sortable: true }] : []),
   { key: 'actions', label: '' },
 ]);
 
 const isVoided = (row) => row.status === 'voided';
+const hasNonCash = (row) => (row.payment_methods ?? []).some((method) => method !== 'cash');
 const rowClass = (row) => (isVoided(row) ? 'opacity-60' : '');
 const plain = (n) => Number(Number(n).toFixed(2));
 
@@ -245,18 +254,49 @@ async function doBulkReceipts() {
   }
 }
 
+// FileReader (bukan Blob.text()) supaya juga jalan di peramban lama dan di jsdom.
+function readBlobText(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
+
+// 056 (US7) — sakelar "tampilkan semua": referensi + bukti bayar semua baris di halaman, langsung di daftar.
+// Default mati (daftar tak memuat gambar apa pun); posisinya diingat per pengguna di perangkat ini saja.
+const ATTACH_KEY = 'sales.attachments.expanded';
+function readAttachPref() {
+  try { return localStorage.getItem(ATTACH_KEY) === '1'; } catch { return false; }
+}
+const showAttachments = ref(readAttachPref());
+watch(showAttachments, (v) => {
+  try { localStorage.setItem(ATTACH_KEY, v ? '1' : '0'); } catch { /* penyimpanan diblokir: tetap berfungsi tanpa ingatan */ }
+});
+
 const exporting = ref(false);
 async function doExport() {
   exporting.value = true;
   try {
     // Hanya KUNCI baris yang dikirim; server membangun ulang isi berkas (nominal tak dipercaya dari klien).
     const blob = await exportSalesTransactions(
-      { event_id: eventId.value || undefined, include_voided: includeVoided.value ? 1 : undefined },
+      {
+        event_id: eventId.value || undefined,
+        include_voided: includeVoided.value ? 1 : undefined,
+        // 056 (US9) — nama penjual yang sedang difilter: kolom unit/bruto/net berkas hanya memuat item mereka.
+        sellers: filters.sellers.length ? [...filters.sellers] : undefined,
+      },
       exportKeys.value
     );
     saveBlob(blob, 'transaksi-penjualan.xlsx');
-  } catch {
-    toast.error(t('reports.export_report_failed'));
+  } catch (e) {
+    // Penolakan 422 (batas gambar) datang sebagai Blob karena permintaan memakai responseType 'blob'.
+    let message = '';
+    if (e?.status === 422 && e.data instanceof Blob) {
+      try { message = JSON.parse(await readBlobText(e.data)).message ?? ''; } catch { message = ''; }
+    }
+    toast.error(message || t('reports.export_report_failed'));
   } finally {
     exporting.value = false;
   }
@@ -323,6 +363,8 @@ function openDetail(row) {
 
 // 054 (US8) — referensi transaksi dibuka dari tautan di baris (tanpa meninggalkan halaman).
 const referenceOrderId = ref(null);
+// 056 — penjualan yang bukti pembayarannya sedang dibuka dari daftar (dialog memuat sendiri saat dibuka).
+const paymentProofOrderId = ref(null);
 
 const showReceipt = ref(false);
 const receiptOrderId = ref(null);
@@ -332,8 +374,9 @@ function openReceipt(row) {
 }
 
 // Follow-up 2 (FR-023) — klik nama artist adalah pintasan mengisi kotak pencarian.
+// 056 (US9): klik nama penjual memakai FILTER penjual (bukan kotak cari) agar statistik ikut terskop.
 function searchByArtist(name) {
-  search.value = name;
+  filterBySeller(name);
 }
 
 // Follow-up 2 (FR-022) — popover ringan pakai data yang SUDAH ada di baris transaksi.
@@ -417,6 +460,7 @@ function showCustomerDetail(row) {
           <BaseSelect v-model="filters.paymentState" :placeholder="t('reports.filter_paystate_all')" :options="paymentStateOptions" />
           <BaseSelect v-model="filters.customerType" :placeholder="t('reports.filter_customer_all')" :options="customerTypeOptions" />
           <BaseSelect v-model="filters.settlement" data-testid="filter-settlement" :placeholder="t('payment_ledger.filter_all')" :options="settlementOptions" />
+          <BaseSelect v-model="filters.reference" data-testid="filter-reference" :placeholder="t('sales_reference.filter_all')" :options="referenceOptions" />
 
           <input v-model="filters.minTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_min_total')" :placeholder="t('reports.filter_min_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
           <input v-model="filters.maxTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_max_total')" :placeholder="t('reports.filter_max_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
@@ -434,6 +478,18 @@ function showCustomerDetail(row) {
       <div class="flex flex-wrap items-baseline justify-between gap-2">
         <span class="text-[13px] font-bold tracking-tight">{{ t('reports.transaction_list', { count: filtered.length }) }}</span>
         <span class="text-[12px] text-muted-3">{{ summaryText }}</span>
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="showAttachments"
+          class="flex items-center gap-2 rounded-lg border border-line-2 px-3 py-1.5 text-[12px] font-semibold"
+          :class="showAttachments ? 'bg-mint-50 text-brand-active' : 'bg-white text-muted-4'"
+          :title="t('sales_attachments.toggle_hint')"
+          data-testid="toggle-attachments"
+          @click="showAttachments = !showAttachments"
+        >
+          <i class="ph-duotone ph-images text-[14px]" aria-hidden="true"></i>{{ t('sales_attachments.toggle') }}
+        </button>
       </div>
 
       <!-- Ringkasan kas satu shift — hanya saat TEPAT satu shift dipilih. -->
@@ -486,7 +542,20 @@ function showCustomerDetail(row) {
               <button v-if="row.has_reference" type="button" class="flex items-center gap-1 whitespace-nowrap text-[12px] font-semibold text-brand-active hover:underline" data-testid="reference-link" @click="referenceOrderId = row.id">
                 <i class="ph-duotone ph-paperclip text-[14px]" aria-hidden="true"></i>{{ t('sales_reference.link') }}
               </button>
+              <!-- 056 — tautan bukti pembayaran: muncul hanya bila SERVER menghitung ada bukti non-tunai yang boleh
+                   dilihat pengguna ini (`payment_proof_count`); daftar tak memuat gambar apa pun. -->
+              <button v-if="row.payment_proof_count > 0" type="button" class="flex items-center gap-1 whitespace-nowrap text-[12px] font-semibold text-brand-active hover:underline" data-testid="payment-proof-link" @click="paymentProofOrderId = row.id">
+                <i class="ph-duotone ph-receipt text-[14px]" aria-hidden="true"></i>{{ t('payment_proof.link') }}
+              </button>
               <StatusPill v-if="isVoided(row)" variant="danger">{{ t('reports.status_voided') }}</StatusPill>
+              <!-- 056 (US7) — isi referensi + bukti baris ini, hanya saat sakelar menyala dan baris memang punya keduanya. -->
+              <RowAttachments
+                v-if="showAttachments && (row.has_reference || row.payment_proof_count > 0)"
+                :key="row.id"
+                :order-id="row.id"
+                :has-reference="!!row.has_reference"
+                :proof-count="row.payment_proof_count ?? 0"
+              />
             </div>
           </template>
           <template #cell-customer_name="{ row }">
@@ -541,6 +610,10 @@ function showCustomerDetail(row) {
               <StatusPill v-else-if="row.payment_status === 'unpaid'" variant="danger" data-testid="row-unpaid">{{ t('payment_ledger.status_unpaid') }}</StatusPill>
               <StatusPill v-if="row.payment_state === 'pending'" variant="warn">{{ t('reports.payment_state_pending') }}</StatusPill>
               <StatusPill v-else-if="row.payment_state === 'rejected'" variant="danger">{{ t('reports.payment_state_rejected') }}</StatusPill>
+              <!-- 056 — status positif. `payment_state` sudah "terburuk dari semua" (rejected > pending > verified), jadi
+                   campuran verified+pending tetap "Belum diverifikasi"; tetapi tunai lahir `verified`, sehingga tanpa
+                   metode NON-tunai penjualan tunai-saja ikut berlabel — itu menyesatkan, maka dicek terpisah. -->
+              <StatusPill v-else-if="row.payment_state === 'verified' && hasNonCash(row)" variant="mint" data-testid="payment-verified">{{ t('reports.paystate_verified') }}</StatusPill>
             </div>
           </template>
           <template #cell-margin_amount="{ row }">
@@ -583,6 +656,7 @@ function showCustomerDetail(row) {
     <TransactionItemsModal :open="showItems" :order-id="itemsOrderId" @close="showItems = false" @changed="load" />
     <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" @close="showReceipt = false" />
     <OrderReferenceModal :open="referenceOrderId !== null" :order-id="referenceOrderId" @close="referenceOrderId = null" @saved="load" />
+    <PaymentProofsModal :open="paymentProofOrderId !== null" :order-id="paymentProofOrderId" @close="paymentProofOrderId = null" />
 
     <BaseModal :open="detailCustomer !== null" :title="t('reports.customer_detail')" max-width-class="max-w-[360px]" @close="detailCustomer = null">
       <div v-if="detailCustomer" class="flex flex-col gap-2.5 px-6 py-5 text-[13.5px]">

@@ -16,6 +16,8 @@ const CUSTOMER_TYPES = ['named', 'walkin'];
 const PAY_STATES = ['pending', 'rejected', 'verified'];
 // 028 — status pembayaran turunan (bukan status verifikasi di atas).
 const SETTLEMENTS = ['unpaid', 'partially_paid', 'fully_paid'];
+// 056 — filter Sale Reference: punya / tanpa (kosong = semua).
+const REFERENCE_FILTERS = ['has', 'none'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LIST = 50;
 // 054 (US5) — halaman tabel. Hanya ukuran ini yang dikenal; nilai lain dari URL diabaikan.
@@ -53,7 +55,7 @@ export function useSalesFilters({ transactions, sessions }) {
   const includeVoided = ref(false);
   const filters = reactive({
     dateFrom: '', dateTo: '', cashiers: [], sellers: [], payments: [], sessions: [],
-    customerType: '', paymentState: '', settlement: '', minTotal: '', maxTotal: '',
+    customerType: '', paymentState: '', settlement: '', reference: '', minTotal: '', maxTotal: '',
   });
   const sortKey = ref('created_at');
   const sortDir = ref('desc');
@@ -77,6 +79,14 @@ export function useSalesFilters({ transactions, sessions }) {
       .map((name) => ({ value: name, label: name }))
   );
 
+  // 056 (US9) — memilih penjual dari klik nama di tabel. BUG YANG DITEMUKAN & DIPERBAIKI: klik itu dulu
+  // hanya mengisi kotak PENCARIAN, sehingga `filters.sellers` kosong dan kartu/ringkasan tetap menghitung
+  // transaksi campuran secara utuh. Kini yang diisi adalah filter penjual (dan kotak cari dikosongkan).
+  function filterBySeller(name) {
+    filters.sellers = [name];
+    search.value = '';
+  }
+
   const PAYMENT_ORDER = ['cash', 'qr_ewallet', 'bank_transfer'];
   const paymentMethods = computed(() => {
     const methods = [...new Set(all.value.flatMap((tx) => tx.payment_methods ?? []))];
@@ -98,6 +108,9 @@ export function useSalesFilters({ transactions, sessions }) {
     if (f.paymentState && (tx.payment_state ?? 'none') !== f.paymentState) return false;
     // Payload lama tanpa `payment_status` dianggap lunas (dulu semua penjualan lunas).
     if (f.settlement && (tx.payment_status ?? 'fully_paid') !== f.settlement) return false;
+    // 056 — `has_reference` sudah ada di tiap baris; payload lama tanpa flag dianggap TANPA referensi.
+    if (f.reference === 'has' && tx.has_reference !== true) return false;
+    if (f.reference === 'none' && tx.has_reference === true) return false;
     if (f.customerType === 'walkin' && tx.customer_name) return false;
     if (f.customerType === 'named' && !tx.customer_name) return false;
 
@@ -123,7 +136,7 @@ export function useSalesFilters({ transactions, sessions }) {
     const f = filters;
     return [
       search.value.trim() !== '', f.dateFrom !== '', f.dateTo !== '', f.cashiers.length > 0, f.sellers.length > 0,
-      f.payments.length > 0, f.sessions.length > 0, f.customerType !== '', f.paymentState !== '', f.settlement !== '',
+      f.payments.length > 0, f.sessions.length > 0, f.customerType !== '', f.paymentState !== '', f.settlement !== '', f.reference !== '',
       f.minTotal !== '' && f.minTotal !== null, f.maxTotal !== '' && f.maxTotal !== null,
     ].filter(Boolean).length;
   });
@@ -132,7 +145,7 @@ export function useSalesFilters({ transactions, sessions }) {
     search.value = '';
     Object.assign(filters, {
       dateFrom: '', dateTo: '', cashiers: [], sellers: [], payments: [], sessions: [],
-      customerType: '', paymentState: '', settlement: '', minTotal: '', maxTotal: '',
+      customerType: '', paymentState: '', settlement: '', reference: '', minTotal: '', maxTotal: '',
     });
   }
 
@@ -271,7 +284,7 @@ export function useSalesFilters({ transactions, sessions }) {
     put('q', search.value.trim());
     put('from', f.dateFrom); put('to', f.dateTo);
     put('cashier', f.cashiers); put('seller', f.sellers); put('pay', f.payments); put('session', f.sessions);
-    put('cust', f.customerType); put('pstate', f.paymentState); put('settle', f.settlement);
+    put('cust', f.customerType); put('pstate', f.paymentState); put('settle', f.settlement); put('ref', f.reference);
     put('min', f.minTotal); put('max', f.maxTotal);
     if (includeVoided.value) q.voided = '1';
     if (sortKey.value !== 'created_at' || sortDir.value !== 'desc') { q.sort = sortKey.value; q.dir = sortDir.value; }
@@ -297,6 +310,7 @@ export function useSalesFilters({ transactions, sessions }) {
     filters.customerType = oneOf(query.cust, CUSTOMER_TYPES);
     filters.paymentState = oneOf(query.pstate, PAY_STATES);
     filters.settlement = oneOf(query.settle, SETTLEMENTS);
+    filters.reference = oneOf(query.ref, REFERENCE_FILTERS);
     filters.minTotal = amount(query.min);
     filters.maxTotal = amount(query.max);
     includeVoided.value = one(query.voided) === '1';
@@ -319,6 +333,6 @@ export function useSalesFilters({ transactions, sessions }) {
     filtered, sorted, summary, kpis, shiftSummary, hasMargin,
     page, pageSize, currentPage, pageCount, paged, pageMeta, PAGE_SIZES,
     activeCount, hasFilterOtherThanSearch,
-    reset, sortBy, toQuery, applyQuery,
+    reset, sortBy, toQuery, applyQuery, filterBySeller,
   };
 }

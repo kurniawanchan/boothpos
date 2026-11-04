@@ -13,13 +13,14 @@ use Illuminate\Support\Facades\Storage;
 class CatalogImageThumbnail
 {
     /** @return string|null byte JPEG, atau null bila tidak ada/rusak/terlalu besar */
-    public static function jpeg(?string $publicPath, int $maxSide = 160, int $maxPixels = 40_000_000): ?string
+    public static function jpeg(?string $publicPath, int $maxSide = 160, int $maxPixels = 40_000_000, string $disk = 'public'): ?string
     {
-        if (! $publicPath || ! Storage::disk('public')->exists($publicPath)) {
+        // 056 — `$disk` opsional: ekspor Sales memakai ini untuk bukti bayar/referensi di disk PRIVAT `local`.
+        if (! $publicPath || ! Storage::disk($disk)->exists($publicPath)) {
             return null;
         }
 
-        $file = Storage::disk('public')->path($publicPath);
+        $file = Storage::disk($disk)->path($publicPath);
         $size = @getimagesize($file);
         if ($size === false || $size[0] < 1 || $size[1] < 1 || $size[0] * $size[1] > $maxPixels) {
             return null;

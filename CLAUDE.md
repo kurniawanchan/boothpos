@@ -443,6 +443,18 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **POS layout**: the variant picker stays open (footer Close; variants disable when the cart already holds all their stock — `cart.add()` itself does not cap); draft actions live in `PosCartPanel`; seller/category filters are `PillFilterRow` over the SAME `artist_id[]`/`category_id[]` arrays (multi-select kept).
 - **Test traps found**: never name a test helper `put`/`seed`/`get`/`call`… (fatal clash with `Illuminate\Foundation\Testing\TestCase`, and PHPUnit loads EVERY file even with `--filter`); `UploadedFile::fake()` reports its MIME from the extension, so content-sniffing needs a real temp file; `user-event` honours an input's `accept`, so test file-type guards with `setup({ applyAccept: false })`; two `artisan test` runs on `boothpos_test` at once corrupt each other (a hung run holds the DB — kill the PHP process INSIDE the container with the shell builtin `kill`, the image has no `kill`/`pkill` binary).
 
+## Sales: payment proof, Verified pill, reference filter, column order (feature 056, 2026-11-04)
+
+- **`payment_proof_count` on `GET /reports/sales` rows is permission-aware and count-only.** `SalesTransactionsService::orderRow()` counts the sale's NON-cash payments whose CURRENT (non-superseded) proof the REQUESTING user may view (`Payment::proofViewableBy()` — the one permission definition), from `payments.proofs` eager-loaded once (`test_the_query_count_does_not_grow…` fails if it is lazy-loaded; mutation-checked). It never carries proof ids/URLs/images, so a cashier gets no hint of a proof they cannot open. The Excel export maps explicit columns and ignores it.
+- **The list never loads a proof image.** The "Payment Proof" link (`payment_proof_count > 0`) opens `PaymentProofsModal`, which reuses `GET /orders/{id}` (`can_view_proof` per payment is server-computed) — there is deliberately NO dedicated proofs endpoint (it would duplicate the permission rule). `PaymentProofThumbnail.vue` is the single blob-loading thumbnail (stale answers dropped, URL revoked on change/unmount, placeholder on failure); its `<img>` has `alt=""` and the BUTTON carries the accessible name so it does not collide with the lightbox image in role queries.
+- **Detail thumbnails are opt-in**: `PaymentHistoryList` `proofThumbnails` (default off — the component is shared with Pre-orders, which are out of scope); only `TransactionItemsModal` turns it on.
+- **"Verified" pill is client-side**: `payment_state === 'verified'` AND at least one non-cash method. The server's `payment_state` is already worst-of (rejected > pending > verified) but cash is born `verified`, so state alone would label cash-only sales.
+- **Sale Reference filter** (`filters.reference` `''|has|none`, address key `ref`, in `OUR_QUERY_KEYS`) works over the existing `has_reference` row field; a payload without the flag counts as "none". `sales_reference.link` now reads "Sale Reference" / "Referensi Penjualan". Total now sits BEFORE Margin.
+- **Seller-scoped statistics (US9, 2026-11-05) — root cause was NOT the maths.** `part()` in `useSalesFilters` already scoped units/gross/net to `filters.sellers`, but clicking a seller name in the table only filled the SEARCH box, so the scope never switched on and mixed sales counted whole. `filterBySeller()` (sets the filter, clears search) now backs that click. Total/cash/non-cash/outstanding stay whole-sale by design (a payment isn't split per seller). Server `seller_items` is keyed by seller NAME (verified correct on dev data: no duplicate names).
+- **Excel export (US8)**: `POST /reports/sales/transactions/export` now builds `App\Exports\SalesTransactionsExport` through `Excel::raw()` + `cleanup()` (pattern of the catalog export). Columns = the on-screen set (Total before Margin; cost/margin owner/admin only) plus `gross_sales`, `net_sales`, `verification`, `reference_note`, `payment_proofs` and one column per embedded image (`reference_image_N`, `payment_proof_image_N`). Row data comes from `SalesTransactionsService` with `$detail=true` ONLY (keys prefixed `_` = image paths, never in the JSON list); proofs are filtered by `Payment::proofViewableBy()` so a file never holds a proof its exporter can't open. Unreadable/PDF image ⇒ cell text, export still succeeds. Optional `sellers[]` scopes units/gross/net like the cards. **Cap: `config('sales.export_max_images')` = 200 (env `SALES_EXPORT_MAX_IMAGES`) — measured ≈0.13 s per 12 MP photo, memory flat, so TIME limits it (400 ≈ 50 s > PHP's 30 s); over the cap = 422 with the limit in the message, never a partial file.** The SPA reads that message from the Blob 422 (`readBlobText`, FileReader).
+- **Toggle (US7)**: `showAttachments` in `SalesView` (default off, `localStorage` key `sales.attachments.expanded`, try/catch). On = `RowAttachments.vue` under the transaction number ONLY for rows with `has_reference` or `payment_proof_count > 0`; it loads via the existing `GET /orders/{id}/reference` and `GET /orders/{id}` through ONE shared limiter (`utils/limitedRunner.js`, ≤ 4 in flight) once the row is visible (IntersectionObserver; immediate where unavailable). No image data in the list payload.
+- **Not verified in a real browser** (Playwright / Chrome DevTools MCP were unavailable in the session that built this): the visual form of the link/thumbnail was never compared with the requester's screenshots.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -450,7 +462,19 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/055-transaction-reference-images/plan.md`
+Active feature plan: `specs/056-sales-payment-proof-column/plan.md`
+(branch `092-sales-payment-proof-column`, from `develop`; spec dir number ≠ branch number) — no migration, one additive
+list field (+ US7–US9 of 2026-11-05: show/hide toggle, Excel export with embedded images, seller-scoped statistics fix — see the 056 section). Sales page: the detail shows a thumbnail of each non-cash payment's CURRENT proof (opt-in
+`proofThumbnails` prop on the shared `PaymentHistoryList`, new `PaymentProofThumbnail.vue`, click = existing viewer);
+the list gets a "Payment Proof" link under the transaction number driven by ONE server field `payment_proof_count`
+(`SalesTransactionsService`, permission-aware through `Payment::proofViewableBy()`, `payments.proofs` eager-loaded once)
+and opening it loads the sale with the existing `GET /orders/{id}` into `PaymentProofsModal` (no new endpoint, no image
+in the list). `sales_reference.link` → "Sale Reference"; a "Verified" pill in the Payment column is derived client-side
+(`payment_state==='verified'` AND a non-cash method — cash is born verified); Total moves before Margin; a Sale
+Reference filter (`''|has|none` on the existing `has_reference`, URL key `ref`) in `useSalesFilters`. OpenAPI moves in
+the same commit. Screenshots were not viewable at spec time — confirm the look. See research.md.
+
+Previous feature: `specs/055-transaction-reference-images/plan.md`
 (branch `091-transaction-reference-images`, from `develop`; spec dir number ≠ branch number) — one migration. The POS
 sale's transaction reference (054, US8) goes from ONE image to up to 10 (≤ 5 MB, JPEG/PNG/WebP sniffed from content),
 and the Sales detail (`TransactionItemsModal`, also used by customer history) shows them as thumbnails with a full-size

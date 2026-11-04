@@ -2,13 +2,19 @@
 
 namespace Tests\Feature;
 
-use App\Exports\GenericArrayExport;
+use App\Exports\SalesTransactionsExport;
 use App\Models\Artist;
 use App\Models\CashierSession;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Event;
 use App\Models\Order;
+use App\Models\OrderReferenceImage;
+use App\Models\Payment;
+use App\Models\PaymentChannel;
+use App\Models\PaymentProof;
+use Illuminate\Support\Facades\Storage;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\OrderService;
@@ -71,8 +77,9 @@ class SalesTransactionsExportTest extends TestCase
         $this->postJson(self::URL, array_merge(['event_id' => $this->event->id], $body))->assertOk();
 
         $rows = [];
-        Excel::assertDownloaded('transaksi-penjualan.xlsx', function (GenericArrayExport $export) use (&$rows) {
-            $rows = $export->array();
+        // 056 — dibuat lewat Excel::raw() (supaya berkas gambar sementara bisa dihapus); `rows()` = baris asosiatif.
+        Excel::assertExportedInRaw(SalesTransactionsExport::class, function (SalesTransactionsExport $export) use (&$rows) {
+            $rows = $export->rows();
 
             return true;
         });
@@ -106,7 +113,7 @@ class SalesTransactionsExportTest extends TestCase
         $row = $this->exported(['keys' => ["order:{$order->id}"]])[0];
 
         $this->assertSame(
-            ['transaction_no', 'status', 'time', 'customer', 'sellers', 'cashier', 'items', 'units', 'discount', 'payment_methods', 'payment_status', 'cash', 'non_cash', 'total', 'paid', 'balance'],
+            ['transaction_no', 'status', 'time', 'customer', 'sellers', 'cashier', 'items', 'units', 'gross_sales', 'net_sales', 'discount', 'payment_methods', 'payment_status', 'verification', 'cash', 'non_cash', 'total', 'paid', 'balance', 'reference_note', 'payment_proofs'],
             array_keys($row),
         );
         $this->assertSame('Budi', $row['customer']);
@@ -222,6 +229,147 @@ class SalesTransactionsExportTest extends TestCase
         $this->postJson(self::URL, ['keys' => ['order:abc']])->assertStatus(422);
         $this->postJson(self::URL, ['keys' => ['preorder:12']])->assertStatus(422);
         $this->postJson(self::URL, ['keys' => array_fill(0, 5001, 'order:1')])->assertStatus(422);
+    }
+
+    // --- 056 (US8/US9): berkas penuh dengan gambar ------------------------------------------------
+
+    /** JPEG nyata kecil di disk privat `local` (Storage::fake), supaya GD bisa mendekodenya. */
+    private function fakeImage(string $path): string
+    {
+        $img = imagecreatetruecolor(40, 30);
+        ob_start();
+        imagejpeg($img);
+        Storage::disk('local')->put($path, (string) ob_get_clean());
+
+        return $path;
+    }
+
+    private function addReference(Order $order, array $paths, ?string $note = 'Catatan WA'): void
+    {
+        $order->update(['reference_note' => $note, 'reference_updated_at' => now(), 'reference_updated_by' => $this->cashier->id]);
+        foreach ($paths as $i => $path) {
+            OrderReferenceImage::create(['order_id' => $order->id, 'path' => $path, 'mime' => 'image/jpeg', 'size_bytes' => 10, 'position' => $i, 'uploaded_by' => $this->cashier->id]);
+        }
+    }
+
+    private function addProof(Order $order, string $path, ?User $recorder = null, ?User $uploader = null, string $mime = 'image/jpeg'): Payment
+    {
+        $channel = PaymentChannel::create(['type' => 'qr_ewallet', 'provider' => 'Shopee', 'account_name' => 'T', 'is_active' => true]);
+        $payment = Payment::create(['order_id' => $order->id, 'method' => 'qr_ewallet', 'purpose' => 'settlement', 'amount' => 1000,
+            'verification' => 'pending', 'paid_at' => now(), 'channel_id' => $channel->id, 'recorded_by' => $recorder?->id]);
+        PaymentProof::create(['proof_token' => (string) Str::uuid(), 'payment_id' => $payment->id, 'file_path' => $path, 'mime_type' => $mime,
+            'file_size' => 10, 'captured_via' => 'upload', 'uploaded_by' => $uploader?->id, 'created_at' => now()]);
+
+        return $payment;
+    }
+
+    /** Ekspor NYATA (tanpa fake) dibuka kembali: [baris-baris sheet, jumlah gambar tertanam]. */
+    private function realWorkbook(array $body = [], ?User $as = null): array
+    {
+        if ($as) {
+            $this->actingAs($as, 'sanctum');
+        }
+        $response = $this->postJson(self::URL, array_merge(['event_id' => $this->event->id], $body))->assertOk();
+        $file = tempnam(sys_get_temp_dir(), 'sx').'.xlsx';
+        file_put_contents($file, $response->getContent());
+        $sheet = IOFactory::load($file)->getActiveSheet();
+        $rows = $sheet->toArray(null, true, true, false);
+        @unlink($file);
+
+        return [$rows, $sheet->getDrawingCollection()->count()];
+    }
+
+    public function test_it_embeds_reference_and_viewable_proof_images_and_carries_the_note(): void
+    {
+        Storage::fake('local');
+        $order = $this->makeOrder();
+        $this->addReference($order, [$this->fakeImage('order-reference-images/a.jpg'), $this->fakeImage('order-reference-images/b.jpg')]);
+        $this->addProof($order, $this->fakeImage('payment-proofs/p.jpg'), $this->cashier, $this->cashier);
+
+        [$rows, $drawings] = $this->realWorkbook(['keys' => ["order:{$order->id}"]]);
+
+        $this->assertSame(3, $drawings);                      // 2 referensi + 1 bukti, tertanam di baris itu
+        $head = array_flip($rows[0]);
+        $this->assertSame('Catatan WA', $rows[1][$head['reference_note']]);
+        $this->assertStringContainsString('qr_ewallet', $rows[1][$head['payment_proofs']]);
+        $this->assertSame('pending', $rows[1][$head['verification']]);
+    }
+
+    public function test_a_proof_the_exporter_may_not_view_is_absent_without_a_trace(): void
+    {
+        Storage::fake('local');
+        $other = User::factory()->create(['role' => 'cashier']);
+        $order = $this->makeOrder();
+        $this->addProof($order, $this->fakeImage('payment-proofs/secret.jpg'), $this->cashier, $this->cashier);
+
+        [$rows, $drawings] = $this->realWorkbook(['keys' => ["order:{$order->id}"]], $other);
+
+        $this->assertSame(0, $drawings);
+        $head = array_flip($rows[0]);
+        $this->assertSame('', (string) $rows[1][$head['payment_proofs']]);
+        $this->assertStringNotContainsString('secret', json_encode($rows));
+    }
+
+    public function test_an_unreadable_or_non_image_proof_does_not_fail_the_export(): void
+    {
+        Storage::fake('local');
+        $order = $this->makeOrder();
+        Storage::disk('local')->put('payment-proofs/doc.pdf', '%PDF-1.4 not an image');
+        $this->addProof($order, 'payment-proofs/doc.pdf', $this->cashier, $this->cashier, 'application/pdf');
+        $this->addReference($order, ['order-reference-images/missing.jpg']);   // berkas tak ada
+
+        [$rows, $drawings] = $this->realWorkbook(['keys' => ["order:{$order->id}"]]);
+
+        $this->assertSame(0, $drawings);
+        $this->assertStringContainsString(__('sales_export.not_embedded'), json_encode($rows, JSON_UNESCAPED_UNICODE));
+    }
+
+    public function test_exceeding_the_image_limit_is_refused_with_a_clear_message_not_a_partial_file(): void
+    {
+        Storage::fake('local');
+        config(['sales.export_max_images' => 2]);
+        $order = $this->makeOrder();
+        $this->addReference($order, [$this->fakeImage('r/1.jpg'), $this->fakeImage('r/2.jpg'), $this->fakeImage('r/3.jpg')]);
+
+        $this->postJson(self::URL, ['event_id' => $this->event->id])
+            ->assertStatus(422)
+            ->assertJsonPath('message', __('sales_export.too_many_images', ['max' => 2]));
+    }
+
+    public function test_the_columns_follow_the_screen_order_with_total_before_margin_for_an_owner(): void
+    {
+        $order = $this->makeOrder();
+
+        [$rows] = $this->realWorkbook(['keys' => ["order:{$order->id}"]], $this->owner);
+
+        $head = $rows[0];
+        $this->assertSame(array_search('total', $head) + 1, array_search('cost', $head));
+        $this->assertSame(array_search('cost', $head) + 1, array_search('margin', $head));
+    }
+
+    public function test_cash_only_sales_have_no_verification_status(): void
+    {
+        $order = $this->makeOrder();
+
+        $this->assertSame('', $this->exported(['keys' => ["order:{$order->id}"]])[0]['verification']);
+    }
+
+    public function test_with_a_seller_filter_units_gross_and_net_cover_only_that_sellers_items(): void
+    {
+        $second = Product::factory()->create(['artist_id' => Artist::factory()->create(['name' => 'Yuki'])->id, 'category_id' => Category::factory()->create()->id, 'name' => 'Poster'])
+            ->variants()->create(['sku' => 'YUKI0001', 'sell_price' => 7000, 'cost_price' => 1000, 'current_stock' => 50]);
+        $order = $this->makeOrder(['items' => [['variant_id' => $this->variant->id, 'qty' => 3], ['variant_id' => $second->id, 'qty' => 2]],
+            'payments' => [['method' => 'cash', 'amount' => 44000]]]);
+        $keys = ['keys' => ["order:{$order->id}"]];
+
+        $whole = $this->exported($keys)[0];
+        $this->assertSame(44000.0, $whole['gross_sales']);
+
+        $scoped = $this->exported($keys + ['sellers' => ['Yuki']])[0];
+        $this->assertSame(2.0, (float) $scoped['units']);
+        $this->assertSame(14000.0, $scoped['gross_sales']);
+        $this->assertSame(14000.0, $scoped['net_sales']);
+        $this->assertSame(44000.0, $scoped['total']);       // Total tetap utuh (pembayaran tak dibagi per penjual)
     }
 
     public function test_it_requires_a_login(): void

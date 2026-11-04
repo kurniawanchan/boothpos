@@ -302,40 +302,101 @@ class ReportController extends Controller
             'include_voided' => ['nullable', 'boolean'],
             'keys' => ['nullable', 'array', 'max:5000'],
             'keys.*' => ['string', 'regex:/^order:\d+$/'],
+            // 056 (US9) — nama penjual yang sedang difilter di layar: kolom unit/bruto/net memuat HANYA item mereka.
+            'sellers' => ['nullable', 'array', 'max:200'],
+            'sellers.*' => ['string', 'max:255'],
         ]);
+        $sellers = $validated['sellers'] ?? [];
 
-        $rows = app(\App\Services\SalesTransactionsService::class)
-            ->build($validated, $request->user(), detail: true)['transactions']
-            ->map(function (array $r) {
-                $row = [
-                    'transaction_no' => $r['order_number'],
-                    'status' => $r['status'],
-                    'time' => $r['created_at'],
-                    'customer' => $r['customer_name'],
-                    'sellers' => implode(', ', $r['artist_names']->all()),
-                    'cashier' => $r['cashier_name'],
-                    'items' => $r['items_text'],
-                    'units' => $r['unit_count'],
-                    // Angka (bukan string) supaya bisa dijumlah langsung di Excel.
-                    'discount' => (float) $r['discount_amount'],
-                    'payment_methods' => implode(', ', $r['payment_methods']->all()),
-                    // 028 — Unpaid/Partially Paid/Fully Paid (dulu status verifikasi mentah).
-                    'payment_status' => $r['payment_status'],
-                    'cash' => (float) $r['cash_amount'],
-                    'non_cash' => (float) $r['noncash_amount'],
-                    'total' => (float) $r['total_amount'],
-                    'paid' => (float) $r['paid_amount'],
-                    'balance' => (float) $r['balance_amount'],
-                ];
-                if (array_key_exists('cost_total', $r)) {
-                    $row['cost'] = (float) $r['cost_total'];
-                    $row['margin'] = (float) $r['margin_amount'];
+        $sales = app(\App\Services\SalesTransactionsService::class)
+            ->build($validated, $request->user(), detail: true)['transactions'];
+
+        // 056 (US8) — batas gambar tertanam: dihitung SEBELUM satu berkas pun dibaca; lewat batas = 422, bukan berkas terpotong.
+        $images = $sales->sum(fn (array $r) => count($r['_reference_images'] ?? []) + count($r['_proof_images'] ?? []));
+        $max = (int) config('sales.export_max_images');
+        if ($images > $max) {
+            return response()->json(['message' => __('sales_export.too_many_images', ['max' => $max])], 422);
+        }
+
+        $rows = $sales->map(function (array $r) use ($sellers) {
+            // Bagian penjual terpilih (sama dengan `part()` di klien); tanpa filter = seluruh penjualan.
+            $part = null;
+            if ($sellers !== [] && isset($r['seller_items'])) {
+                $part = ['units' => 0.0, 'gross' => 0.0, 'net' => 0.0];
+                foreach ($sellers as $name) {
+                    if (isset($r['seller_items'][$name])) {
+                        $part['units'] += (float) $r['seller_items'][$name]['units'];
+                        $part['gross'] += (float) $r['seller_items'][$name]['gross'];
+                        $part['net'] += (float) $r['seller_items'][$name]['net'];
+                    }
                 }
+            }
+            $nonCash = collect($r['payment_methods'])->contains(fn ($m) => $m !== 'cash');
+            $row = [
+                'transaction_no' => $r['order_number'],
+                'status' => $r['status'],
+                'time' => $r['created_at'],
+                'customer' => $r['customer_name'],
+                'sellers' => implode(', ', $r['artist_names']->all()),
+                'cashier' => $r['cashier_name'],
+                'items' => $r['items_text'],
+                'units' => $part ? $part['units'] : $r['unit_count'],
+                // Angka (bukan string) supaya bisa dijumlah langsung di Excel.
+                'gross_sales' => $part ? $part['gross'] : (float) $r['items_gross'],
+                'net_sales' => $part ? $part['net'] : (float) $r['items_net'],
+                'discount' => (float) $r['discount_amount'],
+                'payment_methods' => implode(', ', $r['payment_methods']->all()),
+                // 028 — Unpaid/Partially Paid/Fully Paid (dulu status verifikasi mentah).
+                'payment_status' => $r['payment_status'],
+                // 056 — status verifikasi seperti pil di layar: hanya bila ada pembayaran non-tunai (tunai lahir verified).
+                'verification' => $nonCash ? $r['payment_state'] : '',
+                'cash' => (float) $r['cash_amount'],
+                'non_cash' => (float) $r['noncash_amount'],
+                'total' => (float) $r['total_amount'],
+            ];
+            if (array_key_exists('cost_total', $r)) {
+                $row['cost'] = (float) $r['cost_total'];
+                $row['margin'] = (float) $r['margin_amount'];
+            }
+            // Urutan layar: Total sebelum Margin; paid/balance menyusul, lalu referensi & bukti.
+            $row += [
+                'paid' => (float) $r['paid_amount'],
+                'balance' => (float) $r['balance_amount'],
+                'reference_note' => $r['reference_note'],
+                'payment_proofs' => implode('; ', $r['_proof_labels']),
+                '_reference_images' => $r['_reference_images'],
+                '_proof_images' => $r['_proof_images'],
+            ];
 
-                return $row;
-            })->all();
+            return $row;
+        })->all();
 
-        return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\GenericArrayExport($rows), 'transaksi-penjualan.xlsx');
+        // Mendekode foto ponsel ≈0,13 dtk/gambar: beri waktu cukup untuk batas gambar, hanya untuk permintaan INI.
+        @set_time_limit(120);
+
+        // Workbook dengan gambar tertanam perlu memori lebih (pola ProductCatalogController); dibuat utuh lewat raw()
+        // supaya berkas gambar sementara dihapus begitu workbook selesai.
+        $limit = ini_get('memory_limit');
+        if ($limit !== '-1' && $limit !== false) {
+            $bytes = (int) $limit * match (strtoupper(substr((string) $limit, -1))) {
+                'G' => 1024 ** 3, 'M' => 1024 ** 2, 'K' => 1024, default => 1,
+            };
+            if ($bytes < 512 * 1024 ** 2) {
+                @ini_set('memory_limit', '512M');
+            }
+        }
+
+        $export = new \App\Exports\SalesTransactionsExport($rows);
+        try {
+            $content = app(\Maatwebsite\Excel\Excel::class)->raw($export, \Maatwebsite\Excel\Excel::XLSX);
+        } finally {
+            $export->cleanup();
+        }
+
+        return response($content, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="transaksi-penjualan.xlsx"',
+        ]);
     }
 
     /**

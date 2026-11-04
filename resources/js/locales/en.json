@@ -1861,7 +1861,7 @@
     "delete_confirm": "Delete the note and the image of this reference? This cannot be undone.",
     "load_failed": "Could not load the reference.",
     "updated": "Last changed by {name} · {when}",
-    "link": "Reference",
+    "link": "Sale Reference",
     "add": "Add reference",
     "view": "View / edit reference",
     "loading": "Loading…",
@@ -1879,7 +1879,10 @@
     "new_badge": "New",
     "remove_from_selection": "Remove from selection",
     "undo_remove": "Keep image",
-    "marked_for_removal": "Will be removed when you save"
+    "marked_for_removal": "Will be removed when you save",
+    "filter_all": "All sale references",
+    "filter_has": "Has Sale Reference",
+    "filter_none": "No Sale Reference"
   },
   "sales_reports": {
     "stat_transactions": "Transactions",
@@ -1967,5 +1970,19 @@
     "loading": "Loading…",
     "load_failed": "Could not load the sessions.",
     "link": "Session history"
+  },
+  "payment_proof": {
+    "link": "Payment Proof",
+    "title": "Payment proof",
+    "loading": "Loading…",
+    "load_failed": "Could not load the payment proofs.",
+    "none": "This sale has no payment proof you can view.",
+    "unavailable": "Proof unavailable",
+    "thumb_alt": "Payment proof, {method} {amount}",
+    "open": "Open proof full size"
+  },
+  "sales_attachments": {
+    "toggle": "Show references & payment proofs",
+    "toggle_hint": "Show or hide the Sale Reference and Payment Proof of every sale on this page"
   }
 }

@@ -457,6 +457,26 @@ describe('SalesView — export and selection', () => {
     expect(exportSalesTransactions.mock.calls[0][0]).toEqual(expect.objectContaining({ include_voided: 1 }));
   });
 
+  it('sends the selected seller names so the file\'s units/gross/net are seller-scoped (056 US8/US9)', async () => {
+    const user = await setup();
+    await pick(user, 'Semua penjual', 'Nekoyama Studio');
+
+    await user.click(screen.getByRole('button', { name: /^Ekspor tampilan ini/ }));
+
+    await waitFor(() => expect(exportSalesTransactions).toHaveBeenCalled());
+    expect(exportSalesTransactions.mock.calls[0][0]).toEqual(expect.objectContaining({ sellers: ['Nekoyama Studio'] }));
+  });
+
+  it('shows the server\'s limit message when the export is refused (422 arrives as a Blob)', async () => {
+    const body = new Blob([JSON.stringify({ message: 'Ekspor ini akan menanam lebih dari 400 gambar.' })], { type: 'application/json' });
+    exportSalesTransactions.mockRejectedValue(Object.assign(new Error('x'), { status: 422, data: body }));
+    const user = await setup();
+
+    await user.click(screen.getByRole('button', { name: 'Ekspor tampilan ini (3)' }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Ekspor ini akan menanam lebih dari 400 gambar.'));
+  });
+
   it('reports an export failure', async () => {
     exportSalesTransactions.mockRejectedValue(new Error('gagal'));
     const user = await setup();

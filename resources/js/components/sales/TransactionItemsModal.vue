@@ -338,6 +338,7 @@ async function performVoid() {
           <PaymentHistoryList
             :payments="payments"
             :show-proof="true"
+            :proof-thumbnails="true"
             :show-print="false"
             :can-delete="canDeletePayments"
             @delete="(p) => (paymentDeleteTarget = p)"
