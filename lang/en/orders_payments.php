@@ -53,5 +53,6 @@ return [
     'reference_not_allowed_view' => 'You do not have access to transaction references.',
     'reference_empty' => 'Add a note or an image; to remove the reference entirely, delete it.',
     'reference_image_invalid' => 'The file must be a JPEG, PNG or WebP image.',
+    'reference_image_limit' => 'A sale can hold at most :max reference images; you can add :remaining more.',
     'reference_image_missing' => 'This sale has no reference image.',
 ];

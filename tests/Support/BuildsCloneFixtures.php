@@ -66,6 +66,9 @@ trait BuildsCloneFixtures
         Storage::disk('local')->put("payment-proofs/{$mode}-proof.jpg", "{$mode}-proof-bytes");
         Storage::disk('local')->put("settlement-signatures/{$mode}-signature.png", "{$mode}-signature-bytes");
         Storage::disk('local')->put("settlement-proofs/{$mode}-payout.jpg", "{$mode}-payout-bytes");
+        // 055 — dua gambar referensi transaksi per order (tabel anak tanpa data_mode).
+        Storage::disk('local')->put("order-references/{$mode}-ref-1.jpg", "{$mode}-ref-1-bytes");
+        Storage::disk('local')->put("order-references/{$mode}-ref-2.png", "{$mode}-ref-2-bytes");
 
         $g['user'] = $this->cloneUserId();
         $g['channel'] = $this->cloneChannelId();
@@ -123,6 +126,12 @@ trait BuildsCloneFixtures
             'order_number' => "TRX-{$tag}-0001", 'event_id' => $g['event'], 'session_id' => $g['session'],
             'user_id' => $g['user'], 'customer_id' => $g['customer'], 'local_ref' => (string) Str::uuid(),
         ]);
+        foreach ([1 => 'image/jpeg', 2 => 'image/png'] as $position => $mime) {
+            $g["referenceImage{$position}"] = $this->row('order_reference_images', [
+                'order_id' => $g['order'], 'path' => "order-references/{$mode}-ref-{$position}.".($position === 1 ? 'jpg' : 'png'),
+                'mime' => $mime, 'size_bytes' => 12, 'position' => $position, 'uploaded_by' => $g['user'],
+            ]);
+        }
         $g['orderItem'] = $this->row('order_items', $m + [
             'order_id' => $g['order'], 'variant_id' => $g['variant1'], 'artist_id' => $g['artist'],
             'sku_snapshot' => "{$c['artist']}-{$c['cat']}-{$c['seg']}-001", 'name_snapshot' => "Product {$tag}",

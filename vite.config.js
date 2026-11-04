@@ -74,7 +74,24 @@ export default defineConfig({
     // sama (hanya ada nilainya di docker-compose.yml service `node`),
     // supaya `npm run dev` native TIDAK terkena overhead polling — di
     // native, inotify biasa sudah bekerja andal.
-    watch: process.env.VITE_DEV_SERVER_ORIGIN ? { usePolling: true, interval: 300 } : undefined,
+    //
+    // BUG YANG DITEMUKAN & DIPERBAIKI (055, 2026-11-04) — polling memeriksa SETIAP berkas di bawah root
+    // tiap 300 ms, dan bawaan Vite hanya mengecualikan .git/node_modules. Akibatnya ~40 ribu berkas yang tak
+    // pernah dibutuhkan frontend (vendor/, storage/, .claude/worktrees/, specs/, docs/, test) ikut di-stat
+    // lewat bind mount, antrean I/O libuv macet, dan Vite berhenti menjawab sama sekali (app.css/SFC
+    // menggantung > 2 menit, CPU node hampir 0 %; satu pemindaian Tailwind atas 1.589 berkas butuh 29 detik).
+    // Ditemukan lewat pengukuran sungguhan setelah container di-restart. Folder di bawah ini tidak pernah
+    // diimpor SPA; resources/ (dan routes/ untuk `refresh: true`) tetap dipantau.
+    watch: process.env.VITE_DEV_SERVER_ORIGIN
+      ? {
+          usePolling: true,
+          interval: 300,
+          ignored: [
+            '**/vendor/**', '**/storage/**', '**/.claude/**', '**/public/build/**', '**/bootstrap/cache/**',
+            '**/specs/**', '**/docs/**', '**/tests/**', '**/qa-tests/**', '**/android/**', '**/.specify/**',
+          ],
+        }
+      : undefined,
   },
   test: {
     environment: 'jsdom',

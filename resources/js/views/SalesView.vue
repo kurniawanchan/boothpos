@@ -481,6 +481,11 @@ function showCustomerDetail(row) {
           <template #cell-order_number="{ row }">
             <div class="flex flex-col items-start gap-1 whitespace-nowrap">
               <button type="button" class="whitespace-nowrap font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" :class="{ 'line-through': isVoided(row) }" @click="openDetail(row)">{{ row.order_number }}</button>
+              <!-- 055 — tautan referensi tepat di bawah nomor transaksi (dulu di kolom aksi), hanya pada
+                   penjualan yang punya referensi (catatan/gambar). -->
+              <button v-if="row.has_reference" type="button" class="flex items-center gap-1 whitespace-nowrap text-[12px] font-semibold text-brand-active hover:underline" data-testid="reference-link" @click="referenceOrderId = row.id">
+                <i class="ph-duotone ph-paperclip text-[14px]" aria-hidden="true"></i>{{ t('sales_reference.link') }}
+              </button>
               <StatusPill v-if="isVoided(row)" variant="danger">{{ t('reports.status_voided') }}</StatusPill>
             </div>
           </template>
@@ -553,10 +558,6 @@ function showCustomerDetail(row) {
             <div class="flex flex-col items-start gap-1.5">
               <button type="button" class="whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" @click="openDetail(row)">{{ t('reports.view_items') }}</button>
               <button type="button" class="whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" @click="openReceipt(row)">{{ t('reports.view_receipt') }}</button>
-              <!-- Hanya penjualan yang punya referensi (catatan/gambar) -->
-              <button v-if="row.has_reference" type="button" class="flex items-center gap-1 whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" data-testid="reference-link" @click="referenceOrderId = row.id">
-                <i class="ph-duotone ph-paperclip text-[14px]" aria-hidden="true"></i>{{ t('sales_reference.link') }}
-              </button>
             </div>
           </template>
         </DataTable>

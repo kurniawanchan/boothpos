@@ -5,19 +5,23 @@ import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseTextarea from '../ui/BaseTextarea.vue';
 import ConfirmDialog from '../ui/ConfirmDialog.vue';
-import ImageLightbox from '../ui/ImageLightbox.vue';
-import { getReference, getReferenceImageUrl, saveReference, deleteReference } from '../../api/orders';
+import ReferenceThumbnails from './ReferenceThumbnails.vue';
+import { getReference, saveReference, deleteReference } from '../../api/orders';
 import { formatDateTime } from '../../utils/date';
+import { triageReferenceFiles, REFERENCE_IMAGE_TYPES } from '../../utils/referenceFiles';
 
 /**
- * 054 (US8) — referensi transaksi: catatan teks dan/atau satu gambar pada sebuah penjualan, untuk
+ * 054 (US8) — referensi transaksi: catatan teks dan/atau gambar pada sebuah penjualan, untuk
  * menelusuri penjualan ke bukti awalnya (mis. foto WhatsApp yang diterima sebelum penjualannya dicatat).
  * Satu dialog untuk melihat DAN mengubah: kolom edit hanya tampil bila SERVER menyatakan `can_edit`
  * (owner/admin atau kasir penjualannya); komponen ini tak menebak izin dari peran. Pemeriksaan jenis
  * dan ukuran berkas di sini hanya kemudahan — server memeriksa ulang isi berkasnya.
  *
- * Gambar tak bisa dimuat lewat <img src> biasa (endpoint mengotorisasi tiap permintaan), jadi diunduh
- * dengan token lalu ditampilkan lewat blob URL yang dibebaskan saat ditutup/diganti.
+ * 055 — sampai `max_images` gambar per penjualan. Pengguna memilih BANYAK berkas sekaligus (yang tidak
+ * valid disebut namanya, yang valid tetap ikut) dan menandai gambar tersimpan untuk dihapus (bisa
+ * dibatalkan sebelum Simpan). Simpan mengirim SATU permintaan berisi DELTA (gambar baru + id yang dihapus),
+ * tidak pernah daftar lengkap, supaya simpanan pengguna lain tidak tertimpa. Bila hasilnya kosong sama
+ * sekali (tanpa catatan dan tanpa gambar), Simpan diarahkan ke konfirmasi hapus referensi.
  */
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -27,21 +31,16 @@ const emit = defineEmits(['close', 'saved']);
 
 const { t } = useI18n();
 
-const MAX_BYTES = 5 * 1024 * 1024;
-const ACCEPTED = ['image/jpeg', 'image/png', 'image/webp'];
-
 const data = ref(null);
 const loading = ref(false);
 const loadError = ref(false);
 const note = ref('');
-const imageUrl = ref(null);
-const pickedFile = ref(null);
-const pickedPreview = ref(null);
-const removeImage = ref(false);
-const fileError = ref('');
+const picked = ref([]); // [{ file, url }]
+const marked = ref([]); // id gambar tersimpan yang akan dihapus
+const refused = ref([]); // [{ name, reason }]
+const serverError = ref('');
 const saving = ref(false);
 const confirmDelete = ref(false);
-const lightbox = ref(false);
 const fileInput = ref(null);
 
 function revoke(url) {
@@ -49,28 +48,30 @@ function revoke(url) {
 }
 
 function resetEdits() {
-  revoke(pickedPreview.value);
-  pickedFile.value = null;
-  pickedPreview.value = null;
-  removeImage.value = false;
-  fileError.value = '';
+  picked.value.forEach((p) => revoke(p.url));
+  picked.value = [];
+  marked.value = [];
+  refused.value = [];
+  serverError.value = '';
   if (fileInput.value) fileInput.value.value = '';
 }
 
-async function load() {
-  loading.value = true;
+async function load({ keepEdits = false } = {}) {
+  if (!keepEdits) {
+    loading.value = true;
+    resetEdits();
+  }
   loadError.value = false;
-  revoke(imageUrl.value);
-  imageUrl.value = null;
-  resetEdits();
   try {
     const res = await getReference(props.orderId);
     data.value = res;
-    note.value = res.note ?? '';
-    if (res.has_image) imageUrl.value = await getReferenceImageUrl(props.orderId);
+    if (!keepEdits) note.value = res.note ?? '';
+    // Gambar yang sudah tak ada lagi di server tak bisa ditandai untuk dihapus.
+    const ids = new Set((res.images ?? []).map((i) => i.id));
+    marked.value = marked.value.filter((id) => ids.has(id));
   } catch {
-    data.value = null;
-    loadError.value = true;
+    if (!keepEdits) data.value = null;
+    loadError.value = !keepEdits;
   } finally {
     loading.value = false;
   }
@@ -80,60 +81,81 @@ watch(
   () => [props.open, props.orderId],
   ([isOpen, id]) => {
     if (isOpen && id != null) load();
-    if (!isOpen) {
-      revoke(imageUrl.value);
-      imageUrl.value = null;
-      resetEdits();
-    }
+    if (!isOpen) resetEdits();
   },
   { immediate: true },
 );
-onBeforeUnmount(() => { revoke(imageUrl.value); revoke(pickedPreview.value); });
+onBeforeUnmount(() => picked.value.forEach((p) => revoke(p.url)));
 
 const editable = computed(() => !!data.value?.can_edit);
-const hasReference = computed(() => !!(data.value && (data.value.note || data.value.has_image)));
+const storedImages = computed(() => data.value?.images ?? []);
+const maxImages = computed(() => data.value?.max_images ?? 10);
+const hasReference = computed(() => !!(data.value && (data.value.note || storedImages.value.length)));
 const noteChanged = computed(() => note.value.trim() !== (data.value?.note ?? ''));
-const shownImage = computed(() => pickedPreview.value ?? (removeImage.value ? null : imageUrl.value));
-// Setelah disimpan harus tersisa catatan atau gambar (server menolak hasil kosong; "hapus semua" = tombol Hapus referensi).
-const somethingLeft = computed(() => note.value.trim() !== '' || !!pickedFile.value || (!!data.value?.has_image && !removeImage.value));
-const dirty = computed(() => noteChanged.value || !!pickedFile.value || removeImage.value);
-const canSave = computed(() => editable.value && dirty.value && somethingLeft.value && !saving.value);
+const imagesAfterSave = computed(() => storedImages.value.length - marked.value.length + picked.value.length);
+const slotsLeft = computed(() => Math.max(0, maxImages.value - imagesAfterSave.value));
+const dirty = computed(() => noteChanged.value || picked.value.length > 0 || marked.value.length > 0);
+// Setelah disimpan harus tersisa catatan atau gambar; bila tidak, Simpan = hapus referensi (dengan konfirmasi).
+const emptiesReference = computed(() => note.value.trim() === '' && imagesAfterSave.value === 0);
+const canSave = computed(() => editable.value && dirty.value && !saving.value && (!emptiesReference.value || hasReference.value));
 
-function onFile(e) {
-  const file = e.target.files?.[0];
-  fileError.value = '';
-  revoke(pickedPreview.value);
-  pickedPreview.value = null;
-  pickedFile.value = null;
-  if (!file) return;
-  if (!ACCEPTED.includes(file.type)) {
-    fileError.value = t('sales_reference.file_type_error');
-    e.target.value = '';
-    return;
-  }
-  if (file.size > MAX_BYTES) {
-    fileError.value = t('sales_reference.file_size_error');
-    e.target.value = '';
-    return;
-  }
-  pickedFile.value = file;
-  removeImage.value = false;
-  if (typeof URL.createObjectURL === 'function') pickedPreview.value = URL.createObjectURL(file);
+const refusedMessage = computed(() => {
+  if (!refused.value.length) return '';
+  const reasons = {
+    type: t('sales_reference.reason_type'),
+    size: t('sales_reference.reason_size'),
+    limit: t('sales_reference.reason_limit', { max: maxImages.value }),
+  };
+  const names = refused.value.map((r) => `${r.name} (${reasons[r.reason]})`).join(', ');
+  return t('sales_reference.file_refused', { names });
+});
+
+function onFiles(e) {
+  const files = Array.from(e.target.files ?? []);
+  e.target.value = ''; // supaya berkas yang sama bisa dipilih lagi setelah dibatalkan
+  serverError.value = '';
+  const { accepted, refused: rejected } = triageReferenceFiles(files, slotsLeft.value);
+  refused.value = rejected;
+  picked.value = [
+    ...picked.value,
+    ...accepted.map((file) => ({ file, url: typeof URL.createObjectURL === 'function' ? URL.createObjectURL(file) : null })),
+  ];
+}
+
+function dropPicked(index) {
+  revoke(picked.value[index]?.url);
+  picked.value = picked.value.filter((_, i) => i !== index);
+  refused.value = [];
+}
+
+function toggleRemove(id) {
+  marked.value = marked.value.includes(id) ? marked.value.filter((m) => m !== id) : [...marked.value, id];
 }
 
 async function save() {
   if (!canSave.value) return;
+  if (emptiesReference.value) {
+    confirmDelete.value = true;
+    return;
+  }
   saving.value = true;
+  serverError.value = '';
   try {
     const result = await saveReference(props.orderId, {
       note: noteChanged.value ? note.value : undefined,
-      image: pickedFile.value,
-      removeImage: removeImage.value,
+      images: picked.value.map((p) => p.file),
+      removeImageIds: [...marked.value],
     });
     emit('saved', result);
     emit('close');
-  } catch {
-    // 403/422 sudah ditampilkan interceptor global; dialog tetap terbuka supaya bisa diperbaiki.
+  } catch (err) {
+    if (err?.status === 409) {
+      // Pesan batas sudah ditampilkan interceptor global; muat ulang jumlah tersimpan supaya sisa slot benar.
+      await load({ keepEdits: true });
+    } else if (err?.status === 422) {
+      serverError.value = Object.values(err.errors ?? {}).flat()[0] ?? err.message ?? '';
+    }
+    // 403 juga sudah ditampilkan interceptor global; dialog tetap terbuka supaya bisa diperbaiki.
   } finally {
     saving.value = false;
   }
@@ -161,7 +183,7 @@ async function performDelete() {
 
       <div v-else-if="loadError" class="flex flex-col items-start gap-2 text-[13px]">
         <span class="text-danger-text">{{ t('sales_reference.load_failed') }}</span>
-        <BaseButton variant="secondary" size="sm" @click="load">{{ t('common.retry') }}</BaseButton>
+        <BaseButton variant="secondary" size="sm" @click="load()">{{ t('common.retry') }}</BaseButton>
       </div>
 
       <template v-else-if="data">
@@ -169,9 +191,7 @@ async function performDelete() {
         <template v-if="!editable">
           <p v-if="!hasReference" class="text-[13px] text-muted-3">{{ t('sales_reference.none') }}</p>
           <p v-if="data.note" class="whitespace-pre-line break-words text-[13.5px]" data-testid="reference-note">{{ data.note }}</p>
-          <button v-if="imageUrl" type="button" class="w-fit cursor-zoom-in" @click="lightbox = true">
-            <img :src="imageUrl" :alt="t('sales_reference.image_alt')" class="max-h-[320px] max-w-full rounded-lg border border-line-2 object-contain" />
-          </button>
+          <ReferenceThumbnails v-if="storedImages.length" :order-id="orderId" :images="storedImages" />
         </template>
 
         <!-- Mengubah -->
@@ -179,23 +199,52 @@ async function performDelete() {
           <BaseTextarea v-model="note" :label="t('sales_reference.note_label')" :placeholder="t('sales_reference.note_placeholder')" rows="4" maxlength="1000" />
 
           <div class="flex flex-col gap-2">
-            <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">{{ t('sales_reference.image_label') }}</span>
-            <button v-if="shownImage" type="button" class="w-fit cursor-zoom-in" @click="lightbox = true">
-              <img :src="shownImage" :alt="t('sales_reference.image_alt')" class="max-h-[240px] max-w-full rounded-lg border border-line-2 object-contain" />
-            </button>
+            <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">{{ t('sales_reference.images_title') }}</span>
+
+            <ReferenceThumbnails
+              v-if="storedImages.length"
+              :order-id="orderId"
+              :images="storedImages"
+              removable
+              :marked="marked"
+              @toggle-remove="toggleRemove"
+            />
+
+            <ul v-if="picked.length" class="flex flex-wrap gap-2">
+              <li v-for="(p, i) in picked" :key="p.url ?? i" data-testid="picked-image" class="flex w-[88px] flex-col gap-1">
+                <div class="relative h-[88px] w-[88px] overflow-hidden rounded-lg border border-brand bg-surface-subtle">
+                  <img v-if="p.url" :src="p.url" :alt="p.file.name" class="h-full w-full object-cover" />
+                  <span class="absolute left-1 top-1 rounded bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white">{{ t('sales_reference.new_badge') }}</span>
+                </div>
+                <button type="button" class="text-left text-[11px] font-semibold text-danger-text hover:underline" @click="dropPicked(i)">
+                  {{ t('sales_reference.remove_from_selection') }}
+                </button>
+              </li>
+            </ul>
+
             <div class="flex flex-wrap items-center gap-2">
-              <label class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[12.5px] font-semibold text-muted-5 hover:border-brand">
-                <i class="ph-duotone ph-image text-[16px]" aria-hidden="true"></i>
-                {{ shownImage ? t('sales_reference.replace_image') : t('sales_reference.choose_image') }}
-                <input ref="fileInput" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="onFile" />
+              <label
+                class="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[12.5px] font-semibold text-muted-5"
+                :class="slotsLeft > 0 ? 'cursor-pointer hover:border-brand' : 'cursor-not-allowed opacity-50'"
+              >
+                <i class="ph-duotone ph-images text-[16px]" aria-hidden="true"></i>
+                {{ t('sales_reference.add_images') }}
+                <input
+                  ref="fileInput"
+                  type="file"
+                  multiple
+                  :accept="REFERENCE_IMAGE_TYPES.join(',')"
+                  class="sr-only"
+                  :disabled="slotsLeft === 0"
+                  @change="onFiles"
+                />
               </label>
-              <BaseButton v-if="data.has_image && !pickedFile && !removeImage" variant="secondary" size="sm" @click="removeImage = true">
-                {{ t('sales_reference.remove_image') }}
-              </BaseButton>
-              <BaseButton v-else-if="removeImage" variant="secondary" size="sm" @click="removeImage = false">{{ t('sales_reference.keep_image') }}</BaseButton>
+              <span class="text-[12px] text-muted-4">
+                {{ slotsLeft > 0 ? t('sales_reference.remaining_slots', { count: slotsLeft }) : t('sales_reference.limit_reached', { max: maxImages }) }}
+              </span>
             </div>
-            <p v-if="fileError" class="text-[12px] text-danger-text" role="alert">{{ fileError }}</p>
-            <p class="text-[11.5px] text-muted-3">{{ t('sales_reference.image_hint') }}</p>
+            <p v-if="refusedMessage || serverError" class="text-[12px] text-danger-text" role="alert">{{ serverError || refusedMessage }}</p>
+            <p class="text-[11.5px] text-muted-3">{{ t('sales_reference.images_hint', { max: maxImages }) }}</p>
           </div>
         </template>
 
@@ -226,5 +275,4 @@ async function performDelete() {
     @close="confirmDelete = false"
     @confirm="performDelete"
   />
-  <ImageLightbox :open="lightbox" :src="shownImage ?? imageUrl" :alt="t('sales_reference.image_alt')" @close="lightbox = false" />
 </template>

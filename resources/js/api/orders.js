@@ -46,22 +46,27 @@ export function getReference(orderId) {
 /**
  * Gambarnya hanya bisa diambil dengan token (endpoint mengotorisasi tiap permintaan), jadi diunduh
  * lewat klien axios lalu dijadikan blob URL — bukan <img src> langsung. Pemanggil wajib
- * `URL.revokeObjectURL` bila sudah tak dipakai.
+ * `URL.revokeObjectURL` bila sudah tak dipakai. 055 — satu penjualan bisa punya banyak gambar,
+ * jadi gambar diminta per id (server menolak id milik penjualan lain).
  */
-export function getReferenceImageUrl(orderId) {
-  return client.get(`/orders/${orderId}/reference/image`, { responseType: 'blob' }).then((r) => URL.createObjectURL(r.data));
+export function getReferenceImageUrl(orderId, imageId) {
+  return client
+    .get(`/orders/${orderId}/reference/images/${imageId}`, { responseType: 'blob' })
+    .then((r) => URL.createObjectURL(r.data));
 }
 
 /**
  * Multipart harus dikirim sebagai POST + `_method=PUT` (PHP tidak mengurai multipart pada PUT asli).
- * `note` hanya dikirim bila diubah (string kosong mengosongkan catatan); `image` menambah/mengganti.
+ * `note` hanya dikirim bila diubah (string kosong mengosongkan catatan).
+ * 055 — simpan bersifat DELTA: `images` = gambar yang DITAMBAHKAN, `removeImageIds` = id yang dihapus.
+ * Jangan pernah mengirim daftar lengkap — itu yang membuat dua pengguna tak saling menghapus gambar.
  */
-export function saveReference(orderId, { note, image, removeImage } = {}) {
+export function saveReference(orderId, { note, images = [], removeImageIds = [] } = {}) {
   const form = new FormData();
   form.append('_method', 'PUT');
   if (note !== undefined) form.append('note', note ?? '');
-  if (image) form.append('image', image);
-  if (removeImage) form.append('remove_image', '1');
+  images.forEach((file) => form.append('images[]', file));
+  removeImageIds.forEach((id) => form.append('remove_image_ids[]', String(id)));
   return client.post(`/orders/${orderId}/reference`, form).then((r) => r.data);
 }
 

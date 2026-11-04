@@ -2046,49 +2046,77 @@ paths:
   /orders/{id}/reference:
     get:
       tags: [Order]
-      summary: Referensi transaksi (catatan + gambar) (054, US8)
-      description: Dapat dibaca setiap pengguna dengan menu `sales`; selain itu 403.
+      summary: Referensi transaksi (catatan + gambar) (054, US8; 055 banyak gambar)
+      description: Dapat dibaca setiap pengguna dengan menu `sales`; selain itu 403. Penjualan mode DEMO/LIVE lain → 404.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
-        '200': { description: "`{ note, has_image, updated_at, updated_by_name, can_edit }`" }
+        '200': { description: Blok referensi, content: { application/json: { schema: { $ref: '#/components/schemas/OrderReference' } } } }
         '403': { description: Tanpa menu sales }
     put:
       tags: [Order]
-      summary: Buat/ubah referensi transaksi (054, US8)
+      summary: Ubah referensi transaksi — tambah/hapus gambar, ubah catatan (054, US8; 055)
       description: |
-        multipart (kirim sebagai POST + `_method=PUT`): `note` (≤1000, hanya diubah bila kuncinya ada; kosong
-        mengosongkan), `image` (JPEG/PNG/WebP ≤5 MB, jenis dibaca dari ISI berkas), `remove_image`. Hasil akhir tak
-        boleh kosong (422; gunakan DELETE). Boleh: owner/admin atau kasir penjualan itu. Tidak menyentuh uang, stok,
-        status, atau laporan; boleh pada penjualan batal. Berkas lama yang diganti dihapus.
+        multipart (kirim sebagai POST + `_method=PUT`). Simpan bersifat DELTA dan semua-atau-tidak-sama-sekali:
+        `note` (≤1000, hanya diubah bila kuncinya ada; kosong mengosongkan), `images[]` (gambar yang DITAMBAHKAN,
+        1–10 per permintaan, JPEG/PNG/WebP ≤5 MB masing-masing, jenis dibaca dari ISI berkas), `remove_image_ids[]`
+        (id gambar yang dihapus; id milik penjualan lain atau yang sudah terhapus diabaikan). Maks. 10 gambar per
+        penjualan dihitung terhadap gambar yang TERSIMPAN saat menyimpan (409). Hasil akhir tak boleh kosong (422;
+        gunakan DELETE). Boleh: owner/admin atau kasir penjualan itu. Tidak menyentuh uang, stok, status, atau
+        laporan; boleh pada penjualan batal. Berkas gambar yang dihapus ikut dihapus. Field 054 `image` dan
+        `remove_image` tidak berlaku lagi.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                _method: { type: string, enum: [PUT] }
+                note: { type: string, maxLength: 1000, nullable: true }
+                'images[]': { type: array, maxItems: 10, items: { type: string, format: binary } }
+                'remove_image_ids[]': { type: array, items: { type: integer } }
       responses:
-        '200': { description: "Blok referensi terbaru" }
+        '200': { description: Blok referensi terbaru, content: { application/json: { schema: { $ref: '#/components/schemas/OrderReference' } } } }
         '403': { description: "Bukan owner/admin dan bukan kasir penjualan ini." }
-        '422': { description: "Jenis/ukuran berkas, catatan terlalu panjang, atau hasil kosong." }
+        '409':
+          description: Melewati batas gambar per penjualan.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  code: { type: string, enum: [reference_image_limit] }
+                  max: { type: integer, example: 10 }
+                  remaining: { type: integer, description: Jumlah gambar yang masih bisa ditambahkan }
+        '422': { description: "Catatan terlalu panjang, >10 berkas dalam satu permintaan, jenis/ukuran berkas (`errors[\"images.N\"]`), atau hasil kosong." }
     delete:
       tags: [Order]
-      summary: Hapus referensi transaksi (catatan dan gambar) (054, US8)
+      summary: Hapus referensi transaksi (catatan dan SEMUA gambar) (054, US8; 055)
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
-        '200': { description: "Blok referensi (kosong)" }
+        '200': { description: "Blok referensi (kosong: `images: []`)", content: { application/json: { schema: { $ref: '#/components/schemas/OrderReference' } } } }
         '403': { description: "Bukan owner/admin dan bukan kasir penjualan ini." }
 
-  /orders/{id}/reference/image:
+  /orders/{id}/reference/images/{imageId}:
     get:
       tags: [Order]
-      summary: Gambar referensi transaksi (054, US8)
+      summary: Satu gambar referensi transaksi (055; menggantikan `/orders/{id}/reference/image` dari 054)
       description: |
         Disajikan dari disk privat hanya lewat endpoint ini (menu `sales`), `Cache-Control: private, no-store`.
+        Gambar harus milik penjualan `{id}` (scoped binding) — id gambar penjualan lain → 404.
         Harus diunduh dengan token (blob), bukan <img src> langsung.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: imageId, in: path, required: true, schema: { type: integer } }
       responses:
         '200': { description: "Berkas gambar", content: { 'image/*': { schema: { type: string, format: binary } } } }
         '403': { description: Tanpa menu sales }
-        '404': { description: "Penjualan tak punya gambar referensi." }
+        '404': { description: "Gambar tak ada, bukan milik penjualan ini, sudah dihapus, atau berkasnya hilang." }
 
   /orders/bulk-receipts:
     post:
@@ -7271,6 +7299,31 @@ components:
         status: { type: string, enum: [completed, voided] }
         created_at: { type: string, format: date-time }
 
+    OrderReference:
+      type: object
+      description: |
+        054 (US8) / 055 — referensi transaksi (bukti kerja, bukan catatan keuangan). Bentuk yang SAMA di
+        `GET /orders/{id}` (`reference`) dan `/orders/{id}/reference`. Gambar diambil per id lewat
+        `/orders/{id}/reference/images/{imageId}`.
+      properties:
+        note: { type: string, nullable: true, maxLength: 1000 }
+        images:
+          type: array
+          description: Urut tampil (`position`, lalu `id`). Posisi bisa berlubang setelah penghapusan.
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              mime: { type: string, enum: [image/jpeg, image/png, image/webp] }
+              size_bytes: { type: integer, nullable: true, description: "NULL untuk gambar hasil migrasi 054" }
+              position: { type: integer }
+              created_at: { type: string, format: date-time, nullable: true }
+        image_count: { type: integer }
+        has_image: { type: boolean }
+        max_images: { type: integer, example: 10 }
+        updated_at: { type: string, format: date-time, nullable: true }
+        updated_by_name: { type: string, nullable: true }
+        can_edit: { type: boolean, description: "Owner/admin atau kasir penjualan ini (dihitung server)." }
     Order:
       type: object
       properties:
@@ -7289,6 +7342,7 @@ components:
         notes: { type: string, nullable: true }
         channel: { type: string }
         created_at: { type: string, format: date-time }
+        reference: { $ref: '#/components/schemas/OrderReference' }
         customer:
           type: object
           nullable: true

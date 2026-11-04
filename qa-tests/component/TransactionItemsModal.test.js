@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within, cleanup } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import TransactionItemsModal from '../../resources/js/components/sales/TransactionItemsModal.vue';
-import { getOrder, getReceipt, voidOrder, addOrderPayment, deleteOrderPayment } from '../../resources/js/api/orders';
+import { getOrder, getReceipt, voidOrder, addOrderPayment, deleteOrderPayment, getReferenceImageUrl } from '../../resources/js/api/orders';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { getProduct } from '../../resources/js/api/products';
 import { updatePaymentConfirmation, getPaymentProofBlobUrl, uploadPaymentProof, verifyPayment } from '../../resources/js/api/payments';
 
 vi.mock('../../resources/js/api/orders', () => ({
   getOrder: vi.fn(), getReceipt: vi.fn(), voidOrder: vi.fn(), addOrderPayment: vi.fn(), deleteOrderPayment: vi.fn(),
+  getReference: vi.fn(), getReferenceImageUrl: vi.fn(), saveReference: vi.fn(), deleteReference: vi.fn(),
 }));
 vi.mock('../../resources/js/api/payments', () => ({
   listPaymentChannels: vi.fn().mockResolvedValue({ data: [] }),
@@ -615,5 +616,58 @@ describe('TransactionItemsModal — mark payment verified (032)', () => {
     await open(orderWith(qrisEntry({ can_verify: false }), { status: 'voided', void_reason: 'Salah input' }));
 
     expect(within(screen.getByTestId('payment-entry')).queryByRole('button', { name: 'Tandai terverifikasi' })).not.toBeInTheDocument();
+  });
+});
+
+// 055 (US1) — gambar referensi tampil sebagai thumbnail langsung di detail, tanpa membuka dialog lain.
+describe('TransactionItemsModal — reference thumbnails (055)', () => {
+  const block = (over = {}) => ({
+    note: null, images: [], image_count: 0, has_image: false, max_images: 10,
+    updated_at: null, updated_by_name: null, can_edit: false, ...over,
+  });
+  const img = (id) => ({ id, mime: 'image/png', size_bytes: 10, position: id, created_at: null });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getReferenceImageUrl.mockImplementation((orderId, id) => Promise.resolve(`blob:ref-${id}`));
+    globalThis.URL.revokeObjectURL = vi.fn();
+  });
+
+  it('shows every reference image as a thumbnail next to the note', async () => {
+    await open({ ...FULL_ORDER, reference: block({ note: 'Foto WA', images: [img(1), img(2), img(3)], image_count: 3, has_image: true }) });
+
+    const card = screen.getByTestId('order-reference');
+    expect(within(card).getByText('Foto WA')).toBeInTheDocument();
+    const thumbs = within(card).getAllByTestId('reference-thumbnail');
+    expect(thumbs).toHaveLength(3);
+    await waitFor(() => expect(thumbs[0].querySelector('img')).toHaveAttribute('src', 'blob:ref-1'));
+    expect(getReferenceImageUrl).toHaveBeenCalledWith(101, 3);
+  });
+
+  it('opens the full-size gallery from a thumbnail without leaving the detail', async () => {
+    const user = await open({ ...FULL_ORDER, reference: block({ images: [img(1), img(2)], image_count: 2, has_image: true }) });
+    const thumbs = within(screen.getByTestId('order-reference')).getAllByTestId('reference-thumbnail');
+    await waitFor(() => expect(thumbs[1].querySelector('img')).toHaveAttribute('src', 'blob:ref-2'));
+
+    await user.click(thumbs[1].querySelector('button'));
+
+    expect(await screen.findByText('2 / 2')).toBeInTheDocument();
+    expect(screen.getByText(FULL_ORDER.order_number)).toBeInTheDocument();
+  });
+
+  it('a note-only reference shows no thumbnail area and fetches no image', async () => {
+    await open({ ...FULL_ORDER, reference: block({ note: 'Catatan saja' }) });
+
+    expect(within(screen.getByTestId('order-reference')).queryByTestId('reference-thumbnail')).not.toBeInTheDocument();
+    expect(getReferenceImageUrl).not.toHaveBeenCalled();
+  });
+
+  it('with no reference, an editor still gets "Add reference" and a viewer sees no card', async () => {
+    await open({ ...FULL_ORDER, reference: block({ can_edit: true }) });
+    expect(within(screen.getByTestId('order-reference')).getByRole('button', { name: 'Tambah referensi' })).toBeInTheDocument();
+
+    cleanup();
+    await open({ ...FULL_ORDER, reference: block() });
+    expect(screen.queryByTestId('order-reference')).not.toBeInTheDocument();
   });
 });

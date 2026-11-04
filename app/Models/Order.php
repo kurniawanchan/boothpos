@@ -15,7 +15,7 @@ class Order extends Model
         'order_number', 'event_id', 'session_id', 'customer_id', 'user_id', 'channel',
         'subtotal', 'discount_amount', 'total_amount', 'total_cost', 'paid_amount',
         'change_amount', 'status', 'void_reason', 'local_ref', 'notes',
-        'reference_note', 'reference_image_path', 'reference_image_mime', 'reference_updated_by', 'reference_updated_at',
+        'reference_note', 'reference_updated_by', 'reference_updated_at',
     ];
 
     protected function casts(): array
@@ -38,10 +38,31 @@ class Order extends Model
     /** 054 — siapa terakhir mengubah referensi transaksi (NULL bila belum pernah / penggunanya sudah dihapus). */
     public function referenceEditor(): BelongsTo { return $this->belongsTo(User::class, 'reference_updated_by'); }
 
+    /** 055 — gambar referensi transaksi (0..10), urut tampil. Satu-satunya penulis: OrderReferenceService. */
+    public function referenceImages(): HasMany
+    {
+        return $this->hasMany(OrderReferenceImage::class)->orderBy('position')->orderBy('id');
+    }
+
+    /**
+     * 055 — jumlah gambar referensi tanpa kueri per baris di daftar: pakai agregat `withCount('referenceImages')`
+     * bila sudah dipilih (daftar Sales), lalu relasi yang sudah dimuat, baru terakhir satu COUNT.
+     */
+    public function referenceImageCount(): int
+    {
+        if (array_key_exists('reference_images_count', $this->attributes)) {
+            return (int) $this->attributes['reference_images_count'];
+        }
+
+        return $this->relationLoaded('referenceImages')
+            ? $this->referenceImages->count()
+            : $this->referenceImages()->count();
+    }
+
     /** 054 — ada referensi bila ada catatan ATAU gambar (satu definisi; daftar Sales memakai ini juga). */
     public function hasReference(): bool
     {
-        return $this->reference_note !== null || $this->reference_image_path !== null;
+        return $this->reference_note !== null || $this->referenceImageCount() > 0;
     }
 
     /** 028 — ringkasan pembayaran turunan (lihat App\Support\PaymentSummary). */
