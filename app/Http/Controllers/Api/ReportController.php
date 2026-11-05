@@ -329,30 +329,30 @@ class ReportController extends Controller
             // Bagian penjual terpilih (sama dengan `part()` di klien); tanpa filter = seluruh penjualan.
             $part = null;
             if ($sellers !== [] && isset($r['seller_items'])) {
-                $part = ['units' => 0.0, 'gross' => 0.0, 'net' => 0.0];
+                $part = ['units' => 0.0, 'net' => 0.0];
                 foreach ($sellers as $name) {
                     if (isset($r['seller_items'][$name])) {
                         $part['units'] += (float) $r['seller_items'][$name]['units'];
-                        $part['gross'] += (float) $r['seller_items'][$name]['gross'];
                         $part['net'] += (float) $r['seller_items'][$name]['net'];
                     }
                 }
             }
             $nonCash = collect($r['payment_methods'])->contains(fn ($m) => $m !== 'cash');
+            // Spec 062 (2026-11-05): ekspor TIDAK lagi memuat customer, gross_sales, discount, cost, margin, paid —
+            // untuk peran mana pun. Layar Sales tetap memakai field itu dari service; hanya berkas ini yang dipangkas.
             $row = [
                 'transaction_no' => $r['order_number'],
                 'status' => $r['status'],
                 'time' => $r['created_at'],
-                'customer' => $r['customer_name'],
                 'sellers' => implode(', ', $r['artist_names']->all()),
                 'cashier' => $r['cashier_name'],
                 'items' => $r['items_text'],
                 'units' => $part ? $part['units'] : $r['unit_count'],
                 // Angka (bukan string) supaya bisa dijumlah langsung di Excel.
-                'gross_sales' => $part ? $part['gross'] : (float) $r['items_gross'],
                 'net_sales' => $part ? $part['net'] : (float) $r['items_net'],
-                'discount' => (float) $r['discount_amount'],
                 'payment_methods' => implode(', ', $r['payment_methods']->all()),
+                // Spec 062 — penyedia QR (GoPay, Shopee, ...); kosong bila tak ada pembayaran QR.
+                'qr_type' => implode(', ', $r['qr_types']),
                 // 028 — Unpaid/Partially Paid/Fully Paid (dulu status verifikasi mentah).
                 'payment_status' => $r['payment_status'],
                 // 056 — status verifikasi seperti pil di layar: hanya bila ada pembayaran non-tunai (tunai lahir verified).
@@ -361,14 +361,11 @@ class ReportController extends Controller
                 'non_cash' => (float) $r['noncash_amount'],
                 'total' => (float) $r['total_amount'],
             ];
-            if (array_key_exists('cost_total', $r)) {
-                $row['cost'] = (float) $r['cost_total'];
-                $row['margin'] = (float) $r['margin_amount'];
-            }
-            // Urutan layar: Total sebelum Margin; paid/balance menyusul, lalu referensi & bukti.
+            // Sisa tagihan menyusul Total, lalu referensi & bukti.
             $row += [
-                'paid' => (float) $r['paid_amount'],
                 'balance' => (float) $r['balance_amount'],
+                // Spec 062 — catatan tiap pembayaran, satu per baris; beda dengan catatan referensi penjualan di sebelahnya.
+                'payment_note' => implode("\n", $r['payment_notes']),
                 'reference_note' => $r['reference_note'],
                 'payment_proofs' => implode('; ', $r['_proof_labels']),
                 '_reference_images' => $r['_reference_images'],

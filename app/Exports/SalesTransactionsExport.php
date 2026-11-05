@@ -10,6 +10,7 @@ use Maatwebsite\Excel\Concerns\WithDrawings;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
@@ -30,6 +31,8 @@ class SalesTransactionsExport implements FromArray, WithCustomValueBinder, WithD
     private const IMAGE_ROW_HEIGHT_PT = 70;
 
     private const IMAGE_HEIGHT_PX = 88;
+
+    private const LINE_HEIGHT_PT = 15;
 
     private ?string $tempDir = null;
 
@@ -71,6 +74,9 @@ class SalesTransactionsExport implements FromArray, WithCustomValueBinder, WithD
     /** @var list<list<mixed>>|null hasil perhitungan (sekali): sel tiap baris + penempatan gambar */
     private ?array $computed = null;
 
+    /** @var array<string, mixed>|null baris "Grand total" (kunci = judul kolom); null bila tak ada penjualan */
+    private ?array $grandTotal = null;
+
     /**
      * Menghitung sel dan penempatan gambar SEKALI. Dipanggil dari array() maupun drawings() karena Maatwebsite
      * tidak menjamin urutan keduanya; hasilnya sama untuk keduanya.
@@ -99,6 +105,22 @@ class SalesTransactionsExport implements FromArray, WithCustomValueBinder, WithD
             $out[] = array_merge(array_values($this->rows[$i]), $cells);
         }
 
+        // Spec 062 — baris "Grand total" di akhir. Dijumlah dari sel net_sales yang SAMA yang ditulis di atasnya (nilai
+        // porsi penjual yang difilter ikut terbawa), dalam sen bulat supaya tak ada selisih pecahan; penjualan batal
+        // (diekspor hanya untuk audit) tak ikut, sama dengan angka di layar. Tanpa penjualan, tak ada baris total.
+        if ($this->rows !== []) {
+            $cents = 0;
+            foreach ($this->rows as $row) {
+                if (($row['status'] ?? null) !== 'voided') {
+                    $cents += (int) round(((float) ($row['net_sales'] ?? 0)) * 100);
+                }
+            }
+            $this->grandTotal = array_fill_keys(array_keys($this->rows[0]), '');
+            $this->grandTotal['transaction_no'] = __('sales_export.grand_total');
+            $this->grandTotal['net_sales'] = $cents / 100;
+            $out[] = array_merge(array_values($this->grandTotal), array_fill(0, $this->refColumns + $this->proofColumns, ''));
+        }
+
         return $this->computed = $out;
     }
 
@@ -107,7 +129,15 @@ class SalesTransactionsExport implements FromArray, WithCustomValueBinder, WithD
         return $this->compute();
     }
 
-    /** Baris asosiatif apa adanya (tanpa kolom gambar) — dipakai pengujian dan pemeriksaan isi. */
+    /** Baris "Grand total" (kunci = judul kolom), atau null bila tak ada penjualan. Bukan bagian dari rows(). */
+    public function grandTotalRow(): ?array
+    {
+        $this->compute();
+
+        return $this->grandTotal;
+    }
+
+    /** Baris asosiatif apa adanya (tanpa kolom gambar) — dipakai pengujian dan pemeriksaan isi. Hanya baris PENJUALAN. */
     public function rows(): array
     {
         return $this->rows;
@@ -133,8 +163,41 @@ class SalesTransactionsExport implements FromArray, WithCustomValueBinder, WithD
     {
         $this->compute();
         $sheet->getStyle('1:1')->getFont()->setBold(true);
-        foreach (array_keys($this->imageRows) as $row) {
-            $sheet->getRowDimension($row)->setRowHeight(self::IMAGE_ROW_HEIGHT_PT);
+
+        // Spec 062 — sel multi-baris (items, payment_note): bungkus teks, rata atas, dan tinggi baris dihitung dari jumlah
+        // baris teks. Tinggi EKSPLISIT karena Excel tak selalu menyesuaikan baris yang ditulis PhpSpreadsheet; baris
+        // bergambar tak pernah lebih pendek dari IMAGE_ROW_HEIGHT_PT.
+        $heads = $this->headings();
+        $lastRow = count($this->rows) + 1;
+        $multiline = [];
+        foreach (['items' => 45, 'payment_note' => 35] as $name => $width) {
+            $idx = array_search($name, $heads, true);
+            if ($idx === false) {
+                continue;
+            }
+            $letter = Coordinate::stringFromColumnIndex($idx + 1);
+            $multiline[] = $name;
+            $sheet->getColumnDimension($letter)->setWidth($width);
+            if ($lastRow >= 2) {
+                $sheet->getStyle("{$letter}2:{$letter}{$lastRow}")->getAlignment()->setWrapText(true);
+            }
+        }
+        if ($lastRow >= 2 && $heads !== []) {
+            $sheet->getStyle('A2:'.Coordinate::stringFromColumnIndex(count($heads))."{$lastRow}")->getAlignment()->setVertical(Alignment::VERTICAL_TOP);
+        }
+        if ($this->grandTotal !== null) {
+            $sheet->getStyle(($lastRow + 1).':'.($lastRow + 1))->getFont()->setBold(true);
+        }
+        foreach ($this->rows as $i => $row) {
+            $r = $i + 2;
+            $lines = 1;
+            foreach ($multiline as $name) {
+                $lines = max($lines, substr_count((string) ($row[$name] ?? ''), "\n") + 1);
+            }
+            $height = max(isset($this->imageRows[$r]) ? self::IMAGE_ROW_HEIGHT_PT : 0, $lines > 1 ? $lines * self::LINE_HEIGHT_PT : 0);
+            if ($height > 0) {
+                $sheet->getRowDimension($r)->setRowHeight($height);
+            }
         }
         for ($c = $this->dataColumns + 1; $c <= $this->dataColumns + $this->refColumns + $this->proofColumns; $c++) {
             $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setWidth(18);

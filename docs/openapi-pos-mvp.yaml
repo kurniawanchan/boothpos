@@ -3626,12 +3626,22 @@ paths:
         dari layar. Kunci yang tak ada atau di luar filter `event_id`/tanggal DIABAIKAN. Tanpa `keys`
         = seluruh transaksi sesuai filter. Maks. 5000 kunci.
 
-        Kolom: `transaction_no, status, time, customer, sellers, cashier, items` (SEMUA baris
-        item, "Nama ×qty; …"), `units, gross_sales, net_sales, discount, payment_methods, payment_status,
-        verification, cash, non_cash, total`; pengguna yang boleh melihat laporan juga mendapat `cost, margin`
-        (Total sebelum Margin, seperti di layar), lalu `paid, balance, reference_note, payment_proofs`
-        dan kolom gambar `reference_image_N` / `payment_proof_image_N`. Kontak pelanggan
-        (telepon/email) SENGAJA tidak ikut. Nominal berupa angka agar bisa dijumlah di Excel.
+        Kolom (diubah oleh spec 062, 2026-11-05): `transaction_no, status, time, sellers, cashier, items,
+        units, net_sales, payment_methods, qr_type, payment_status, verification, cash, non_cash, total,
+        balance, payment_note, reference_note, payment_proofs`, lalu kolom gambar `reference_image_N` /
+        `payment_proof_image_N`. TIDAK ADA lagi `customer`, `gross_sales`, `discount`, `cost`, `margin`, `paid`
+        untuk peran mana pun (layar Sales dan `GET /reports/sales` tetap membawanya); berkas tak pernah memuat
+        nama, telepon, atau email pelanggan. Nominal berupa angka agar bisa dijumlah di Excel.
+
+        - `items`: SATU baris per item (sel multi-baris, teks dibungkus), berpeluru, `• Nama ×qty (kategori)`;
+          kategori dibaca saat ini (tak ada snapshot) dan dihilangkan bila tak diketahui.
+        - `qr_type`: penyedia channel (mis. GoPay, Shopee) tiap pembayaran `qr_ewallet` yang tidak ditolak,
+          satu kali per penyedia, dipisah koma; kosong bila tak ada pembayaran QR.
+        - `payment_note`: catatan tiap pembayaran yang tidak ditolak, `metode: catatan`, satu per baris,
+          urut dicatat. Berbeda dengan `reference_note` (catatan penjualan) yang tetap ada.
+        - Baris TERAKHIR "Grand total" (label mengikuti bahasa pengguna): jumlah `net_sales` seluruh baris di
+          atasnya (nilai porsi penjual bila `sellers[]` dipakai), tanpa penjualan batal, berupa angka, tebal;
+          tidak ditulis bila tak ada penjualan.
 
         056 (US8) — gambar TERTANAM di baris tiap penjualan: gambar Sale Reference, dan gambar bukti bayar
         BERLAKU milik pembayaran non-tunai yang boleh dilihat PENGEKSPOR (`Payment::proofViewableBy()`, aturan
@@ -3641,12 +3651,13 @@ paths:
         menyebut batasnya, tidak pernah berkas terpotong. `verification` = status seperti pil di layar
         (kosong bila hanya tunai).
 
-        056 (US9) — `sellers[]` (nama penjual yang sedang difilter di layar): kolom `units, gross_sales,
-        net_sales` hanya memuat item penjual itu (sama dengan kartu ringkasan); `total`, `cash`, `non_cash`
-        tetap angka seluruh penjualan.
+        056 (US9) — `sellers[]` (nama penjual yang sedang difilter di layar): kolom `units, net_sales`
+        hanya memuat item penjual itu (sama dengan kartu ringkasan; `gross_sales` sudah tidak ada sejak
+        spec 062); `total`, `cash`, `non_cash` tetap angka seluruh penjualan.
 
         028-partial-split-payment: kolom `payment_status` kini berisi `unpaid|partially_paid|fully_paid`
-        (dulu status verifikasi mentah) dan ditambah `paid`, `balance` (setelah `total`, sebelum `cost, margin`).
+        (dulu status verifikasi mentah) dan ditambah `paid`, `balance` (spec 062: `paid` sudah dibuang dari
+        berkas, `balance` tetap setelah `total`).
       requestBody:
         required: false
         content:

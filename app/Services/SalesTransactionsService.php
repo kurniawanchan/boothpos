@@ -45,7 +45,17 @@ class SalesTransactionsService
             // 056 — `payments.proofs` dimuat SEKALI untuk `payment_proof_count` (bukan per baris).
             ->with(array_merge(['cashier', 'customer', 'items.artist', 'payments.proofs', 'session.user', 'approvals'],
                 // 056 (US8) — path gambar referensi hanya dibutuhkan ekspor (detail); daftar tetap memakai withCount.
-                $detail ? ['referenceImages'] : []))
+                // Spec 062 — channel pembayaran (hanya untuk jenis QR di ekspor), termasuk channel yang sudah dihapus lunak.
+                $detail ? [
+                    'referenceImages',
+                    'payments.channel' => fn ($q) => $q->withTrashed(),
+                    // Spec 062 — kategori tiap item untuk teks "• nama ×qty (kategori)": SATU rantai eager-load (bukan per baris).
+                    // Cakupan dilepas di tiap tingkat (withoutGlobalScopes juga menyertakan baris terhapus lunak): pengguna
+                    // ber-seller melihat order UTUH (058 Q1:B), jadi scope seller tak boleh menyembunyikan produk seller lain,
+                    // dan produk/kategori yang sudah dihapus tak boleh membuat labelnya hilang. order_items tak punya snapshot kategori.
+                    'items.variant' => fn ($q) => $q->withoutGlobalScopes()->with(['product' => fn ($q) => $q->withoutGlobalScopes()
+                        ->with(['category' => fn ($q) => $q->withoutGlobalScopes()])]),
+                ] : []))
             // 055 — `has_reference` butuh jumlah gambar referensi; satu agregat, bukan kueri per baris.
             ->withCount(['items', 'referenceImages'])
             ->whereIn('status', filter_var($filters['include_voided'] ?? false, FILTER_VALIDATE_BOOLEAN) ? ['completed', 'voided'] : ['completed'])
@@ -120,10 +130,22 @@ class SalesTransactionsService
                 '_reference_images' => $order->referenceImages->pluck('path')->values()->all(),
                 '_proof_images' => $viewable->map(fn (Payment $p) => $p->currentProof()->file_path)->values()->all(),
                 '_proof_labels' => $viewable->map(fn (Payment $p) => $p->method.' '.$this->money($p->amount))->values()->all(),
+                // Spec 062 — jenis QR = penyedia channel pembayaran QR (mis. GoPay, Shopee), satu kali per penyedia,
+                // dalam urutan pembayaran. Pembayaran ditolak tak dihitung, sama seperti jumlah uang di baris ini.
+                'qr_types' => $payments->where('method', 'qr_ewallet')->sortBy('id')
+                    ->map(fn (Payment $p) => (string) ($p->channel?->provider ?? ''))->filter(fn ($v) => $v !== '')->unique()->values()->all(),
+                // Spec 062 — catatan PER PEMBAYARAN (bukan catatan referensi penjualan): "metode: catatan", urut dicatat.
+                'payment_notes' => $payments->sortBy('id')->filter(fn (Payment $p) => trim((string) $p->notes) !== '')
+                    ->map(fn (Payment $p) => $p->method.': '.trim((string) $p->notes))->values()->all(),
             ];
         }
 
-        $row = $exportOnly + ($detail ? ['items_text' => $items->map(fn ($i) => $i->name_snapshot.' ×'.$this->plain($i->qty))->implode('; ')] : []) + [
+        $row = $exportOnly + ($detail ? ['items_text' => $items->map(function ($i) {
+            // Spec 062 — satu item per baris, berpeluru, dengan kategori bila diketahui (item tanpa kategori tetap tampil).
+            $category = trim((string) $i->variant?->product?->category?->name);
+
+            return '• '.$i->name_snapshot.' ×'.$this->plain($i->qty).($category !== '' ? " ({$category})" : '');
+        })->implode("\n")] : []) + [
             'key' => "order:{$order->id}",
             'id' => $order->id,
             'order_number' => $order->order_number,
