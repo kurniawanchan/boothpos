@@ -456,8 +456,9 @@ class SakanaFridgeDemoSeeder extends Seeder
     /**
      * Dua pre-order dengan status berbeda (FR-001/US1 acceptance #9):
      * satu berhenti di 'dp_paid', satu lagi ditransisikan penuh sampai
-     * 'handed_over' — mendemonstrasikan siklus penuh arrived (stok naik)
-     * dan handed_over (stok turun) sekaligus (lihat CLAUDE.md "Stock
+     * 'handed_over' — mendemonstrasikan siklus penuh. Sejak spec 061
+     * (2026-11-05) 'arrived' TIDAK menggerakkan stok; hanya 'handed_over'
+     * yang mengurangi stok (dari stok awal varian, lihat CLAUDE.md "Stock
      * movement invariants").
      *
      * @param  Customer[]  $customers

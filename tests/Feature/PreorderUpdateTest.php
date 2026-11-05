@@ -72,14 +72,19 @@ class PreorderUpdateTest extends TestCase
         $this->assertDatabaseMissing('stock_movements', ['variant_id' => $this->variantA->id]);
     }
 
-    public function test_editing_items_after_arrived_corrects_stock_by_exact_delta(): void
+    /**
+     * Spec 061: kedatangan tidak menambah stok, jadi mengedit qty sesudahnya
+     * juga tidak boleh menggerakkan stok (FR-006). Stok baru berkurang saat
+     * serah terima, memakai qty akhir.
+     */
+    public function test_editing_items_after_arrived_writes_no_stock_movement(): void
     {
+        $this->variantA->update(['current_stock' => 10]);
+        $this->variantB->update(['current_stock' => 10]);
         $preorder = $this->createPreorder(); // qty 2 of variantA
         $this->moveToStatus($preorder['id'], 'dp_paid')->assertOk();
         $this->moveToStatus($preorder['id'], 'arrived')->assertOk();
-        $this->assertSame(2, $this->variantA->fresh()->current_stock);
 
-        // Increase variantA to 5 and add variantB qty 3.
         $response = $this->patchJson("/api/v1/preorders/{$preorder['id']}", [
             'items' => [
                 ['variant_id' => $this->variantA->id, 'qty' => 5],
@@ -88,13 +93,29 @@ class PreorderUpdateTest extends TestCase
         ]);
 
         $response->assertOk();
-        $this->assertSame(5, $this->variantA->fresh()->current_stock);
-        $this->assertSame(3, $this->variantB->fresh()->current_stock);
-        // Delta for variantA was +3 (5-2), never a reversal of the original +2.
-        $this->assertDatabaseHas('stock_movements', ['variant_id' => $this->variantA->id, 'type' => 'purchase', 'qty_change' => 3]);
-        $this->assertDatabaseHas('stock_movements', ['variant_id' => $this->variantB->id, 'type' => 'purchase', 'qty_change' => 3]);
-        // Only one delta movement was written for variantA beyond the original arrival movement.
-        $this->assertEquals(2, \DB::table('stock_movements')->where('variant_id', $this->variantA->id)->count());
+        $this->assertSame(10, $this->variantA->fresh()->current_stock);
+        $this->assertSame(10, $this->variantB->fresh()->current_stock);
+        $this->assertSame(0, \DB::table('stock_movements')->count());
+    }
+
+    public function test_editing_an_arrived_preorder_then_handing_over_deducts_the_edited_quantity(): void
+    {
+        $this->variantA->update(['current_stock' => 10]);
+        $preorder = $this->createPreorder(); // qty 2 of variantA
+        $this->moveToStatus($preorder['id'], 'dp_paid')->assertOk();
+        $this->moveToStatus($preorder['id'], 'arrived')->assertOk();
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}", [
+            'items' => [['variant_id' => $this->variantA->id, 'qty' => 5]],
+        ])->assertOk();
+        $total = \App\Models\Preorder::find($preorder['id'])->total_amount;
+        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
+            'method' => 'cash', 'amount' => (float) $total, 'purpose' => 'settlement',
+        ])->assertCreated()->assertJsonPath('status', 'settled');
+
+        $this->moveToStatus($preorder['id'], 'handed_over')->assertOk();
+
+        $this->assertSame(5, $this->variantA->fresh()->current_stock); // 10 - 5, qty akhir
+        $this->assertDatabaseHas('stock_movements', ['variant_id' => $this->variantA->id, 'type' => 'preorder_handover', 'qty_change' => -5]);
     }
 
     public function test_editing_items_after_arrived_with_unchanged_quantity_writes_no_new_movement(): void
@@ -119,13 +140,14 @@ class PreorderUpdateTest extends TestCase
 
     public function test_edit_is_refused_when_status_is_handed_over(): void
     {
+        $this->variantA->update(['current_stock' => 2]); // spec 061: stok harus ada sebelum serah terima
         $preorder = $this->createPreorder();
         $this->moveToStatus($preorder['id'], 'dp_paid')->assertOk();
         $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
             'method' => 'cash', 'amount' => 200000, 'purpose' => 'settlement',
         ])->assertCreated();
+        // Sudah lunas -> otomatis settled saat tiba (spec 061), tanpa langkah 'settled' manual.
         $this->moveToStatus($preorder['id'], 'arrived')->assertOk();
-        $this->moveToStatus($preorder['id'], 'settled')->assertOk();
         $this->moveToStatus($preorder['id'], 'handed_over')->assertOk();
 
         $response = $this->patchJson("/api/v1/preorders/{$preorder['id']}", [

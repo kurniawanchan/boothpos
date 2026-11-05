@@ -10,6 +10,7 @@ use App\Models\Preorder;
 use App\Models\ProductVariant;
 use App\Models\User;
 use App\Support\Couriers;
+use App\Support\PaymentSummary;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -330,7 +331,8 @@ class PreorderService
 
                     if ($qty === (int) $item->qty) {
                         // Seluruh baris pindah: pakai baris yang sama supaya id yang
-                        // dirujuk stock_movements (saat "arrived") tetap benar.
+                        // dirujuk stock_movements (saat serah terima; juga baris
+                        // 'arrived' lama sebelum spec 061) tetap benar.
                         $item->update(['preorder_id' => $new->id]);
                     } else {
                         $remaining = (int) $item->qty - $qty;
@@ -481,7 +483,6 @@ class PreorderService
 
             $subtotal = 0;
             $newItemsData = [];
-            $newQtyByVariant = [];
             $matchedOldIds = [];
 
             foreach ($data['items'] as $itemInput) {
@@ -533,7 +534,6 @@ class PreorderService
                 }
 
                 $subtotal += $lineTotal;
-                $newQtyByVariant[$variantId] = ($newQtyByVariant[$variantId] ?? 0) + $qty;
             }
 
             $shippingCost = array_key_exists('shipping_cost', $data)
@@ -567,34 +567,11 @@ class PreorderService
             ];
             [$pickupDay, $courierName] = $this->resolvePickupDayAndCourier($resolveInput);
 
-            // research.md Decision 3 — hanya pada status arrived/settled stok
-            // SUDAH pernah ditambahkan (movement type 'purchase' saat
-            // transisi ke 'arrived'); di ordered/dp_paid belum ada efek stok
-            // sama sekali, jadi tidak ada yang perlu dikoreksi.
-            if (in_array($preorder->status, ['arrived', 'settled'], true)) {
-                // Stok peduli pada TOTAL qty per varian, bukan identitas
-                // baris mana pun — dijumlah ulang di sini terlepas dari
-                // pencocokan by-id di atas (satu varian bisa saja muncul
-                // di lebih dari satu baris lama dalam skenario yang jarang).
-                $oldQtyByVariant = $preorder->items->groupBy('variant_id')->map(fn ($items) => (int) $items->sum('qty'));
-                $allVariantIds = array_unique([...$oldQtyByVariant->keys()->all(), ...array_keys($newQtyByVariant)]);
-
-                foreach ($allVariantIds as $variantId) {
-                    $oldQty = (int) ($oldQtyByVariant->get($variantId) ?? 0);
-                    $newQty = (int) ($newQtyByVariant[$variantId] ?? 0);
-                    $delta = $newQty - $oldQty;
-
-                    if ($delta === 0) {
-                        continue;
-                    }
-
-                    $variant = ProductVariant::lockForUpdate()->findOrFail($variantId);
-                    $this->stockService->applyMovement(
-                        variant: $variant, type: 'purchase', qtyChange: $delta,
-                        referenceType: 'preorder', referenceId: $preorder->id, userId: $user->id, // id PRE-ORDER (036): dulu 'preorder_item' -> bentrok makna dengan baris tiba/serah terima
-                    );
-                }
-            }
+            // Spec 061 (2026-11-05): mengedit qty pada status arrived/settled TIDAK
+            // lagi menggerakkan stok. Blok selisih 'purchase' yang dulu ada di
+            // sini hanya ada karena kedatangan menambah stok; kini kedatangan
+            // tidak menyentuh stok, jadi stok baru berkurang saat serah terima
+            // memakai qty AKHIR. Baris 'purchase' lama tetap utuh (tak ditulis ulang).
 
             $preorder->items()->delete();
             foreach ($newItemsData as $itemData) {
@@ -701,6 +678,40 @@ class PreorderService
         return app(PaymentService::class)->markVerified($preorder, $payment, $user);
     }
 
+    /**
+     * Spec 061 — satu-satunya definisi "arrived + lunas" (jalur status DAN koreksi sekali pakai
+     * app:settle-paid-arrived-preorders). "Lunas" memakai PaymentSummary yang sama dengan seluruh
+     * sistem (pembayaran ditolak tidak dihitung), bukan cache paid_amount yang bisa melenceng.
+     * Hanya membaca; tidak menulis apa pun.
+     */
+    public function isArrivedAndFullyPaid(Preorder $preorder): bool
+    {
+        if ($preorder->status !== 'arrived' || (float) $preorder->total_amount <= 0) {
+            return false;
+        }
+
+        $summary = PaymentSummary::for($preorder->unsetRelation('payments')->load('payments'));
+
+        return $summary['status'] === PaymentSummary::FULLY_PAID;
+    }
+
+    /**
+     * Spec 061 — pindahkan arrived → settled bila sudah lunas. Tidak menyentuh stok, pembayaran,
+     * total, maupun log; pemanggil yang menulis log bila perlu. Panggil di dalam transaksi pemanggil.
+     *
+     * @return bool true bila status diubah ke 'settled'
+     */
+    public function settleArrivedIfFullyPaid(Preorder $preorder): bool
+    {
+        if (! $this->isArrivedAndFullyPaid($preorder)) {
+            return false;
+        }
+
+        $preorder->update(['status' => 'settled']);
+
+        return true;
+    }
+
     public function transitionStatus(Preorder $preorder, string $newStatus, ?string $cancelReason, User $user): Preorder
     {
         if (! $preorder->canTransitionTo($newStatus)) {
@@ -716,15 +727,10 @@ class PreorderService
         }
 
         return DB::transaction(function () use ($preorder, $newStatus, $cancelReason, $user) {
-            if ($newStatus === 'arrived') {
-                foreach ($preorder->items as $item) {
-                    $variant = ProductVariant::lockForUpdate()->findOrFail($item->variant_id);
-                    $this->stockService->applyMovement(
-                        variant: $variant, type: 'purchase', qtyChange: $item->qty,
-                        referenceType: 'preorder_item', referenceId: $item->id, userId: $user->id,
-                    );
-                }
-            }
+            // Spec 061 (2026-11-05, permintaan pemilik produk): barang tiba
+            // ('arrived') TIDAK menggerakkan stok sama sekali — dulu menambah
+            // lewat movement 'purchase'. Stok hanya berkurang saat serah
+            // terima di bawah, jadi siklus penuh = satu pengurangan.
 
             if ($newStatus === 'handed_over') {
                 foreach ($preorder->items as $item) {
@@ -740,6 +746,14 @@ class PreorderService
                 'status' => $newStatus,
                 'cancel_reason' => $newStatus === 'cancelled' ? $cancelReason : $preorder->cancel_reason,
             ]);
+
+            // Spec 061 (US4): 'settled' dulu hanya tercapai lewat pembayaran SESUDAH tiba
+            // (PaymentService::syncCache). Pre-order yang sudah lunas SEBELUM tiba macet di
+            // 'arrived': tak ada tombol Settle dan serah terima menuntut 'settled'.
+            // Diselesaikan di transaksi yang sama dengan perpindahan ke 'arrived'.
+            if ($newStatus === 'arrived') {
+                $this->settleArrivedIfFullyPaid($preorder);
+            }
 
             return $preorder->fresh(['items', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer']);
         });

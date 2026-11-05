@@ -362,7 +362,8 @@ class PreorderSplitTest extends TestCase
         $this->patchJson("/api/v1/preorders/{$order['id']}/status", ['status' => 'arrived'])->assertOk();
         $movementsBefore = \App\Models\StockMovement::count();
         $stockBefore = ProductVariant::orderBy('id')->pluck('current_stock', 'id')->all();
-        $this->assertGreaterThan(0, $movementsBefore);
+        // Spec 061: kedatangan tidak menulis movement, jadi tidak ada baris sama sekali.
+        $this->assertSame(0, $movementsBefore);
 
         $response = $this->split($order['id'], [
             ['item_id' => $this->itemId($order, $a), 'qty' => 1],

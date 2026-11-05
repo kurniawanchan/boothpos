@@ -775,6 +775,8 @@ sekadar membaca kode); butir 5 lewat browser dan butir 6 ditangkap suite tes pen
    BUKAN diperbaiki:** mengedit pre-order setelah barang tiba membangun ulang
    item-nya, sehingga baris pergerakan "tiba" sebelumnya menunjuk item yang
    sudah tidak ada dan tampil tanpa referensi.
+   *(Catatan 2026-11-05, spec 061: kedatangan dan edit pre-order kini tidak lagi menulis
+   pergerakan stok, jadi keterbatasan ini hanya berlaku untuk baris LAMA.)*
 5. **`StockView.vue` — filter tipe tidak pernah menampilkan pilihannya**
    (kotak tetap bertuliskan "Semua tipe" setelah memilih "Penjualan") dan tidak
    ada jalan kembali ke semua tipe: `BaseSelect` tidak diikat (`v-model`) dan

@@ -2763,11 +2763,12 @@ paths:
       summary: Ubah pre-order (022-preorder-invoice-crud-overhaul, US1, FR-001/FR-001a/FR-002)
       description: |
         Item boleh diubah (tambah/hapus/ubah qty) selama status BUKAN
-        "handed_over"/"cancelled" (409 kalau ditolak). Kalau status sudah
-        "arrived"/"settled" (stok sudah pernah ditambahkan saat transisi ke
-        "arrived"), efek stok dikoreksi lewat DELTA per variant (qty baru
-        dikurangi qty lama) — bukan membalik lalu menerapkan ulang seluruh
-        item (research.md Decision 3).
+        "handed_over"/"cancelled" (409 kalau ditolak). Mengedit item TIDAK
+        menggerakkan stok pada status apa pun (spec 061, 2026-11-05):
+        sebelumnya, pada "arrived"/"settled", efek stok dikoreksi lewat DELTA
+        per variant karena kedatangan menambah stok; kini kedatangan tidak
+        menyentuh stok, dan stok baru berkurang saat "handed_over" memakai
+        qty AKHIR. Baris `purchase` lama tidak ditulis ulang.
       requestBody:
         required: true
         content:
@@ -3254,10 +3255,16 @@ paths:
         Perpindahan status mengikuti state machine pada dokumen UML.
         Lompatan status ditolak dengan 409.
 
-        **Efek stok:**
-        - `arrived` menulis `stock_movements` bertipe `purchase`
+        **Efek stok** (diubah oleh spec 061, 2026-11-05 — dulu `arrived` menambah stok):
+        - `arrived` TIDAK menulis `stock_movements` dan tidak menggerakkan stok
+          (berhasil juga saat stok nol)
         - `handed_over` menulis `stock_movements` bertipe `preorder_handover`
+          (mengurangi stok; 409 bila stok kurang, status dan stok tidak berubah)
         - `handed_over` hanya diizinkan bila `paid_amount` sudah menutup `total_amount`
+
+        **Lunas sebelum tiba:** bila pre-order sudah lunas saat dipindah ke
+        `arrived`, ia langsung menjadi `settled` pada langkah yang sama —
+        baca `status` dari respons, nilainya bisa `settled`.
       requestBody:
         required: true
         content:

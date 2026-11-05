@@ -434,6 +434,8 @@ sequenceDiagram
 
 Titik paling rawan salah paham ada di sini: stok bertambah saat barang tiba, dan baru berkurang saat diserahkan. Kalau keduanya dilewat, stok sistem akan meleset dari stok fisik.
 
+**Catatan 2026-11-05 (spec 061) — aturan di atas DIBALIK atas permintaan pemilik produk:** status *barang tiba* tidak lagi menambah stok dan tidak menulis pergerakan stok sama sekali; stok hanya berkurang saat *diserahkan*, sehingga siklus penuh = satu pengurangan. Pre-order yang sudah lunas saat ditandai tiba langsung menjadi *lunas* (settled). Teks di atas dibiarkan sebagai riwayat.
+
 **Catatan v1.3 — bug yang ditemukan & diperbaiki pada `GET /preorders/{id}` (dan implisit pada setiap `PATCH` di atas yang mengembalikan body pre-order).** `PreorderController` memakai gaya `present()` hand-rolled yang menggerbang setiap relasi dengan `relationLoaded()` — bila service tidak memuat relasi lebih dulu, field itu diam-diam LENYAP dari response, bukan error. Sebelum diperbaiki, `customer`, `payments`, dan `shipment` hilang dari respons karena pemanggil lupa `load()`/`fresh()` relasi tersebut. Diagram di atas mengasumsikan versi yang sudah diperbaiki: setiap endpoint yang mengembalikan `Preorder` (`GET /preorders/{id}`, dan hasil dari `PATCH .../status`, `POST .../payments`, `POST .../shipment`) memuat `preorder->load(['items', 'payments', 'shipment', 'customer'])` sebelum di-`present()`, sehingga keempatnya SELALU tampil (bernilai `null`/array kosong bila memang belum ada, bukan hilang dari JSON). Siapa pun yang menambah relasi baru ke `present()` wajib memverifikasi `load()`-nya ikut diperbarui di titik yang sama — pola ini sengaja gagal senyap, tidak gagal keras.
 
 ---
