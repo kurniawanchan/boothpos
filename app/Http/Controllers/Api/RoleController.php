@@ -80,6 +80,12 @@ class RoleController extends Controller
         // kunci reserved. Mengubah name saja, atau mengubah menu_keys tapi
         // tetap mempertahankan keduanya, tidak pernah bisa melanggar guard
         // ini — dicek dulu di sini murah, sebelum query lintas-peran.
+        // 057 (FR-013) — penanda Owner adalah NAMA + is_system_default, jadi mengganti nama peran Owner akan
+        // melepas kuncinya (bypass). Nama peran Owner bawaan tak boleh diubah.
+        if ($role->isOwner() && array_key_exists('name', $data) && strcasecmp((string) $data['name'], (string) $role->name) !== 0) {
+            return response()->json(['message' => __('permissions.owner_locked')], 422);
+        }
+
         if (array_key_exists('menu_keys', $data) || array_key_exists('menu_actions', $data)) {
             // 057 — "mampu" = AKSI PENUH pada users DAN roles: dinilai pada peran SETELAH perubahan (hipotetis).
             $after = new Role;
@@ -127,6 +133,11 @@ class RoleController extends Controller
     public function destroy(Request $request, Role $role): JsonResponse
     {
         $this->authorize('delete', $role);
+
+        // 057 — peran Owner bawaan tak boleh dihapus (kuncinya akan hilang bersamanya).
+        if ($role->isOwner()) {
+            return response()->json(['message' => __('permissions.owner_locked')], 422);
+        }
 
         $policy = app(\App\Policies\RolePolicy::class);
 

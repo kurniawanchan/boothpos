@@ -78,6 +78,18 @@ class RoleMenuActionsApiTest extends TestCase
         $this->putJson("/api/v1/roles/{$owner->id}", ['menu_actions' => $full])->assertOk();
     }
 
+    public function test_the_owner_role_cannot_be_renamed_or_deleted_which_would_bypass_its_lock(): void
+    {
+        $owner = Role::where('name', 'Owner')->first();
+
+        $this->putJson("/api/v1/roles/{$owner->id}", ['name' => 'Boss'])->assertStatus(422);
+        $this->assertSame('Owner', $owner->fresh()->name);
+        $this->deleteJson("/api/v1/roles/{$owner->id}")->assertStatus(422);
+        $this->assertNotNull(Role::find($owner->id));
+        // mengirim ulang nama yang SAMA tetap boleh (editor mengirim nama apa adanya)
+        $this->putJson("/api/v1/roles/{$owner->id}", ['name' => 'Owner'])->assertOk();
+    }
+
     public function test_menu_keys_endpoint_carries_the_actions_of_each_menu(): void
     {
         $data = collect($this->getJson('/api/v1/menu-keys')->assertOk()->json('data'));

@@ -155,7 +155,7 @@ async function performDelete() {
 
     <BaseModal :open="showForm" :title="editingRole ? t('roles.edit_role') : t('roles.new_role')" max-width-class="max-w-[760px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveRole">
-        <BaseInput v-model="form.name" :label="t('roles.role_name')" required maxlength="50" :error="formErrors.name" />
+        <BaseInput v-model="form.name" :label="t('roles.role_name')" required maxlength="50" :disabled="!!editingRole?.is_locked" :error="formErrors.name" />
         <RoleMenuPicker v-model="form.menu_keys" v-model:actions="form.menu_actions" :locked="!!editingRole?.is_locked" :error="formErrors['menu_keys.0'] || formErrors.menu_keys" />
         <div class="mt-1 flex justify-end gap-2">
           <BaseButton type="button" variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
