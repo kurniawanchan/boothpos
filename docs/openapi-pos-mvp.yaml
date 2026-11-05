@@ -5655,6 +5655,15 @@ paths:
         adanya.** Template (`GET /imports/master-data/template`) dan impor
         (`POST /imports/master-data`) tetap memakai 17 kolom lama.
 
+        **Ekspor sheet `stock` juga punya satu kolom bantu** (spec 060,
+        2026-11-05). Urutan ekspor: `sku, variant_name, current_stock,
+        reason`. `variant_name` = nama varian saat ini, HANYA-BACA: impor
+        mengabaikannya dan tidak pernah mengubah nama varian. Berkas ekspor
+        tetap bisa diunggah ulang apa adanya; template dan impor tetap
+        `sku, current_stock, reason`. Pembaca berkas yang memakai posisi
+        kolom (bukan nama judul) perlu memperhitungkan `current_stock`
+        kini di kolom ketiga.
+
         `vendors`, `materials`, `vendor_prices`, `bom` ditambahkan
         pasca-MVP (2026-09-01) — lihat catatan bertanggal di
         `CLAUDE.md`/`README.md`/PRD §10.2. `bom` berisi satu baris per

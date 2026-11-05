@@ -803,8 +803,10 @@ class MasterDataImportTest extends TestCase
         file_put_contents($exported, $this->get('/api/v1/exports/stock')->streamedContent());
 
         // Sunting satu sel, persis seperti yang dilakukan pemilik toko.
+        // Kolom C = current_stock sejak spec 060 (B kini variant_name).
         $spreadsheet = IOFactory::load($exported);
-        $spreadsheet->getSheetByName('stock')->setCellValue('B2', 15);
+        $this->assertSame('current_stock', $spreadsheet->getSheetByName('stock')->getCell('C1')->getValue());
+        $spreadsheet->getSheetByName('stock')->setCellValue('C2', 15);
         (new XlsxWriter($spreadsheet))->save($exported);
 
         $this->postImport(new UploadedFile($exported, 'stock.xlsx', null, null, true))
@@ -812,6 +814,88 @@ class MasterDataImportTest extends TestCase
             ->assertJsonPath('sheets.stock.updated', 1);
 
         $this->assertSame(15, ProductVariant::first()->current_stock);
+    }
+
+    /**
+     * Spec 060: ekspor stok kini membawa variant_name. Helper ini membuat
+     * satu varian, mengekspornya lewat endpoint, dan mengembalikan jalur
+     * berkas untuk disunting.
+     */
+    private function exportedStockFile(): string
+    {
+        $this->actingAsRole('owner');
+        $artist = Artist::factory()->create(['code' => 'RYU']);
+        $category = Category::factory()->create(['code' => 'KY']);
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => $category->id, 'code_prefix' => 'RYUKYSAK']);
+        $product->variants()->create(['sku' => 'RYUKYSAK0001', 'variant_name' => 'Ukuran S', 'sell_price' => 1000, 'current_stock' => 3]);
+
+        $exported = tempnam(sys_get_temp_dir(), 'stock060').'.xlsx';
+        $this->tempFiles[] = $exported;
+        file_put_contents($exported, $this->get('/api/v1/exports/stock')->streamedContent());
+
+        return $exported;
+    }
+
+    public function test_unmodified_stock_export_reimports_with_no_changes(): void
+    {
+        $exported = $this->exportedStockFile();
+
+        $this->postImport(new UploadedFile($exported, 'stock.xlsx', null, null, true))
+            ->assertOk()
+            ->assertJsonPath('sheets.stock.updated', 0);
+
+        $this->assertSame(3, ProductVariant::first()->current_stock);
+        $this->assertSame('Ukuran S', ProductVariant::first()->variant_name);
+        $this->assertSame(0, StockMovement::where('type', 'adjustment')->count());
+    }
+
+    public function test_edited_stock_number_in_an_export_with_variant_name_is_applied(): void
+    {
+        $exported = $this->exportedStockFile();
+
+        $spreadsheet = IOFactory::load($exported);
+        $spreadsheet->getSheetByName('stock')->setCellValue('C2', 9);
+        (new XlsxWriter($spreadsheet))->save($exported);
+
+        $this->postImport(new UploadedFile($exported, 'stock.xlsx', null, null, true))
+            ->assertOk()
+            ->assertJsonPath('sheets.stock.updated', 1);
+
+        $variant = ProductVariant::first();
+        $this->assertSame(9, $variant->current_stock);
+        $this->assertSame('Ukuran S', $variant->variant_name);
+    }
+
+    public function test_variant_name_column_in_a_stock_file_is_ignored_on_import(): void
+    {
+        $exported = $this->exportedStockFile();
+
+        $spreadsheet = IOFactory::load($exported);
+        $spreadsheet->getSheetByName('stock')->setCellValue('B2', 'Nama Diubah Di Excel');
+        (new XlsxWriter($spreadsheet))->save($exported);
+
+        $this->postImport(new UploadedFile($exported, 'stock.xlsx', null, null, true))
+            ->assertOk()
+            ->assertJsonPath('sheets.stock.updated', 0);
+
+        $this->assertSame('Ukuran S', ProductVariant::first()->variant_name);
+    }
+
+    public function test_stock_import_template_does_not_list_variant_name(): void
+    {
+        $this->actingAsRole('owner');
+
+        $response = $this->get('/api/v1/imports/master-data/template');
+        $response->assertOk();
+
+        $path = tempnam(sys_get_temp_dir(), 'tpl060').'.xlsx';
+        $this->tempFiles[] = $path;
+        file_put_contents($path, $response->streamedContent());
+
+        $header = IOFactory::load($path)->getSheetByName('stock')->toArray()[0];
+
+        $this->assertSame(['sku', 'current_stock', 'reason'], $header);
+        $this->assertNotContains('variant_name', $header);
     }
 
     // =================================================================

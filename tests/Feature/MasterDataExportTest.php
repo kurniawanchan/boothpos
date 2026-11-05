@@ -428,11 +428,63 @@ class MasterDataExportTest extends TestCase
         $sheets = $this->readDownload('/api/v1/exports/stock');
 
         $rows = $sheets[MasterDataSheets::STOCK];
-        $this->assertSame(['sku', 'current_stock', 'reason'], $rows[0]);
+        // Spec 060: variant_name (hanya-baca) tepat di sebelah sku.
+        $this->assertSame(['sku', 'variant_name', 'current_stock', 'reason'], $rows[0]);
 
         $row = array_combine($rows[0], $rows[1]);
         $this->assertSame('RYUKYSAK0001', $row['sku']);
+        $this->assertSame('Standard', $row['variant_name']);
         $this->assertEquals(12, $row['current_stock']);
+    }
+
+    public function test_stock_export_variant_name_follows_a_rename(): void
+    {
+        $this->actingAsRole('inventory');
+        $this->seedCatalog();
+
+        // Nama dibaca LIVE dari varian, bukan salinan saat dibuat (FR-002).
+        \App\Models\ProductVariant::where('sku', 'RYUKYSAK0001')->update(['variant_name' => 'Ukuran L']);
+
+        $rows = $this->readDownload('/api/v1/exports/stock')[MasterDataSheets::STOCK];
+
+        $this->assertSame('Ukuran L', $this->rowBySku($rows, 'RYUKYSAK0001')['variant_name']);
+    }
+
+    public function test_stock_export_keeps_rows_with_a_blank_variant_name(): void
+    {
+        $this->actingAsRole('inventory');
+        $this->seedCatalog();
+        $product = Product::first();
+        // Kolom NOT NULL, jadi "kosong" berarti string kosong.
+        $product->variants()->create(['sku' => 'RYUKYSAK0002', 'variant_name' => '', 'sell_price' => 1000, 'current_stock' => 4]);
+        $product->variants()->create(['sku' => 'RYUKYSAK0003', 'variant_name' => 'Besar', 'sell_price' => 1000, 'current_stock' => 7]);
+
+        $rows = $this->readDownload('/api/v1/exports/stock')[MasterDataSheets::STOCK];
+
+        // Jumlah dan urutan baris tidak berubah: satu per varian, urut sku (FR-003, SC-004).
+        $this->assertCount(4, $rows); // judul + 3 varian
+        $skus = array_column(array_slice($rows, 1), 0);
+        $this->assertSame(['RYUKYSAK0001', 'RYUKYSAK0002', 'RYUKYSAK0003'], $skus);
+
+        $blank = $this->rowBySku($rows, 'RYUKYSAK0002');
+        $this->assertTrue($blank['variant_name'] === null || $blank['variant_name'] === '');
+        $this->assertEquals(4, $blank['current_stock']); // kolom setelahnya tidak bergeser
+        $this->assertSame('Besar', $this->rowBySku($rows, 'RYUKYSAK0003')['variant_name']);
+    }
+
+    public function test_stock_export_writes_a_formula_looking_variant_name_as_text(): void
+    {
+        $this->actingAsRole('inventory');
+        $this->seedCatalog();
+        $product = Product::first();
+        $product->variants()->create(['sku' => 'RYUKYSAK0002', 'variant_name' => '=1+1', 'sell_price' => 1000, 'current_stock' => 1]);
+        $product->variants()->create(['sku' => 'RYUKYSAK0003', 'variant_name' => 'Merah, "Edisi" Khusus', 'sell_price' => 1000, 'current_stock' => 1]);
+
+        $rows = $this->readDownload('/api/v1/exports/stock')[MasterDataSheets::STOCK];
+
+        // Bila dianggap rumus, toArray() akan mengembalikan 2 (hasil hitung), bukan teks aslinya.
+        $this->assertSame('=1+1', $this->rowBySku($rows, 'RYUKYSAK0002')['variant_name']);
+        $this->assertSame('Merah, "Edisi" Khusus', $this->rowBySku($rows, 'RYUKYSAK0003')['variant_name']);
     }
 
     public function test_artists_and_categories_export_use_their_own_columns(): void
