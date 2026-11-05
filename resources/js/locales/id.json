@@ -868,7 +868,7 @@
     "mark_handed_over": "Tandai diserahkan",
     "cancel_preorder_btn": "Batalkan",
     "handover_note": "Diserahkan hanya diizinkan bila pelunasan sudah menutup total.",
-    "arrived_marked": "Ditandai barang tiba — stok bertambah.",
+    "arrived_marked": "Ditandai barang tiba. Stok berubah saat diserahterimakan.",
     "handed_over_marked": "Ditandai diserahkan ke pelanggan — stok berkurang.",
     "ordered_items": "Item dipesan",
     "subtotal": "Subtotal",

@@ -113,17 +113,46 @@ class PreorderTest extends TestCase
         $this->assertEquals('100000.00', $response->json('paid_amount'));
     }
 
-    public function test_arrived_status_increases_stock(): void
+    /**
+     * Spec 061 (2026-11-05): MEMBALIK aturan lama "arrived → stok naik".
+     * Barang tiba tidak menggerakkan stok sama sekali; stok baru berkurang
+     * saat serah terima.
+     */
+    public function test_arrived_status_makes_no_stock_movement(): void
     {
+        $this->variant->update(['current_stock' => 10]);
         $preorder = $this->createPreorder();
         $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'dp_paid'])->assertOk();
-        // Lompat langsung dp_paid tidak valid tanpa payment, tapi untuk
-        // menguji efek stok kita transisi manual lewat endpoint status.
 
         $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->assertOk();
 
-        $this->assertSame(1, $this->variant->fresh()->current_stock);
-        $this->assertDatabaseHas('stock_movements', ['variant_id' => $this->variant->id, 'type' => 'purchase', 'qty_change' => 1]);
+        $this->assertSame(10, $this->variant->fresh()->current_stock);
+        $this->assertDatabaseMissing('stock_movements', ['variant_id' => $this->variant->id]);
+    }
+
+    public function test_arrival_succeeds_when_stock_is_zero_and_with_several_variants(): void
+    {
+        // Stok nol tidak lagi menghalangi kedatangan barang (FR-002).
+        $other = $this->variant->product->variants()->create([
+            'sku' => 'RYUKYFIG0002', 'sell_price' => 100000, 'cost_price' => 50000, 'current_stock' => 4,
+        ]);
+        $preorder = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id,
+            'fulfillment' => 'pickup',
+            'items' => [
+                ['variant_id' => $this->variant->id, 'qty' => 2],
+                ['variant_id' => $other->id, 'qty' => 3],
+            ],
+        ])->json();
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'dp_paid'])->assertOk();
+
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])
+            ->assertOk()
+            ->assertJsonPath('status', 'arrived');
+
+        $this->assertSame(0, $this->variant->fresh()->current_stock);
+        $this->assertSame(4, $other->fresh()->current_stock);
+        $this->assertSame(0, \DB::table('stock_movements')->count());
     }
 
     public function test_cannot_skip_from_ordered_directly_to_handed_over(): void
@@ -137,6 +166,7 @@ class PreorderTest extends TestCase
 
     public function test_handed_over_rejected_when_not_fully_paid(): void
     {
+        $this->variant->update(['current_stock' => 1]); // spec 061: stok tidak lagi datang dari kedatangan
         $preorder = $this->createPreorder(); // total 300000, belum bayar
         $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'dp_paid'])->assertOk();
         $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->assertOk();
@@ -151,6 +181,7 @@ class PreorderTest extends TestCase
 
     public function test_handed_over_succeeds_when_fully_paid_and_decreases_stock(): void
     {
+        $this->variant->update(['current_stock' => 1]); // spec 061: stok harus sudah ada sebelum serah terima
         $preorder = $this->createPreorder();
         $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'dp_paid'])->assertOk();
         $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->assertOk();
@@ -165,6 +196,53 @@ class PreorderTest extends TestCase
         $response->assertOk()->assertJsonPath('status', 'handed_over');
         $this->assertSame(0, $this->variant->fresh()->current_stock);
         $this->assertDatabaseHas('stock_movements', ['variant_id' => $this->variant->id, 'type' => 'preorder_handover', 'qty_change' => -1]);
+    }
+
+    public function test_full_lifecycle_nets_exactly_one_deduction(): void
+    {
+        $this->variant->update(['current_stock' => 10]);
+        $preorder = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id,
+            'fulfillment' => 'pickup',
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 3]],
+        ])->json();
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'dp_paid'])->assertOk();
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->assertOk();
+        $this->assertSame(10, $this->variant->fresh()->current_stock);
+
+        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
+            'method' => 'cash', 'amount' => 900000, 'purpose' => 'settlement',
+        ])->assertCreated()->assertJsonPath('status', 'settled');
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'handed_over'])->assertOk();
+
+        // Satu pengurangan sebesar qty akhir — tidak pernah penambahan, tidak dua kali (FR-008, SC-002).
+        $this->assertSame(7, $this->variant->fresh()->current_stock);
+        $this->assertSame(1, \DB::table('stock_movements')->where('variant_id', $this->variant->id)->count());
+        $this->assertDatabaseHas('stock_movements', ['variant_id' => $this->variant->id, 'type' => 'preorder_handover', 'qty_change' => -3]);
+        $this->assertDatabaseMissing('stock_movements', ['variant_id' => $this->variant->id, 'type' => 'purchase']);
+    }
+
+    public function test_handover_is_refused_when_stock_is_insufficient_and_changes_nothing(): void
+    {
+        $this->variant->update(['current_stock' => 1]);
+        $preorder = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $this->customer->id,
+            'fulfillment' => 'pickup',
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 3]],
+        ])->json();
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'dp_paid'])->assertOk();
+        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->assertOk();
+        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", [
+            'method' => 'cash', 'amount' => 900000, 'purpose' => 'settlement',
+        ])->assertCreated()->assertJsonPath('status', 'settled');
+
+        $response = $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'handed_over']);
+
+        $response->assertStatus(409);
+        $this->assertStringContainsString('1', json_encode($response->json())); // menyebut stok tersedia
+        $this->assertSame(1, $this->variant->fresh()->current_stock);
+        $this->assertSame(0, \DB::table('stock_movements')->count());
+        $this->assertSame('settled', \App\Models\Preorder::find($preorder['id'])->status);
     }
 
     public function test_response_includes_customer_payments_and_shipment(): void

@@ -868,7 +868,7 @@
     "mark_handed_over": "Mark handed over",
     "cancel_preorder_btn": "Cancel",
     "handover_note": "Handover is only allowed once the balance is fully paid.",
-    "arrived_marked": "Marked as arrived — stock increased.",
+    "arrived_marked": "Marked as arrived. Stock changes when it is handed over.",
     "handed_over_marked": "Marked as handed over to customer — stock decreased.",
     "ordered_items": "Ordered items",
     "subtotal": "Subtotal",

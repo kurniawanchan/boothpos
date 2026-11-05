@@ -129,7 +129,8 @@ class PaymentService
      * mengeluarkannya. paid_amount dan status dihitung ULANG dari entri yang
      * tersisa; status pre-order mundur sejauh yang ditimbulkan pembayaran itu
      * (settled yang tak lagi lunas → arrived; dp_paid tanpa sisa pembayaran →
-     * ordered; arrived tak pernah mundur ke ordered karena stok sudah masuk).
+     * ordered; arrived tak pernah mundur ke ordered — barang sudah tiba, walau
+     * sejak spec 061 kedatangan itu tidak lagi menggerakkan stok).
      */
     public function deletePayment(Preorder|Order $target, Payment $payment, User $user): Preorder|Order
     {

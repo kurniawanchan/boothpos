@@ -9,7 +9,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Satu-satunya jalur sah untuk mengubah stok. Dipakai oleh: penyesuaian
- * manual, transaksi penjualan, dan alur pre-order (arrived/handed_over).
+ * manual, transaksi penjualan, dan alur pre-order (hanya handed_over; sejak
+ * spec 061 status arrived tidak lagi menggerakkan stok).
  *
  * Dijadikan service terpisah (bukan logic tersebar di tiap controller)
  * karena dipakai oleh lebih dari satu modul — ambang batas DRY yang wajar

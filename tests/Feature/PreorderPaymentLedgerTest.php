@@ -230,6 +230,46 @@ class PreorderPaymentLedgerTest extends TestCase
             ->assertJsonPath('status', 'settled')->assertJsonPath('payment_summary.status', 'fully_paid');
     }
 
+    // --- spec 061: lunas SEBELUM tiba tidak boleh macet di "arrived" ---------------
+
+    public function test_arriving_while_fully_paid_settles_in_the_same_step(): void
+    {
+        $order = $this->order();
+        $this->pay($order['id'], ['amount' => 200000])->assertCreated()->assertJsonPath('status', 'dp_paid');
+
+        $this->patchJson("/api/v1/preorders/{$order['id']}/status", ['status' => 'arrived'])
+            ->assertOk()
+            ->assertJsonPath('status', 'settled')
+            ->assertJsonPath('payment_summary.status', 'fully_paid');
+
+        $this->assertSame('settled', Preorder::find($order['id'])->status);
+        $this->assertSame(0, \DB::table('stock_movements')->count());
+    }
+
+    public function test_partially_paid_arrival_stays_arrived_until_a_payment_completes_it(): void
+    {
+        $order = $this->order();
+        $this->pay($order['id'], ['amount' => 50000])->assertCreated();
+
+        $this->patchJson("/api/v1/preorders/{$order['id']}/status", ['status' => 'arrived'])
+            ->assertOk()
+            ->assertJsonPath('status', 'arrived');
+    }
+
+    public function test_a_pre_order_settled_on_arrival_can_be_handed_over(): void
+    {
+        $this->variant->update(['current_stock' => 5]); // stok harus ada sebelum serah terima
+        $order = $this->order();
+        $this->pay($order['id'], ['amount' => 200000])->assertCreated();
+        $this->patchJson("/api/v1/preorders/{$order['id']}/status", ['status' => 'arrived'])->assertOk();
+
+        $this->patchJson("/api/v1/preorders/{$order['id']}/status", ['status' => 'handed_over'])
+            ->assertOk()
+            ->assertJsonPath('status', 'handed_over');
+
+        $this->assertSame(3, $this->variant->fresh()->current_stock);
+    }
+
     // --- US3: riwayat dan audit ---------------------------------------------------
 
     public function test_the_history_lists_payments_in_the_order_they_were_recorded(): void

@@ -14,7 +14,7 @@ Docs in `docs/` are the spec source of truth: `PRD-POS-Event-Multivendor.md`, `o
 # Backend
 php artisan test                          # full suite (native/host only — see warning below)
 php artisan test --filter=PreorderTest    # one file
-php artisan test --filter=test_arrived_status_increases_stock   # one test
+php artisan test --filter=test_arrived_status_makes_no_stock_movement   # one test
 php artisan migrate && php artisan db:seed
 php artisan serve                         # :8000
 
@@ -56,8 +56,8 @@ Roles are `owner`, `admin`, `cashier`, `inventory`, with two helpers on `User`: 
 
 **Stock movement invariants** (`stock_movements.type`: `purchase`, `sale`, `preorder_handover`, `adjustment`, `return`, `initial`). The preorder lifecycle is the easiest thing in this codebase to get backwards:
 - Creating a preorder does **not** touch stock (goods don't physically exist yet)
-- `arrived` → `purchase` movement, stock **increases**
-- `handed_over` → `preorder_handover` movement, stock **decreases** (blocked with 409 unless fully paid)
+- `arrived` → **no stock movement** (spec 061, 2026-11-05 — it used to write a `purchase` movement and increase stock; old `purchase` rows are history and are left as they are). Editing an arrived/settled pre-order moves no stock either. A fully paid pre-order that arrives becomes `settled` in the same step (`PreorderService::settleArrivedIfFullyPaid()`); `php artisan app:settle-paid-arrived-preorders [--apply --by=<owner|admin>]` fixes rows that were already stuck at `arrived`, in DEMO and LIVE (dry-run by default, logs `preorder_status_corrected`).
+- `handed_over` → `preorder_handover` movement, stock **decreases** (blocked with 409 unless fully paid, and with 409 when stock is lower than the quantity — stock must be entered beforehand now that arrival no longer supplies it). The whole lifecycle therefore nets exactly one deduction.
 
 Stock rows are append-only history; `current_stock` is maintained alongside them by `StockService::applyMovement()`, which is the only sanctioned write path — including for the bulk Excel import.
 
@@ -505,7 +505,17 @@ One required approval per UNIQUE seller among a POS sale's lines (`order_items.a
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/060-stock-export-variant-name/plan.md`
+Active feature plan: `specs/061-preorder-arrived-no-stock-movement/plan.md`
+(branch `086-preorder-arrived-no-stock-movement`, from `develop`; spec dir number ≠ branch number) — no migration, no
+route. REVERSES the documented rule "arrived → `purchase`, stock increases": moving a pre-order to Goods arrived writes
+NO stock movement, and editing an arrived/settled pre-order writes none either (the delta block in
+`PreorderService::update()` goes). Hand-over keeps deducting (`preorder_handover`) and still needs full payment; a
+hand-over now needs stock entered beforehand (existing never-below-zero guard). Also fixes pre-orders stuck at `arrived`
+while fully paid (no Settle action exists, `settled` was only reached by a later payment): `settleArrivedIfFullyPaid()`
+settles on arrival, and a one-off `app:settle-paid-arrived-preorders` (dry-run default, `--apply --by=`) settles the
+existing ones in DEMO and LIVE with an activity-log row each. Old arrival rows are left as they are. See research.md.
+
+Previous feature: `specs/060-stock-export-variant-name/plan.md`
 (branch `085-stock-export-variant-name`, from `develop`; spec dir number ≠ branch number) — no migration, no route, no
 frontend change. The Stock page's Excel export (`GET /exports/stock`, the `stock` sheet) gains ONE export-only column,
 `variant_name`, right after `sku` (live `ProductVariant.variant_name`). Same pattern as 041/050: a new

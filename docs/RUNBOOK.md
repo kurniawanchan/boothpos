@@ -351,6 +351,24 @@ Owner dan Admin). Tanpa keduanya, menu Settlement tidak muncul dan API-nya menja
 503 `schema_outdated`. Peran kustom yang dibuat sebelum fitur ini tidak otomatis
 mendapat menu `settlements` — tambahkan lewat layar Peran bila perlu.
 
+Spec 061 (2026-11-05) mengubah alur stok pre-order dan menambah satu koreksi sekali pakai:
+
+- Status **Goods arrived** tidak lagi menambah stok; stok hanya berkurang saat **Handed over**.
+  Akibatnya stok varian HARUS sudah diisi sebelum serah terima (kalau kurang, serah terima
+  ditolak 409 dan tidak ada yang berubah).
+- Pre-order yang sudah lunas SEBELUM tiba kini otomatis menjadi **Settled** saat ditandai tiba.
+  Yang sudah terlanjur macet di "arrived" (lunas tetapi tombol Hand over tidak muncul) diperbaiki
+  satu kali per instalasi, DEMO dan LIVE sekaligus:
+
+```bash
+php artisan app:settle-paid-arrived-preorders                       # dry-run: hanya daftar nomor
+php artisan app:settle-paid-arrived-preorders --apply --by=owner    # terapkan (owner/admin)
+docker compose exec app php artisan app:settle-paid-arrived-preorders --apply --by=owner   # Docker
+```
+
+Aman diulang (baris yang sudah beres tidak dipilih lagi), tidak mengubah stok, pembayaran,
+atau total, dan menulis satu baris log aktivitas `preorder_status_corrected` per pre-order.
+
 Menguji di browser dengan data terpisah: `php artisan serve` MEMBACA ULANG `.env`
 dan mengabaikan `DB_DATABASE` dari environment container, jadi server yang dijalankan
 dengan `artisan serve` selalu memakai database di `.env`. Untuk menjalankan instans

@@ -158,37 +158,41 @@ class StockMovementsTest extends TestCase
         $this->assertSame($order->order_number, $ref['number']);
     }
 
-    public function test_preorder_arrival_and_handover_resolve_to_the_preorder_number(): void
+    /**
+     * Spec 061: kedatangan tidak lagi menulis movement; hanya serah terima yang
+     * menulis baris pre-order, dan baris itu harus tetap menunjuk nomornya.
+     * Dibayar penuh SEBELUM tiba -> otomatis settled saat tiba, jadi tidak ada
+     * langkah 'settled' manual.
+     */
+    public function test_preorder_handover_resolves_to_the_preorder_number_and_arrival_writes_no_row(): void
     {
         $preorder = $this->preorder();
         $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", ['method' => 'cash', 'amount' => 20000, 'purpose' => 'full'])->assertCreated();
         $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->assertOk();
-        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'settled'])->assertOk();
         $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'handed_over'])->assertOk();
 
         $rows = collect($this->movements("variant_id={$this->variant->id}")->json('data'));
 
-        $this->assertCount(2, $rows); // tiba + serah terima
-        foreach ($rows as $row) {
-            $this->assertSame(['type' => 'preorder', 'id' => $preorder['id'], 'number' => $preorder['preorder_number']], $row['reference'], $row['type']);
-        }
+        $this->assertCount(1, $rows); // hanya serah terima
+        $this->assertSame('preorder_handover', $rows[0]['type']);
+        $this->assertSame(['type' => 'preorder', 'id' => $preorder['id'], 'number' => $preorder['preorder_number']], $rows[0]['reference']);
     }
 
-    public function test_the_preorder_edit_delta_resolves_but_an_arrival_row_orphaned_by_the_edit_shows_no_reference(): void
+    /**
+     * Baris LAMA (sebelum spec 061) tetap terbaca: selisih edit memakai referensi
+     * 'preorder' (terselesaikan), baris tiba yang menunjuk item yang sudah tidak
+     * ada menampilkan null, bukan nomor tebakan. Dibuat langsung sebagai fixture
+     * karena kode baru tidak lagi menulis keduanya.
+     */
+    public function test_legacy_preorder_edit_delta_rows_resolve_and_orphaned_arrival_rows_show_no_reference(): void
     {
         $preorder = $this->preorder();
-        $this->postJson("/api/v1/preorders/{$preorder['id']}/payments", ['method' => 'cash', 'amount' => 20000, 'purpose' => 'full'])->assertCreated();
-        $this->patchJson("/api/v1/preorders/{$preorder['id']}/status", ['status' => 'arrived'])->assertOk();
-        // Edit setelah tiba: item pre-order dibangun ulang (id baru) dan selisih qty ditulis sebagai 'purchase'.
-        $this->putJson("/api/v1/preorders/{$preorder['id']}", [
-            'items' => [['id' => $preorder['items'][0]['id'], 'variant_id' => $this->variant->id, 'qty' => 3]],
-        ])->assertOk();
+        $this->movement(['type' => 'purchase', 'qty_change' => 2, 'reference_type' => 'preorder', 'reference_id' => $preorder['id']]);
+        $this->movement(['type' => 'purchase', 'qty_change' => 1, 'reference_type' => 'preorder_item', 'reference_id' => 999999]);
 
         $byRef = collect($this->movements("variant_id={$this->variant->id}")->json('data'))->keyBy(fn ($r) => $r['qty_change']);
 
-        // Selisih edit (+2) memakai referensi 'preorder' baru -> terselesaikan.
         $this->assertSame($preorder['preorder_number'], $byRef[2]['reference']['number']);
-        // Baris tiba (+1) menunjuk item yang sudah tidak ada -> null, BUKAN nomor tebakan (keterbatasan yang dicatat).
         $this->assertNull($byRef[1]['reference']);
     }
 
